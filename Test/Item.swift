@@ -6,13 +6,6 @@
 //
 
 import Foundation
-import SwiftData
 
-@Model
-final class Item {
-    var timestamp: Date
-    
-    init(timestamp: Date) {
-        self.timestamp = timestamp
-    }
-}
+// This file is no longer needed for the current app
+// You can delete this file from your project if you want

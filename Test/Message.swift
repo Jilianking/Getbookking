@@ -14,5 +14,10 @@ struct Message: Codable, Identifiable {
         case client = "client"
         case admin = "admin"
     }
+
+    /// Stable id for SwiftUI when backend id is nil
+    var stableId: String {
+        id ?? "\(clientId)-\(createdAt.timeIntervalSince1970)"
+    }
 }
 

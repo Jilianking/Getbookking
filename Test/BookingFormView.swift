@@ -11,6 +11,7 @@ import FirebaseFirestore
 struct BookingFormView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var firebaseService: FirebaseService
+    var drawerState: DrawerState?
     
     @State private var name = ""
     @State private var email = ""
@@ -106,6 +107,16 @@ struct BookingFormView: View {
             }
             .navigationTitle("New Booking")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if let drawerState = drawerState {
+                        Button(action: {
+                            dismiss()
+                            drawerState.isOpen = true
+                        }) {
+                            Image(systemName: "line.3.horizontal")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
@@ -122,11 +133,13 @@ struct BookingFormView: View {
                 Text(alertMessage)
             }
             .task {
+                await firebaseService.fetchServices()
                 if !selectedDate.isToday && !selectedDate.isPast {
                     loadAvailableTimeSlots()
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
     
     private var isFormValid: Bool {

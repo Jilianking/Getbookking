@@ -7,9 +7,17 @@ class CalendarViewModel: ObservableObject {
     
     private let firebaseService = FirebaseService()
     
-    func loadEvents() async {
+    func loadEvents(isDemoMode: Bool = false) async {
         await MainActor.run {
             isLoading = true
+        }
+        
+        if isDemoMode {
+            await MainActor.run {
+                events = []
+                isLoading = false
+            }
+            return
         }
         
         let calendar = Calendar.current

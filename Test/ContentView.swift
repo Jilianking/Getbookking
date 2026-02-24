@@ -1,23 +1,29 @@
 //
 //  ContentView.swift
 //  Test
+//
+//  Phase 1: Auth flow — Login when not authenticated, Admin tabs when authenticated.
+//
+
 import SwiftUI
 
 struct ContentView: View {
-    @State private var counter = 0
+    @EnvironmentObject var authViewModel: AuthViewModel
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Booking App")
-                .font(.title)
-            Text("Counter: \(counter)")
-            Button("Increment") { counter += 1 }
+        Group {
+            if authViewModel.isAuthenticated {
+                AdminTabView()
+                    .environmentObject(authViewModel)
+            } else {
+                LoginView()
+                    .environmentObject(authViewModel)
+            }
         }
-        .padding()
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(AuthViewModel())
 }
-

@@ -7,7 +7,13 @@ class MessagesViewModel: ObservableObject {
     
     private let firebaseService = FirebaseService()
     
-    func loadThreads() async {
+    func loadThreads(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            await MainActor.run {
+                threads = []
+            }
+            return
+        }
         do {
             let fetchedThreads = try await firebaseService.fetchAllThreads()
             await MainActor.run {
@@ -18,7 +24,10 @@ class MessagesViewModel: ObservableObject {
         }
     }
     
-    func loadMessages(for threadId: String) async -> [Message] {
+    func loadMessages(for threadId: String, isDemoMode: Bool = false) async -> [Message] {
+        if isDemoMode {
+            return []
+        }
         do {
             let fetchedMessages = try await firebaseService.fetchMessages(threadId: threadId)
             await MainActor.run {
@@ -65,7 +74,7 @@ class MessagesViewModel: ObservableObject {
         
         do {
             try await firebaseService.sendMessage(message)
-            await loadMessages(for: threadId)
+            _ = await loadMessages(for: threadId)
         } catch {
             print("Error sending message: \(error)")
         }

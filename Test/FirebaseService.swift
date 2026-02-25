@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import FirebaseFirestore
+import FirebaseStorage
 
 class FirebaseService: ObservableObject {
     @Published var bookings: [Booking] = []
@@ -380,6 +381,56 @@ class FirebaseService: ObservableObject {
 
     func updateProviderProfile(uid: String, updates: [String: Any]) async throws {
         try await db.collection("users").document(uid).setData(updates, merge: true)
+    }
+
+    // MARK: - Tenant design (branding, services)
+    func updateTenant(tenantId: String, updates: [String: Any]) async throws {
+        try await db.collection("tenants").document(tenantId).setData(updates, merge: true)
+    }
+
+    func fetchTenantServices(tenantId: String) async throws -> [TenantService] {
+        let snapshot = try await db.collection("tenants").document(tenantId).collection("services").getDocuments()
+        return snapshot.documents.compactMap { doc -> TenantService? in
+            let d = doc.data()
+            guard let slug = d["slug"] as? String, let name = d["name"] as? String else { return nil }
+            return TenantService(
+                id: doc.documentID,
+                slug: slug,
+                name: name,
+                durationMinutes: d["durationMinutes"] as? Int ?? 30,
+                isActive: d["isActive"] as? Bool ?? true,
+                bookingModeOverride: d["bookingModeOverride"] as? String,
+                formSchema: d["formSchema"] as? [[String: Any]]
+            )
+        }
+    }
+
+    func createTenantService(tenantId: String, name: String, durationMinutes: Int, slug: String? = nil) async throws -> String {
+        let slugValue = slug ?? self.slug(from: name)
+        let data: [String: Any] = [
+            "slug": slugValue,
+            "name": name,
+            "durationMinutes": durationMinutes,
+            "isActive": true
+        ]
+        let ref = try await db.collection("tenants").document(tenantId).collection("services").addDocument(data: data)
+        return ref.documentID
+    }
+
+    func updateTenantService(tenantId: String, serviceId: String, updates: [String: Any]) async throws {
+        try await db.collection("tenants").document(tenantId).collection("services").document(serviceId).setData(updates, merge: true)
+    }
+
+    func deleteTenantService(tenantId: String, serviceId: String) async throws {
+        try await db.collection("tenants").document(tenantId).collection("services").document(serviceId).delete()
+    }
+
+    func uploadTenantLogo(tenantId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let ref = storage.reference().child("tenants/\(tenantId)/logo.jpg")
+        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
     }
 
     private func createTenant(displayName: String, slug: String) async throws -> String {

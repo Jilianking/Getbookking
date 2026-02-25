@@ -20,17 +20,31 @@ struct ProviderProfile {
     var createdAt: Date?
 }
 
+struct TimeSlot: Identifiable, Codable, Equatable {
+    var id: String
+    var open: Int   // 0-23
+    var close: Int  // 0-23
+
+    init(id: String = UUID().uuidString, open: Int, close: Int) {
+        self.id = id
+        self.open = open
+        self.close = close
+    }
+}
+
 struct ProviderAvailability {
-    var openHour: Int      // 0-23
-    var closeHour: Int     // 0-23
-    var daysOpen: [Int]    // 0=Sun, 1=Mon, ..., 6=Sat
+    var timeSlots: [TimeSlot]     // Multiple ranges per day (e.g. 9–12, 14–18)
+    var daysOpen: [Int]          // 0=Sun, 1=Mon, ..., 6=Sat – shop hours
     var timeZone: String
+    var blockedDates: [String]   // "yyyy-MM-dd" – block from shop hours (approval mode)
+    var availableDates: [String] // "yyyy-MM-dd" – selected for appointments (fixed slots mode)
 
     static let `default` = ProviderAvailability(
-        openHour: 9,
-        closeHour: 18,
+        timeSlots: [TimeSlot(open: 9, close: 18)],
         daysOpen: [1, 2, 3, 4, 5],
-        timeZone: TimeZone.current.identifier
+        timeZone: TimeZone.current.identifier,
+        blockedDates: [],
+        availableDates: []
     )
 }
 

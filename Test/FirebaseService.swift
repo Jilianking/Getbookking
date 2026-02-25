@@ -359,8 +359,7 @@ class FirebaseService: ObservableObject {
             "subscriptionPlan": subscriptionPlan,
             "subscriptionStatus": "active",
             "availability": [
-                "openHour": ProviderAvailability.default.openHour,
-                "closeHour": ProviderAvailability.default.closeHour,
+                "timeSlots": [["open": 9, "close": 18]],
                 "daysOpen": ProviderAvailability.default.daysOpen,
                 "timeZone": ProviderAvailability.default.timeZone
             ],
@@ -477,10 +476,17 @@ class FirebaseService: ObservableObject {
 
         var availability = ProviderAvailability.default
         if let avail = data["availability"] as? [String: Any] {
-            availability.openHour = avail["openHour"] as? Int ?? availability.openHour
-            availability.closeHour = avail["closeHour"] as? Int ?? availability.closeHour
+            if let slots = avail["timeSlots"] as? [[String: Any]], !slots.isEmpty {
+                availability.timeSlots = slots.enumerated().map { i, s in
+                    TimeSlot(id: "\(i)", open: s["open"] as? Int ?? 9, close: s["close"] as? Int ?? 18)
+                }
+            } else if let open = avail["openHour"] as? Int, let close = avail["closeHour"] as? Int {
+                availability.timeSlots = [TimeSlot(open: open, close: close)]
+            }
             availability.daysOpen = avail["daysOpen"] as? [Int] ?? availability.daysOpen
             availability.timeZone = avail["timeZone"] as? String ?? availability.timeZone
+            availability.blockedDates = avail["blockedDates"] as? [String] ?? []
+            availability.availableDates = avail["availableDates"] as? [String] ?? []
         }
 
         var workflow = ProviderWorkflow.default

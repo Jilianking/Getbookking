@@ -9,8 +9,9 @@ import Combine
 import FirebaseAuth
 
 class SettingsViewModel: ObservableObject {
-    @Published var workflowMode: WorkflowMode = .approval
+    @Published var confirmationType: BookingConfirmationType = .requestApprove
     @Published var responseTimeHours: Int = 24
+    @Published var depositAmount: Double?
     @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
     @Published var timeZoneId: String = ""
@@ -32,12 +33,24 @@ class SettingsViewModel: ObservableObject {
         Array(daysOpen).sorted()
     }
 
+    func hasInvalidSlot(_ slot: TimeSlot) -> Bool {
+        slot.close <= slot.open
+    }
+
+    func formatHour(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour == 12 { return "12 PM" }
+        if hour < 12 { return "\(hour) AM" }
+        return "\(hour - 12) PM"
+    }
+
     func loadData(isDemoMode: Bool = false) async {
         await MainActor.run { isLoading = true; errorMessage = nil }
         if isDemoMode {
             await MainActor.run {
-                workflowMode = .approval
+                confirmationType = .requestApprove
                 responseTimeHours = 24
+                depositAmount = nil
                 timeSlots = [TimeSlot(open: 9, close: 18)]
                 daysOpen = [1, 2, 3, 4, 5]
                 timeZoneId = TimeZone.current.identifier
@@ -57,8 +70,9 @@ class SettingsViewModel: ObservableObject {
             await MainActor.run {
                 if let p = profile {
                     hasProfile = true
-                    workflowMode = p.workflow.mode
+                    confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
+                    depositAmount = p.workflow.depositAmount
                     timeSlots = p.availability.timeSlots.isEmpty
                         ? [TimeSlot(open: 9, close: 18)]
                         : p.availability.timeSlots
@@ -83,11 +97,13 @@ class SettingsViewModel: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
+            var workflowData: [String: Any] = [
+                "confirmationType": confirmationType.rawValue,
+                "responseTimeHours": responseTimeHours
+            ]
+            if let amount = depositAmount { workflowData["depositAmount"] = amount }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
-                "workflow": [
-                    "mode": workflowMode.rawValue,
-                    "responseTimeHours": responseTimeHours
-                ]
+                "workflow": workflowData
             ])
             await MainActor.run {
                 saveSuccess = true
@@ -105,7 +121,12 @@ class SettingsViewModel: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
-            let slotsData = timeSlots.map { ["open": $0.open, "close": $0.close] }
+            let slotsData = timeSlots.map { slot -> [String: Any] in
+                var d: [String: Any] = ["open": slot.open, "close": slot.close, "type": slot.type.rawValue]
+                if let label = slot.customLabel { d["customLabel"] = label }
+                if let days = slot.recurringDays { d["recurringDays"] = days }
+                return d
+            }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "availability": [
                     "timeSlots": slotsData,
@@ -173,7 +194,7 @@ class SettingsViewModel: ObservableObject {
 
     func addTimeSlot() {
         let last = timeSlots.last ?? TimeSlot(open: 9, close: 18)
-        timeSlots.append(TimeSlot(open: last.open, close: last.close))
+        timeSlots.append(TimeSlot(open: last.open, close: last.close, type: last.type, customLabel: last.type == .custom ? last.customLabel : nil, recurringDays: last.type == .recurring ? last.recurringDays : nil))
     }
 
     func removeTimeSlot(at index: Int) {
@@ -183,12 +204,40 @@ class SettingsViewModel: ObservableObject {
 
     func updateTimeSlot(at index: Int, open: Int, close: Int) {
         guard index >= 0, index < timeSlots.count else { return }
-        timeSlots[index] = TimeSlot(id: timeSlots[index].id, open: open, close: close)
+        let s = timeSlots[index]
+        timeSlots[index] = TimeSlot(id: s.id, open: open, close: close, type: s.type, customLabel: s.customLabel, recurringDays: s.recurringDays)
     }
 
-    func updateTimeSlot(id: String, open: Int? = nil, close: Int? = nil) {
+    func updateTimeSlot(id: String, open: Int? = nil, close: Int? = nil, type: SlotType? = nil, customLabel: String? = nil, recurringDays: [Int]? = nil) {
         guard let idx = timeSlots.firstIndex(where: { $0.id == id }) else { return }
         let s = timeSlots[idx]
-        timeSlots[idx] = TimeSlot(id: id, open: open ?? s.open, close: close ?? s.close)
+        let newType = type ?? s.type
+        let newCustomLabel = newType == .custom ? (customLabel ?? s.customLabel) : nil
+        let newRecurringDays = newType == .recurring ? (recurringDays ?? s.recurringDays ?? [1, 2, 3, 4, 5]) : nil
+        timeSlots[idx] = TimeSlot(
+            id: id,
+            open: open ?? s.open,
+            close: close ?? s.close,
+            type: newType,
+            customLabel: newCustomLabel,
+            recurringDays: newRecurringDays
+        )
+    }
+
+    func toggleRecurringDay(slotId: String, day: Int) {
+        guard let idx = timeSlots.firstIndex(where: { $0.id == slotId }) else { return }
+        var days = Set(timeSlots[idx].recurringDays ?? [1, 2, 3, 4, 5])
+        if days.contains(day) {
+            days.remove(day)
+        } else {
+            days.insert(day)
+        }
+        timeSlots[idx].recurringDays = Array(days).sorted()
+    }
+
+    func setSlotCustomLabel(id: String, _ label: String) {
+        guard let idx = timeSlots.firstIndex(where: { $0.id == id }) else { return }
+        let s = timeSlots[idx]
+        timeSlots[idx] = TimeSlot(id: s.id, open: s.open, close: s.close, type: s.type, customLabel: label.isEmpty ? nil : label, recurringDays: s.recurringDays)
     }
 }

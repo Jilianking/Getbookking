@@ -6,19 +6,24 @@
 //
 
 import SwiftUI
-import FirebaseCore  // Add this import
+import UIKit
+import FirebaseCore
 
 @main
 struct TestApp: App {
-    init() {
-        // Initialize Firebase when app launches
-        FirebaseApp.configure()
-    }
-    
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(AuthViewModel())
         }
+    }
+}
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        FirebaseApp.configure()
+        return true
     }
 }

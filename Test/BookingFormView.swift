@@ -1,8 +1,7 @@
 //
 //  BookingFormView.swift
-//  Test
 //
-//  Created by jilianking on 1/13/26.
+//  New booking form. Submits to tenant bookingRequests when tenant exists.
 //
 
 import SwiftUI
@@ -10,20 +9,19 @@ import FirebaseFirestore
 
 struct BookingFormView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var firebaseService: FirebaseService
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var viewModel = BookingFormViewModel()
     var drawerState: DrawerState?
     
     @State private var name = ""
     @State private var email = ""
     @State private var phone = ""
-    @State private var selectedService = ""
+    @State private var selectedServiceName = ""
     @State private var selectedDate = Date()
     @State private var selectedTimeSlot = ""
     @State private var promoCode = ""
     @State private var notes = ""
     
-    @State private var availableTimeSlots: [String] = []
-    @State private var isLoadingSlots = false
     @State private var isSubmitting = false
     @State private var showAlert = false
     @State private var alertMessage = ""
@@ -39,19 +37,20 @@ struct BookingFormView: View {
                 }
                 
                 Section("Service Details") {
-                    Picker("Service", selection: $selectedService) {
+                    Picker("Service", selection: $selectedServiceName) {
                         Text("Select a service").tag("")
-                        ForEach(firebaseService.services) { service in
-                            Text(service.name).tag(service.name)
+                        ForEach(viewModel.servicesForPicker, id: \.name) { svc in
+                            Text(svc.name).tag(svc.name)
                         }
                     }
+                    .disabled(viewModel.isLoading)
                     
                     DatePicker("Date", selection: $selectedDate, displayedComponents: [.date])
-                        .onChange(of: selectedDate) { oldValue, newValue in
-                            loadAvailableTimeSlots()
+                        .onChange(of: selectedDate) { _, _ in
+                            Task { await viewModel.loadAvailableTimeSlots(for: selectedDate) }
                         }
                     
-                    if isLoadingSlots {
+                    if viewModel.isLoadingSlots {
                         HStack {
                             ProgressView()
                             Text("Loading available times...")
@@ -61,7 +60,7 @@ struct BookingFormView: View {
                     } else {
                         Picker("Time Slot", selection: $selectedTimeSlot) {
                             Text("Select a time").tag("")
-                            ForEach(availableTimeSlots, id: \.self) { slot in
+                            ForEach(viewModel.availableTimeSlots, id: \.self) { slot in
                                 Text(slot).tag(slot)
                             }
                         }
@@ -133,9 +132,9 @@ struct BookingFormView: View {
                 Text(alertMessage)
             }
             .task {
-                await firebaseService.fetchServices()
+                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 if !selectedDate.isToday && !selectedDate.isPast {
-                    loadAvailableTimeSlots()
+                    await viewModel.loadAvailableTimeSlots(for: selectedDate)
                 }
             }
         }
@@ -146,36 +145,19 @@ struct BookingFormView: View {
         !name.isEmpty &&
         !email.isEmpty &&
         !phone.isEmpty &&
-        !selectedService.isEmpty &&
+        !selectedServiceName.isEmpty &&
         !selectedTimeSlot.isEmpty
     }
     
-    private func loadAvailableTimeSlots() {
-        isLoadingSlots = true
-        availableTimeSlots = []
-        selectedTimeSlot = ""
-        
-        Task {
-            do {
-                let slots = try await firebaseService.fetchAvailableTimeSlots(for: selectedDate)
-                await MainActor.run {
-                    availableTimeSlots = slots
-                    isLoadingSlots = false
-                }
-            } catch {
-                await MainActor.run {
-                    alertMessage = "Failed to load time slots: \(error.localizedDescription)"
-                    showAlert = true
-                    isLoadingSlots = false
-                }
-            }
-        }
+    private var selectedServiceInfo: (id: String, name: String, slug: String)? {
+        viewModel.servicesForPicker.first { $0.name == selectedServiceName }
     }
     
     private func validatePromoCode() {
         Task {
             do {
-                let code = try await firebaseService.validatePromoCode(promoCode)
+                let svc = FirebaseService()
+                let code = try await svc.validatePromoCode(promoCode)
                 await MainActor.run {
                     promoCodeValidated = code
                     if code == nil {
@@ -195,40 +177,66 @@ struct BookingFormView: View {
     private func submitBooking() {
         isSubmitting = true
         
-        let booking = Booking(
-            id: nil,
-            name: name,
-            email: email,
-            phone: phone,
-            service: selectedService,
-            date: Timestamp(date: selectedDate),
-            timeSlot: selectedTimeSlot,
-            promoCode: promoCode.isEmpty ? nil : promoCode,
-            status: .pending,
-            createdAt: Timestamp(date: Date()),
-            notes: notes.isEmpty ? nil : notes
-        )
-        
         Task {
             do {
-                let bookingId = try await firebaseService.createBooking(booking)
-                await MainActor.run {
-                    alertMessage = "Booking submitted successfully! Your booking ID is: \(bookingId)"
-                    showAlert = true
-                    isSubmitting = false
+                if viewModel.useTenantData, let svc = selectedServiceInfo {
+                    let requestedStart = parseTimeSlot(selectedTimeSlot, on: selectedDate)
+                    _ = try await viewModel.submitTenantBooking(
+                        customerName: name,
+                        customerEmail: email,
+                        customerPhone: phone.isEmpty ? nil : phone,
+                        serviceId: svc.id,
+                        serviceSlug: svc.slug,
+                        serviceName: svc.name,
+                        preferredTime: selectedTimeSlot,
+                        requestedStartTime: requestedStart,
+                        notes: notes.isEmpty ? nil : notes
+                    )
+                    await MainActor.run {
+                        alertMessage = "Booking request submitted! It will appear in Booking Requests."
+                        showAlert = true
+                        isSubmitting = false
+                    }
+                } else {
+                    let booking = Booking(
+                        id: nil,
+                        name: name,
+                        email: email,
+                        phone: phone,
+                        service: selectedServiceName,
+                        date: Timestamp(date: selectedDate),
+                        timeSlot: selectedTimeSlot,
+                        promoCode: promoCode.isEmpty ? nil : promoCode,
+                        status: .pending,
+                        createdAt: Timestamp(date: Date()),
+                        notes: notes.isEmpty ? nil : notes
+                    )
+                    let bookingId = try await viewModel.submitLegacyBooking(booking)
+                    await MainActor.run {
+                        alertMessage = "Booking submitted successfully! Your booking ID is: \(bookingId)"
+                        showAlert = true
+                        isSubmitting = false
+                    }
                 }
             } catch {
                 await MainActor.run {
-                    alertMessage = "Failed to submit booking: \(error.localizedDescription)"
+                    alertMessage = "Failed to submit: \(error.localizedDescription)"
                     showAlert = true
                     isSubmitting = false
                 }
             }
         }
     }
+    
+    private func parseTimeSlot(_ slot: String, on date: Date) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        formatter.defaultDate = date
+        return formatter.date(from: slot)
+    }
 }
 
-extension Date {
+private extension Date {
     var isToday: Bool {
         Calendar.current.isDateInToday(self)
     }
@@ -237,4 +245,3 @@ extension Date {
         self < Date()
     }
 }
-

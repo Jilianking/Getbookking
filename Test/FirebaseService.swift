@@ -307,6 +307,29 @@ class FirebaseService: ObservableObject {
             .setData(firestoreUpdates, merge: true)
     }
 
+    func createTenantBookingRequest(tenantId: String, customerName: String, customerEmail: String, customerPhone: String?, serviceId: String?, serviceSlug: String?, serviceName: String?, preferredTime: String?, requestedStartTime: Date?, notes: String?, formResponses: [String: Any]?) async throws -> String {
+        var data: [String: Any] = [
+            "status": "NEW",
+            "source": "admin_app",
+            "tenantId": tenantId,
+            "customerName": customerName,
+            "customerEmail": customerEmail,
+            "createdAt": Timestamp(date: Date())
+        ]
+        if let phone = customerPhone, !phone.isEmpty { data["customerPhone"] = phone }
+        if let sid = serviceId { data["serviceId"] = sid }
+        if let slug = serviceSlug { data["serviceSlug"] = slug }
+        if let name = serviceName { data["serviceName"] = name }
+        if let pt = preferredTime, !pt.isEmpty { data["preferredTime"] = pt }
+        if let start = requestedStartTime { data["requestedStartTime"] = Timestamp(date: start) }
+        if let n = notes, !n.isEmpty { data["notes"] = n }
+        if let fr = formResponses { data["formResponses"] = fr }
+        let ref = try await db.collection("tenants").document(tenantId)
+            .collection("bookingRequests")
+            .addDocument(data: data)
+        return ref.documentID
+    }
+
     func fetchTenantCustomers(tenantId: String) async throws -> [Client] {
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("customers")
@@ -359,12 +382,12 @@ class FirebaseService: ObservableObject {
             "subscriptionPlan": subscriptionPlan,
             "subscriptionStatus": "active",
             "availability": [
-                "timeSlots": [["open": 9, "close": 18]],
+                "timeSlots": [["open": 9, "close": 18, "type": "open_booking"]],
                 "daysOpen": ProviderAvailability.default.daysOpen,
                 "timeZone": ProviderAvailability.default.timeZone
             ],
             "workflow": [
-                "mode": ProviderWorkflow.default.mode.rawValue,
+                "confirmationType": ProviderWorkflow.default.confirmationType.rawValue,
                 "responseTimeHours": ProviderWorkflow.default.responseTimeHours
             ],
             "createdAt": Timestamp(date: Date())
@@ -478,7 +501,16 @@ class FirebaseService: ObservableObject {
         if let avail = data["availability"] as? [String: Any] {
             if let slots = avail["timeSlots"] as? [[String: Any]], !slots.isEmpty {
                 availability.timeSlots = slots.enumerated().map { i, s in
-                    TimeSlot(id: "\(i)", open: s["open"] as? Int ?? 9, close: s["close"] as? Int ?? 18)
+                    let typeRaw = s["type"] as? String ?? "open_booking"
+                    let type = SlotType(rawValue: typeRaw) ?? .openBooking
+                    return TimeSlot(
+                        id: "\(i)",
+                        open: s["open"] as? Int ?? 9,
+                        close: s["close"] as? Int ?? 18,
+                        type: type,
+                        customLabel: s["customLabel"] as? String,
+                        recurringDays: s["recurringDays"] as? [Int]
+                    )
                 }
             } else if let open = avail["openHour"] as? Int, let close = avail["closeHour"] as? Int {
                 availability.timeSlots = [TimeSlot(open: open, close: close)]
@@ -491,10 +523,13 @@ class FirebaseService: ObservableObject {
 
         var workflow = ProviderWorkflow.default
         if let wf = data["workflow"] as? [String: Any] {
-            if let modeRaw = wf["mode"] as? String, let mode = WorkflowMode(rawValue: modeRaw) {
-                workflow.mode = mode
+            if let typeRaw = wf["confirmationType"] as? String, let type = BookingConfirmationType(rawValue: typeRaw) {
+                workflow.confirmationType = type
+            } else if let modeRaw = wf["mode"] as? String {
+                workflow.confirmationType = (modeRaw == "fixed_slots") ? .instantBook : .requestApprove
             }
             workflow.responseTimeHours = wf["responseTimeHours"] as? Int ?? workflow.responseTimeHours
+            workflow.depositAmount = wf["depositAmount"] as? Double
         }
 
         let tenantId = data["tenantId"] as? String

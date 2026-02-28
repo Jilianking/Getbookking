@@ -9,7 +9,6 @@ enum CalendarViewMode: String, CaseIterable {
 struct CalendarView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = CalendarViewModel()
-    @StateObject private var firebaseService = FirebaseService()
     @State private var selectedDate = Date()
     @State private var viewMode: CalendarViewMode = .month
     @State private var showingBookingForm = false
@@ -93,7 +92,8 @@ struct CalendarView: View {
                 await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode)
             }
             .sheet(isPresented: $showingBookingForm) {
-                BookingFormView(firebaseService: firebaseService, drawerState: drawerState)
+                BookingFormView(drawerState: drawerState)
+                    .environmentObject(authViewModel)
                     .onDisappear { Task { await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode) } }
             }
         }

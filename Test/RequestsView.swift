@@ -3,7 +3,7 @@ import SwiftUI
 struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = RequestsViewModel()
-    @State private var selectedStatus: Request.RequestStatus? = .pending
+    @State private var selectedStatus: Request.RequestStatus? = nil
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
     @State private var searchText = ""
@@ -67,6 +67,9 @@ struct RequestsView: View {
                         if viewModel.useTenantData {
                             ForEach(filteredBookingRequests) { br in
                                 BookingRequestListRow(request: br)
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
                                     .onTapGesture { selectedBookingRequest = br }
                             }
                         } else {
@@ -77,6 +80,8 @@ struct RequestsView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color(.systemGroupedBackground))
 
                     Text("Showing \(viewModel.useTenantData ? filteredBookingRequests.count : filteredRequests.count) of \(viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count) request(s)")
                         .font(.caption)
@@ -97,7 +102,7 @@ struct RequestsView: View {
                 RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
             }
             .sheet(item: $selectedBookingRequest) { br in
-                BookingRequestDetailView(request: br, viewModel: viewModel, drawerState: drawerState)
+                BookingRequestDetailView(request: br, drawerState: drawerState)
             }
             .task {
                 await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode)
@@ -123,7 +128,12 @@ struct RequestsView: View {
     private var filteredBookingRequests: [BookingRequest] {
         var list = viewModel.bookingRequests
         if let status = selectedStatus {
-            list = list.filter { $0.status == status.rawValue }
+            list = list.filter { br in
+                if status == .pending {
+                    return br.status == "pending" || br.status == "NEW"
+                }
+                return br.status == status.rawValue
+            }
         }
         if !searchText.isEmpty {
             list = list.filter {
@@ -135,107 +145,206 @@ struct RequestsView: View {
     }
 }
 
+// MARK: - Status Badge (Square-style colored pill)
+private func statusBadgeColor(_ status: String) -> Color {
+    switch status.lowercased() {
+    case "new": return Color.green
+    case "confirmed": return Color.blue
+    case "reviewed": return Color.gray
+    case "declined", "cancelled": return Color.red.opacity(0.9)
+    default: return Color.gray
+    }
+}
+
+struct StatusBadgeView: View {
+    let status: String
+
+    var body: some View {
+        Text(status.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(statusBadgeColor(status))
+            .clipShape(Capsule())
+    }
+}
+
 struct BookingRequestListRow: View {
     let request: BookingRequest
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Circle()
                 .fill(Color.black)
-                .frame(width: 40, height: 40)
+                .frame(width: 48, height: 48)
                 .overlay(
                     Text((request.customerName ?? "?").prefix(2).uppercased())
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundColor(.white)
                 )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(request.customerName ?? "Unknown")
                     .font(.subheadline.weight(.semibold))
-                Text(request.customerEmail ?? "")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                if let phone = request.customerPhone {
-                    Text(phone)
+                if let service = request.serviceName ?? request.serviceSlug, !service.isEmpty {
+                    Text(service)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.gray.opacity(0.15))
+                        .clipShape(Capsule())
                 }
+                Text(request.createdAt?.formatted(.dateTime.month(.abbreviated).day().hour().minute()) ?? "-")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             Spacer()
-            Text(request.createdAt?.formatted(.dateTime.month(.abbreviated).day()) ?? "-")
-                .font(.caption)
-                .foregroundColor(.secondary)
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 8)
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
     }
 }
 
 struct BookingRequestDetailView: View {
     let request: BookingRequest
-    @ObservedObject var viewModel: RequestsViewModel
     var drawerState: DrawerState
     @Environment(\.dismiss) var dismiss
-    @State private var status: String
-    @State private var notes = ""
-
-    init(request: BookingRequest, viewModel: RequestsViewModel, drawerState: DrawerState) {
-        self.request = request
-        self.viewModel = viewModel
-        self.drawerState = drawerState
-        _status = State(initialValue: request.status)
-        _notes = State(initialValue: request.notes ?? "")
-    }
-
-    private func saveChanges() {
-        guard let id = request.documentId else { return }
-        Task {
-            await viewModel.updateBookingRequest(id, status: status, notes: notes.isEmpty ? nil : notes)
-            dismiss()
-        }
-    }
 
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Customer Information")) {
-                    Text(request.customerName ?? "-")
-                    Text(request.customerEmail ?? "-")
-                    if let phone = request.customerPhone {
-                        Text(phone)
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Hero header: large avatar, name
+                    VStack(spacing: 12) {
+                        Circle()
+                            .fill(Color.black)
+                            .frame(width: 64, height: 64)
+                            .overlay(
+                                Text((request.customerName ?? "?").prefix(2).uppercased())
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundColor(.white)
+                            )
+                        Text(request.customerName ?? "Unknown")
+                            .font(.title2.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 16)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+
+                    // Service card
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(request.serviceName ?? request.serviceSlug ?? "-")
+                            .font(.headline.weight(.semibold))
+                        if let pt = request.preferredTime, !pt.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("Preferred: \(pt)")
+                                    .font(.subheadline)
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                        if let start = request.requestedStartTime {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("Requested: \(start.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                                    .font(.subheadline)
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+
+                    // Contact card with quick actions
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Contact")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 12)
+                        if let phone = request.customerPhone, !phone.isEmpty,
+                           let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })"), !phone.filter(\.isNumber).isEmpty {
+                            Link(destination: telURL) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "phone.fill")
+                                        .font(.body)
+                                        .foregroundColor(.green)
+                                        .frame(width: 24, alignment: .center)
+                                    Text(phone)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                            if let email = request.customerEmail, !email.isEmpty { Divider() }
+                        }
+                        if let email = request.customerEmail, !email.isEmpty,
+                           let mailURL = URL(string: "mailto:\(email)") {
+                            Link(destination: mailURL) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "envelope.fill")
+                                        .font(.body)
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24, alignment: .center)
+                                    Text(email)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+
+                    // Notes card (if present)
+                    if let notes = request.notes, !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Notes")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.secondary)
+                            Text(notes)
+                                .font(.subheadline)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                     }
                 }
-
-                Section(header: Text("Service Details")) {
-                    Text(request.serviceName ?? request.serviceSlug ?? "-")
-                    if let pt = request.preferredTime, !pt.isEmpty {
-                        Text("Preferred: \(pt)")
-                    }
-                }
-
-                Section(header: Text("Status")) {
-                    Picker("Status", selection: $status) {
-                        Text("NEW").tag("NEW")
-                        Text("Reviewed").tag("reviewed")
-                        Text("Confirmed").tag("confirmed")
-                        Text("Declined").tag("declined")
-                        Text("Cancelled").tag("cancelled")
-                    }
-                }
-
-                Section(header: Text("Notes")) {
-                    TextEditor(text: $notes)
-                        .frame(height: 100)
-                }
-
-                Section {
-                    Button("Save Changes") {
-                        saveChanges()
-                    }
-                }
+                .padding(16)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle(request.customerName ?? "Request")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

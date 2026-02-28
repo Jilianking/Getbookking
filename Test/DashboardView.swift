@@ -3,7 +3,6 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DashboardViewModel()
-    @StateObject private var firebaseService = FirebaseService()
     @State private var showingBookingForm = false
     var drawerState: DrawerState
     let sectionTitle: String
@@ -166,7 +165,8 @@ struct DashboardView: View {
             await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
         }
         .sheet(isPresented: $showingBookingForm) {
-            BookingFormView(firebaseService: firebaseService, drawerState: drawerState)
+            BookingFormView(drawerState: drawerState)
+                .environmentObject(authViewModel)
                 .onDisappear { Task { await viewModel.loadData(isDemoMode: authViewModel.isDemoMode) } }
         }
     }
@@ -193,25 +193,12 @@ struct DashboardBookingRequestRow: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Text(request.status.capitalized)
-                .font(.caption.weight(.medium))
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(statusColor)
-                .cornerRadius(8)
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
-    }
-
-    private var statusColor: Color {
-        switch request.status.lowercased() {
-        case "new": return .orange
-        case "confirmed": return .green
-        case "declined": return .red
-        default: return .gray
-        }
     }
 }
 

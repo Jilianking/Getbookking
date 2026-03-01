@@ -15,6 +15,7 @@ enum AdminSection: String, CaseIterable {
     case clients
     case design
     case insights
+    case payments
     case settings
 
     var title: String {
@@ -26,6 +27,7 @@ enum AdminSection: String, CaseIterable {
         case .clients: return "Customers"
         case .design: return "Web Page Design"
         case .insights: return "Insights"
+        case .payments: return "Payments"
         case .settings: return "Settings"
         }
     }
@@ -39,6 +41,7 @@ enum AdminSection: String, CaseIterable {
         case .clients: return "person.2.fill"
         case .design: return "paintbrush.fill"
         case .insights: return "chart.bar.fill"
+        case .payments: return "dollarsign.circle.fill"
         case .settings: return "gear"
         }
     }
@@ -94,7 +97,9 @@ struct AdminRootView: View {
         case .design:
             DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
         case .insights:
-            PlaceholderSectionView(drawerState: drawerState, title: AdminSection.insights.title, message: "Payments and insights coming soon.")
+            PlaceholderSectionView(drawerState: drawerState, title: AdminSection.insights.title, message: "Insights and analytics coming soon.")
+        case .payments:
+            PaymentsView(drawerState: drawerState, sectionTitle: AdminSection.payments.title)
         case .settings:
             SettingsView(drawerState: drawerState, sectionTitle: AdminSection.settings.title)
         }

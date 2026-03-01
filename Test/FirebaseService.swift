@@ -267,6 +267,11 @@ class FirebaseService: ObservableObject {
         return doc.data()
     }
 
+    func fetchTenantStripeAccountId(tenantId: String) async throws -> String? {
+        let doc = try await db.collection("tenants").document(tenantId).getDocument()
+        return doc.data()?["stripeAccountId"] as? String
+    }
+
     func fetchTenantBookingRequests(tenantId: String) async throws -> [BookingRequest] {
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests")

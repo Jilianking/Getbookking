@@ -61,7 +61,7 @@ struct DashboardView: View {
                             }
                             Spacer()
                             Button("View All") {
-                                drawerState.selectedSection = .insights
+                                drawerState.selectedSection = .payments
                                 drawerState.isOpen = false
                             }
                                 .font(.subheadline.weight(.medium))
@@ -70,7 +70,7 @@ struct DashboardView: View {
                         .padding(.horizontal)
 
                         Button(action: {
-                            drawerState.selectedSection = .insights
+                            drawerState.selectedSection = .payments
                             drawerState.isOpen = false
                         }) {
                             HStack(spacing: 16) {

@@ -2,7 +2,10 @@
   "hosting": {
     "public": "web",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [{"source": "**", "destination": "/index.html"}]
+    "rewrites": [
+      {"source": "/payments", "destination": "/payments.html"},
+      {"source": "**", "destination": "/index.html"}
+    ]
   },
   "functions": {
     "source": "functions"

@@ -122,10 +122,7 @@ class PaymentsViewModel: ObservableObject {
     func createConnectAccountLink() async {
         await MainActor.run { isConnectingStripe = true; errorMessage = nil }
         do {
-            let result = try await functions.httpsCallable("createConnectAccountLink").call([
-                "returnUrl": "getbookking://payments?success=1",
-                "refreshUrl": "getbookking://payments?refresh=1",
-            ])
+            let result = try await functions.httpsCallable("createConnectAccountLink").call()
             let data = result.data as? [String: Any]
             let urlString = data?["url"] as? String
             guard let url = urlString.flatMap({ URL(string: $0) }) else {

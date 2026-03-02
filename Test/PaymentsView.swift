@@ -8,6 +8,7 @@ import SwiftUI
 
 struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = PaymentsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -21,8 +22,8 @@ struct PaymentsView: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
 
-                    // Connect Stripe banner
-                    if !viewModel.stripeConnected {
+                    // Connect Stripe banner (not connected)
+                    if viewModel.stripeStatus == .notConnected {
                         Button(action: { Task { await viewModel.createConnectAccountLink() } }) {
                             HStack(spacing: 12) {
                                 Image(systemName: "link.circle.fill")
@@ -62,6 +63,32 @@ struct PaymentsView: View {
                                 .foregroundColor(.red)
                                 .padding(.horizontal)
                         }
+                    }
+
+                    // Approval pending (onboarding done, Stripe reviewing)
+                    if viewModel.stripeStatus == .pendingApproval {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Setup complete")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(.primary)
+                                Text("You've finished connecting Stripe. Your account is under review and we'll notify you when you can start accepting payments.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.08))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
                     }
 
                     // 1. Tap to Pay
@@ -175,6 +202,11 @@ struct PaymentsView: View {
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
+                }
             }
         }
         .navigationViewStyle(.stack)

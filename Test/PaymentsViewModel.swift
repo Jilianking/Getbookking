@@ -19,9 +19,16 @@ struct PaymentTransaction: Identifiable {
     let status: String
 }
 
+enum StripeConnectionStatus {
+    case notConnected      // no account
+    case pendingApproval   // onboarding done, Stripe reviewing
+    case fullyConnected    // charges_enabled, ready to accept payments
+}
+
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
     @Published var pendingBalance: Double = 0
+    @Published var stripeStatus: StripeConnectionStatus = .notConnected
     @Published var stripeConnected: Bool = false
     @Published var tenantId: String?
     @Published var isLoading = false
@@ -42,24 +49,69 @@ class PaymentsViewModel: ObservableObject {
             await MainActor.run { isLoading = false }
             return
         }
+        var tid: String?
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
-            guard let tid = profile?.tenantId else {
+            guard let tenantId = profile?.tenantId else {
                 await MainActor.run {
-                    tenantId = nil
+                    self.tenantId = nil
+                    stripeStatus = .notConnected
                     stripeConnected = false
                     isLoading = false
                 }
                 return
             }
-            let stripeAccountId = try await firebaseService.fetchTenantStripeAccountId(tenantId: tid)
+            tid = tenantId
+            let result = try await functions.httpsCallable("getConnectAccountStatus").call()
+            let data = result.data as? [String: Any]
+            let hasAccount = data?["hasAccount"] as? Bool ?? false
+            let chargesEnabled = data?["chargesEnabled"] as? Bool ?? false
+            let detailsSubmitted = data?["detailsSubmitted"] as? Bool ?? false
+
+            let status: StripeConnectionStatus
+            if !hasAccount {
+                status = .notConnected
+            } else if chargesEnabled {
+                status = .fullyConnected
+            } else if detailsSubmitted {
+                status = .pendingApproval
+            } else {
+                status = .notConnected
+            }
+
             await MainActor.run {
-                tenantId = tid
-                stripeConnected = stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty
+                self.tenantId = tenantId
+                stripeStatus = status
+                stripeConnected = chargesEnabled
                 isLoading = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            // Fallback: try Firestore-only if Cloud Function fails (e.g. Stripe not configured)
+            if let tenantId = tid {
+                do {
+                    let stripeAccountId = try await firebaseService.fetchTenantStripeAccountId(tenantId: tenantId)
+                    await MainActor.run {
+                        self.tenantId = tenantId
+                        stripeStatus = (stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty) ? .pendingApproval : .notConnected
+                        stripeConnected = false
+                        isLoading = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.tenantId = tenantId
+                        stripeStatus = .notConnected
+                        stripeConnected = false
+                        isLoading = false
+                    }
+                }
+            } else {
+                await MainActor.run {
+                    self.tenantId = nil
+                    stripeStatus = .notConnected
+                    stripeConnected = false
+                    isLoading = false
+                }
+            }
         }
     }
 
@@ -70,7 +122,10 @@ class PaymentsViewModel: ObservableObject {
     func createConnectAccountLink() async {
         await MainActor.run { isConnectingStripe = true; errorMessage = nil }
         do {
-            let result = try await functions.httpsCallable("createConnectAccountLink").call()
+            let result = try await functions.httpsCallable("createConnectAccountLink").call([
+                "returnUrl": "getbookking://payments?success=1",
+                "refreshUrl": "getbookking://payments?refresh=1",
+            ])
             let data = result.data as? [String: Any]
             let urlString = data?["url"] as? String
             guard let url = urlString.flatMap({ URL(string: $0) }) else {

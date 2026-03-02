@@ -33,6 +33,9 @@ class PaymentsViewModel: ObservableObject {
     @Published var tenantId: String?
     @Published var isLoading = false
     @Published var isConnectingStripe = false
+    @Published var isWithdrawing = false
+    @Published var isCreatingDepositLink = false
+    @Published var depositLinkUrl: String?
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
 
@@ -77,6 +80,18 @@ class PaymentsViewModel: ObservableObject {
                 status = .pendingApproval
             } else {
                 status = .notConnected
+            }
+
+            // Fetch balance when connected
+            if chargesEnabled {
+                let balanceResult = try? await functions.httpsCallable("getConnectBalance").call()
+                let balanceData = balanceResult?.data as? [String: Any]
+                let availableCents = balanceData?["availableCents"] as? Int ?? 0
+                let pendingCents = balanceData?["pendingCents"] as? Int ?? 0
+                await MainActor.run {
+                    availableBalance = Double(availableCents) / 100
+                    pendingBalance = Double(pendingCents) / 100
+                }
             }
 
             await MainActor.run {
@@ -137,5 +152,48 @@ class PaymentsViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func withdrawToBank() async {
+        guard availableBalance > 0 else { return }
+        let amountCents = Int(availableBalance * 100)
+        await MainActor.run { isWithdrawing = true; errorMessage = nil }
+        do {
+            _ = try await functions.httpsCallable("createPayout").call(["amountCents": amountCents])
+            await MainActor.run { isWithdrawing = false }
+            await loadData()
+        } catch {
+            await MainActor.run {
+                isWithdrawing = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func createDepositLink(amountCents: Int) async {
+        await MainActor.run { isCreatingDepositLink = true; errorMessage = nil; depositLinkUrl = nil }
+        do {
+            let result = try await functions.httpsCallable("createDepositLink").call(["amountCents": amountCents])
+            let data = result.data as? [String: Any]
+            let url = data?["url"] as? String
+            await MainActor.run {
+                isCreatingDepositLink = false
+                depositLinkUrl = url
+            }
+        } catch {
+            await MainActor.run {
+                isCreatingDepositLink = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func clearDepositLink() {
+        depositLinkUrl = nil
+    }
+
+    func startTapToPay() async {
+        // Tap to Pay requires Stripe Terminal SDK + Apple entitlement. Backend ready.
+        await MainActor.run { errorMessage = "Tap to Pay requires Stripe Terminal SDK setup. Coming soon." }
     }
 }

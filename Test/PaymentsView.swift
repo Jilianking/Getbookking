@@ -10,6 +10,9 @@ struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = PaymentsViewModel()
+    @State private var showWithdrawConfirm = false
+    @State private var showDepositSheet = false
+    @State private var depositAmountCents = 500
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -57,12 +60,6 @@ struct PaymentsView: View {
                         .buttonStyle(.plain)
                         .disabled(viewModel.isConnectingStripe)
                         .padding(.horizontal)
-                        if let err = viewModel.errorMessage {
-                            Text(err)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .padding(.horizontal)
-                        }
                     }
 
                     // Approval pending (onboarding done, Stripe reviewing)
@@ -97,7 +94,7 @@ struct PaymentsView: View {
                         iconColor: .blue,
                         title: "Tap to Pay",
                         subtitle: "Hold your iPhone for the customer to tap",
-                        action: { /* TODO: Stripe Terminal Tap to Pay */ },
+                        action: { Task { await viewModel.startTapToPay() } },
                         disabled: !viewModel.stripeConnected
                     )
 
@@ -107,12 +104,12 @@ struct PaymentsView: View {
                         iconColor: .green,
                         title: "Deposit Link",
                         subtitle: "Generate a link to request a deposit from customers",
-                        action: { /* TODO: Backend creates Payment Link */ },
+                        action: { showDepositSheet = true },
                         disabled: !viewModel.stripeConnected
                     )
 
                     // 3. Withdraw to Bank
-                    Button(action: { /* TODO: Backend creates payout */ }) {
+                    Button(action: { showWithdrawConfirm = true }) {
                         HStack(spacing: 16) {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.green.opacity(0.2))
@@ -141,6 +138,14 @@ struct PaymentsView: View {
                     .disabled(!viewModel.stripeConnected || viewModel.availableBalance <= 0)
                     .opacity((viewModel.stripeConnected && viewModel.availableBalance > 0) ? 1 : 0.6)
                     .padding(.horizontal)
+                    .disabled(viewModel.isWithdrawing)
+
+                    if let err = viewModel.errorMessage, !err.isEmpty {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
+                    }
 
                     // 4. Recent Activity
                     VStack(alignment: .leading, spacing: 12) {
@@ -208,6 +213,28 @@ struct PaymentsView: View {
                     Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
                 }
             }
+            .confirmationDialog("Withdraw to bank", isPresented: $showWithdrawConfirm) {
+                Button("Withdraw \(formatCurrency(viewModel.availableBalance))", role: .none) {
+                    Task { await viewModel.withdrawToBank() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Transfer \(formatCurrency(viewModel.availableBalance)) to your connected bank account?")
+            }
+            .sheet(isPresented: $showDepositSheet) {
+                DepositLinkSheet(
+                    amountCents: $depositAmountCents,
+                    isCreating: viewModel.isCreatingDepositLink,
+                    depositLinkUrl: viewModel.depositLinkUrl,
+                    onCreate: {
+                        Task { await viewModel.createDepositLink(amountCents: depositAmountCents) }
+                    },
+                    onDismiss: {
+                        viewModel.clearDepositLink()
+                        showDepositSheet = false
+                    }
+                )
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -217,6 +244,93 @@ struct PaymentsView: View {
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+}
+
+private struct DepositLinkSheet: View {
+    @Binding var amountCents: Int
+    let isCreating: Bool
+    let depositLinkUrl: String?
+    let onCreate: () -> Void
+    let onDismiss: () -> Void
+
+    private let presets: [(String, Int)] = [
+        ("$5", 500),
+        ("$10", 1000),
+        ("$25", 2500),
+        ("$50", 5000),
+    ]
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if let url = depositLinkUrl {
+                    VStack(spacing: 24) {
+                        Image(systemName: "link.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.green)
+                        Text("Link created")
+                            .font(.title2.weight(.semibold))
+                        Text("Share this link with your customer to collect the deposit.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        ShareLink(item: URL(string: url) ?? URL(string: "https://")!, subject: Text("Deposit request")) {
+                            Label("Share link", systemImage: "square.and.arrow.up")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Done", action: onDismiss)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                } else {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Deposit amount")
+                            .font(.headline)
+                        ForEach(presets, id: \.1) { label, cents in
+                            Button(action: { amountCents = cents }) {
+                                HStack {
+                                    Text(label)
+                                    Spacer()
+                                    if amountCents == cents {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Button(action: onCreate) {
+                            if isCreating {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            } else {
+                                Text("Generate link")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isCreating)
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Deposit Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+            }
+        }
     }
 }
 

@@ -129,3 +129,178 @@ exports.getConnectAccountStatus = functions
       payoutsEnabled: account.payouts_enabled ?? false,
     };
   });
+
+/** Helper: get stripeAccountId for authenticated user's tenant */
+async function getStripeAccountIdForUser(uid) {
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) return null;
+  const tenantId = userDoc.data().tenantId;
+  if (!tenantId) return null;
+  const tenantDoc = await db.collection("tenants").doc(tenantId).get();
+  return tenantDoc.data()?.stripeAccountId ?? null;
+}
+
+/**
+ * Returns the Connect account balance. { availableCents, pendingCents }.
+ */
+exports.getConnectBalance = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      return { availableCents: 0, pendingCents: 0 };
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      return { availableCents: 0, pendingCents: 0 };
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const balance = await stripe.balance.retrieve(
+      {},
+      { stripeAccount: stripeAccountId }
+    );
+    const available = balance.available?.find((b) => b.currency === "usd");
+    const pending = balance.pending?.find((b) => b.currency === "usd");
+    return {
+      availableCents: available?.amount ?? 0,
+      pendingCents: pending?.amount ?? 0,
+    };
+  });
+
+/**
+ * Creates a payout to the connected account's bank. amountCents in USD cents.
+ */
+exports.createPayout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const amountCents = data?.amountCents;
+    if (typeof amountCents !== "number" || amountCents < 50) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Amount must be at least 50 cents ($0.50)"
+      );
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    await stripe.payouts.create(
+      { amount: Math.round(amountCents), currency: "usd" },
+      { stripeAccount: stripeAccountId }
+    );
+    return { success: true };
+  });
+
+/**
+ * Creates a Payment Link for deposits. amountCents in USD cents.
+ * Returns { url: string } to share with customers.
+ */
+exports.createDepositLink = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const amountCents = data?.amountCents ?? 500; // default $5
+    if (typeof amountCents !== "number" || amountCents < 50) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Amount must be at least 50 cents ($0.50)"
+      );
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const link = await stripe.paymentLinks.create(
+      {
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: { name: "Deposit" },
+              unit_amount: Math.round(amountCents),
+            },
+            quantity: 1,
+          },
+        ],
+      },
+      { stripeAccount: stripeAccountId }
+    );
+    return { url: link.url };
+  });
+
+/**
+ * Creates a PaymentIntent for Tap to Pay. amountCents in USD cents.
+ * Returns { clientSecret, paymentIntentId } for Stripe Terminal SDK.
+ * Requires Stripe Terminal iOS SDK + Tap to Pay entitlement for full flow.
+ */
+exports.createPaymentIntentForTapToPay = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const amountCents = data?.amountCents ?? 100; // default $1 for testing
+    if (typeof amountCents !== "number" || amountCents < 50) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Amount must be at least 50 cents ($0.50)"
+      );
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: Math.round(amountCents),
+        currency: "usd",
+        capture_method: "automatic",
+      },
+      { stripeAccount: stripeAccountId }
+    );
+    return {
+      clientSecret: pi.client_secret,
+      paymentIntentId: pi.id,
+    };
+  });

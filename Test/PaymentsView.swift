@@ -226,8 +226,14 @@ struct PaymentsView: View {
                     amountCents: $depositAmountCents,
                     isCreating: viewModel.isCreatingDepositLink,
                     depositLinkUrl: viewModel.depositLinkUrl,
-                    onCreate: {
-                        Task { await viewModel.createDepositLink(amountCents: depositAmountCents) }
+                    onCreate: { amountCents, productName, productDescription in
+                        Task {
+                            await viewModel.createDepositLink(
+                                amountCents: amountCents,
+                                productName: productName,
+                                productDescription: productDescription
+                            )
+                        }
                     },
                     onDismiss: {
                         viewModel.clearDepositLink()
@@ -251,8 +257,14 @@ private struct DepositLinkSheet: View {
     @Binding var amountCents: Int
     let isCreating: Bool
     let depositLinkUrl: String?
-    let onCreate: () -> Void
+    let onCreate: (Int, String?, String?) -> Void
     let onDismiss: () -> Void
+
+    @State private var useCustomAmount = false
+    @State private var customAmountText = ""
+    @State private var productNameOption = "Deposit"
+    @State private var customProductName = ""
+    @State private var productDescription = ""
 
     private let presets: [(String, Int)] = [
         ("$5", 500),
@@ -260,6 +272,31 @@ private struct DepositLinkSheet: View {
         ("$25", 2500),
         ("$50", 5000),
     ]
+
+    private let productNamePresets = ["Deposit", "Booking deposit", "Service deposit"]
+
+    private var resolvedAmountCents: Int {
+        if useCustomAmount {
+            let cleaned = customAmountText.replacingOccurrences(of: "$", with: "").trimmingCharacters(in: .whitespaces)
+            if let dollars = Double(cleaned), dollars > 0 {
+                return Int(dollars * 100)
+            }
+            return 0
+        }
+        return amountCents
+    }
+
+    private var resolvedProductName: String {
+        if productNameOption == "Custom" { return customProductName }
+        return productNameOption
+    }
+
+    private var canGenerate: Bool {
+        let cents = resolvedAmountCents
+        guard cents >= 50 else { return false }
+        if productNameOption == "Custom" { return !customProductName.trimmingCharacters(in: .whitespaces).isEmpty }
+        return true
+    }
 
     var body: some View {
         NavigationView {
@@ -287,40 +324,82 @@ private struct DepositLinkSheet: View {
                     }
                     .padding()
                 } else {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Deposit amount")
-                            .font(.headline)
-                        ForEach(presets, id: \.1) { label, cents in
-                            Button(action: { amountCents = cents }) {
+                    Form {
+                        Section("Deposit amount") {
+                            ForEach(presets, id: \.1) { label, cents in
+                                Button(action: {
+                                    useCustomAmount = false
+                                    amountCents = cents
+                                }) {
+                                    HStack {
+                                        Text(label)
+                                        Spacer()
+                                        if !useCustomAmount && amountCents == cents {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                }
+                                .foregroundColor(.primary)
+                            }
+                            Button(action: { useCustomAmount = true }) {
                                 HStack {
-                                    Text(label)
+                                    Text("Custom")
                                     Spacer()
-                                    if amountCents == cents {
+                                    if useCustomAmount {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.green)
                                     }
                                 }
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
                             }
-                            .buttonStyle(.plain)
-                        }
-                        Button(action: onCreate) {
-                            if isCreating {
-                                ProgressView()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            } else {
-                                Text("Generate link")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
+                            .foregroundColor(.primary)
+                            if useCustomAmount {
+                                TextField("Amount (e.g. 75 or 75.50)", text: $customAmountText)
+                                    .keyboardType(.decimalPad)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isCreating)
+
+                        Section("Label") {
+                            Picker("Type", selection: $productNameOption) {
+                                ForEach(productNamePresets, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
+                                Text("Custom").tag("Custom")
+                            }
+                            .pickerStyle(.menu)
+                            if productNameOption == "Custom" {
+                                TextField("Product name", text: $customProductName)
+                            }
+                        }
+
+                        Section {
+                            TextField("Description (optional)", text: $productDescription, axis: .vertical)
+                                .lineLimit(3...6)
+                        } header: {
+                            Text("Description")
+                        } footer: {
+                            Text("Shown to the customer on the payment page.")
+                        }
+
+                        Section {
+                            Button(action: {
+                                onCreate(resolvedAmountCents, resolvedProductName.isEmpty ? nil : resolvedProductName, productDescription.isEmpty ? nil : productDescription)
+                            }) {
+                                if isCreating {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                } else {
+                                    Text("Generate link")
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canGenerate || isCreating)
+                        }
                     }
-                    .padding()
+                    .formStyle(.grouped)
                 }
             }
             .navigationTitle("Deposit Link")

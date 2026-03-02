@@ -97,7 +97,7 @@ struct AdminRootView: View {
         case .design:
             DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
         case .insights:
-            PlaceholderSectionView(drawerState: drawerState, title: AdminSection.insights.title, message: "Insights and analytics coming soon.")
+            InsightsView(drawerState: drawerState, sectionTitle: AdminSection.insights.title)
         case .payments:
             PaymentsView(drawerState: drawerState, sectionTitle: AdminSection.payments.title)
         case .settings:

@@ -170,10 +170,13 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func createDepositLink(amountCents: Int) async {
+    func createDepositLink(amountCents: Int, productName: String?, productDescription: String?) async {
         await MainActor.run { isCreatingDepositLink = true; errorMessage = nil; depositLinkUrl = nil }
         do {
-            let result = try await functions.httpsCallable("createDepositLink").call(["amountCents": amountCents])
+            var params: [String: Any] = ["amountCents": amountCents]
+            if let name = productName, !name.isEmpty { params["productName"] = name }
+            if let desc = productDescription, !desc.isEmpty { params["productDescription"] = desc }
+            let result = try await functions.httpsCallable("createDepositLink").call(params)
             let data = result.data as? [String: Any]
             let url = data?["url"] as? String
             await MainActor.run {

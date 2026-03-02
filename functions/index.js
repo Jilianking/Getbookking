@@ -210,6 +210,7 @@ exports.createPayout = functions
 
 /**
  * Creates a Payment Link for deposits. amountCents in USD cents.
+ * Optional: productName, productDescription for customization.
  * Returns { url: string } to share with customers.
  */
 exports.createDepositLink = functions
@@ -225,6 +226,10 @@ exports.createDepositLink = functions
         "Amount must be at least 50 cents ($0.50)"
       );
     }
+    const productName = (data?.productName || "Deposit").toString().trim() || "Deposit";
+    const productDescription = data?.productDescription
+      ? data.productDescription.toString().trim()
+      : undefined;
     const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
@@ -240,13 +245,15 @@ exports.createDepositLink = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const productData = { name: productName };
+    if (productDescription) productData.description = productDescription;
     const link = await stripe.paymentLinks.create(
       {
         line_items: [
           {
             price_data: {
               currency: "usd",
-              product_data: { name: "Deposit" },
+              product_data: productData,
               unit_amount: Math.round(amountCents),
             },
             quantity: 1,
@@ -256,6 +263,56 @@ exports.createDepositLink = functions
       { stripeAccount: stripeAccountId }
     );
     return { url: link.url };
+  });
+
+/**
+ * Returns balance transactions for the Connect account within a date range.
+ * Params: { startTimestampSeconds?: number, endTimestampSeconds?: number, limit?: number }
+ * Returns { transactions: Array<{ id, type, amount, fee, net, created, description, reportingCategory }> }.
+ */
+exports.getConnectBalanceTransactions = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      return { transactions: [] };
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      return { transactions: [] };
+    }
+    const startTs = data?.startTimestampSeconds;
+    const endTs = data?.endTimestampSeconds;
+    const limit = Math.min(Math.max(parseInt(data?.limit, 10) || 100, 1), 100);
+
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const params = { limit };
+    if (typeof startTs === "number" && startTs > 0) {
+      params.created = params.created || {};
+      params.created.gte = startTs;
+    }
+    if (typeof endTs === "number" && endTs > 0) {
+      params.created = params.created || {};
+      params.created.lte = endTs;
+    }
+    const list = await stripe.balanceTransactions.list(
+      params,
+      { stripeAccount: stripeAccountId }
+    );
+    const transactions = (list.data || []).map((t) => ({
+      id: t.id,
+      type: t.type || "unknown",
+      amount: t.amount ?? 0,
+      fee: t.fee ?? 0,
+      net: t.net ?? 0,
+      created: t.created ?? 0,
+      description: t.description || null,
+      reportingCategory: t.reporting_category || null,
+    }));
+    return { transactions };
   });
 
 /**

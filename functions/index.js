@@ -316,6 +316,75 @@ exports.getConnectBalanceTransactions = functions
   });
 
 /**
+ * Creates a booking request from the public web form. No auth required.
+ * Params: { tenantSlug, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, notes? }
+ */
+exports.createBookingRequestFromWeb = functions.https.onCall(async (data, context) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  const customerName = (data?.customerName || "").toString().trim();
+  const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
+
+  if (!tenantSlug || !customerName || !customerEmail) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "tenantSlug, customerName, and customerEmail are required"
+    );
+  }
+
+  const tenantSnap = await db
+    .collection("tenants")
+    .where("slug", "==", tenantSlug)
+    .limit(1)
+    .get();
+
+  if (tenantSnap.empty) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+  const tenantDoc = tenantSnap.docs[0];
+  const tenantId = tenantDoc.id;
+  const tenantData = tenantDoc.data();
+  if (tenantData.isActive === false) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting bookings"
+    );
+  }
+
+  const customerPhone = data?.customerPhone ? data.customerPhone.toString().trim() : null;
+  const serviceId = data?.serviceId ? data.serviceId.toString() : null;
+  const serviceSlug = data?.serviceSlug ? data.serviceSlug.toString() : null;
+  const serviceName = data?.serviceName ? data.serviceName.toString() : null;
+  const preferredTime = data?.preferredTime ? data.preferredTime.toString().trim() : null;
+  const notes = data?.notes ? data.notes.toString().trim() : null;
+
+  const bookingData = {
+    status: "NEW",
+    source: "web",
+    tenantId,
+    customerName,
+    customerEmail,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (customerPhone) bookingData.customerPhone = customerPhone;
+  if (serviceId) bookingData.serviceId = serviceId;
+  if (serviceSlug) bookingData.serviceSlug = serviceSlug;
+  if (serviceName) bookingData.serviceName = serviceName;
+  if (preferredTime) bookingData.preferredTime = preferredTime;
+  if (notes) bookingData.notes = notes;
+  if (data?.formResponses && typeof data.formResponses === "object") {
+    bookingData.formResponses = data.formResponses;
+  }
+
+  const ref = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .add(bookingData);
+
+  return { requestId: ref.id };
+});
+
+/**
  * Creates a PaymentIntent for Tap to Pay. amountCents in USD cents.
  * Returns { clientSecret, paymentIntentId } for Stripe Terminal SDK.
  * Requires Stripe Terminal iOS SDK + Tap to Pay entitlement for full flow.

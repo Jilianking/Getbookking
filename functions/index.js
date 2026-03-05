@@ -311,8 +311,77 @@ exports.getConnectBalanceTransactions = functions
       created: t.created ?? 0,
       description: t.description || null,
       reportingCategory: t.reporting_category || null,
+      sourceId: t.source || null,
     }));
     return { transactions };
+  });
+
+/**
+ * Returns receipt URL for a charge. Params: { chargeId: string }.
+ * Returns { url: string } (Stripe receipt page).
+ */
+exports.getReceiptUrl = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const chargeId = (data?.chargeId || "").toString().trim();
+    if (!chargeId || !chargeId.startsWith("ch_")) {
+      throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const charge = await stripe.charges.retrieve(
+      chargeId,
+      { stripeAccount: stripeAccountId }
+    );
+    const url = charge.receipt_url || null;
+    if (!url) {
+      throw new functions.https.HttpsError("not-found", "Receipt not available for this charge");
+    }
+    return { url };
+  });
+
+/**
+ * Creates a refund for a charge on the Connect account.
+ * Params: { chargeId: string, amountCents?: number, reason?: string }.
+ * Omit amountCents for full refund.
+ */
+exports.createRefund = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const chargeId = (data?.chargeId || "").toString().trim();
+    if (!chargeId || !chargeId.startsWith("ch_")) {
+      throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
+    }
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const amountCents = data?.amountCents;
+    const reason = (data?.reason || "requested_by_customer").toString().trim();
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const params = { charge: chargeId, reason: reason };
+    if (typeof amountCents === "number" && amountCents > 0) {
+      params.amount = Math.round(amountCents);
+    }
+    await stripe.refunds.create(params, { stripeAccount: stripeAccountId });
+    return { success: true };
   });
 
 /**

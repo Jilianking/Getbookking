@@ -10,6 +10,7 @@ struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
+    @State private var showWithdrawSheet = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -86,7 +87,7 @@ struct PaymentsView: View {
                     )
 
                     // 3. Withdraw to Bank
-                    Button(action: { /* TODO: Backend creates payout */ }) {
+                    Button(action: { showWithdrawSheet = true }) {
                         HStack(spacing: 16) {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.green.opacity(0.2))
@@ -150,7 +151,7 @@ struct PaymentsView: View {
                         } else {
                             VStack(spacing: 0) {
                                 ForEach(viewModel.transactions) { txn in
-                                    PaymentTransactionRow(transaction: txn)
+                                    PaymentTransactionRow(transaction: txn, viewModel: viewModel)
                                 }
                             }
                             .background(Color(.systemBackground))
@@ -180,6 +181,11 @@ struct PaymentsView: View {
             .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
                 DepositLinkSheet(viewModel: viewModel) {
                     showDepositLinkSheet = false
+                }
+            }
+            .sheet(isPresented: $showWithdrawSheet) {
+                WithdrawSheet(viewModel: viewModel) {
+                    showWithdrawSheet = false
                 }
             }
         }
@@ -234,13 +240,22 @@ struct PaymentActionCard: View {
 
 struct PaymentTransactionRow: View {
     let transaction: PaymentTransaction
+    @ObservedObject var viewModel: PaymentsViewModel
+    @State private var showRefundConfirm = false
 
-    private var isCredit: Bool {
-        transaction.type == "deposit" || transaction.type == "service_payment"
+    private var isCredit: Bool { transaction.type == "charge" }
+    private var typeLabel: String {
+        switch transaction.type {
+        case "charge": return "Payment"
+        case "payout": return "Payout"
+        case "refund": return "Refund"
+        default: return transaction.type.capitalized
+        }
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
             Circle()
                 .fill(isCredit ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
                 .frame(width: 40, height: 40)
@@ -250,7 +265,7 @@ struct PaymentTransactionRow: View {
                         .foregroundColor(isCredit ? .green : .orange)
                 )
             VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.customerName ?? transaction.type)
+                Text(transaction.customerName ?? typeLabel)
                     .font(.subheadline.weight(.medium))
                 Text(transaction.createdAt?.formatted(.dateTime) ?? "")
                     .font(.caption)
@@ -260,8 +275,34 @@ struct PaymentTransactionRow: View {
             Text("\(isCredit ? "+" : "-")\(formatAmount(transaction.amount))")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(isCredit ? .green : .primary)
+            }
+            if let chargeId = transaction.chargeId {
+                HStack(spacing: 12) {
+                    Button(action: { Task { await viewModel.openReceipt(chargeId: chargeId) } }) {
+                        Label("Receipt", systemImage: "doc.text")
+                            .font(.caption)
+                    }
+                    .disabled(viewModel.isRefunding)
+                    Button(action: { showRefundConfirm = true }) {
+                        Label("Refund", systemImage: "arrow.uturn.backward")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    .disabled(viewModel.isRefunding)
+                    Spacer()
+                }
+                .padding(.leading, 52)
+            }
         }
         .padding()
+        .confirmationDialog("Refund", isPresented: $showRefundConfirm) {
+            Button("Full refund", role: .destructive) {
+                Task { await viewModel.createRefund(chargeId: transaction.chargeId!) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Refund this payment?")
+        }
     }
 
     private func formatAmount(_ value: Double) -> String {
@@ -374,5 +415,85 @@ struct DepositLinkSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Withdraw Sheet
+struct WithdrawSheet: View {
+    @ObservedObject var viewModel: PaymentsViewModel
+    var onDismiss: () -> Void
+    @State private var amountText = ""
+
+    private var amountCents: Int {
+        let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        return Int(round(value * 100))
+    }
+
+    private var maxCents: Int { Int(viewModel.availableBalance * 100) }
+    private var canWithdraw: Bool { amountCents >= 50 && amountCents <= maxCents }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Available: \(formatCurrency(viewModel.availableBalance))")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                TextField("0", text: $amountText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title2.monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                if let err = viewModel.errorMessage {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                Button(action: { amountText = String(maxCents / 100) }) {
+                    Text("Withdraw full balance")
+                        .font(.subheadline)
+                }
+                .padding(.top, 8)
+                Button(action: {
+                    Task {
+                        await viewModel.createPayout(amountCents: amountCents)
+                        if !viewModel.isCreatingPayout && viewModel.errorMessage == nil {
+                            onDismiss()
+                        }
+                    }
+                }) {
+                    HStack {
+                        if viewModel.isCreatingPayout {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Withdraw")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canWithdraw ? Color.green : Color.gray)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .disabled(!canWithdraw || viewModel.isCreatingPayout)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 24)
+            .navigationTitle("Withdraw to bank")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { onDismiss() }
+                }
+            }
+        }
+    }
+
+    private func formatCurrency(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 }

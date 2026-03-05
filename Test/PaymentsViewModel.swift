@@ -12,11 +12,13 @@ import FirebaseFunctions
 
 struct PaymentTransaction: Identifiable {
     let id: String
-    let type: String // deposit, service_payment, payout, refund
+    let type: String // charge, payout, refund, etc.
     let amount: Double
     let customerName: String?
     let createdAt: Date?
     let status: String
+    /// Stripe charge ID when type is "charge"; used for receipt and refund.
+    let chargeId: String?
 }
 
 class PaymentsViewModel: ObservableObject {
@@ -30,6 +32,8 @@ class PaymentsViewModel: ObservableObject {
     @Published var transactions: [PaymentTransaction] = []
     @Published var depositLinkUrl: String?
     @Published var isCreatingDepositLink = false
+    @Published var isCreatingPayout = false
+    @Published var isRefunding = false
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions()
@@ -58,10 +62,60 @@ class PaymentsViewModel: ObservableObject {
             await MainActor.run {
                 tenantId = tid
                 stripeConnected = stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty
-                isLoading = false
             }
+            if stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty {
+                await loadBalance()
+                await loadTransactions()
+            }
+            await MainActor.run { isLoading = false }
         } catch {
             await MainActor.run { isLoading = false }
+        }
+    }
+
+    private func loadBalance() async {
+        do {
+            let result = try await functions.httpsCallable("getConnectBalance").call()
+            let data = result.data as? [String: Any]
+            let availableCents = (data?["availableCents"] as? NSNumber)?.intValue ?? 0
+            let pendingCents = (data?["pendingCents"] as? NSNumber)?.intValue ?? 0
+            await MainActor.run {
+                availableBalance = Double(availableCents) / 100
+                pendingBalance = Double(pendingCents) / 100
+            }
+        } catch {
+            await MainActor.run { availableBalance = 0; pendingBalance = 0 }
+        }
+    }
+
+    private func loadTransactions() async {
+        do {
+            let result = try await functions.httpsCallable("getConnectBalanceTransactions").call()
+            let data = result.data as? [String: Any]
+            let list = data?["transactions"] as? [[String: Any]] ?? []
+            let txns = list.compactMap { t -> PaymentTransaction? in
+                guard let id = t["id"] as? String else { return nil }
+                let typeStr = t["type"] as? String ?? "unknown"
+                let amountCents = (t["net"] as? NSNumber)?.intValue ?? (t["amount"] as? NSNumber)?.intValue ?? 0
+                let amount = Double(amountCents) / 100
+                let description = t["description"] as? String
+                let created = (t["created"] as? NSNumber)?.intValue ?? 0
+                let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
+                let sourceId = t["sourceId"] as? String
+                let chargeId = (typeStr == "charge" && sourceId?.hasPrefix("ch_") == true) ? sourceId : nil
+                return PaymentTransaction(
+                    id: id,
+                    type: typeStr,
+                    amount: abs(amount),
+                    customerName: description,
+                    createdAt: createdAt,
+                    status: "completed",
+                    chargeId: chargeId
+                )
+            }
+            await MainActor.run { transactions = txns }
+        } catch {
+            await MainActor.run { transactions = [] }
         }
     }
 
@@ -105,6 +159,54 @@ class PaymentsViewModel: ObservableObject {
         } catch {
             await MainActor.run {
                 isCreatingDepositLink = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Withdraw to bank. amountCents in USD cents.
+    func createPayout(amountCents: Int) async {
+        guard amountCents >= 50 else { return }
+        await MainActor.run { isCreatingPayout = true; errorMessage = nil }
+        do {
+            _ = try await functions.httpsCallable("createPayout").call(["amountCents": amountCents])
+            await MainActor.run { isCreatingPayout = false }
+            await loadBalance()
+            await loadTransactions()
+        } catch {
+            await MainActor.run {
+                isCreatingPayout = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Opens Stripe receipt for a charge in Safari.
+    func openReceipt(chargeId: String) async {
+        await MainActor.run { errorMessage = nil }
+        do {
+            let result = try await functions.httpsCallable("getReceiptUrl").call(["chargeId": chargeId])
+            let data = result.data as? [String: Any]
+            guard let urlString = data?["url"] as? String, let url = URL(string: urlString) else { return }
+            await UIApplication.shared.open(url)
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Refund a charge. Pass nil amountCents for full refund.
+    func createRefund(chargeId: String, amountCents: Int? = nil, reason: String = "requested_by_customer") async {
+        await MainActor.run { isRefunding = true; errorMessage = nil }
+        do {
+            var params: [String: Any] = ["chargeId": chargeId, "reason": reason]
+            if let amount = amountCents, amount > 0 { params["amountCents"] = amount }
+            _ = try await functions.httpsCallable("createRefund").call(params)
+            await MainActor.run { isRefunding = false }
+            await loadBalance()
+            await loadTransactions()
+        } catch {
+            await MainActor.run {
+                isRefunding = false
                 errorMessage = error.localizedDescription
             }
         }

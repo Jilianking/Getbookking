@@ -10,7 +10,7 @@ import PhotosUI
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
-    @State private var selectedTab: DesignTab = .branding
+    @State private var selectedTab: DesignTab = .template
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -109,6 +109,7 @@ struct DesignView: View {
                     contentUnavailable
                 } else {
                     switch selectedTab {
+                    case .template: templateContent
                     case .branding: brandingContent
                     case .form: formContent
                     case .services: servicesContent
@@ -129,6 +130,52 @@ struct DesignView: View {
                 .foregroundColor(.secondary)
         }
         .padding()
+    }
+
+    private var templateContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Choose a template to get started")
+                .font(.headline)
+            Text("Form fields and services will be pre-filled. You can edit everything in the Form and Services tabs.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(BookingTemplate.allCases) { template in
+                    Button(action: {
+                        Task { await viewModel.applyTemplate(template) }
+                        selectedTab = .form
+                    }) {
+                        VStack(spacing: 12) {
+                            Image(systemName: template.icon)
+                                .font(.system(size: 28))
+                                .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                            Text(template.displayName)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .background(viewModel.industry == template.rawValue ? Color.black : Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isLoading)
+                }
+            }
+
+            if let industry = viewModel.industry, let template = BookingTemplate(rawValue: industry) {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Using \(template.displayName) template — edit in Form & Services tabs")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
     }
 
     private var brandingContent: some View {
@@ -236,9 +283,6 @@ struct DesignView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(service.name)
                             .font(.subheadline.weight(.medium))
-                        Text("\(service.durationMinutes) min")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                     Spacer()
                     Button(role: .destructive) {

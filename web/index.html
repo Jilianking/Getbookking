@@ -1,322 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Book an appointment</title>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyB9DwVkkCM-0cpYhkWRnTfScHIRNIDyJ3g",
-      authDomain: "test-app-96812.firebaseapp.com",
-      projectId: "test-app-96812",
-      storageBucket: "test-app-96812.firebasestorage.app",
-      messagingSenderId: "729589639948",
-      appId: "1:729589639948:web:af6eb6c640f3364c6d7729",
-      measurementId: "G-L01T86TY3K"
-    };
-  </script>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      min-height: 100vh;
-      color: #333;
-      background: #f5f5f5;
-    }
-    .container {
-      max-width: 480px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    .logo { max-height: 60px; margin-bottom: 16px; }
-    h1 { font-size: 24px; margin: 0 0 8px; }
-    .tagline { font-size: 14px; color: #666; margin-bottom: 20px; }
-    .service-list { list-style: none; padding: 0; margin: 0; }
-    .service-item {
-      display: block;
-      padding: 14px 16px;
-      margin-bottom: 8px;
-      background: #f5f5f5;
-      border-radius: 8px;
-      text-decoration: none;
-      color: inherit;
-      font-weight: 500;
-      transition: background 0.2s, transform 0.1s;
-    }
-    .service-item:hover { background: #eee; }
-    .service-item:active { transform: scale(0.99); }
-    .service-duration { font-size: 12px; color: #888; font-weight: normal; }
-    label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
-    input, textarea, select {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      margin-bottom: 16px;
-    }
-    textarea { min-height: 80px; resize: vertical; }
-    button {
-      width: 100%;
-      padding: 14px;
-      font-size: 16px;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .back-link {
-      display: inline-block;
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 16px;
-      text-decoration: none;
-    }
-    .back-link:hover { text-decoration: underline; }
-    .error { color: #c00; font-size: 14px; margin-bottom: 16px; }
-    .success { color: #22c55e; font-size: 16px; font-weight: 500; text-align: center; padding: 24px; }
-    .loading { text-align: center; padding: 40px; color: #666; }
-  </style>
-</head>
-<body>
-  <div id="root">
-    <div class="container">
-      <div class="loading">Loading…</div>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to Firebase Hosting</title>
+
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/12.10.0/firebase-app-compat.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/12.10.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-database-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.10.0/firebase-performance-compat.js"></script>
+    <!-- 
+      initialize the SDK after all desired features are loaded, set useEmulator to false
+      to avoid connecting the SDK to running emulators.
+    -->
+    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+
+    <style media="screen">
+      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
+      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
+      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
+      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
+      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
+      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
+      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
+      @media (max-width: 600px) {
+        body, #message { margin-top: 0; background: white; box-shadow: none; }
+        body { border-top: 16px solid #ffa100; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message">
+      <h2>Welcome</h2>
+      <h1>Firebase Hosting Setup Complete</h1>
+      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
+      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
     </div>
-  </div>
+    <p id="load">Firebase SDK Loading&hellip;</p>
 
-  <script>
-    (function() {
-      try {
-        if (typeof firebase === 'undefined' || !firebaseConfig) {
-          document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase failed to load. Check your connection.</p></div></div>';
-          return;
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const loadEl = document.querySelector('#load');
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+        // // The Firebase SDK is initialized and available here!
+        //
+        // firebase.auth().onAuthStateChanged(user => { });
+        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
+        // firebase.firestore().doc('/foo/bar').get().then(() => { });
+        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
+        // firebase.messaging().requestPermission().then(() => { });
+        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
+        // firebase.analytics(); // call to activate
+        // firebase.analytics().logEvent('tutorial_completed');
+        // firebase.performance(); // call to activate
+        //
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+
+        try {
+          let app = firebase.app();
+          let features = [
+            'auth', 
+            'database', 
+            'firestore',
+            'functions',
+            'messaging', 
+            'storage', 
+            'analytics', 
+            'remoteConfig',
+            'performance',
+          ].filter(feature => typeof app[feature] === 'function');
+          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
+        } catch (e) {
+          console.error(e);
+          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
         }
-      } catch (e) {
-        document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Error: ' + (e.message || 'Failed to load') + '</p></div></div>';
-        return;
-      }
-      try {
-        firebase.initializeApp(firebaseConfig);
-      } catch (e) {
-        document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase init failed: ' + (e.message || 'Unknown error') + '</p></div></div>';
-        return;
-      }
-      const db = firebase.firestore();
-      const functions = firebase.functions();
-
-      function parsePath() {
-        const path = (window.location.pathname || '').replace(/^\/+|\/+$/g, '');
-        const parts = path ? path.split('/') : [];
-        let tenantSlug = parts[0] || '';
-        let serviceSlug = '';
-        if (parts[1] === 'book' && parts[2]) {
-          serviceSlug = parts[2];
-        }
-        return { tenantSlug, serviceSlug };
-      }
-
-      function applyBranding(tenant) {
-        const bg = tenant.backgroundColor || '#FFFFFF';
-        const cardBg = tenant.cardSurfaceColor || '#F5F5F5';
-        const text = tenant.textColor || '#333333';
-        const accent = tenant.primaryColor || '#000000';
-        document.body.style.background = bg;
-        document.body.style.color = text;
-        const cards = document.querySelectorAll('.card');
-        cards.forEach(c => { c.style.background = cardBg; });
-        const buttons = document.querySelectorAll('button[data-accent]');
-        buttons.forEach(b => {
-          b.style.background = accent;
-          b.style.color = '#fff';
-        });
-      }
-
-      function renderServiceList(tenant, services) {
-        const base = window.location.origin + '/' + tenant.slug;
-        const items = services.map(s => `
-          <a href="${base}/book/${s.slug}" class="service-item">
-            ${s.name}
-            <span class="service-duration"> · ${s.durationMinutes || 30} min</span>
-          </a>
-        `).join('');
-        return `
-          <div class="card">
-            ${tenant.logoUrl ? `<img class="logo" src="${tenant.logoUrl}" alt="" />` : ''}
-            <h1>${tenant.displayName || 'Book an appointment'}</h1>
-            ${tenant.tagline ? `<p class="tagline">${tenant.tagline}</p>` : ''}
-            <ul class="service-list">${items}</ul>
-          </div>
-        `;
-      }
-
-      function renderForm(tenant, services, preselectedService) {
-        const opts = services.map(s =>
-          `<option value="${s.id}" data-slug="${s.slug}" data-name="${s.name}" ${preselectedService && preselectedService.id === s.id ? 'selected' : ''}>${s.name} (${s.durationMinutes || 30} min)</option>`
-        ).join('');
-        const contact = (tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail)
-          ? `<p class="tagline">${tenant.contactPhone ? '📞 ' + tenant.contactPhone + ' ' : ''}${tenant.contactEmail ? '✉️ ' + tenant.contactEmail : ''}</p>`
-          : '';
-        return `
-          <div class="card">
-            <a href="${window.location.origin}/${tenant.slug}" class="back-link">← Back to services</a>
-            ${tenant.logoUrl ? `<img class="logo" src="${tenant.logoUrl}" alt="" />` : ''}
-            <h1>Book: ${tenant.displayName || 'Appointment'}</h1>
-            ${contact}
-            <form id="book-form">
-              <label>Service</label>
-              <select name="service" required>${opts}</select>
-              <label>Full Name</label>
-              <input type="text" name="name" required placeholder="Your name" />
-              <label>Email</label>
-              <input type="email" name="email" required placeholder="you@example.com" />
-              <label>Phone</label>
-              <input type="tel" name="phone" placeholder="Optional" />
-              <label>Preferred Time</label>
-              <input type="text" name="preferredTime" placeholder="e.g. Mornings or Afternoons" />
-              <label>Notes</label>
-              <textarea name="notes" placeholder="Any special requests?"></textarea>
-              <p id="form-error" class="error" style="display:none"></p>
-              <button type="submit" data-accent>Request booking</button>
-            </form>
-          </div>
-        `;
-      }
-
-      function renderSuccess() {
-        return `
-          <div class="card">
-            <p class="success">✓ Request submitted! We'll get back to you soon.</p>
-          </div>
-        `;
-      }
-
-      function renderError(msg) {
-        return `
-          <div class="card">
-            <h1>Oops</h1>
-            <p class="error">${msg}</p>
-          </div>
-        `;
-      }
-
-      async function loadTenantBySlug(slug) {
-        const snap = await db.collection('tenants').where('slug', '==', slug.toLowerCase()).limit(1).get();
-        if (snap.empty) return null;
-        const doc = snap.docs[0];
-        return { id: doc.id, slug: doc.data().slug || slug, ...doc.data() };
-      }
-
-      async function loadServices(tenantId) {
-        const snap = await db.collection('tenants').doc(tenantId).collection('services')
-          .where('isActive', '==', true).get();
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      }
-
-      function init() {
-        const { tenantSlug, serviceSlug } = parsePath();
-
-        if (!tenantSlug) {
-          document.getElementById('root').innerHTML = `
-            <div class="container">
-              <div class="card">
-                <h1>GetBookKing</h1>
-                <p>Enter your booking link to get started.</p>
-              </div>
-            </div>
-          `;
-          return;
-        }
-
-        loadTenantBySlug(tenantSlug).then(async tenant => {
-          if (!tenant) {
-            document.getElementById('root').innerHTML = '<div class="container">' + renderError('Business not found') + '</div>';
-            return;
-          }
-          if (tenant.isActive === false) {
-            document.getElementById('root').innerHTML = '<div class="container">' + renderError('This business is not accepting bookings right now.') + '</div>';
-            return;
-          }
-
-          applyBranding(tenant);
-          const services = await loadServices(tenant.id);
-
-          if (services.length === 0) {
-            document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>' + (tenant.displayName || 'Book') + '</h1><p>No services available yet.</p></div></div>';
-            return;
-          }
-
-          const preselected = serviceSlug ? services.find(s => s.slug === serviceSlug) : null;
-          const showForm = serviceSlug && preselected;
-
-          document.getElementById('root').innerHTML = '<div class="container">' +
-            (showForm ? renderForm(tenant, services, preselected) : renderServiceList(tenant, services)) +
-          '</div>';
-
-          if (showForm) {
-            const form = document.getElementById('book-form');
-            form.addEventListener('submit', async (e) => {
-              e.preventDefault();
-              const errEl = document.getElementById('form-error');
-              errEl.style.display = 'none';
-              const btn = form.querySelector('button[type="submit"]');
-              btn.disabled = true;
-
-              const sel = form.querySelector('select[name="service"]');
-              const opt = sel.options[sel.selectedIndex];
-              const serviceId = opt.value;
-              const serviceSlugVal = opt.dataset.slug;
-              const serviceName = opt.dataset.name;
-
-              try {
-                const createBooking = functions.httpsCallable('createBookingRequestFromWeb');
-                await createBooking({
-                  tenantSlug: tenant.slug,
-                  customerName: form.name.value.trim(),
-                  customerEmail: form.email.value.trim().toLowerCase(),
-                  customerPhone: form.phone.value.trim() || null,
-                  serviceId,
-                  serviceSlug: serviceSlugVal,
-                  serviceName,
-                  preferredTime: form.preferredTime.value.trim() || null,
-                  notes: form.notes.value.trim() || null
-                });
-                document.getElementById('root').innerHTML = '<div class="container">' + renderSuccess() + '</div>';
-                applyBranding(tenant);
-              } catch (err) {
-                errEl.textContent = err.message || 'Something went wrong. Please try again.';
-                errEl.style.display = 'block';
-                btn.disabled = false;
-              }
-            });
-          }
-        }).catch(err => {
-          console.error(err);
-          const msg = err && err.message ? err.message : 'Failed to load. Please try again.';
-          document.getElementById('root').innerHTML = '<div class="container">' + renderError(msg) + '</div>';
-        });
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-      } else {
-        init();
-      }
-    })();
-  </script>
-</body>
+      });
+    </script>
+  </body>
 </html>

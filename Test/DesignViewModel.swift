@@ -9,6 +9,7 @@ import Combine
 import FirebaseAuth
 
 enum DesignTab: String, CaseIterable {
+    case template
     case branding
     case form
     case services
@@ -43,6 +44,9 @@ class DesignViewModel: ObservableObject {
     // Services
     @Published var services: [TenantService] = []
 
+    // Template / industry
+    @Published var industry: String?
+
     // Contact
     @Published var contactPhone: String = ""
     @Published var contactEmail: String = ""
@@ -63,6 +67,7 @@ class DesignViewModel: ObservableObject {
                 bookingUrl = ""
                 formFields = FormField.defaultFields
                 services = []
+                industry = nil
                 isLoading = false
             }
             return
@@ -80,6 +85,7 @@ class DesignViewModel: ObservableObject {
                     bookingUrl = ""
                     formFields = FormField.defaultFields
                     services = []
+                    industry = nil
                     isLoading = false
                 }
                 return
@@ -112,6 +118,7 @@ class DesignViewModel: ObservableObject {
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
                 contactAddress = tenant?["contactAddress"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
+                industry = tenant?["industry"] as? String
                 isLoading = false
             }
         } catch {
@@ -219,6 +226,35 @@ class DesignViewModel: ObservableObject {
 
     func removeFormField(_ field: FormField) {
         formFields.removeAll { $0.id == field.id }
+    }
+
+    func applyTemplate(_ template: BookingTemplate) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        do {
+            formFields = template.formFields
+            let schema = formFields.map { $0.toFirestore() }
+
+            for svc in services {
+                try await firebaseService.deleteTenantService(tenantId: tid, serviceId: svc.id)
+            }
+            services = []
+
+            for item in template.defaultServices {
+                _ = try await firebaseService.createTenantService(tenantId: tid, name: item.name, durationMinutes: item.durationMinutes)
+            }
+
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "formSchema": schema,
+                "industry": template.rawValue,
+            ])
+
+            await loadData()
+            await MainActor.run { saveSuccess = true }
+            Task { @MainActor in try? await Task.sleep(nanoseconds: 2_000_000_000); saveSuccess = false }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
     }
 }
 

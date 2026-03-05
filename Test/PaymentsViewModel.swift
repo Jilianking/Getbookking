@@ -19,23 +19,13 @@ struct PaymentTransaction: Identifiable {
     let status: String
 }
 
-enum StripeConnectionStatus {
-    case notConnected      // no account
-    case pendingApproval   // onboarding done, Stripe reviewing
-    case fullyConnected    // charges_enabled, ready to accept payments
-}
-
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
     @Published var pendingBalance: Double = 0
-    @Published var stripeStatus: StripeConnectionStatus = .notConnected
     @Published var stripeConnected: Bool = false
     @Published var tenantId: String?
     @Published var isLoading = false
     @Published var isConnectingStripe = false
-    @Published var isWithdrawing = false
-    @Published var isCreatingDepositLink = false
-    @Published var depositLinkUrl: String?
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
 
@@ -52,81 +42,24 @@ class PaymentsViewModel: ObservableObject {
             await MainActor.run { isLoading = false }
             return
         }
-        var tid: String?
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
-            guard let tenantId = profile?.tenantId else {
+            guard let tid = profile?.tenantId else {
                 await MainActor.run {
-                    self.tenantId = nil
-                    stripeStatus = .notConnected
+                    tenantId = nil
                     stripeConnected = false
                     isLoading = false
                 }
                 return
             }
-            tid = tenantId
-            let result = try await functions.httpsCallable("getConnectAccountStatus").call()
-            let data = result.data as? [String: Any]
-            let hasAccount = data?["hasAccount"] as? Bool ?? false
-            let chargesEnabled = data?["chargesEnabled"] as? Bool ?? false
-            let detailsSubmitted = data?["detailsSubmitted"] as? Bool ?? false
-
-            let status: StripeConnectionStatus
-            if !hasAccount {
-                status = .notConnected
-            } else if chargesEnabled {
-                status = .fullyConnected
-            } else if detailsSubmitted {
-                status = .pendingApproval
-            } else {
-                status = .notConnected
-            }
-
-            // Fetch balance when connected
-            if chargesEnabled {
-                let balanceResult = try? await functions.httpsCallable("getConnectBalance").call()
-                let balanceData = balanceResult?.data as? [String: Any]
-                let availableCents = balanceData?["availableCents"] as? Int ?? 0
-                let pendingCents = balanceData?["pendingCents"] as? Int ?? 0
-                await MainActor.run {
-                    availableBalance = Double(availableCents) / 100
-                    pendingBalance = Double(pendingCents) / 100
-                }
-            }
-
+            let stripeAccountId = try await firebaseService.fetchTenantStripeAccountId(tenantId: tid)
             await MainActor.run {
-                self.tenantId = tenantId
-                stripeStatus = status
-                stripeConnected = chargesEnabled
+                tenantId = tid
+                stripeConnected = stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty
                 isLoading = false
             }
         } catch {
-            // Fallback: try Firestore-only if Cloud Function fails (e.g. Stripe not configured)
-            if let tenantId = tid {
-                do {
-                    let stripeAccountId = try await firebaseService.fetchTenantStripeAccountId(tenantId: tenantId)
-                    await MainActor.run {
-                        self.tenantId = tenantId
-                        stripeStatus = (stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty) ? .pendingApproval : .notConnected
-                        stripeConnected = false
-                        isLoading = false
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.tenantId = tenantId
-                        stripeStatus = .notConnected
-                        stripeConnected = false
-                        isLoading = false
-                    }
-                }
-            } else {
-                await MainActor.run {
-                    self.tenantId = nil
-                    stripeStatus = .notConnected
-                    stripeConnected = false
-                    isLoading = false
-                }
-            }
+            await MainActor.run { isLoading = false }
         }
     }
 
@@ -152,51 +85,5 @@ class PaymentsViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
-    }
-
-    func withdrawToBank() async {
-        guard availableBalance > 0 else { return }
-        let amountCents = Int(availableBalance * 100)
-        await MainActor.run { isWithdrawing = true; errorMessage = nil }
-        do {
-            _ = try await functions.httpsCallable("createPayout").call(["amountCents": amountCents])
-            await MainActor.run { isWithdrawing = false }
-            await loadData()
-        } catch {
-            await MainActor.run {
-                isWithdrawing = false
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    func createDepositLink(amountCents: Int, productName: String?, productDescription: String?) async {
-        await MainActor.run { isCreatingDepositLink = true; errorMessage = nil; depositLinkUrl = nil }
-        do {
-            var params: [String: Any] = ["amountCents": amountCents]
-            if let name = productName, !name.isEmpty { params["productName"] = name }
-            if let desc = productDescription, !desc.isEmpty { params["productDescription"] = desc }
-            let result = try await functions.httpsCallable("createDepositLink").call(params)
-            let data = result.data as? [String: Any]
-            let url = data?["url"] as? String
-            await MainActor.run {
-                isCreatingDepositLink = false
-                depositLinkUrl = url
-            }
-        } catch {
-            await MainActor.run {
-                isCreatingDepositLink = false
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    func clearDepositLink() {
-        depositLinkUrl = nil
-    }
-
-    func startTapToPay() async {
-        // Tap to Pay requires Stripe Terminal SDK + Apple entitlement. Backend ready.
-        await MainActor.run { errorMessage = "Tap to Pay requires Stripe Terminal SDK setup. Coming soon." }
     }
 }

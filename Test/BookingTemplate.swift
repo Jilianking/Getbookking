@@ -51,10 +51,13 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             ]
         case .tattoos:
             return base + [
-                FormField(id: "placement", key: "placement", label: "Placement (body area)", type: .text, required: false),
-                FormField(id: "size", key: "size", label: "Approximate size", type: .text, required: false),
-                FormField(id: "style", key: "style", label: "Style (e.g. traditional, realism)", type: .text, required: false),
-                FormField(id: "notes", key: "notes", label: "Reference images / details", type: .textarea, required: false),
+                FormField(id: "placement", key: "placement", label: "Placement", type: .text, required: false),
+                FormField(id: "size", key: "size", label: "Approx size (inches)", type: .text, required: false),
+                FormField(id: "style", key: "style", label: "Style", type: .text, required: false),
+                FormField(id: "description", key: "description", label: "Description", type: .textarea, required: false),
+                FormField(id: "referenceImages", key: "referenceImages", label: "Reference images / details", type: .textarea, required: false),
+                FormField(id: "preferredDays", key: "preferredDays", label: "Preferred days", type: .text, required: false),
+                FormField(id: "preferredTimeOfDay", key: "preferredTimeOfDay", label: "Preferred time of day", type: .text, required: false),
             ]
         case .nails:
             return base + [

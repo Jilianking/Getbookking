@@ -37,6 +37,9 @@ class DesignViewModel: ObservableObject {
     @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
+    @Published var backgroundPattern: String = ""
+    @Published var backgroundPatternColorHex: String = "#333333"
+    @Published var backgroundPatternOpacity: Double = 0.15
 
     // Form fields
     @Published var formFields: [FormField] = []
@@ -107,6 +110,9 @@ class DesignViewModel: ObservableObject {
                 fontBodySize = tenant?["fontBodySize"] as? String ?? "medium"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
+                backgroundPattern = tenant?["backgroundPattern"] as? String ?? ""
+                backgroundPatternColorHex = tenant?["backgroundPatternColor"] as? String ?? "#333333"
+                backgroundPatternOpacity = tenant?["backgroundPatternOpacity"] as? Double ?? 0.15
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
                     formFields = schema.compactMap { FormField.fromFirestore($0) }
                     if formFields.isEmpty { formFields = FormField.defaultFields }
@@ -142,7 +148,10 @@ class DesignViewModel: ObservableObject {
             "fontFamily": fontFamily,
             "fontBodySize": fontBodySize,
             "cardBorderRadius": cardBorderRadius,
-            "tagline": tagline
+            "tagline": tagline,
+            "backgroundPattern": backgroundPattern,
+            "backgroundPatternColor": backgroundPatternColorHex,
+            "backgroundPatternOpacity": backgroundPatternOpacity
         ]
         await saveTenantUpdates(tid, updates)
     }

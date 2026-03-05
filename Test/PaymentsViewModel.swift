@@ -28,6 +28,8 @@ class PaymentsViewModel: ObservableObject {
     @Published var isConnectingStripe = false
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
+    @Published var depositLinkUrl: String?
+    @Published var isCreatingDepositLink = false
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions()
@@ -82,6 +84,27 @@ class PaymentsViewModel: ObservableObject {
         } catch {
             await MainActor.run {
                 isConnectingStripe = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Creates a Stripe Payment Link for the given amount. amountCents in USD cents (e.g. 2500 = $25).
+    func createDepositLink(amountCents: Int) async {
+        guard amountCents >= 50 else { return }
+        await MainActor.run { isCreatingDepositLink = true; errorMessage = nil; depositLinkUrl = nil }
+        do {
+            let result = try await functions.httpsCallable("createDepositLink").call(["amountCents": amountCents])
+            let data = result.data as? [String: Any]
+            let urlString = data?["url"] as? String
+            await MainActor.run {
+                isCreatingDepositLink = false
+                depositLinkUrl = urlString
+                if urlString == nil { errorMessage = "Invalid response from server" }
+            }
+        } catch {
+            await MainActor.run {
+                isCreatingDepositLink = false
                 errorMessage = error.localizedDescription
             }
         }

@@ -1,89 +1,379 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
-
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.10.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.10.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
-
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book an appointment</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      color: #333;
+      background: #f5f5f5;
+      background-size: auto;
+    }
+    .container { max-width: 480px; margin: 0 auto; padding: 24px; min-height: 100vh; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .logo { max-height: 120px; margin-bottom: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    .tagline { font-size: 14px; color: #666; margin-bottom: 36px; }
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card-header .logo {
+      width: 112px;
+      height: 112px;
+      max-height: none;
+      object-fit: cover;
+      flex-shrink: 0;
+      margin: 0;
+      border-radius: 8px;
+    }
+    .card-header-text { flex: 1; min-width: 0; }
+    .card-header-text h1 { font-size: 24px; margin: 0 0 6px; }
+    .card-header-text .tagline { font-size: 14px; color: #666; margin: 0; }
+    .service-list { list-style: none; padding: 0; margin: 0; margin-top: 8px; }
+    .service-item {
+      display: block;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      text-decoration: none;
+      color: inherit;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .service-item:hover { background: #e5e5e5; }
+    label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    input[type="file"] { padding: 8px; font-size: 14px; }
+    button {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .back-link {
+      display: inline-block;
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 16px;
+      text-decoration: none;
+    }
+    .back-link:hover { text-decoration: underline; }
+    .error { color: #c00; font-size: 14px; margin-bottom: 16px; }
+    .success { color: #22c55e; font-size: 16px; font-weight: 500; text-align: center; padding: 24px; }
+    .loading { text-align: center; padding: 40px; color: #666; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="container">
+      <div class="loading">Loading…</div>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
+  </div>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+  <script>
+    (function() {
+      if (typeof firebase === 'undefined' || typeof firebaseConfig === 'undefined') {
+        document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase failed to load.</p></div></div>';
+        return;
+      }
+      try { firebase.initializeApp(firebaseConfig); } catch (e) {
+        document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase init failed.</p></div></div>';
+        return;
+      }
+      const db = firebase.firestore();
+      const functions = firebase.functions();
+      const storage = firebase.storage();
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+      // Hero Patterns (CC BY 4.0 heropatterns.com) – fill & opacity
+      function h(str) { return (str || '').replace(/^#/, ''); }
+      var H = {
+        circles_and_squares: function(f,o){return "url('data:image/svg+xml,%3Csvg%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%220%200%2040%2040%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M0%200h20v20H0V0zm10%2017c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207zm20%200c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207zM10%2037c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207zm10-17h20v20H20V20zm10%2017c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207z%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20fill-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')";},
+        squares_in_squares: function(f,o){return "url('data:image/svg+xml,%3Csvg%20width%3D%2270%22%20height%3D%2270%22%20viewBox%3D%220%200%2070%2070%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20fill-rule%3D%22evenodd%22%3E%3Cpath%20d%3D%22M0%200h35v35H0V0zm5%205h25v25H5V5zm5%205h15v15H10V10zm5%205h5v5h-5v-5zM40%205h25v25H40V5zm5%205h15v15H45V10zm5%205h5v5h-5v-5zM70%2035H35v35h35V35zm-5%205H40v25h25V40zm-5%205H45v15h15V45zm-5%205h-5v5h5v-5zM30%2040H5v25h25V40zm-5%205H10v15h15V45zm-5%205h-5v5h5v-5z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E')";},
+        bubbles: function(f,o){return "url('data:image/svg+xml,%3Csvg%20width%3D%22100%22%20height%3D%22100%22%20viewBox%3D%220%200%20100%20100%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M11%2018c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207zm48%2025c3.866%200%207-3.134%207-7s-3.134-7-7-7-7%203.134-7%207%203.134%207%207%207zm-43-7c1.657%200%203-1.343%203-3s-1.343-3-3-3-3%201.343-3%203%201.343%203%203%203zm63%2031c1.657%200%203-1.343%203-3s-1.343-3-3-3-3%201.343-3%203%201.343%203%203%203zM34%2090c1.657%200%203-1.343%203-3s-1.343-3-3-3-3%201.343-3%203%201.343%203%203%203zm56-76c1.657%200%203-1.343%203-3s-1.343-3-3-3-3%201.343-3%203%201.343%203%203%203zM12%2086c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm28-65c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm23-11c2.761%200%205-2.239%205-5s-2.239-5-5-5-5%202.239-5%205%202.239%205%205%205zm-6%2060c2.21%200%204-1.79%204-4s-1.79-4-4-4-4%201.79-4%204%201.79%204%204%204zm29%2022c2.761%200%205-2.239%205-5s-2.239-5-5-5-5%202.239-5%205%202.239%205%205%205zM32%2063c2.761%200%205-2.239%205-5s-2.239-5-5-5-5%202.239-5%205%202.239%205%205%205zm57-13c2.761%200%205-2.239%205-5s-2.239-5-5-5-5%202.239-5%205%202.239%205%205%205zm-9-21c1.105%200%202-.895%202-2s-.895-2-2-2-2%20.895-2%202%20.895%202%202%202zM60%2091c1.105%200%202-.895%202-2s-.895-2-2-2-2%20.895-2%202%20.895%202%202%202zM35%2041c1.105%200%202-.895%202-2s-.895-2-2-2-2%20.895-2%202%20.895%202%202%202zM12%2060c1.105%200%202-.895%202-2s-.895-2-2-2-2%20.895-2%202%20.895%202%202%202z%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20fill-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')";},
+        bamboo: function(f,o){return "url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20height%3D%2232%22%20width%3D%2216%22%20viewBox%3D%220%200%2016%2032%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20d%3D%22M0%2024h4v2H0v-2zm0%204h6v2H0v-2zm0-8h2v2H0v-2zM0%200h4v2H0V0zm0%204h2v2H0V4zm16%2020h-6v2h6v-2zm0%204H8v2h8v-2zm0-8h-4v2h4v-2zm0-20h-6v2h6V0zm0%204h-4v2h4V4zm-2%2012h2v2h-2v-2zm0-8h2v2h-2V8zM2%208h10v2H2V8zm0%208h10v2H2v-2zm-2-4h14v2H0v-2zm4-8h6v2H4V4zm0%2016h6v2H4v-2zM6%200h2v2H6V0zm0%2024h2v2H6v-2z%22%2F%3E%3C%2Fsvg%3E')";},
+        bathroom_floor: function(f,o){return "url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20height%3D%2280%22%20width%3D%2280%22%20viewBox%3D%220%200%2080%2080%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20d%3D%22M0%200h40v40H0V0zm40%2040h40v40H40V40zm0-40h2l-2%202V0zm0%204l4-4h2l-6%206V4zm0%204l8-8h2L40%2010V8zm0%204L52%200h2L40%2014v-2zm0%204L56%200h2L40%2018v-2zm0%204L60%200h2L40%2022v-2zm0%204L64%200h2L40%2026v-2zm0%204L68%200h2L40%2030v-2zm0%204L72%200h2L40%2034v-2zm0%204L76%200h2L40%2038v-2zm0%204L80%200v2L42%2040h-2zm4%200L80%204v2L46%2040h-2zm4%200L80%208v2L50%2040h-2zm4%200l28-28v2L54%2040h-2zm4%200l24-24v2L58%2040h-2zm4%200l20-20v2L62%2040h-2zm4%200l16-16v2L66%2040h-2zm4%200l12-12v2L70%2040h-2zm4%200l8-8v2l-6%206h-2zm4%200l4-4v2l-2%202h-2z%22%2F%3E%3C%2Fsvg%3E')";},
+        hexagons: function(f,o){return "url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2228%22%20height%3D%2249%22%20viewBox%3D%220%200%2028%2049%22%3E%3Cpath%20d%3D%22M13.99%209.25l13%207.5v15l-13%207.5L1%2031.75v-15l12.99-7.5zM3%2017.9v12.7l10.99%206.34%2011-6.35V17.9l-11-6.34L3%2017.9zM0%2015l12.98-7.5V0h-2v6.35L0%2012.69v2.3zm0%2018.5L12.98%2041v8h-2v-6.85L0%2035.81v-2.3zM15%200v7.5L27.99%2015H28v-2.31h-.01L17%206.35V0h-2zm0%2049v-8l12.99-7.5H28v2.31h-.01L17%2042.15V49h-2z%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20fill-rule%3D%22nonzero%22%2F%3E%3C%2Fsvg%3E')";},
+        texture: function(f,o){return "url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20width%3D%224%22%20height%3D%224%22%20viewBox%3D%220%200%204%204%22%3E%3Cpath%20d%3D%22M1%203h1v1H1V3zm2-2h1v1H3V1z%22%2F%3E%3C%2Fsvg%3E')";},
+        topography: function(f,o){return "url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22%23"+h(f)+"%22%20fill-opacity%3D%22"+(o||0.15)+"%22%20width%3D%22600%22%20height%3D%22600%22%20viewBox%3D%220%200%20600%20600%22%3E%3Cpath%20d%3D%22M600%20325.1v-1.17c-6.5%203.83-13.06%207.64-14.68%208.64-10.6%206.56-18.57%2012.56-24.68%2019.09-5.58%205.95-12.44%2010.06-22.42%2014.15-1.45.6-2.96%201.2-4.83%201.9l-4.75%201.82c-9.78%203.75-14.8%206.27-18.98%2010.1-4.23%203.88-9.65%206.6-16.77%208.84-1.95.6-3.99%201.17-6.47%201.8l-6.14%201.53c-5.29%201.35-8.3%202.37-10.54%203.78-3.08%201.92-6.63%203.26-12.74%205.03a384.1%20384.1%200%200%201-4.82%201.36c-2.04.58-3.6%201.04-5.17%201.52a110.03%20110.03%200%200%200-11.2%204.05c-2.7%201.15-5.5%203.93-8.78%208.4a157.68%20157.68%200%200%200-6.15%209.2c-5.75%209.07-7.58%2011.74-10.24%2014.51a50.97%2050.97%200%200%201-4.6%204.22c-2.33%201.9-10.39%207.54-11.81%208.74a14.68%2014.68%200%200%200-3.67%204.15c-1.24%202.3-1.9%204.57-2.78%208.87-2.17%2010.61-3.52%2014.81-8.2%2022.1-4.07%206.33-6.8%209.88-9.83%2012.99-.47.48-.95.96-1.5%201.48l-3.75%203.56c-1.67%201.6-3.18%203.12-4.86%204.9a42.44%2042.44%200%200%200-9.89%2016.94c-2.5%208.13-2.72%2015.47-1.76%2027.22.47%205.82.51%206.36.51%208.18%200%2010.51.12%2017.53.63%2025.78.24%204.05.56%207.8.97%2011.22h.9c-1.13-9.58-1.5-21.83-1.5-37%200-1.86-.04-2.4-.52-8.26-.94-11.63-.72-18.87%201.73-26.85a41.44%2041.44%200%200%201%209.65-16.55c1.67-1.76%203.18-3.27%204.83-4.85.63-.6%203.13-2.96%203.75-3.57a71.6%2071.6%200%200%200%201.52-1.5c3.09-3.16%205.86-6.76%209.96-13.15%204.77-7.42%206.15-11.71%208.34-22.44.86-4.21%201.5-6.4%202.68-8.6.68-1.25%201.79-2.48%203.43-3.86%201.38-1.15%209.43-6.8%2011.8-8.72%201.71-1.4%203.26-2.81%204.7-4.3%202.72-2.85%204.56-5.54%2010.36-14.67a156.9%20156.9%200%200%201%206.1-9.15c3.2-4.33%205.9-7.01%208.37-8.07%203.5-1.5%207.06-2.77%2011.1-4.02a233.84%20233.84%200%200%201%207.6-2.2l2.38-.67c6.19-1.79%209.81-3.16%2012.98-5.15%202.14-1.33%205.08-2.33%2010.27-3.65l6.14-1.53c2.5-.63%204.55-1.2%206.52-1.82%207.24-2.27%2012.79-5.06%2017.15-9.05%204.05-3.72%209-6.2%2018.66-9.9l4.75-1.82c1.87-.72%203.39-1.31%204.85-1.91%2010.1-4.15%2017.07-8.32%2022.76-14.4%206.05-6.45%2013.95-12.4%2024.49-18.92%201.56-.96%207.82-4.6%2014.15-8.33v-64.58%22%2F%3E%3C%2Fsvg%3E')";}
+      };
+
+      function parsePath() {
+        var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
+        var parts = path ? path.split('/') : [];
+        var tenantSlug = parts[0] || '';
+        var serviceSlug = parts[1] === 'book' && parts[2] ? parts[2] : '';
+        return { tenantSlug: tenantSlug, serviceSlug: serviceSlug };
+      }
+
+      function applyBranding(t) {
+        var bg = t.backgroundColor || '#FFFFFF';
+        var card = t.cardSurfaceColor || '#F5F5F5';
+        var txt = t.textColor || '#333333';
+        var accent = t.primaryColor || '#000000';
+        document.body.style.background = bg;
+        document.body.style.color = txt;
+        [].forEach.call(document.querySelectorAll('.card'), function(el){ el.style.background = card; });
+        [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el){ el.style.background = accent; el.style.color = '#fff'; });
+        var pid = t.backgroundPattern || '';
+        var pcolor = t.backgroundPatternColor || '#333333';
+        var pop = t.backgroundPatternOpacity;
+        if (pop == null) pop = 0.15;
+        var fn = H[pid];
+        if (fn) {
+          document.body.style.backgroundImage = fn(pcolor, pop);
+        } else {
+          document.body.style.backgroundImage = '';
         }
-      });
-    </script>
-  </body>
+      }
+
+      function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      function list(tenant, services) {
+        var base = location.origin + '/' + tenant.slug;
+        var items = services.map(function(s){ return '<a href="'+base+'/book/'+s.slug+'" class="service-item">'+esc(s.name)+'</a>'; }).join('');
+        var title = '<h1>'+esc(tenant.displayName||'Book an appointment')+'</h1>';
+        var taglineHtml = tenant.tagline ? '<p class="tagline">'+esc(tenant.tagline)+'</p>' : '';
+        var header;
+        if (tenant.logoUrl) {
+          header = '<div class="card-header">' +
+            '<img class="logo" src="'+tenant.logoUrl+'" alt="">' +
+            '<div class="card-header-text">' + title + taglineHtml + '</div></div>';
+        } else {
+          header = title + taglineHtml;
+        }
+        return '<div class="card">' + header + '<ul class="service-list">'+items+'</ul></div>';
+      }
+      function field(f, services, presel) {
+        var key = (f.key||'').replace(/[^a-zA-Z0-9_]/g,'');
+        var name = 'f_'+key;
+        var req = f.required ? ' required' : '';
+        var lab = '<label for="'+name+'">'+esc(f.label||key)+'</label>';
+        var inp = '';
+        if (f.key === 'service') {
+          var opts = (services||[]).map(function(s){
+            var sel = presel && presel.id === s.id ? ' selected' : '';
+            return '<option value="'+s.id+'" data-slug="'+(s.slug||'')+'" data-name="'+esc(s.name)+'"'+sel+'>'+esc(s.name)+'</option>';
+          }).join('');
+          inp = '<select id="'+name+'" name="'+name+'" data-key="service"'+req+'>'+opts+'</select>';
+        } else if (f.type === 'select') {
+          var oo = (f.options||[]).map(function(o){ return '<option value="'+esc(o)+'">'+esc(o)+'</option>'; }).join('');
+          inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'>'+oo+'</select>';
+        } else if (f.type === 'boolean') {
+          inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'> <option value="">—</option><option value="yes">Yes</option><option value="no">No</option></select>';
+        } else if (f.type === 'file') {
+          inp = '<input type="file" accept="image/*" multiple id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" data-type="file">';
+        } else if (f.type === 'textarea') {
+          inp = '<textarea id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.label)+'"'+req+'></textarea>';
+        } else {
+          var typ = f.type === 'email' ? 'email' : f.type === 'phone' ? 'tel' : 'text';
+          inp = '<input type="'+typ+'" id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.label)+'"'+req+'>';
+        }
+        return lab + inp;
+      }
+      function form(tenant, services, presel) {
+        var schema = tenant.formSchema || [];
+        var useSchema = Array.isArray(schema) && schema.length > 0;
+        var fields = useSchema ? schema : [
+          {key:'name',label:'Full Name',type:'text',required:true},
+          {key:'email',label:'Email',type:'email',required:true},
+          {key:'phone',label:'Phone',type:'phone',required:false},
+          {key:'service',label:'Service',type:'select',required:true},
+          {key:'preferredTime',label:'Preferred Time',type:'text',required:false},
+          {key:'notes',label:'Notes',type:'textarea',required:false}
+        ];
+        if (!fields.some(function(x){ return x.key === 'service'; })) {
+          fields = [{key:'service',label:'Service',type:'select',required:true}].concat(fields);
+        }
+        var html = fields.map(function(f){
+          if (f.key === 'service') return field({key:'service',label:'Service',type:'select',required:true,options:null}, services, presel);
+          return field(f, services, presel);
+        }).join('');
+        var contact = (tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail) ?
+          '<p class="tagline">' + (tenant.contactPhone ? '📞 '+tenant.contactPhone+' ' : '') + (tenant.contactEmail ? '✉️ '+tenant.contactEmail : '') + '</p>' : '';
+        return '<div class="card">' +
+          '<a href="'+location.origin+'/'+tenant.slug+'" class="back-link">← Back to services</a>' +
+          (tenant.logoUrl ? '<img class="logo" src="'+tenant.logoUrl+'" alt="">' : '') +
+          '<h1>Book: '+esc(tenant.displayName||'Appointment')+'</h1>' + contact +
+          '<form id="book-form">'+html+
+          '<p id="form-error" class="error" style="display:none"></p>' +
+          '<button type="submit" data-accent>Request booking</button></form></div>';
+      }
+      function success(){ return '<div class="card"><p class="success">✓ Request submitted! We\'ll get back to you soon.</p></div>'; }
+      function err(m){ return '<div class="card"><h1>Oops</h1><p class="error">'+esc(m)+'</p></div>'; }
+
+      function loadTenant(slug) {
+        return db.collection('tenants').where('slug','==',slug.toLowerCase()).limit(1).get()
+          .then(function(snap){
+            if (snap.empty) return null;
+            var d = snap.docs[0];
+            var data = d.data();
+            return { id: d.id, slug: data.slug || slug, displayName: data.displayName, logoUrl: data.logoUrl, tagline: data.tagline,
+              backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
+              primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
+              contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
+              backgroundPattern: data.backgroundPattern, backgroundPatternColor: data.backgroundPatternColor, backgroundPatternOpacity: data.backgroundPatternOpacity };
+          });
+      }
+      function loadServices(tid) {
+        return db.collection('tenants').doc(tid).collection('services').get()
+          .then(function(snap){
+            return snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
+              var x = d.data();
+              return { id: d.id, slug: x.slug, name: x.name };
+            });
+          });
+      }
+
+      function init() {
+        var p = parsePath();
+        if (!p.tenantSlug) {
+          document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>GetBookKing</h1><p>Enter your booking link to get started.</p></div></div>';
+          return;
+        }
+        loadTenant(p.tenantSlug).then(function(tenant){
+          if (!tenant) {
+            document.getElementById('root').innerHTML = '<div class="container">'+err('Business not found')+'</div>';
+            return;
+          }
+          if (tenant.isActive === false) {
+            document.getElementById('root').innerHTML = '<div class="container">'+err('This business is not accepting bookings right now.')+'</div>';
+            return;
+          }
+          applyBranding(tenant);
+          return loadServices(tenant.id).then(function(services){
+            if (services.length === 0) {
+              document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>'+esc(tenant.displayName||'Book')+'</h1><p>No services available yet.</p></div></div>';
+              applyBranding(tenant);
+              return;
+            }
+            var presel = p.serviceSlug ? services.filter(function(s){ return s.slug === p.serviceSlug; })[0] : null;
+            var showForm = p.serviceSlug && presel;
+            document.getElementById('root').innerHTML = '<div class="container">' + (showForm ? form(tenant, services, presel) : list(tenant, services)) + '</div>';
+            applyBranding(tenant);
+            if (showForm) {
+              function uploadId() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                  var r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+                  return v.toString(16);
+                });
+              }
+              function uploadFileFields(fm, tenantId, formResponses) {
+                var fileInputs = fm.querySelectorAll('input[data-type="file"]');
+                var fieldPromises = [];
+                for (var fi = 0; fi < fileInputs.length; fi++) {
+                  var inp = fileInputs[fi];
+                  var key = inp.getAttribute('data-key');
+                  if (!key || !inp.files || inp.files.length === 0) continue;
+                  var uid = uploadId();
+                  var pathBase = 'tenantRefImages/' + tenantId + '/' + uid + '/';
+                  var uploads = [];
+                  for (var j = 0; j < inp.files.length; j++) {
+                    var file = inp.files[j];
+                    var safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+                    var ref = storage.ref(pathBase + safeName);
+                    uploads.push(ref.put(file).then(function(snapshot) { return snapshot.ref.getDownloadURL(); }));
+                  }
+                  fieldPromises.push(Promise.all(uploads).then(function(urls) {
+                    formResponses[key] = urls;
+                    return urls;
+                  }));
+                }
+                if (fieldPromises.length === 0) return Promise.resolve(formResponses);
+                return Promise.all(fieldPromises).then(function() { return formResponses; });
+              }
+              var fm = document.getElementById('book-form');
+              fm.addEventListener('submit', function(ev){
+                ev.preventDefault();
+                var errEl = document.getElementById('form-error');
+                errEl.style.display = 'none';
+                var btn = fm.querySelector('button[type="submit"]');
+                btn.disabled = true;
+                var origText = btn.textContent;
+                btn.textContent = 'Uploading…';
+                var formResponses = {};
+                [].forEach.call(fm.querySelectorAll('[data-key]'), function(el){
+                  if (el.getAttribute('data-type') === 'file') return;
+                  var k = el.getAttribute('data-key');
+                  var v = (el.value||'').trim();
+                  if (k) formResponses[k] = v || null;
+                });
+                uploadFileFields(fm, tenant.id, formResponses).then(function() {
+                  btn.textContent = 'Submitting…';
+                  var customerName = formResponses.name || '';
+                  var customerEmail = (formResponses.email||'').toLowerCase();
+                  var customerPhone = formResponses.phone || null;
+                  var serviceId = null, serviceSlugVal = null, serviceName = null;
+                  var sel = fm.querySelector('[data-key="service"]');
+                  if (sel && sel.options && sel.options[sel.selectedIndex]) {
+                    var opt = sel.options[sel.selectedIndex];
+                    serviceId = opt.value;
+                    serviceSlugVal = opt.dataset.slug || null;
+                    serviceName = opt.dataset.name || null;
+                  }
+                  return functions.httpsCallable('createBookingRequestFromWeb')({
+                    tenantSlug: tenant.slug,
+                    customerName: customerName,
+                    customerEmail: customerEmail,
+                    customerPhone: customerPhone,
+                    serviceId: serviceId,
+                    serviceSlug: serviceSlugVal,
+                    serviceName: serviceName,
+                    preferredTime: formResponses.preferredTime || null,
+                    notes: formResponses.notes || null,
+                    formResponses: formResponses
+                  });
+                }).then(function(){
+                  document.getElementById('root').innerHTML = '<div class="container">'+success()+'</div>';
+                  applyBranding(tenant);
+                }).catch(function(e){
+                  errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';
+                  errEl.style.display = 'block';
+                  btn.disabled = false;
+                  btn.textContent = origText;
+                });
+              });
+            }
+          });
+        }).catch(function(e){
+          console.error(e);
+          document.getElementById('root').innerHTML = '<div class="container">'+err(e && e.message ? e.message : 'Failed to load.')+'</div>';
+        });
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+      else init();
+    })();
+  </script>
+</body>
 </html>

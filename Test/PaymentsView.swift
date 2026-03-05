@@ -9,6 +9,7 @@ import SwiftUI
 struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = PaymentsViewModel()
+    @State private var showDepositLinkSheet = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -80,7 +81,7 @@ struct PaymentsView: View {
                         iconColor: .green,
                         title: "Deposit Link",
                         subtitle: "Generate a link to request a deposit from customers",
-                        action: { /* TODO: Backend creates Payment Link */ },
+                        action: { showDepositLinkSheet = true },
                         disabled: !viewModel.stripeConnected
                     )
 
@@ -176,6 +177,11 @@ struct PaymentsView: View {
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
+            .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
+                DepositLinkSheet(viewModel: viewModel) {
+                    showDepositLinkSheet = false
+                }
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -263,5 +269,110 @@ struct PaymentTransactionRow: View {
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: value)) ?? "$0"
+    }
+}
+
+// MARK: - Deposit Link Sheet
+struct DepositLinkSheet: View {
+    @ObservedObject var viewModel: PaymentsViewModel
+    var onDismiss: () -> Void
+    @State private var amountText = ""
+    @FocusState private var isAmountFocused: Bool
+
+    private static let suggestionAmounts: [(label: String, cents: Int)] = [
+        ("$25", 2500),
+        ("$50", 5000),
+        ("$100", 10_000),
+        ("$200", 20_000),
+    ]
+
+    private var amountCents: Int {
+        let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        return Int(round(value * 100))
+    }
+
+    private var canCreate: Bool { amountCents >= 50 }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Enter deposit amount")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                TextField("0.00", text: $amountText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title2.monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .focused($isAmountFocused)
+                    .padding(.horizontal, 24)
+
+                if let err = viewModel.errorMessage {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+
+                if let urlString = viewModel.depositLinkUrl, let url = URL(string: urlString) {
+                    VStack(spacing: 16) {
+                        Text("Link ready")
+                            .font(.subheadline.weight(.semibold))
+                        Text(urlString)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .padding(.horizontal)
+                        ShareLink(item: url, subject: Text("Deposit link"), message: Text("Pay your deposit")) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .font(.body.weight(.medium))
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                } else {
+                    Button(action: {
+                        Task { await viewModel.createDepositLink(amountCents: amountCents) }
+                    }) {
+                        HStack {
+                            if viewModel.isCreatingDepositLink {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text("Create link")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canCreate ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!canCreate || viewModel.isCreatingDepositLink)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 20)
+            .navigationTitle("Deposit Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { onDismiss() }
+                }
+                ToolbarItem(placement: .keyboard) {
+                    HStack(spacing: 12) {
+                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
+                            Button(item.label) {
+                                amountText = String(format: "%.2f", Double(item.cents) / 100)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
     }
 }

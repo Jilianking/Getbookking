@@ -39,6 +39,7 @@ enum FormFieldType: String, CaseIterable {
     case email
     case phone
     case textarea
+    case file
 
     var displayName: String {
         switch self {
@@ -46,6 +47,7 @@ enum FormFieldType: String, CaseIterable {
         case .email: return "Email"
         case .phone: return "Phone"
         case .textarea: return "Long text"
+        case .file: return "File / photos"
         }
     }
 }

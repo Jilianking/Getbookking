@@ -1,123 +1,147 @@
 //
 //  DesignView.swift
 //
-//  Web page design: preview on top, tabbed Branding / Form / Services / Contact.
+//  Web page design: Preview mode (default) + Builder mode with tabs.
 //
 
 import SwiftUI
 import PhotosUI
 
+enum HeroPattern: String, CaseIterable {
+    case none = ""
+    case circles_and_squares = "circles_and_squares"
+    case squares_in_squares = "squares_in_squares"
+    case bubbles = "bubbles"
+    case bamboo = "bamboo"
+    case bathroom_floor = "bathroom_floor"
+    case hexagons = "hexagons"
+    case texture = "texture"
+    case topography = "topography"
+}
+
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .template
+    @State private var isShowingBuilder = false
     var drawerState: DrawerState
     let sectionTitle: String
 
-    private let previewHeight: CGFloat = 180
-
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                previewSection
-                tabPicker
-                tabContent
+            Group {
+                if isShowingBuilder {
+                    builderContent
+                } else {
+                    previewContent
+                }
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { drawerState.isOpen = true }) {
-                        Image(systemName: "line.3.horizontal")
+                    Group {
+                        if isShowingBuilder {
+                            Button("Preview") {
+                                isShowingBuilder = false
+                            }
+                        } else {
+                            Button(action: { drawerState.isOpen = true }) {
+                                Image(systemName: "line.3.horizontal")
+                            }
+                        }
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Group {
+                        if !isShowingBuilder {
+                            HStack(spacing: 16) {
+                                Button("Edit") {
+                                    isShowingBuilder = true
+                                }
+                                if viewModel.hasTenant, URL(string: viewModel.bookingUrl) != nil {
+                                    Button(action: openInSafari) {
+                                        Image(systemName: "safari")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
-            .refreshable {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
-            }
         }
         .navigationViewStyle(.stack)
     }
 
-    private var previewSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Live preview")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            if viewModel.hasTenant {
-                WebViewPreview(url: URL(string: viewModel.bookingUrl), height: previewHeight)
-                Button(action: openInSafari) {
-                    HStack {
-                        Image(systemName: "safari")
-                        Text("Open in Safari")
-                    }
-                    .font(.subheadline)
-                }
-                .padding(.top, 4)
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: previewHeight)
-                    .overlay(
-                        Text("Connect your business to see preview")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding()
-                    )
-            }
-        }
-        .padding()
+    private var previewContent: some View {
+        WebViewPreview(
+            url: viewModel.hasTenant ? URL(string: viewModel.bookingUrl) : nil,
+            height: nil
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
     }
 
-    private var tabPicker: some View {
-        Picker("Section", selection: $selectedTab) {
-            ForEach(DesignTab.allCases, id: \.self) { tab in
-                Text(tab.rawValue.capitalized).tag(tab)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding()
-        .background(Color(.systemBackground))
-    }
-
-    @ViewBuilder
-    private var tabContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let msg = viewModel.errorMessage {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding()
-                }
-                if viewModel.saveSuccess {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Saved")
-                            .font(.subheadline)
-                            .foregroundColor(.green)
+    private var builderContent: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(DesignTab.allCases, id: \.self) { tab in
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(tab.rawValue.capitalized)
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(selectedTab == tab ? Color.accentColor : Color.clear)
+                            .foregroundColor(selectedTab == tab ? .white : .primary)
                     }
-                    .padding()
-                }
-                if !viewModel.hasTenant && !authViewModel.isDemoMode {
-                    contentUnavailable
-                } else {
-                    switch selectedTab {
-                    case .template: templateContent
-                    case .branding: brandingContent
-                    case .form: formContent
-                    case .services: servicesContent
-                    case .contact: contactContent
-                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .background(Color(.systemGray5))
+            .cornerRadius(8)
             .padding()
+            .background(Color(.systemBackground))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let msg = viewModel.errorMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding()
+                    }
+                    if viewModel.saveSuccess {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Saved")
+                                .font(.subheadline)
+                                .foregroundColor(.green)
+                        }
+                        .padding()
+                    }
+                    if !viewModel.hasTenant && !authViewModel.isDemoMode {
+                        contentUnavailable
+                    } else {
+                        switch selectedTab {
+                        case .template: templateContent
+                        case .branding: brandingContent
+                        case .form: formContent
+                        case .services: servicesContent
+                        case .contact: contactContent
+                        }
+                    }
+                }
+                .padding()
+            }
+            .refreshable {
+                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            }
         }
     }
 
@@ -195,6 +219,38 @@ struct DesignView: View {
                 HexColorRow(label: "Accent (buttons)", hex: $viewModel.primaryColorHex)
                 HexColorRow(label: "Accent hover", hex: $viewModel.primaryColorHoverHex)
                 HexColorRow(label: "Success", hex: $viewModel.successColorHex)
+            }
+
+            // Background pattern
+            Text("Background pattern")
+                .font(.headline)
+            Text("Optional pattern over your background color")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 52))], spacing: 10) {
+                ForEach(HeroPattern.allCases, id: \.rawValue) { p in
+                    Button(action: { viewModel.backgroundPattern = p.rawValue }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(p == .none ? Color(.systemGray5) : Color(hex: viewModel.backgroundPatternColorHex).opacity(viewModel.backgroundPatternOpacity))
+                            Image(systemName: p == .none ? "circle.slash" : "square.grid.3x3")
+                                .font(.system(size: 18))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(viewModel.backgroundPattern == p.rawValue ? Color.accentColor : Color.clear, lineWidth: 2)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HexColorRow(label: "Pattern color", hex: $viewModel.backgroundPatternColorHex)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Pattern opacity: \(Int(viewModel.backgroundPatternOpacity * 100))%")
+                    .font(.subheadline)
+                Slider(value: $viewModel.backgroundPatternOpacity, in: 0...0.5, step: 0.05)
             }
 
             // Typography

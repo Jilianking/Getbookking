@@ -10,6 +10,9 @@ struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
     @State private var showingLogoutAlert = false
+    @State private var showEnterModeAlert = false
+    @State private var previousIndustryForCancel: String = ""
+    @State private var hasLoadedServiceOnce = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -45,6 +48,40 @@ struct SettingsView: View {
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile {
+                    Section(header: Text("Service"), footer: Text("Updates your booking form and services in Website Design. You can still edit them after.")) {
+                        Picker("Business type", selection: $viewModel.selectedIndustry) {
+                            ForEach(BookingTemplate.allCases) { template in
+                                Text(template.displayName).tag(template.rawValue)
+                            }
+                        }
+                        .onChange(of: viewModel.selectedIndustry) { oldValue, newValue in
+                            guard hasLoadedServiceOnce else { return }
+                            previousIndustryForCancel = oldValue
+                            showEnterModeAlert = true
+                        }
+                        Button(action: {
+                            Task { await viewModel.applyTemplateAndSave() }
+                        }) {
+                            HStack {
+                                Text("Save and apply to website")
+                                if viewModel.isSavingService {
+                                    Spacer()
+                                    ProgressView()
+                                        .scaleEffect(0.9)
+                                }
+                            }
+                        }
+                        .disabled(viewModel.isSavingService)
+                        if viewModel.saveSuccess {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Saved — Website Design updated")
+                                    .foregroundColor(.green)
+                            }
+                        }
+                    }
+
                     Section(header: Text("Scheduling & Availability")) {
                         Picker("Booking confirmation", selection: $viewModel.confirmationType) {
                             ForEach(BookingConfirmationType.allCases, id: \.self) { type in
@@ -122,8 +159,19 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to logout?")
             }
+            .alert("Entering \(BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this") mode", isPresented: $showEnterModeAlert) {
+                Button("Cancel", role: .cancel) {
+                    viewModel.selectedIndustry = previousIndustryForCancel
+                }
+                Button("Enter") {
+                    Task { await viewModel.applyTemplateAndSave() }
+                }
+            } message: {
+                Text("Your booking form and services will be updated for this business type. You can still edit them in Website Design.")
+            }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                hasLoadedServiceOnce = true
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)

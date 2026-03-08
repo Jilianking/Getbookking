@@ -21,6 +21,9 @@ class SettingsViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var saveSuccess = false
     @Published var hasProfile = false
+    @Published var tenantId: String?
+    @Published var selectedIndustry: String = BookingTemplate.custom.rawValue
+    @Published var isSavingService = false
 
     private let firebaseService = FirebaseService()
 
@@ -57,6 +60,8 @@ class SettingsViewModel: ObservableObject {
                 blockedDates = []
                 availableDates = []
                 hasProfile = false
+                tenantId = nil
+                selectedIndustry = BookingTemplate.custom.rawValue
                 isLoading = false
             }
             return
@@ -67,9 +72,18 @@ class SettingsViewModel: ObservableObject {
                 return
             }
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            var industry: String?
+            var tid: String?
+            if let p = profile, let tenantIdFromProfile = p.tenantId {
+                tid = tenantIdFromProfile
+                let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile)
+                industry = tenant?["industry"] as? String
+            }
             await MainActor.run {
                 if let p = profile {
                     hasProfile = true
+                    tenantId = tid
+                    selectedIndustry = industry ?? BookingTemplate.custom.rawValue
                     confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
                     depositAmount = p.workflow.depositAmount
@@ -82,6 +96,8 @@ class SettingsViewModel: ObservableObject {
                     availableDates = Set(p.availability.availableDates)
                 } else {
                     hasProfile = false
+                    tenantId = nil
+                    selectedIndustry = BookingTemplate.custom.rawValue
                 }
                 isLoading = false
             }
@@ -239,5 +255,39 @@ class SettingsViewModel: ObservableObject {
         guard let idx = timeSlots.firstIndex(where: { $0.id == id }) else { return }
         let s = timeSlots[idx]
         timeSlots[idx] = TimeSlot(id: s.id, open: s.open, close: s.close, type: s.type, customLabel: label.isEmpty ? nil : label, recurringDays: s.recurringDays)
+    }
+
+    /// Applies the selected service template: form schema + default services + industry. Website Design stays editable after.
+    func applyTemplateAndSave() async {
+        guard let tid = tenantId,
+              let template = BookingTemplate(rawValue: selectedIndustry) else { return }
+        await MainActor.run { isSavingService = true; errorMessage = nil; saveSuccess = false }
+        do {
+            let schema = template.formFields.map { $0.toFirestore() }
+            let existingServices = try await firebaseService.fetchTenantServices(tenantId: tid)
+            for svc in existingServices {
+                try await firebaseService.deleteTenantService(tenantId: tid, serviceId: svc.id)
+            }
+            for item in template.defaultServices {
+                _ = try await firebaseService.createTenantService(tenantId: tid, name: item.name, durationMinutes: item.durationMinutes)
+            }
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "formSchema": schema,
+                "industry": template.rawValue,
+            ])
+            await MainActor.run {
+                isSavingService = false
+                saveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    saveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isSavingService = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }

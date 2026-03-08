@@ -94,6 +94,28 @@
     .error { color: #c00; font-size: 14px; margin-bottom: 16px; }
     .success { color: #22c55e; font-size: 16px; font-weight: 500; text-align: center; padding: 24px; }
     .loading { text-align: center; padding: 40px; color: #666; }
+    .hero-page { min-height: 100vh; display: flex; flex-direction: column; }
+    .hero-section {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background-size: cover; background-position: center; background-color: #111;
+    }
+    .hero-overlay {
+      text-align: center; padding: 24px; max-width: 480px;
+    }
+    .hero-title { font-size: 2.5rem; font-weight: 600; color: #fff; margin: 0 0 32px; letter-spacing: 0.02em; }
+    .btn-book-now {
+      display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600;
+      background: #fff; color: #111; border: none; border-radius: 8px; text-decoration: none;
+      cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn-book-now:hover { opacity: 0.9; }
+    .featured-work { padding: 48px 24px; background: #f5f5f5; }
+    .featured-work h2 { font-size: 1.5rem; margin: 0 0 24px; text-align: center; }
+    .featured-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; max-width: 800px; margin: 0 auto; }
+    .featured-grid img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; display: block; }
+    .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
+    .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
+    .about-artist p { margin: 0; line-height: 1.6; color: #444; }
   </style>
 </head>
 <body>
@@ -134,8 +156,9 @@
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
         var parts = path ? path.split('/') : [];
         var tenantSlug = parts[0] || '';
-        var serviceSlug = parts[1] === 'book' && parts[2] ? parts[2] : '';
-        return { tenantSlug: tenantSlug, serviceSlug: serviceSlug };
+        var isBookPath = parts[1] === 'book';
+        var serviceSlug = isBookPath && parts[2] ? parts[2] : '';
+        return { tenantSlug: tenantSlug, serviceSlug: serviceSlug, isBookPath: isBookPath };
       }
 
       function applyBranding(t) {
@@ -182,11 +205,12 @@
         var lab = '<label for="'+name+'">'+esc(f.label||key)+'</label>';
         var inp = '';
         if (f.key === 'service') {
+          var placeholder = !presel ? '<option value="">Select a service</option>' : '';
           var opts = (services||[]).map(function(s){
             var sel = presel && presel.id === s.id ? ' selected' : '';
             return '<option value="'+s.id+'" data-slug="'+(s.slug||'')+'" data-name="'+esc(s.name)+'"'+sel+'>'+esc(s.name)+'</option>';
           }).join('');
-          inp = '<select id="'+name+'" name="'+name+'" data-key="service"'+req+'>'+opts+'</select>';
+          inp = '<select id="'+name+'" name="'+name+'" data-key="service"'+req+'>'+placeholder+opts+'</select>';
         } else if (f.type === 'select') {
           var oo = (f.options||[]).map(function(o){ return '<option value="'+esc(o)+'">'+esc(o)+'</option>'; }).join('');
           inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'>'+oo+'</select>';
@@ -243,8 +267,27 @@
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
-              backgroundPattern: data.backgroundPattern, backgroundPatternColor: data.backgroundPatternColor, backgroundPatternOpacity: data.backgroundPatternOpacity };
+              backgroundPattern: data.backgroundPattern, backgroundPatternColor: data.backgroundPatternColor, backgroundPatternOpacity: data.backgroundPatternOpacity,
+              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '', galleryImages: data.galleryImages || [], aboutText: data.aboutText || '' };
           });
+      }
+      function tattooHeroPage(tenant) {
+        var bookUrl = location.origin + '/' + tenant.slug + '/book';
+        var heroStyle = tenant.heroImageUrl ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')' : '';
+        var heroHtml = '<section class="hero-section" style="'+heroStyle+'">' +
+          '<div class="hero-overlay">' +
+          '<h1 class="hero-title">' + esc(tenant.displayName || 'Book') + '</h1>' +
+          '<a href="' + bookUrl + '" class="btn-book-now">Book Now</a>' +
+          '</div></section>';
+        var gallery = (tenant.galleryImages || []).slice(0, 6);
+        var galleryHtml = gallery.length ? '<section class="featured-work">' +
+          '<h2>Featured Work</h2>' +
+          '<div class="featured-grid">' +
+          gallery.map(function(url){ return '<img src="'+esc(url)+'" alt="">'; }).join('') +
+          '</div></section>' : '';
+        var aboutHtml = (tenant.aboutText || tenant.tagline) ? '<section class="about-artist">' +
+          '<h2>About</h2><p>' + esc(tenant.aboutText || tenant.tagline || '') + '</p></section>' : '';
+        return '<div class="hero-page">' + heroHtml + galleryHtml + aboutHtml + '</div>';
       }
       function loadServices(tid) {
         return db.collection('tenants').doc(tid).collection('services').get()
@@ -279,8 +322,9 @@
               return;
             }
             var presel = p.serviceSlug ? services.filter(function(s){ return s.slug === p.serviceSlug; })[0] : null;
-            var showForm = p.serviceSlug && presel;
-            document.getElementById('root').innerHTML = '<div class="container">' + (showForm ? form(tenant, services, presel) : list(tenant, services)) + '</div>';
+            var showForm = p.isBookPath && services.length > 0;
+            var homeContent = (tenant.industry === 'tattoos' && !p.isBookPath) ? tattooHeroPage(tenant) : list(tenant, services);
+            document.getElementById('root').innerHTML = '<div class="container">' + (showForm ? form(tenant, services, presel) : homeContent) + '</div>';
             applyBranding(tenant);
             if (showForm) {
               function uploadId() {
@@ -341,6 +385,13 @@
                     serviceId = opt.value;
                     serviceSlugVal = opt.dataset.slug || null;
                     serviceName = opt.dataset.name || null;
+                  }
+                  if (!serviceId) {
+                    errEl.textContent = 'Please select a service.';
+                    errEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                    return;
                   }
                   return functions.httpsCallable('createBookingRequestFromWeb')({
                     tenantSlug: tenant.slug,

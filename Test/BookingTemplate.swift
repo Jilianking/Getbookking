@@ -11,7 +11,8 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     case hair = "hair"
     case tattoos = "tattoos"
     case nails = "nails"
-    case projectManagement = "project_management"
+    case plumbing = "plumbing"
+    case electrical = "electrical"
     case custom = "custom"
 
     var id: String { rawValue }
@@ -21,7 +22,8 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .hair: return "Hair Salon"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
-        case .projectManagement: return "Home Services"
+        case .plumbing: return "Plumbing"
+        case .electrical: return "Electrical"
         case .custom: return "Custom / Blank"
         }
     }
@@ -31,7 +33,8 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .hair: return "scissors"
         case .tattoos: return "paintbrush.fill"
         case .nails: return "hand.raised.fill"
-        case .projectManagement: return "wrench.and.screwdriver.fill"
+        case .plumbing: return "drop.fill"
+        case .electrical: return "bolt.fill"
         case .custom: return "doc.plaintext"
         }
     }
@@ -65,13 +68,25 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 FormField(id: "design", key: "designPreference", label: "Design preference", type: .text, required: false),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
-        case .projectManagement:
+        case .plumbing:
             return base + [
-                FormField(id: "issue_type", key: "issueType", label: "Type of work", type: .text, required: false),
-                FormField(id: "urgency", key: "urgency", label: "Urgency", type: .text, required: false),
-                FormField(id: "property", key: "propertyType", label: "Property (residential/commercial)", type: .text, required: false),
                 FormField(id: "address", key: "address", label: "Service address", type: .text, required: false),
+                FormField(id: "issue_type", key: "issueType", label: "Issue type (leak, drain, water heater, etc.)", type: .text, required: false),
+                FormField(id: "urgency", key: "urgency", label: "Urgency", type: .text, required: false),
+                FormField(id: "property_type", key: "propertyType", label: "Property (residential/commercial)", type: .text, required: false),
+                FormField(id: "preferred_contact", key: "preferredContact", label: "Preferred contact method", type: .text, required: false),
                 FormField(id: "notes", key: "notes", label: "Additional details", type: .textarea, required: false),
+                FormField(id: "attachments", key: "attachments", label: "Photos / documents", type: .file, required: false),
+            ]
+        case .electrical:
+            return base + [
+                FormField(id: "address", key: "address", label: "Service address", type: .text, required: false),
+                FormField(id: "issue_type", key: "issueType", label: "Issue type (wiring, panel, outlet, etc.)", type: .text, required: false),
+                FormField(id: "urgency", key: "urgency", label: "Urgency", type: .text, required: false),
+                FormField(id: "property_type", key: "propertyType", label: "Property (residential/commercial)", type: .text, required: false),
+                FormField(id: "preferred_contact", key: "preferredContact", label: "Preferred contact method", type: .text, required: false),
+                FormField(id: "notes", key: "notes", label: "Additional details", type: .textarea, required: false),
+                FormField(id: "attachments", key: "attachments", label: "Photos / documents", type: .file, required: false),
             ]
         case .custom:
             return FormField.defaultFields
@@ -104,12 +119,21 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Acrylic full set", 90),
                 ("Nail art", 30),
             ]
-        case .projectManagement:
+        case .plumbing:
             return [
-                ("Inspection", 60),
-                ("Repair", 90),
-                ("Installation", 120),
-                ("Emergency call", 60),
+                ("Leak detection", 60),
+                ("Drain cleaning", 60),
+                ("Water heater service", 90),
+                ("Pipe repair", 90),
+                ("Emergency call-out", 60),
+            ]
+        case .electrical:
+            return [
+                ("Wiring", 90),
+                ("Panel upgrade", 120),
+                ("Outlet repair", 60),
+                ("Lighting", 60),
+                ("Emergency call-out", 60),
             ]
         case .custom:
             return []

@@ -460,6 +460,23 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
+    func uploadTenantHeroImage(tenantId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let ref = storage.reference().child("tenants/\(tenantId)/hero.jpg")
+        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
+    func uploadTenantGalleryImage(tenantId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/gallery/\(name)")
+        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
     private func createTenant(displayName: String, slug: String) async throws -> String {
         let ref = db.collection("tenants").document()
         try await ref.setData([

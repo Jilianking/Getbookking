@@ -22,8 +22,10 @@ enum HeroPattern: String, CaseIterable {
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
-    @State private var selectedTab: DesignTab = .template
+    @State private var selectedTab: DesignTab = .home
     @State private var isShowingBuilder = false
+    @State private var hoursPickerChoice: String = "custom"
+    private static let hoursPresets = ["Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"]
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -129,11 +131,9 @@ struct DesignView: View {
                         contentUnavailable
                     } else {
                         switch selectedTab {
-                        case .template: templateContent
-                        case .branding: brandingContent
-                        case .form: formContent
-                        case .services: servicesContent
-                        case .contact: contactContent
+                        case .home: homeContent
+                        case .book: bookContent
+                        case .about: aboutContent
                         }
                     }
                 }
@@ -156,138 +156,229 @@ struct DesignView: View {
         .padding()
     }
 
-    private var templateContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Choose a template to get started")
+    private var homeContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Template
+            Text("Template")
                 .font(.headline)
-            Text("Form fields and services will be pre-filled. You can edit everything in the Form and Services tabs.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(BookingTemplate.allCases) { template in
                     Button(action: {
                         Task { await viewModel.applyTemplate(template) }
-                        selectedTab = .form
                     }) {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 8) {
                             Image(systemName: template.icon)
-                                .font(.system(size: 28))
-                                .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                                .font(.system(size: 24))
                             Text(template.displayName)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                                .font(.caption.weight(.medium))
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .background(viewModel.industry == template.rawValue ? Color.black : Color(.secondarySystemGroupedBackground))
-                        .cornerRadius(12)
+                        .padding(.vertical, 14)
+                        .background(viewModel.industry == template.rawValue ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                        .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                        .cornerRadius(10)
                     }
                     .buttonStyle(.plain)
                     .disabled(viewModel.isLoading)
                 }
             }
 
-            if let industry = viewModel.industry, let template = BookingTemplate(rawValue: industry) {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Using \(template.displayName) template — edit in Form & Services tabs")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-    }
-
-    private var brandingContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Logo
-            Section {
-                LogoUploadSection(viewModel: viewModel)
-            }
-
-            // Colors
-            Text("Colors")
+            // Appearance
+            Text("Appearance")
                 .font(.headline)
+            LogoUploadSection(viewModel: viewModel)
             Group {
                 HexColorRow(label: "Background", hex: $viewModel.backgroundColorHex)
-                HexColorRow(label: "Card surface (inside)", hex: $viewModel.cardSurfaceColorHex)
+                HexColorRow(label: "Card surface", hex: $viewModel.cardSurfaceColorHex)
                 HexColorRow(label: "Text", hex: $viewModel.textColorHex)
                 HexColorRow(label: "Accent (buttons)", hex: $viewModel.primaryColorHex)
-                HexColorRow(label: "Accent hover", hex: $viewModel.primaryColorHoverHex)
-                HexColorRow(label: "Success", hex: $viewModel.successColorHex)
             }
-
-            // Background pattern
             Text("Background pattern")
-                .font(.headline)
-            Text("Optional pattern over your background color")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 52))], spacing: 10) {
+                .font(.subheadline.weight(.medium))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 8) {
                 ForEach(HeroPattern.allCases, id: \.rawValue) { p in
                     Button(action: { viewModel.backgroundPattern = p.rawValue }) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(p == .none ? Color(.systemGray5) : Color(hex: viewModel.backgroundPatternColorHex).opacity(viewModel.backgroundPatternOpacity))
-                            Image(systemName: p == .none ? "circle.slash" : "square.grid.3x3")
-                                .font(.system(size: 18))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(viewModel.backgroundPattern == p.rawValue ? Color.accentColor : Color.clear, lineWidth: 2)
-                        )
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(p == .none ? Color(.systemGray5) : Color(hex: viewModel.backgroundPatternColorHex).opacity(viewModel.backgroundPatternOpacity))
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(viewModel.backgroundPattern == p.rawValue ? Color.accentColor : Color.clear, lineWidth: 2)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
             }
             HexColorRow(label: "Pattern color", hex: $viewModel.backgroundPatternColorHex)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Pattern opacity: \(Int(viewModel.backgroundPatternOpacity * 100))%")
-                    .font(.subheadline)
-                Slider(value: $viewModel.backgroundPatternOpacity, in: 0...0.5, step: 0.05)
-            }
-
-            // Typography
-            Text("Typography")
-                .font(.headline)
-            Group {
-                Picker("Font", selection: $viewModel.fontFamily) {
-                    Text("System").tag("system")
-                    Text("Serif").tag("serif")
-                    Text("Sans-serif").tag("sans-serif")
-                }
-                .pickerStyle(.menu)
-                Picker("Font size", selection: $viewModel.fontBodySize) {
-                    Text("Small").tag("small")
-                    Text("Medium").tag("medium")
-                    Text("Large").tag("large")
-                }
-                .pickerStyle(.menu)
-            }
-
-            // Appearance
-            Text("Card style")
-                .font(.headline)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Corner radius: \(Int(viewModel.cardBorderRadius))")
-                    .font(.subheadline)
-                Slider(value: $viewModel.cardBorderRadius, in: 0...24, step: 2)
-            }
-
-            // Tagline
             Text("Tagline")
-                .font(.headline)
+                .font(.subheadline.weight(.medium))
             TextField("Short tagline for your page", text: $viewModel.tagline)
                 .textFieldStyle(.roundedBorder)
 
-            Button("Save branding") {
-                Task { await viewModel.saveBranding() }
+            // Hero
+            Text("Hero")
+                .font(.headline)
+            TextField("Business name", text: $viewModel.displayName)
+                .textFieldStyle(.roundedBorder)
+            HeroImageUploadSection(viewModel: viewModel)
+
+            // Featured work
+            Text("Featured work")
+                .font(.headline)
+            Text("Gallery layout")
+                .font(.subheadline.weight(.medium))
+            Picker("Layout", selection: $viewModel.galleryGridLayout) {
+                Text("3 in a row").tag("3x1")
+                Text("2×2 grid").tag("2x2")
+                Text("3×6 grid").tag("3x6")
+            }
+            .pickerStyle(.segmented)
+            GalleryImagesSection(viewModel: viewModel)
+
+            Button("Save Home") {
+                Task { await viewModel.saveHome() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var bookContent: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Services")
+                .font(.headline)
+            ForEach(viewModel.services) { service in
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(service.name)
+                            .font(.subheadline.weight(.medium))
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task { await viewModel.deleteService(service) }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(8)
+            }
+            AddServiceSheet(viewModel: viewModel)
+            if viewModel.services.isEmpty {
+                Text("Add your first service so clients can book.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Divider()
+
+            Text("Booking form fields")
+                .font(.headline)
+            ForEach(viewModel.formFields) { field in
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(field.label)
+                            .font(.subheadline.weight(.medium))
+                        Text("\(field.type.displayName) • \(field.required ? "Required" : "Optional")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        viewModel.removeFormField(field)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(8)
+            }
+            Button(action: { viewModel.addFormField() }) {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Add field")
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Save form") {
+                    Task { await viewModel.saveFormFields() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var aboutContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("About")
+                .font(.headline)
+            Text("This appears in the Meet / About section on your site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(3...8)
+
+            Text("Contact")
+                .font(.headline)
+            Group {
+                Text("Phone")
+                    .font(.subheadline.weight(.medium))
+                TextField("(555) 123-4567", text: $viewModel.contactPhone)
+                    .textFieldStyle(.roundedBorder)
+                Text("Email")
+                    .font(.subheadline.weight(.medium))
+                TextField("hello@business.com", text: $viewModel.contactEmail)
+                    .textFieldStyle(.roundedBorder)
+                    .autocapitalization(.none)
+                Text("Address / Studio location")
+                    .font(.subheadline.weight(.medium))
+                TextField("123 Main St, City", text: $viewModel.contactAddress)
+                    .textFieldStyle(.roundedBorder)
+                Text("Hours")
+                    .font(.subheadline.weight(.medium))
+                Picker("Hours", selection: $hoursPickerChoice) {
+                    ForEach(Self.hoursPresets, id: \.self) { preset in
+                        Text(preset).tag(preset)
+                    }
+                    Text("Custom").tag("custom")
+                }
+                .pickerStyle(.menu)
+                .onChange(of: hoursPickerChoice) { _, new in
+                    if new != "custom" {
+                        viewModel.businessHours = new
+                    }
+                }
+                .onAppear {
+                    if Self.hoursPresets.contains(viewModel.businessHours) {
+                        hoursPickerChoice = viewModel.businessHours
+                    } else {
+                        hoursPickerChoice = "custom"
+                    }
+                }
+                .onChange(of: viewModel.businessHours) { _, new in
+                    if Self.hoursPresets.contains(new) {
+                        hoursPickerChoice = new
+                    }
+                }
+                if hoursPickerChoice == "custom" {
+                    TextField("e.g. Sun 11am–5pm", text: $viewModel.businessHours)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text("Instagram")
+                    .font(.subheadline.weight(.medium))
+                TextField("@yourhandle", text: $viewModel.instagramHandle)
+                    .textFieldStyle(.roundedBorder)
+                    .autocapitalization(.none)
+                Toggle("Show contact on page", isOn: $viewModel.showContactOnPage)
+            }
+
+            Button("Save About") {
+                Task { await viewModel.saveAbout() }
             }
             .buttonStyle(.borderedProminent)
         }
@@ -440,6 +531,134 @@ struct LogoUploadSection: View {
                     }
                 }
                 Spacer()
+            }
+        }
+    }
+}
+
+// MARK: - Hero image upload
+struct HeroImageUploadSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Hero background image")
+                .font(.subheadline.weight(.medium))
+            HStack(spacing: 16) {
+                if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
+                   let url = URL(string: urlString) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 80, height: 56)
+                    .clipped()
+                    .cornerRadius(8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 56)
+                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack {
+                            Image(systemName: "photo.badge.plus")
+                            Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
+                        }
+                        .font(.subheadline)
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            guard let newItem = newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                                await viewModel.uploadHeroImage(imageData: data)
+                            }
+                            await MainActor.run { selectedItem = nil }
+                        }
+                    }
+                    if viewModel.isUploadingHero {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
+// MARK: - Gallery images
+struct GalleryImagesSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Portfolio / gallery (Featured work)")
+                .font(.subheadline.weight(.medium))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
+                        if let url = URL(string: urlString) {
+                            ZStack(alignment: .topTrailing) {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Color.gray.opacity(0.2)
+                                }
+                                .frame(width: 72, height: 72)
+                                .clipped()
+                                .cornerRadius(8)
+                                Button(action: {
+                                    Task { await viewModel.removeGalleryImage(at: index) }
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(.white, .red)
+                                }
+                                .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                            .frame(width: 72, height: 72)
+                            .overlay(
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                    .foregroundColor(.secondary)
+                            )
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            guard let newItem = newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                                await viewModel.addGalleryImage(imageData: data)
+                            }
+                            await MainActor.run { selectedItem = nil }
+                        }
+                    }
+                }
+            }
+            if viewModel.isUploadingGallery {
+                HStack {
+                    ProgressView()
+                    Text("Uploading…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }

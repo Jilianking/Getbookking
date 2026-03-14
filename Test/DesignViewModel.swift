@@ -9,11 +9,9 @@ import Combine
 import FirebaseAuth
 
 enum DesignTab: String, CaseIterable {
-    case template
-    case branding
-    case form
-    case services
-    case contact
+    case home
+    case book
+    case about
 }
 
 class DesignViewModel: ObservableObject {
@@ -24,9 +22,15 @@ class DesignViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var saveSuccess = false
 
-    // Branding
+    // Home: appearance + hero + featured work
+    @Published var displayName: String = ""
     @Published var logoUrl: String = ""
     @Published var isUploadingLogo = false
+    @Published var heroImageUrl: String = ""
+    @Published var isUploadingHero = false
+    @Published var galleryImages: [String] = []
+    @Published var isUploadingGallery = false
+    @Published var galleryGridLayout: String = "3x1"
     @Published var backgroundColorHex: String = "#FFFFFF"
     @Published var cardSurfaceColorHex: String = "#F5F5F5"
     @Published var textColorHex: String = "#333333"
@@ -50,10 +54,13 @@ class DesignViewModel: ObservableObject {
     // Template / industry
     @Published var industry: String?
 
-    // Contact
+    // About: about text + contact
+    @Published var aboutText: String = ""
     @Published var contactPhone: String = ""
     @Published var contactEmail: String = ""
     @Published var contactAddress: String = ""
+    @Published var businessHours: String = ""
+    @Published var instagramHandle: String = ""
     @Published var showContactOnPage: Bool = true
 
     private let firebaseService = FirebaseService()
@@ -99,7 +106,11 @@ class DesignViewModel: ObservableObject {
                 tenantId = tid
                 tenantSlug = slug
                 bookingUrl = "\(hostingBase)/\(slug)"
+                displayName = tenant?["displayName"] as? String ?? ""
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
+                heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""
+                galleryImages = tenant?["galleryImages"] as? [String] ?? []
+                galleryGridLayout = tenant?["galleryGridLayout"] as? String ?? "3x1"
                 backgroundColorHex = tenant?["backgroundColor"] as? String ?? "#FFFFFF"
                 cardSurfaceColorHex = tenant?["cardSurfaceColor"] as? String ?? "#F5F5F5"
                 textColorHex = tenant?["textColor"] as? String ?? "#333333"
@@ -120,9 +131,12 @@ class DesignViewModel: ObservableObject {
                     formFields = FormField.defaultFields
                 }
                 services = svc
+                aboutText = tenant?["aboutText"] as? String ?? ""
                 contactPhone = tenant?["contactPhone"] as? String ?? ""
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
-                contactAddress = tenant?["contactAddress"] as? String ?? ""
+                contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
+                businessHours = tenant?["businessHours"] as? String ?? ""
+                instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
                 isLoading = false
@@ -135,10 +149,14 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    func saveBranding() async {
+    func saveHome() async {
         guard let tid = tenantId else { return }
         let updates: [String: Any] = [
+            "displayName": displayName,
             "logoUrl": logoUrl,
+            "heroImageUrl": heroImageUrl,
+            "galleryImages": galleryImages,
+            "galleryGridLayout": galleryGridLayout,
             "backgroundColor": backgroundColorHex,
             "cardSurfaceColor": cardSurfaceColorHex,
             "textColor": textColorHex,
@@ -152,6 +170,21 @@ class DesignViewModel: ObservableObject {
             "backgroundPattern": backgroundPattern,
             "backgroundPatternColor": backgroundPatternColorHex,
             "backgroundPatternOpacity": backgroundPatternOpacity
+        ]
+        await saveTenantUpdates(tid, updates)
+    }
+
+    func saveAbout() async {
+        guard let tid = tenantId else { return }
+        let updates: [String: Any] = [
+            "aboutText": aboutText,
+            "contactPhone": contactPhone,
+            "contactEmail": contactEmail,
+            "contactAddress": contactAddress,
+            "address": contactAddress,
+            "businessHours": businessHours,
+            "instagramHandle": instagramHandle,
+            "showContactOnPage": showContactOnPage
         ]
         await saveTenantUpdates(tid, updates)
     }
@@ -171,6 +204,57 @@ class DesignViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
                 isUploadingLogo = false
             }
+        }
+    }
+
+    func uploadHeroImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingHero = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantHeroImage(tenantId: tid, imageData: imageData)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["heroImageUrl": url])
+            await MainActor.run {
+                heroImageUrl = url
+                isUploadingHero = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingHero = false
+            }
+        }
+    }
+
+    func addGalleryImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingGallery = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            var updated = galleryImages
+            updated.append(url)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["galleryImages": updated])
+            await MainActor.run {
+                galleryImages = updated
+                isUploadingGallery = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingGallery = false
+            }
+        }
+    }
+
+    func removeGalleryImage(at index: Int) async {
+        guard let tid = tenantId else { return }
+        guard index >= 0, index < galleryImages.count else { return }
+        var updated = galleryImages
+        updated.remove(at: index)
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["galleryImages": updated])
+            await MainActor.run { galleryImages = updated }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
         }
     }
 

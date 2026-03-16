@@ -56,7 +56,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         guard width > 100 else { return }
         if context.coordinator.lastLoadedURL != url {
             context.coordinator.lastLoadedURL = url
-            webView.load(URLRequest(url: url))
+            webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         }
     }
 

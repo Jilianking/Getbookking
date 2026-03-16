@@ -132,6 +132,7 @@ struct DesignView: View {
                     } else {
                         switch selectedTab {
                         case .home: homeContent
+                        case .gallery: galleryContent
                         case .book: bookContent
                         case .about: aboutContent
                         }
@@ -237,8 +238,68 @@ struct DesignView: View {
             .pickerStyle(.segmented)
             GalleryImagesSection(viewModel: viewModel)
 
+            // Sidebar
+            Text("Sidebar")
+                .font(.headline)
+            Text("Icon color auto-detects: black on white backgrounds, white on colored backgrounds. Override per page if needed.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            HexColorRow(label: "Home page icon color", hex: $viewModel.sidebarIconColorHome)
+            HexColorRow(label: "Booking page icon color", hex: $viewModel.sidebarIconColorBooking)
+
             Button("Save Home") {
                 Task { await viewModel.saveHome() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var galleryContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Gallery Page")
+                .font(.headline)
+            Text("Organize your work into categories. Each category shows as a labeled section on your gallery page.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            ForEach(Array(viewModel.galleryCategories.enumerated()), id: \.element.id) { catIndex, category in
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        TextField("Category name", text: Binding(
+                            get: { viewModel.galleryCategories[catIndex].name },
+                            set: { viewModel.galleryCategories[catIndex].name = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Button(role: .destructive) {
+                            viewModel.removeGalleryCategory(at: catIndex)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                    GalleryCategoryImagesSection(viewModel: viewModel, categoryIndex: catIndex)
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
+            }
+
+            Button(action: { viewModel.addGalleryCategory() }) {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Add category")
+                }
+            }
+
+            if viewModel.galleryCategories.isEmpty {
+                Text("No categories yet. Add one to start building your gallery page.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Button("Save Gallery") {
+                Task { await viewModel.saveGallery() }
             }
             .buttonStyle(.borderedProminent)
         }
@@ -723,6 +784,75 @@ struct AddServiceSheet: View {
                         }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Gallery category images
+struct GalleryCategoryImagesSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let categoryIndex: Int
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(viewModel.galleryCategories[categoryIndex].images.enumerated()), id: \.offset) { imgIndex, urlString in
+                        if let url = URL(string: urlString) {
+                            ZStack(alignment: .topTrailing) {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Color.gray.opacity(0.2)
+                                }
+                                .frame(width: 64, height: 64)
+                                .clipped()
+                                .cornerRadius(6)
+                                Button(action: {
+                                    viewModel.removeCategoryImage(categoryIndex: categoryIndex, imageIndex: imgIndex)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(.white, .red)
+                                }
+                                .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5]))
+                            .frame(width: 64, height: 64)
+                            .overlay(
+                                Image(systemName: "plus")
+                                    .font(.title3)
+                                    .foregroundColor(.secondary)
+                            )
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            guard let newItem = newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                                await viewModel.addCategoryImage(categoryIndex: categoryIndex, imageData: data)
+                            }
+                            await MainActor.run { selectedItem = nil }
+                        }
+                    }
+                }
+            }
+            if viewModel.isUploadingCategoryImage {
+                HStack {
+                    ProgressView()
+                    Text("Uploading…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }

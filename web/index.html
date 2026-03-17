@@ -1443,42 +1443,29 @@
         var base = location.origin + '/' + tenant.slug;
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Gallery';
+
         var nav = '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
           '</div></nav>';
+
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel">' +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
-        var categories = tenant.galleryCategories || [];
-        var sections = '';
-        if (categories.length) {
-          sections = categories.map(function(cat) {
-            var imgs = (cat.images || []).map(function(url) {
-              return '<img src="' + esc(url) + '" alt="" loading="lazy">';
-            }).join('');
-            if (!imgs) return '';
-            return '<section class="gallery-section">' +
-              '<h2 class="gallery-section-title">' + esc(cat.name || 'Untitled') + '</h2>' +
-              '<div class="gallery-grid">' + imgs + '</div>' +
-              '</section>';
-          }).join('');
-        }
-        if (!sections) {
-          var fallbackImgs = (tenant.galleryImages || []).map(function(url) {
-            return '<img src="' + esc(url) + '" alt="" loading="lazy">';
-          }).join('');
-          if (fallbackImgs) {
-            sections = '<div class="gallery-grid">' + fallbackImgs + '</div>';
-          } else {
-            sections = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:48px 0;">No gallery images yet. Add them in the app.</p>';
-          }
-        }
+
+        var imgsHtml = (tenant.galleryImages || []).map(function(url) {
+          return '<img src="' + esc(url) + '" alt="" loading="lazy">';
+        }).join('');
+
+        var content = imgsHtml
+          ? '<div class="gallery-grid">' + imgsHtml + '</div>'
+          : '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:48px 0;">No gallery images yet. Add them in the app.</p>';
+
         return '<div class="gallery-page">' +
           nav +
           '<div class="gallery-header"><h1 class="gallery-title">' + esc(displayName) + '</h1></div>' +
-          '<div class="gallery-shell">' + sections + '</div>' +
+          '<div class="gallery-shell">' + content + '</div>' +
           sidebar +
           '</div>';
       }
@@ -1509,7 +1496,9 @@
         var galleryPageUrl = base + '/gallery';
         var gridStyle = 'grid-template-columns:repeat(' + gridCols + ',1fr);grid-template-rows:repeat(' + gridRows + ',1fr);';
         var featuredGridInner = gallery.length
-          ? gallery.map(function(url){ return '<img src="'+esc(url)+'" alt="">'; }).join('')
+          ? gallery.map(function(url){
+              return '<a href="'+esc(galleryPageUrl)+'"><img src="'+esc(url)+'" alt=""></a>';
+            }).join('')
           : '<div class="tattoo-featured-placeholder">Add your portfolio in the app</div>';
         var featuredHtml = '<section id="featured" class="tattoo-featured">' +
           '<h2>Featured Work</h2>' +

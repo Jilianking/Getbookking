@@ -15,28 +15,6 @@ enum DesignTab: String, CaseIterable {
     case about
 }
 
-struct GalleryCategory: Identifiable, Equatable {
-    var id: String
-    var name: String
-    var images: [String]
-
-    init(id: String = UUID().uuidString, name: String = "", images: [String] = []) {
-        self.id = id
-        self.name = name
-        self.images = images
-    }
-
-    func toFirestore() -> [String: Any] {
-        return ["name": name, "images": images]
-    }
-
-    static func fromFirestore(_ data: [String: Any]) -> GalleryCategory? {
-        guard let name = data["name"] as? String else { return nil }
-        let images = data["images"] as? [String] ?? []
-        return GalleryCategory(name: name, images: images)
-    }
-}
-
 class DesignViewModel: ObservableObject {
     @Published var tenantId: String?
     @Published var tenantSlug: String?
@@ -80,10 +58,6 @@ class DesignViewModel: ObservableObject {
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)
     @Published var sidebarIconColorHome: String = ""
     @Published var sidebarIconColorBooking: String = ""
-
-    // Gallery page categories
-    @Published var galleryCategories: [GalleryCategory] = []
-    @Published var isUploadingCategoryImage = false
 
     // About: about text + contact
     @Published var aboutText: String = ""
@@ -172,11 +146,6 @@ class DesignViewModel: ObservableObject {
                 industry = tenant?["industry"] as? String
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""
                 sidebarIconColorBooking = tenant?["sidebarIconColorBooking"] as? String ?? ""
-                if let catArray = tenant?["galleryCategories"] as? [[String: Any]] {
-                    galleryCategories = catArray.compactMap { GalleryCategory.fromFirestore($0) }
-                } else {
-                    galleryCategories = []
-                }
                 isLoading = false
             }
         } catch {
@@ -296,44 +265,6 @@ class DesignViewModel: ObservableObject {
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
-    }
-
-    func saveGallery() async {
-        guard let tid = tenantId else { return }
-        let catData = galleryCategories.map { $0.toFirestore() }
-        await saveTenantUpdates(tid, ["galleryCategories": catData])
-    }
-
-    func addGalleryCategory() {
-        galleryCategories.append(GalleryCategory(name: "New Category"))
-    }
-
-    func removeGalleryCategory(at index: Int) {
-        guard index >= 0, index < galleryCategories.count else { return }
-        galleryCategories.remove(at: index)
-    }
-
-    func addCategoryImage(categoryIndex: Int, imageData: Data) async {
-        guard let tid = tenantId, categoryIndex >= 0, categoryIndex < galleryCategories.count else { return }
-        await MainActor.run { isUploadingCategoryImage = true; errorMessage = nil }
-        do {
-            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
-            await MainActor.run {
-                galleryCategories[categoryIndex].images.append(url)
-                isUploadingCategoryImage = false
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                isUploadingCategoryImage = false
-            }
-        }
-    }
-
-    func removeCategoryImage(categoryIndex: Int, imageIndex: Int) {
-        guard categoryIndex >= 0, categoryIndex < galleryCategories.count else { return }
-        guard imageIndex >= 0, imageIndex < galleryCategories[categoryIndex].images.count else { return }
-        galleryCategories[categoryIndex].images.remove(at: imageIndex)
     }
 
     func saveFormFields() async {

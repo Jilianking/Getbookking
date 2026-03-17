@@ -375,74 +375,108 @@ struct DesignView: View {
 
     private var aboutContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("About")
-                .font(.headline)
-            Text("This appears in the Meet / About section on your site.")
+            Text("ABOUT")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+                .tracking(1)
+            Text("This appears in the Meet section on your site.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
 
-            Text("Contact")
-                .font(.headline)
-            Group {
-                Text("Phone")
-                    .font(.subheadline.weight(.medium))
-                TextField("(555) 123-4567", text: $viewModel.contactPhone)
-                    .textFieldStyle(.roundedBorder)
-                Text("Email")
-                    .font(.subheadline.weight(.medium))
-                TextField("hello@business.com", text: $viewModel.contactEmail)
-                    .textFieldStyle(.roundedBorder)
-                    .autocapitalization(.none)
-                Text("Address / Studio location")
-                    .font(.subheadline.weight(.medium))
-                TextField("123 Main St, City", text: $viewModel.contactAddress)
-                    .textFieldStyle(.roundedBorder)
-                Text("Hours")
-                    .font(.subheadline.weight(.medium))
-                Picker("Hours", selection: $hoursPickerChoice) {
-                    ForEach(Self.hoursPresets, id: \.self) { preset in
-                        Text(preset).tag(preset)
+            Text("CONTACT")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+                .tracking(1)
+                .padding(.top, 8)
+
+            VStack(spacing: 12) {
+                IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
+                    get: { viewModel.contactPhone },
+                    set: { viewModel.contactPhone = Self.formatPhone($0) }
+                ))
+                .keyboardType(.phonePad)
+
+                IconFieldRow(icon: "envelope", placeholder: "example@example.com", text: $viewModel.contactEmail)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+
+                IconFieldRow(icon: "mappin.circle", placeholder: "123 Main St, City, State", text: $viewModel.contactAddress)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "clock")
+                        .foregroundColor(.secondary)
+                        .frame(width: 24)
+                    Picker("Hours", selection: $hoursPickerChoice) {
+                        ForEach(Self.hoursPresets, id: \.self) { preset in
+                            Text(preset).tag(preset)
+                        }
+                        Text("Custom").tag("custom")
                     }
-                    Text("Custom").tag("custom")
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .pickerStyle(.menu)
+                .padding(12)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
                 .onChange(of: hoursPickerChoice) { _, new in
-                    if new != "custom" {
-                        viewModel.businessHours = new
-                    }
+                    if new != "custom" { viewModel.businessHours = new }
                 }
                 .onAppear {
-                    if Self.hoursPresets.contains(viewModel.businessHours) {
-                        hoursPickerChoice = viewModel.businessHours
-                    } else {
-                        hoursPickerChoice = "custom"
-                    }
+                    hoursPickerChoice = Self.hoursPresets.contains(viewModel.businessHours) ? viewModel.businessHours : "custom"
                 }
                 .onChange(of: viewModel.businessHours) { _, new in
-                    if Self.hoursPresets.contains(new) {
-                        hoursPickerChoice = new
+                    if Self.hoursPresets.contains(new) { hoursPickerChoice = new }
+                }
+
+                if hoursPickerChoice == "custom" {
+                    IconFieldRow(icon: "clock.badge", placeholder: "e.g. Sun 11am–5pm", text: $viewModel.businessHours)
+                }
+
+                IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
+                    .textInputAutocapitalization(.never)
+
+                Toggle(isOn: $viewModel.showContactOnPage) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "eye")
+                            .foregroundColor(.secondary)
+                            .frame(width: 24)
+                        Text("Show contact on page")
+                            .font(.subheadline)
                     }
                 }
-                if hoursPickerChoice == "custom" {
-                    TextField("e.g. Sun 11am–5pm", text: $viewModel.businessHours)
-                        .textFieldStyle(.roundedBorder)
-                }
-                Text("Instagram")
-                    .font(.subheadline.weight(.medium))
-                TextField("@yourhandle", text: $viewModel.instagramHandle)
-                    .textFieldStyle(.roundedBorder)
-                    .autocapitalization(.none)
-                Toggle("Show contact on page", isOn: $viewModel.showContactOnPage)
+                .padding(12)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
             }
 
-            Button("Save About") {
-                Task { await viewModel.saveAbout() }
+            HStack(spacing: 12) {
+                Button("Discard") {
+                    Task { await viewModel.loadData() }
+                }
+                .buttonStyle(.bordered)
+                Button("Save changes") {
+                    Task { await viewModel.saveAbout() }
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
         }
+    }
+
+    private static func formatPhone(_ input: String) -> String {
+        let digits = input.filter { $0.isNumber }
+        let limited = String(digits.prefix(10))
+        var result = ""
+        for (i, d) in limited.enumerated() {
+            if i == 0 { result += "(" }
+            if i == 3 { result += ") " }
+            if i == 6 { result += "-" }
+            result.append(d)
+        }
+        return result
     }
 
     private var formContent: some View {
@@ -787,6 +821,26 @@ struct AddServiceSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Icon + text field row
+struct IconFieldRow: View {
+    let icon: String
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundColor(.secondary)
+                .frame(width: 24)
+            TextField(placeholder, text: $text)
+                .font(.subheadline)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(10)
     }
 }
 

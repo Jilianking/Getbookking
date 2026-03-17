@@ -265,20 +265,20 @@
     .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: #333; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
     @media (max-width: 640px) { .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); } .tattoo-featured-grid img { height: 180px; } .tattoo-hero-section { min-height: 55vh; } }
-    .tattoo-meet { padding: 48px 0; max-width: 560px; }
-    .tattoo-meet h2 { font-size: 1.5rem; margin: 0 0 16px; font-weight: 600; }
-    .tattoo-meet p { margin: 0; line-height: 1.65; color: #444; }
-    .tattoo-about { padding: 48px 0; max-width: 900px; }
-    .tattoo-about h2 { font-size: 1.5rem; margin: 0 0 16px; font-weight: 600; }
-    .tattoo-about-bio { margin: 0 0 32px; line-height: 1.65; color: #444; }
-    .tattoo-about .tattoo-contact-strip { border-top: 1px solid #eee; padding-top: 32px; }
-    .tattoo-contact-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 40px 0; border-top: 1px solid #eee; }
-    .tattoo-contact-item h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin: 0 0 8px; }
-    .tattoo-contact-item p { margin: 0; font-size: 14px; color: #333; line-height: 1.5; }
-    .tattoo-contact-item a { color: #333; text-decoration: none; }
-    .tattoo-contact-item a:hover { text-decoration: underline; }
-    .tattoo-contact-placeholder { color: #999; font-style: italic; }
-    @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; } }
+    .tattoo-about { padding: 64px 24px; background: #111; color: #fff; text-align: center; }
+    .tattoo-about-inner { max-width: 640px; margin: 0 auto; }
+    .tattoo-about h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: #fff; letter-spacing: 0.02em; }
+    .tattoo-about-bio { margin: 0 0 48px; line-height: 1.75; color: rgba(255,255,255,0.75); font-size: 1rem; }
+    .tattoo-contact-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; padding: 0; border: none; }
+    .tattoo-contact-item { text-align: center; }
+    .tattoo-contact-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    .tattoo-contact-icon svg { width: 28px; height: 28px; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .tattoo-contact-item h3 { font-size: 15px; font-weight: 600; color: #fff; text-transform: none; letter-spacing: 0; margin: 0 0 8px; }
+    .tattoo-contact-item p { margin: 0; font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.6; }
+    .tattoo-contact-item a { color: rgba(255,255,255,0.6); text-decoration: none; }
+    .tattoo-contact-item a:hover { color: #fff; text-decoration: underline; }
+    .tattoo-contact-placeholder { color: rgba(255,255,255,0.3); font-style: italic; }
+    @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; gap: 24px; } .tattoo-about h2 { font-size: 1.8rem; } }
     /* Gallery page */
     .gallery-page { min-height: 100vh; background: #000; color: #fff; }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
@@ -1518,14 +1518,21 @@
           '<a href="'+esc(galleryPageUrl)+'" class="tattoo-gallery-link">View full gallery →</a>' +
           '</section>';
         var aboutBody = (tenant.aboutText || tenant.tagline) ? esc(tenant.aboutText || tenant.tagline || '') : 'Add your story in the app to introduce yourself to clients.';
+        var svgLocation = '<svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+        var svgClock = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+        var svgInstagram = '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff" stroke="none"/></svg>';
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
         var aboutSection = '<section id="about" class="tattoo-about">' +
-          '<h2>About</h2>' +
+          '<div class="tattoo-about-inner">' +
+          '<h2>Meet ' + esc(displayName) + '</h2>' +
           '<p class="tattoo-about-bio">' + aboutBody + '</p>' +
           '<div class="tattoo-contact-strip">' +
-          '<div class="tattoo-contact-item"><h3>Studio &amp; location</h3><p>'+ (tenant.address ? esc(tenant.address) : '<span class="tattoo-contact-placeholder">Add in app</span>') +'</p></div>' +
-          '<div class="tattoo-contact-item"><h3>Hours</h3><p>'+ (tenant.businessHours ? esc(tenant.businessHours) : '<span class="tattoo-contact-placeholder">Add in app</span>') +'</p></div>' +
-          '</div></section>';
-        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div><div class="tattoo-shell">' + featuredHtml + aboutSection + '</div>' + sidebar + '</div>';
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgLocation + '</div><h3>Studio &amp; Location</h3><p>' + (tenant.address ? esc(tenant.address) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgClock + '</div><h3>Hours</h3><p>' + (tenant.businessHours ? esc(tenant.businessHours) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgInstagram + '</div><h3>Instagram</h3><p>' + (igHandle ? '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>' : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '</div></div></section>';
+        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div><div class="tattoo-shell">' + featuredHtml + '</div>' + aboutSection + sidebar + '</div>';
       }
       function bindTattooSidebar() {
         var menuBtn = document.querySelector('.tattoo-nav-menu');

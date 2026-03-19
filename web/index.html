@@ -119,11 +119,13 @@
     /* Booking form shell – light page, white card */
     .booking-shell {
       min-height: 100vh;
-      background: #fff;
-      padding: 24px 16px;
+      background: #000;
+      padding: 84px 16px 48px;
       display: flex;
-      align-items: flex-start;
+      flex-direction: column;
+      align-items: center;
       justify-content: center;
+      color: #fff;
     }
     .booking-card {
       width: 100%;
@@ -143,6 +145,26 @@
       font-size: 1.8rem;
       font-weight: 800;
       margin: 0 0 12px;
+    }
+    /* Gallery-style header for booking (matches tattoo gallery title) */
+    .booking-page-header {
+      width: 100%;
+      text-align: center;
+      margin: 0 0 28px;
+    }
+    .booking-page-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff;
+      margin: 0;
+    }
+    .booking-page-subtitle {
+      margin: 10px 0 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: rgba(255,255,255,0.65);
     }
     .booking-tagline {
       font-size: 0.95rem;
@@ -174,6 +196,127 @@
       border-color: #ef4444;
       box-shadow: 0 0 0 2px rgba(248,113,113,0.2);
     }
+    /* Client-facing upload dropzone (reference images / PDFs) */
+    .upload-drop {
+      width: 100%;
+      margin-bottom: 14px;
+      border-radius: 12px;
+      border: 2px dashed rgba(239, 68, 68, 0.35);
+      background: rgba(17, 24, 39, 0.03);
+      padding: 18px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    }
+    .upload-drop:hover {
+      border-color: rgba(239, 68, 68, 0.65);
+      transform: translateY(-1px);
+    }
+    .upload-drop.dragover {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .upload-drop-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .upload-drop-inner { display: flex; flex-direction: column; gap: 6px; }
+    .upload-drop-title {
+      font-weight: 800;
+      color: #111827;
+      font-size: 0.95rem;
+      margin: 0;
+    }
+    .upload-drop-sub {
+      color: rgba(17, 24, 39, 0.65);
+      font-size: 0.85rem;
+      margin: 0;
+    }
+    .upload-drop-filelist {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #6b7280;
+      word-break: break-all;
+    }
+    /* Preferred days dropdown (multi-select) */
+    .pref-days-dropdown {
+      width: 100%;
+      margin-bottom: 14px;
+      position: relative;
+    }
+    .pref-days-button {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 2px solid #e5e7eb;
+      background: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #111827;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: left;
+      user-select: none;
+    }
+    .pref-days-button:focus {
+      outline: none;
+      border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2);
+    }
+    .pref-days-summary {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pref-days-caret { color: #6b7280; }
+    .pref-days-menu {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 8px);
+      background: #fff;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 10px;
+      z-index: 30;
+      max-height: 240px;
+      overflow: auto;
+    }
+    .pref-days-menu.open { display: block; }
+    .pref-days-option {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-weight: 800;
+      color: #111827;
+      text-align: left;
+    }
+    .pref-days-option:hover { background: rgba(239, 68, 68, 0.08); }
+    .pref-days-option.active { background: rgba(239, 68, 68, 0.12); }
+    .pref-days-check {
+      width: 18px;
+      color: transparent;
+      font-weight: 900;
+    }
+    .pref-days-option.active .pref-days-check { color: #ef4444; }
     .booking-submit {
       width: 100%;
       padding: 14px 18px;
@@ -264,7 +407,7 @@
     }
     .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: #333; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
-    @media (max-width: 640px) { .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); } .tattoo-featured-grid img { height: 180px; } .tattoo-hero-section { min-height: 55vh; } }
+    @media (max-width: 640px) { .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); } .tattoo-featured-grid img { height: 180px; } .tattoo-hero-section { min-height: 55vh; } .booking-page-title { font-size: 2rem; } .booking-shell { padding-top: 72px; } }
     .tattoo-about { padding: 64px 24px; background: #111; color: #fff; text-align: center; }
     .tattoo-about-inner { max-width: 640px; margin: 0 auto; }
     .tattoo-about h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: #fff; letter-spacing: 0.02em; }
@@ -1038,7 +1181,7 @@
           if (isGalleryPath) {
             iconColor = '#FFFFFF';
           } else if (isBookPath) {
-            iconColor = '#000000';
+            iconColor = (tenant.industry === 'tattoos') ? '#FFFFFF' : '#000000';
           } else if (tenant.industry === 'tattoos' || tenant.industry === 'hair' ||
                      tenant.industry === 'plumbing' || tenant.industry === 'electrical') {
             iconColor = '#FFFFFF';
@@ -1313,8 +1456,10 @@
       function field(f, services, presel) {
         var key = (f.key||'').replace(/[^a-zA-Z0-9_]/g,'');
         var name = 'f_'+key;
+        var inputId = name;
+        if ((f.key||'') === 'preferredDays') inputId = name + '_select';
         var req = f.required ? ' required' : '';
-        var lab = '<label for="'+name+'">'+esc(f.label||key)+'</label>';
+        var lab = '<label for="'+inputId+'">'+esc(f.label||key)+'</label>';
         var inp = '';
         if (f.key === 'service') {
           var placeholder = !presel ? '<option value="">Select a service</option>' : '';
@@ -1323,18 +1468,62 @@
             return '<option value="'+s.id+'" data-slug="'+(s.slug||'')+'" data-name="'+esc(s.name)+'"'+sel+'>'+esc(s.name)+'</option>';
           }).join('');
           inp = '<select id="'+name+'" name="'+name+'" data-key="service"'+req+'>'+placeholder+opts+'</select>';
+        } else if ((f.key||'') === 'preferredDays') {
+          // Client-facing multi-select rendered as a custom dropdown.
+          // We write chosen days into a hidden input so existing submit logic includes it in formResponses.
+          inp =
+            '<div class="pref-days-dropdown" data-pref-days-dropdown>' +
+              '<button type="button" id="'+inputId+'" class="pref-days-button" data-pref-days-button aria-expanded="false">' +
+                '<span class="pref-days-summary" data-pref-days-summary>Preferred days</span>' +
+                '<span class="pref-days-caret" aria-hidden="true">▾</span>' +
+              '</button>' +
+              '<div class="pref-days-menu" data-pref-days-menu role="listbox" aria-multiselectable="true">' +
+                '<button type="button" class="pref-days-option" data-pref-day="Mon" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Mon</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Tue" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Tue</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Wed" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Wed</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Thu" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Thu</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Fri" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Fri</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Sat" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Sat</span></button>' +
+                '<button type="button" class="pref-days-option" data-pref-day="Sun" role="option" aria-selected="false"><span class="pref-days-check">✓</span><span>Sun</span></button>' +
+              '</div>' +
+              '<input type="hidden" id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" value="" data-preferred-days-hidden />' +
+            '</div>';
+        } else if ((f.key||'') === 'preferredTime' || (f.key||'') === 'preferredTimeOfDay') {
+          // Backwards-compatible override:
+          // Some tenants may still have old schema using preferredTimeOfDay as text.
+          // Force dropdown UI for both keys, independent of the stored f.type.
+          var ptPlaceholder = esc(f.placeholder || f.label || 'Preferred time of day');
+          inp =
+            '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'>' +
+              '<option value="">'+ptPlaceholder+'</option>' +
+              '<option value="Morning">Morning</option>' +
+              '<option value="Afternoon">Afternoon</option>' +
+              '<option value="Night">Night</option>' +
+              '<option value="Flexible">Flexible</option>' +
+            '</select>';
         } else if (f.type === 'select') {
+          var firstOpt = '<option value="">'+esc(f.placeholder || ('Select ' + (f.label || f.key)))+'</option>';
           var oo = (f.options||[]).map(function(o){ return '<option value="'+esc(o)+'">'+esc(o)+'</option>'; }).join('');
-          inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'>'+oo+'</select>';
+          inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'>'+firstOpt+oo+'</select>';
         } else if (f.type === 'boolean') {
           inp = '<select id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'"'+req+'> <option value="">—</option><option value="yes">Yes</option><option value="no">No</option></select>';
+        } else if ((f.key||'') === 'referenceImages') {
+          inp = ''
+            + '<div class="upload-drop" data-reference-images-drop tabindex="0" role="button" aria-label="Upload reference images or PDFs">'
+            +   '<div class="upload-drop-inner">'
+            +     '<p class="upload-drop-title">Drop photos or PDFs here</p>'
+            +     '<p class="upload-drop-sub">or click to choose files (multiple allowed)</p>'
+            +   '</div>'
+            +   '<p class="upload-drop-filelist" data-upload-filelist></p>'
+            +   '<input type="file" accept="image/*,application/pdf" multiple id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" data-type="file" class="upload-drop-input">'
+            + '</div>';
         } else if (f.type === 'file') {
-          inp = '<input type="file" accept="image/*" multiple id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" data-type="file">';
+          inp = '<input type="file" accept="image/*,application/pdf" multiple id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" data-type="file">';
         } else if (f.type === 'textarea') {
-          inp = '<textarea id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.label)+'"'+req+'></textarea>';
+          inp = '<textarea id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.placeholder || f.label || key)+'"'+req+'></textarea>';
         } else {
           var typ = f.type === 'email' ? 'email' : f.type === 'phone' ? 'tel' : 'text';
-          inp = '<input type="'+typ+'" id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.label)+'"'+req+'>';
+          inp = '<input type="'+typ+'" id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" placeholder="'+esc(f.placeholder || f.label || key)+'"'+req+'>';
         }
         return lab + inp;
       }
@@ -1377,9 +1566,11 @@
           '<div class="tattoo-page">' +
             nav +
             '<div class="booking-shell">' +
+              '<div class="booking-page-header">' +
+                '<h1 class="booking-page-title">' + esc(tenant.displayName||'Appointment') + '</h1>' +
+                (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
+              '</div>' +
               '<div class="booking-card">' +
-                '<h1 class="booking-heading">Book: '+esc(tenant.displayName||'Appointment')+'</h1>' +
-                (tenant.tagline ? '<p class="booking-tagline">'+esc(tenant.tagline)+'</p>' : '') +
                 contact +
                 '<form id="book-form" class="booking-form">' + html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
@@ -1415,13 +1606,21 @@
       function sidebarLinksHtml(tenant, base, bookUrl) {
         var galleryUrl = base + '/gallery';
         var links = tenant.sidebarLinks;
-        if (!Array.isArray(links) || !links.length) {
+        if (!Array.isArray(links)) links = [];
+        if (!links.length) {
           links = [
             { label: 'Home', type: 'internal', target: 'home' },
             { label: 'Gallery', type: 'internal', target: 'gallery' },
             { label: 'Book', type: 'internal', target: 'book' },
             { label: 'About', type: 'internal', target: 'about' }
           ];
+        } else if (!links.some(function(l){ return l && l.target === 'gallery'; })) {
+          links = links.slice();
+          var insertAt = 0;
+          for (var i = 0; i < links.length; i++) {
+            if (links[i] && links[i].target === 'home') { insertAt = i + 1; break; }
+          }
+          links.splice(insertAt, 0, { label: 'Gallery', type: 'internal', target: 'gallery' });
         }
         return links.map(function(l) {
           var href;
@@ -1629,7 +1828,149 @@
                 if (fieldPromises.length === 0) return Promise.resolve(formResponses);
                 return Promise.all(fieldPromises).then(function() { return formResponses; });
               }
+              function setupDropzones(fm) {
+                function fileListText(files) {
+                  if (!files || !files.length) return '';
+                  var names = [];
+                  for (var i = 0; i < files.length; i++) names.push(files[i].name || ('file' + (i + 1)));
+                  return names.join(', ');
+                }
+                function isAllowedFile(file) {
+                  var t = (file && file.type) || '';
+                  if (t.indexOf('image/') === 0) return true;
+                  if (t === 'application/pdf') return true;
+                  var n = (file && file.name) || '';
+                  return /\.pdf$/i.test(n);
+                }
+                var dropzones = fm.querySelectorAll('.upload-drop[data-reference-images-drop]');
+                for (var i = 0; i < dropzones.length; i++) {
+                  (function(dz){
+                    var input = dz.querySelector('input[type="file"]');
+                    var listEl = dz.querySelector('[data-upload-filelist]');
+                    if (!input) return;
+                    function refreshList() {
+                      if (listEl) listEl.textContent = fileListText(input.files) ? ('Selected: ' + fileListText(input.files)) : '';
+                    }
+                    input.addEventListener('change', refreshList);
+                    dz.addEventListener('click', function(e){
+                      if (e.target === input) return;
+                      input.click();
+                    });
+                    dz.addEventListener('keydown', function(e){
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+                    });
+                    ['dragenter','dragover'].forEach(function(ev){
+                      dz.addEventListener(ev, function(e){
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dz.classList.add('dragover');
+                      });
+                    });
+                    ['dragleave','drop'].forEach(function(ev){
+                      dz.addEventListener(ev, function(e){
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dz.classList.remove('dragover');
+                      });
+                    });
+                    dz.addEventListener('drop', function(e){
+                      var files = e.dataTransfer && e.dataTransfer.files;
+                      if (!files || !files.length) return;
+                      var dt = new DataTransfer();
+                      for (var j = 0; j < files.length; j++) {
+                        if (isAllowedFile(files[j])) dt.items.add(files[j]);
+                      }
+                      if (dt.files.length) {
+                        input.files = dt.files;
+                        refreshList();
+                      }
+                    });
+                  })(dropzones[i]);
+                }
+              }
+              function setupPreferredDaysDropdown(fm) {
+                var groups = fm.querySelectorAll('[data-pref-days-dropdown]');
+                for (var gi = 0; gi < groups.length; gi++) {
+                  (function(group){
+                    var button = group.querySelector('[data-pref-days-button]');
+                    var menu = group.querySelector('[data-pref-days-menu]');
+                    var summary = group.querySelector('[data-pref-days-summary]');
+                    var hidden = group.querySelector('[data-preferred-days-hidden]');
+                    var options = group.querySelectorAll('[data-pref-day]');
+
+                    if (!button || !menu || !summary || !hidden || !options || !options.length) return;
+
+                    function selectedFromHidden() {
+                      var val = hidden.value || '';
+                      return val ? val.split(',').map(function(x){ return x.trim(); }).filter(Boolean) : [];
+                    }
+
+                    function updateUI(selected) {
+                      for (var oi = 0; oi < options.length; oi++) {
+                        var opt = options[oi];
+                        var day = opt.getAttribute('data-pref-day');
+                        var isActive = selected.indexOf(day) >= 0;
+                        opt.classList.toggle('active', isActive);
+                        opt.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                      }
+
+                      if (!selected.length) {
+                        summary.textContent = 'Preferred days';
+                      } else {
+                        // Always show the chosen days (even for 3+ selections).
+                        summary.textContent = selected.join(', ');
+                      }
+                    }
+
+                    function toggleMenu(open) {
+                      var shouldOpen = (typeof open === 'boolean') ? open : !menu.classList.contains('open');
+                      if (shouldOpen) menu.classList.add('open');
+                      else menu.classList.remove('open');
+                      button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                    }
+
+                    function toggleDay(day) {
+                      var selected = selectedFromHidden();
+                      var idx = selected.indexOf(day);
+                      if (idx >= 0) selected.splice(idx, 1);
+                      else selected.push(day);
+                      hidden.value = selected.join(',');
+                      updateUI(selected);
+                    }
+
+                    // Initialize UI from current hidden value
+                    updateUI(selectedFromHidden());
+
+                    button.addEventListener('click', function(e){
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleMenu();
+                    });
+
+                    for (var oi = 0; oi < options.length; oi++) {
+                      (function(opt){
+                        var day = opt.getAttribute('data-pref-day');
+                        opt.addEventListener('click', function(e){
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleDay(day);
+                        });
+                      })(options[oi]);
+                    }
+
+                    document.addEventListener('click', function(ev){
+                      if (!group.contains(ev.target)) {
+                        menu.classList.remove('open');
+                        button.setAttribute('aria-expanded', 'false');
+                      }
+                    });
+                  })(groups[gi]);
+                }
+              }
               var fm = document.getElementById('book-form');
+              if (fm) {
+              setupDropzones(fm);
+              setupPreferredDaysDropdown(fm);
               fm.addEventListener('submit', function(ev){
                 ev.preventDefault();
                 var errEl = document.getElementById('form-error');
@@ -1648,8 +1989,48 @@
                 uploadFileFields(fm, tenant.id, formResponses).then(function() {
                   btn.textContent = 'Submitting…';
                   var customerName = formResponses.name || '';
-                  var customerEmail = (formResponses.email||'').toLowerCase();
-                  var customerPhone = formResponses.phone || null;
+                  function normalizeEmail(v) {
+                    return (v || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+                  }
+                  function normalizePhone(raw) {
+                    var s = (raw || '').toString().trim();
+                    if (!s) return null;
+
+                    var hasPlus = s.charAt(0) === '+';
+                    var digits = s.replace(/\D/g, '');
+                    if (!digits) return null;
+
+                    function formatUS10(d10) {
+                      return '(' + d10.slice(0,3) + ') ' + d10.slice(3,6) + ' - ' + d10.slice(6,10);
+                    }
+
+                    // US +1 or 10-digit formats
+                    if (digits.length === 10) return formatUS10(digits);
+                    if (digits.length === 11 && digits.charAt(0) === '1') return formatUS10(digits.slice(1));
+
+                    // If user entered +<country>, preserve best-effort with +
+                    if (hasPlus) return '+' + digits;
+
+                    // Best-effort for all other countries: prefix + for anything >= 7 digits
+                    if (digits.length >= 7) return '+' + digits;
+
+                    // Too short: keep raw digits
+                    return digits;
+                  }
+                  var customerEmail = normalizeEmail(formResponses.email);
+                  var customerPhone = normalizePhone(formResponses.phone);
+                  var preferredDays = null;
+                  if (formResponses.preferredDays) {
+                    preferredDays = (formResponses.preferredDays || '')
+                      .toString()
+                      .split(',')
+                      .map(function(x){ return (x||'').trim(); })
+                      .filter(Boolean);
+                    if (!preferredDays.length) preferredDays = null;
+                  }
+                  var preferredTime =
+                    (formResponses.preferredTime || formResponses.preferredTimeOfDay || '').toString().trim();
+                  if (!preferredTime) preferredTime = null;
                   var serviceId = null, serviceSlugVal = null, serviceName = null;
                   var sel = fm.querySelector('[data-key="service"]');
                   if (sel && sel.options && sel.options[sel.selectedIndex]) {
@@ -1673,7 +2054,8 @@
                     serviceId: serviceId,
                     serviceSlug: serviceSlugVal,
                     serviceName: serviceName,
-                    preferredTime: formResponses.preferredTime || null,
+                    preferredTime: preferredTime,
+                    preferredDays: preferredDays,
                     notes: formResponses.notes || null,
                     formResponses: formResponses
                   });
@@ -1687,6 +2069,7 @@
                   btn.textContent = origText;
                 });
               });
+              }
             }
           });
         }).catch(function(e){

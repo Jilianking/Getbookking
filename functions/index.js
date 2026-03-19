@@ -386,7 +386,7 @@ exports.createRefund = functions
 
 /**
  * Creates a booking request from the public web form. No auth required.
- * Params: { tenantSlug, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, notes? }
+ * Params: { tenantSlug, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, preferredDays?, notes? }
  */
 exports.createBookingRequestFromWeb = functions.https.onCall(async (data, context) => {
   const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
@@ -424,6 +424,22 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   const serviceSlug = data?.serviceSlug ? data.serviceSlug.toString() : null;
   const serviceName = data?.serviceName ? data.serviceName.toString() : null;
   const preferredTime = data?.preferredTime ? data.preferredTime.toString().trim() : null;
+  const preferredDays = (() => {
+    if (Array.isArray(data?.preferredDays)) {
+      const arr = data.preferredDays
+        .map((d) => (d || "").toString().trim())
+        .filter(Boolean);
+      return arr.length ? arr : null;
+    }
+    if (typeof data?.preferredDays === "string") {
+      const parts = data.preferredDays
+        .split(",")
+        .map((x) => (x || "").toString().trim())
+        .filter(Boolean);
+      return parts.length ? parts : null;
+    }
+    return null;
+  })();
   const notes = data?.notes ? data.notes.toString().trim() : null;
 
   const bookingData = {
@@ -439,6 +455,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   if (serviceSlug) bookingData.serviceSlug = serviceSlug;
   if (serviceName) bookingData.serviceName = serviceName;
   if (preferredTime) bookingData.preferredTime = preferredTime;
+  if (preferredDays) bookingData.preferredDays = preferredDays;
   if (notes) bookingData.notes = notes;
   if (data?.formResponses && typeof data.formResponses === "object") {
     bookingData.formResponses = data.formResponses;

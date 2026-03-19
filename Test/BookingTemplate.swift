@@ -42,8 +42,22 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     var formFields: [FormField] {
         let base = [
             FormField(id: "name", key: "name", label: "Full Name", type: .text, required: true),
-            FormField(id: "email", key: "email", label: "Email", type: .email, required: true),
-            FormField(id: "phone", key: "phone", label: "Phone", type: .phone, required: true),
+            FormField(
+                id: "email",
+                key: "email",
+                label: "Email",
+                type: .email,
+                required: true,
+                placeholder: "example@example.com"
+            ),
+            FormField(
+                id: "phone",
+                key: "phone",
+                label: "Phone",
+                type: .phone,
+                required: true,
+                placeholder: "(xxx) xxx - xxxx"
+            ),
         ]
         switch self {
         case .hair:
@@ -54,13 +68,49 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             ]
         case .tattoos:
             return base + [
-                FormField(id: "placement", key: "placement", label: "Placement", type: .text, required: false),
-                FormField(id: "size", key: "size", label: "Approx size (inches)", type: .text, required: false),
-                FormField(id: "style", key: "style", label: "Style", type: .text, required: false),
-                FormField(id: "description", key: "description", label: "Description", type: .textarea, required: false),
-                FormField(id: "referenceImages", key: "referenceImages", label: "Reference images / details", type: .textarea, required: false),
+                FormField(
+                    id: "placement",
+                    key: "placement",
+                    label: "Tattoo placement",
+                    type: .select,
+                    required: false,
+                    options: ["arm", "forearm", "leg", "back", "chest", "foot/ankle", "unsure"]
+                ),
+                FormField(
+                    id: "size",
+                    key: "size",
+                    label: "Approx size (inches)",
+                    type: .select,
+                    required: false,
+                    options: ["small (1-3\")", "medium (4-6\")", "large (7 - 10\")", "sleeve"]
+                ),
+                FormField(
+                    id: "style",
+                    key: "style",
+                    label: "Style",
+                    type: .select,
+                    required: false,
+                    options: ["black & grey", "color", "fine line", "traditional", "realism", "unsure"]
+                ),
+                FormField(
+                    id: "description",
+                    key: "description",
+                    label: "Description",
+                    type: .textarea,
+                    required: false,
+                    placeholder: "Describe your tattoo idea"
+                ),
+                FormField(id: "referenceImages", key: "referenceImages", label: "Reference images / details", type: .file, required: false),
                 FormField(id: "preferredDays", key: "preferredDays", label: "Preferred days", type: .text, required: false),
-                FormField(id: "preferredTimeOfDay", key: "preferredTimeOfDay", label: "Preferred time of day", type: .text, required: false),
+                FormField(
+                    id: "preferredTime",
+                    key: "preferredTime",
+                    label: "Preferred time of day",
+                    type: .select,
+                    required: false,
+                    options: ["Morning", "Afternoon", "Night", "Flexible"],
+                    placeholder: "Select preferred time"
+                ),
             ]
         case .nails:
             return base + [

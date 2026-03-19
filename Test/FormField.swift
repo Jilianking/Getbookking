@@ -12,17 +12,32 @@ struct FormField: Identifiable, Equatable {
     var label: String
     var type: FormFieldType
     var required: Bool
+    var options: [String]?
+    var placeholder: String?
 
-    init(id: String = UUID().uuidString, key: String, label: String, type: FormFieldType = .text, required: Bool = true) {
+    init(
+        id: String = UUID().uuidString,
+        key: String,
+        label: String,
+        type: FormFieldType = .text,
+        required: Bool = true,
+        options: [String]? = nil,
+        placeholder: String? = nil
+    ) {
         self.id = id
         self.key = key
         self.label = label
         self.type = type
         self.required = required
+        self.options = options
+        self.placeholder = placeholder
     }
 
     func toFirestore() -> [String: Any] {
-        ["key": key, "label": label, "type": type.rawValue, "required": required]
+        var dict: [String: Any] = ["key": key, "label": label, "type": type.rawValue, "required": required]
+        if let options { dict["options"] = options }
+        if let placeholder { dict["placeholder"] = placeholder }
+        return dict
     }
 
     static func fromFirestore(_ dict: [String: Any]) -> FormField? {
@@ -30,7 +45,17 @@ struct FormField: Identifiable, Equatable {
         let typeRaw = dict["type"] as? String ?? "text"
         let type = FormFieldType(rawValue: typeRaw) ?? .text
         let required = dict["required"] as? Bool ?? true
-        return FormField(id: key, key: key, label: label, type: type, required: required)
+        let options = dict["options"] as? [String]
+        let placeholder = dict["placeholder"] as? String
+        return FormField(
+            id: key,
+            key: key,
+            label: label,
+            type: type,
+            required: required,
+            options: options,
+            placeholder: placeholder
+        )
     }
 }
 
@@ -40,6 +65,7 @@ enum FormFieldType: String, CaseIterable {
     case phone
     case textarea
     case file
+    case select
 
     var displayName: String {
         switch self {
@@ -48,6 +74,7 @@ enum FormFieldType: String, CaseIterable {
         case .phone: return "Phone"
         case .textarea: return "Long text"
         case .file: return "File / photos"
+        case .select: return "Dropdown"
         }
     }
 }

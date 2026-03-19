@@ -7,18 +7,6 @@
 import SwiftUI
 import PhotosUI
 
-enum HeroPattern: String, CaseIterable {
-    case none = ""
-    case circles_and_squares = "circles_and_squares"
-    case squares_in_squares = "squares_in_squares"
-    case bubbles = "bubbles"
-    case bamboo = "bamboo"
-    case bathroom_floor = "bathroom_floor"
-    case hexagons = "hexagons"
-    case texture = "texture"
-    case topography = "topography"
-}
-
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
@@ -196,23 +184,6 @@ struct DesignView: View {
                 HexColorRow(label: "Text", hex: $viewModel.textColorHex)
                 HexColorRow(label: "Accent (buttons)", hex: $viewModel.primaryColorHex)
             }
-            Text("Background pattern")
-                .font(.subheadline.weight(.medium))
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 8) {
-                ForEach(HeroPattern.allCases, id: \.rawValue) { p in
-                    Button(action: { viewModel.backgroundPattern = p.rawValue }) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(p == .none ? Color(.systemGray5) : Color(hex: viewModel.backgroundPatternColorHex).opacity(viewModel.backgroundPatternOpacity))
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(viewModel.backgroundPattern == p.rawValue ? Color.accentColor : Color.clear, lineWidth: 2)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            HexColorRow(label: "Pattern color", hex: $viewModel.backgroundPatternColorHex)
             Text("Tagline")
                 .font(.subheadline.weight(.medium))
             TextField("Short tagline for your page", text: $viewModel.tagline)
@@ -657,58 +628,63 @@ struct HeroImageUploadSection: View {
 // MARK: - Gallery images
 struct GalleryImagesSection: View {
     @ObservedObject var viewModel: DesignViewModel
-    @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedItems: [PhotosPickerItem] = []
+
+    /// Wraps thumbnails in rows; parent `ScrollView` handles vertical scrolling.
+    private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Portfolio / gallery (Featured work)")
                 .font(.subheadline.weight(.medium))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
-                        if let url = URL(string: urlString) {
-                            ZStack(alignment: .topTrailing) {
-                                AsyncImage(url: url) { image in
-                                    image.resizable().aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Color.gray.opacity(0.2)
-                                }
-                                .frame(width: 72, height: 72)
-                                .clipped()
-                                .cornerRadius(8)
-                                Button(action: {
-                                    Task { await viewModel.removeGalleryImage(at: index) }
-                                }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(.white, .red)
-                                }
-                                .offset(x: 4, y: -4)
+            LazyVGrid(columns: thumbGridColumns, alignment: .leading, spacing: 12) {
+                ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
+                    if let url = URL(string: urlString) {
+                        ZStack(alignment: .topTrailing) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Color.gray.opacity(0.2)
                             }
+                            .frame(width: 72, height: 72)
+                            .clipped()
+                            .cornerRadius(8)
+                            Button(action: {
+                                Task { await viewModel.removeGalleryImage(at: index) }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.white, .red)
+                            }
+                            .offset(x: 4, y: -4)
                         }
                     }
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
-                            .frame(width: 72, height: 72)
-                            .overlay(
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .foregroundColor(.secondary)
-                            )
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem = newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                }
+                PhotosPicker(
+                    selection: $selectedItems,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                        .frame(width: 72, height: 72)
+                        .overlay(
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                        )
+                }
+                .onChange(of: selectedItems) { _, newItems in
+                    Task {
+                        let itemsToUpload = newItems
+                        guard !itemsToUpload.isEmpty else { return }
+
+                        for item in itemsToUpload {
+                            if let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty {
                                 await viewModel.addGalleryImage(imageData: data)
                             }
-                            await MainActor.run { selectedItem = nil }
                         }
+                        await MainActor.run { selectedItems.removeAll() }
                     }
                 }
             }

@@ -31,6 +31,8 @@ class AuthViewModel: ObservableObject {
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
     @Published var isDemoMode = false
+    /// Cached tenant logo (Web Page Design). Prefetched on sign-in; updated via notification after uploads.
+    @Published var tenantLogoUrl: String?
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     private let firebaseService = FirebaseService()
@@ -44,10 +46,12 @@ class AuthViewModel: ObservableObject {
                     self.isDemoMode = false
                     self.currentUserEmail = user?.email
                     self.currentUserDisplayName = user?.displayName
+                    Task { await self.refreshTenantLogoFromServer() }
                 } else if !self.isDemoMode {
                     self.isAuthenticated = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
+                    self.tenantLogoUrl = nil
                 }
             }
         }
@@ -88,6 +92,7 @@ class AuthViewModel: ObservableObject {
         isAuthenticated = false
         currentUserEmail = nil
         currentUserDisplayName = nil
+        tenantLogoUrl = nil
     }
 
     /// Demo mode: full app experience without Firebase sign-in.
@@ -96,5 +101,42 @@ class AuthViewModel: ObservableObject {
         isAuthenticated = true
         currentUserEmail = "demo@example.com"
         currentUserDisplayName = "Demo Provider"
+        tenantLogoUrl = nil
     }
+
+    /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.
+    func refreshTenantLogoFromServer() async {
+        if isDemoMode || !isAuthenticated {
+            tenantLogoUrl = nil
+            return
+        }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            tenantLogoUrl = nil
+            return
+        }
+        do {
+            let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            guard let tid = profile?.tenantId else {
+                tenantLogoUrl = nil
+                return
+            }
+            let tenant = try await firebaseService.fetchTenant(tenantId: tid)
+            let raw = tenant?["logoUrl"] as? String
+            let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            tenantLogoUrl = trimmed.isEmpty ? nil : trimmed
+        } catch {
+            tenantLogoUrl = nil
+        }
+    }
+
+    /// Update cache without a network round-trip (e.g. after logo upload in Design).
+    func applyTenantLogoCache(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        tenantLogoUrl = trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+extension Notification.Name {
+    /// Posted with `userInfo["logoUrl"]` when the tenant logo changes in Firestore from this app.
+    static let tenantLogoDidChange = Notification.Name("tenantLogoDidChange")
 }

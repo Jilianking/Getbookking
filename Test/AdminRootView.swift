@@ -53,6 +53,53 @@ final class DrawerState {
     var selectedSection: AdminSection = .dashboard
 }
 
+/// Initials always visible; logo fades in when loaded (no spinner, fast perceived load).
+private struct DrawerTenantLogoView: View {
+    let logoURL: String?
+    let displayNameFallback: String?
+    private let side: CGFloat = 44
+    @State private var logoOpaque = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.green.opacity(0.8))
+                .frame(width: side, height: side)
+                .overlay(
+                    Text((displayNameFallback ?? "A").prefix(1).uppercased())
+                        .font(.headline)
+                        .foregroundColor(.white)
+                )
+            if let s = logoURL, !s.isEmpty, let url = URL(string: s) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .onAppear {
+                                withAnimation(.easeIn(duration: 0.22)) {
+                                    logoOpaque = true
+                                }
+                            }
+                    default:
+                        Color.clear
+                    }
+                }
+                .id(url.absoluteString)
+                .frame(width: side, height: side)
+                .clipShape(Circle())
+                .opacity(logoOpaque ? 1 : 0)
+                .animation(.easeIn(duration: 0.22), value: logoOpaque)
+            }
+        }
+        .frame(width: side, height: side)
+        .onChange(of: logoURL) { _, _ in
+            logoOpaque = false
+        }
+    }
+}
+
 struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var drawerState = DrawerState()
@@ -79,6 +126,11 @@ struct AdminRootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
+        .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
+            if let url = note.userInfo?["logoUrl"] as? String {
+                authViewModel.applyTenantLogoCache(url)
+            }
+        }
     }
 
     @ViewBuilder
@@ -149,16 +201,12 @@ struct AdminRootView: View {
 
             Spacer()
 
-            // User block
+            // User block (avatar = business logo when set in Web Page Design)
             HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.green.opacity(0.8))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Text((authViewModel.currentUserDisplayName ?? "A").prefix(1).uppercased())
-                            .font(.headline)
-                            .foregroundColor(.white)
-                    )
+                DrawerTenantLogoView(
+                    logoURL: authViewModel.tenantLogoUrl,
+                    displayNameFallback: authViewModel.currentUserDisplayName
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(authViewModel.currentUserDisplayName ?? "Admin User")
                         .font(.subheadline.weight(.semibold))

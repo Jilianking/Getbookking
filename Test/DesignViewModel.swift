@@ -42,9 +42,6 @@ class DesignViewModel: ObservableObject {
     @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
-    @Published var backgroundPattern: String = ""
-    @Published var backgroundPatternColorHex: String = "#333333"
-    @Published var backgroundPatternOpacity: Double = 0.15
 
     // Form fields
     @Published var formFields: [FormField] = []
@@ -126,9 +123,6 @@ class DesignViewModel: ObservableObject {
                 fontBodySize = tenant?["fontBodySize"] as? String ?? "medium"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
-                backgroundPattern = tenant?["backgroundPattern"] as? String ?? ""
-                backgroundPatternColorHex = tenant?["backgroundPatternColor"] as? String ?? "#333333"
-                backgroundPatternOpacity = tenant?["backgroundPatternOpacity"] as? Double ?? 0.15
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
                     formFields = schema.compactMap { FormField.fromFirestore($0) }
                     if formFields.isEmpty { formFields = FormField.defaultFields }
@@ -174,9 +168,6 @@ class DesignViewModel: ObservableObject {
             "fontBodySize": fontBodySize,
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
-            "backgroundPattern": backgroundPattern,
-            "backgroundPatternColor": backgroundPatternColorHex,
-            "backgroundPatternOpacity": backgroundPatternOpacity,
             "sidebarIconColorHome": sidebarIconColorHome,
             "sidebarIconColorBooking": sidebarIconColorBooking
         ]
@@ -208,6 +199,11 @@ class DesignViewModel: ObservableObject {
                 logoUrl = url
                 isUploadingLogo = false
             }
+            NotificationCenter.default.post(
+                name: .tenantLogoDidChange,
+                object: nil,
+                userInfo: ["logoUrl": url]
+            )
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
@@ -288,6 +284,13 @@ class DesignViewModel: ObservableObject {
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
+            if let logo = updates["logoUrl"] as? String {
+                NotificationCenter.default.post(
+                    name: .tenantLogoDidChange,
+                    object: nil,
+                    userInfo: ["logoUrl": logo]
+                )
+            }
             await MainActor.run {
                 saveSuccess = true
                 Task { @MainActor in

@@ -397,41 +397,42 @@
     .tattoo-btn-book { display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; background: #fff; color: #111; border-radius: 8px; text-decoration: none; }
     .tattoo-btn-book:hover { opacity: 0.92; }
     .tattoo-featured { padding: 32px 0 56px; }
-    .tattoo-featured h2 { font-size: 1.5rem; margin: 0 0 8px; font-weight: 600; }
-    .tattoo-featured-sub { font-size: 14px; color: #666; margin: 0 0 24px; }
+    .tattoo-featured h2 { font-size: 1.5rem; margin: 0 0 8px; font-weight: 600; color: inherit; }
+    .tattoo-featured-sub { font-size: 14px; color: inherit; opacity: 0.65; margin: 0 0 24px; }
     .tattoo-featured-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .tattoo-featured-grid img { width: 100%; height: 400px; object-fit: cover; border-radius: 12px; display: block; }
     .tattoo-featured-placeholder {
-      grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: #888;
-      font-size: 14px; background: #f9f9f9; border-radius: 12px; border: 1px dashed #ddd;
+      grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: inherit; opacity: 0.55;
+      font-size: 14px; background: rgba(0,0,0,0.04); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.12);
     }
-    .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: #333; font-weight: 500; text-decoration: none; }
+    .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: inherit; opacity: 0.85; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
     @media (max-width: 640px) { .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); } .tattoo-featured-grid img { height: 180px; } .tattoo-hero-section { min-height: 55vh; } .booking-page-title { font-size: 2rem; } .booking-shell { padding-top: 72px; } }
     .tattoo-about { padding: 64px 24px; background: #111; color: #fff; text-align: center; }
     .tattoo-about-inner { max-width: 640px; margin: 0 auto; }
-    .tattoo-about h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: #fff; letter-spacing: 0.02em; }
-    .tattoo-about-bio { margin: 0 0 48px; line-height: 1.75; color: rgba(255,255,255,0.75); font-size: 1rem; }
+    .tattoo-about h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: inherit; letter-spacing: 0.02em; }
+    .tattoo-about-bio { margin: 0 0 48px; line-height: 1.75; color: inherit; opacity: 0.8; font-size: 1rem; }
     .tattoo-contact-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; padding: 0; border: none; }
     .tattoo-contact-item { text-align: center; }
     .tattoo-contact-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
-    .tattoo-contact-icon svg { width: 28px; height: 28px; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-    .tattoo-contact-item h3 { font-size: 15px; font-weight: 600; color: #fff; text-transform: none; letter-spacing: 0; margin: 0 0 8px; }
-    .tattoo-contact-item p { margin: 0; font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.6; }
-    .tattoo-contact-item a { color: rgba(255,255,255,0.6); text-decoration: none; }
-    .tattoo-contact-item a:hover { color: #fff; text-decoration: underline; }
-    .tattoo-contact-placeholder { color: rgba(255,255,255,0.3); font-style: italic; }
+    .tattoo-contact-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .tattoo-contact-item h3 { font-size: 15px; font-weight: 600; color: inherit; text-transform: none; letter-spacing: 0; margin: 0 0 8px; }
+    .tattoo-contact-item p { margin: 0; font-size: 14px; color: inherit; opacity: 0.7; line-height: 1.6; }
+    .tattoo-contact-item a { color: inherit; opacity: 0.75; text-decoration: none; }
+    .tattoo-contact-item a:hover { opacity: 1; text-decoration: underline; }
+    .tattoo-contact-placeholder { color: inherit; opacity: 0.4; font-style: italic; }
     @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; gap: 24px; } .tattoo-about h2 { font-size: 1.8rem; } }
     /* Gallery page */
     .gallery-page { min-height: 100vh; background: #000; color: #fff; }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
-    .gallery-title { font-family: 'Playfair Display', Georgia, serif; font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: #fff; }
+    .gallery-title { font-family: 'Playfair Display', Georgia, serif; font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
     .gallery-shell { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; }
     .gallery-section { margin-bottom: 48px; }
-    .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: inherit; opacity: 0.72; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(127,127,127,0.35); }
     .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .gallery-grid img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; display: block; cursor: pointer; transition: opacity 0.2s; }
     .gallery-grid img:hover { opacity: 0.85; }
+    .gallery-empty-hint { text-align: center; padding: 48px 0; color: inherit; opacity: 0.5; }
     @media (max-width: 640px) {
       .gallery-grid { grid-template-columns: repeat(2, 1fr); }
       .gallery-grid img { height: 180px; }
@@ -1315,6 +1316,32 @@
           + '  </div>'
           + '</div>';
       }
+      function maxCellsFromGalleryLayout(layoutStr, defaultCols, defaultRows) {
+        var layout = String(layoutStr || '3x1').toLowerCase().replace(/\u00d7/g, 'x').split('x');
+        var c = parseInt(layout[0], 10);
+        var r = parseInt(layout[1], 10);
+        if (!c || c < 1) c = defaultCols;
+        if (!r || r < 1) r = defaultRows;
+        return c * r;
+      }
+      /** Home featured strip: new schema uses featuredWorkImages; legacy uses first maxCells of galleryImages. */
+      function featuredUrlsForHomeStrip(tenant, maxCells) {
+        if (Object.prototype.hasOwnProperty.call(tenant, 'featuredWorkImages') && tenant.featuredWorkImages != null) {
+          return (tenant.featuredWorkImages || []).slice(0, maxCells);
+        }
+        var g = tenant.galleryImages || [];
+        return g.slice(0, maxCells);
+      }
+      /** /gallery page: new schema uses galleryImages only; legacy uses tail of old combined list. */
+      function galleryPageImageUrls(tenant) {
+        var g = tenant.galleryImages || [];
+        if (Object.prototype.hasOwnProperty.call(tenant, 'featuredWorkImages') && tenant.featuredWorkImages != null) {
+          return g;
+        }
+        var maxCells = maxCellsFromGalleryLayout(tenant.galleryGridLayout, 3, 1);
+        if (g.length <= maxCells) return [];
+        return g.slice(maxCells);
+      }
       function hairLayoutPage(tenant, services) {
         var base = location.origin + '/' + tenant.slug;
         var title = esc(tenant.displayName || 'Let your hair shine with strength & beauty');
@@ -1370,7 +1397,7 @@
           +    heroRight
           + '</section>';
 
-        var gallery = (tenant.galleryImages || []).slice(0, 4);
+        var gallery = featuredUrlsForHomeStrip(tenant, 4);
         var featuredHtml = gallery.length ? (
           '<section id="featured" class="hair-section hair-featured">'
           + '  <h2>Featured looks</h2>'
@@ -1557,7 +1584,7 @@
                 '<h1 class="booking-page-title">' + esc(tenant.displayName||'Appointment') + '</h1>' +
                 (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
               '</div>' +
-              '<div class="booking-card">' +
+              '<div class="booking-card" style="background:'+(tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff')+'">' +
                 contact +
                 '<form id="book-form" class="booking-form">' + html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
@@ -1577,7 +1604,7 @@
             if (snap.empty) return null;
             var d = snap.docs[0];
             var data = d.data();
-            return { id: d.id, slug: data.slug || slug, displayName: data.displayName, logoUrl: data.logoUrl, tagline: data.tagline,
+            var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, logoUrl: data.logoUrl, tagline: data.tagline,
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
@@ -1586,7 +1613,18 @@
               sidebarLinks: data.sidebarLinks || [],
               sidebarIconColorHome: data.sidebarIconColorHome || '',
               sidebarIconColorBooking: data.sidebarIconColorBooking || '',
-              galleryCategories: data.galleryCategories || [] };
+              galleryCategories: data.galleryCategories || [],
+              featuredWorkBackgroundColor: data.featuredWorkBackgroundColor || '',
+              featuredWorkTextColor: data.featuredWorkTextColor || '',
+              bookingFormCardBackgroundColor: data.bookingFormCardBackgroundColor || '',
+              galleryPageBackgroundColor: data.galleryPageBackgroundColor || '',
+              galleryPageTextColor: data.galleryPageTextColor || '',
+              aboutSectionBackgroundColor: data.aboutSectionBackgroundColor || '',
+              aboutSectionTextColor: data.aboutSectionTextColor || '' };
+            if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
+              row.featuredWorkImages = data.featuredWorkImages || [];
+            }
+            return row;
           });
       }
       function sidebarLinksHtml(tenant, base, bookUrl) {
@@ -1639,15 +1677,18 @@
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var imgsHtml = (tenant.galleryImages || []).map(function(url) {
+        var imgsHtml = galleryPageImageUrls(tenant).map(function(url) {
           return '<img src="' + esc(url) + '" alt="" loading="lazy">';
         }).join('');
 
         var content = imgsHtml
           ? '<div class="gallery-grid">' + imgsHtml + '</div>'
-          : '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:48px 0;">No gallery images yet. Add them in the app.</p>';
+          : '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
+        var gPageBg = tenant.galleryPageBackgroundColor || '#000000';
+        var gPageFg = tenant.galleryPageTextColor || '#ffffff';
+        var galleryPageStyle = 'background:'+gPageBg+';color:'+gPageFg;
 
-        return '<div class="gallery-page">' +
+        return '<div class="gallery-page" style="'+galleryPageStyle+'">' +
           nav +
           '<div class="gallery-header"><h1 class="gallery-title">' + esc(displayName) + '</h1></div>' +
           '<div class="gallery-shell">' + content + '</div>' +
@@ -1677,7 +1718,7 @@
         var gridCols = parseInt(layout[0], 10) || 3;
         var gridRows = parseInt(layout[1], 10) || 1;
         var maxCells = gridCols * gridRows;
-        var gallery = (tenant.galleryImages || []).slice(0, maxCells);
+        var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
         var galleryPageUrl = base + '/gallery';
         var gridStyle = 'grid-template-columns:repeat(' + gridCols + ',1fr);grid-template-rows:repeat(' + gridRows + ',1fr);';
         var featuredGridInner = gallery.length
@@ -1685,7 +1726,10 @@
               return '<a href="'+esc(galleryPageUrl)+'"><img src="'+esc(url)+'" alt=""></a>';
             }).join('')
           : '<div class="tattoo-featured-placeholder">Add your portfolio in the app</div>';
-        var featuredHtml = '<section id="featured" class="tattoo-featured">' +
+        var featBg = tenant.featuredWorkBackgroundColor || '#ffffff';
+        var featFg = tenant.featuredWorkTextColor || '#111111';
+        var featSectionStyle = 'background:'+featBg+';color:'+featFg;
+        var featuredHtml = '<section id="featured" class="tattoo-featured" style="'+featSectionStyle+'">' +
           '<h2>Featured Work</h2>' +
           '<p class="tattoo-featured-sub">' + (gallery.length ? 'A selection of recent work.' : 'Your best work will appear here.') + '</p>' +
           '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
@@ -1697,7 +1741,10 @@
         var svgInstagram = '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff" stroke="none"/></svg>';
         var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
         var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
-        var aboutSection = '<section id="about" class="tattoo-about">' +
+        var abg = tenant.aboutSectionBackgroundColor || '#111111';
+        var afg = tenant.aboutSectionTextColor || '#ffffff';
+        var aboutStyleStr = 'background:'+abg+';color:'+afg;
+        var aboutSection = '<section id="about" class="tattoo-about" style="'+aboutStyleStr+'">' +
           '<div class="tattoo-about-inner">' +
           '<h2>Meet ' + esc(displayName) + '</h2>' +
           '<p class="tattoo-about-bio">' + aboutBody + '</p>' +

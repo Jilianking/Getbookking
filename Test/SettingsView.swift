@@ -5,10 +5,12 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
+    @State private var businessLogoPickerItem: PhotosPickerItem?
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
@@ -43,6 +45,103 @@ struct SettingsView: View {
                             Image(systemName: "arrow.right.square")
                             Text("Logout")
                                 .foregroundColor(.red)
+                        }
+                    }
+                }
+
+                if !authViewModel.isDemoMode && viewModel.hasProfile, viewModel.tenantId != nil {
+                    Section(
+                        header: Text("Business logo"),
+                        footer: Text("Used on your site and in the app menu.")
+                            .font(.caption2)
+                    ) {
+                        HStack(alignment: .center, spacing: 12) {
+                            PhotosPicker(
+                                selection: $businessLogoPickerItem,
+                                matching: .images,
+                                photoLibrary: .shared()
+                            ) {
+                                ZStack(alignment: .bottomTrailing) {
+                                    Group {
+                                        if viewModel.logoUrl.isEmpty {
+                                            Circle()
+                                                .fill(Color(.secondarySystemGroupedBackground))
+                                                .overlay(
+                                                    Image(systemName: "building.2.fill")
+                                                        .font(.system(size: 22))
+                                                        .foregroundColor(.secondary)
+                                                )
+                                        } else if let url = URL(string: viewModel.logoUrl) {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                case .failure:
+                                                    Image(systemName: "exclamationmark.triangle")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                default:
+                                                    Color(.secondarySystemGroupedBackground)
+                                                        .overlay(ProgressView().scaleEffect(0.7))
+                                                }
+                                            }
+                                        } else {
+                                            Circle()
+                                                .fill(Color(.secondarySystemGroupedBackground))
+                                        }
+                                    }
+                                    .frame(width: 52, height: 52)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                                    )
+
+                                    Image(systemName: "camera.circle.fill")
+                                        .symbolRenderingMode(.multicolor)
+                                        .font(.system(size: 20))
+                                        .background(
+                                            Circle()
+                                                .fill(Color(.systemBackground))
+                                                .frame(width: 16, height: 16)
+                                        )
+                                        .offset(x: 1, y: 1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.isUploadingLogo)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Tap photo to change")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                if viewModel.isUploadingLogo {
+                                    ProgressView()
+                                        .scaleEffect(0.85)
+                                }
+                                if !viewModel.logoUrl.isEmpty {
+                                    Button(role: .destructive) {
+                                        Task { await viewModel.removeBusinessLogo() }
+                                    } label: {
+                                        Text("Remove")
+                                            .font(.caption.weight(.medium))
+                                    }
+                                    .disabled(viewModel.isUploadingLogo)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .onChange(of: businessLogoPickerItem) { _, newItem in
+                        Task {
+                            guard let newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                                await viewModel.uploadBusinessLogo(imageData: data)
+                            }
+                            await MainActor.run { businessLogoPickerItem = nil }
                         }
                     }
                 }

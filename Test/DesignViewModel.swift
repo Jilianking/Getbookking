@@ -22,15 +22,20 @@ class DesignViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var saveSuccess = false
+    /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
+    @Published private(set) var webPreviewReloadToken: UInt64 = 0
 
     // Home: appearance + hero + featured work
     @Published var displayName: String = ""
     @Published var logoUrl: String = ""
-    @Published var isUploadingLogo = false
     @Published var heroImageUrl: String = ""
     @Published var isUploadingHero = false
+    /// Shown only on `/gallery` (not on home featured strip).
     @Published var galleryImages: [String] = []
     @Published var isUploadingGallery = false
+    /// Home featured strip only; order matters. Independent from `galleryImages`.
+    @Published var featuredWorkImages: [String] = []
+    @Published var isUploadingFeaturedWork = false
     @Published var galleryGridLayout: String = "3x1"
     @Published var backgroundColorHex: String = "#FFFFFF"
     @Published var cardSurfaceColorHex: String = "#F5F5F5"
@@ -42,6 +47,15 @@ class DesignViewModel: ObservableObject {
     @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
+
+    // Section surfaces (Design tabs: Home / Gallery / About)
+    @Published var featuredWorkBackgroundColorHex: String = "#FFFFFF"
+    @Published var featuredWorkTextColorHex: String = "#111111"
+    @Published var bookingFormCardBackgroundColorHex: String = "#FFFFFF"
+    @Published var galleryPageBackgroundColorHex: String = "#000000"
+    @Published var galleryPageTextColorHex: String = "#FFFFFF"
+    @Published var aboutSectionBackgroundColorHex: String = "#111111"
+    @Published var aboutSectionTextColorHex: String = "#FFFFFF"
 
     // Form fields
     @Published var formFields: [FormField] = []
@@ -69,6 +83,42 @@ class DesignViewModel: ObservableObject {
     private let hostingBase = "https://test-app-96812.web.app"
 
     var hasTenant: Bool { tenantId != nil }
+
+    func invalidateWebPreview() {
+        webPreviewReloadToken &+= 1
+    }
+
+    /// Layout slot count for the home featured strip (web uses first this many URLs from `featuredWorkImages`).
+    var featuredWorkImageSlotCount: Int {
+        let normalized = galleryGridLayout
+            .lowercased()
+            .replacingOccurrences(of: "×", with: "x")
+        let parts = normalized.split(separator: "x").map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard parts.count == 2,
+              let cols = Int(parts[0]),
+              let rows = Int(parts[1]),
+              cols > 0, rows > 0 else {
+            return 3
+        }
+        return cols * rows
+    }
+
+    /// Maps stored layouts onto horizontal strips `2x1` / `3x1` / `4x1` (columns × one row).
+    func normalizeFeaturedGridLayoutPresets() {
+        let presets: Set<String> = ["2x1", "3x1", "4x1"]
+        let key = galleryGridLayout.lowercased().replacingOccurrences(of: "×", with: "x")
+        if presets.contains(key) { return }
+        let slots = featuredWorkImageSlotCount
+        if slots <= 2 {
+            galleryGridLayout = "2x1"
+        } else if slots == 3 {
+            galleryGridLayout = "3x1"
+        } else {
+            galleryGridLayout = "4x1"
+        }
+    }
 
     func loadData(isDemoMode: Bool = false) async {
         await MainActor.run { isLoading = true; errorMessage = nil }
@@ -104,6 +154,7 @@ class DesignViewModel: ObservableObject {
             }
             let tenant = try await firebaseService.fetchTenant(tenantId: tid)
             let svc = try await firebaseService.fetchTenantServices(tenantId: tid)
+            var persistSplit: (featured: [String], gallery: [String])?
             await MainActor.run {
                 tenantId = tid
                 tenantSlug = slug
@@ -111,8 +162,20 @@ class DesignViewModel: ObservableObject {
                 displayName = tenant?["displayName"] as? String ?? ""
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
                 heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""
-                galleryImages = tenant?["galleryImages"] as? [String] ?? []
                 galleryGridLayout = tenant?["galleryGridLayout"] as? String ?? "3x1"
+                let rawGallery = tenant?["galleryImages"] as? [String] ?? []
+                if tenant?["featuredWorkImages"] == nil {
+                    /// Legacy: one list served home (prefix) + full gallery page; split into two fields.
+                    let maxSlots = featuredWorkImageSlotCount
+                    featuredWorkImages = Array(rawGallery.prefix(maxSlots))
+                    galleryImages = Array(rawGallery.dropFirst(maxSlots))
+                    if !rawGallery.isEmpty {
+                        persistSplit = (featured: featuredWorkImages, gallery: galleryImages)
+                    }
+                } else {
+                    featuredWorkImages = tenant?["featuredWorkImages"] as? [String] ?? []
+                    galleryImages = rawGallery
+                }
                 backgroundColorHex = tenant?["backgroundColor"] as? String ?? "#FFFFFF"
                 cardSurfaceColorHex = tenant?["cardSurfaceColor"] as? String ?? "#F5F5F5"
                 textColorHex = tenant?["textColor"] as? String ?? "#333333"
@@ -123,6 +186,13 @@ class DesignViewModel: ObservableObject {
                 fontBodySize = tenant?["fontBodySize"] as? String ?? "medium"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
+                featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FFFFFF"
+                featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#111111"
+                bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
+                galleryPageBackgroundColorHex = tenant?["galleryPageBackgroundColor"] as? String ?? "#000000"
+                galleryPageTextColorHex = tenant?["galleryPageTextColor"] as? String ?? "#FFFFFF"
+                aboutSectionBackgroundColorHex = tenant?["aboutSectionBackgroundColor"] as? String ?? "#111111"
+                aboutSectionTextColorHex = tenant?["aboutSectionTextColor"] as? String ?? "#FFFFFF"
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
                     formFields = schema.compactMap { FormField.fromFirestore($0) }
                     if formFields.isEmpty { formFields = FormField.defaultFields }
@@ -140,7 +210,19 @@ class DesignViewModel: ObservableObject {
                 industry = tenant?["industry"] as? String
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""
                 sidebarIconColorBooking = tenant?["sidebarIconColorBooking"] as? String ?? ""
+                normalizeFeaturedGridLayoutPresets()
                 isLoading = false
+            }
+            if let split = persistSplit {
+                do {
+                    try await firebaseService.updateTenant(tenantId: tid, updates: [
+                        "featuredWorkImages": split.featured,
+                        "galleryImages": split.gallery
+                    ])
+                    await MainActor.run { invalidateWebPreview() }
+                } catch {
+                    await MainActor.run { errorMessage = error.localizedDescription }
+                }
             }
         } catch {
             await MainActor.run {
@@ -156,6 +238,7 @@ class DesignViewModel: ObservableObject {
             "displayName": displayName,
             "logoUrl": logoUrl,
             "heroImageUrl": heroImageUrl,
+            "featuredWorkImages": featuredWorkImages,
             "galleryImages": galleryImages,
             "galleryGridLayout": galleryGridLayout,
             "backgroundColor": backgroundColorHex,
@@ -169,9 +252,20 @@ class DesignViewModel: ObservableObject {
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
             "sidebarIconColorHome": sidebarIconColorHome,
-            "sidebarIconColorBooking": sidebarIconColorBooking
+            "sidebarIconColorBooking": sidebarIconColorBooking,
+            "featuredWorkBackgroundColor": featuredWorkBackgroundColorHex,
+            "featuredWorkTextColor": featuredWorkTextColorHex,
+            "bookingFormCardBackgroundColor": bookingFormCardBackgroundColorHex
         ]
         await saveTenantUpdates(tid, updates)
+    }
+
+    func saveGalleryPageColors() async {
+        guard let tid = tenantId else { return }
+        await saveTenantUpdates(tid, [
+            "galleryPageBackgroundColor": galleryPageBackgroundColorHex,
+            "galleryPageTextColor": galleryPageTextColorHex
+        ])
     }
 
     func saveAbout() async {
@@ -184,32 +278,16 @@ class DesignViewModel: ObservableObject {
             "address": contactAddress,
             "businessHours": businessHours,
             "instagramHandle": instagramHandle,
-            "showContactOnPage": showContactOnPage
+            "showContactOnPage": showContactOnPage,
+            "aboutSectionBackgroundColor": aboutSectionBackgroundColorHex,
+            "aboutSectionTextColor": aboutSectionTextColorHex
         ]
         await saveTenantUpdates(tid, updates)
     }
 
-    func uploadLogo(imageData: Data) async {
-        guard let tid = tenantId else { return }
-        await MainActor.run { isUploadingLogo = true; errorMessage = nil }
-        do {
-            let url = try await firebaseService.uploadTenantLogo(tenantId: tid, imageData: imageData)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": url])
-            await MainActor.run {
-                logoUrl = url
-                isUploadingLogo = false
-            }
-            NotificationCenter.default.post(
-                name: .tenantLogoDidChange,
-                object: nil,
-                userInfo: ["logoUrl": url]
-            )
-        } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                isUploadingLogo = false
-            }
-        }
+    /// Keeps builder in sync when logo is changed in Settings.
+    func syncLogoUrlFromExternal(_ url: String) {
+        logoUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func uploadHeroImage(imageData: Data) async {
@@ -221,6 +299,7 @@ class DesignViewModel: ObservableObject {
             await MainActor.run {
                 heroImageUrl = url
                 isUploadingHero = false
+                invalidateWebPreview()
             }
         } catch {
             await MainActor.run {
@@ -241,6 +320,7 @@ class DesignViewModel: ObservableObject {
             await MainActor.run {
                 galleryImages = updated
                 isUploadingGallery = false
+                invalidateWebPreview()
             }
         } catch {
             await MainActor.run {
@@ -257,7 +337,47 @@ class DesignViewModel: ObservableObject {
         updated.remove(at: index)
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: ["galleryImages": updated])
-            await MainActor.run { galleryImages = updated }
+            await MainActor.run {
+                galleryImages = updated
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func addFeaturedWorkImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingFeaturedWork = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            var updated = featuredWorkImages
+            updated.append(url)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["featuredWorkImages": updated])
+            await MainActor.run {
+                featuredWorkImages = updated
+                isUploadingFeaturedWork = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingFeaturedWork = false
+            }
+        }
+    }
+
+    func removeFeaturedWorkImage(at index: Int) async {
+        guard let tid = tenantId else { return }
+        guard index >= 0, index < featuredWorkImages.count else { return }
+        var updated = featuredWorkImages
+        updated.remove(at: index)
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["featuredWorkImages": updated])
+            await MainActor.run {
+                featuredWorkImages = updated
+                invalidateWebPreview()
+            }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
@@ -292,6 +412,7 @@ class DesignViewModel: ObservableObject {
                 )
             }
             await MainActor.run {
+                invalidateWebPreview()
                 saveSuccess = true
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -307,8 +428,9 @@ class DesignViewModel: ObservableObject {
         guard let tid = tenantId else { return }
         await MainActor.run { errorMessage = nil }
         do {
-            _ = try await firebaseService.createTenantService(tenantId: tid, name: name, durationMinutes: durationMinutes)
+            _ =             try await firebaseService.createTenantService(tenantId: tid, name: name, durationMinutes: durationMinutes)
             await loadData()
+            await MainActor.run { invalidateWebPreview() }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
@@ -319,7 +441,10 @@ class DesignViewModel: ObservableObject {
         await MainActor.run { errorMessage = nil }
         do {
             try await firebaseService.deleteTenantService(tenantId: tid, serviceId: service.id)
-            await MainActor.run { services.removeAll { $0.id == service.id } }
+            await MainActor.run {
+                services.removeAll { $0.id == service.id }
+                invalidateWebPreview()
+            }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
@@ -356,7 +481,10 @@ class DesignViewModel: ObservableObject {
             ])
 
             await loadData()
-            await MainActor.run { saveSuccess = true }
+            await MainActor.run {
+                invalidateWebPreview()
+                saveSuccess = true
+            }
             Task { @MainActor in try? await Task.sleep(nanoseconds: 2_000_000_000); saveSuccess = false }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }

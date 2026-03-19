@@ -24,6 +24,9 @@ class SettingsViewModel: ObservableObject {
     @Published var tenantId: String?
     @Published var selectedIndustry: String = BookingTemplate.custom.rawValue
     @Published var isSavingService = false
+    /// Tenant logo (same as website); edited in Settings like a profile photo.
+    @Published var logoUrl: String = ""
+    @Published var isUploadingLogo = false
 
     private let firebaseService = FirebaseService()
 
@@ -62,6 +65,7 @@ class SettingsViewModel: ObservableObject {
                 hasProfile = false
                 tenantId = nil
                 selectedIndustry = BookingTemplate.custom.rawValue
+                logoUrl = ""
                 isLoading = false
             }
             return
@@ -74,16 +78,20 @@ class SettingsViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             var industry: String?
             var tid: String?
+            var loadedLogoUrl = ""
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
-                let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile)
-                industry = tenant?["industry"] as? String
+                if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
+                    industry = tenant["industry"] as? String
+                    loadedLogoUrl = tenant["logoUrl"] as? String ?? ""
+                }
             }
             await MainActor.run {
                 if let p = profile {
                     hasProfile = true
                     tenantId = tid
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
+                    logoUrl = loadedLogoUrl
                     confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
                     depositAmount = p.workflow.depositAmount
@@ -98,6 +106,7 @@ class SettingsViewModel: ObservableObject {
                     hasProfile = false
                     tenantId = nil
                     selectedIndustry = BookingTemplate.custom.rawValue
+                    logoUrl = ""
                 }
                 isLoading = false
             }
@@ -106,6 +115,45 @@ class SettingsViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
                 isLoading = false
             }
+        }
+    }
+
+    func uploadBusinessLogo(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingLogo = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantLogo(tenantId: tid, imageData: imageData)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": url])
+            await MainActor.run {
+                logoUrl = url
+                isUploadingLogo = false
+            }
+            NotificationCenter.default.post(
+                name: .tenantLogoDidChange,
+                object: nil,
+                userInfo: ["logoUrl": url]
+            )
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingLogo = false
+            }
+        }
+    }
+
+    func removeBusinessLogo() async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": ""])
+            await MainActor.run { logoUrl = "" }
+            NotificationCenter.default.post(
+                name: .tenantLogoDidChange,
+                object: nil,
+                userInfo: ["logoUrl": ""]
+            )
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
         }
     }
 

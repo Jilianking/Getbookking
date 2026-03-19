@@ -62,13 +62,28 @@ struct DesignView: View {
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
+                if let url = note.userInfo?["logoUrl"] as? String {
+                    viewModel.syncLogoUrlFromExternal(url)
+                }
+            }
         }
         .navigationViewStyle(.stack)
     }
 
+    /// Same path as `bookingUrl` with a cache-busting query so WKWebView reloads after Firestore updates (token bumps in `DesignViewModel`).
+    private var sitePreviewURL: URL? {
+        guard viewModel.hasTenant, !viewModel.bookingUrl.isEmpty,
+              var components = URLComponents(string: viewModel.bookingUrl) else { return nil }
+        var q = components.queryItems ?? []
+        q.append(URLQueryItem(name: "_cb", value: String(viewModel.webPreviewReloadToken)))
+        components.queryItems = q
+        return components.url
+    }
+
     private var previewContent: some View {
         WebViewPreview(
-            url: viewModel.hasTenant ? URL(string: viewModel.bookingUrl) : nil,
+            url: sitePreviewURL,
             height: nil
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -174,21 +189,6 @@ struct DesignView: View {
                 }
             }
 
-            // Appearance
-            Text("Appearance")
-                .font(.headline)
-            LogoUploadSection(viewModel: viewModel)
-            Group {
-                HexColorRow(label: "Background", hex: $viewModel.backgroundColorHex)
-                HexColorRow(label: "Card surface", hex: $viewModel.cardSurfaceColorHex)
-                HexColorRow(label: "Text", hex: $viewModel.textColorHex)
-                HexColorRow(label: "Accent (buttons)", hex: $viewModel.primaryColorHex)
-            }
-            Text("Tagline")
-                .font(.subheadline.weight(.medium))
-            TextField("Short tagline for your page", text: $viewModel.tagline)
-                .textFieldStyle(.roundedBorder)
-
             // Hero
             Text("Hero")
                 .font(.headline)
@@ -199,15 +199,23 @@ struct DesignView: View {
             // Featured work
             Text("Featured work")
                 .font(.headline)
-            Text("Gallery layout")
-                .font(.subheadline.weight(.medium))
-            Picker("Layout", selection: $viewModel.galleryGridLayout) {
-                Text("3 in a row").tag("3x1")
-                Text("2×2 grid").tag("2x2")
-                Text("3×6 grid").tag("3x6")
+            Picker("Featured work layout", selection: $viewModel.galleryGridLayout) {
+                Text("2 wide").tag("2x1")
+                Text("3 wide").tag("3x1")
+                Text("4 wide").tag("4x1")
             }
             .pickerStyle(.segmented)
-            GalleryImagesSection(viewModel: viewModel)
+            FeaturedWorkHomeGallerySection(viewModel: viewModel)
+
+            Text("Home & booking sections")
+                .font(.headline)
+                .padding(.top, 8)
+            Text("Featured strip on your home page and the booking form card.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            HexColorRow(label: "Featured work background", hex: $viewModel.featuredWorkBackgroundColorHex)
+            HexColorRow(label: "Featured work text", hex: $viewModel.featuredWorkTextColorHex)
+            HexColorRow(label: "Booking form card", hex: $viewModel.bookingFormCardBackgroundColorHex)
 
             // Sidebar
             Text("Sidebar")
@@ -229,7 +237,7 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Gallery")
                 .font(.headline)
-            Text("These photos appear on your Gallery page in a big grid.")
+            Text("These photos appear only on your /gallery page—not on the home featured strip.")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -238,6 +246,19 @@ struct DesignView: View {
             Text("Tip: Upload your best healed work here.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+            Text("Gallery page")
+                .font(.headline)
+                .padding(.top, 8)
+            Text("Full /gallery page background and text.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            HexColorRow(label: "Page background", hex: $viewModel.galleryPageBackgroundColorHex)
+            HexColorRow(label: "Page text", hex: $viewModel.galleryPageTextColorHex)
+            Button("Save gallery page colors") {
+                Task { await viewModel.saveGalleryPageColors() }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -318,6 +339,10 @@ struct DesignView: View {
             Text("This appears in the Meet section on your site.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            Text("Meet section colors")
+                .font(.subheadline.weight(.medium))
+            HexColorRow(label: "Section background", hex: $viewModel.aboutSectionBackgroundColorHex)
+            HexColorRow(label: "Section text", hex: $viewModel.aboutSectionTextColorHex)
             TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
@@ -510,63 +535,6 @@ struct DesignView: View {
     }
 }
 
-// MARK: - Logo upload
-struct LogoUploadSection: View {
-    @ObservedObject var viewModel: DesignViewModel
-    @State private var selectedItem: PhotosPickerItem?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Logo")
-                .font(.headline)
-            HStack(spacing: 16) {
-                if let urlString = viewModel.logoUrl.isEmpty ? nil : viewModel.logoUrl,
-                   let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Color.gray.opacity(0.2)
-                    }
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 64, height: 64)
-                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text(viewModel.logoUrl.isEmpty ? "Choose photo" : "Change logo")
-                        }
-                        .font(.subheadline)
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem = newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
-                                await viewModel.uploadLogo(imageData: data)
-                            }
-                            await MainActor.run { selectedItem = nil }
-                        }
-                    }
-                    if viewModel.isUploadingLogo {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
-                }
-                Spacer()
-            }
-        }
-    }
-}
-
 // MARK: - Hero image upload
 struct HeroImageUploadSection: View {
     @ObservedObject var viewModel: DesignViewModel
@@ -625,7 +593,7 @@ struct HeroImageUploadSection: View {
     }
 }
 
-// MARK: - Gallery images
+// MARK: - Gallery page images only
 struct GalleryImagesSection: View {
     @ObservedObject var viewModel: DesignViewModel
     @State private var selectedItems: [PhotosPickerItem] = []
@@ -635,7 +603,7 @@ struct GalleryImagesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Portfolio / gallery (Featured work)")
+            Text("Gallery page photos")
                 .font(.subheadline.weight(.medium))
             LazyVGrid(columns: thumbGridColumns, alignment: .leading, spacing: 12) {
                 ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
@@ -695,6 +663,119 @@ struct GalleryImagesSection: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Featured work on Home tab (separate from gallery page photos)
+struct FeaturedWorkHomeGallerySection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @State private var selectedItems: [PhotosPickerItem] = []
+
+    private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
+
+    private var slots: Int { viewModel.featuredWorkImageSlotCount }
+
+    private var layoutCaptionLabel: String {
+        switch viewModel.galleryGridLayout {
+        case "2x1": return "2 wide"
+        case "3x1": return "3 wide"
+        case "4x1": return "4 wide"
+        default: return viewModel.galleryGridLayout
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Featured work photos")
+                .font(.subheadline.weight(.medium))
+            Text("These appear only on your home featured strip (first \(slots) slots for \(layoutCaptionLabel)). Add your full portfolio under the Gallery tab—they won’t show here.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("Featured on home")
+                .font(.caption.weight(.semibold))
+
+            LazyVGrid(columns: thumbGridColumns, alignment: .leading, spacing: 12) {
+                ForEach(Array(viewModel.featuredWorkImages.enumerated()), id: \.offset) { index, urlString in
+                    galleryThumbnail(urlString: urlString, removeAt: index)
+                }
+                ForEach(0..<max(0, slots - viewModel.featuredWorkImages.count), id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                        .frame(width: 72, height: 72)
+                        .foregroundColor(.secondary.opacity(0.35))
+                }
+                addPhotosPickerCell
+            }
+
+            if viewModel.featuredWorkImages.count > slots {
+                Text("\(viewModel.featuredWorkImages.count - slots) extra in list (wider layout would show more).")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            if viewModel.isUploadingFeaturedWork {
+                HStack {
+                    ProgressView()
+                    Text("Uploading…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func galleryThumbnail(urlString: String, removeAt index: Int) -> some View {
+        if let url = URL(string: urlString) {
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.gray.opacity(0.2)
+                }
+                .frame(width: 72, height: 72)
+                .clipped()
+                .cornerRadius(8)
+                Button(action: {
+                    Task { await viewModel.removeFeaturedWorkImage(at: index) }
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white, .red)
+                }
+                .offset(x: 4, y: -4)
+            }
+        }
+    }
+
+    private var addPhotosPickerCell: some View {
+        PhotosPicker(
+            selection: $selectedItems,
+            matching: .images,
+            photoLibrary: .shared()
+        ) {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                .frame(width: 72, height: 72)
+                .overlay(
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                )
+        }
+        .onChange(of: selectedItems) { _, newItems in
+            Task {
+                let itemsToUpload = newItems
+                guard !itemsToUpload.isEmpty else { return }
+                for item in itemsToUpload {
+                    if let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty {
+                        await viewModel.addFeaturedWorkImage(imageData: data)
+                    }
+                }
+                await MainActor.run { selectedItems.removeAll() }
             }
         }
     }

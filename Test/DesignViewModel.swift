@@ -44,16 +44,19 @@ class DesignViewModel: ObservableObject {
     @Published var primaryColorHoverHex: String = "#333333"
     @Published var successColorHex: String = "#22C55E"
     @Published var fontFamily: String = "system"
+    /// Public site display headings (Google Fonts). Stored as `heroFont` on tenant.
+    @Published var heroFont: String = DisplayFontOption.kanit.rawValue
     @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
 
     // Section surfaces (Design tabs: Home / Gallery / About)
-    @Published var featuredWorkBackgroundColorHex: String = "#FFFFFF"
-    @Published var featuredWorkTextColorHex: String = "#111111"
+    /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
+    @Published var featuredWorkBackgroundColorHex: String = "#FAF8F5"
+    @Published var featuredWorkTextColorHex: String = "#1C1917"
     @Published var bookingFormCardBackgroundColorHex: String = "#FFFFFF"
-    @Published var galleryPageBackgroundColorHex: String = "#000000"
-    @Published var galleryPageTextColorHex: String = "#FFFFFF"
+    @Published var galleryPageBackgroundColorHex: String = "#FAF8F5"
+    @Published var galleryPageTextColorHex: String = "#1C1917"
     @Published var aboutSectionBackgroundColorHex: String = "#111111"
     @Published var aboutSectionTextColorHex: String = "#FFFFFF"
 
@@ -88,6 +91,21 @@ class DesignViewModel: ObservableObject {
         webPreviewReloadToken &+= 1
     }
 
+    func applyFeaturedWorkPreset(_ preset: FeaturedWorkColorPreset) {
+        featuredWorkBackgroundColorHex = preset.backgroundHex
+        featuredWorkTextColorHex = preset.textHex
+        if industry == "tattoos" {
+            galleryPageBackgroundColorHex = preset.backgroundHex
+            galleryPageTextColorHex = preset.textHex
+        }
+    }
+
+    /// Maps legacy custom colors to the nearest curated preset (background drives the match; text follows).
+    func snapFeaturedWorkColorsToNearestPreset() {
+        guard let preset = FeaturedWorkColorPresets.nearest(toBackgroundHex: featuredWorkBackgroundColorHex) else { return }
+        applyFeaturedWorkPreset(preset)
+    }
+
     /// Layout slot count for the home featured strip (web uses first this many URLs from `featuredWorkImages`).
     var featuredWorkImageSlotCount: Int {
         let normalized = galleryGridLayout
@@ -105,18 +123,20 @@ class DesignViewModel: ObservableObject {
         return cols * rows
     }
 
-    /// Maps stored layouts onto horizontal strips `2x1` / `3x1` / `4x1` (columns × one row).
+    /// Maps stored layouts onto horizontal strips `2x1` / `3x1` (columns × one row). Legacy `4x1` maps to `3x1`.
     func normalizeFeaturedGridLayoutPresets() {
-        let presets: Set<String> = ["2x1", "3x1", "4x1"]
+        let presets: Set<String> = ["2x1", "3x1"]
         let key = galleryGridLayout.lowercased().replacingOccurrences(of: "×", with: "x")
+        if key == "4x1" {
+            galleryGridLayout = "3x1"
+            return
+        }
         if presets.contains(key) { return }
         let slots = featuredWorkImageSlotCount
         if slots <= 2 {
             galleryGridLayout = "2x1"
-        } else if slots == 3 {
-            galleryGridLayout = "3x1"
         } else {
-            galleryGridLayout = "4x1"
+            galleryGridLayout = "3x1"
         }
     }
 
@@ -183,14 +203,18 @@ class DesignViewModel: ObservableObject {
                 primaryColorHoverHex = tenant?["primaryColorHover"] as? String ?? "#333333"
                 successColorHex = tenant?["successColor"] as? String ?? "#22C55E"
                 fontFamily = tenant?["fontFamily"] as? String ?? "system"
+                heroFont = DisplayFontOption.fromStored(
+                    tenant?["heroFont"] as? String ?? tenant?["headlineFont"] as? String
+                ).rawValue
                 fontBodySize = tenant?["fontBodySize"] as? String ?? "medium"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
-                featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FFFFFF"
-                featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#111111"
+                featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
+                featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
+                snapFeaturedWorkColorsToNearestPreset()
                 bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
-                galleryPageBackgroundColorHex = tenant?["galleryPageBackgroundColor"] as? String ?? "#000000"
-                galleryPageTextColorHex = tenant?["galleryPageTextColor"] as? String ?? "#FFFFFF"
+                galleryPageBackgroundColorHex = tenant?["galleryPageBackgroundColor"] as? String ?? "#FAF8F5"
+                galleryPageTextColorHex = tenant?["galleryPageTextColor"] as? String ?? "#1C1917"
                 aboutSectionBackgroundColorHex = tenant?["aboutSectionBackgroundColor"] as? String ?? "#111111"
                 aboutSectionTextColorHex = tenant?["aboutSectionTextColor"] as? String ?? "#FFFFFF"
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
@@ -211,6 +235,7 @@ class DesignViewModel: ObservableObject {
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""
                 sidebarIconColorBooking = tenant?["sidebarIconColorBooking"] as? String ?? ""
                 normalizeFeaturedGridLayoutPresets()
+                syncTattooSectionThemeFromFeaturedIfNeeded()
                 isLoading = false
             }
             if let split = persistSplit {
@@ -234,7 +259,11 @@ class DesignViewModel: ObservableObject {
 
     func saveHome() async {
         guard let tid = tenantId else { return }
-        let updates: [String: Any] = [
+        if industry == "tattoos" {
+            galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
+            galleryPageTextColorHex = featuredWorkTextColorHex
+        }
+        var updates: [String: Any] = [
             "displayName": displayName,
             "logoUrl": logoUrl,
             "heroImageUrl": heroImageUrl,
@@ -248,6 +277,8 @@ class DesignViewModel: ObservableObject {
             "primaryColorHover": primaryColorHoverHex,
             "successColor": successColorHex,
             "fontFamily": fontFamily,
+            "heroFont": heroFont,
+            "headlineFont": heroFont,
             "fontBodySize": fontBodySize,
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
@@ -257,11 +288,25 @@ class DesignViewModel: ObservableObject {
             "featuredWorkTextColor": featuredWorkTextColorHex,
             "bookingFormCardBackgroundColor": bookingFormCardBackgroundColorHex
         ]
+        if industry == "tattoos" {
+            updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
+            updates["galleryPageTextColor"] = featuredWorkTextColorHex
+        }
         await saveTenantUpdates(tid, updates)
+    }
+
+    /// Keeps Gallery page colors in sync with Featured work for the tattoo template (booking card stays separate).
+    private func syncTattooSectionThemeFromFeaturedIfNeeded() {
+        guard industry == "tattoos" else { return }
+        galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
+        galleryPageTextColorHex = featuredWorkTextColorHex
     }
 
     func saveGalleryPageColors() async {
         guard let tid = tenantId else { return }
+        if industry == "tattoos" {
+            syncTattooSectionThemeFromFeaturedIfNeeded()
+        }
         await saveTenantUpdates(tid, [
             "galleryPageBackgroundColor": galleryPageBackgroundColorHex,
             "galleryPageTextColor": galleryPageTextColorHex

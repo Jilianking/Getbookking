@@ -196,13 +196,25 @@ struct DesignView: View {
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
+            // Typography — hero, gallery, booking titles (Google Fonts on the public site)
+            Text("Typography")
+                .font(.headline)
+                .padding(.top, 8)
+            Text("Font for headlines on your public site (home hero, gallery, booking). Pick a Google Font, then Save Home and deploy hosting.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Picker("Display font", selection: $viewModel.heroFont) {
+                ForEach(DisplayFontOption.allCases) { opt in
+                    Text(opt.displayName).tag(opt.rawValue)
+                }
+            }
+
             // Featured work
             Text("Featured work")
                 .font(.headline)
             Picker("Featured work layout", selection: $viewModel.galleryGridLayout) {
                 Text("2 wide").tag("2x1")
                 Text("3 wide").tag("3x1")
-                Text("4 wide").tag("4x1")
             }
             .pickerStyle(.segmented)
             FeaturedWorkHomeGallerySection(viewModel: viewModel)
@@ -210,11 +222,23 @@ struct DesignView: View {
             Text("Home & booking sections")
                 .font(.headline)
                 .padding(.top, 8)
-            Text("Featured strip on your home page and the booking form card.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            HexColorRow(label: "Featured work background", hex: $viewModel.featuredWorkBackgroundColorHex)
-            HexColorRow(label: "Featured work text", hex: $viewModel.featuredWorkTextColorHex)
+            Group {
+                if viewModel.industry == "tattoos" {
+                    Text("Featured strip and /gallery page share one background. The booking page uses that behind a white card—pick a preset below.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Featured strip on your home page and the booking form card.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            FeaturedWorkPresetPicker(viewModel: viewModel)
+            if viewModel.industry == "tattoos" {
+                Text("Booking form card sits on that background—default is white; override below if you want.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             HexColorRow(label: "Booking form card", hex: $viewModel.bookingFormCardBackgroundColorHex)
 
             // Sidebar
@@ -250,15 +274,21 @@ struct DesignView: View {
             Text("Gallery page")
                 .font(.headline)
                 .padding(.top, 8)
-            Text("Full /gallery page background and text.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            HexColorRow(label: "Page background", hex: $viewModel.galleryPageBackgroundColorHex)
-            HexColorRow(label: "Page text", hex: $viewModel.galleryPageTextColorHex)
-            Button("Save gallery page colors") {
-                Task { await viewModel.saveGalleryPageColors() }
+            if viewModel.industry == "tattoos" {
+                Text("Background and text match Home → Featured section. Change colors on the Home tab (Featured work presets).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Full /gallery page background and text.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                HexColorRow(label: "Page background", hex: $viewModel.galleryPageBackgroundColorHex)
+                HexColorRow(label: "Page text", hex: $viewModel.galleryPageTextColorHex)
+                Button("Save gallery page colors") {
+                    Task { await viewModel.saveGalleryPageColors() }
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -681,7 +711,6 @@ struct FeaturedWorkHomeGallerySection: View {
         switch viewModel.galleryGridLayout {
         case "2x1": return "2 wide"
         case "3x1": return "3 wide"
-        case "4x1": return "4 wide"
         default: return viewModel.galleryGridLayout
         }
     }
@@ -778,6 +807,62 @@ struct FeaturedWorkHomeGallerySection: View {
                 await MainActor.run { selectedItems.removeAll() }
             }
         }
+    }
+}
+
+// MARK: - Featured work color presets (paired bg + text)
+struct FeaturedWorkPresetPicker: View {
+    @ObservedObject var viewModel: DesignViewModel
+    private let columns = [GridItem(.adaptive(minimum: 88), spacing: 12)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Featured section colors")
+                .font(.subheadline.weight(.medium))
+            Text("Preset pairs—background and text stay readable together.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(FeaturedWorkColorPresets.all) { preset in
+                    Button {
+                        viewModel.applyFeaturedWorkPreset(preset)
+                    } label: {
+                        VStack(spacing: 6) {
+                            Circle()
+                                .fill(Color(hex: preset.backgroundHex))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(
+                                            isSelected(preset) ? Color.accentColor : Color.primary.opacity(0.2),
+                                            lineWidth: isSelected(preset) ? 3 : 1
+                                        )
+                                )
+                            Text(preset.name)
+                                .font(.caption2)
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .frame(minWidth: 72)
+                        }
+                        .padding(8)
+                        .background(isSelected(preset) ? Color.accentColor.opacity(0.12) : Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func isSelected(_ preset: FeaturedWorkColorPreset) -> Bool {
+        normalizeHex(preset.backgroundHex) == normalizeHex(viewModel.featuredWorkBackgroundColorHex)
+    }
+
+    private func normalizeHex(_ s: String) -> String {
+        var x = s.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if x.hasPrefix("#") { x.removeFirst() }
+        return x
     }
 }
 

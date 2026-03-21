@@ -33,6 +33,8 @@ class AuthViewModel: ObservableObject {
     @Published var isDemoMode = false
     /// Cached tenant logo (Web Page Design). Prefetched on sign-in; updated via notification after uploads.
     @Published var tenantLogoUrl: String?
+    /// Firebase Auth profile photo (fallback when tenant logo is unset).
+    @Published var accountPhotoUrl: String?
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     private let firebaseService = FirebaseService()
@@ -46,12 +48,14 @@ class AuthViewModel: ObservableObject {
                     self.isDemoMode = false
                     self.currentUserEmail = user?.email
                     self.currentUserDisplayName = user?.displayName
+                    self.accountPhotoUrl = user?.photoURL?.absoluteString
                     Task { await self.refreshTenantLogoFromServer() }
                 } else if !self.isDemoMode {
                     self.isAuthenticated = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
                     self.tenantLogoUrl = nil
+                    self.accountPhotoUrl = nil
                 }
             }
         }
@@ -93,6 +97,7 @@ class AuthViewModel: ObservableObject {
         currentUserEmail = nil
         currentUserDisplayName = nil
         tenantLogoUrl = nil
+        accountPhotoUrl = nil
     }
 
     /// Demo mode: full app experience without Firebase sign-in.
@@ -102,9 +107,11 @@ class AuthViewModel: ObservableObject {
         currentUserEmail = "demo@example.com"
         currentUserDisplayName = "Demo Provider"
         tenantLogoUrl = nil
+        accountPhotoUrl = nil
     }
 
     /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.
+    /// On network/Firestore failure, keeps the previous `tenantLogoUrl` so the drawer avatar doesn’t flicker empty.
     func refreshTenantLogoFromServer() async {
         if isDemoMode || !isAuthenticated {
             tenantLogoUrl = nil
@@ -114,6 +121,7 @@ class AuthViewModel: ObservableObject {
             tenantLogoUrl = nil
             return
         }
+        accountPhotoUrl = Auth.auth().currentUser?.photoURL?.absoluteString
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             guard let tid = profile?.tenantId else {
@@ -125,7 +133,7 @@ class AuthViewModel: ObservableObject {
             let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             tenantLogoUrl = trimmed.isEmpty ? nil : trimmed
         } catch {
-            tenantLogoUrl = nil
+            // Keep existing tenantLogoUrl; user still sees last good logo until refresh succeeds.
         }
     }
 

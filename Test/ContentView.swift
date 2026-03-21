@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -18,6 +19,11 @@ struct ContentView: View {
             } else {
                 LoginView()
                     .environmentObject(authViewModel)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
+                Task { await authViewModel.refreshTenantLogoFromServer() }
             }
         }
     }

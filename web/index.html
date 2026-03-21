@@ -6,13 +6,17 @@
   <title>Book an appointment</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Teko:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <style>
+    :root {
+      --font-display: 'Kanit', system-ui, sans-serif;
+      --font-hero: 'Kanit', system-ui, sans-serif;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -153,7 +157,7 @@
       margin: 0 0 28px;
     }
     .booking-page-title {
-      font-family: 'Playfair Display', Georgia, serif;
+      font-family: var(--font-display);
       font-size: 3rem;
       font-weight: 700;
       letter-spacing: 0.02em;
@@ -349,8 +353,68 @@
     .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
     .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
     .about-artist p { margin: 0; line-height: 1.6; color: #444; }
-    /* Tattoo (Bleu-style) layout */
-    .tattoo-page { min-height: 100vh; background: #fff; color: #111; }
+    /* Tattoo (Bleu-style) layout — display font for all copy (hero, featured, about, booking shell) */
+    .tattoo-page { min-height: 100vh; background: #fff; color: #111; font-family: var(--font-display); }
+    /* Booking /book: .booking-shell was #000 — let themed .tattoo-page bg show; card stays white */
+    .tattoo-page .booking-shell {
+      background: transparent;
+      color: inherit;
+    }
+    .tattoo-page .booking-page-title {
+      color: inherit;
+    }
+    .tattoo-page .booking-page-subtitle {
+      color: inherit;
+      opacity: 0.65;
+    }
+    .tattoo-page .booking-card {
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+    }
+    .booking-success-card {
+      text-align: center;
+      padding: 12px 8px 8px;
+    }
+    .booking-success-lead {
+      color: #15803d;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin: 0 0 12px;
+      letter-spacing: 0.02em;
+    }
+    .booking-success-detail {
+      color: #4b5563;
+      font-size: 1.05rem;
+      line-height: 1.55;
+      margin: 0;
+    }
+    .booking-success-generic {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 40px 24px 48px;
+    }
+    .booking-success-brand {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin: 0 0 24px;
+      color: #111827;
+      letter-spacing: -0.02em;
+    }
+    /* Tattoo /book thank-you: no white card — copy sits on themed page bg */
+    .tattoo-page .booking-success-flat {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 8px 16px 48px;
+      text-align: center;
+      background: transparent;
+      box-shadow: none;
+    }
+    .tattoo-page .booking-success-flat .booking-success-lead,
+    .tattoo-page .booking-success-flat .booking-success-detail {
+      color: #111111;
+    }
     .tattoo-hero-wrap { position: relative; width: 100%; }
     .tattoo-nav {
       position: absolute;
@@ -365,15 +429,16 @@
       padding: 12px 12px;
       display: flex;
       align-items: center;
-      justify-content: flex-start;
-      gap: 0;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .tattoo-nav .tattoo-logo { max-height: 36px; width: auto; border-radius: 6px; }
     .tattoo-nav .tattoo-brand { font-weight: 700; font-size: 1.1rem; color: #fff; text-decoration: none; }
     .tattoo-nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; }
     .tattoo-nav-links a { color: rgba(255,255,255,0.95); text-decoration: none; }
     .tattoo-nav-links a:hover { color: #fff; text-decoration: underline; }
-    .tattoo-nav-menu { background: none; border: none; color: #fff; font-size: 2rem; padding: 12px; cursor: pointer; line-height: 1; }
+    .tattoo-nav-menu { margin-left: auto; background: none; border: none; color: #fff; font-size: 2rem; padding: 12px; cursor: pointer; line-height: 1; }
     .tattoo-hero-section {
       min-height: 60vh; display: flex; align-items: center; justify-content: center;
       background-size: cover; background-position: center; background-color: #111;
@@ -385,19 +450,29 @@
     .tattoo-sidebar.tattoo-sidebar-open { pointer-events: auto; }
     .tattoo-sidebar-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.25s; }
     .tattoo-sidebar-open .tattoo-sidebar-backdrop { opacity: 1; }
-    .tattoo-sidebar-panel { position: absolute; top: 0; left: 0; bottom: 0; width: 320px; max-width: 85vw; background: #fff; box-shadow: 2px 0 16px rgba(0,0,0,0.18); transform: translateX(-100%); transition: transform 0.25s; padding: 32px 24px; }
+    .tattoo-sidebar-panel { position: absolute; top: 0; left: 0; bottom: 0; width: 320px; max-width: 85vw; box-shadow: 2px 0 16px rgba(0,0,0,0.18); transform: translateX(-100%); transition: transform 0.25s; padding: 32px 24px; }
     .tattoo-sidebar-open .tattoo-sidebar-panel { transform: translateX(0); }
-    .tattoo-sidebar-panel a { display: block; padding: 16px 0; font-size: 20px; color: #111; text-decoration: none; border-bottom: 1px solid #eee; }
+    .tattoo-sidebar-panel a { display: block; padding: 16px 0; font-size: 20px; color: inherit; opacity: 0.92; text-decoration: none; border-bottom: 1px solid rgba(127,127,127,0.35); }
     .tattoo-sidebar-panel a:last-child { border-bottom: none; }
     @media (max-width: 768px) {
       .tattoo-nav-links { display: none; }
     }
     .tattoo-hero-overlay { text-align: center; padding: 24px; max-width: 480px; }
-    .tattoo-hero-title { font-size: 2.25rem; font-weight: 600; color: #fff; margin: 0 0 24px; letter-spacing: 0.02em; }
+    .tattoo-hero-title { font-family: var(--font-hero); font-size: 2.25rem; font-weight: 600; color: #fff; margin: 0 0 24px; letter-spacing: 0.02em; }
     .tattoo-btn-book { display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; background: #fff; color: #111; border-radius: 8px; text-decoration: none; }
     .tattoo-btn-book:hover { opacity: 0.92; }
-    .tattoo-featured { padding: 32px 0 56px; }
-    .tattoo-featured h2 { font-size: 1.5rem; margin: 0 0 8px; font-weight: 600; color: inherit; }
+    /* Full-bleed band; inner constrains content like .tattoo-shell */
+    .tattoo-featured-outer {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .tattoo-featured-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 32px 56px;
+      box-sizing: border-box;
+    }
+    .tattoo-featured-inner h2 { font-size: 1.5rem; margin: 0 0 8px; font-weight: 600; color: inherit; }
     .tattoo-featured-sub { font-size: 14px; color: inherit; opacity: 0.65; margin: 0 0 24px; }
     .tattoo-featured-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .tattoo-featured-grid img { width: 100%; height: 400px; object-fit: cover; border-radius: 12px; display: block; }
@@ -407,10 +482,17 @@
     }
     .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: inherit; opacity: 0.85; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
-    @media (max-width: 640px) { .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); } .tattoo-featured-grid img { height: 180px; } .tattoo-hero-section { min-height: 55vh; } .booking-page-title { font-size: 2rem; } .booking-shell { padding-top: 72px; } }
+    @media (max-width: 640px) {
+      .tattoo-featured-inner { padding-left: 20px; padding-right: 20px; }
+      .tattoo-featured-grid { grid-template-columns: repeat(2, 1fr); }
+      .tattoo-featured-grid img { height: 180px; }
+      .tattoo-hero-section { min-height: 55vh; }
+      .booking-page-title { font-size: 2rem; }
+      .booking-shell { padding-top: 72px; }
+    }
     .tattoo-about { padding: 64px 24px; background: #111; color: #fff; text-align: center; }
     .tattoo-about-inner { max-width: 640px; margin: 0 auto; }
-    .tattoo-about h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: inherit; letter-spacing: 0.02em; }
+    .tattoo-about h2 { font-family: var(--font-display); font-size: 2.2rem; font-weight: 700; margin: 0 0 24px; color: inherit; letter-spacing: 0.02em; }
     .tattoo-about-bio { margin: 0 0 48px; line-height: 1.75; color: inherit; opacity: 0.8; font-size: 1rem; }
     .tattoo-contact-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; padding: 0; border: none; }
     .tattoo-contact-item { text-align: center; }
@@ -423,9 +505,9 @@
     .tattoo-contact-placeholder { color: inherit; opacity: 0.4; font-style: italic; }
     @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; gap: 24px; } .tattoo-about h2 { font-size: 1.8rem; } }
     /* Gallery page */
-    .gallery-page { min-height: 100vh; background: #000; color: #fff; }
+    .gallery-page { min-height: 100vh; background: #000; color: #fff; font-family: var(--font-display); }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
-    .gallery-title { font-family: 'Playfair Display', Georgia, serif; font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
+    .gallery-title { font-family: var(--font-display); font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
     .gallery-shell { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; }
     .gallery-section { margin-bottom: 48px; }
     .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: inherit; opacity: 0.72; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(127,127,127,0.35); }
@@ -1129,6 +1211,43 @@
         return { tenantSlug: tenantSlug, serviceSlug: serviceSlug, isBookPath: isBookPath, isGalleryPath: isGalleryPath };
       }
 
+      function fontStackForDisplayKey(key) {
+        var k = (key || 'kanit').toLowerCase();
+        if (k === 'oswald') {
+          return "'Oswald', system-ui, sans-serif";
+        }
+        if (k === 'playfair') {
+          return "'Playfair Display', Georgia, serif";
+        }
+        if (k === 'plus-jakarta-sans') {
+          return "'Plus Jakarta Sans', system-ui, sans-serif";
+        }
+        if (k === 'teko') {
+          return "'Teko', system-ui, sans-serif";
+        }
+        if (k === 'libre-baskerville') {
+          return "'Libre Baskerville', Georgia, serif";
+        }
+        if (k === 'cormorant-garamond') {
+          return "'Cormorant Garamond', Georgia, serif";
+        }
+        return "'Kanit', system-ui, sans-serif";
+      }
+      /** `heroFont` on tenant: kanit, oswald, playfair, plus-jakarta-sans, teko, libre-baskerville, cormorant-garamond. Legacy Adobe → Kanit. */
+      function applyTenantTypography(t) {
+        var raw = (t && t.heroFont) ? String(t.heroFont).toLowerCase().trim() : '';
+        var fallback = (t && t.headlineFont) ? String(t.headlineFont).toLowerCase().trim() : '';
+        var key = raw || fallback || 'kanit';
+        if (key === 'squash-mn' || key === 'sincopa' || key === 'mercato-variable') {
+          key = 'kanit';
+        }
+        var el = document.getElementById('adobe-fonts-typekit');
+        if (el) el.remove();
+        var stack = fontStackForDisplayKey(key);
+        document.documentElement.style.setProperty('--font-display', stack);
+        document.documentElement.style.setProperty('--font-hero', stack);
+      }
+
       function applyBranding(t) {
         var bg = t.backgroundColor || '#FFFFFF';
         var card = t.cardSurfaceColor || '#F5F5F5';
@@ -1144,16 +1263,19 @@
           document.body.style.background = '#ffffff';
           document.body.style.color = '#111827';
         }
-        // Override for Tattoo template: white page, dark text (Bleu-style)
+        // Override for Tattoo template: same surface as Featured work / Gallery / Book
         if (t.industry === 'tattoos') {
-          document.body.style.background = '#ffffff';
-          document.body.style.color = '#111';
+          var tw = t.featuredWorkBackgroundColor || '#FAF8F5';
+          var tx = t.featuredWorkTextColor || '#1C1917';
+          document.body.style.background = tw;
+          document.body.style.color = tx;
         }
         // Override for trades (plumbing / electrical): deep blue hero background
         if (t.industry === 'plumbing' || t.industry === 'electrical') {
           document.body.style.background = 'radial-gradient(circle at top left, #1d4ed8 0%, #020617 55%, #000000 100%)';
           document.body.style.color = '#e5e7eb';
         }
+        applyTenantTypography(t);
       }
 
       function applySidebarIconColor(tenant, isBookPath, isGalleryPath) {
@@ -1167,9 +1289,13 @@
 
         if (!iconColor) {
           if (isGalleryPath) {
-            iconColor = '#FFFFFF';
+            iconColor = (tenant.industry === 'tattoos')
+              ? (tenant.featuredWorkTextColor || '#1C1917')
+              : '#FFFFFF';
           } else if (isBookPath) {
-            iconColor = (tenant.industry === 'tattoos') ? '#FFFFFF' : '#000000';
+            iconColor = (tenant.industry === 'tattoos')
+              ? (tenant.featuredWorkTextColor || '#1C1917')
+              : '#000000';
           } else if (tenant.industry === 'tattoos' || tenant.industry === 'hair' ||
                      tenant.industry === 'plumbing' || tenant.industry === 'electrical') {
             iconColor = '#FFFFFF';
@@ -1186,6 +1312,16 @@
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      /** Top bar: menu only. `logoUrl` is for in-app profile / Settings — not shown on the public tattoo site. */
+      function tattooNavHtml(tenant) {
+        return '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '</div></nav>';
+      }
+      /** Intentionally empty: business image stays profile-only in the app; headlines use display name + fonts. */
+      function tattooHeadlineLogoHtml(tenant) {
+        return '';
+      }
       function list(tenant, services) {
         var base = location.origin + '/' + tenant.slug;
         var items = services.map(function(s){ return '<a href="'+base+'/book/'+s.slug+'" class="service-item">'+esc(s.name)+'</a>'; }).join('');
@@ -1541,6 +1677,12 @@
         }
         return lab + inp;
       }
+      /** Tattoo template: one editable theme for Featured, Gallery, Book, sidebar. */
+      function tattooSiteThemeInlineStyle(tenant) {
+        var bg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
+        var fg = tenant.featuredWorkTextColor || '#1C1917';
+        return 'background:'+bg+';color:'+fg;
+      }
       function form(tenant, services, presel) {
         var schema = tenant.formSchema || [];
         var useSchema = Array.isArray(schema) && schema.length > 0;
@@ -1566,25 +1708,31 @@
         var base = location.origin + '/' + tenant.slug;
         var bookUrl = base + '/book';
 
-        var nav = '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
+        var nav = (tenant.industry === 'tattoos') ? tattooNavHtml(tenant) : (
+          '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>';
+          '</div></nav>'
+        );
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel">' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
 
+        var bookPageStyle = (tenant.industry === 'tattoos') ? tattooSiteThemeInlineStyle(tenant) : '';
+        // Themed page behind the card; card surface stays white (or tenant override).
+        var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
-          '<div class="tattoo-page">' +
+          '<div class="tattoo-page"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
             nav +
             '<div class="booking-shell">' +
               '<div class="booking-page-header">' +
+                (tenant.industry === 'tattoos' ? tattooHeadlineLogoHtml(tenant) : '') +
                 '<h1 class="booking-page-title">' + esc(tenant.displayName||'Appointment') + '</h1>' +
                 (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
               '</div>' +
-              '<div class="booking-card" style="background:'+(tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff')+'">' +
+              '<div class="booking-card" style="background:'+bookCardBg+'">' +
                 contact +
                 '<form id="book-form" class="booking-form">' + html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
@@ -1595,7 +1743,43 @@
             sidebar +
           '</div>';
       }
-      function success(){ return '<div class="card"><p class="success">✓ Request submitted! We\'ll get back to you soon.</p></div>'; }
+      /** Thank-you view after booking: large business name + confirmation (tattoo matches /book layout). */
+      function bookingSuccessHtml(tenant) {
+        var name = esc(tenant.displayName || 'Thank you');
+        var lead = '✓ Request received';
+        var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
+        if (tenant.industry === 'tattoos') {
+          var base = location.origin + '/' + tenant.slug;
+          var bookUrl = base + '/book';
+          var nav = tattooNavHtml(tenant);
+          var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+            '<div class="tattoo-sidebar-backdrop"></div>' +
+            '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+            sidebarLinksHtml(tenant, base, bookUrl) +
+            '</div></div>';
+          var bookPageStyle = tattooSiteThemeInlineStyle(tenant);
+          return '' +
+            '<div class="tattoo-page" style="'+bookPageStyle+'">' +
+              nav +
+              '<div class="booking-shell">' +
+                '<div class="booking-page-header">' +
+                  tattooHeadlineLogoHtml(tenant) +
+                  '<h1 class="booking-page-title">' + name + '</h1>' +
+                '</div>' +
+                '<div class="booking-success-flat">' +
+                  '<p class="booking-success-lead">' + lead + '</p>' +
+                  '<p class="booking-success-detail">' + detail + '</p>' +
+                '</div>' +
+              '</div>' +
+              sidebar +
+            '</div>';
+        }
+        return '<div class="booking-success-generic"><h1 class="booking-success-brand">' + name + '</h1>' +
+          '<div class="card"><div class="booking-success-card">' +
+          '<p class="booking-success-lead">' + lead + '</p>' +
+          '<p class="booking-success-detail">' + detail + '</p>' +
+          '</div></div></div>';
+      }
       function err(m){ return '<div class="card"><h1>Oops</h1><p class="error">'+esc(m)+'</p></div>'; }
 
       function loadTenant(slug) {
@@ -1620,12 +1804,17 @@
               galleryPageBackgroundColor: data.galleryPageBackgroundColor || '',
               galleryPageTextColor: data.galleryPageTextColor || '',
               aboutSectionBackgroundColor: data.aboutSectionBackgroundColor || '',
-              aboutSectionTextColor: data.aboutSectionTextColor || '' };
+              aboutSectionTextColor: data.aboutSectionTextColor || '',
+              headlineFont: data.headlineFont || '',
+              heroFont: data.heroFont || '' };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
             }
             return row;
           });
+      }
+      function tattooSidebarPanelInlineStyle(tenant) {
+        return tattooSiteThemeInlineStyle(tenant);
       }
       function sidebarLinksHtml(tenant, base, bookUrl) {
         var galleryUrl = base + '/gallery';
@@ -1667,13 +1856,11 @@
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Gallery';
 
-        var nav = '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>';
+        var nav = tattooNavHtml(tenant);
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel">' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
 
@@ -1684,13 +1871,19 @@
         var content = imgsHtml
           ? '<div class="gallery-grid">' + imgsHtml + '</div>'
           : '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
-        var gPageBg = tenant.galleryPageBackgroundColor || '#000000';
-        var gPageFg = tenant.galleryPageTextColor || '#ffffff';
-        var galleryPageStyle = 'background:'+gPageBg+';color:'+gPageFg;
+        var gPageBg, gPageFg, galleryPageStyle;
+        if (tenant.industry === 'tattoos') {
+          gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
+          gPageFg = tenant.featuredWorkTextColor || '#1C1917';
+        } else {
+          gPageBg = tenant.galleryPageBackgroundColor || '#000000';
+          gPageFg = tenant.galleryPageTextColor || '#ffffff';
+        }
+        galleryPageStyle = 'background:'+gPageBg+';color:'+gPageFg;
 
         return '<div class="gallery-page" style="'+galleryPageStyle+'">' +
           nav +
-          '<div class="gallery-header"><h1 class="gallery-title">' + esc(displayName) + '</h1></div>' +
+          '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + '<h1 class="gallery-title">' + esc(displayName) + '</h1></div>' +
           '<div class="gallery-shell">' + content + '</div>' +
           sidebar +
           '</div>';
@@ -1700,12 +1893,10 @@
         var base = location.origin + '/' + tenant.slug;
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Studio';
-        var nav = '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>';
+        var nav = tattooNavHtml(tenant);
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel">' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var heroStyle = tenant.heroImageUrl ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')' : '';
@@ -1717,6 +1908,7 @@
         var layout = (tenant.galleryGridLayout || '3x1').split('x');
         var gridCols = parseInt(layout[0], 10) || 3;
         var gridRows = parseInt(layout[1], 10) || 1;
+        gridCols = Math.min(Math.max(gridCols, 1), 3);
         var maxCells = gridCols * gridRows;
         var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
         var galleryPageUrl = base + '/gallery';
@@ -1729,12 +1921,13 @@
         var featBg = tenant.featuredWorkBackgroundColor || '#ffffff';
         var featFg = tenant.featuredWorkTextColor || '#111111';
         var featSectionStyle = 'background:'+featBg+';color:'+featFg;
-        var featuredHtml = '<section id="featured" class="tattoo-featured" style="'+featSectionStyle+'">' +
+        var featuredHtml = '<section id="featured" class="tattoo-featured-outer" style="'+featSectionStyle+'">' +
+          '<div class="tattoo-featured-inner">' +
           '<h2>Featured Work</h2>' +
           '<p class="tattoo-featured-sub">' + (gallery.length ? 'A selection of recent work.' : 'Your best work will appear here.') + '</p>' +
           '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
           '<a href="'+esc(galleryPageUrl)+'" class="tattoo-gallery-link">View full gallery →</a>' +
-          '</section>';
+          '</div></section>';
         var aboutBody = (tenant.aboutText || tenant.tagline) ? esc(tenant.aboutText || tenant.tagline || '') : 'Add your story in the app to introduce yourself to clients.';
         var svgLocation = '<svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>';
         var svgClock = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
@@ -1753,7 +1946,7 @@
           '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgClock + '</div><h3>Hours</h3><p>' + (tenant.businessHours ? esc(tenant.businessHours) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
           '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgInstagram + '</div><h3>Instagram</h3><p>' + (igHandle ? '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>' : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
           '</div></div></section>';
-        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div><div class="tattoo-shell">' + featuredHtml + '</div>' + aboutSection + sidebar + '</div>';
+        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
       }
       function bindTattooSidebar() {
         var menuBtn = document.querySelector('.tattoo-nav-menu');
@@ -1807,8 +2000,13 @@
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
               bindTattooSidebar();
-              document.body.style.background = '#000';
-              document.body.style.color = '#fff';
+              if (tenant.industry === 'tattoos') {
+                document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
+                document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
+              } else {
+                document.body.style.background = '#000';
+                document.body.style.color = '#fff';
+              }
               applySidebarIconColor(tenant, false, true);
               return;
             }
@@ -2093,8 +2291,11 @@
                     formResponses: formResponses
                   });
                 }).then(function(){
-                  document.getElementById('root').innerHTML = '<div class="container">'+success()+'</div>';
+                  var doneHtml = bookingSuccessHtml(tenant);
+                  document.getElementById('root').innerHTML = tenant.industry === 'tattoos' ? doneHtml : '<div class="container">' + doneHtml + '</div>';
                   applyBranding(tenant);
+                  if (tenant.industry === 'tattoos') bindTattooSidebar();
+                  applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){
                   errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';
                   errEl.style.display = 'block';

@@ -12,6 +12,7 @@ Client-facing booking page. URL format: `/{businessSlug}/book/{serviceSlug}`
 2. **Create Firestore data**
    - Add a `tenants` collection with documents containing: `slug`, `displayName`, `isActive`, `bookingModeDefault`, etc.
    - Optional branding fields on tenant: `logoUrl`, `primaryColor`, `primaryColorHover`, `secondaryColor`, `successColor`, `backgroundColor`, `fontFamily`
+   - **Typography (display):** `heroFont` — `kanit` (default), `oswald`, `playfair`, `plus-jakarta-sans`, `teko`, `libre-baskerville`, `cormorant-garamond`. Loaded from Google Fonts in `index.html`; mirrored to legacy `headlineFont` on save from the app.
    - Add a `services` subcollection under each tenant with: `slug`, `name`, `durationMinutes`, `isActive`, `bookingModeOverride`, `formSchema`
 
 3. **Update Firestore rules** for the `tenants` structure (see project root `firestore.rules` if present)

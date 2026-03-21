@@ -53,12 +53,22 @@ final class DrawerState {
     var selectedSection: AdminSection = .dashboard
 }
 
-/// Initials always visible; logo fades in when loaded (no spinner, fast perceived load).
+/// Initials always visible; tenant logo preferred, then Firebase Auth photo; fades in when loaded.
 private struct DrawerTenantLogoView: View {
-    let logoURL: String?
+    let tenantLogoURL: String?
+    let accountPhotoURL: String?
     let displayNameFallback: String?
     private let side: CGFloat = 44
     @State private var logoOpaque = false
+    @State private var imageRetryCount = 0
+
+    private var resolvedImageURL: URL? {
+        let t = tenantLogoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !t.isEmpty, let u = URL(string: t) { return u }
+        let a = accountPhotoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !a.isEmpty, let u = URL(string: a) { return u }
+        return nil
+    }
 
     var body: some View {
         ZStack {
@@ -70,7 +80,7 @@ private struct DrawerTenantLogoView: View {
                         .font(.headline)
                         .foregroundColor(.white)
                 )
-            if let s = logoURL, !s.isEmpty, let url = URL(string: s) {
+            if let url = resolvedImageURL {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -82,11 +92,19 @@ private struct DrawerTenantLogoView: View {
                                     logoOpaque = true
                                 }
                             }
+                    case .failure:
+                        Color.clear
+                            .onAppear {
+                                guard imageRetryCount < 3 else { return }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                                    imageRetryCount += 1
+                                }
+                            }
                     default:
                         Color.clear
                     }
                 }
-                .id(url.absoluteString)
+                .id("\(url.absoluteString)-\(imageRetryCount)")
                 .frame(width: side, height: side)
                 .clipShape(Circle())
                 .opacity(logoOpaque ? 1 : 0)
@@ -94,8 +112,13 @@ private struct DrawerTenantLogoView: View {
             }
         }
         .frame(width: side, height: side)
-        .onChange(of: logoURL) { _, _ in
+        .onChange(of: tenantLogoURL) { _, _ in
             logoOpaque = false
+            imageRetryCount = 0
+        }
+        .onChange(of: accountPhotoURL) { _, _ in
+            logoOpaque = false
+            imageRetryCount = 0
         }
     }
 }
@@ -204,7 +227,8 @@ struct AdminRootView: View {
             // User block (avatar = business logo when set in Web Page Design)
             HStack(spacing: 12) {
                 DrawerTenantLogoView(
-                    logoURL: authViewModel.tenantLogoUrl,
+                    tenantLogoURL: authViewModel.tenantLogoUrl,
+                    accountPhotoURL: authViewModel.accountPhotoUrl,
                     displayNameFallback: authViewModel.currentUserDisplayName
                 )
                 VStack(alignment: .leading, spacing: 2) {

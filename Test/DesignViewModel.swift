@@ -44,7 +44,7 @@ class DesignViewModel: ObservableObject {
     @Published var primaryColorHoverHex: String = "#333333"
     @Published var successColorHex: String = "#22C55E"
     @Published var fontFamily: String = "system"
-    /// Public site display headings (Google Fonts). Stored as `heroFont` on tenant.
+    /// Google Font for the public site **hero title** only; UI uses Inter on the web. Stored as `heroFont` on tenant.
     @Published var heroFont: String = DisplayFontOption.kanit.rawValue
     @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
@@ -83,7 +83,6 @@ class DesignViewModel: ObservableObject {
     @Published var showContactOnPage: Bool = true
 
     private let firebaseService = FirebaseService()
-    private let hostingBase = "https://test-app-96812.web.app"
 
     var hasTenant: Bool { tenantId != nil }
 
@@ -178,7 +177,7 @@ class DesignViewModel: ObservableObject {
             await MainActor.run {
                 tenantId = tid
                 tenantSlug = slug
-                bookingUrl = "\(hostingBase)/\(slug)"
+                bookingUrl = PublicBookingSite.urlString(forSlug: slug)
                 displayName = tenant?["displayName"] as? String ?? ""
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
                 heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""

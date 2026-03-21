@@ -1,6 +1,10 @@
 # Client Booking Page
 
-Client-facing booking page. URL format: `/{businessSlug}/book/{serviceSlug}`
+Client-facing booking page. URL format: `https://getbookking.com/{businessSlug}/book/{serviceSlug}` (same path shape on **localhost** / **\*.web.app** with that origin). Slugs are **case-insensitive** in the path and normalized to lowercase for lookups.
+
+Production site: **https://getbookking.com** (Firebase project ID may still be `test-app-96812` for CLI deploys).
+
+**Troubleshooting:** Tenant URLs must match the **`slug`** stored in Firestore (`tenants.slug`) exactly (letters/numbers/hyphens). After changing routing, run `firebase deploy --only hosting` so the CDN picks up `index.html`. `firebase.json` sets short cache for HTML routes and long cache for static assets.
 
 ## Setup
 

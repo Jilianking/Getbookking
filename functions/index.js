@@ -69,7 +69,7 @@ exports.createConnectAccountLink = functions
       await tenantRef.set({ stripeAccountId }, { merge: true });
     }
 
-    const baseUrl = data?.returnBaseUrl ?? "https://test-app-96812.web.app";
+    const baseUrl = data?.returnBaseUrl ?? "https://getbookking.com";
     const returnUrl = data?.returnUrl ?? `${baseUrl}/payments?success=1`;
     const refreshUrl = data?.refreshUrl ?? `${baseUrl}/payments?refresh=1`;
     const accountLink = await stripe.accountLinks.create({

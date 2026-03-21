@@ -6,6 +6,7 @@
 
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -200,10 +201,10 @@ struct DesignView: View {
             Text("Typography")
                 .font(.headline)
                 .padding(.top, 8)
-            Text("Font for headlines on your public site (home hero, gallery, booking). Pick a Google Font, then Save Home and deploy hosting.")
+            Text("Font for the large hero title on your public site. Body, sidebar, and other text use Inter. Save Home and deploy hosting.")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Picker("Display font", selection: $viewModel.heroFont) {
+            Picker("Hero font", selection: $viewModel.heroFont) {
                 ForEach(DisplayFontOption.allCases) { opt in
                     Text(opt.displayName).tag(opt.rawValue)
                 }

@@ -86,12 +86,20 @@ class AuthViewModel: ObservableObject {
     }
     
     func signOut() throws {
+        let uid = Auth.auth().currentUser?.uid
+        Task {
+            await PushNotificationManager.shared.clearTokenForSignOut(providerUid: uid)
+        }
         try Auth.auth().signOut()
     }
     
     /// Call from UI (e.g. Settings); ignores errors.
     func logout() {
         isDemoMode = false
+        let uid = Auth.auth().currentUser?.uid
+        Task {
+            await PushNotificationManager.shared.clearTokenForSignOut(providerUid: uid)
+        }
         try? Auth.auth().signOut()
         isAuthenticated = false
         currentUserEmail = nil

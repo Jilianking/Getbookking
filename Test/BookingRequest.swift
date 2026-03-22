@@ -26,4 +26,6 @@ struct BookingRequest: Identifiable {
     var notes: String?
     var formResponses: [String: Any]?
     var createdAt: Date?
+    /// Set when provider opens the request in the app (does not change workflow `status`).
+    var readAt: Date?
 }

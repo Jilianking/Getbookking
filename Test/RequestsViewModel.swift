@@ -86,6 +86,24 @@ class RequestsViewModel: ObservableObject {
             print("Error updating request: \(error)")
         }
     }
+
+    /// Marks the request as opened in-app (`readAt`). Does not change `status` (e.g. stays NEW).
+    @discardableResult
+    func markBookingRequestAsRead(requestId: String) async -> Bool {
+        guard let tid = tenantId else { return false }
+        do {
+            try await firebaseService.updateTenantBookingRequest(
+                tenantId: tid,
+                requestId: requestId,
+                updates: ["readAt": Date()]
+            )
+            await loadRequests()
+            return true
+        } catch {
+            print("Error marking booking request read: \(error)")
+            return false
+        }
+    }
     
     func deleteRequest(_ requestId: String) async {
         do {

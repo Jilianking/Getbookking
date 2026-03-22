@@ -516,3 +516,71 @@ exports.createPaymentIntentForTapToPay = functions
       paymentIntentId: pi.id,
     };
   });
+
+/**
+ * FCM push to provider devices when a booking request is created (web or app).
+ * iOS stores tokens under users/{uid}/deviceTokens/{hash} (see PushNotificationManager.swift).
+ */
+exports.onTenantBookingRequestCreated = functions.firestore
+  .document("tenants/{tenantId}/bookingRequests/{requestId}")
+  .onCreate(async (snap, context) => {
+    const tenantId = context.params.tenantId;
+    const requestId = context.params.requestId;
+    const data = snap.data() || {};
+    const customerName = data.customerName || "Someone";
+    const serviceName = (data.serviceName || "").toString().trim();
+    const body = serviceName
+      ? `${customerName} — ${serviceName}`.slice(0, 200)
+      : `New request from ${customerName}`.slice(0, 200);
+
+    const usersSnap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .get();
+
+    const tokens = [];
+    for (const userDoc of usersSnap.docs) {
+      const tokSnap = await db
+        .collection("users")
+        .doc(userDoc.id)
+        .collection("deviceTokens")
+        .get();
+      tokSnap.forEach((t) => {
+        const token = t.data().token;
+        if (token && typeof token === "string") tokens.push(token);
+      });
+    }
+
+    if (tokens.length === 0) return null;
+
+    const unique = [...new Set(tokens)];
+    const chunkSize = 500;
+
+    for (let i = 0; i < unique.length; i += chunkSize) {
+      const chunk = unique.slice(i, i + chunkSize);
+      try {
+        await admin.messaging().sendEachForMulticast({
+          tokens: chunk,
+          notification: {
+            title: "New booking request",
+            body,
+          },
+          data: {
+            type: "booking_request",
+            tenantId: String(tenantId),
+            requestId: String(requestId),
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+              },
+            },
+          },
+        });
+      } catch (e) {
+        console.error("onTenantBookingRequestCreated FCM error", e);
+      }
+    }
+    return null;
+  });

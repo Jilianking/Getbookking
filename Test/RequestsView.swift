@@ -1,9 +1,52 @@
 import SwiftUI
 
+// MARK: - Booking request list filter (tenant + legacy)
+
+private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
+    case all
+    case unread
+    case newOnly
+    case confirmed
+    case cancelledOrDeclined
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .unread: return "Unread"
+        case .newOnly: return "New"
+        case .confirmed: return "Confirmed"
+        case .cancelledOrDeclined: return "Cancelled / Declined"
+        }
+    }
+
+    func matches(_ br: BookingRequest) -> Bool {
+        let s = br.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch self {
+        case .all: return true
+        case .unread: return s == "new" && br.readAt == nil
+        case .newOnly: return s == "new"
+        case .confirmed: return s == "confirmed"
+        case .cancelledOrDeclined: return s == "cancelled" || s == "declined"
+        }
+    }
+
+    func matches(_ r: Request) -> Bool {
+        switch self {
+        case .all: return true
+        case .unread: return r.status == .pending && r.reviewedAt == nil
+        case .newOnly: return r.status == .pending
+        case .confirmed: return r.status == .confirmed
+        case .cancelledOrDeclined: return r.status == .cancelled || r.status == .declined
+        }
+    }
+}
+
 struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = RequestsViewModel()
-    @State private var selectedStatus: Request.RequestStatus? = nil
+    @State private var requestFilter: BookingRequestFilter = .all
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
     @State private var searchText = ""
@@ -32,21 +75,34 @@ struct RequestsView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
 
-                // Filter + refresh
-                HStack {
-                    Button(action: {}) {
-                        HStack(spacing: 4) {
-                            Text("All (\(viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count))")
-                            Image(systemName: "arrow.up.arrow.down")
-                                .font(.caption2)
+                // Filter dropdown + refresh
+                HStack(alignment: .center, spacing: 8) {
+                    Menu {
+                        Picker("Filter", selection: $requestFilter) {
+                            ForEach(BookingRequestFilter.allCases) { filter in
+                                Text("\(filter.title) (\(filterCount(for: filter)))")
+                                    .tag(filter)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("\(requestFilter.title) (\(filterCount(for: requestFilter)))")
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color.gray.opacity(0.1))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.gray.opacity(0.12))
+                        .foregroundColor(.primary)
                         .cornerRadius(8)
                     }
-                    .foregroundColor(.primary)
-                    Spacer()
+                    .buttonStyle(.plain)
+
                     Button(action: { Task { await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode) } }) {
                         Image(systemName: "arrow.clockwise")
                             .padding(8)
@@ -102,7 +158,7 @@ struct RequestsView: View {
                 RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
             }
             .sheet(item: $selectedBookingRequest) { br in
-                BookingRequestDetailView(request: br, drawerState: drawerState)
+                BookingRequestDetailView(request: br, viewModel: viewModel, drawerState: drawerState)
             }
             .task {
                 await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode)
@@ -111,11 +167,15 @@ struct RequestsView: View {
         .navigationViewStyle(.stack)
     }
 
-    private var filteredRequests: [Request] {
-        var list = viewModel.requests
-        if let status = selectedStatus {
-            list = list.filter { $0.status == status }
+    private func filterCount(for filter: BookingRequestFilter) -> Int {
+        if viewModel.useTenantData {
+            return viewModel.bookingRequests.filter { filter.matches($0) }.count
         }
+        return viewModel.requests.filter { filter.matches($0) }.count
+    }
+
+    private var filteredRequests: [Request] {
+        var list = viewModel.requests.filter { requestFilter.matches($0) }
         if !searchText.isEmpty {
             list = list.filter {
                 $0.customerName.localizedCaseInsensitiveContains(searchText) ||
@@ -126,15 +186,7 @@ struct RequestsView: View {
     }
 
     private var filteredBookingRequests: [BookingRequest] {
-        var list = viewModel.bookingRequests
-        if let status = selectedStatus {
-            list = list.filter { br in
-                if status == .pending {
-                    return br.status == "pending" || br.status == "NEW"
-                }
-                return br.status == status.rawValue
-            }
-        }
+        var list = viewModel.bookingRequests.filter { requestFilter.matches($0) }
         if !searchText.isEmpty {
             list = list.filter {
                 ($0.customerName ?? "").localizedCaseInsensitiveContains(searchText) ||
@@ -173,6 +225,22 @@ struct StatusBadgeView: View {
 struct BookingRequestListRow: View {
     let request: BookingRequest
 
+    /// Green dot only for unread NEW requests; no dot otherwise.
+    private var showUnreadNewDot: Bool {
+        request.status.uppercased() == "NEW" && request.readAt == nil
+    }
+
+    private var serviceAndDateLine: String {
+        let service = (request.serviceName ?? request.serviceSlug ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let when = request.requestedStartTime ?? request.createdAt
+        let dateStr = when.map {
+            $0.formatted(.dateTime.month(.abbreviated).day().year())
+        } ?? ""
+        if !service.isEmpty, !dateStr.isEmpty { return "\(service) · \(dateStr)" }
+        if !service.isEmpty { return service }
+        return dateStr.isEmpty ? "—" : dateStr
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             Circle()
@@ -186,20 +254,24 @@ struct BookingRequestListRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(request.customerName ?? "Unknown")
                     .font(.subheadline.weight(.semibold))
-                if let service = request.serviceName ?? request.serviceSlug, !service.isEmpty {
-                    Text(service)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-                Text(request.createdAt?.formatted(.dateTime.month(.abbreviated).day().hour().minute()) ?? "-")
+                Text(serviceAndDateLine)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                Text(request.createdAt?.formatted(.dateTime.month(.abbreviated).day().hour().minute()) ?? "Submitted —")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
             Spacer()
+            Group {
+                if showUnreadNewDot {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                } else {
+                    Color.clear.frame(width: 8, height: 8)
+                }
+            }
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
@@ -213,6 +285,7 @@ struct BookingRequestListRow: View {
 
 struct BookingRequestDetailView: View {
     let request: BookingRequest
+    @ObservedObject var viewModel: RequestsViewModel
     var drawerState: DrawerState
     @Environment(\.dismiss) var dismiss
 
@@ -220,7 +293,7 @@ struct BookingRequestDetailView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Hero header: large avatar, name
+                    // Header: avatar, name (no status pill — read state uses `readAt` only)
                     VStack(spacing: 12) {
                         Circle()
                             .fill(Color.black)
@@ -240,29 +313,15 @@ struct BookingRequestDetailView: View {
                     .cornerRadius(12)
                     .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
 
-                    // Service card
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(request.serviceName ?? request.serviceSlug ?? "-")
-                            .font(.headline.weight(.semibold))
-                        if let pt = request.preferredTime, !pt.isEmpty {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("Preferred: \(pt)")
-                                    .font(.subheadline)
-                            }
-                            .foregroundColor(.secondary)
-                        }
-                        if let start = request.requestedStartTime {
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("Requested: \(start.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
-                                    .font(.subheadline)
-                            }
-                            .foregroundColor(.secondary)
+                    // Service / appointment type
+                    VStack(alignment: .leading, spacing: 12) {
+                        BookingRequestSectionHeader(title: "Service")
+                        BookingRequestDetailRow(
+                            label: "Appointment type",
+                            value: request.serviceName ?? request.serviceSlug ?? "—"
+                        )
+                        if let mode = request.bookingModeUsed, !mode.isEmpty {
+                            BookingRequestDetailRow(label: "Booking mode", value: mode)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -271,12 +330,47 @@ struct BookingRequestDetailView: View {
                     .cornerRadius(12)
                     .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
 
-                    // Contact card with quick actions
+                    // Appointment scheduling
+                    VStack(alignment: .leading, spacing: 12) {
+                        BookingRequestSectionHeader(title: "Appointment")
+                        if let start = request.requestedStartTime {
+                            BookingRequestDetailRow(
+                                label: "Date",
+                                value: start.formatted(.dateTime.month(.abbreviated).day().year()),
+                                systemImage: "calendar"
+                            )
+                            BookingRequestDetailRow(
+                                label: "Time",
+                                value: start.formatted(date: .omitted, time: .shortened),
+                                systemImage: "clock"
+                            )
+                        } else if let created = request.createdAt {
+                            BookingRequestDetailRow(
+                                label: "Submitted",
+                                value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
+                                systemImage: "calendar"
+                            )
+                        }
+                        if let pt = request.preferredTime, !pt.isEmpty {
+                            BookingRequestDetailRow(label: "Preferred", value: pt, systemImage: "clock")
+                        }
+                        if let days = request.preferredDays, !days.isEmpty {
+                            BookingRequestDetailRow(
+                                label: "Preferred days",
+                                value: days.joined(separator: ", ")
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+
+                    // Contact
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Contact")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.bottom, 12)
+                        BookingRequestSectionHeader(title: "Contact")
+                            .padding(.bottom, 8)
                         if let phone = request.customerPhone, !phone.isEmpty,
                            let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })"), !phone.filter(\.isNumber).isEmpty {
                             Link(destination: telURL) {
@@ -296,7 +390,7 @@ struct BookingRequestDetailView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(Rectangle())
                             }
-                            if let email = request.customerEmail, !email.isEmpty { Divider() }
+                            if let em = request.customerEmail, !em.isEmpty { Divider() }
                         }
                         if let email = request.customerEmail, !email.isEmpty,
                            let mailURL = URL(string: "mailto:\(email)") {
@@ -309,7 +403,7 @@ struct BookingRequestDetailView: View {
                                     Text(email)
                                         .font(.subheadline.weight(.medium))
                                         .foregroundColor(.primary)
-                                        .lineLimit(1)
+                                        .lineLimit(2)
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption)
@@ -326,14 +420,13 @@ struct BookingRequestDetailView: View {
                     .cornerRadius(12)
                     .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
 
-                    // Notes card (if present)
+                    // Notes
                     if let notes = request.notes, !notes.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Notes")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(.secondary)
+                            BookingRequestSectionHeader(title: "Notes")
                             Text(notes)
                                 .font(.subheadline)
+                                .foregroundColor(.primary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(16)
@@ -341,6 +434,9 @@ struct BookingRequestDetailView: View {
                         .cornerRadius(12)
                         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                     }
+
+                    // Custom form fields (web / admin)
+                    BookingRequestFormSectionsView(responses: request.formResponses)
                 }
                 .padding(16)
             }
@@ -361,6 +457,16 @@ struct BookingRequestDetailView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .task(id: request.documentId) {
+            await markReadIfNeeded()
+        }
+    }
+
+    /// First open sets `readAt` in Firestore (status stays NEW). List hides the green dot after reload.
+    private func markReadIfNeeded() async {
+        guard request.readAt == nil else { return }
+        guard let rid = request.documentId else { return }
+        _ = await viewModel.markBookingRequestAsRead(requestId: rid)
     }
 }
 

@@ -297,7 +297,8 @@ class FirebaseService: ObservableObject {
                 requestedStartTime: (d["requestedStartTime"] as? Timestamp)?.dateValue(),
                 notes: d["notes"] as? String,
                 formResponses: d["formResponses"] as? [String: Any],
-                createdAt: (d["createdAt"] as? Timestamp)?.dateValue()
+                createdAt: (d["createdAt"] as? Timestamp)?.dateValue(),
+                readAt: (d["readAt"] as? Timestamp)?.dateValue()
             )
         }
     }
@@ -306,6 +307,9 @@ class FirebaseService: ObservableObject {
         var firestoreUpdates = updates
         if let reviewedAt = firestoreUpdates["reviewedAt"] as? Date {
             firestoreUpdates["reviewedAt"] = Timestamp(date: reviewedAt)
+        }
+        if let readAt = firestoreUpdates["readAt"] as? Date {
+            firestoreUpdates["readAt"] = Timestamp(date: readAt)
         }
         try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests").document(requestId)

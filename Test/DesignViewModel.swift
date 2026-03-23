@@ -66,8 +66,10 @@ class DesignViewModel: ObservableObject {
     // Services
     @Published var services: [TenantService] = []
 
-    // Template / industry
+    // Template / industry (business type — set in Settings)
     @Published var industry: String?
+    /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
+    @Published var webThemeId: String = ""
 
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)
     @Published var sidebarIconColorHome: String = ""
@@ -93,7 +95,7 @@ class DesignViewModel: ObservableObject {
     func applyFeaturedWorkPreset(_ preset: FeaturedWorkColorPreset) {
         featuredWorkBackgroundColorHex = preset.backgroundHex
         featuredWorkTextColorHex = preset.textHex
-        if industry == "tattoos" {
+        if industry == "tattoos" || industry == "hair" {
             galleryPageBackgroundColorHex = preset.backgroundHex
             galleryPageTextColorHex = preset.textHex
         }
@@ -149,6 +151,7 @@ class DesignViewModel: ObservableObject {
                 formFields = FormField.defaultFields
                 services = []
                 industry = nil
+                webThemeId = ""
                 isLoading = false
             }
             return
@@ -167,6 +170,7 @@ class DesignViewModel: ObservableObject {
                     formFields = FormField.defaultFields
                     services = []
                     industry = nil
+                    webThemeId = ""
                     isLoading = false
                 }
                 return
@@ -231,11 +235,20 @@ class DesignViewModel: ObservableObject {
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
+                let resolvedTheme = WebTheme.resolvedThemeId(
+                    stored: tenant?["webThemeId"] as? String,
+                    industry: tenant?["industry"] as? String
+                )
+                webThemeId = resolvedTheme
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""
                 sidebarIconColorBooking = tenant?["sidebarIconColorBooking"] as? String ?? ""
                 normalizeFeaturedGridLayoutPresets()
                 syncTattooSectionThemeFromFeaturedIfNeeded()
                 isLoading = false
+            }
+            if tenant?["webThemeId"] == nil {
+                let def = WebTheme.resolvedThemeId(stored: nil, industry: tenant?["industry"] as? String)
+                try? await firebaseService.updateTenant(tenantId: tid, updates: ["webThemeId": def])
             }
             if let split = persistSplit {
                 do {
@@ -258,7 +271,7 @@ class DesignViewModel: ObservableObject {
 
     func saveHome() async {
         guard let tid = tenantId else { return }
-        if industry == "tattoos" {
+        if industry == "tattoos" || industry == "hair" {
             galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
             galleryPageTextColorHex = featuredWorkTextColorHex
         }
@@ -287,23 +300,23 @@ class DesignViewModel: ObservableObject {
             "featuredWorkTextColor": featuredWorkTextColorHex,
             "bookingFormCardBackgroundColor": bookingFormCardBackgroundColorHex
         ]
-        if industry == "tattoos" {
+        if industry == "tattoos" || industry == "hair" {
             updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
         }
         await saveTenantUpdates(tid, updates)
     }
 
-    /// Keeps Gallery page colors in sync with Featured work for the tattoo template (booking card stays separate).
+    /// Keeps Gallery page colors in sync with Featured work for tattoo & hair web themes.
     private func syncTattooSectionThemeFromFeaturedIfNeeded() {
-        guard industry == "tattoos" else { return }
+        guard industry == "tattoos" || industry == "hair" else { return }
         galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
         galleryPageTextColorHex = featuredWorkTextColorHex
     }
 
     func saveGalleryPageColors() async {
         guard let tid = tenantId else { return }
-        if industry == "tattoos" {
+        if industry == "tattoos" || industry == "hair" {
             syncTattooSectionThemeFromFeaturedIfNeeded()
         }
         await saveTenantUpdates(tid, [
@@ -503,28 +516,19 @@ class DesignViewModel: ObservableObject {
     }
 
 
-    func applyTemplate(_ template: BookingTemplate) async {
+    /// Applies a **web layout** only. Business type stays in Settings (`industry` unchanged).
+    func applyWebTheme(_ theme: WebTheme) async {
         guard let tid = tenantId else { return }
+        guard let ind = industry, theme.bookingIndustry.rawValue == ind else {
+            await MainActor.run { errorMessage = "This layout doesn’t match your business type. Change it in Settings if needed." }
+            return
+        }
         await MainActor.run { errorMessage = nil }
         do {
-            formFields = template.formFields
-            let schema = formFields.map { $0.toFirestore() }
-
-            for svc in services {
-                try await firebaseService.deleteTenantService(tenantId: tid, serviceId: svc.id)
-            }
-            services = []
-
-            for item in template.defaultServices {
-                _ = try await firebaseService.createTenantService(tenantId: tid, name: item.name, durationMinutes: item.durationMinutes)
-            }
-
             try await firebaseService.updateTenant(tenantId: tid, updates: [
-                "formSchema": schema,
-                "industry": template.rawValue,
+                "webThemeId": theme.rawValue
             ])
-
-            await loadData()
+            await MainActor.run { webThemeId = theme.rawValue }
             await MainActor.run {
                 invalidateWebPreview()
                 saveSuccess = true

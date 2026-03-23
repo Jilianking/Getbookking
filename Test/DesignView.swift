@@ -163,26 +163,35 @@ struct DesignView: View {
 
     private var homeContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Template
-            Text("Template")
+            // Web themes (scoped to business type from Settings)
+            Text("Website templates")
                 .font(.headline)
+            Text("Choose a template for your public site. Your business type is set in Settings → Service.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 4)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(BookingTemplate.allCases) { template in
+                ForEach(WebTheme.themes(forIndustry: viewModel.industry)) { theme in
                     Button(action: {
-                        Task { await viewModel.applyTemplate(template) }
+                        Task { await viewModel.applyWebTheme(theme) }
                     }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: template.icon)
-                                .font(.system(size: 24))
-                            Text(template.displayName)
-                                .font(.caption.weight(.medium))
-                                .multilineTextAlignment(.center)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Image(systemName: theme.icon)
+                                .font(.system(size: 22))
+                            Text(theme.displayName)
+                                .font(.caption.weight(.semibold))
+                                .multilineTextAlignment(.leading)
                                 .lineLimit(2)
+                            Text(theme.detail)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(3)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(viewModel.industry == template.rawValue ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                        .foregroundColor(viewModel.industry == template.rawValue ? .white : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(viewModel.webThemeId == theme.rawValue ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                        .foregroundColor(viewModel.webThemeId == theme.rawValue ? .white : .primary)
                         .cornerRadius(10)
                     }
                     .buttonStyle(.plain)
@@ -224,7 +233,7 @@ struct DesignView: View {
                 .font(.headline)
                 .padding(.top, 8)
             Group {
-                if viewModel.industry == "tattoos" {
+                if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
                     Text("Featured strip and /gallery page share one background. The booking page uses that behind a white card—pick a preset below.")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -235,7 +244,7 @@ struct DesignView: View {
                 }
             }
             FeaturedWorkPresetPicker(viewModel: viewModel)
-            if viewModel.industry == "tattoos" {
+            if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
                 Text("Booking form card sits on that background—default is white; override below if you want.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -275,7 +284,7 @@ struct DesignView: View {
             Text("Gallery page")
                 .font(.headline)
                 .padding(.top, 8)
-            if viewModel.industry == "tattoos" {
+            if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
                 Text("Background and text match Home → Featured section. Change colors on the Home tab (Featured work presets).")
                     .font(.caption)
                     .foregroundColor(.secondary)

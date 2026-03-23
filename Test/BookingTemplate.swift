@@ -64,6 +64,13 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             return base + [
                 FormField(id: "hair_type", key: "hairType", label: "Hair type / length", type: .text, required: false),
                 FormField(id: "style_preference", key: "stylePreference", label: "Style or color preference", type: .text, required: false),
+                FormField(
+                    id: "referenceImages",
+                    key: "referenceImages",
+                    label: "Reference photos (optional)",
+                    type: .file,
+                    required: false
+                ),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
         case .tattoos:

@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
+    /// When true, ignores `onChange` so reverting the picker after Cancel doesn’t reopen the alert.
+    @State private var isRestoringIndustry = false
     @State private var hasLoadedServiceOnce = false
     var drawerState: DrawerState
     let sectionTitle: String
@@ -147,7 +149,7 @@ struct SettingsView: View {
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile {
-                    Section(header: Text("Service"), footer: Text("Updates your booking form and services in Website Design. You can still edit them after.")) {
+                    Section(header: Text("Service"), footer: Text("Business type controls your booking form, default services, and which website templates appear in Website Design. Changing it asks for confirmation because your current services are replaced.")) {
                         Picker("Business type", selection: $viewModel.selectedIndustry) {
                             ForEach(BookingTemplate.allCases) { template in
                                 Text(template.displayName).tag(template.rawValue)
@@ -155,6 +157,10 @@ struct SettingsView: View {
                         }
                         .onChange(of: viewModel.selectedIndustry) { oldValue, newValue in
                             guard hasLoadedServiceOnce else { return }
+                            if isRestoringIndustry {
+                                isRestoringIndustry = false
+                                return
+                            }
                             previousIndustryForCancel = oldValue
                             showEnterModeAlert = true
                         }
@@ -175,7 +181,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.green)
-                                Text("Saved — Website Design updated")
+                                Text("Saved — booking form and services applied")
                                     .foregroundColor(.green)
                             }
                         }
@@ -258,15 +264,16 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to logout?")
             }
-            .alert("Entering \(BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this") mode", isPresented: $showEnterModeAlert) {
+            .alert(businessTypeChangeAlertTitle, isPresented: $showEnterModeAlert) {
                 Button("Cancel", role: .cancel) {
+                    isRestoringIndustry = true
                     viewModel.selectedIndustry = previousIndustryForCancel
                 }
-                Button("Enter") {
+                Button("Continue") {
                     Task { await viewModel.applyTemplateAndSave() }
                 }
             } message: {
-                Text("Your booking form and services will be updated for this business type. You can still edit them in Website Design.")
+                Text(businessTypeChangeAlertMessage)
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
@@ -279,6 +286,39 @@ struct SettingsView: View {
         .navigationViewStyle(.stack)
     }
 
+    private var businessTypeChangeAlertTitle: String {
+        let name = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this type"
+        return "Switch to \(name)?"
+    }
+
+    private var businessTypeChangeAlertMessage: String {
+        guard let template = BookingTemplate(rawValue: viewModel.selectedIndustry) else {
+            return "Your booking form and services will update to match this business type. Website templates in Website Design follow the business type you set here."
+        }
+        switch template {
+        case .custom:
+            return """
+            You're entering Custom mode.
+
+            • Booking form switches to a generic field set (editable in Website Design).
+            • Your current services are removed. Custom starts with no default services—add them under Book in Website Design.
+            • In Website Design, only templates for Custom are available under Website templates.
+
+            You can customize everything after saving.
+            """
+        default:
+            let label = template.displayName
+            return """
+            You're entering \(label) mode.
+
+            • Booking form switches to fields for this industry (editable afterward).
+            • Your current services are removed and replaced with starter services for \(label).
+            • Website Design → Website templates only shows options that match this business type.
+
+            Tap Continue to apply, or Cancel to keep your previous type.
+            """
+        }
+    }
 }
 
 // MARK: - Days open calendar sheet

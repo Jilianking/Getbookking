@@ -1807,6 +1807,23 @@
       }
       function err(m){ return '<div class="card"><h1>Oops</h1><p class="error">'+esc(m)+'</p></div>'; }
 
+      /** Matches `WebTheme` in the app; invalid or missing ids fall back per industry. */
+      function resolvedWebThemeId(tenant) {
+        var ind = String(tenant.industry || '').trim();
+        var stored = String(tenant.webThemeId || '').trim();
+        var map = {
+          'hair': ['hair-salon-v1'],
+          'tattoos': ['tattoo-studio-v1'],
+          'nails': ['nail-salon-v1'],
+          'plumbing': ['plumbing-v1'],
+          'electrical': ['electrical-v1'],
+          'custom': ['custom-standard']
+        };
+        var list = map[ind] || ['custom-standard'];
+        if (stored && list.indexOf(stored) >= 0) return stored;
+        return list[0];
+      }
+
       function loadTenant(slug) {
         return db.collection('tenants').where('slug','==',slug.toLowerCase()).limit(1).get()
           .then(function(snap){
@@ -1831,10 +1848,12 @@
               aboutSectionBackgroundColor: data.aboutSectionBackgroundColor || '',
               aboutSectionTextColor: data.aboutSectionTextColor || '',
               headlineFont: data.headlineFont || '',
-              heroFont: data.heroFont || '' };
+              heroFont: data.heroFont || '',
+              webThemeId: data.webThemeId || '' };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
             }
+            row.resolvedWebThemeId = resolvedWebThemeId(row);
             return row;
           });
       }

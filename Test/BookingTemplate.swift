@@ -9,6 +9,7 @@ import Foundation
 
 enum BookingTemplate: String, CaseIterable, Identifiable {
     case hair = "hair"
+    case barber = "barber"
     case tattoos = "tattoos"
     case nails = "nails"
     case plumbing = "plumbing"
@@ -20,6 +21,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .hair: return "Hair Salon"
+        case .barber: return "Barber shop"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
         case .plumbing: return "Plumbing"
@@ -31,6 +33,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .hair: return "scissors"
+        case .barber: return "mustache.fill"
         case .tattoos: return "paintbrush.fill"
         case .nails: return "hand.raised.fill"
         case .plumbing: return "drop.fill"
@@ -62,8 +65,147 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         switch self {
         case .hair:
             return base + [
+                FormField(
+                    id: "visit_type",
+                    key: "visitType",
+                    label: "Visit type",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "Cut only",
+                        "Color only",
+                        "Cut + color",
+                        "Highlights",
+                        "Balayage",
+                        "Extensions consult",
+                        "Other",
+                    ]
+                ),
+                FormField(
+                    id: "hair_texture",
+                    key: "hairTexture",
+                    label: "Hair texture",
+                    type: .select,
+                    required: false,
+                    options: ["Straight", "Wavy", "Curly", "Coily", "Mixed", "Unsure"],
+                    placeholder: "Select texture"
+                ),
+                FormField(
+                    id: "color_history",
+                    key: "colorHistory",
+                    label: "Color history (last ~12 months)",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "None (natural)",
+                        "At-home color",
+                        "Salon color",
+                        "Bleach / lightening",
+                        "Not sure",
+                    ]
+                ),
+                FormField(
+                    id: "scalp_sensitivity",
+                    key: "scalpSensitivity",
+                    label: "Scalp sensitivity",
+                    type: .select,
+                    required: false,
+                    options: ["No issues", "Mild / occasional", "Sensitive", "Very sensitive"]
+                ),
+                FormField(
+                    id: "allergies",
+                    key: "allergies",
+                    label: "Allergies (hair / skin)",
+                    type: .text,
+                    required: false,
+                    placeholder: "e.g. dye, latex, fragrance — or none"
+                ),
                 FormField(id: "hair_type", key: "hairType", label: "Hair type / length", type: .text, required: false),
                 FormField(id: "style_preference", key: "stylePreference", label: "Style or color preference", type: .text, required: false),
+                FormField(
+                    id: "referenceImages",
+                    key: "referenceImages",
+                    label: "Reference photos (optional)",
+                    type: .file,
+                    required: false
+                ),
+                FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
+            ]
+        case .barber:
+            return base + [
+                FormField(
+                    id: "barber_visit_type",
+                    key: "visitType",
+                    label: "Visit type",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "Haircut",
+                        "Fade",
+                        "Haircut + beard",
+                        "Beard trim only",
+                        "Lineup / edge-up",
+                        "Kids cut",
+                        "Hot towel shave",
+                        "Other",
+                    ]
+                ),
+                FormField(
+                    id: "fade_or_style",
+                    key: "fadeOrStyle",
+                    label: "Fade / style",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "Low fade",
+                        "Mid fade",
+                        "High fade",
+                        "Taper",
+                        "Buzz / crew",
+                        "Long on top",
+                        "Not sure",
+                        "N/A",
+                    ],
+                    placeholder: "Select style"
+                ),
+                FormField(
+                    id: "facial_hair",
+                    key: "facialHair",
+                    label: "Facial hair",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "Clean shave",
+                        "Beard trim",
+                        "Mustache only",
+                        "No facial hair service today",
+                        "N/A",
+                    ]
+                ),
+                FormField(
+                    id: "scalp_sensitivity",
+                    key: "scalpSensitivity",
+                    label: "Scalp / skin sensitivity",
+                    type: .select,
+                    required: false,
+                    options: ["No issues", "Mild / occasional", "Sensitive", "Very sensitive"]
+                ),
+                FormField(
+                    id: "allergies",
+                    key: "allergies",
+                    label: "Allergies (products / skin)",
+                    type: .text,
+                    required: false,
+                    placeholder: "e.g. fragrance, latex — or none"
+                ),
+                FormField(
+                    id: "cut_details",
+                    key: "cutDetails",
+                    label: "What do you want done?",
+                    type: .text,
+                    required: false,
+                    placeholder: "e.g. skin fade, beard shape, lineup"
+                ),
                 FormField(
                     id: "referenceImages",
                     key: "referenceImages",
@@ -160,6 +302,17 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Highlights", 120),
                 ("Balayage", 180),
                 ("Consultation", 30),
+            ]
+        case .barber:
+            return [
+                ("Haircut", 30),
+                ("Fade", 45),
+                ("Haircut + beard", 45),
+                ("Beard trim", 20),
+                ("Lineup / edge-up", 20),
+                ("Hot towel shave", 45),
+                ("Kids cut", 25),
+                ("Consultation", 15),
             ]
         case .tattoos:
             return [

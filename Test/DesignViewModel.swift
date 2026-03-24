@@ -71,6 +71,11 @@ class DesignViewModel: ObservableObject {
     /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
     @Published var webThemeId: String = ""
 
+    /// Tattoo, hair salon, and barber share portfolio-style web (featured strip, gallery, booking chrome).
+    var usesPortfolioStyleWebChrome: Bool {
+        industry == "tattoos" || industry == "hair" || industry == "barber"
+    }
+
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)
     @Published var sidebarIconColorHome: String = ""
     @Published var sidebarIconColorBooking: String = ""
@@ -95,7 +100,7 @@ class DesignViewModel: ObservableObject {
     func applyFeaturedWorkPreset(_ preset: FeaturedWorkColorPreset) {
         featuredWorkBackgroundColorHex = preset.backgroundHex
         featuredWorkTextColorHex = preset.textHex
-        if industry == "tattoos" || industry == "hair" {
+        if usesPortfolioStyleWebChrome {
             galleryPageBackgroundColorHex = preset.backgroundHex
             galleryPageTextColorHex = preset.textHex
         }
@@ -271,7 +276,7 @@ class DesignViewModel: ObservableObject {
 
     func saveHome() async {
         guard let tid = tenantId else { return }
-        if industry == "tattoos" || industry == "hair" {
+        if usesPortfolioStyleWebChrome {
             galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
             galleryPageTextColorHex = featuredWorkTextColorHex
         }
@@ -300,23 +305,23 @@ class DesignViewModel: ObservableObject {
             "featuredWorkTextColor": featuredWorkTextColorHex,
             "bookingFormCardBackgroundColor": bookingFormCardBackgroundColorHex
         ]
-        if industry == "tattoos" || industry == "hair" {
+        if usesPortfolioStyleWebChrome {
             updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
         }
         await saveTenantUpdates(tid, updates)
     }
 
-    /// Keeps Gallery page colors in sync with Featured work for tattoo & hair web themes.
+    /// Keeps Gallery page colors in sync with Featured work for portfolio-style web themes.
     private func syncTattooSectionThemeFromFeaturedIfNeeded() {
-        guard industry == "tattoos" || industry == "hair" else { return }
+        guard usesPortfolioStyleWebChrome else { return }
         galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
         galleryPageTextColorHex = featuredWorkTextColorHex
     }
 
     func saveGalleryPageColors() async {
         guard let tid = tenantId else { return }
-        if industry == "tattoos" || industry == "hair" {
+        if usesPortfolioStyleWebChrome {
             syncTattooSectionThemeFromFeaturedIfNeeded()
         }
         await saveTenantUpdates(tid, [

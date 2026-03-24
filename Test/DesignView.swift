@@ -233,7 +233,7 @@ struct DesignView: View {
                 .font(.headline)
                 .padding(.top, 8)
             Group {
-                if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
+                if viewModel.usesPortfolioStyleWebChrome {
                     Text("Featured strip and /gallery page share one background. The booking page uses that behind a white card—pick a preset below.")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -244,7 +244,7 @@ struct DesignView: View {
                 }
             }
             FeaturedWorkPresetPicker(viewModel: viewModel)
-            if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
+            if viewModel.usesPortfolioStyleWebChrome {
                 Text("Booking form card sits on that background—default is white; override below if you want.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -284,7 +284,7 @@ struct DesignView: View {
             Text("Gallery page")
                 .font(.headline)
                 .padding(.top, 8)
-            if viewModel.industry == "tattoos" || viewModel.industry == "hair" {
+            if viewModel.usesPortfolioStyleWebChrome {
                 Text("Background and text match Home → Featured section. Change colors on the Home tab (Featured work presets).")
                     .font(.caption)
                     .foregroundColor(.secondary)

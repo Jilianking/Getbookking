@@ -12,7 +12,6 @@
 		35C0ED1E2F1ACC7000BB5E8B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED1D2F1ACC7000BB5E8B /* FirebaseFirestore */; };
 		35C0ED202F1ACC7000BB5E8B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED1F2F1ACC7000BB5E8B /* FirebaseStorage */; };
 		35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */; };
-		35C0ED282F1ACC7000BB5E8B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED272F1ACC7000BB5E8B /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,7 +65,6 @@
 				35C0ED1A2F1ACC7000BB5E8B /* FirebaseAuth in Frameworks */,
 				35C0ED1E2F1ACC7000BB5E8B /* FirebaseFirestore in Frameworks */,
 				35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */,
-				35C0ED282F1ACC7000BB5E8B /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,7 +130,6 @@
 				35C0ED1D2F1ACC7000BB5E8B /* FirebaseFirestore */,
 				35C0ED1F2F1ACC7000BB5E8B /* FirebaseStorage */,
 				35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */,
-				35C0ED272F1ACC7000BB5E8B /* FirebaseMessaging */,
 			);
 			productName = Test;
 			productReference = 35C0ECA62F16A57500BB5E8B /* Test.app */;
@@ -425,7 +422,6 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -473,7 +469,6 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -682,11 +677,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFunctions;
-		};
-		35C0ED272F1ACC7000BB5E8B /* FirebaseMessaging */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

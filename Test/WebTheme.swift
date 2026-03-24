@@ -11,6 +11,8 @@ import Foundation
 enum WebTheme: String, CaseIterable, Identifiable {
     /// Hair: hero → featured → meet + contact → sidebar (matches tattoo-style flow).
     case hairSalonV1 = "hair-salon-v1"
+    /// Barber: same structural layout as hair; distinct theme id for barber tenants.
+    case barberShopV1 = "barber-shop-v1"
     /// Tattoo: full tattoo template on web.
     case tattooStudioV1 = "tattoo-studio-v1"
     /// Nails: classic service card list home.
@@ -28,6 +30,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var bookingIndustry: BookingTemplate {
         switch self {
         case .hairSalonV1: return .hair
+        case .barberShopV1: return .barber
         case .tattooStudioV1: return .tattoos
         case .nailSalonV1: return .nails
         case .plumbingV1: return .plumbing
@@ -39,6 +42,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .hairSalonV1: return "Gallery & story"
+        case .barberShopV1: return "Cuts & lineups"
         case .tattooStudioV1: return "Portfolio & studio"
         case .nailSalonV1: return "Classic cards"
         case .plumbingV1: return "Trades hero"
@@ -50,6 +54,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .hairSalonV1: return "Hero, featured work, meet section, slide-out menu"
+        case .barberShopV1: return "Stone hero, fades & gallery, meet + contact, sidebar"
         case .tattooStudioV1: return "Hero, featured work, about, slide-out menu"
         case .nailSalonV1: return "Logo, services grid, reviews-style sections"
         case .plumbingV1, .electricalV1: return "Hero, services, FAQs, contact strip"
@@ -60,6 +65,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .hairSalonV1: return "rectangle.split.3x3"
+        case .barberShopV1: return "mustache.fill"
         case .tattooStudioV1: return "photo.on.rectangle.angled"
         case .nailSalonV1: return "square.grid.2x2"
         case .plumbingV1, .electricalV1: return "building.2"

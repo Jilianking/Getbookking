@@ -21,6 +21,11 @@ enum BookingRequestDetailModel {
         "referenceimages": "Reference images",
         "hairtype": "Hair type",
         "stylepreference": "Style preference",
+        "visittype": "Visit type",
+        "fadeorstyle": "Fade / style",
+        "facialhair": "Facial hair",
+        "cutdetails": "Cut details",
+        "scalpsensitivity": "Scalp sensitivity",
         "designpreference": "Design preference",
         "nailtype": "Nail type",
         "design": "Design",
@@ -63,7 +68,7 @@ enum BookingRequestDetailModel {
     static func bucket(forKey key: String) -> Int {
         let k = key.lowercased()
         let tattooKeys = ["placement", "size", "style", "description", "referenceimages", "hairtype", "stylepreference",
-                          "designpreference", "nailtype", "design"]
+                          "designpreference", "nailtype", "design", "visittype", "fadeorstyle", "facialhair", "cutdetails", "scalpsensitivity"]
         if tattooKeys.contains(where: { k == $0 || k.hasPrefix($0) }) {
             return 0
         }

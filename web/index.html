@@ -1288,6 +1288,12 @@
           document.body.style.background = hw;
           document.body.style.color = hx;
         }
+        if (t.industry === 'barber') {
+          var bb = t.featuredWorkBackgroundColor || '#FAFAF9';
+          var bf = t.featuredWorkTextColor || '#1C1917';
+          document.body.style.background = bb;
+          document.body.style.color = bf;
+        }
         // Override for Tattoo template: same surface as Featured work / Gallery / Book
         if (t.industry === 'tattoos') {
           var tw = t.featuredWorkBackgroundColor || '#FAF8F5';
@@ -1314,14 +1320,14 @@
 
         if (!iconColor) {
           if (isGalleryPath) {
-            iconColor = (tenant.industry === 'tattoos' || tenant.industry === 'hair')
+            iconColor = isPortfolioIndustry(tenant.industry)
               ? (tenant.featuredWorkTextColor || '#1C1917')
               : '#FFFFFF';
           } else if (isBookPath) {
-            iconColor = (tenant.industry === 'tattoos' || tenant.industry === 'hair')
+            iconColor = isPortfolioIndustry(tenant.industry)
               ? (tenant.featuredWorkTextColor || '#1C1917')
               : '#000000';
-          } else if (tenant.industry === 'tattoos' || tenant.industry === 'hair' ||
+          } else if (isPortfolioIndustry(tenant.industry) ||
                      tenant.industry === 'plumbing' || tenant.industry === 'electrical') {
             iconColor = '#FFFFFF';
           } else {
@@ -1337,6 +1343,10 @@
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      /** Tattoo, hair salon, barber: shared portfolio booking chrome (sidebar, themed /book). */
+      function isPortfolioIndustry(ind) {
+        return ind === 'tattoos' || ind === 'hair' || ind === 'barber';
+      }
       /** Top bar: menu only. Public wordmark is displayName + hero font (sidebar). `logoUrl` = profile image in Settings, not used on tattoo pages. */
       function tattooNavHtml(tenant) {
         return '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
@@ -1733,7 +1743,7 @@
         var base = location.origin + '/' + tenant.slug;
         var bookUrl = base + '/book';
 
-        var nav = (tenant.industry === 'tattoos' || tenant.industry === 'hair') ? tattooNavHtml(tenant) : (
+        var nav = isPortfolioIndustry(tenant.industry) ? tattooNavHtml(tenant) : (
           '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
           '</div></nav>'
@@ -1745,7 +1755,7 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var bookPageStyle = (tenant.industry === 'tattoos' || tenant.industry === 'hair') ? tattooSiteThemeInlineStyle(tenant) : '';
+        var bookPageStyle = isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '';
         // Themed page behind the card; card surface stays white (or tenant override).
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
@@ -1753,7 +1763,7 @@
             nav +
             '<div class="booking-shell">' +
               '<div class="booking-page-header">' +
-                ((tenant.industry === 'tattoos' || tenant.industry === 'hair') ? tattooHeadlineLogoHtml(tenant) : '') +
+                (isPortfolioIndustry(tenant.industry) ? tattooHeadlineLogoHtml(tenant) : '') +
                 '<h1 class="booking-page-title">' + esc(tenant.displayName||'Appointment') + '</h1>' +
                 (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
               '</div>' +
@@ -1773,7 +1783,7 @@
         var name = esc(tenant.displayName || 'Thank you');
         var lead = '✓ Request received';
         var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
-        if (tenant.industry === 'tattoos' || tenant.industry === 'hair') {
+        if (isPortfolioIndustry(tenant.industry)) {
           var base = location.origin + '/' + tenant.slug;
           var bookUrl = base + '/book';
           var nav = tattooNavHtml(tenant);
@@ -1813,6 +1823,7 @@
         var stored = String(tenant.webThemeId || '').trim();
         var map = {
           'hair': ['hair-salon-v1'],
+          'barber': ['barber-shop-v1'],
           'tattoos': ['tattoo-studio-v1'],
           'nails': ['nail-salon-v1'],
           'plumbing': ['plumbing-v1'],
@@ -1930,7 +1941,7 @@
         if (tenant.industry === 'tattoos') {
           gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
           gPageFg = tenant.featuredWorkTextColor || '#1C1917';
-        } else if (tenant.industry === 'hair') {
+        } else if (tenant.industry === 'hair' || tenant.industry === 'barber') {
           gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
           gPageFg = tenant.featuredWorkTextColor || '#1C1917';
         } else {
@@ -2070,6 +2081,70 @@
           '</div></div></section>';
         return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
       }
+
+      /** Barber shop home: same structure as hair; different hero, copy, and contact labels. */
+      function barberPortfolioHomePage(tenant, services) {
+        var base = location.origin + '/' + tenant.slug;
+        var bookUrl = base + '/book';
+        var displayName = tenant.displayName || 'Barbershop';
+        var nav = tattooNavHtml(tenant);
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var heroStyle = tenant.heroImageUrl
+          ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')'
+          : 'background:linear-gradient(145deg,#0c0a09 0%,#44403c 48%,#1c1917 100%)';
+        var heroHtml = '<section class="tattoo-hero-section" style="'+heroStyle+'">' +
+          '<div class="tattoo-hero-overlay">' +
+          '<h1 class="tattoo-hero-title">' + esc(displayName) + '</h1>' +
+          '<a href="' + bookUrl + '" class="tattoo-btn-book">Book a cut</a>' +
+          '</div></section>';
+        var layout = (tenant.galleryGridLayout || '3x1').split('x');
+        var gridCols = parseInt(layout[0], 10) || 3;
+        var gridRows = parseInt(layout[1], 10) || 1;
+        gridCols = Math.min(Math.max(gridCols, 1), 3);
+        var maxCells = gridCols * gridRows;
+        var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
+        var galleryPageUrl = base + '/gallery';
+        var gridStyle = 'grid-template-columns:repeat(' + gridCols + ',1fr);grid-template-rows:repeat(' + gridRows + ',1fr);';
+        var featuredGridInner = gallery.length
+          ? gallery.map(function(url){
+              return '<a href="'+esc(galleryPageUrl)+'"><img src="'+esc(url)+'" alt=""></a>';
+            }).join('')
+          : '<div class="tattoo-featured-placeholder">Add your best fades and lineups in the app.</div>';
+        var featBg = tenant.featuredWorkBackgroundColor || '#ffffff';
+        var featFg = tenant.featuredWorkTextColor || '#111111';
+        var featSectionStyle = 'background:'+featBg+';color:'+featFg;
+        var featuredHtml = '<section id="featured" class="tattoo-featured-outer" style="'+featSectionStyle+'">' +
+          '<div class="tattoo-featured-inner">' +
+          '<h2>Featured work</h2>' +
+          '<p class="tattoo-featured-sub">' + (gallery.length ? 'Fresh fades, clean lineups, and beard work.' : 'Your best cuts will appear here.') + '</p>' +
+          '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
+          '<a href="'+esc(galleryPageUrl)+'" class="tattoo-gallery-link">View full gallery →</a>' +
+          '</div></section>';
+        var defaultBio = 'Sharp cuts, clean fades, and beard detail—book your chair.';
+        var aboutBody = (tenant.aboutText || tenant.tagline) ? esc(tenant.aboutText || tenant.tagline || '') : defaultBio;
+        var svgLocation = '<svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+        var svgClock = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+        var svgInstagram = '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff" stroke="none"/></svg>';
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
+        var abg = tenant.aboutSectionBackgroundColor || '#111111';
+        var afg = tenant.aboutSectionTextColor || '#ffffff';
+        var aboutStyleStr = 'background:'+abg+';color:'+afg;
+        var aboutSection = '<section id="about" class="tattoo-about" style="'+aboutStyleStr+'">' +
+          '<div class="tattoo-about-inner">' +
+          '<h2>Meet ' + esc(displayName) + '</h2>' +
+          '<p class="tattoo-about-bio">' + aboutBody + '</p>' +
+          '<div class="tattoo-contact-strip">' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgLocation + '</div><h3>Shop &amp; location</h3><p>' + (tenant.address ? esc(tenant.address) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgClock + '</div><h3>Hours</h3><p>' + (tenant.businessHours ? esc(tenant.businessHours) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgInstagram + '</div><h3>Instagram</h3><p>' + (igHandle ? '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>' : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '</div></div></section>';
+        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
+      }
       function bindTattooSidebar() {
         var menuBtn = document.querySelector('.tattoo-nav-menu');
         var sidebar = document.getElementById('tattoo-sidebar');
@@ -2117,12 +2192,13 @@
             var showForm = p.isBookPath && services.length > 0;
             var isGallery = p.isGalleryPath;
             var isHairHome = (tenant.industry === 'hair' && !p.isBookPath && !isGallery);
+            var isBarberHome = (tenant.industry === 'barber' && !p.isBookPath && !isGallery);
             var isTradesHome = ((tenant.industry === 'plumbing' || tenant.industry === 'electrical') && !p.isBookPath && !isGallery);
             var isTattooHome = (tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
               bindTattooSidebar();
-              if (tenant.industry === 'tattoos' || tenant.industry === 'hair') {
+              if (isPortfolioIndustry(tenant.industry)) {
                 document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
                 document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
               } else {
@@ -2138,13 +2214,15 @@
                 ? tradesLayoutPage(tenant, services)
                 : isHairHome
                   ? hairTattooStyleHomePage(tenant, services)
-                  : list(tenant, services);
+                  : isBarberHome
+                    ? barberPortfolioHomePage(tenant, services)
+                    : list(tenant, services);
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
-              if (tenant.industry === 'tattoos' || tenant.industry === 'hair') bindTattooSidebar();
-            } else if (isTradesHome || isTattooHome || isHairHome) {
+              if (isPortfolioIndustry(tenant.industry)) bindTattooSidebar();
+            } else if (isTradesHome || isTattooHome || isHairHome || isBarberHome) {
               document.getElementById('root').innerHTML = homeContent;
-              if (isTattooHome || isHairHome) bindTattooSidebar();
+              if (isTattooHome || isHairHome || isBarberHome) bindTattooSidebar();
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }
@@ -2414,9 +2492,9 @@
                   });
                 }).then(function(){
                   var doneHtml = bookingSuccessHtml(tenant);
-                  document.getElementById('root').innerHTML = (tenant.industry === 'tattoos' || tenant.industry === 'hair') ? doneHtml : '<div class="container">' + doneHtml + '</div>';
+                  document.getElementById('root').innerHTML = isPortfolioIndustry(tenant.industry) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
                   applyBranding(tenant);
-                  if (tenant.industry === 'tattoos' || tenant.industry === 'hair') bindTattooSidebar();
+                  if (isPortfolioIndustry(tenant.industry)) bindTattooSidebar();
                   applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){
                   errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';

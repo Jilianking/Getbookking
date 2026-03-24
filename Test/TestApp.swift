@@ -27,12 +27,4 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         PushNotificationManager.shared.configure(application: application)
         return true
     }
-
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        PushNotificationManager.shared.applicationDidRegisterForRemoteNotifications(deviceToken: deviceToken)
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        PushNotificationManager.shared.applicationDidFailToRegisterForRemoteNotifications(error: error)
-    }
 }

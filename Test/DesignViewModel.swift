@@ -73,7 +73,7 @@ class DesignViewModel: ObservableObject {
 
     /// Tattoo, hair salon, and barber share portfolio-style web (featured strip, gallery, booking chrome).
     var usesPortfolioStyleWebChrome: Bool {
-        industry == "tattoos" || industry == "hair" || industry == "barber"
+        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming"
     }
 
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)

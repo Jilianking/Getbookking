@@ -379,15 +379,44 @@ class FirebaseService: ObservableObject {
     }
 
     // MARK: - Provider Profile
-    func createProviderProfile(uid: String, email: String, name: String, business: String, subscriptionPlan: String) async throws {
+    func createProviderProfile(
+        uid: String,
+        email: String,
+        name: String,
+        firstName: String,
+        lastName: String,
+        business: String,
+        industry: String,
+        subscriptionPlan: String
+    ) async throws {
         let slugValue = slug(from: business).isEmpty ? "business-\(uid.prefix(8))" : slug(from: business)
-        let tenantId = try await createTenant(displayName: business, slug: slugValue)
+        let tenantId = try await createTenant(displayName: business, slug: slugValue, industry: industry)
+
+        // Apply booking template immediately so services/form fields are ready right after sign up.
+        // (Settings → "Save and apply to website" should no longer be required for initial setup.)
+        let template = BookingTemplate(rawValue: industry) ?? .custom
+        let schema = template.formFields.map { $0.toFirestore() }
+        for item in template.defaultServices {
+            _ = try await createTenantService(
+                tenantId: tenantId,
+                name: item.name,
+                durationMinutes: item.durationMinutes
+            )
+        }
+        try await updateTenant(tenantId: tenantId, updates: [
+            "formSchema": schema,
+            "industry": template.rawValue
+        ])
+
         let data: [String: Any] = [
             "tenantId": tenantId,
             "tenantSlug": slugValue,
             "email": email,
             "name": name,
+            "firstName": firstName,
+            "lastName": lastName,
             "business": business,
+            "industry": industry,
             "subscriptionPlan": subscriptionPlan,
             "subscriptionStatus": "active",
             "availability": [
@@ -464,6 +493,11 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
+    func deleteTenantLogoFile(tenantId: String) async throws {
+        let ref = Storage.storage().reference().child("tenants/\(tenantId)/logo.jpg")
+        try await ref.delete()
+    }
+
     func uploadTenantHeroImage(tenantId: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let ref = storage.reference().child("tenants/\(tenantId)/hero.jpg")
@@ -481,11 +515,12 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
-    private func createTenant(displayName: String, slug: String) async throws -> String {
+    private func createTenant(displayName: String, slug: String, industry: String) async throws -> String {
         let ref = db.collection("tenants").document()
         try await ref.setData([
             "slug": slug,
             "displayName": displayName,
+            "industry": industry,
             "isActive": true,
             "bookingModeDefault": "request",
             "requireApprovalForSlotBookings": true,
@@ -516,10 +551,15 @@ class FirebaseService: ObservableObject {
     }
 
     private func parseProviderProfile(data: [String: Any]) -> ProviderProfile? {
-        guard let name = data["name"] as? String,
-              let business = data["business"] as? String,
+        guard let business = data["business"] as? String,
               let email = data["email"] as? String,
               let subscriptionPlan = data["subscriptionPlan"] as? String else { return nil }
+        let firstName = (data["firstName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let lastName = (data["lastName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let fallbackName = (data["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let composedName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = composedName.isEmpty ? fallbackName : composedName
+        let industry = (data["industry"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "custom"
         let subscriptionStatus = data["subscriptionStatus"] as? String ?? "active"
         let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
 
@@ -565,7 +605,10 @@ class FirebaseService: ObservableObject {
             tenantId: tenantId,
             tenantSlug: tenantSlug,
             name: name,
+            firstName: firstName,
+            lastName: lastName,
             business: business,
+            industry: industry,
             email: email,
             subscriptionPlan: subscriptionPlan,
             subscriptionStatus: subscriptionStatus,

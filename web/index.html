@@ -537,321 +537,6 @@
       .gallery-title { font-size: 2rem; }
       .gallery-header { padding: 64px 16px 16px; }
     }
-    /* Trades (plumbing / electrical) Framer-style layout */
-    .trades-page {
-      min-height: 100vh;
-      padding: 0 20px 64px;
-      background: radial-gradient(circle at top left, #1d4ed8 0%, #020617 55%, #000000 100%);
-      color: #e5e7eb;
-      font-family: var(--font-display);
-    }
-    .trades-shell {
-      max-width: 1040px;
-      margin: 0 auto;
-    }
-    .trades-nav-framer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 0 8px;
-      gap: 16px;
-    }
-    .trades-nav-framer .logo {
-      max-height: 32px;
-      width: auto;
-      border-radius: 6px;
-    }
-    .trades-nav-framer .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      font-size: 14px;
-    }
-    .trades-nav-framer .nav-links a {
-      color: #cbd5f5;
-      text-decoration: none;
-    }
-    .trades-nav-framer .nav-links a:hover {
-      color: #ffffff;
-    }
-    .trades-nav-framer .btn-contact {
-      padding: 8px 18px;
-      border-radius: 999px;
-      background: #fbbf24;
-      color: #111827;
-      font-weight: 600;
-      font-size: 14px;
-      text-decoration: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    }
-    .trades-hero {
-      padding: 56px 0 32px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 32px;
-      max-width: 960px;
-    }
-    .trades-hero-left {
-      flex: 1.2;
-      min-width: 0;
-    }
-    .trades-hero-right {
-      flex: 1;
-      display: flex;
-      justify-content: flex-end;
-    }
-    .trades-hero h1 {
-      font-family: var(--font-hero);
-      font-size: clamp(36px, 4vw, 46px);
-      font-weight: 700;
-      color: #f9fafb;
-      margin: 0 0 16px;
-      letter-spacing: -0.03em;
-    }
-    .trades-hero .trades-tagline {
-      font-size: 16px;
-      line-height: 1.6;
-      color: #cbd5f5;
-      margin: 0 0 18px;
-      max-width: 540px;
-    }
-    .btn-trades-cta {
-      display: inline-block;
-      padding: 12px 28px;
-      border-radius: 999px;
-      background: #fbbf24;
-      color: #111827;
-      font-weight: 600;
-      font-size: 15px;
-      text-decoration: none;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.45);
-      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-    }
-    .btn-trades-cta:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 14px 40px rgba(0,0,0,0.55);
-      background: #facc15;
-    }
-    .trades-hero .trades-social-proof {
-      margin-top: 16px;
-      font-size: 13px;
-      color: #9ca3af;
-    }
-    .trades-hero-logo {
-      max-width: 220px;
-      height: auto;
-      border-radius: 20px;
-      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
-      object-fit: cover;
-    }
-    @media (max-width: 768px) {
-      .trades-hero {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      .trades-hero-right {
-        width: 100%;
-        justify-content: center;
-        margin-top: 20px;
-      }
-    }
-    .trades-strip {
-      padding-bottom: 56px;
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
-      gap: 16px;
-    }
-    @media (max-width: 768px) {
-      .trades-strip {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-    .trades-strip-item {
-      background: rgba(15, 23, 42, 0.92);
-      border-radius: 18px;
-      padding: 18px 20px;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.7);
-    }
-    .trades-strip-item.primary {
-      background: #0f172a;
-    }
-    .trades-strip-item h3 {
-      font-size: 16px;
-      font-weight: 600;
-      color: #f9fafb;
-      margin: 0 0 6px;
-    }
-    .trades-strip-item p {
-      font-size: 14px;
-      line-height: 1.6;
-      color: #cbd5e1;
-      margin: 0;
-    }
-    .trades-section {
-      padding: 0 0 56px;
-    }
-    .trades-section h2 {
-      font-size: 24px;
-      font-weight: 600;
-      color: #f9fafb;
-      margin: 0 0 16px;
-    }
-    .trades-section p.lead {
-      max-width: 640px;
-      font-size: 15px;
-      line-height: 1.7;
-      color: #cbd5e1;
-      margin: 0 0 16px;
-    }
-    .trades-section .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 8px;
-    }
-    .trades-feature-card {
-      background: rgba(15, 23, 42, 0.95);
-      border-radius: 16px;
-      padding: 16px 18px;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.8);
-      font-size: 14px;
-      color: #e5e7eb;
-    }
-    .trades-services {
-      padding: 0 0 56px;
-    }
-    .trades-services h2 {
-      font-size: 24px;
-      font-weight: 600;
-      color: #f9fafb;
-      margin: 0 0 16px;
-    }
-    .trades-services-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-    .trades-service-card {
-      display: block;
-      padding: 16px 18px;
-      border-radius: 16px;
-      background: #0f172a;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      text-decoration: none;
-      color: #e5e7eb;
-      font-size: 15px;
-      font-weight: 500;
-      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.8);
-      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
-    }
-    .trades-service-card:hover {
-      background: #111827;
-      transform: translateY(-1px);
-      box-shadow: 0 18px 44px rgba(15, 23, 42, 0.9);
-    }
-    .trades-emergency {
-      padding: 24px 22px;
-      border-radius: 20px;
-      background: linear-gradient(135deg, #1d4ed8, #1e293b);
-      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.9);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 56px;
-    }
-    .trades-emergency h2 {
-      font-size: 22px;
-      margin: 0;
-    }
-    .trades-emergency p {
-      margin: 0;
-      font-size: 14px;
-      color: #e5e7eb;
-    }
-    .trades-emergency a {
-      margin-top: 10px;
-      align-self: flex-start;
-      font-size: 14px;
-      font-weight: 600;
-      color: #fbbf24;
-      text-decoration: none;
-    }
-    .trades-faq {
-      padding-bottom: 56px;
-    }
-    .trades-faq-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-    .trades-faq-item {
-      background: #020617;
-      border-radius: 16px;
-      padding: 16px 18px;
-      border: 1px solid rgba(30, 64, 175, 0.7);
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
-      font-size: 14px;
-    }
-    .trades-faq-item h3 {
-      font-size: 15px;
-      margin: 0 0 6px;
-      color: #e5e7eb;
-    }
-    .trades-faq-item p {
-      margin: 0;
-      color: #cbd5e1;
-    }
-    .trades-testimonials {
-      padding-bottom: 56px;
-    }
-    .trades-testimonials-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-    .trades-testimonial-card {
-      background: #020617;
-      border-radius: 18px;
-      padding: 18px 20px;
-      border: 1px solid rgba(55, 65, 81, 0.9);
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 1);
-      font-size: 14px;
-      color: #e5e7eb;
-    }
-    .trades-testimonial-card .quote {
-      margin-bottom: 10px;
-    }
-    .trades-testimonial-card .name {
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    .trades-testimonial-card .meta {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-    .trades-locations {
-      padding-bottom: 32px;
-      border-top: 1px solid rgba(30, 64, 175, 0.6);
-      margin-top: 8px;
-    }
-    .trades-locations h3 {
-      font-size: 15px;
-      margin: 18px 0 6px;
-      color: #e5e7eb;
-    }
-    .trades-locations p {
-      margin: 0 0 4px;
-      font-size: 13px;
-      color: #cbd5e1;
-    }
-    .trades-footer {
-      font-size: 12px;
-      color: #6b7280;
-      margin-top: 16px;
-    }
     /* Hair layout – Velvera-style landing */
     .hair-page {
       min-height: 100vh;
@@ -1294,17 +979,18 @@
           document.body.style.background = bb;
           document.body.style.color = bf;
         }
+        if (t.industry === 'pet_grooming') {
+          var pg = t.featuredWorkBackgroundColor || '#FAF8F5';
+          var pgt = t.featuredWorkTextColor || '#1C1917';
+          document.body.style.background = pg;
+          document.body.style.color = pgt;
+        }
         // Override for Tattoo template: same surface as Featured work / Gallery / Book
         if (t.industry === 'tattoos') {
           var tw = t.featuredWorkBackgroundColor || '#FAF8F5';
           var tx = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = tw;
           document.body.style.color = tx;
-        }
-        // Override for trades (plumbing / electrical): deep blue hero background
-        if (t.industry === 'plumbing' || t.industry === 'electrical') {
-          document.body.style.background = 'radial-gradient(circle at top left, #1d4ed8 0%, #020617 55%, #000000 100%)';
-          document.body.style.color = '#e5e7eb';
         }
         applyTenantTypography(t);
       }
@@ -1327,8 +1013,7 @@
             iconColor = isPortfolioIndustry(tenant.industry)
               ? (tenant.featuredWorkTextColor || '#1C1917')
               : '#000000';
-          } else if (isPortfolioIndustry(tenant.industry) ||
-                     tenant.industry === 'plumbing' || tenant.industry === 'electrical') {
+          } else if (isPortfolioIndustry(tenant.industry)) {
             iconColor = '#FFFFFF';
           } else {
             var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
@@ -1343,9 +1028,9 @@
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
-      /** Tattoo, hair salon, barber: shared portfolio booking chrome (sidebar, themed /book). */
+      /** Tattoo, hair salon, barber, pet grooming: shared portfolio booking chrome (sidebar, themed /book). */
       function isPortfolioIndustry(ind) {
-        return ind === 'tattoos' || ind === 'hair' || ind === 'barber';
+        return ind === 'tattoos' || ind === 'hair' || ind === 'barber' || ind === 'pet_grooming';
       }
       /** Top bar: menu only. Public wordmark is displayName + hero font (sidebar). `logoUrl` = profile image in Settings, not used on tattoo pages. */
       function tattooNavHtml(tenant) {
@@ -1371,121 +1056,6 @@
           header = title + taglineHtml;
         }
         return '<div class="card">' + header + '<ul class="service-list">'+items+'</ul></div>';
-      }
-      function tradesLayoutPage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
-        var bookUrl = base + '/book';
-        var phone = tenant.contactPhone || tenant.phone || '(595) 555-0123';
-        var title = esc(tenant.displayName || 'Your trusted plumbing solutions');
-        var taglineText = tenant.tagline || 'With years of experience, we deliver top-notch plumbing solutions tailored to your needs.';
-        var heroLeft = ''
-          + '<div class="trades-hero-left">'
-          + '  <h1>'+title+'</h1>'
-          + '  <p class="trades-tagline">'+esc(taglineText)+'</p>'
-          + '  <a href="'+bookUrl+'" class="btn-trades-cta">Request service</a>'
-          + '  <p class="trades-social-proof">Customer favorites · Licensed &amp; insured</p>'
-          + '</div>';
-        var heroRight = tenant.logoUrl
-          ? '<div class="trades-hero-right"><img src="'+tenant.logoUrl+'" alt="" class="trades-hero-logo"></div>'
-          : '';
-        var hero = ''
-          + '<section class="trades-hero">'
-          +    heroLeft
-          +    heroRight
-          + '</section>';
-        var strip = ''
-          + '<section class="trades-strip">'
-          + '  <div class="trades-strip-item primary">'
-          + '    <h3>Call us '+esc(phone)+'</h3>'
-          + '    <p>We remain available 24/7 for any plumbing emergency.</p>'
-          + '  </div>'
-          + '  <div class="trades-strip-item">'
-          + '    <h3>Expert evaluation</h3>'
-          + '    <p>Our experts will evaluate the situation and look for solutions.</p>'
-          + '  </div>'
-          + '  <div class="trades-strip-item">'
-          + '    <h3>We arrive in 30 minutes</h3>'
-          + '    <p>Our team will arrive with all the necessary equipment.</p>'
-          + '  </div>'
-          + '</section>';
-        var solutions = ''
-          + '<section class="trades-section">'
-          + '  <h2>Plumbing solutions tailored to your needs</h2>'
-          + '  <p class="lead">Our team of licensed and experienced plumbers is committed to providing prompt, professional, and courteous service, keeping your system in top condition.</p>'
-          + '  <div class="feature-grid">'
-          + '    <div class="trades-feature-card"><strong>Experienced and certified plumbers</strong><br>All our plumbers are fully licensed, insured, and highly trained.</div>'
-          + '    <div class="trades-feature-card"><strong>High-quality materials and equipment</strong><br>We only use trusted brands and professional-grade tools.</div>'
-          + '    <div class="trades-feature-card"><strong>Customer satisfaction guarantee</strong><br>We make sure every job is done right the first time.</div>'
-          + '  </div>'
-          + '</section>';
-        var serviceCards = (services || []).map(function(s){
-          return '<a href="'+base+'/book/'+(s.slug || '')+'" class="trades-service-card">'+esc(s.name)+'</a>';
-        }).join('');
-        var servicesHtml = ''
-          + '<section class="trades-services">'
-          + '  <h2>Our services</h2>'
-          + '  <div class="trades-services-grid">'+serviceCards+'</div>'
-          + '</section>';
-        var emergency = ''
-          + '<section class="trades-emergency">'
-          + '  <h2>Have a plumbing emergency?</h2>'
-          + '  <p>Call us anytime for fast, reliable service when you need it most.</p>'
-          + '  <a href="tel:'+esc(phone)+'">Call '+esc(phone)+'</a>'
-          + '</section>';
-        var faqs = ''
-          + '<section class="trades-faq">'
-          + '  <h2>Your questions, answered</h2>'
-          + '  <div class="trades-faq-list">'
-          + '    <div class="trades-faq-item"><h3>Are your plumbers licensed and insured?</h3><p>Yes, every plumber on our team is fully licensed, insured, and rigorously trained.</p></div>'
-          + '    <div class="trades-faq-item"><h3>Do you offer free estimates?</h3><p>We provide upfront pricing and clear estimates before any work begins.</p></div>'
-          + '    <div class="trades-faq-item"><h3>What payment methods do you accept?</h3><p>We accept major credit cards and secure online payments.</p></div>'
-          + '    <div class="trades-faq-item"><h3>Do you offer financing options?</h3><p>For larger projects, we can discuss flexible payment options.</p></div>'
-          + '  </div>'
-          + '</section>';
-        var testimonials = ''
-          + '<section class="trades-testimonials">'
-          + '  <h2>What our customers say</h2>'
-          + '  <div class="trades-testimonials-grid">'
-          + '    <div class="trades-testimonial-card"><div class="quote">“Quick and efficient service for our clogged drain, highly recommended.”</div><div class="name">Ryan Johnson</div><div class="meta">Review on Trustpilot</div></div>'
-          + '    <div class="trades-testimonial-card"><div class="quote">“Outstanding job on our kitchen remodel, very thorough and professional.”</div><div class="name">Michael Brown</div><div class="meta">Review on Facebook</div></div>'
-          + '    <div class="trades-testimonial-card"><div class="quote">“Reliable, courteous, and detail-oriented. They resolved our issues fast.”</div><div class="name">David Martinez</div><div class="meta">Review on Trustpilot</div></div>'
-          + '    <div class="trades-testimonial-card"><div class="quote">“Rapid response and expert handling of our emergency saved the day.”</div><div class="name">John Smith</div><div class="meta">Review on Google</div></div>'
-          + '  </div>'
-          + '</section>';
-        var locations = ''
-          + '<section class="trades-locations">'
-          + '  <p>Top-notch residential and commercial plumbing service.</p>'
-          + '  <div>'
-          + '    <h3>Service area</h3>'
-          + '    <p>'+esc(tenant.city || 'Your local area')+'</p>'
-          + '  </div>'
-          + '  <div class="trades-footer">© '+new Date().getFullYear()+' '+esc(tenant.displayName || 'Your plumbing company')+'</div>'
-          + '</section>';
-        var nav = ''
-          + '<nav class="trades-nav-framer">'
-          + (tenant.logoUrl
-              ? '<img class="logo" src="'+tenant.logoUrl+'" alt="">'
-              : '<span style="font-weight:700;color:#e5e7eb">'+esc(tenant.displayName || 'Plumbing')+'</span>')
-          + '  <div class="nav-links">'
-          + '    <a href="'+base+'">Home</a>'
-          + '    <a href="'+base+'/book">Book</a>'
-          + '  </div>'
-          + '  <a href="'+bookUrl+'" class="btn-contact">Request service</a>'
-          + '</nav>';
-        return ''
-          + '<div class="trades-page">'
-          + '  <div class="trades-shell">'
-          +      nav
-          +      hero
-          +      strip
-          +      solutions
-          +      servicesHtml
-          +      emergency
-          +      faqs
-          +      testimonials
-          +      locations
-          + '  </div>'
-          + '</div>';
       }
       function maxCellsFromGalleryLayout(layoutStr, defaultCols, defaultRows) {
         var layout = String(layoutStr || '3x1').toLowerCase().replace(/\u00d7/g, 'x').split('x');
@@ -1826,8 +1396,7 @@
           'barber': ['barber-shop-v1'],
           'tattoos': ['tattoo-studio-v1'],
           'nails': ['nail-salon-v1'],
-          'plumbing': ['plumbing-v1'],
-          'electrical': ['electrical-v1'],
+          'pet_grooming': ['pet-grooming-v1'],
           'custom': ['custom-standard']
         };
         var list = map[ind] || ['custom-standard'];
@@ -1941,7 +1510,7 @@
         if (tenant.industry === 'tattoos') {
           gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
           gPageFg = tenant.featuredWorkTextColor || '#1C1917';
-        } else if (tenant.industry === 'hair' || tenant.industry === 'barber') {
+        } else if (tenant.industry === 'hair' || tenant.industry === 'barber' || tenant.industry === 'pet_grooming') {
           gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
           gPageFg = tenant.featuredWorkTextColor || '#1C1917';
         } else {
@@ -2145,6 +1714,70 @@
           '</div></div></section>';
         return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
       }
+
+      /** Pet grooming home: same structure as hair/barber (hero → featured → Meet + contact → sidebar). */
+      function petGroomingPortfolioHomePage(tenant, services) {
+        var base = location.origin + '/' + tenant.slug;
+        var bookUrl = base + '/book';
+        var displayName = tenant.displayName || 'Pet grooming';
+        var nav = tattooNavHtml(tenant);
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var heroStyle = tenant.heroImageUrl
+          ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')'
+          : 'background:linear-gradient(145deg,#134e4a 0%,#2dd4bf 38%,#0f766e 100%)';
+        var heroHtml = '<section class="tattoo-hero-section" style="'+heroStyle+'">' +
+          '<div class="tattoo-hero-overlay">' +
+          '<h1 class="tattoo-hero-title">' + esc(displayName) + '</h1>' +
+          '<a href="' + bookUrl + '" class="tattoo-btn-book">Book grooming</a>' +
+          '</div></section>';
+        var layout = (tenant.galleryGridLayout || '3x1').split('x');
+        var gridCols = parseInt(layout[0], 10) || 3;
+        var gridRows = parseInt(layout[1], 10) || 1;
+        gridCols = Math.min(Math.max(gridCols, 1), 3);
+        var maxCells = gridCols * gridRows;
+        var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
+        var galleryPageUrl = base + '/gallery';
+        var gridStyle = 'grid-template-columns:repeat(' + gridCols + ',1fr);grid-template-rows:repeat(' + gridRows + ',1fr);';
+        var featuredGridInner = gallery.length
+          ? gallery.map(function(url){
+              return '<a href="'+esc(galleryPageUrl)+'"><img src="'+esc(url)+'" alt=""></a>';
+            }).join('')
+          : '<div class="tattoo-featured-placeholder">Add grooming photos in the app—before &amp; afters welcome.</div>';
+        var featBg = tenant.featuredWorkBackgroundColor || '#ffffff';
+        var featFg = tenant.featuredWorkTextColor || '#111111';
+        var featSectionStyle = 'background:'+featBg+';color:'+featFg;
+        var featuredHtml = '<section id="featured" class="tattoo-featured-outer" style="'+featSectionStyle+'">' +
+          '<div class="tattoo-featured-inner">' +
+          '<h2>Featured work</h2>' +
+          '<p class="tattoo-featured-sub">' + (gallery.length ? 'Baths, trims, nail care, and happy pets.' : 'Your best grooms will appear here.') + '</p>' +
+          '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
+          '<a href="'+esc(galleryPageUrl)+'" class="tattoo-gallery-link">View full gallery →</a>' +
+          '</div></section>';
+        var defaultBio = 'Gentle handling, breed-smart cuts, and spa-day care—book a visit for your pet.';
+        var aboutBody = (tenant.aboutText || tenant.tagline) ? esc(tenant.aboutText || tenant.tagline || '') : defaultBio;
+        var svgLocation = '<svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+        var svgClock = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+        var svgInstagram = '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff" stroke="none"/></svg>';
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
+        var abg = tenant.aboutSectionBackgroundColor || '#111111';
+        var afg = tenant.aboutSectionTextColor || '#ffffff';
+        var aboutStyleStr = 'background:'+abg+';color:'+afg;
+        var aboutSection = '<section id="about" class="tattoo-about" style="'+aboutStyleStr+'">' +
+          '<div class="tattoo-about-inner">' +
+          '<h2>Meet ' + esc(displayName) + '</h2>' +
+          '<p class="tattoo-about-bio">' + aboutBody + '</p>' +
+          '<div class="tattoo-contact-strip">' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgLocation + '</div><h3>Grooming &amp; location</h3><p>' + (tenant.address ? esc(tenant.address) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgClock + '</div><h3>Hours</h3><p>' + (tenant.businessHours ? esc(tenant.businessHours) : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '<div class="tattoo-contact-item"><div class="tattoo-contact-icon">' + svgInstagram + '</div><h3>Instagram</h3><p>' + (igHandle ? '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>' : '<span class="tattoo-contact-placeholder">Add in app</span>') + '</p></div>' +
+          '</div></div></section>';
+        return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
+      }
       function bindTattooSidebar() {
         var menuBtn = document.querySelector('.tattoo-nav-menu');
         var sidebar = document.getElementById('tattoo-sidebar');
@@ -2193,7 +1826,7 @@
             var isGallery = p.isGalleryPath;
             var isHairHome = (tenant.industry === 'hair' && !p.isBookPath && !isGallery);
             var isBarberHome = (tenant.industry === 'barber' && !p.isBookPath && !isGallery);
-            var isTradesHome = ((tenant.industry === 'plumbing' || tenant.industry === 'electrical') && !p.isBookPath && !isGallery);
+            var isPetGroomingHome = (tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
             var isTattooHome = (tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
@@ -2210,19 +1843,19 @@
             }
             var homeContent = isTattooHome
               ? tattooHeroPage(tenant)
-              : isTradesHome
-                ? tradesLayoutPage(tenant, services)
-                : isHairHome
-                  ? hairTattooStyleHomePage(tenant, services)
-                  : isBarberHome
-                    ? barberPortfolioHomePage(tenant, services)
+              : isHairHome
+                ? hairTattooStyleHomePage(tenant, services)
+                : isBarberHome
+                  ? barberPortfolioHomePage(tenant, services)
+                  : isPetGroomingHome
+                    ? petGroomingPortfolioHomePage(tenant, services)
                     : list(tenant, services);
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
               if (isPortfolioIndustry(tenant.industry)) bindTattooSidebar();
-            } else if (isTradesHome || isTattooHome || isHairHome || isBarberHome) {
+            } else if (isTattooHome || isHairHome || isBarberHome || isPetGroomingHome) {
               document.getElementById('root').innerHTML = homeContent;
-              if (isTattooHome || isHairHome || isBarberHome) bindTattooSidebar();
+              if (isTattooHome || isHairHome || isBarberHome || isPetGroomingHome) bindTattooSidebar();
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }

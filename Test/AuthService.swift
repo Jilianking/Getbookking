@@ -71,16 +71,28 @@ class AuthViewModel: ObservableObject {
         _ = try await Auth.auth().signIn(withEmail: email, password: password)
     }
     
-    func signUp(email: String, password: String, name: String, business: String, subscriptionPlan: SubscriptionPlan) async throws {
+    func signUp(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        business: String,
+        industry: String,
+        subscriptionPlan: SubscriptionPlan
+    ) async throws {
         let result = try await Auth.auth().createUser(withEmail: email, password: password)
+        let fullName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
         let changeRequest = result.user.createProfileChangeRequest()
-        changeRequest.displayName = name
+        changeRequest.displayName = fullName
         try await changeRequest.commitChanges()
         try await firebaseService.createProviderProfile(
             uid: result.user.uid,
             email: email,
-            name: name,
+            name: fullName,
+            firstName: firstName,
+            lastName: lastName,
             business: business,
+            industry: industry,
             subscriptionPlan: subscriptionPlan.rawValue
         )
     }

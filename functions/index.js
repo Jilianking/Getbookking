@@ -1,6 +1,8 @@
 /**
- * Cloud Functions for GetBookKing payments (Stripe Connect).
- * Set secret: firebase functions:secrets:set STRIPE_SECRET_KEY
+ * Cloud Functions for GetBookKing.
+ * Set secrets:
+ *   firebase functions:secrets:set STRIPE_SECRET_KEY
+ *   firebase functions:secrets:set OPENAI_API_KEY
  */
 
 const functions = require("firebase-functions");
@@ -9,6 +11,7 @@ const admin = require("firebase-admin");
 const Stripe = require("stripe");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
+const openaiApiKey = defineSecret("OPENAI_API_KEY");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -139,6 +142,72 @@ async function getStripeAccountIdForUser(uid) {
   const tenantDoc = await db.collection("tenants").doc(tenantId).get();
   return tenantDoc.data()?.stripeAccountId ?? null;
 }
+
+/**
+ * Generates a logo asset with OpenAI gpt-image-1.
+ * Params: { prompt: string, businessName?: string }
+ * Returns { imageBase64: string, mimeType: string }
+ */
+exports.generateTenantLogoWithOpenAI = functions
+  .runWith({ secrets: [openaiApiKey], timeoutSeconds: 120, memory: "512MB" })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const apiKey = openaiApiKey.value();
+    if (!apiKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "OpenAI is not configured. Run: firebase functions:secrets:set OPENAI_API_KEY"
+      );
+    }
+    const rawPrompt = (data?.prompt || "").toString().trim();
+    if (rawPrompt.length < 3) {
+      throw new functions.https.HttpsError("invalid-argument", "Describe your logo in at least a few words.");
+    }
+    if (rawPrompt.length > 2000) {
+      throw new functions.https.HttpsError("invalid-argument", "Prompt is too long (max 2000 characters).");
+    }
+    const businessName = (data?.businessName || "").toString().trim();
+    const fullPrompt = [
+      businessName ? `Professional brand logo for "${businessName}".` : "Professional brand logo.",
+      rawPrompt,
+      "Flat vector style, simple recognizable mark, high contrast, readable at small sizes.",
+      "No mockups, no photo backgrounds, single centered composition on a white background.",
+    ].join(" ");
+
+    const oaiResp = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-image-1",
+        prompt: fullPrompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "medium",
+        response_format: "b64_json",
+      }),
+    });
+    const oaiJson = await oaiResp.json();
+    if (!oaiResp.ok) {
+      const msg = (oaiJson.error && oaiJson.error.message) || oaiResp.statusText || "OpenAI request failed";
+      console.error("OpenAI images error", oaiResp.status, msg);
+      throw new functions.https.HttpsError(
+        oaiResp.status === 429 ? "resource-exhausted" : "internal",
+        msg
+      );
+    }
+    const first = oaiJson.data && oaiJson.data[0] ? oaiJson.data[0] : null;
+    const b64 = first && (first.b64_json || first.image_base64 || first.imageBase64);
+    if (!b64) {
+      console.error("OpenAI image payload missing base64", JSON.stringify(oaiJson).slice(0, 500));
+      throw new functions.https.HttpsError("internal", "No base64 image data returned from OpenAI");
+    }
+    return { imageBase64: b64, mimeType: "image/png" };
+  });
 
 /**
  * Returns the Connect account balance. { availableCents, pendingCents }.

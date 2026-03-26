@@ -11,7 +11,10 @@ struct ProviderProfile {
     var tenantId: String?
     var tenantSlug: String?
     var name: String
+    var firstName: String
+    var lastName: String
     var business: String
+    var industry: String
     var email: String
     var subscriptionPlan: String
     var subscriptionStatus: String

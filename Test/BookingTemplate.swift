@@ -12,8 +12,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     case barber = "barber"
     case tattoos = "tattoos"
     case nails = "nails"
-    case plumbing = "plumbing"
-    case electrical = "electrical"
+    case petGrooming = "pet_grooming"
     case custom = "custom"
 
     var id: String { rawValue }
@@ -24,8 +23,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "Barber shop"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
-        case .plumbing: return "Plumbing"
-        case .electrical: return "Electrical"
+        case .petGrooming: return "Pet grooming"
         case .custom: return "Custom / Blank"
         }
     }
@@ -36,8 +34,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "mustache.fill"
         case .tattoos: return "paintbrush.fill"
         case .nails: return "hand.raised.fill"
-        case .plumbing: return "drop.fill"
-        case .electrical: return "bolt.fill"
+        case .petGrooming: return "pawprint.fill"
         case .custom: return "doc.plaintext"
         }
     }
@@ -267,25 +264,35 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 FormField(id: "design", key: "designPreference", label: "Design preference", type: .text, required: false),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
-        case .plumbing:
+        case .petGrooming:
             return base + [
-                FormField(id: "address", key: "address", label: "Service address", type: .text, required: false),
-                FormField(id: "issue_type", key: "issueType", label: "Issue type (leak, drain, water heater, etc.)", type: .text, required: false),
-                FormField(id: "urgency", key: "urgency", label: "Urgency", type: .text, required: false),
-                FormField(id: "property_type", key: "propertyType", label: "Property (residential/commercial)", type: .text, required: false),
-                FormField(id: "preferred_contact", key: "preferredContact", label: "Preferred contact method", type: .text, required: false),
-                FormField(id: "notes", key: "notes", label: "Additional details", type: .textarea, required: false),
-                FormField(id: "attachments", key: "attachments", label: "Photos / documents", type: .file, required: false),
-            ]
-        case .electrical:
-            return base + [
-                FormField(id: "address", key: "address", label: "Service address", type: .text, required: false),
-                FormField(id: "issue_type", key: "issueType", label: "Issue type (wiring, panel, outlet, etc.)", type: .text, required: false),
-                FormField(id: "urgency", key: "urgency", label: "Urgency", type: .text, required: false),
-                FormField(id: "property_type", key: "propertyType", label: "Property (residential/commercial)", type: .text, required: false),
-                FormField(id: "preferred_contact", key: "preferredContact", label: "Preferred contact method", type: .text, required: false),
-                FormField(id: "notes", key: "notes", label: "Additional details", type: .textarea, required: false),
-                FormField(id: "attachments", key: "attachments", label: "Photos / documents", type: .file, required: false),
+                FormField(id: "pet_name", key: "petName", label: "Pet name", type: .text, required: false),
+                FormField(
+                    id: "pet_type",
+                    key: "petType",
+                    label: "Pet type",
+                    type: .select,
+                    required: false,
+                    options: ["Dog", "Cat", "Other"],
+                    placeholder: "Select type"
+                ),
+                FormField(id: "breed_size", key: "breedSize", label: "Breed / size", type: .text, required: false),
+                FormField(
+                    id: "coat",
+                    key: "coatNotes",
+                    label: "Coat (matted, shedding, double coat, etc.)",
+                    type: .text,
+                    required: false
+                ),
+                FormField(
+                    id: "behavior",
+                    key: "behaviorNotes",
+                    label: "Behavior (nervous, senior, reactive, etc.)",
+                    type: .text,
+                    required: false
+                ),
+                FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
+                FormField(id: "pet_photos", key: "petPhotos", label: "Reference photos", type: .file, required: false),
             ]
         case .custom:
             return FormField.defaultFields
@@ -329,21 +336,14 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Acrylic full set", 90),
                 ("Nail art", 30),
             ]
-        case .plumbing:
+        case .petGrooming:
             return [
-                ("Leak detection", 60),
-                ("Drain cleaning", 60),
-                ("Water heater service", 90),
-                ("Pipe repair", 90),
-                ("Emergency call-out", 60),
-            ]
-        case .electrical:
-            return [
-                ("Wiring", 90),
-                ("Panel upgrade", 120),
-                ("Outlet repair", 60),
-                ("Lighting", 60),
-                ("Emergency call-out", 60),
+                ("Full groom", 90),
+                ("Bath & brush", 60),
+                ("Nail trim", 30),
+                ("Deshedding treatment", 75),
+                ("Puppy / kitten intro", 45),
+                ("Teeth brushing add-on", 15),
             ]
         case .custom:
             return []

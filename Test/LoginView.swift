@@ -153,12 +153,28 @@ struct LoginView: View {
         }
     }
 
-    private func performSignUp(name: String, business: String, email: String, password: String, plan: SubscriptionPlan) {
+    private func performSignUp(
+        firstName: String,
+        lastName: String,
+        business: String,
+        industry: String,
+        email: String,
+        password: String,
+        plan: SubscriptionPlan
+    ) {
         errorMessage = ""
         isLoading = true
         Task {
             do {
-                try await authViewModel.signUp(email: email, password: password, name: name, business: business, subscriptionPlan: plan)
+                try await authViewModel.signUp(
+                    email: email,
+                    password: password,
+                    firstName: firstName,
+                    lastName: lastName,
+                    business: business,
+                    industry: industry,
+                    subscriptionPlan: plan
+                )
                 await MainActor.run {
                     showingSignUp = false
                     isLoading = false
@@ -173,11 +189,13 @@ struct LoginView: View {
     }
 }
 
-// MARK: - Sign up form (name, business, email, password, subscription plan)
+// MARK: - Sign up form (first/last name, business, industry, email, password, subscription plan)
 
 struct SignUpFormView: View {
-    @State private var name = ""
+    @State private var firstName = ""
+    @State private var lastName = ""
     @State private var business = ""
+    @State private var selectedIndustry: BookingTemplate = .custom
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
@@ -185,7 +203,7 @@ struct SignUpFormView: View {
     @State private var isPasswordVisible = false
     @State private var isConfirmVisible = false
 
-    var onSignUp: (String, String, String, String, SubscriptionPlan) -> Void
+    var onSignUp: (String, String, String, String, String, String, SubscriptionPlan) -> Void
     var onSwitchToSignIn: () -> Void
     @Binding var isLoading: Bool
     @Binding var errorMessage: String
@@ -195,7 +213,7 @@ struct SignUpFormView: View {
     }
 
     private var canSubmit: Bool {
-        !name.isEmpty && !business.isEmpty && !email.isEmpty &&
+        !firstName.isEmpty && !lastName.isEmpty && !business.isEmpty && !email.isEmpty &&
         !password.isEmpty && !confirmPassword.isEmpty && passwordsMatch && password.count >= 6
     }
 
@@ -220,10 +238,24 @@ struct SignUpFormView: View {
                     .foregroundColor(.secondary)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Name")
+                    Text("First name")
                         .font(.subheadline.weight(.medium))
-                    TextField("Your full name", text: $name)
-                        .textContentType(.name)
+                    TextField("First name", text: $firstName)
+                        .textContentType(.givenName)
+                        .padding(12)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Last name")
+                        .font(.subheadline.weight(.medium))
+                    TextField("Last name", text: $lastName)
+                        .textContentType(.familyName)
                         .padding(12)
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(10)
@@ -245,6 +277,24 @@ struct SignUpFormView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Industry")
+                        .font(.subheadline.weight(.medium))
+                    Picker("Industry", selection: $selectedIndustry) {
+                        ForEach(BookingTemplate.allCases) { template in
+                            Text(template.displayName).tag(template)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .padding(12)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -397,6 +447,14 @@ struct SignUpFormView: View {
 
     private func submit() {
         errorMessage = ""
-        onSignUp(name, business, email, password, selectedPlan)
+        onSignUp(
+            firstName.trimmingCharacters(in: .whitespacesAndNewlines),
+            lastName.trimmingCharacters(in: .whitespacesAndNewlines),
+            business.trimmingCharacters(in: .whitespacesAndNewlines),
+            selectedIndustry.rawValue,
+            email.trimmingCharacters(in: .whitespacesAndNewlines),
+            password,
+            selectedPlan
+        )
     }
 }

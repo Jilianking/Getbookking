@@ -145,6 +145,7 @@ class SettingsViewModel: ObservableObject {
         guard let tid = tenantId else { return }
         await MainActor.run { errorMessage = nil }
         do {
+            try? await firebaseService.deleteTenantLogoFile(tenantId: tid)
             try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": ""])
             await MainActor.run { logoUrl = "" }
             NotificationCenter.default.post(

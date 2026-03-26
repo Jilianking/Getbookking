@@ -17,10 +17,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case tattooStudioV1 = "tattoo-studio-v1"
     /// Nails: classic service card list home.
     case nailSalonV1 = "nail-salon-v1"
-    /// Plumbing: trades marketing layout.
-    case plumbingV1 = "plumbing-v1"
-    /// Electrical: trades marketing layout.
-    case electricalV1 = "electrical-v1"
+    /// Pet grooming: same structural layout as hair/barber (hero, featured, meet, sidebar).
+    case petGroomingV1 = "pet-grooming-v1"
     /// Custom: default card list.
     case customStandard = "custom-standard"
 
@@ -33,8 +31,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return .barber
         case .tattooStudioV1: return .tattoos
         case .nailSalonV1: return .nails
-        case .plumbingV1: return .plumbing
-        case .electricalV1: return .electrical
+        case .petGroomingV1: return .petGrooming
         case .customStandard: return .custom
         }
     }
@@ -45,8 +42,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Cuts & lineups"
         case .tattooStudioV1: return "Portfolio & studio"
         case .nailSalonV1: return "Classic cards"
-        case .plumbingV1: return "Trades hero"
-        case .electricalV1: return "Trades hero"
+        case .petGroomingV1: return "Hero & gallery"
         case .customStandard: return "Simple list"
         }
     }
@@ -57,7 +53,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Stone hero, fades & gallery, meet + contact, sidebar"
         case .tattooStudioV1: return "Hero, featured work, about, slide-out menu"
         case .nailSalonV1: return "Logo, services grid, reviews-style sections"
-        case .plumbingV1, .electricalV1: return "Hero, services, FAQs, contact strip"
+        case .petGroomingV1: return "Hero, featured grooms, meet + contact, sidebar"
         case .customStandard: return "Compact booking list"
         }
     }
@@ -68,7 +64,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "mustache.fill"
         case .tattooStudioV1: return "photo.on.rectangle.angled"
         case .nailSalonV1: return "square.grid.2x2"
-        case .plumbingV1, .electricalV1: return "building.2"
+        case .petGroomingV1: return "pawprint.fill"
         case .customStandard: return "list.bullet.rectangle"
         }
     }

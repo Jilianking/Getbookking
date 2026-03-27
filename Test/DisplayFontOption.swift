@@ -1,7 +1,8 @@
 //
 //  DisplayFontOption.swift
 //
-//  Google Fonts for the public site **hero title** only (`heroFont`). Web UI/body uses Inter. See `fontStackForDisplayKey` in web/index.html.
+//  Hero font choices for the public site hero title (`heroFont`). Web UI/body uses Inter.
+//  See `fontStackForDisplayKey` in web/index.html for CSS family mapping.
 //
 
 import Foundation
@@ -15,6 +16,8 @@ enum DisplayFontOption: String, CaseIterable, Identifiable {
     case libreBaskerville = "libre-baskerville"
     case cormorantGaramond = "cormorant-garamond"
     case poiretOne = "poiret-one"
+    case foglihtenNo06 = "foglihten-no06"
+    case butler = "butler"
 
     var id: String { rawValue }
 
@@ -28,6 +31,8 @@ enum DisplayFontOption: String, CaseIterable, Identifiable {
         case .libreBaskerville: return "Libre Baskerville"
         case .cormorantGaramond: return "Cormorant Garamond"
         case .poiretOne: return "Poiret One"
+        case .foglihtenNo06: return "Foglihten No06"
+        case .butler: return "Butler"
         }
     }
 

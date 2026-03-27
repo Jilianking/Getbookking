@@ -10,7 +10,7 @@ import PhotosUI
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
-    @State private var businessLogoPickerItem: PhotosPickerItem?
+    @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
@@ -57,27 +57,27 @@ struct SettingsView: View {
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
-                        header: Text("Business logo"),
-                        footer: Text("Used on your site and in the app menu.")
+                        header: Text("Profile picture"),
+                        footer: Text("Used for your account profile. Website logo is managed in Web Page Design.")
                             .font(.caption2)
                     ) {
                         HStack(alignment: .center, spacing: 12) {
                             PhotosPicker(
-                                selection: $businessLogoPickerItem,
+                                selection: $profilePhotoPickerItem,
                                 matching: .images,
                                 photoLibrary: .shared()
                             ) {
                                 ZStack(alignment: .bottomTrailing) {
                                     Group {
-                                        if viewModel.logoUrl.isEmpty {
+                                        if viewModel.profilePhotoUrl.isEmpty {
                                             Circle()
                                                 .fill(Color(.secondarySystemGroupedBackground))
                                                 .overlay(
-                                                    Image(systemName: "building.2.fill")
+                                                    Image(systemName: "person.fill")
                                                         .font(.system(size: 22))
                                                         .foregroundColor(.secondary)
                                                 )
-                                        } else if let url = URL(string: viewModel.logoUrl) {
+                                        } else if let url = URL(string: viewModel.profilePhotoUrl) {
                                             AsyncImage(url: url) { phase in
                                                 switch phase {
                                                 case .success(let image):
@@ -127,9 +127,14 @@ struct SettingsView: View {
                                     ProgressView()
                                         .scaleEffect(0.85)
                                 }
-                                if !viewModel.logoUrl.isEmpty {
+                                if !viewModel.profilePhotoUrl.isEmpty {
                                     Button(role: .destructive) {
-                                        Task { await viewModel.removeBusinessLogo() }
+                                        Task {
+                                            await viewModel.removeProfilePhoto()
+                                            await MainActor.run {
+                                                authViewModel.accountPhotoUrl = nil
+                                            }
+                                        }
                                     } label: {
                                         Text("Remove")
                                             .font(.caption.weight(.medium))
@@ -141,13 +146,17 @@ struct SettingsView: View {
                         }
                         .padding(.vertical, 2)
                     }
-                    .onChange(of: businessLogoPickerItem) { _, newItem in
+                    .onChange(of: profilePhotoPickerItem) { _, newItem in
                         Task {
                             guard let newItem else { return }
                             if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
-                                await viewModel.uploadBusinessLogo(imageData: data)
+                                await viewModel.uploadProfilePhoto(imageData: data)
+                                await MainActor.run {
+                                    let trimmed = viewModel.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    authViewModel.accountPhotoUrl = trimmed.isEmpty ? nil : trimmed
+                                }
                             }
-                            await MainActor.run { businessLogoPickerItem = nil }
+                            await MainActor.run { profilePhotoPickerItem = nil }
                         }
                     }
                 }

@@ -415,6 +415,7 @@ class FirebaseService: ObservableObject {
             "name": name,
             "firstName": firstName,
             "lastName": lastName,
+            "profilePhotoUrl": "",
             "business": business,
             "industry": industry,
             "subscriptionPlan": subscriptionPlan,
@@ -498,6 +499,67 @@ class FirebaseService: ObservableObject {
         try await ref.delete()
     }
 
+    func uploadProviderProfilePhoto(uid: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let ref = storage.reference().child("users/\(uid)/profile.jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
+    func deleteProviderProfilePhotoFile(uid: String) async throws {
+        let ref = Storage.storage().reference().child("users/\(uid)/profile.jpg")
+        try await ref.delete()
+    }
+
+    // MARK: - Tenant Products
+    func fetchTenantProducts(tenantId: String) async throws -> [Product] {
+        let snapshot = try await db.collection("tenants").document(tenantId).collection("products").getDocuments()
+        return snapshot.documents.compactMap { doc -> Product? in
+            let d = doc.data()
+            guard let name = d["name"] as? String else { return nil }
+            return Product(
+                id: doc.documentID,
+                name: name,
+                category: d["category"] as? String ?? "",
+                price: d["price"] as? Double ?? 0,
+                salePrice: d["salePrice"] as? Double,
+                imageUrl: d["imageUrl"] as? String ?? "",
+                isActive: d["isActive"] as? Bool ?? true
+            )
+        }
+    }
+
+    func createTenantProduct(tenantId: String, name: String, category: String, price: Double, salePrice: Double?, imageUrl: String) async throws -> String {
+        var data: [String: Any] = [
+            "name": name,
+            "category": category,
+            "price": price,
+            "imageUrl": imageUrl,
+            "isActive": true
+        ]
+        if let sp = salePrice { data["salePrice"] = sp }
+        let ref = try await db.collection("tenants").document(tenantId).collection("products").addDocument(data: data)
+        return ref.documentID
+    }
+
+    func deleteTenantProduct(tenantId: String, productId: String) async throws {
+        try await db.collection("tenants").document(tenantId).collection("products").document(productId).delete()
+    }
+
+    func uploadProductImage(tenantId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/products/\(name)")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
     func uploadTenantHeroImage(tenantId: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let ref = storage.reference().child("tenants/\(tenantId)/hero.jpg")
@@ -560,6 +622,8 @@ class FirebaseService: ObservableObject {
         let composedName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
         let name = composedName.isEmpty ? fallbackName : composedName
         let industry = (data["industry"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "custom"
+        let profilePhotoUrl = (data["profilePhotoUrl"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let subscriptionStatus = data["subscriptionStatus"] as? String ?? "active"
         let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
 
@@ -607,6 +671,7 @@ class FirebaseService: ObservableObject {
             name: name,
             firstName: firstName,
             lastName: lastName,
+            profilePhotoUrl: profilePhotoUrl,
             business: business,
             industry: industry,
             email: email,

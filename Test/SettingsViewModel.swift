@@ -24,8 +24,7 @@ class SettingsViewModel: ObservableObject {
     @Published var tenantId: String?
     @Published var selectedIndustry: String = BookingTemplate.custom.rawValue
     @Published var isSavingService = false
-    /// Tenant logo (same as website); edited in Settings like a profile photo.
-    @Published var logoUrl: String = ""
+    @Published var profilePhotoUrl: String = ""
     @Published var isUploadingLogo = false
     @Published var accountDisplayName: String = ""
 
@@ -66,7 +65,7 @@ class SettingsViewModel: ObservableObject {
                 hasProfile = false
                 tenantId = nil
                 selectedIndustry = BookingTemplate.custom.rawValue
-                logoUrl = ""
+                profilePhotoUrl = ""
                 accountDisplayName = "Demo User"
                 isLoading = false
             }
@@ -80,12 +79,10 @@ class SettingsViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             var industry: String?
             var tid: String?
-            var loadedLogoUrl = ""
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
                     industry = tenant["industry"] as? String
-                    loadedLogoUrl = tenant["logoUrl"] as? String ?? ""
                 }
             }
             await MainActor.run {
@@ -94,7 +91,7 @@ class SettingsViewModel: ObservableObject {
                     hasProfile = true
                     tenantId = tid
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
-                    logoUrl = loadedLogoUrl
+                    profilePhotoUrl = p.profilePhotoUrl
                     accountDisplayName = !fullName.isEmpty ? fullName : (!p.name.isEmpty ? p.name : p.business)
                     confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
@@ -110,7 +107,7 @@ class SettingsViewModel: ObservableObject {
                     hasProfile = false
                     tenantId = nil
                     selectedIndustry = BookingTemplate.custom.rawValue
-                    logoUrl = ""
+                    profilePhotoUrl = ""
                     accountDisplayName = ""
                 }
                 isLoading = false
@@ -123,21 +120,16 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func uploadBusinessLogo(imageData: Data) async {
-        guard let tid = tenantId else { return }
+    func uploadProfilePhoto(imageData: Data) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { isUploadingLogo = true; errorMessage = nil }
         do {
-            let url = try await firebaseService.uploadTenantLogo(tenantId: tid, imageData: imageData)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": url])
+            let url = try await firebaseService.uploadProviderProfilePhoto(uid: uid, imageData: imageData)
+            try await firebaseService.updateProviderProfile(uid: uid, updates: ["profilePhotoUrl": url])
             await MainActor.run {
-                logoUrl = url
+                profilePhotoUrl = url
                 isUploadingLogo = false
             }
-            NotificationCenter.default.post(
-                name: .tenantLogoDidChange,
-                object: nil,
-                userInfo: ["logoUrl": url]
-            )
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
@@ -146,18 +138,13 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func removeBusinessLogo() async {
-        guard let tid = tenantId else { return }
+    func removeProfilePhoto() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil }
         do {
-            try? await firebaseService.deleteTenantLogoFile(tenantId: tid)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["logoUrl": ""])
-            await MainActor.run { logoUrl = "" }
-            NotificationCenter.default.post(
-                name: .tenantLogoDidChange,
-                object: nil,
-                userInfo: ["logoUrl": ""]
-            )
+            try? await firebaseService.deleteProviderProfilePhotoFile(uid: uid)
+            try await firebaseService.updateProviderProfile(uid: uid, updates: ["profilePhotoUrl": ""])
+            await MainActor.run { profilePhotoUrl = "" }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }

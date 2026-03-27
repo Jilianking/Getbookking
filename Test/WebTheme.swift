@@ -21,10 +21,20 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case petGroomingV1 = "pet-grooming-v1"
     /// Custom: default card list.
     case customStandard = "custom-standard"
+    /// Luxe: elegant full-width hero, service cards, promo strip, team section. Works with any industry.
+    case luxeV1 = "luxe-v1"
 
     var id: String { rawValue }
 
-    /// Business type this theme belongs to (must match Settings).
+    /// True for templates available to every industry (not tied to one business type).
+    var isUniversal: Bool {
+        switch self {
+        case .luxeV1: return true
+        default: return false
+        }
+    }
+
+    /// Business type this theme belongs to (must match Settings). Ignored for universal themes.
     var bookingIndustry: BookingTemplate {
         switch self {
         case .hairSalonV1: return .hair
@@ -33,28 +43,31 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .nailSalonV1: return .nails
         case .petGroomingV1: return .petGrooming
         case .customStandard: return .custom
+        case .luxeV1: return .custom
         }
     }
 
     var displayName: String {
         switch self {
-        case .hairSalonV1: return "Gallery & story"
-        case .barberShopV1: return "Cuts & lineups"
-        case .tattooStudioV1: return "Portfolio & studio"
-        case .nailSalonV1: return "Classic cards"
-        case .petGroomingV1: return "Hero & gallery"
-        case .customStandard: return "Simple list"
+        case .hairSalonV1: return "Classic"
+        case .barberShopV1: return "Classic"
+        case .tattooStudioV1: return "Classic"
+        case .nailSalonV1: return "Classic"
+        case .petGroomingV1: return "Classic"
+        case .customStandard: return "Classic"
+        case .luxeV1: return "Luxe"
         }
     }
 
     var detail: String {
         switch self {
-        case .hairSalonV1: return "Hero, featured work, meet section, slide-out menu"
-        case .barberShopV1: return "Stone hero, fades & gallery, meet + contact, sidebar"
-        case .tattooStudioV1: return "Hero, featured work, about, slide-out menu"
-        case .nailSalonV1: return "Logo, services grid, reviews-style sections"
-        case .petGroomingV1: return "Hero, featured grooms, meet + contact, sidebar"
-        case .customStandard: return "Compact booking list"
+        case .hairSalonV1: return "Hero, featured work, about, sidebar"
+        case .barberShopV1: return "Hero, featured work, about, sidebar"
+        case .tattooStudioV1: return "Hero, featured work, about, sidebar"
+        case .nailSalonV1: return "Hero, featured work, about, sidebar"
+        case .petGroomingV1: return "Hero, featured work, about, sidebar"
+        case .customStandard: return "Hero, featured work, about, sidebar"
+        case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         }
     }
 
@@ -66,6 +79,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .nailSalonV1: return "square.grid.2x2"
         case .petGroomingV1: return "pawprint.fill"
         case .customStandard: return "list.bullet.rectangle"
+        case .luxeV1: return "sparkles"
         }
     }
 
@@ -73,9 +87,9 @@ enum WebTheme: String, CaseIterable, Identifiable {
     static func themes(forIndustry industry: String?) -> [WebTheme] {
         guard let raw = industry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               let bt = BookingTemplate(rawValue: raw) else {
-            return [.customStandard]
+            return [.customStandard] + allCases.filter(\.isUniversal)
         }
-        return WebTheme.allCases.filter { $0.bookingIndustry == bt }
+        return allCases.filter { $0.bookingIndustry == bt || $0.isUniversal }
     }
 
     /// Default theme when `webThemeId` is missing or invalid for the current industry.

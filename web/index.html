@@ -13,6 +13,18 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <style>
+    @font-face {
+      font-family: 'Foglihten No06';
+      src: url('/fonts/FoglihtenNo06.woff2') format('woff2'),
+           url('/fonts/FoglihtenNo06.woff') format('woff');
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Butler';
+      src: url('/fonts/Butler-Regular.woff2') format('woff2'),
+           url('/fonts/Butler-Regular.woff') format('woff');
+      font-display: swap;
+    }
     :root {
       /* UI: sidebar, body, forms, section titles (Inter). Hero headline uses --font-hero + Google Font picker. */
       --font-display: 'Inter', system-ui, sans-serif;
@@ -881,6 +893,371 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
+    /* ─── Luxe template ─── */
+    .luxe-page {
+      min-height: 100vh;
+      background: #FFFDF9;
+      color: #1a1a1a;
+      font-family: var(--font-display);
+    }
+    .luxe-nav {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .luxe-nav-brand {
+      font-family: var(--font-hero);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+    }
+    .luxe-nav-links {
+      display: flex;
+      gap: 28px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .luxe-nav-links a {
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .luxe-nav-links a:hover { color: #fff; }
+    .luxe-hero {
+      position: relative;
+      min-height: 92vh;
+      display: flex;
+      align-items: center;
+      background-size: cover;
+      background-position: center;
+      background-color: #2c2c2c;
+    }
+    .luxe-hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.18) 100%);
+    }
+    .luxe-hero-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 40px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .luxe-hero-text h1 {
+      font-family: var(--font-hero);
+      font-size: clamp(2.2rem, 4.5vw, 3.4rem);
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.15;
+      margin: 0 0 16px;
+    }
+    .luxe-hero-text p {
+      font-size: 1rem;
+      color: rgba(255,255,255,0.78);
+      line-height: 1.7;
+      margin: 0 0 28px;
+      max-width: 440px;
+    }
+    .luxe-hero-cta {
+      display: inline-block;
+      padding: 14px 32px;
+      background: #C9A96E;
+      color: #fff;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    .luxe-hero-cta:hover { background: #b8944f; }
+    .luxe-hours-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 300px;
+    }
+    .luxe-hours-card h3 {
+      font-family: var(--font-hero);
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin: 0 0 16px;
+      color: #1a1a1a;
+    }
+    .luxe-hours-text {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.8;
+      margin: 0 0 20px;
+      white-space: pre-line;
+    }
+    .luxe-hours-book {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background: #C9A96E;
+      color: #fff;
+      text-align: center;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .luxe-hours-book:hover { background: #b8944f; }
+    .luxe-section-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #C9A96E;
+      margin: 0 0 8px;
+      font-weight: 600;
+    }
+    .luxe-section-heading {
+      font-family: var(--font-hero);
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 0 40px;
+      color: #1a1a1a;
+    }
+    .luxe-services-section {
+      padding: 80px 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .luxe-services-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+    .luxe-service-card {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: transform 0.2s;
+    }
+    .luxe-service-card:hover { transform: translateY(-4px); }
+    .luxe-service-card img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+      margin-bottom: 14px;
+    }
+    .luxe-service-placeholder {
+      width: 100%;
+      height: 220px;
+      border-radius: 10px;
+      background: #f0ebe3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      font-size: 2rem;
+      color: #C9A96E;
+    }
+    .luxe-service-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 4px;
+    }
+    .luxe-service-link {
+      font-size: 13px;
+      color: #C9A96E;
+      font-weight: 500;
+    }
+    .luxe-promo {
+      background: #E8E0D0;
+      padding: 64px 40px;
+      text-align: center;
+    }
+    .luxe-promo-inner {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .luxe-promo h2 {
+      font-family: var(--font-hero);
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 0 12px;
+      color: #1a1a1a;
+    }
+    .luxe-promo p {
+      font-size: 1rem;
+      color: #555;
+      margin: 0 0 24px;
+      line-height: 1.6;
+    }
+    .luxe-promo-cta {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #1a1a1a;
+      color: #fff;
+      font-weight: 600;
+      font-size: 13px;
+      text-decoration: none;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      transition: background 0.2s;
+    }
+    .luxe-promo-cta:hover { background: #333; }
+    .luxe-shop-section { padding: 80px 40px; background: #FFFDF9; }
+    .luxe-shop-inner { max-width: 1200px; margin: 0 auto; text-align: center; }
+    .luxe-shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; text-align: left; }
+    .luxe-product-card { text-decoration: none; color: inherit; display: block; transition: transform 0.2s; }
+    .luxe-product-card:hover { transform: translateY(-4px); }
+    .luxe-product-card img { width: 100%; height: 260px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 14px; background: #1a1a1a; }
+    .luxe-product-placeholder { width: 100%; height: 260px; border-radius: 10px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; font-size: 2rem; color: #C9A96E; }
+    .luxe-product-category { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin: 0 0 4px; }
+    .luxe-product-card h3 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; color: #1a1a1a; }
+    .luxe-product-prices { display: flex; align-items: center; gap: 8px; }
+    .luxe-product-price { font-size: 0.95rem; font-weight: 600; color: #1a1a1a; }
+    .luxe-product-price-sale { font-size: 0.95rem; font-weight: 600; color: #c0392b; }
+    .luxe-product-price-original { font-size: 0.85rem; color: #999; text-decoration: line-through; }
+    .luxe-team-section {
+      padding: 80px 40px;
+      background: #F5F0E8;
+    }
+    .luxe-team-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .luxe-team-bio {
+      font-size: 1.05rem;
+      line-height: 1.75;
+      color: #555;
+      max-width: 600px;
+      margin: -20px auto 40px;
+    }
+    .luxe-team-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .luxe-team-card {
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      transition: transform 0.2s;
+    }
+    .luxe-team-card:hover { transform: translateY(-4px); }
+    .luxe-team-card img {
+      width: 100%;
+      height: 280px;
+      object-fit: cover;
+      display: block;
+    }
+    .luxe-contact {
+      padding: 56px 40px;
+      background: #1a1a1a;
+      color: #fff;
+    }
+    .luxe-contact-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      text-align: center;
+    }
+    .luxe-contact-item h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 0 0 8px;
+      color: #C9A96E;
+    }
+    .luxe-contact-item p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      margin: 0;
+      line-height: 1.6;
+    }
+    .luxe-contact-item a {
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+    }
+    .luxe-contact-item a:hover { color: #fff; text-decoration: underline; }
+    .luxe-page .booking-shell {
+      background: #FFFDF9;
+      color: #1a1a1a;
+    }
+    .luxe-page .booking-page-title {
+      color: #1a1a1a;
+      font-family: var(--font-hero);
+    }
+    .luxe-page .booking-page-subtitle {
+      color: #555;
+    }
+    .luxe-page .booking-card {
+      box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+    }
+    .luxe-page .booking-submit {
+      background: #C9A96E !important;
+      color: #fff !important;
+    }
+    .luxe-page .booking-submit:hover {
+      background: #b8944f !important;
+    }
+    .luxe-page .booking-form input:focus,
+    .luxe-page .booking-form textarea:focus,
+    .luxe-page .booking-form select:focus {
+      border-color: #C9A96E;
+      box-shadow: 0 0 0 2px rgba(201,169,110,0.2);
+    }
+    .luxe-page .booking-success-flat .booking-success-lead {
+      color: #15803d;
+    }
+    .luxe-page .booking-success-flat .booking-success-detail {
+      color: #555;
+    }
+    @media (max-width: 768px) {
+      .luxe-nav { padding: 14px 20px; }
+      .luxe-nav-links { display: none; }
+      .luxe-nav .tattoo-nav-menu { display: block !important; }
+      .luxe-hero-inner {
+        grid-template-columns: 1fr;
+        padding: 0 20px;
+      }
+      .luxe-hours-card { max-width: 100%; margin-top: 24px; }
+      .luxe-services-grid { grid-template-columns: repeat(2, 1fr); }
+      .luxe-services-section,
+      .luxe-promo,
+      .luxe-team-section,
+      .luxe-contact { padding-left: 20px; padding-right: 20px; }
+      .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
+      .luxe-team-grid { grid-template-columns: 1fr; }
+      .luxe-contact-inner { grid-template-columns: 1fr; }
+      .luxe-hero { min-height: 75vh; }
+    }
   </style>
 </head>
 <body>
@@ -938,6 +1315,12 @@
         if (k === 'poiret-one') {
           return "'Poiret One', system-ui, sans-serif";
         }
+        if (k === 'foglihten-no06') {
+          return "'Foglihten No06', Georgia, serif";
+        }
+        if (k === 'butler') {
+          return "'Butler', 'Libre Baskerville', Georgia, serif";
+        }
         return "'Kanit', system-ui, sans-serif";
       }
       /** `heroFont` on tenant → `--font-hero` only (home hero title). UI uses Inter via `--font-display`. */
@@ -967,23 +1350,27 @@
         [].forEach.call(document.querySelectorAll('.card'), function(el){ el.style.background = card; });
         [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el){ el.style.background = accent; el.style.color = '#fff'; });
         // Hair uses tattoo-style home; featured-band colors on body (same idea as tattoos)
-        if (t.industry === 'hair') {
+        if (t.industry === 'hair' && !isLuxeTheme(t)) {
           var hw = t.featuredWorkBackgroundColor || '#FAF8F5';
           var hx = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = hw;
           document.body.style.color = hx;
         }
-        if (t.industry === 'barber') {
+        if (t.industry === 'barber' && !isLuxeTheme(t)) {
           var bb = t.featuredWorkBackgroundColor || '#FAFAF9';
           var bf = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = bb;
           document.body.style.color = bf;
         }
-        if (t.industry === 'pet_grooming') {
+        if (t.industry === 'pet_grooming' && !isLuxeTheme(t)) {
           var pg = t.featuredWorkBackgroundColor || '#FAF8F5';
           var pgt = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = pg;
           document.body.style.color = pgt;
+        }
+        if (isLuxeTheme(t)) {
+          document.body.style.background = '#FFFDF9';
+          document.body.style.color = '#1a1a1a';
         }
         // Override for Tattoo template: same surface as Featured work / Gallery / Book
         if (t.industry === 'tattoos') {
@@ -1006,14 +1393,14 @@
 
         if (!iconColor) {
           if (isGalleryPath) {
-            iconColor = isPortfolioIndustry(tenant.industry)
-              ? (tenant.featuredWorkTextColor || '#1C1917')
+            iconColor = usesThemedChrome(tenant)
+              ? (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917'))
               : '#FFFFFF';
           } else if (isBookPath) {
-            iconColor = isPortfolioIndustry(tenant.industry)
-              ? (tenant.featuredWorkTextColor || '#1C1917')
+            iconColor = usesThemedChrome(tenant)
+              ? (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917'))
               : '#000000';
-          } else if (isPortfolioIndustry(tenant.industry)) {
+          } else if (usesThemedChrome(tenant)) {
             iconColor = '#FFFFFF';
           } else {
             var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
@@ -1031,6 +1418,12 @@
       /** Tattoo, hair salon, barber, pet grooming: shared portfolio booking chrome (sidebar, themed /book). */
       function isPortfolioIndustry(ind) {
         return ind === 'tattoos' || ind === 'hair' || ind === 'barber' || ind === 'pet_grooming';
+      }
+      function isLuxeTheme(tenant) {
+        return tenant && tenant.resolvedWebThemeId === 'luxe-v1';
+      }
+      function usesThemedChrome(tenant) {
+        return isPortfolioIndustry(tenant.industry) || isLuxeTheme(tenant);
       }
       /** Top bar: menu only. Public wordmark is displayName + hero font (sidebar). `logoUrl` = profile image in Settings, not used on tattoo pages. */
       function tattooNavHtml(tenant) {
@@ -1313,7 +1706,7 @@
         var base = location.origin + '/' + tenant.slug;
         var bookUrl = base + '/book';
 
-        var nav = isPortfolioIndustry(tenant.industry) ? tattooNavHtml(tenant) : (
+        var nav = usesThemedChrome(tenant) ? tattooNavHtml(tenant) : (
           '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
           '</div></nav>'
@@ -1325,15 +1718,15 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var bookPageStyle = isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '';
-        // Themed page behind the card; card surface stays white (or tenant override).
+        var bookPageStyle = isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '');
+        var wrapClass = 'tattoo-page' + (isLuxeTheme(tenant) ? ' luxe-page' : '');
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
-          '<div class="tattoo-page"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
+          '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
             nav +
             '<div class="booking-shell">' +
               '<div class="booking-page-header">' +
-                (isPortfolioIndustry(tenant.industry) ? tattooHeadlineLogoHtml(tenant) : '') +
+                (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
                 '<h1 class="booking-page-title">' + esc(tenant.displayName||'Appointment') + '</h1>' +
                 (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
               '</div>' +
@@ -1353,7 +1746,7 @@
         var name = esc(tenant.displayName || 'Thank you');
         var lead = '✓ Request received';
         var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
-        if (isPortfolioIndustry(tenant.industry)) {
+        if (usesThemedChrome(tenant)) {
           var base = location.origin + '/' + tenant.slug;
           var bookUrl = base + '/book';
           var nav = tattooNavHtml(tenant);
@@ -1362,9 +1755,10 @@
             '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
             tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
             '</div></div>';
-          var bookPageStyle = tattooSiteThemeInlineStyle(tenant);
+          var bookPageStyle = isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : tattooSiteThemeInlineStyle(tenant);
+          var successWrapClass = 'tattoo-page' + (isLuxeTheme(tenant) ? ' luxe-page' : '');
           return '' +
-            '<div class="tattoo-page" style="'+bookPageStyle+'">' +
+            '<div class="' + successWrapClass + '" style="'+bookPageStyle+'">' +
               nav +
               '<div class="booking-shell">' +
                 '<div class="booking-page-header">' +
@@ -1391,6 +1785,8 @@
       function resolvedWebThemeId(tenant) {
         var ind = String(tenant.industry || '').trim();
         var stored = String(tenant.webThemeId || '').trim();
+        var universal = ['luxe-v1'];
+        if (stored && universal.indexOf(stored) >= 0) return stored;
         var map = {
           'hair': ['hair-salon-v1'],
           'barber': ['barber-shop-v1'],
@@ -1438,6 +1834,7 @@
           });
       }
       function tattooSidebarPanelInlineStyle(tenant) {
+        if (isLuxeTheme(tenant)) return 'background:#FFFDF9;color:#1a1a1a';
         return tattooSiteThemeInlineStyle(tenant);
       }
       function sidebarLinksHtml(tenant, base, bookUrl) {
@@ -1507,7 +1904,10 @@
           ? '<div class="gallery-grid">' + imgsHtml + '</div>'
           : '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
         var gPageBg, gPageFg, galleryPageStyle;
-        if (tenant.industry === 'tattoos') {
+        if (isLuxeTheme(tenant)) {
+          gPageBg = '#FFFDF9';
+          gPageFg = '#1a1a1a';
+        } else if (tenant.industry === 'tattoos') {
           gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
           gPageFg = tenant.featuredWorkTextColor || '#1C1917';
         } else if (tenant.industry === 'hair' || tenant.industry === 'barber' || tenant.industry === 'pet_grooming') {
@@ -1778,6 +2178,136 @@
           '</div></div></section>';
         return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
       }
+      function luxeHomePage(tenant, services) {
+        var base = location.origin + '/' + tenant.slug;
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Welcome';
+
+        var nav = '<nav class="luxe-nav">' +
+          '<a href="' + base + '" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
+          '<div class="luxe-nav-links">' +
+            '<a href="' + base + '">Home</a>' +
+            '<a href="' + base + '#services">Services</a>' +
+            '<a href="' + galleryUrl + '">Gallery</a>' +
+            '<a href="' + base + '#about">About</a>' +
+            '<a href="' + bookUrl + '">Booking</a>' +
+          '</div>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
+        '</nav>';
+
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
+          tattooSidebarBrandHtml(tenant) +
+          sidebarLinksHtml(tenant, base, bookUrl) +
+          '</div></div>';
+
+        var heroStyle = tenant.heroImageUrl
+          ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')'
+          : 'background:linear-gradient(135deg,#3c3429 0%,#5c4f3d 50%,#2c2419 100%)';
+        var tagline = tenant.tagline || 'Experience quality service that makes you feel your best.';
+
+        var hoursHtml = '';
+        if (tenant.businessHours) {
+          hoursHtml = '<div class="luxe-hero-right"><div class="luxe-hours-card">' +
+            '<h3>Opening Hours</h3>' +
+            '<p class="luxe-hours-text">' + esc(tenant.businessHours) + '</p>' +
+            '<a href="' + bookUrl + '" class="luxe-hours-book">Book Now</a>' +
+          '</div></div>';
+        }
+
+        var hero = '<section class="luxe-hero" style="' + heroStyle + '">' +
+          '<div class="luxe-hero-inner">' +
+            '<div class="luxe-hero-text">' +
+              '<h1>' + esc(displayName) + '</h1>' +
+              '<p>' + esc(tagline) + '</p>' +
+              '<a href="' + bookUrl + '" class="luxe-hero-cta">Book Appointment</a>' +
+            '</div>' +
+            hoursHtml +
+          '</div>' +
+        '</section>';
+
+        var maxCards = Math.min(services.length, 4);
+        var featuredImages = featuredUrlsForHomeStrip(tenant, 4);
+        var serviceCards = '';
+        for (var i = 0; i < maxCards; i++) {
+          var s = services[i];
+          var imgTag = featuredImages[i]
+            ? '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy">'
+            : '<div class="luxe-service-placeholder">\u2726</div>';
+          serviceCards += '<a href="' + bookUrl + '/' + esc(s.slug) + '" class="luxe-service-card">' +
+            imgTag +
+            '<h3>' + esc(s.name) + '</h3>' +
+            '<span class="luxe-service-link">Book online \u2192</span>' +
+          '</a>';
+        }
+
+        var servicesSection = '<section id="services" class="luxe-services-section">' +
+          '<p class="luxe-section-label">Our Services</p>' +
+          '<h2 class="luxe-section-heading">What We Offer</h2>' +
+          '<div class="luxe-services-grid">' + serviceCards + '</div>' +
+        '</section>';
+
+        var promoTag = tenant.tagline || 'Your satisfaction is our priority.';
+        var promo = '<section class="luxe-promo">' +
+          '<div class="luxe-promo-inner">' +
+            '<h2>Ready for a Fresh Look?</h2>' +
+            '<p>' + esc(promoTag) + '</p>' +
+            '<a href="' + bookUrl + '" class="luxe-promo-cta">Book Now</a>' +
+          '</div>' +
+        '</section>';
+
+        var aboutBody = (tenant.aboutText || tenant.tagline)
+          ? esc(tenant.aboutText || tenant.tagline)
+          : 'Add your story in the app to introduce yourself to clients.';
+        var teamCards = '';
+
+        var teamSection = '<section id="about" class="luxe-team-section">' +
+          '<div class="luxe-team-inner">' +
+            '<p class="luxe-section-label">About Us</p>' +
+            '<h2 class="luxe-section-heading">Meet ' + esc(displayName) + '</h2>' +
+            '<p class="luxe-team-bio">' + aboutBody + '</p>' +
+            teamCards +
+          '</div>' +
+        '</section>';
+
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
+        var connectParts = [];
+        if (igHandle) connectParts.push('<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>');
+        if (tenant.contactEmail) connectParts.push('<a href="mailto:' + esc(tenant.contactEmail) + '">' + esc(tenant.contactEmail) + '</a>');
+        if (tenant.contactPhone) connectParts.push(esc(tenant.contactPhone));
+        var connectHtml = connectParts.length ? connectParts.join('<br>') : 'Add in app';
+
+        var contact = '<section class="luxe-contact">' +
+          '<div class="luxe-contact-inner">' +
+            '<div class="luxe-contact-item"><h3>Location</h3><p>' + (tenant.address ? esc(tenant.address) : 'Add in app') + '</p></div>' +
+            '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' + (tenant.businessHours ? esc(tenant.businessHours) : 'Add in app') + '</p></div>' +
+            '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
+          '</div>' +
+        '</section>';
+
+        var shopHtml = '';
+        if (tenant._products && tenant._products.length > 0) {
+          var productCards = '';
+          for (var pi = 0; pi < tenant._products.length; pi++) {
+            var prod = tenant._products[pi];
+            var prodImg = prod.imageUrl ? '<img src="' + esc(prod.imageUrl) + '" alt="" loading="lazy">' : '<div class="luxe-product-placeholder">\u2726</div>';
+            var priceHtml = '';
+            if (prod.salePrice && prod.salePrice < prod.price) {
+              priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price-sale">$' + Number(prod.salePrice).toFixed(2) + '</span><span class="luxe-product-price-original">$' + Number(prod.price).toFixed(2) + '</span></div>';
+            } else {
+              priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price">$' + Number(prod.price).toFixed(2) + '</span></div>';
+            }
+            productCards += '<div class="luxe-product-card">' + prodImg + (prod.category ? '<p class="luxe-product-category">' + esc(prod.category) + '</p>' : '') + '<h3>' + esc(prod.name) + '</h3>' + priceHtml + '</div>';
+          }
+          shopHtml = '<section class="luxe-shop-section"><div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div></section>';
+        }
+
+        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + shopHtml + contact + sidebar + '</div>';
+      }
+
       function bindTattooSidebar() {
         var menuBtn = document.querySelector('.tattoo-nav-menu');
         var sidebar = document.getElementById('tattoo-sidebar');
@@ -1788,6 +2318,15 @@
         sidebar.querySelectorAll('.tattoo-sidebar-panel a').forEach(function(a){
           a.addEventListener('click', function(){ sidebar.classList.remove('tattoo-sidebar-open'); });
         });
+      }
+      function loadProducts(tid) {
+        return db.collection('tenants').doc(tid).collection('products').get()
+          .then(function(snap){
+            return snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
+              var x = d.data();
+              return { id: d.id, name: x.name || '', category: x.category || '', price: x.price || 0, salePrice: x.salePrice || null, imageUrl: x.imageUrl || '' };
+            });
+          });
       }
       function loadServices(tid) {
         return db.collection('tenants').doc(tid).collection('services').get()
@@ -1815,7 +2354,9 @@
             return;
           }
           applyBranding(tenant);
-          return loadServices(tenant.id).then(function(services){
+          return Promise.all([loadServices(tenant.id), loadProducts(tenant.id)]).then(function(results){
+            var services = results[0];
+            tenant._products = results[1];
             if (services.length === 0) {
               document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>'+esc(tenant.displayName||'Book')+'</h1><p>No services available yet.</p></div></div>';
               applyBranding(tenant);
@@ -1824,14 +2365,19 @@
             var presel = p.serviceSlug ? services.filter(function(s){ return s.slug === p.serviceSlug; })[0] : null;
             var showForm = p.isBookPath && services.length > 0;
             var isGallery = p.isGalleryPath;
-            var isHairHome = (tenant.industry === 'hair' && !p.isBookPath && !isGallery);
-            var isBarberHome = (tenant.industry === 'barber' && !p.isBookPath && !isGallery);
-            var isPetGroomingHome = (tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
-            var isTattooHome = (tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
+            var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery);
+            var isHairHome = (!isLuxeHome && tenant.industry === 'hair' && !p.isBookPath && !isGallery);
+            var isBarberHome = (!isLuxeHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
+            var isPetGroomingHome = (!isLuxeHome && tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
+            var isTattooHome = (!isLuxeHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
+            var isThemedHome = isTattooHome || isHairHome || isBarberHome || isPetGroomingHome || isLuxeHome;
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
               bindTattooSidebar();
-              if (isPortfolioIndustry(tenant.industry)) {
+              if (isLuxeTheme(tenant)) {
+                document.body.style.background = '#FFFDF9';
+                document.body.style.color = '#1a1a1a';
+              } else if (isPortfolioIndustry(tenant.industry)) {
                 document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
                 document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
               } else {
@@ -1841,21 +2387,23 @@
               applySidebarIconColor(tenant, false, true);
               return;
             }
-            var homeContent = isTattooHome
-              ? tattooHeroPage(tenant)
-              : isHairHome
-                ? hairTattooStyleHomePage(tenant, services)
-                : isBarberHome
-                  ? barberPortfolioHomePage(tenant, services)
-                  : isPetGroomingHome
-                    ? petGroomingPortfolioHomePage(tenant, services)
-                    : list(tenant, services);
+            var homeContent = isLuxeHome
+              ? luxeHomePage(tenant, services)
+              : isTattooHome
+                ? tattooHeroPage(tenant)
+                : isHairHome
+                  ? hairTattooStyleHomePage(tenant, services)
+                  : isBarberHome
+                    ? barberPortfolioHomePage(tenant, services)
+                    : isPetGroomingHome
+                      ? petGroomingPortfolioHomePage(tenant, services)
+                      : list(tenant, services);
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
-              if (isPortfolioIndustry(tenant.industry)) bindTattooSidebar();
-            } else if (isTattooHome || isHairHome || isBarberHome || isPetGroomingHome) {
+              if (usesThemedChrome(tenant)) bindTattooSidebar();
+            } else if (isThemedHome) {
               document.getElementById('root').innerHTML = homeContent;
-              if (isTattooHome || isHairHome || isBarberHome || isPetGroomingHome) bindTattooSidebar();
+              bindTattooSidebar();
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }
@@ -2125,9 +2673,9 @@
                   });
                 }).then(function(){
                   var doneHtml = bookingSuccessHtml(tenant);
-                  document.getElementById('root').innerHTML = isPortfolioIndustry(tenant.industry) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
+                  document.getElementById('root').innerHTML = usesThemedChrome(tenant) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
                   applyBranding(tenant);
-                  if (isPortfolioIndustry(tenant.industry)) bindTattooSidebar();
+                  if (usesThemedChrome(tenant)) bindTattooSidebar();
                   applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){
                   errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';

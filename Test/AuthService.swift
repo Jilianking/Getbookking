@@ -144,6 +144,10 @@ class AuthViewModel: ObservableObject {
         accountPhotoUrl = Auth.auth().currentUser?.photoURL?.absoluteString
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            let storedProfilePhoto = profile?.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !storedProfilePhoto.isEmpty {
+                accountPhotoUrl = storedProfilePhoto
+            }
             guard let tid = profile?.tenantId else {
                 tenantLogoUrl = nil
                 return

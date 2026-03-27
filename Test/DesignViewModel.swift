@@ -13,6 +13,7 @@ enum DesignTab: String, CaseIterable {
     case gallery
     case book
     case about
+    case shop
 }
 
 class DesignViewModel: ObservableObject {
@@ -66,14 +67,18 @@ class DesignViewModel: ObservableObject {
     // Services
     @Published var services: [TenantService] = []
 
+    // Products (shop section on luxe template)
+    @Published var products: [Product] = []
+    @Published var isUploadingProduct = false
+
     // Template / industry (business type — set in Settings)
     @Published var industry: String?
     /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
     @Published var webThemeId: String = ""
 
-    /// Tattoo, hair salon, and barber share portfolio-style web (featured strip, gallery, booking chrome).
+    /// Portfolio-style web templates (featured strip, gallery, booking chrome, sidebar).
     var usesPortfolioStyleWebChrome: Bool {
-        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming"
+        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming" || webThemeId == "luxe-v1"
     }
 
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)
@@ -251,6 +256,8 @@ class DesignViewModel: ObservableObject {
                 syncTattooSectionThemeFromFeaturedIfNeeded()
                 isLoading = false
             }
+            let fetchedProducts = try await firebaseService.fetchTenantProducts(tenantId: tid)
+            await MainActor.run { products = fetchedProducts }
             if tenant?["webThemeId"] == nil {
                 let def = WebTheme.resolvedThemeId(stored: nil, industry: tenant?["industry"] as? String)
                 try? await firebaseService.updateTenant(tenantId: tid, updates: ["webThemeId": def])
@@ -524,7 +531,7 @@ class DesignViewModel: ObservableObject {
     /// Applies a **web layout** only. Business type stays in Settings (`industry` unchanged).
     func applyWebTheme(_ theme: WebTheme) async {
         guard let tid = tenantId else { return }
-        guard let ind = industry, theme.bookingIndustry.rawValue == ind else {
+        guard theme.isUniversal || (industry != nil && theme.bookingIndustry.rawValue == industry) else {
             await MainActor.run { errorMessage = "This layout doesn’t match your business type. Change it in Settings if needed." }
             return
         }
@@ -539,6 +546,33 @@ class DesignViewModel: ObservableObject {
                 saveSuccess = true
             }
             Task { @MainActor in try? await Task.sleep(nanoseconds: 2_000_000_000); saveSuccess = false }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    // MARK: - Products
+    func addProduct(name: String, category: String, price: Double, salePrice: Double?, imageData: Data?) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingProduct = true }
+        do {
+            var imageUrl = ""
+            if let data = imageData {
+                imageUrl = try await firebaseService.uploadProductImage(tenantId: tid, imageData: data)
+            }
+            let docId = try await firebaseService.createTenantProduct(tenantId: tid, name: name, category: category, price: price, salePrice: salePrice, imageUrl: imageUrl)
+            let product = Product(id: docId, name: name, category: category, price: price, salePrice: salePrice, imageUrl: imageUrl, isActive: true)
+            await MainActor.run { products.append(product); isUploadingProduct = false; invalidateWebPreview() }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription; isUploadingProduct = false }
+        }
+    }
+
+    func deleteProduct(_ product: Product) async {
+        guard let tid = tenantId else { return }
+        do {
+            try await firebaseService.deleteTenantProduct(tenantId: tid, productId: product.id)
+            await MainActor.run { products.removeAll { $0.id == product.id }; invalidateWebPreview() }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }

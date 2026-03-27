@@ -56,7 +56,7 @@ final class DrawerState {
     var selectedSection: AdminSection = .dashboard
 }
 
-/// Initials always visible; tenant logo preferred, then Firebase Auth photo; fades in when loaded.
+/// Initials always visible; profile photo preferred, then tenant logo; fades in when loaded.
 private struct DrawerTenantLogoView: View {
     let tenantLogoURL: String?
     let accountPhotoURL: String?
@@ -66,10 +66,10 @@ private struct DrawerTenantLogoView: View {
     @State private var imageRetryCount = 0
 
     private var resolvedImageURL: URL? {
-        let t = tenantLogoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !t.isEmpty, let u = URL(string: t) { return u }
         let a = accountPhotoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !a.isEmpty, let u = URL(string: a) { return u }
+        let t = tenantLogoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !t.isEmpty, let u = URL(string: t) { return u }
         return nil
     }
 

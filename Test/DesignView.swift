@@ -139,6 +139,7 @@ struct DesignView: View {
                         case .gallery: galleryContent
                         case .book: bookContent
                         case .about: aboutContent
+                        case .shop: shopContent
                         }
                     }
                 }
@@ -163,10 +164,10 @@ struct DesignView: View {
 
     private var homeContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Web themes (scoped to business type from Settings)
+            // Web templates
             Text("Website templates")
                 .font(.headline)
-            Text("Choose a template for your public site. Your business type is set in Settings → Service.")
+            Text("Choose a template for your public site.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.bottom, 4)
@@ -572,6 +573,132 @@ struct DesignView: View {
     private func openInSafari() {
         guard let url = URL(string: viewModel.bookingUrl) else { return }
         UIApplication.shared.open(url)
+    }
+
+    // MARK: - Shop tab
+    @State private var showAddProduct = false
+    @State private var newProductName = ""
+    @State private var newProductCategory = ""
+    @State private var newProductPrice = ""
+    @State private var newProductSalePrice = ""
+    @State private var newProductImageItem: PhotosPickerItem? = nil
+    @State private var newProductImageData: Data? = nil
+
+    private var shopContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Products")
+                .font(.headline)
+            Text("Add products to display in the shop section on your Luxe template.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if viewModel.products.isEmpty && !viewModel.isUploadingProduct {
+                VStack(spacing: 12) {
+                    Image(systemName: "bag")
+                        .font(.system(size: 36))
+                        .foregroundColor(.secondary)
+                    Text("No products yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+            }
+
+            ForEach(viewModel.products) { product in
+                HStack(spacing: 12) {
+                    if !product.imageUrl.isEmpty, let url = URL(string: product.imageUrl) {
+                        AsyncImage(url: url) { img in
+                            img.resizable().scaledToFill()
+                        } placeholder: {
+                            Color(.systemGray5)
+                        }
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 56, height: 56)
+                            .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(product.name).font(.subheadline.weight(.medium))
+                        if !product.category.isEmpty {
+                            Text(product.category).font(.caption).foregroundColor(.secondary)
+                        }
+                        HStack(spacing: 6) {
+                            if let sp = product.salePrice {
+                                Text("$\(String(format: "%.2f", sp))").font(.caption.weight(.semibold)).foregroundColor(.red)
+                                Text("$\(String(format: "%.2f", product.price))").font(.caption).strikethrough().foregroundColor(.secondary)
+                            } else {
+                                Text("$\(String(format: "%.2f", product.price))").font(.caption.weight(.semibold))
+                            }
+                        }
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task { await viewModel.deleteProduct(product) }
+                    } label: {
+                        Image(systemName: "trash").font(.caption).foregroundColor(.red)
+                    }
+                }
+                .padding(12)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
+            }
+
+            if viewModel.isUploadingProduct {
+                HStack { ProgressView(); Text("Adding product…").font(.caption).foregroundColor(.secondary) }
+            }
+
+            Button { showAddProduct = true } label: {
+                Label("Add Product", systemImage: "plus.circle.fill").font(.subheadline.weight(.medium))
+            }
+            .sheet(isPresented: $showAddProduct) { addProductSheet }
+        }
+    }
+
+    private var addProductSheet: some View {
+        NavigationView {
+            Form {
+                Section("Product Info") {
+                    TextField("Name", text: $newProductName)
+                    TextField("Category (e.g. Shampoo)", text: $newProductCategory)
+                    TextField("Price", text: $newProductPrice).keyboardType(.decimalPad)
+                    TextField("Sale price (optional)", text: $newProductSalePrice).keyboardType(.decimalPad)
+                }
+                Section("Image") {
+                    PhotosPicker(selection: $newProductImageItem, matching: .images) {
+                        Label(newProductImageData != nil ? "Change image" : "Choose image", systemImage: "photo")
+                    }
+                    .onChange(of: newProductImageItem) { _, item in
+                        Task { if let data = try? await item?.loadTransferable(type: Data.self) { newProductImageData = data } }
+                    }
+                    if newProductImageData != nil {
+                        HStack { Image(systemName: "checkmark.circle.fill").foregroundColor(.green); Text("Image selected").font(.caption) }
+                    }
+                }
+            }
+            .navigationTitle("New Product")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { resetAddProductForm(); showAddProduct = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        let price = Double(newProductPrice) ?? 0
+                        let salePrice = Double(newProductSalePrice)
+                        Task { await viewModel.addProduct(name: newProductName, category: newProductCategory, price: price, salePrice: salePrice, imageData: newProductImageData); resetAddProductForm(); showAddProduct = false }
+                    }
+                    .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func resetAddProductForm() {
+        newProductName = ""; newProductCategory = ""; newProductPrice = ""; newProductSalePrice = ""
+        newProductImageItem = nil; newProductImageData = nil
     }
 }
 

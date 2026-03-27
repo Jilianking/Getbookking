@@ -13,6 +13,7 @@ struct ProviderProfile {
     var name: String
     var firstName: String
     var lastName: String
+    var profilePhotoUrl: String
     var business: String
     var industry: String
     var email: String

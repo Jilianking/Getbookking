@@ -34,7 +34,11 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "person.crop.circle")
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(authViewModel.currentUserDisplayName ?? "User")
+                                Text(
+                                    viewModel.accountDisplayName.isEmpty
+                                    ? (authViewModel.currentUserDisplayName ?? "User")
+                                    : viewModel.accountDisplayName
+                                )
                                     .font(.subheadline.weight(.medium))
                                 Text(email)
                                     .font(.caption)

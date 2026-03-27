@@ -27,6 +27,7 @@ class SettingsViewModel: ObservableObject {
     /// Tenant logo (same as website); edited in Settings like a profile photo.
     @Published var logoUrl: String = ""
     @Published var isUploadingLogo = false
+    @Published var accountDisplayName: String = ""
 
     private let firebaseService = FirebaseService()
 
@@ -66,6 +67,7 @@ class SettingsViewModel: ObservableObject {
                 tenantId = nil
                 selectedIndustry = BookingTemplate.custom.rawValue
                 logoUrl = ""
+                accountDisplayName = "Demo User"
                 isLoading = false
             }
             return
@@ -88,10 +90,12 @@ class SettingsViewModel: ObservableObject {
             }
             await MainActor.run {
                 if let p = profile {
+                    let fullName = "\(p.firstName) \(p.lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
                     hasProfile = true
                     tenantId = tid
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
                     logoUrl = loadedLogoUrl
+                    accountDisplayName = !fullName.isEmpty ? fullName : (!p.name.isEmpty ? p.name : p.business)
                     confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
                     depositAmount = p.workflow.depositAmount
@@ -107,6 +111,7 @@ class SettingsViewModel: ObservableObject {
                     tenantId = nil
                     selectedIndustry = BookingTemplate.custom.rawValue
                     logoUrl = ""
+                    accountDisplayName = ""
                 }
                 isLoading = false
             }

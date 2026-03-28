@@ -1,0 +1,15 @@
+# GetBookKing: proxy *.getbookking.com → https://getbookking.com/{slug}/...
+# 1. Add zone getbookking.com to Cloudflare (nameservers).
+# 2. npx wrangler login
+# 3. npx wrangler deploy
+# 4. Dashboard → Workers & Pages → this worker → Triggers → Routes:
+#    add *.getbookking.com/*
+#    (Keep apex getbookking.com + www on Firebase Hosting without this worker.)
+
+name = "getbookking-tenant-proxy"
+main = "src/index.js"
+compatibility_date = "2024-10-22"
+
+routes = [
+  { pattern = "*.getbookking.com/*", zone_name = "getbookking.com" }
+]

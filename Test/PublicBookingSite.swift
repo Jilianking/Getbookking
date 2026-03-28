@@ -1,21 +1,20 @@
 //
 //  PublicBookingSite.swift
 //
-//  Canonical production URLs: https://getbookking.com/{slug}/…
+//  Canonical production URLs: https://{slug}.getbookking.com/…
 //
 
 import Foundation
 
 enum PublicBookingSite {
-    /// Production hostname (path-based tenant sites).
     static let host = "getbookking.com"
     static let httpsBase = "https://\(host)"
 
-    /// Public home URL: `https://getbookking.com/{slug}`
+    /// Public home URL: `https://{slug}.getbookking.com`
     static func urlString(forSlug slug: String) -> String {
         let s = slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !s.isEmpty else { return httpsBase }
-        return "\(httpsBase)/\(s)"
+        return "https://\(s).\(host)"
     }
 
     static func url(forSlug slug: String) -> URL? {

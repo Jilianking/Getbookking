@@ -1,35 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Provider profile (settings/account info)
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Tenant website/config data and nested resources used by the app.
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function userTenantIdMatches(tenantId) {
+      return isSignedIn()
+        && exists(userPath())
+        && get(userPath()).data.tenantId == tenantId;
+    }
+
+    function isTenantOwnerUid(tenantId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/tenants/$(tenantId))
+        && get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerUid == request.auth.uid;
+    }
+
+    function canManageTenant(tenantId) {
+      return userTenantIdMatches(tenantId) || isTenantOwnerUid(tenantId);
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     match /tenants/{tenantId} {
-      // Public website reads tenant branding/config directly from Firestore.
       allow read: if true;
-      allow write: if request.auth != null;
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update: if canManageTenant(tenantId)
+        && (!('ownerUid' in resource.data) || request.resource.data.ownerUid == resource.data.ownerUid);
+
+      allow delete: if canManageTenant(tenantId);
 
       match /services/{serviceId} {
-        // Public website service list.
         allow read: if true;
-        allow write: if request.auth != null;
+        allow write: if canManageTenant(tenantId);
       }
 
       match /products/{productId} {
-        // Public website shop section.
         allow read: if true;
-        allow write: if request.auth != null;
+        allow write: if canManageTenant(tenantId);
       }
 
       match /customers/{customerId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if canManageTenant(tenantId);
       }
 
       match /bookingRequests/{requestId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if canManageTenant(tenantId);
       }
     }
   }

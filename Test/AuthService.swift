@@ -84,17 +84,22 @@ class AuthViewModel: ObservableObject {
         let fullName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
         let changeRequest = result.user.createProfileChangeRequest()
         changeRequest.displayName = fullName
-        try await changeRequest.commitChanges()
-        try await firebaseService.createProviderProfile(
-            uid: result.user.uid,
-            email: email,
-            name: fullName,
-            firstName: firstName,
-            lastName: lastName,
-            business: business,
-            industry: industry,
-            subscriptionPlan: subscriptionPlan.rawValue
-        )
+        do {
+            try await changeRequest.commitChanges()
+            try await firebaseService.createProviderProfile(
+                uid: result.user.uid,
+                email: email,
+                name: fullName,
+                firstName: firstName,
+                lastName: lastName,
+                business: business,
+                industry: industry,
+                subscriptionPlan: subscriptionPlan.rawValue
+            )
+        } catch {
+            try? await result.user.delete()
+            throw error
+        }
     }
     
     func signOut() throws {

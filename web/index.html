@@ -11,6 +11,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <style>
     @font-face {
@@ -463,7 +464,7 @@
     .tattoo-sidebar.tattoo-sidebar-open { pointer-events: auto; }
     .tattoo-sidebar-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.25s; }
     .tattoo-sidebar-open .tattoo-sidebar-backdrop { opacity: 1; }
-    .tattoo-sidebar-panel { position: absolute; top: 0; left: 0; bottom: 0; width: 320px; max-width: 85vw; box-shadow: 2px 0 16px rgba(0,0,0,0.18); transform: translateX(-100%); transition: transform 0.25s; padding: 32px 24px; }
+    .tattoo-sidebar-panel { position: absolute; top: 0; right: 0; bottom: 0; left: auto; width: 320px; max-width: 85vw; box-shadow: -2px 0 16px rgba(0,0,0,0.18); transform: translateX(100%); transition: transform 0.25s; padding: 32px 24px; }
     .tattoo-sidebar-open .tattoo-sidebar-panel { transform: translateX(0); }
     /* Wordmark: same hero font as home; logoUrl stays profile/settings-only */
     .tattoo-sidebar-brand {
@@ -907,7 +908,19 @@
       padding: 18px 40px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
+      gap: 16px;
+    }
+    .luxe-nav-trailing {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .luxe-nav .tattoo-nav-menu {
+      margin-left: 0;
+      flex-shrink: 0;
     }
     .luxe-nav-brand {
       font-family: var(--font-hero);
@@ -1124,6 +1137,7 @@
     }
     .luxe-promo-cta:hover { background: #333; }
     .luxe-shop-section { padding: 80px 40px; background: #FFFDF9; }
+    .luxe-shop-page-shell { padding: 56px 40px 80px; background: #FFFDF9; min-height: 55vh; }
     .luxe-shop-inner { max-width: 1200px; margin: 0 auto; text-align: center; }
     .luxe-shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; text-align: left; }
     .luxe-product-card { text-decoration: none; color: inherit; display: block; transition: transform 0.2s; }
@@ -1252,7 +1266,8 @@
       .luxe-services-section,
       .luxe-promo,
       .luxe-team-section,
-      .luxe-contact { padding-left: 20px; padding-right: 20px; }
+      .luxe-contact,
+      .luxe-shop-page-shell { padding-left: 20px; padding-right: 20px; }
       .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
       .luxe-team-grid { grid-template-columns: 1fr; }
       .luxe-contact-inner { grid-template-columns: 1fr; }
@@ -1277,19 +1292,69 @@
         document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase init failed.</p></div></div>';
         return;
       }
+      firebase.auth().signInAnonymously().catch(function(err) {
+        console.warn('Anonymous sign-in failed (Storage uploads may fail):', err);
+      });
       const db = firebase.firestore();
       const functions = firebase.functions();
       const storage = firebase.storage();
 
-      /** Path-only public URLs: `/{tenantSlug}/`, `/{tenantSlug}/book/...`, `/{tenantSlug}/gallery` (no subdomains). */
+      function ensureAnonymousAuth() {
+        if (firebase.auth().currentUser) return Promise.resolve();
+        return firebase.auth().signInAnonymously();
+      }
+
+      /** Supports both subdomain routes (`{tenant}.getbookking.com/home`) and legacy path routes (`/tenant/home`). */
       function parsePath() {
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
         var parts = path ? path.split('/') : [];
-        var tenantSlug = (parts[0] || '').toLowerCase();
-        var isBookPath = parts[1] === 'book';
-        var isGalleryPath = parts[1] === 'gallery';
-        var serviceSlug = isBookPath && parts[2] ? String(parts[2]).toLowerCase() : '';
-        return { tenantSlug: tenantSlug, serviceSlug: serviceSlug, isBookPath: isBookPath, isGalleryPath: isGalleryPath };
+        var host = (location.hostname || '').toLowerCase();
+        var hostTenant = '';
+        if (host.endsWith('.getbookking.com') && host !== 'getbookking.com' && host !== 'www.getbookking.com') {
+          hostTenant = host.split('.')[0] || '';
+        }
+
+        var tenantSlug = '';
+        var page = 'home';
+        if (hostTenant) {
+          tenantSlug = hostTenant.toLowerCase();
+          page = (parts[0] || 'home').toLowerCase();
+        } else {
+          tenantSlug = (parts[0] || '').toLowerCase();
+          page = (parts[1] || 'home').toLowerCase();
+        }
+        if (!page) page = 'home';
+        if (page === tenantSlug) page = 'home';
+
+        var isBookPath = page === 'book';
+        var isGalleryPath = page === 'gallery';
+        var isShopPath = page === 'shop';
+        var isAboutPath = page === 'about';
+        var serviceSlugIndex = hostTenant ? 1 : 2;
+        var serviceSlug = isBookPath && parts[serviceSlugIndex] ? String(parts[serviceSlugIndex]).toLowerCase() : '';
+        var sectionTarget = isShopPath ? 'shop' : (isAboutPath ? 'about' : '');
+        return {
+          tenantSlug: tenantSlug,
+          page: page,
+          serviceSlug: serviceSlug,
+          isBookPath: isBookPath,
+          isGalleryPath: isGalleryPath,
+          isShopPath: isShopPath,
+          isAboutPath: isAboutPath,
+          sectionTarget: sectionTarget,
+          isSubdomainRoute: !!hostTenant
+        };
+      }
+      function tenantBaseUrl(tenant) {
+        var slug = (tenant && tenant.slug ? String(tenant.slug) : '').toLowerCase();
+        if (!slug) return location.origin;
+        var host = (location.hostname || '').toLowerCase();
+        var protocol = location.protocol || 'https:';
+        if (host === slug + '.getbookking.com') return location.origin;
+        if (host === 'getbookking.com' || host === 'www.getbookking.com' || host.endsWith('.getbookking.com')) {
+          return protocol + '//' + slug + '.getbookking.com';
+        }
+        return location.origin + '/' + slug;
       }
 
       function fontStackForDisplayKey(key) {
@@ -1436,7 +1501,7 @@
         return '';
       }
       function list(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var items = services.map(function(s){ return '<a href="'+base+'/book/'+s.slug+'" class="service-item">'+esc(s.name)+'</a>'; }).join('');
         var title = '<h1>'+esc(tenant.displayName||'Book an appointment')+'</h1>';
         var taglineHtml = tenant.tagline ? '<p class="tagline">'+esc(tenant.tagline)+'</p>' : '';
@@ -1466,18 +1531,12 @@
         var g = tenant.galleryImages || [];
         return g.slice(0, maxCells);
       }
-      /** /gallery page: new schema uses galleryImages only; legacy uses tail of old combined list. */
+      /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
       function galleryPageImageUrls(tenant) {
-        var g = tenant.galleryImages || [];
-        if (Object.prototype.hasOwnProperty.call(tenant, 'featuredWorkImages') && tenant.featuredWorkImages != null) {
-          return g;
-        }
-        var maxCells = maxCellsFromGalleryLayout(tenant.galleryGridLayout, 3, 1);
-        if (g.length <= maxCells) return [];
-        return g.slice(maxCells);
+        return tenant.galleryImages || [];
       }
       function hairLayoutPage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var title = esc(tenant.displayName || 'Let your hair shine with strength & beauty');
         var taglineText = tenant.tagline || 'A haircut is just the beginning. Experience hair artistry that enhances your beauty and confidence.';
         var statLabel = 'Happy customers';
@@ -1703,7 +1762,7 @@
         var contact = (tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail) ?
           '<p class="tagline">' + (tenant.contactPhone ? '📞 '+tenant.contactPhone+' ' : '') + (tenant.contactEmail ? '✉️ '+tenant.contactEmail : '') + '</p>' : '';
 
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
 
         var nav = usesThemedChrome(tenant) ? tattooNavHtml(tenant) : (
@@ -1747,7 +1806,7 @@
         var lead = '✓ Request received';
         var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
         if (usesThemedChrome(tenant)) {
-          var base = location.origin + '/' + tenant.slug;
+          var base = tenantBaseUrl(tenant);
           var bookUrl = base + '/book';
           var nav = tattooNavHtml(tenant);
           var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
@@ -1848,6 +1907,9 @@
             { label: 'Book', type: 'internal', target: 'book' },
             { label: 'About', type: 'internal', target: 'about' }
           ];
+          if (isLuxeTheme(tenant)) {
+            links.splice(3, 0, { label: 'Shop', type: 'internal', target: 'shop' });
+          }
         } else if (!links.some(function(l){ return l && l.target === 'gallery'; })) {
           links = links.slice();
           var insertAt = 0;
@@ -1864,10 +1926,12 @@
             href = bookUrl;
           } else if (l.target === 'gallery') {
             href = galleryUrl;
+          } else if (l.target === 'shop') {
+            href = base + '/shop';
           } else if (l.target === 'about') {
-            href = base + '#about';
+            href = base + '/about';
           } else {
-            href = base;
+            href = base + '/home';
           }
           return '<a href="'+esc(href)+'">'+esc(l.label || '')+'</a>';
         }).join('');
@@ -1884,7 +1948,7 @@
         return tattooSidebarBrandHtml(tenant) + sidebarLinksHtml(tenant, base, bookUrl);
       }
       function galleryPage(tenant) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Gallery';
 
@@ -1928,7 +1992,7 @@
       }
 
       function tattooHeroPage(tenant) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Studio';
         var nav = tattooNavHtml(tenant);
@@ -1989,7 +2053,7 @@
 
       /** Hair salon home: same structure as tattoo (hero → featured → Meet + location/hours/Instagram → sidebar). */
       function hairTattooStyleHomePage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Salon';
         var nav = tattooNavHtml(tenant);
@@ -2053,7 +2117,7 @@
 
       /** Barber shop home: same structure as hair; different hero, copy, and contact labels. */
       function barberPortfolioHomePage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Barbershop';
         var nav = tattooNavHtml(tenant);
@@ -2117,7 +2181,7 @@
 
       /** Pet grooming home: same structure as hair/barber (hero → featured → Meet + contact → sidebar). */
       function petGroomingPortfolioHomePage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Pet grooming';
         var nav = tattooNavHtml(tenant);
@@ -2178,22 +2242,72 @@
           '</div></div></section>';
         return '<div class="tattoo-page"><div class="tattoo-hero-wrap">' + nav + heroHtml + '</div>' + featuredHtml + aboutSection + sidebar + '</div>';
       }
+      function luxeTenantProductCardsHtml(tenant) {
+        if (!tenant._products || !tenant._products.length) return '';
+        var productCards = '';
+        for (var pi = 0; pi < tenant._products.length; pi++) {
+          var prod = tenant._products[pi];
+          var prodImg = prod.imageUrl ? '<img src="' + esc(prod.imageUrl) + '" alt="" loading="lazy">' : '<div class="luxe-product-placeholder">\u2726</div>';
+          var priceHtml = '';
+          if (prod.salePrice && prod.salePrice < prod.price) {
+            priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price-sale">$' + Number(prod.salePrice).toFixed(2) + '</span><span class="luxe-product-price-original">$' + Number(prod.price).toFixed(2) + '</span></div>';
+          } else {
+            priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price">$' + Number(prod.price).toFixed(2) + '</span></div>';
+          }
+          productCards += '<div class="luxe-product-card">' + prodImg + (prod.category ? '<p class="luxe-product-category">' + esc(prod.category) + '</p>' : '') + '<h3>' + esc(prod.name) + '</h3>' + priceHtml + '</div>';
+        }
+        return productCards;
+      }
+      function luxeShopPage(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Welcome';
+        var nav = '<nav class="luxe-nav">' +
+          '<a href="' + base + '/home" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
+          '<div class="luxe-nav-trailing">' +
+            '<div class="luxe-nav-links">' +
+            '<a href="' + base + '/home">Home</a>' +
+            '<a href="' + base + '/home#services">Services</a>' +
+            '<a href="' + galleryUrl + '">Gallery</a>' +
+            '<a href="' + base + '/shop">Shop</a>' +
+            '<a href="' + base + '/about">About</a>' +
+            '<a href="' + bookUrl + '">Booking</a>' +
+          '</div>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
+          '</div>' +
+        '</nav>';
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
+          tattooSidebarBrandHtml(tenant) +
+          sidebarLinksHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var productCards = luxeTenantProductCardsHtml(tenant);
+        var inner = productCards
+          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
+          : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#555;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
+        return '<div class="luxe-page">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
+      }
       function luxeHomePage(tenant, services) {
-        var base = location.origin + '/' + tenant.slug;
+        var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
         var displayName = tenant.displayName || 'Welcome';
 
         var nav = '<nav class="luxe-nav">' +
-          '<a href="' + base + '" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
-          '<div class="luxe-nav-links">' +
-            '<a href="' + base + '">Home</a>' +
-            '<a href="' + base + '#services">Services</a>' +
+          '<a href="' + base + '/home" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
+          '<div class="luxe-nav-trailing">' +
+            '<div class="luxe-nav-links">' +
+            '<a href="' + base + '/home">Home</a>' +
+            '<a href="' + base + '/home#services">Services</a>' +
             '<a href="' + galleryUrl + '">Gallery</a>' +
-            '<a href="' + base + '#about">About</a>' +
+            '<a href="' + base + '/shop">Shop</a>' +
+            '<a href="' + base + '/about">About</a>' +
             '<a href="' + bookUrl + '">Booking</a>' +
           '</div>' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
+          '</div>' +
         '</nav>';
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
@@ -2236,23 +2350,23 @@
           var imgTag = featuredImages[i]
             ? '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy">'
             : '<div class="luxe-service-placeholder">\u2726</div>';
-          serviceCards += '<a href="' + bookUrl + '/' + esc(s.slug) + '" class="luxe-service-card">' +
+          serviceCards += '<a href="' + galleryUrl + '" class="luxe-service-card">' +
             imgTag +
             '<h3>' + esc(s.name) + '</h3>' +
-            '<span class="luxe-service-link">Book online \u2192</span>' +
+            '<span class="luxe-service-link">View gallery \u2192</span>' +
           '</a>';
         }
 
         var servicesSection = '<section id="services" class="luxe-services-section">' +
           '<p class="luxe-section-label">Our Services</p>' +
-          '<h2 class="luxe-section-heading">What We Offer</h2>' +
+          '<h2 class="luxe-section-heading">Current Flash</h2>' +
           '<div class="luxe-services-grid">' + serviceCards + '</div>' +
         '</section>';
 
-        var promoTag = tenant.tagline || 'Your satisfaction is our priority.';
+        var promoTag = tenant.tagline || 'Book with confidence.';
         var promo = '<section class="luxe-promo">' +
           '<div class="luxe-promo-inner">' +
-            '<h2>Ready for a Fresh Look?</h2>' +
+            '<h2>Ready for Your Next Piece?</h2>' +
             '<p>' + esc(promoTag) + '</p>' +
             '<a href="' + bookUrl + '" class="luxe-promo-cta">Book Now</a>' +
           '</div>' +
@@ -2288,24 +2402,7 @@
           '</div>' +
         '</section>';
 
-        var shopHtml = '';
-        if (tenant._products && tenant._products.length > 0) {
-          var productCards = '';
-          for (var pi = 0; pi < tenant._products.length; pi++) {
-            var prod = tenant._products[pi];
-            var prodImg = prod.imageUrl ? '<img src="' + esc(prod.imageUrl) + '" alt="" loading="lazy">' : '<div class="luxe-product-placeholder">\u2726</div>';
-            var priceHtml = '';
-            if (prod.salePrice && prod.salePrice < prod.price) {
-              priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price-sale">$' + Number(prod.salePrice).toFixed(2) + '</span><span class="luxe-product-price-original">$' + Number(prod.price).toFixed(2) + '</span></div>';
-            } else {
-              priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price">$' + Number(prod.price).toFixed(2) + '</span></div>';
-            }
-            productCards += '<div class="luxe-product-card">' + prodImg + (prod.category ? '<p class="luxe-product-category">' + esc(prod.category) + '</p>' : '') + '<h3>' + esc(prod.name) + '</h3>' + priceHtml + '</div>';
-          }
-          shopHtml = '<section class="luxe-shop-section"><div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div></section>';
-        }
-
-        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + shopHtml + contact + sidebar + '</div>';
+        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + contact + sidebar + '</div>';
       }
 
       function bindTattooSidebar() {
@@ -2357,6 +2454,22 @@
           return Promise.all([loadServices(tenant.id), loadProducts(tenant.id)]).then(function(results){
             var services = results[0];
             tenant._products = results[1];
+            var isShop = p.isShopPath;
+            if (isShop && isLuxeTheme(tenant)) {
+              document.getElementById('root').innerHTML = luxeShopPage(tenant);
+              bindTattooSidebar();
+              document.body.style.background = '#FFFDF9';
+              document.body.style.color = '#1a1a1a';
+              applyBranding(tenant);
+              applySidebarIconColor(tenant, false, true);
+              return;
+            }
+            if (isShop && !isLuxeTheme(tenant)) {
+              var shopBase = tenantBaseUrl(tenant);
+              document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p>Shop is only available on the Luxe site template.</p><p><a href="' + esc(shopBase + '/home') + '">Back to home</a></p></div></div>';
+              applyBranding(tenant);
+              return;
+            }
             if (services.length === 0) {
               document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>'+esc(tenant.displayName||'Book')+'</h1><p>No services available yet.</p></div></div>';
               applyBranding(tenant);
@@ -2365,7 +2478,7 @@
             var presel = p.serviceSlug ? services.filter(function(s){ return s.slug === p.serviceSlug; })[0] : null;
             var showForm = p.isBookPath && services.length > 0;
             var isGallery = p.isGalleryPath;
-            var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery);
+            var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
             var isHairHome = (!isLuxeHome && tenant.industry === 'hair' && !p.isBookPath && !isGallery);
             var isBarberHome = (!isLuxeHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
             var isPetGroomingHome = (!isLuxeHome && tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
@@ -2409,6 +2522,14 @@
             }
             applyBranding(tenant);
             applySidebarIconColor(tenant, p.isBookPath, false);
+            if (!showForm && p.sectionTarget) {
+              setTimeout(function() {
+                var target = document.getElementById(p.sectionTarget);
+                if (target && target.scrollIntoView) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 0);
+            }
             if (showForm) {
               function uploadId() {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -2417,28 +2538,31 @@
                 });
               }
               function uploadFileFields(fm, tenantId, formResponses) {
-                var fileInputs = fm.querySelectorAll('input[data-type="file"]');
-                var fieldPromises = [];
-                for (var fi = 0; fi < fileInputs.length; fi++) {
-                  var inp = fileInputs[fi];
-                  var key = inp.getAttribute('data-key');
-                  if (!key || !inp.files || inp.files.length === 0) continue;
-                  var uid = uploadId();
-                  var pathBase = 'tenantRefImages/' + tenantId + '/' + uid + '/';
-                  var uploads = [];
-                  for (var j = 0; j < inp.files.length; j++) {
-                    var file = inp.files[j];
-                    var safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
-                    var ref = storage.ref(pathBase + safeName);
-                    uploads.push(ref.put(file).then(function(snapshot) { return snapshot.ref.getDownloadURL(); }));
+                function runUploads() {
+                  var fileInputs = fm.querySelectorAll('input[data-type="file"]');
+                  var fieldPromises = [];
+                  for (var fi = 0; fi < fileInputs.length; fi++) {
+                    var inp = fileInputs[fi];
+                    var key = inp.getAttribute('data-key');
+                    if (!key || !inp.files || inp.files.length === 0) continue;
+                    var uid = uploadId();
+                    var pathBase = 'tenantRefImages/' + tenantId + '/' + uid + '/';
+                    var uploads = [];
+                    for (var j = 0; j < inp.files.length; j++) {
+                      var file = inp.files[j];
+                      var safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+                      var ref = storage.ref(pathBase + safeName);
+                      uploads.push(ref.put(file).then(function(snapshot) { return snapshot.ref.getDownloadURL(); }));
+                    }
+                    fieldPromises.push(Promise.all(uploads).then(function(urls) {
+                      formResponses[key] = urls;
+                      return urls;
+                    }));
                   }
-                  fieldPromises.push(Promise.all(uploads).then(function(urls) {
-                    formResponses[key] = urls;
-                    return urls;
-                  }));
+                  if (fieldPromises.length === 0) return Promise.resolve(formResponses);
+                  return Promise.all(fieldPromises).then(function() { return formResponses; });
                 }
-                if (fieldPromises.length === 0) return Promise.resolve(formResponses);
-                return Promise.all(fieldPromises).then(function() { return formResponses; });
+                return ensureAnonymousAuth().then(runUploads);
               }
               function setupDropzones(fm) {
                 function fileListText(files) {

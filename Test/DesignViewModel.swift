@@ -385,7 +385,10 @@ class DesignViewModel: ObservableObject {
             let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
             var updated = galleryImages
             updated.append(url)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["galleryImages": updated])
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "galleryImages": updated,
+                "featuredWorkImages": featuredWorkImages
+            ])
             await MainActor.run {
                 galleryImages = updated
                 isUploadingGallery = false
@@ -405,7 +408,10 @@ class DesignViewModel: ObservableObject {
         var updated = galleryImages
         updated.remove(at: index)
         do {
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["galleryImages": updated])
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "galleryImages": updated,
+                "featuredWorkImages": featuredWorkImages
+            ])
             await MainActor.run {
                 galleryImages = updated
                 invalidateWebPreview()

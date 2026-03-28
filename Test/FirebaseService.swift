@@ -390,11 +390,19 @@ class FirebaseService: ObservableObject {
         subscriptionPlan: String
     ) async throws {
         let slugValue = slug(from: business).isEmpty ? "business-\(uid.prefix(8))" : slug(from: business)
-        let tenantId = try await createTenant(displayName: business, slug: slugValue, industry: industry)
+        let indNorm = industry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmedIndustry = industry.trimmingCharacters(in: .whitespacesAndNewlines)
+        let template = BookingTemplate(rawValue: indNorm) ?? BookingTemplate(rawValue: trimmedIndustry) ?? .custom
+
+        let tenantId = try await createTenant(
+            displayName: business,
+            slug: slugValue,
+            industry: template.rawValue,
+            ownerUid: uid
+        )
 
         // Apply booking template immediately so services/form fields are ready right after sign up.
         // (Settings → "Save and apply to website" should no longer be required for initial setup.)
-        let template = BookingTemplate(rawValue: industry) ?? .custom
         let schema = template.formFields.map { $0.toFirestore() }
         for item in template.defaultServices {
             _ = try await createTenantService(
@@ -403,9 +411,11 @@ class FirebaseService: ObservableObject {
                 durationMinutes: item.durationMinutes
             )
         }
+        let webThemeId = WebTheme.defaultTheme(forIndustry: template.rawValue).rawValue
         try await updateTenant(tenantId: tenantId, updates: [
             "formSchema": schema,
-            "industry": template.rawValue
+            "industry": template.rawValue,
+            "webThemeId": webThemeId
         ])
 
         let data: [String: Any] = [
@@ -417,7 +427,7 @@ class FirebaseService: ObservableObject {
             "lastName": lastName,
             "profilePhotoUrl": "",
             "business": business,
-            "industry": industry,
+            "industry": template.rawValue,
             "subscriptionPlan": subscriptionPlan,
             "subscriptionStatus": "active",
             "availability": [
@@ -489,7 +499,9 @@ class FirebaseService: ObservableObject {
     func uploadTenantLogo(tenantId: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let ref = storage.reference().child("tenants/\(tenantId)/logo.jpg")
-        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(imageData, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -563,7 +575,9 @@ class FirebaseService: ObservableObject {
     func uploadTenantHeroImage(tenantId: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let ref = storage.reference().child("tenants/\(tenantId)/hero.jpg")
-        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(imageData, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -572,17 +586,20 @@ class FirebaseService: ObservableObject {
         let storage = Storage.storage()
         let name = UUID().uuidString + ".jpg"
         let ref = storage.reference().child("tenants/\(tenantId)/gallery/\(name)")
-        _ = try await ref.putDataAsync(imageData, metadata: nil)
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(imageData, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
 
-    private func createTenant(displayName: String, slug: String, industry: String) async throws -> String {
+    private func createTenant(displayName: String, slug: String, industry: String, ownerUid: String) async throws -> String {
         let ref = db.collection("tenants").document()
         try await ref.setData([
             "slug": slug,
             "displayName": displayName,
             "industry": industry,
+            "ownerUid": ownerUid,
             "isActive": true,
             "bookingModeDefault": "request",
             "requireApprovalForSlotBookings": true,

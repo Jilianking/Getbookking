@@ -588,7 +588,7 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Products")
                 .font(.headline)
-            Text("Add products to display in the shop section on your Luxe template.")
+            Text("Add products to display in the shop section on your Luxe or Blade template.")
                 .font(.caption)
                 .foregroundColor(.secondary)
 

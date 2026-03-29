@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kanit:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Teko:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&family=Poiret+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
@@ -434,6 +435,9 @@
       position: absolute;
       top: 0;
       left: 0;
+      right: 0;
+      width: 100%;
+      box-sizing: border-box;
       z-index: 10;
       background: none;
       backdrop-filter: none;
@@ -443,7 +447,7 @@
       padding: 12px 12px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 12px;
       width: 100%;
       box-sizing: border-box;
@@ -452,7 +456,7 @@
     .tattoo-nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; }
     .tattoo-nav-links a { color: rgba(255,255,255,0.95); text-decoration: none; }
     .tattoo-nav-links a:hover { color: #fff; text-decoration: underline; }
-    .tattoo-nav-menu { margin-left: auto; background: none; border: none; color: #fff; font-size: 2rem; padding: 12px; cursor: pointer; line-height: 1; }
+    .tattoo-nav-menu { background: none; border: none; color: #fff; font-size: 2rem; padding: 12px; cursor: pointer; line-height: 1; }
     .tattoo-hero-section {
       min-height: 60vh; display: flex; align-items: center; justify-content: center;
       background-size: cover; background-position: center; background-color: #111;
@@ -921,6 +925,7 @@
     .luxe-nav .tattoo-nav-menu {
       margin-left: 0;
       flex-shrink: 0;
+      color: #fff;
     }
     .luxe-nav-brand {
       font-family: var(--font-hero);
@@ -943,6 +948,27 @@
       font-weight: 500;
     }
     .luxe-nav-links a:hover { color: #fff; }
+    /* Cream subpages (shop / gallery / book): dark chrome; home hero keeps white nav above */
+    .luxe-nav--light .luxe-nav-brand {
+      color: #1a1a1a;
+    }
+    .luxe-nav--light .luxe-nav-links a {
+      color: rgba(26, 26, 26, 0.72);
+    }
+    .luxe-nav--light .luxe-nav-links a:hover {
+      color: #1a1a1a;
+    }
+    .luxe-nav--light .tattoo-nav-menu {
+      color: #1a1a1a;
+    }
+    .luxe-page--sub .gallery-header {
+      padding-top: 108px;
+    }
+    @media (max-width: 640px) {
+      .luxe-page--sub .gallery-header {
+        padding-top: 92px;
+      }
+    }
     .luxe-hero {
       position: relative;
       min-height: 92vh;
@@ -1137,7 +1163,7 @@
     }
     .luxe-promo-cta:hover { background: #333; }
     .luxe-shop-section { padding: 80px 40px; background: #FFFDF9; }
-    .luxe-shop-page-shell { padding: 56px 40px 80px; background: #FFFDF9; min-height: 55vh; }
+    .luxe-shop-page-shell { padding: 96px 40px 80px; background: #FFFDF9; min-height: 55vh; }
     .luxe-shop-inner { max-width: 1200px; margin: 0 auto; text-align: center; }
     .luxe-shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; text-align: left; }
     .luxe-product-card { text-decoration: none; color: inherit; display: block; transition: transform 0.2s; }
@@ -1224,6 +1250,14 @@
       background: #FFFDF9;
       color: #1a1a1a;
     }
+    .luxe-page--sub .booking-shell {
+      padding-top: 96px;
+    }
+    @media (max-width: 640px) {
+      .luxe-page--sub .booking-shell {
+        padding-top: 88px;
+      }
+    }
     .luxe-page .booking-page-title {
       color: #1a1a1a;
       font-family: var(--font-hero);
@@ -1272,6 +1306,580 @@
       .luxe-team-grid { grid-template-columns: 1fr; }
       .luxe-contact-inner { grid-template-columns: 1fr; }
       .luxe-hero { min-height: 75vh; }
+    }
+    /* ─── Blade (blade-v1) universal dark theme — scoped under .blade-page ─── */
+    .blade-page {
+      --bh-black: #0a0a08;
+      --bh-charcoal: #141410;
+      --bh-muted: #1e1e18;
+      --bh-gold: #c9a84c;
+      --bh-gold-light: #e5c97a;
+      --bh-cream: #f5f0e8;
+      --bh-grey: #888880;
+      --bh-line: rgba(201, 168, 76, 0.2);
+      min-height: 100vh;
+      background: var(--bh-black);
+      color: var(--bh-cream);
+      font-family: 'Barlow', sans-serif;
+      font-weight: 300;
+      overflow-x: hidden;
+      padding-top: 88px;
+    }
+    .blade-page--sub { padding-top: 96px; }
+    .blade-page .blade-topnav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 22px 40px;
+      background: transparent;
+      transition: background 0.25s ease, backdrop-filter 0.25s ease;
+    }
+    .blade-page .blade-topnav::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 40px; right: 40px;
+      height: 1px;
+      background: var(--bh-line);
+    }
+    .blade-page .blade-nav-logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.14em;
+      color: var(--bh-gold);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .blade-page .blade-nav-trailing {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .blade-page .blade-nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .blade-page .blade-nav-links a {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--bh-grey);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .blade-page .blade-nav-links a:hover { color: var(--bh-cream); }
+    .blade-page .blade-nav-book {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--bh-black);
+      background: var(--bh-gold);
+      border: none;
+      padding: 10px 22px;
+      text-decoration: none;
+      transition: background 0.3s;
+      white-space: nowrap;
+    }
+    .blade-page .blade-nav-book:hover { background: var(--bh-gold-light); color: var(--bh-black); }
+    .blade-page .blade-nav-menu-btn {
+      display: none !important;
+      background: none !important;
+      border: none !important;
+      font-size: 1.45rem !important;
+      cursor: pointer;
+      padding: 8px !important;
+      color: var(--bh-gold) !important;
+    }
+    .blade-page .blade-hero {
+      min-height: calc(100vh - 88px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      position: relative;
+      overflow: hidden;
+    }
+    .blade-page .blade-hero-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 0 40px 64px;
+      position: relative;
+      z-index: 2;
+    }
+    .blade-page .blade-hero-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--bh-gold);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .blade-page .blade-hero-eyebrow::before {
+      content: '';
+      width: 36px;
+      height: 1px;
+      background: var(--bh-gold);
+    }
+    .blade-page .blade-hero-title {
+      font-family: 'Anton', sans-serif;
+      font-size: clamp(48px, 7vw, 104px);
+      line-height: 0.92;
+      letter-spacing: -0.02em;
+      color: var(--bh-cream);
+      margin: 0 0 28px;
+      text-transform: uppercase;
+    }
+    .blade-page .blade-hero-title em {
+      font-style: italic;
+      font-family: 'Barlow', sans-serif;
+      font-weight: 300;
+      font-size: 0.38em;
+      color: var(--bh-gold);
+      display: block;
+      letter-spacing: 0.06em;
+      line-height: 1.35;
+      margin-bottom: 10px;
+      text-transform: none;
+    }
+    .blade-page .blade-hero-desc {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--bh-grey);
+      max-width: 400px;
+      margin-bottom: 40px;
+    }
+    .blade-page .blade-hero-cta { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+    .blade-page .blade-btn-primary {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--bh-black);
+      background: var(--bh-gold);
+      border: none;
+      padding: 16px 36px;
+      text-decoration: none;
+      transition: all 0.3s;
+      display: inline-block;
+    }
+    .blade-page .blade-btn-primary:hover { background: var(--bh-gold-light); transform: translateY(-2px); }
+    .blade-page .blade-btn-ghost {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--bh-cream);
+      background: transparent;
+      border: 1px solid rgba(245, 240, 232, 0.25);
+      padding: 16px 36px;
+      text-decoration: none;
+      transition: all 0.3s;
+      display: inline-block;
+    }
+    .blade-page .blade-btn-ghost:hover { border-color: var(--bh-gold); color: var(--bh-gold); }
+    .blade-page .blade-hero-right {
+      position: relative;
+      overflow: hidden;
+      min-height: 320px;
+    }
+    .blade-page .blade-hero-image {
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      object-fit: cover;
+      filter: grayscale(25%) contrast(1.05);
+      transform: scale(1.02);
+      transition: transform 8s ease;
+    }
+    .blade-page .blade-hero-right:hover .blade-hero-image { transform: scale(1.05); }
+    .blade-page .blade-hero-placeholder {
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      background: linear-gradient(160deg, #1c1a14 0%, #0f0f0b 40%, #141410 100%);
+    }
+    .blade-page .blade-hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, var(--bh-black) 0%, transparent 42%);
+      pointer-events: none;
+    }
+    .blade-page .blade-hero-vertical {
+      position: absolute;
+      right: 28px;
+      bottom: 56px;
+      writing-mode: vertical-rl;
+      font-size: 10px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--bh-grey);
+      z-index: 3;
+    }
+    .blade-page .blade-stats-bar {
+      background: var(--bh-charcoal);
+      border-top: 1px solid var(--bh-line);
+      border-bottom: 1px solid var(--bh-line);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 0 40px;
+    }
+    .blade-page .blade-stat-item {
+      padding: 32px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-right: 1px solid var(--bh-line);
+      padding-right: 28px;
+      padding-left: 28px;
+    }
+    .blade-page .blade-stat-item:first-child { padding-left: 0; }
+    .blade-page .blade-stat-item:last-child { border-right: none; }
+    .blade-page .blade-stat-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 42px;
+      color: var(--bh-gold);
+      line-height: 1;
+    }
+    .blade-page .blade-stat-label {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--bh-grey);
+    }
+    .blade-page .blade-section {
+      padding: 96px 40px;
+      position: relative;
+    }
+    .blade-page .blade-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 32px;
+      margin-bottom: 56px;
+      flex-wrap: wrap;
+    }
+    .blade-page .blade-section-label {
+      font-size: 10px;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--bh-gold);
+      margin-bottom: 12px;
+    }
+    .blade-page .blade-section-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 4.5vw, 64px);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      color: var(--bh-cream);
+      margin: 0;
+    }
+    .blade-page .blade-section-desc {
+      font-size: 14px;
+      color: var(--bh-grey);
+      max-width: 320px;
+      line-height: 1.75;
+      margin: 0;
+    }
+    .blade-page .blade-services-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--bh-line);
+    }
+    .blade-page .blade-service-card {
+      background: var(--bh-charcoal);
+      padding: 40px 32px;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.35s;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .blade-page .blade-service-card::before {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%; height: 2px;
+      background: var(--bh-gold);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.35s ease;
+    }
+    .blade-page .blade-service-card:hover { background: var(--bh-muted); }
+    .blade-page .blade-service-card:hover::before { transform: scaleX(1); }
+    .blade-page .blade-service-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 56px;
+      color: rgba(201, 168, 76, 0.1);
+      line-height: 1;
+      position: absolute;
+      top: 20px; right: 24px;
+    }
+    .blade-page .blade-gold-rule {
+      width: 36px;
+      height: 1px;
+      background: var(--bh-gold);
+      margin-bottom: 16px;
+    }
+    .blade-page .blade-service-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      letter-spacing: 0.05em;
+      color: var(--bh-cream);
+      margin: 0 0 10px;
+    }
+    .blade-page .blade-service-desc {
+      font-size: 13px;
+      color: var(--bh-grey);
+      line-height: 1.7;
+      margin: 0 0 22px;
+    }
+    .blade-page .blade-service-price {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--bh-gold);
+    }
+    .blade-page .blade-about-block {
+      padding: 96px 40px;
+      background: var(--bh-charcoal);
+      border-top: 1px solid var(--bh-line);
+      border-bottom: 1px solid var(--bh-line);
+    }
+    .blade-page .blade-about-body {
+      font-size: 16px;
+      line-height: 1.85;
+      color: var(--bh-grey);
+      max-width: 720px;
+    }
+    .blade-page .blade-gallery-strip {
+      padding: 96px 0 96px 40px;
+      overflow: hidden;
+    }
+    .blade-page .blade-gallery-marquee {
+      display: flex;
+      gap: 14px;
+      margin-top: 56px;
+      animation: blade-marquee 32s linear infinite;
+      width: max-content;
+    }
+    .blade-page .blade-gallery-marquee:hover { animation-play-state: paused; }
+    @keyframes blade-marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    .blade-page .blade-gallery-item {
+      width: 260px;
+      height: 340px;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: var(--bh-muted);
+    }
+    .blade-page .blade-gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: grayscale(50%);
+      transition: filter 0.35s, transform 0.35s;
+    }
+    .blade-page .blade-gallery-item:hover img { filter: grayscale(0%); transform: scale(1.04); }
+    .blade-page .blade-book-panel {
+      padding: 96px 40px;
+      background: var(--bh-charcoal);
+      border-top: 1px solid var(--bh-line);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .blade-page .blade-book-title {
+      font-family: 'Anton', sans-serif;
+      font-size: clamp(44px, 5vw, 88px);
+      line-height: 0.92;
+      letter-spacing: -0.02em;
+      color: var(--bh-cream);
+      margin: 12px 0 20px;
+      text-transform: uppercase;
+    }
+    .blade-page .blade-book-title span { color: var(--bh-gold); display: block; }
+    .blade-page .blade-hours-block {
+      margin-top: 28px;
+      font-size: 14px;
+      color: var(--bh-cream);
+      white-space: pre-line;
+      line-height: 1.7;
+    }
+    .blade-page .blade-testimonials {
+      padding: 96px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .blade-page .blade-testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--bh-line);
+      margin-top: 56px;
+    }
+    .blade-page .blade-testimonial-card {
+      background: var(--bh-black);
+      padding: 40px 32px;
+    }
+    .blade-page .blade-testimonial-stars { color: var(--bh-gold); font-size: 14px; letter-spacing: 4px; margin-bottom: 18px; }
+    .blade-page .blade-testimonial-text {
+      font-size: 15px;
+      font-style: italic;
+      color: var(--bh-cream);
+      line-height: 1.75;
+      margin: 0 0 22px;
+    }
+    .blade-page .blade-testimonial-author {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--bh-gold);
+    }
+    .blade-page .blade-info-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-top: 1px solid var(--bh-line);
+    }
+    .blade-page .blade-info-half {
+      padding: 72px 40px;
+    }
+    .blade-page .blade-info-half:first-child { border-right: 1px solid var(--bh-line); }
+    .blade-page .blade-hours-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--bh-line);
+      font-size: 13px;
+    }
+    .blade-page .blade-hours-day { color: var(--bh-grey); letter-spacing: 0.06em; }
+    .blade-page .blade-hours-val { color: var(--bh-cream); text-align: right; }
+    .blade-page .blade-address-block { margin-top: 28px; font-size: 15px; line-height: 1.85; color: var(--bh-cream); }
+    .blade-page .blade-address-phone {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 0.05em;
+      color: var(--bh-gold);
+      margin-top: 20px;
+      display: inline-block;
+      text-decoration: none;
+    }
+    .blade-page footer.blade-footer {
+      background: var(--bh-black);
+      border-top: 1px solid var(--bh-line);
+      padding: 44px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .blade-page .blade-footer-logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 0.18em;
+      color: var(--bh-gold);
+    }
+    .blade-page .blade-footer-copy { font-size: 11px; letter-spacing: 0.12em; color: var(--bh-grey); margin: 0; }
+    .blade-page .blade-footer-links { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; }
+    .blade-page .blade-footer-links a {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--bh-grey);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .blade-page .blade-footer-links a:hover { color: var(--bh-gold); }
+    .blade-page .blade-fade-up {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .blade-page .blade-fade-up.blade-visible { opacity: 1; transform: translateY(0); }
+    .blade-page .blade-shop-page-shell {
+      padding: 48px 40px 80px;
+      background: var(--bh-black);
+      min-height: 50vh;
+    }
+    .blade-page .blade-shop-page-shell .luxe-section-label { color: var(--bh-gold); }
+    .blade-page .blade-shop-page-shell .luxe-section-heading { color: var(--bh-cream); }
+    .blade-page .blade-shop-page-shell .luxe-product-card h3 { color: var(--bh-cream); }
+    .blade-page .blade-shop-page-shell .luxe-product-price,
+    .blade-page .blade-shop-page-shell .luxe-product-price-sale { color: var(--bh-gold); }
+    .blade-page .blade-shop-page-shell .luxe-product-category { color: var(--bh-grey); }
+    .blade-page.blade-page--sub .gallery-header { padding-top: 100px; }
+    .blade-page.blade-page--sub .gallery-title { color: var(--bh-cream); font-family: 'Bebas Neue', sans-serif; }
+    .blade-page.blade-page--sub .gallery-grid img { border-radius: 4px; }
+    .blade-page.blade-page--sub .gallery-empty-hint { color: var(--bh-grey); }
+    .blade-page .booking-shell {
+      background: var(--bh-black) !important;
+      color: var(--bh-cream) !important;
+    }
+    .blade-page .booking-page-title { color: var(--bh-cream) !important; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
+    .blade-page .booking-page-subtitle { color: var(--bh-grey) !important; }
+    .blade-page .booking-card {
+      background: var(--bh-charcoal) !important;
+      color: var(--bh-cream) !important;
+      border: 1px solid var(--bh-line);
+      box-shadow: none !important;
+    }
+    .blade-page .booking-form label { color: var(--bh-grey); }
+    .blade-page .booking-form input,
+    .blade-page .booking-form textarea,
+    .blade-page .booking-form select {
+      background: var(--bh-black) !important;
+      border-color: var(--bh-line) !important;
+      color: var(--bh-cream) !important;
+    }
+    .blade-page .booking-submit {
+      background: var(--bh-gold) !important;
+      color: var(--bh-black) !important;
+      border: none;
+    }
+    .blade-page .booking-submit:hover { background: var(--bh-gold-light) !important; }
+    .blade-page .booking-success-flat .booking-success-lead { color: var(--bh-gold) !important; }
+    .blade-page .booking-success-flat .booking-success-detail { color: var(--bh-grey) !important; }
+    @media (max-width: 900px) {
+      .blade-page .blade-nav-links { display: none !important; }
+      .blade-page .blade-nav-menu-btn { display: block !important; }
+      .blade-page .blade-hero { grid-template-columns: 1fr; }
+      .blade-page .blade-hero-left { padding: 32px 24px 48px; }
+      .blade-page .blade-hero-vertical { display: none; }
+      .blade-page .blade-stats-bar { grid-template-columns: repeat(2, 1fr); }
+      .blade-page .blade-stat-item { border-right: none; padding-left: 0; }
+      .blade-page .blade-stat-item:nth-child(odd) { border-right: 1px solid var(--bh-line); }
+      .blade-page .blade-services-grid { grid-template-columns: 1fr; }
+      .blade-page .blade-testimonials-grid { grid-template-columns: 1fr; }
+      .blade-page .blade-book-panel { grid-template-columns: 1fr; }
+      .blade-page .blade-info-section { grid-template-columns: 1fr; }
+      .blade-page .blade-info-half:first-child { border-right: none; border-bottom: 1px solid var(--bh-line); }
+      .blade-page .blade-topnav { padding: 18px 20px; }
+      .blade-page .blade-topnav::after { left: 20px; right: 20px; }
+      .blade-page .blade-section,
+      .blade-page .blade-about-block,
+      .blade-page .blade-gallery-strip,
+      .blade-page .blade-book-panel,
+      .blade-page .blade-testimonials,
+      .blade-page .blade-info-half,
+      .blade-page footer.blade-footer { padding-left: 20px; padding-right: 20px; }
     }
   </style>
 </head>
@@ -1415,19 +2023,19 @@
         [].forEach.call(document.querySelectorAll('.card'), function(el){ el.style.background = card; });
         [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el){ el.style.background = accent; el.style.color = '#fff'; });
         // Hair uses tattoo-style home; featured-band colors on body (same idea as tattoos)
-        if (t.industry === 'hair' && !isLuxeTheme(t)) {
+        if (t.industry === 'hair' && !isLuxeTheme(t) && !isBladeTheme(t)) {
           var hw = t.featuredWorkBackgroundColor || '#FAF8F5';
           var hx = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = hw;
           document.body.style.color = hx;
         }
-        if (t.industry === 'barber' && !isLuxeTheme(t)) {
+        if (t.industry === 'barber' && !isLuxeTheme(t) && !isBladeTheme(t)) {
           var bb = t.featuredWorkBackgroundColor || '#FAFAF9';
           var bf = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = bb;
           document.body.style.color = bf;
         }
-        if (t.industry === 'pet_grooming' && !isLuxeTheme(t)) {
+        if (t.industry === 'pet_grooming' && !isLuxeTheme(t) && !isBladeTheme(t)) {
           var pg = t.featuredWorkBackgroundColor || '#FAF8F5';
           var pgt = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = pg;
@@ -1437,8 +2045,12 @@
           document.body.style.background = '#FFFDF9';
           document.body.style.color = '#1a1a1a';
         }
+        if (isBladeTheme(t)) {
+          document.body.style.background = '#0a0a08';
+          document.body.style.color = '#f5f0e8';
+        }
         // Override for Tattoo template: same surface as Featured work / Gallery / Book
-        if (t.industry === 'tattoos') {
+        if (t.industry === 'tattoos' && !isBladeTheme(t)) {
           var tw = t.featuredWorkBackgroundColor || '#FAF8F5';
           var tx = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = tw;
@@ -1459,14 +2071,14 @@
         if (!iconColor) {
           if (isGalleryPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917'))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))
               : '#FFFFFF';
           } else if (isBookPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917'))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))
               : '#000000';
           } else if (usesThemedChrome(tenant)) {
-            iconColor = '#FFFFFF';
+            iconColor = isBladeTheme(tenant) ? '#c9a84c' : '#FFFFFF';
           } else {
             var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
             iconColor = (bg === '#FFFFFF' || bg === '#FFF') ? '#000000' : '#FFFFFF';
@@ -1487,14 +2099,250 @@
       function isLuxeTheme(tenant) {
         return tenant && tenant.resolvedWebThemeId === 'luxe-v1';
       }
+      function isBladeTheme(tenant) {
+        return tenant && tenant.resolvedWebThemeId === 'blade-v1';
+      }
       function usesThemedChrome(tenant) {
-        return isPortfolioIndustry(tenant.industry) || isLuxeTheme(tenant);
+        return isPortfolioIndustry(tenant.industry) || isLuxeTheme(tenant) || isBladeTheme(tenant);
       }
       /** Top bar: menu only. Public wordmark is displayName + hero font (sidebar). `logoUrl` = profile image in Settings, not used on tattoo pages. */
       function tattooNavHtml(tenant) {
         return '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
           '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
           '</div></nav>';
+      }
+      /** Luxe top bar: `hero` = white on dark hero; `light` = dark on cream (shop / gallery / book). */
+      function luxeChromeNavHtml(tenant, variant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Welcome';
+        var navClass = variant === 'light' ? 'luxe-nav luxe-nav--light' : 'luxe-nav';
+        return '<nav class="' + navClass + '">' +
+          '<a href="' + base + '/home" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
+          '<div class="luxe-nav-trailing">' +
+            '<div class="luxe-nav-links">' +
+            '<a href="' + base + '/home">Home</a>' +
+            '<a href="' + galleryUrl + '">Gallery</a>' +
+            '<a href="' + base + '/shop">Shop</a>' +
+            '<a href="' + base + '/about">About</a>' +
+            '<a href="' + bookUrl + '">Booking</a>' +
+          '</div>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
+          '</div>' +
+        '</nav>';
+      }
+      /** Blade (blade-v1): fixed dark nav + gold accents; `anchorHome` for #section links from subpages. */
+      function bladeNavHtml(tenant, anchorHome) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var shopUrl = base + '/shop';
+        var h = anchorHome || (base + '/home');
+        var name = esc(tenant.displayName || 'Studio');
+        return '<nav class="blade-topnav">' +
+          '<a href="' + base + '/home" class="blade-nav-logo">' + name + '</a>' +
+          '<div class="blade-nav-trailing">' +
+          '<ul class="blade-nav-links">' +
+          '<li><a href="' + h + '#services">Services</a></li>' +
+          '<li><a href="' + h + '#about">About</a></li>' +
+          '<li><a href="' + galleryUrl + '">Gallery</a></li>' +
+          '<li><a href="' + shopUrl + '">Shop</a></li>' +
+          '<li><a href="' + h + '#location">Location</a></li>' +
+          '</ul>' +
+          '<a href="' + bookUrl + '" class="blade-nav-book">Book now</a>' +
+          '<button class="tattoo-nav-menu blade-nav-menu-btn" type="button" aria-label="Menu">&#9776;</button>' +
+          '</div></nav>';
+      }
+      function bindBladeChrome() {
+        var root = document.getElementById('root');
+        if (!root) return;
+        var page = root.querySelector('.blade-page');
+        if (!page) return;
+        var nav = page.querySelector('.blade-topnav');
+        if (nav) {
+          function onNavScroll() {
+            if (window.scrollY > 48) {
+              nav.style.background = 'rgba(10,10,8,0.95)';
+              nav.style.backdropFilter = 'blur(10px)';
+            } else {
+              nav.style.background = 'transparent';
+              nav.style.backdropFilter = 'none';
+            }
+          }
+          onNavScroll();
+          window.addEventListener('scroll', onNavScroll, { passive: true });
+        }
+        if (typeof IntersectionObserver === 'undefined') return;
+        var fadeEls = page.querySelectorAll('.blade-fade-up');
+        var obs = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('blade-visible');
+            obs.unobserve(entry.target);
+          });
+        }, { threshold: 0.06, rootMargin: '0px 0px -32px 0px' });
+        for (var bi = 0; bi < fadeEls.length; bi++) obs.observe(fadeEls[bi]);
+      }
+      function bladeHomePage(tenant, services) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var anchorHome = base + '/home';
+        var displayName = tenant.displayName || 'Studio';
+        var nav = bladeNavHtml(tenant, anchorHome);
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarBrandHtml(tenant) +
+          sidebarLinksHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var tag = tenant.tagline || '';
+        var emLine = tag.split('.')[0].trim() || 'Crafted for you';
+        var heroDesc = (tenant.aboutText && String(tenant.aboutText).trim())
+          ? String(tenant.aboutText).trim()
+          : (tag || 'Book your next visit — we look forward to serving you.');
+        if (heroDesc.length > 240) heroDesc = heroDesc.slice(0, 237) + '…';
+        var eyebrow = (tenant.address && String(tenant.address).trim())
+          ? String(tenant.address).trim().split('\n')[0]
+          : (tenant.businessHours ? 'See our hours below' : displayName);
+        var heroRight = tenant.heroImageUrl
+          ? '<img class="blade-hero-image" src="' + esc(tenant.heroImageUrl) + '" alt="">'
+          : '<div class="blade-hero-placeholder" role="img" aria-hidden="true"></div>';
+        var vertical = tag ? (tag.length > 52 ? tag.slice(0, 50) + '…' : tag) : displayName;
+        var svc = services || [];
+        var n = svc.length;
+        var rCount = (tenant.reviews && tenant.reviews.length) ? tenant.reviews.length : 0;
+        var gCount = (tenant.galleryImages && tenant.galleryImages.length) ? tenant.galleryImages.length : 0;
+        var stats = '<div class="blade-stats-bar">' +
+          '<div class="blade-stat-item"><span class="blade-stat-num">' + n + '</span><span class="blade-stat-label">Services</span></div>' +
+          '<div class="blade-stat-item"><span class="blade-stat-num">' + gCount + '</span><span class="blade-stat-label">Gallery photos</span></div>' +
+          '<div class="blade-stat-item"><span class="blade-stat-num">' + rCount + '</span><span class="blade-stat-label">Reviews</span></div>' +
+          '<div class="blade-stat-item"><span class="blade-stat-num">100%</span><span class="blade-stat-label">Dedicated care</span></div>' +
+          '</div>';
+        var serviceCards = '';
+        for (var si = 0; si < svc.length; si++) {
+          var s = svc[si];
+          var num = (si + 1 < 10 ? '0' : '') + (si + 1);
+          var desc = (s.description && String(s.description).trim()) ? String(s.description) : 'Professional service tailored to you.';
+          var priceTxt = (typeof s.price === 'number' && s.price > 0) ? ('From $' + Number(s.price).toFixed(0)) : 'Book for pricing';
+          var href = base + '/book/' + (s.slug || '');
+          serviceCards += '<a href="' + esc(href) + '" class="blade-service-card blade-fade-up">' +
+            '<div class="blade-service-num">' + num + '</div>' +
+            '<div class="blade-gold-rule"></div>' +
+            '<div class="blade-service-name">' + esc(s.name) + '</div>' +
+            '<p class="blade-service-desc">' + esc(desc) + '</p>' +
+            '<div class="blade-service-price">' + esc(priceTxt) + '</div>' +
+            '</a>';
+        }
+        var servicesBody = serviceCards
+          ? '<div class="blade-services-grid">' + serviceCards + '</div>'
+          : '<p class="blade-section-desc blade-fade-up" style="max-width:none">Add active services in the app to list them here.</p>';
+        var servicesSection = '<section class="blade-section" id="services">' +
+          '<div class="blade-section-header blade-fade-up">' +
+          '<div><div class="blade-section-label">What we offer</div><h2 class="blade-section-title">OUR SERVICES</h2></div>' +
+          '<p class="blade-section-desc">Choose a service to go straight to booking.</p>' +
+          '</div>' + servicesBody + '</section>';
+        var aboutBody = (tenant.aboutText && String(tenant.aboutText).trim())
+          ? esc(String(tenant.aboutText).trim())
+          : esc(tenant.tagline || 'Tell your story in the app — clients will see it here.');
+        var aboutSection = '<section class="blade-about-block" id="about">' +
+          '<div class="blade-section-header blade-fade-up">' +
+          '<div><div class="blade-section-label">About</div><h2 class="blade-section-title">WHO WE ARE</h2></div>' +
+          '</div>' +
+          '<p class="blade-about-body">' + aboutBody + '</p>' +
+          '</section>';
+        var gUrls = galleryPageImageUrls(tenant);
+        var gallerySection = '';
+        if (gUrls.length) {
+          function bladeMarqueeChunk(urls) {
+            return urls.map(function(u) {
+              return '<div class="blade-gallery-item"><a href="' + esc(galleryUrl) + '"><img src="' + esc(u) + '" alt=""></a></div>';
+            }).join('');
+          }
+          gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
+            '<div class="blade-section-header blade-fade-up" style="padding-right:40px">' +
+            '<div><div class="blade-section-label">Portfolio</div><h2 class="blade-section-title">THE GALLERY</h2></div>' +
+            '<p class="blade-section-desc">Open the full gallery anytime.</p>' +
+            '</div>' +
+            '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls) + bladeMarqueeChunk(gUrls) + '</div></section>';
+        }
+        var hoursSnippet = tenant.businessHours
+          ? '<div class="blade-hours-block">' + esc(tenant.businessHours) + '</div>'
+          : '<p class="blade-section-desc" style="margin-top:20px">Hours from the app appear here.</p>';
+        var bookPanel = '<section class="blade-book-panel" id="blade-booking">' +
+          '<div class="blade-fade-up">' +
+          '<div class="blade-section-label">Reserve</div>' +
+          '<h2 class="blade-book-title">BOOK YOUR<br><span>APPOINTMENT</span></h2>' +
+          '<p class="blade-section-desc" style="max-width:400px">Use the same booking form as the rest of your site.</p>' +
+          hoursSnippet +
+          '<div class="blade-hero-cta" style="margin-top:28px">' +
+          '<a href="' + bookUrl + '" class="blade-btn-primary">Book now</a>' +
+          '<a href="' + anchorHome + '#services" class="blade-btn-ghost">View services</a>' +
+          '</div></div>' +
+          '<div class="blade-fade-up" style="text-align:center">' +
+          '<a href="' + bookUrl + '" class="blade-btn-primary" style="display:inline-block">Open booking form</a>' +
+          '</div></section>';
+        var revs = tenant.reviews || [];
+        var testimonialSection = '';
+        if (revs.length) {
+          var tCards = '';
+          for (var ri = 0; ri < Math.min(revs.length, 3); ri++) {
+            var rv = revs[ri] || {};
+            tCards += '<div class="blade-testimonial-card blade-fade-up">' +
+              '<div class="blade-testimonial-stars">★★★★★</div>' +
+              '<p class="blade-testimonial-text">“' + esc(rv.quote || '') + '”</p>' +
+              '<div class="blade-testimonial-author">— ' + esc(rv.name || 'Client') +
+              (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
+          }
+          testimonialSection = '<section class="blade-testimonials">' +
+            '<div class="blade-section-header blade-fade-up">' +
+            '<div><div class="blade-section-label">Reviews</div><h2 class="blade-section-title">WHAT THEY SAY</h2></div></div>' +
+            '<div class="blade-testimonials-grid">' + tCards + '</div></section>';
+        }
+        var hoursInfo = tenant.businessHours
+          ? '<div class="blade-about-body" style="margin-top:16px;white-space:pre-line">' + esc(tenant.businessHours) + '</div>'
+          : '<p class="blade-about-body" style="margin-top:16px">Add business hours in the app.</p>';
+        var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
+        var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
+        var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
+        var addrHtml = tenant.address
+          ? '<div class="blade-address-block">' + esc(tenant.address).replace(/\n/g, '<br>') + '</div>'
+          : '<div class="blade-address-block">' + (tenant.contactEmail ? esc(tenant.contactEmail) : 'Add your address in the app.') + '</div>';
+        var infoSection = '<div class="blade-info-section" id="location">' +
+          '<div class="blade-info-half blade-fade-up">' +
+          '<div class="blade-section-label">When</div>' +
+          '<h3 class="blade-section-title" style="font-size:38px">HOURS</h3>' + hoursInfo +
+          '</div>' +
+          '<div class="blade-info-half blade-fade-up">' +
+          '<div class="blade-section-label">Where</div>' +
+          '<h3 class="blade-section-title" style="font-size:38px">LOCATION</h3>' +
+          addrHtml +
+          (phoneHref ? '<a href="' + esc(phoneHref) + '" class="blade-address-phone">' + phoneDisplay + '</a>' : '') +
+          '</div></div>';
+        var y = new Date().getFullYear();
+        var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
+        var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
+        var footer = '<footer class="blade-footer">' +
+          '<div class="blade-footer-logo">' + esc(displayName) + '</div>' +
+          '<p class="blade-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '<ul class="blade-footer-links">' +
+          (igUrl ? '<li><a href="' + igUrl + '" target="_blank" rel="noopener">Instagram</a></li>' : '') +
+          '<li><a href="' + bookUrl + '">Book</a></li>' +
+          '<li><a href="' + galleryUrl + '">Gallery</a></li>' +
+          '</ul></footer>';
+        var hero = '<section class="blade-hero">' +
+          '<div class="blade-hero-left">' +
+          '<div class="blade-hero-eyebrow">' + esc(eyebrow) + '</div>' +
+          '<h1 class="blade-hero-title"><em>' + esc(emLine) + '</em>' + esc(displayName) + '</h1>' +
+          '<p class="blade-hero-desc">' + esc(heroDesc) + '</p>' +
+          '<div class="blade-hero-cta">' +
+          '<a href="' + bookUrl + '" class="blade-btn-primary">Book appointment</a>' +
+          '<a href="' + anchorHome + '#services" class="blade-btn-ghost">View services</a>' +
+          '</div></div>' +
+          '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div></div>' +
+          '<div class="blade-hero-vertical">' + esc(vertical) + '</div></section>';
+        return '<div class="blade-page">' + nav + hero + stats + servicesSection + aboutSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + sidebar + '</div>';
       }
       /** Intentionally empty: business image stays profile-only in the app; headlines use display name + fonts. */
       function tattooHeadlineLogoHtml(tenant) {
@@ -1765,11 +2613,15 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
 
-        var nav = usesThemedChrome(tenant) ? tattooNavHtml(tenant) : (
-          '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>'
-        );
+        var nav = isBladeTheme(tenant)
+          ? bladeNavHtml(tenant, base + '/home')
+          : (isLuxeTheme(tenant)
+            ? luxeChromeNavHtml(tenant, 'light')
+            : (usesThemedChrome(tenant) ? tattooNavHtml(tenant) : (
+              '<nav class="tattoo-nav"><div class="tattoo-nav-inner">' +
+              '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+              '</div></nav>'
+            )));
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
@@ -1777,8 +2629,10 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var bookPageStyle = isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '');
-        var wrapClass = 'tattoo-page' + (isLuxeTheme(tenant) ? ' luxe-page' : '');
+        var bookPageStyle = isBladeTheme(tenant)
+          ? 'background:#0a0a08;color:#f5f0e8'
+          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : ''));
+        var wrapClass = 'tattoo-page' + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '');
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
@@ -1808,14 +2662,20 @@
         if (usesThemedChrome(tenant)) {
           var base = tenantBaseUrl(tenant);
           var bookUrl = base + '/book';
-          var nav = tattooNavHtml(tenant);
+          var nav = isBladeTheme(tenant)
+            ? bladeNavHtml(tenant, base + '/home')
+            : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : tattooNavHtml(tenant));
           var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
             '<div class="tattoo-sidebar-backdrop"></div>' +
             '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
             tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
             '</div></div>';
-          var bookPageStyle = isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : tattooSiteThemeInlineStyle(tenant);
-          var successWrapClass = 'tattoo-page' + (isLuxeTheme(tenant) ? ' luxe-page' : '');
+          var bookPageStyle = isBladeTheme(tenant)
+            ? 'background:#0a0a08;color:#f5f0e8'
+            : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : tattooSiteThemeInlineStyle(tenant));
+          var successWrapClass = 'tattoo-page' +
+            (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
+            (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '');
           return '' +
             '<div class="' + successWrapClass + '" style="'+bookPageStyle+'">' +
               nav +
@@ -1844,7 +2704,7 @@
       function resolvedWebThemeId(tenant) {
         var ind = String(tenant.industry || '').trim();
         var stored = String(tenant.webThemeId || '').trim();
-        var universal = ['luxe-v1'];
+        var universal = ['luxe-v1', 'blade-v1'];
         if (stored && universal.indexOf(stored) >= 0) return stored;
         var map = {
           'hair': ['hair-salon-v1'],
@@ -1894,6 +2754,7 @@
       }
       function tattooSidebarPanelInlineStyle(tenant) {
         if (isLuxeTheme(tenant)) return 'background:#FFFDF9;color:#1a1a1a';
+        if (isBladeTheme(tenant)) return 'background:#141410;color:#f5f0e8';
         return tattooSiteThemeInlineStyle(tenant);
       }
       function sidebarLinksHtml(tenant, base, bookUrl) {
@@ -1907,7 +2768,7 @@
             { label: 'Book', type: 'internal', target: 'book' },
             { label: 'About', type: 'internal', target: 'about' }
           ];
-          if (isLuxeTheme(tenant)) {
+          if (isLuxeTheme(tenant) || isBladeTheme(tenant)) {
             links.splice(3, 0, { label: 'Shop', type: 'internal', target: 'shop' });
           }
         } else if (!links.some(function(l){ return l && l.target === 'gallery'; })) {
@@ -1952,7 +2813,9 @@
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Gallery';
 
-        var nav = tattooNavHtml(tenant);
+        var nav = isBladeTheme(tenant)
+          ? bladeNavHtml(tenant, base + '/home')
+          : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : tattooNavHtml(tenant));
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
@@ -1968,7 +2831,10 @@
           ? '<div class="gallery-grid">' + imgsHtml + '</div>'
           : '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
         var gPageBg, gPageFg, galleryPageStyle;
-        if (isLuxeTheme(tenant)) {
+        if (isBladeTheme(tenant)) {
+          gPageBg = '#0a0a08';
+          gPageFg = '#f5f0e8';
+        } else if (isLuxeTheme(tenant)) {
           gPageBg = '#FFFDF9';
           gPageFg = '#1a1a1a';
         } else if (tenant.industry === 'tattoos') {
@@ -1983,7 +2849,10 @@
         }
         galleryPageStyle = 'background:'+gPageBg+';color:'+gPageFg;
 
-        return '<div class="gallery-page" style="'+galleryPageStyle+'">' +
+        var galleryWrapClass = 'gallery-page' +
+          (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
+          (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '');
+        return '<div class="' + galleryWrapClass + '" style="'+galleryPageStyle+'">' +
           nav +
           '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + '<h1 class="gallery-title">' + esc(displayName) + '</h1></div>' +
           '<div class="gallery-shell">' + content + '</div>' +
@@ -2261,22 +3130,7 @@
       function luxeShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
-        var galleryUrl = base + '/gallery';
-        var displayName = tenant.displayName || 'Welcome';
-        var nav = '<nav class="luxe-nav">' +
-          '<a href="' + base + '/home" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
-          '<div class="luxe-nav-trailing">' +
-            '<div class="luxe-nav-links">' +
-            '<a href="' + base + '/home">Home</a>' +
-            '<a href="' + base + '/home#services">Services</a>' +
-            '<a href="' + galleryUrl + '">Gallery</a>' +
-            '<a href="' + base + '/shop">Shop</a>' +
-            '<a href="' + base + '/about">About</a>' +
-            '<a href="' + bookUrl + '">Booking</a>' +
-          '</div>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
-          '</div>' +
-        '</nav>';
+        var nav = luxeChromeNavHtml(tenant, 'light');
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
@@ -2287,7 +3141,23 @@
         var inner = productCards
           ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#555;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
-        return '<div class="luxe-page">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
+        return '<div class="luxe-page luxe-page--sub">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
+      }
+      function bladeShopPage(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var nav = bladeNavHtml(tenant, base + '/home');
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarBrandHtml(tenant) +
+          sidebarLinksHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var productCards = luxeTenantProductCardsHtml(tenant);
+        var inner = productCards
+          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
+          : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Add them in the app.</p></div>';
+        return '<div class="blade-page blade-page--sub">' + nav + '<div class="blade-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
       }
       function luxeHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
@@ -2295,20 +3165,7 @@
         var galleryUrl = base + '/gallery';
         var displayName = tenant.displayName || 'Welcome';
 
-        var nav = '<nav class="luxe-nav">' +
-          '<a href="' + base + '/home" class="luxe-nav-brand">' + esc(displayName) + '</a>' +
-          '<div class="luxe-nav-trailing">' +
-            '<div class="luxe-nav-links">' +
-            '<a href="' + base + '/home">Home</a>' +
-            '<a href="' + base + '/home#services">Services</a>' +
-            '<a href="' + galleryUrl + '">Gallery</a>' +
-            '<a href="' + base + '/shop">Shop</a>' +
-            '<a href="' + base + '/about">About</a>' +
-            '<a href="' + bookUrl + '">Booking</a>' +
-          '</div>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
-          '</div>' +
-        '</nav>';
+        var nav = luxeChromeNavHtml(tenant, 'hero');
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
@@ -2357,9 +3214,9 @@
           '</a>';
         }
 
-        var servicesSection = '<section id="services" class="luxe-services-section">' +
-          '<p class="luxe-section-label">Our Services</p>' +
-          '<h2 class="luxe-section-heading">Current Flash</h2>' +
+        var servicesSection = '<section id="gallery" class="luxe-services-section">' +
+          '<p class="luxe-section-label">Gallery</p>' +
+          '<h2 class="luxe-section-heading">Featured work</h2>' +
           '<div class="luxe-services-grid">' + serviceCards + '</div>' +
         '</section>';
 
@@ -2406,10 +3263,13 @@
       }
 
       function bindTattooSidebar() {
-        var menuBtn = document.querySelector('.tattoo-nav-menu');
+        var menuBtns = document.querySelectorAll('.tattoo-nav-menu');
         var sidebar = document.getElementById('tattoo-sidebar');
-        if (!menuBtn || !sidebar) return;
-        menuBtn.addEventListener('click', function(){ sidebar.classList.add('tattoo-sidebar-open'); });
+        if (!menuBtns.length || !sidebar) return;
+        function openSidebar() { sidebar.classList.add('tattoo-sidebar-open'); }
+        for (var mi = 0; mi < menuBtns.length; mi++) {
+          menuBtns[mi].addEventListener('click', openSidebar);
+        }
         var backdrop = sidebar.querySelector('.tattoo-sidebar-backdrop');
         if (backdrop) backdrop.addEventListener('click', function(){ sidebar.classList.remove('tattoo-sidebar-open'); });
         sidebar.querySelectorAll('.tattoo-sidebar-panel a').forEach(function(a){
@@ -2430,7 +3290,15 @@
           .then(function(snap){
             return snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
               var x = d.data();
-              return { id: d.id, slug: x.slug, name: x.name };
+              var pr = x.price;
+              return {
+                id: d.id,
+                slug: x.slug,
+                name: x.name,
+                description: (x.description != null ? String(x.description) : '') || '',
+                price: (typeof pr === 'number' && !isNaN(pr)) ? pr : null,
+                imageUrl: x.imageUrl || ''
+              };
             });
           });
       }
@@ -2455,6 +3323,16 @@
             var services = results[0];
             tenant._products = results[1];
             var isShop = p.isShopPath;
+            if (isShop && isBladeTheme(tenant)) {
+              document.getElementById('root').innerHTML = bladeShopPage(tenant);
+              bindTattooSidebar();
+              bindBladeChrome();
+              document.body.style.background = '#0a0a08';
+              document.body.style.color = '#f5f0e8';
+              applyBranding(tenant);
+              applySidebarIconColor(tenant, false, true);
+              return;
+            }
             if (isShop && isLuxeTheme(tenant)) {
               document.getElementById('root').innerHTML = luxeShopPage(tenant);
               bindTattooSidebar();
@@ -2464,9 +3342,9 @@
               applySidebarIconColor(tenant, false, true);
               return;
             }
-            if (isShop && !isLuxeTheme(tenant)) {
+            if (isShop && !isLuxeTheme(tenant) && !isBladeTheme(tenant)) {
               var shopBase = tenantBaseUrl(tenant);
-              document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p>Shop is only available on the Luxe site template.</p><p><a href="' + esc(shopBase + '/home') + '">Back to home</a></p></div></div>';
+              document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p>Shop is only available on the Luxe or Blade site template.</p><p><a href="' + esc(shopBase + '/home') + '">Back to home</a></p></div></div>';
               applyBranding(tenant);
               return;
             }
@@ -2479,15 +3357,20 @@
             var showForm = p.isBookPath && services.length > 0;
             var isGallery = p.isGalleryPath;
             var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isHairHome = (!isLuxeHome && tenant.industry === 'hair' && !p.isBookPath && !isGallery);
-            var isBarberHome = (!isLuxeHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
-            var isPetGroomingHome = (!isLuxeHome && tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
-            var isTattooHome = (!isLuxeHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
-            var isThemedHome = isTattooHome || isHairHome || isBarberHome || isPetGroomingHome || isLuxeHome;
+            var isBladeHome = (isBladeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
+            var isHairHome = (!isLuxeHome && !isBladeHome && tenant.industry === 'hair' && !p.isBookPath && !isGallery);
+            var isBarberHome = (!isLuxeHome && !isBladeHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
+            var isPetGroomingHome = (!isLuxeHome && !isBladeHome && tenant.industry === 'pet_grooming' && !p.isBookPath && !isGallery);
+            var isTattooHome = (!isLuxeHome && !isBladeHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
+            var isThemedHome = isTattooHome || isHairHome || isBarberHome || isPetGroomingHome || isLuxeHome || isBladeHome;
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
               bindTattooSidebar();
-              if (isLuxeTheme(tenant)) {
+              if (isBladeTheme(tenant)) {
+                document.body.style.background = '#0a0a08';
+                document.body.style.color = '#f5f0e8';
+                bindBladeChrome();
+              } else if (isLuxeTheme(tenant)) {
                 document.body.style.background = '#FFFDF9';
                 document.body.style.color = '#1a1a1a';
               } else if (isPortfolioIndustry(tenant.industry)) {
@@ -2500,23 +3383,27 @@
               applySidebarIconColor(tenant, false, true);
               return;
             }
-            var homeContent = isLuxeHome
-              ? luxeHomePage(tenant, services)
-              : isTattooHome
-                ? tattooHeroPage(tenant)
-                : isHairHome
-                  ? hairTattooStyleHomePage(tenant, services)
-                  : isBarberHome
-                    ? barberPortfolioHomePage(tenant, services)
-                    : isPetGroomingHome
-                      ? petGroomingPortfolioHomePage(tenant, services)
-                      : list(tenant, services);
+            var homeContent = isBladeHome
+              ? bladeHomePage(tenant, services)
+              : isLuxeHome
+                ? luxeHomePage(tenant, services)
+                : isTattooHome
+                  ? tattooHeroPage(tenant)
+                  : isHairHome
+                    ? hairTattooStyleHomePage(tenant, services)
+                    : isBarberHome
+                      ? barberPortfolioHomePage(tenant, services)
+                      : isPetGroomingHome
+                        ? petGroomingPortfolioHomePage(tenant, services)
+                        : list(tenant, services);
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
               if (usesThemedChrome(tenant)) bindTattooSidebar();
+              if (isBladeTheme(tenant)) bindBladeChrome();
             } else if (isThemedHome) {
               document.getElementById('root').innerHTML = homeContent;
               bindTattooSidebar();
+              if (isBladeHome) bindBladeChrome();
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }
@@ -2800,6 +3687,7 @@
                   document.getElementById('root').innerHTML = usesThemedChrome(tenant) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
                   applyBranding(tenant);
                   if (usesThemedChrome(tenant)) bindTattooSidebar();
+                  if (isBladeTheme(tenant)) bindBladeChrome();
                   applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){
                   errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';

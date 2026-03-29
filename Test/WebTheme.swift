@@ -23,13 +23,15 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case customStandard = "custom-standard"
     /// Luxe: elegant full-width hero, service cards, promo strip, team section. Works with any industry.
     case luxeV1 = "luxe-v1"
+    /// Blade: dark editorial layout, gold accents, services, gallery strip, reviews. Works with any industry.
+    case bladeV1 = "blade-v1"
 
     var id: String { rawValue }
 
     /// True for templates available to every industry (not tied to one business type).
     var isUniversal: Bool {
         switch self {
-        case .luxeV1: return true
+        case .luxeV1, .bladeV1: return true
         default: return false
         }
     }
@@ -44,6 +46,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .petGroomingV1: return .petGrooming
         case .customStandard: return .custom
         case .luxeV1: return .custom
+        case .bladeV1: return .custom
         }
     }
 
@@ -56,6 +59,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .petGroomingV1: return "Classic"
         case .customStandard: return "Classic"
         case .luxeV1: return "Luxe"
+        case .bladeV1: return "Blade"
         }
     }
 
@@ -68,6 +72,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .petGroomingV1: return "Hero, featured work, about, sidebar"
         case .customStandard: return "Hero, featured work, about, sidebar"
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
+        case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
         }
     }
 
@@ -80,6 +85,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .petGroomingV1: return "pawprint.fill"
         case .customStandard: return "list.bullet.rectangle"
         case .luxeV1: return "sparkles"
+        case .bladeV1: return "moon.stars"
         }
     }
 

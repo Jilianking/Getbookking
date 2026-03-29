@@ -78,7 +78,8 @@ class DesignViewModel: ObservableObject {
 
     /// Portfolio-style web templates (featured strip, gallery, booking chrome, sidebar).
     var usesPortfolioStyleWebChrome: Bool {
-        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming" || webThemeId == "luxe-v1"
+        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming"
+            || webThemeId == "luxe-v1" || webThemeId == "blade-v1"
     }
 
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)

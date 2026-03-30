@@ -24,6 +24,8 @@ class DesignViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var saveSuccess = false
+    @Published private(set) var isApplyingBladeStarters = false
+    @Published private(set) var isSavingBladeServices = false
     /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
     @Published private(set) var webPreviewReloadToken: UInt64 = 0
 
@@ -51,6 +53,10 @@ class DesignViewModel: ObservableObject {
     @Published var luxeHeroTagline: String = ""
     /// Luxe cream promo strip headline (above tagline + Book Now).
     @Published var luxePromoHeadline: String = ""
+    /// Blade hero italic line before the business name.
+    @Published var bladeHeroTagline: String = ""
+    /// Blade hero paragraph under the name (optional; falls back to About text on web).
+    @Published var bladeHeroDescription: String = ""
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -222,6 +228,8 @@ class DesignViewModel: ObservableObject {
                 tagline = tenant?["tagline"] as? String ?? ""
                 luxeHeroTagline = tenant?["luxeHeroTagline"] as? String ?? ""
                 luxePromoHeadline = tenant?["luxePromoHeadline"] as? String ?? ""
+                bladeHeroTagline = tenant?["bladeHeroTagline"] as? String ?? ""
+                bladeHeroDescription = tenant?["bladeHeroDescription"] as? String ?? ""
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -331,6 +339,10 @@ class DesignViewModel: ObservableObject {
             updates["businessHours"] = businessHours
             updates["instagramHandle"] = instagramHandle
             updates["showContactOnPage"] = showContactOnPage
+        }
+        if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .blade {
+            updates["bladeHeroTagline"] = bladeHeroTagline
+            updates["bladeHeroDescription"] = bladeHeroDescription
         }
         await saveTenantUpdates(tid, updates)
     }
@@ -518,15 +530,120 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    func addService(name: String, durationMinutes: Int) async {
+    func addService(
+        name: String,
+        durationMinutes: Int,
+        description: String? = nil,
+        startingPrice: Double? = nil
+    ) async {
         guard let tid = tenantId else { return }
         await MainActor.run { errorMessage = nil }
+        let nextOrder = (services.map(\.sortOrder).max() ?? -1) + 1
         do {
-            _ =             try await firebaseService.createTenantService(tenantId: tid, name: name, durationMinutes: durationMinutes)
+            _ = try await firebaseService.createTenantService(
+                tenantId: tid,
+                name: name,
+                durationMinutes: durationMinutes,
+                description: description,
+                sortOrder: nextOrder,
+                startingPrice: startingPrice
+            )
             await loadData()
             await MainActor.run { invalidateWebPreview() }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    @discardableResult
+    func updateService(
+        serviceId: String,
+        name: String,
+        description: String?,
+        durationMinutes: Int,
+        startingPrice: Double?
+    ) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        await MainActor.run { isSavingBladeServices = true; errorMessage = nil }
+        do {
+            let slug = firebaseService.slug(from: trimmed)
+            let updates = firebaseService.tenantServiceDisplayUpdates(
+                name: trimmed,
+                slug: slug,
+                durationMinutes: durationMinutes,
+                description: description,
+                startingPrice: startingPrice
+            )
+            try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
+            let descStored = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalDesc: String? = (descStored?.isEmpty == false) ? descStored : nil
+            let finalPrice: Double? = {
+                guard let p = startingPrice, p > 0 else { return nil }
+                return p
+            }()
+            await MainActor.run {
+                if let idx = services.firstIndex(where: { $0.id == serviceId }) {
+                    var s = services[idx]
+                    s.name = trimmed
+                    s.slug = slug
+                    s.durationMinutes = durationMinutes
+                    s.description = finalDesc
+                    s.price = finalPrice
+                    services[idx] = s
+                }
+                isSavingBladeServices = false
+                invalidateWebPreview()
+                saveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    saveSuccess = false
+                }
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                isSavingBladeServices = false
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    func moveService(from index: Int, direction: Int) async {
+        let j = index + direction
+        guard services.indices.contains(index), services.indices.contains(j) else { return }
+        await MainActor.run { services.swapAt(index, j) }
+        await persistServiceSortOrders()
+    }
+
+    private func persistServiceSortOrders() async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isSavingBladeServices = true; errorMessage = nil }
+        do {
+            for (i, svc) in services.enumerated() {
+                try await firebaseService.updateTenantService(
+                    tenantId: tid,
+                    serviceId: svc.id,
+                    updates: ["sortOrder": i]
+                )
+            }
+            await MainActor.run {
+                services = services.enumerated().map { i, s in
+                    var t = s
+                    t.sortOrder = i
+                    return t
+                }
+                isSavingBladeServices = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                isSavingBladeServices = false
+                errorMessage = error.localizedDescription
+            }
+            await loadData()
         }
     }
 
@@ -541,6 +658,49 @@ class DesignViewModel: ObservableObject {
             }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Replaces all tenant services with four Blade industry starters (names + descriptions for the web).
+    func applyBladeStarterServices(isDemoMode: Bool = false) async {
+        guard let tid = tenantId else { return }
+        guard (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .blade else { return }
+        let rawIndustry = industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let tmpl = BookingTemplate(rawValue: rawIndustry) ?? .custom
+        await MainActor.run {
+            isApplyingBladeStarters = true
+            errorMessage = nil
+            saveSuccess = false
+        }
+        do {
+            let existing = try await firebaseService.fetchTenantServices(tenantId: tid)
+            for svc in existing {
+                try await firebaseService.deleteTenantService(tenantId: tid, serviceId: svc.id)
+            }
+            for (index, item) in tmpl.bladeStarterServices.enumerated() {
+                _ = try await firebaseService.createTenantService(
+                    tenantId: tid,
+                    name: item.name,
+                    durationMinutes: item.durationMinutes,
+                    description: item.description,
+                    sortOrder: index
+                )
+            }
+            await loadData(isDemoMode: isDemoMode)
+            await MainActor.run {
+                isApplyingBladeStarters = false
+                invalidateWebPreview()
+                saveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    saveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isApplyingBladeStarters = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

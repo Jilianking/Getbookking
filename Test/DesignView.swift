@@ -14,6 +14,8 @@ struct DesignView: View {
     @State private var selectedTab: DesignTab = .template
     @State private var isShowingBuilder = false
     @State private var hoursPickerChoice: String = "custom"
+    @State private var showBladeStarterConfirm = false
+    @State private var bladeServiceToEdit: TenantService?
     private static let hoursPresets = ["Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"]
     var drawerState: DrawerState
     let sectionTitle: String
@@ -155,6 +157,21 @@ struct DesignView: View {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
         }
+        .alert("Replace all services?", isPresented: $showBladeStarterConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Replace", role: .destructive) {
+                Task { await viewModel.applyBladeStarterServices(isDemoMode: authViewModel.isDemoMode) }
+            }
+        } message: {
+            Text(
+                "Your current services will be removed and replaced with four Blade starter services for \(BookingTemplate(rawValue: viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")?.displayName ?? "your business type"). You can edit order and details below."
+            )
+        }
+        .sheet(item: $bladeServiceToEdit) { service in
+            EditTenantServiceSheet(service: service, viewModel: viewModel) {
+                bladeServiceToEdit = nil
+            }
+        }
     }
 
     private var contentUnavailable: some View {
@@ -213,6 +230,37 @@ struct DesignView: View {
         }
     }
 
+    /// Matches `defaultBladeHeroTaglineForIndustry` in `web/index.html`.
+    private var bladeHeroTaglinePlaceholder: String {
+        let raw = viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let template = BookingTemplate(rawValue: raw) ?? .custom
+        switch template {
+        case .hair: return "Designed around you"
+        case .barber: return "Defined by detail"
+        case .tattoos: return "Designed to last"
+        case .nails: return "Polished to perfection"
+        case .custom: return "Focused on results"
+        }
+    }
+
+    /// Matches `defaultBladeHeroDescriptionForIndustry` in `web/index.html`.
+    private var bladeHeroDescriptionPlaceholder: String {
+        let raw = viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let template = BookingTemplate(rawValue: raw) ?? .custom
+        switch template {
+        case .hair:
+            return "From color to cut, every service is tailored to your look. We focus on results that feel natural, polished, and long-lasting."
+        case .barber:
+            return "Modern cuts, clean fades, and consistent results. Every appointment is focused on precision, from consultation to final detail."
+        case .tattoos:
+            return "Every piece starts with your vision. We focus on clean execution, strong design, and results you’ll carry with confidence."
+        case .nails:
+            return "Every set is crafted with care, delivering clean finishes and consistent results you can rely on."
+        case .custom:
+            return "Every service is delivered with attention to detail and a focus on consistent, high-quality results."
+        }
+    }
+
     private var templateContent: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
@@ -252,6 +300,38 @@ struct DesignView: View {
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
+            if isBladeTemplate {
+                Text("Blade hero")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 4)
+                Text("Italic line before your name and the short intro under it on Blade home. Leave blank to use industry defaults; the web can still fall back to your About story for the paragraph if this is empty.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField(
+                    "Hero tagline (italic)",
+                    text: $viewModel.bladeHeroTagline,
+                    prompt: Text(bladeHeroTaglinePlaceholder)
+                )
+                .textFieldStyle(.roundedBorder)
+                TextField(
+                    "Hero introduction",
+                    text: $viewModel.bladeHeroDescription,
+                    prompt: Text(bladeHeroDescriptionPlaceholder),
+                    axis: .vertical
+                )
+                .lineLimit(4...10)
+                .textFieldStyle(.roundedBorder)
+                Text("The gold line above the hero uses city/area from the About tab.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                BladeServicesHomeSection(
+                    viewModel: viewModel,
+                    serviceToEdit: $bladeServiceToEdit,
+                    onRequestReplaceStarters: { showBladeStarterConfirm = true }
+                )
+            }
+
             if isLuxeTemplate {
                 Text("Hero tagline")
                     .font(.subheadline.weight(.medium))
@@ -289,13 +369,6 @@ struct DesignView: View {
             if isClassicTemplate {
                 FeaturedWorkPresetPicker(viewModel: viewModel)
                     .padding(.top, 8)
-            } else if isBladeTemplate {
-                Text("Blade notes")
-                    .font(.headline)
-                    .padding(.top, 8)
-                Text("Blade uses a fixed dark style. Manage city/area in About and gallery images in Gallery.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
             if isLuxeTemplate {
@@ -1118,8 +1191,12 @@ struct HexColorRow: View {
 
 struct AddServiceSheet: View {
     @ObservedObject var viewModel: DesignViewModel
+    var disabled: Bool = false
     @State private var name = ""
     @State private var duration = 30
+    @State private var descriptionText = ""
+    @State private var showStartingPrice = false
+    @State private var priceText = ""
     @State private var showingSheet = false
 
     var body: some View {
@@ -1129,11 +1206,23 @@ struct AddServiceSheet: View {
                 Text("Add service")
             }
         }
+        .disabled(disabled)
         .sheet(isPresented: $showingSheet) {
-            NavigationView {
+            NavigationStack {
                 Form {
                     TextField("Service name", text: $name)
+                    TextField("Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
+                        .lineLimit(2...6)
                     Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    Toggle("Show starting price", isOn: $showStartingPrice)
+                    if showStartingPrice {
+                        TextField("Amount (USD)", text: $priceText)
+                            .keyboardType(.decimalPad)
+                    } else {
+                        Text("Blade shows “Book for pricing” when this is off.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .navigationTitle("New service")
                 .navigationBarTitleDisplayMode(.inline)
@@ -1143,10 +1232,20 @@ struct AddServiceSheet: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Add") {
+                            let desc = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let price = Self.parseStartingPriceHelper(enabled: showStartingPrice, text: priceText)
                             Task {
-                                await viewModel.addService(name: name, durationMinutes: duration)
+                                await viewModel.addService(
+                                    name: name,
+                                    durationMinutes: duration,
+                                    description: desc.isEmpty ? nil : desc,
+                                    startingPrice: price
+                                )
                                 name = ""
                                 duration = 30
+                                descriptionText = ""
+                                showStartingPrice = false
+                                priceText = ""
                                 showingSheet = false
                             }
                         }
@@ -1156,7 +1255,169 @@ struct AddServiceSheet: View {
             }
         }
     }
+
+    fileprivate static func parseStartingPriceHelper(enabled: Bool, text: String) -> Double? {
+        guard enabled else { return nil }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: "")
+        guard let v = Double(t), v > 0 else { return nil }
+        return v
+    }
 }
+
+private struct BladeServicesHomeSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @Binding var serviceToEdit: TenantService?
+    let onRequestReplaceStarters: () -> Void
+
+    private var controlsDisabled: Bool {
+        viewModel.isApplyingBladeStarters || viewModel.isSavingBladeServices || viewModel.isLoading || !viewModel.hasTenant
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Blade services")
+                .font(.subheadline.weight(.medium))
+                .padding(.top, 12)
+            Text("Cards under OUR SERVICES use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if viewModel.services.isEmpty {
+                Text("No services yet—add one or replace with industry starters.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            ForEach(Array(viewModel.services.enumerated()), id: \.element.id) { index, service in
+                HStack(alignment: .top, spacing: 10) {
+                    Text(String(format: "%02d", index + 1))
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(service.name)
+                            .font(.subheadline.weight(.medium))
+                        Text(service.bladePriceCaption)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        if let d = service.description, !d.isEmpty {
+                            Text(d)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    VStack(spacing: 2) {
+                        Button {
+                            Task { await viewModel.moveService(from: index, direction: -1) }
+                        } label: {
+                            Image(systemName: "chevron.up")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .disabled(controlsDisabled || index == 0)
+                        Button {
+                            Task { await viewModel.moveService(from: index, direction: 1) }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .disabled(controlsDisabled || index >= viewModel.services.count - 1)
+                    }
+                    .buttonStyle(.borderless)
+                    Button("Edit") {
+                        serviceToEdit = service
+                    }
+                    .font(.caption.weight(.semibold))
+                    .disabled(controlsDisabled)
+                    Button(role: .destructive) {
+                        Task { await viewModel.deleteService(service) }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(controlsDisabled)
+                }
+                .padding(10)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(8)
+            }
+            AddServiceSheet(viewModel: viewModel, disabled: controlsDisabled)
+            Button {
+                onRequestReplaceStarters()
+            } label: {
+                Text("Replace with industry starter services")
+            }
+            .buttonStyle(.bordered)
+            .disabled(controlsDisabled)
+        }
+    }
+}
+
+private struct EditTenantServiceSheet: View {
+    let service: TenantService
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var name = ""
+    @State private var descriptionText = ""
+    @State private var duration = 30
+    @State private var showStartingPrice = false
+    @State private var priceText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Service name", text: $name)
+                TextField("Description (Blade card)", text: $descriptionText, axis: .vertical)
+                    .lineLimit(3...8)
+                Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                Toggle("Show starting price", isOn: $showStartingPrice)
+                if showStartingPrice {
+                    TextField("Amount (USD)", text: $priceText)
+                        .keyboardType(.decimalPad)
+                } else {
+                    Text("Guests see “Book for pricing” on Blade when this is off.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Edit service")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let desc = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let price = AddServiceSheet.parseStartingPriceHelper(enabled: showStartingPrice, text: priceText)
+                        Task {
+                            let ok = await viewModel.updateService(
+                                serviceId: service.id,
+                                name: name,
+                                description: desc.isEmpty ? nil : desc,
+                                durationMinutes: duration,
+                                startingPrice: price
+                            )
+                            if ok { onDismiss() }
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isSavingBladeServices)
+                }
+            }
+        }
+        .onAppear {
+            name = service.name
+            descriptionText = service.description ?? ""
+            duration = service.durationMinutes
+            if let p = service.price, p > 0 {
+                showStartingPrice = true
+                priceText = p.rounded() == p ? String(format: "%.0f", p) : String(format: "%.2f", p)
+            } else {
+                showStartingPrice = false
+                priceText = ""
+            }
+        }
+    }
+}
+
 
 // MARK: - Template gallery (mini SwiftUI previews)
 

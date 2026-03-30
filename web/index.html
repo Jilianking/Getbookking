@@ -1534,6 +1534,10 @@
       padding: 96px 40px;
       position: relative;
     }
+    /** Fixed Blade topnav: keep section headings visible when jumping via #services */
+    .blade-page #services {
+      scroll-margin-top: 96px;
+    }
     .blade-page .blade-section-header {
       display: flex;
       justify-content: space-between;
@@ -1610,6 +1614,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: 24px;
       letter-spacing: 0.05em;
+      text-transform: uppercase;
       color: var(--bh-cream);
       margin: 0 0 10px;
     }
@@ -2155,6 +2160,20 @@
           onNavScroll();
           window.addEventListener('scroll', onNavScroll, { passive: true });
         }
+        function bladeScrollToServices() {
+          var sec = document.getElementById('services');
+          if (sec && sec.scrollIntoView) {
+            sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+        page.addEventListener('click', function(e) {
+          var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+          if (!a) return;
+          var href = a.getAttribute('href') || '';
+          if (href.indexOf('#services') < 0) return;
+          e.preventDefault();
+          bladeScrollToServices();
+        });
         if (typeof IntersectionObserver === 'undefined') return;
         var fadeEls = page.querySelectorAll('.blade-fade-up');
         var obs = new IntersectionObserver(function(entries) {
@@ -2166,6 +2185,33 @@
         }, { threshold: 0.06, rootMargin: '0px 0px -32px 0px' });
         for (var bi = 0; bi < fadeEls.length; bi++) obs.observe(fadeEls[bi]);
       }
+
+      /** Blade hero `<em>` line when `bladeHeroTagline` empty (after legacy `tagline` split). */
+      function defaultBladeHeroTaglineForIndustry(industry) {
+        var k = String(industry || '').trim().toLowerCase();
+        var map = {
+          barber: 'Defined by detail',
+          hair: 'Designed around you',
+          tattoos: 'Designed to last',
+          nails: 'Polished to perfection',
+          custom: 'Focused on results'
+        };
+        return map[k] || map.custom;
+      }
+
+      /** Blade hero paragraph under the name when `bladeHeroDescription` and `aboutText` empty. */
+      function defaultBladeHeroDescriptionForIndustry(industry) {
+        var k = String(industry || '').trim().toLowerCase();
+        var map = {
+          barber: 'Modern cuts, clean fades, and consistent results. Every appointment is focused on precision, from consultation to final detail.',
+          hair: 'From color to cut, every service is tailored to your look. We focus on results that feel natural, polished, and long-lasting.',
+          tattoos: 'Every piece starts with your vision. We focus on clean execution, strong design, and results you’ll carry with confidence.',
+          nails: 'Every set is crafted with care, delivering clean finishes and consistent results you can rely on.',
+          custom: 'Every service is delivered with attention to detail and a focus on consistent, high-quality results.'
+        };
+        return map[k] || map.custom;
+      }
+
       function bladeHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
@@ -2180,10 +2226,21 @@
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var tag = tenant.tagline || '';
-        var emLine = tag.split('.')[0].trim() || 'Crafted for you';
-        var heroDesc = (tenant.aboutText && String(tenant.aboutText).trim())
-          ? String(tenant.aboutText).trim()
-          : (tag || 'Book your next visit — we look forward to serving you.');
+        var emLine = '';
+        if (tenant.bladeHeroTagline && String(tenant.bladeHeroTagline).trim()) {
+          emLine = String(tenant.bladeHeroTagline).trim();
+        } else {
+          var legacyEm = tag.split('.')[0].trim();
+          emLine = legacyEm || defaultBladeHeroTaglineForIndustry(tenant.industry);
+        }
+        var heroDesc = '';
+        if (tenant.bladeHeroDescription && String(tenant.bladeHeroDescription).trim()) {
+          heroDesc = String(tenant.bladeHeroDescription).trim();
+        } else if (tenant.aboutText && String(tenant.aboutText).trim()) {
+          heroDesc = String(tenant.aboutText).trim();
+        } else {
+          heroDesc = tag || defaultBladeHeroDescriptionForIndustry(tenant.industry);
+        }
         if (heroDesc.length > 240) heroDesc = heroDesc.slice(0, 237) + '…';
         var sa = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
         var eyebrow = sa
@@ -2194,17 +2251,8 @@
         var heroRight = tenant.heroImageUrl
           ? '<img class="blade-hero-image" src="' + esc(tenant.heroImageUrl) + '" alt="">'
           : '<div class="blade-hero-placeholder" role="img" aria-hidden="true"></div>';
-        var vertical = tag ? (tag.length > 52 ? tag.slice(0, 50) + '…' : tag) : displayName;
+        var vertical = emLine.length > 52 ? emLine.slice(0, 50) + '…' : emLine;
         var svc = services || [];
-        var n = svc.length;
-        var rCount = (tenant.reviews && tenant.reviews.length) ? tenant.reviews.length : 0;
-        var gCount = (tenant.galleryImages && tenant.galleryImages.length) ? tenant.galleryImages.length : 0;
-        var stats = '<div class="blade-stats-bar">' +
-          '<div class="blade-stat-item"><span class="blade-stat-num">' + n + '</span><span class="blade-stat-label">Services</span></div>' +
-          '<div class="blade-stat-item"><span class="blade-stat-num">' + gCount + '</span><span class="blade-stat-label">Gallery photos</span></div>' +
-          '<div class="blade-stat-item"><span class="blade-stat-num">' + rCount + '</span><span class="blade-stat-label">Reviews</span></div>' +
-          '<div class="blade-stat-item"><span class="blade-stat-num">100%</span><span class="blade-stat-label">Dedicated care</span></div>' +
-          '</div>';
         var serviceCards = '';
         for (var si = 0; si < svc.length; si++) {
           var s = svc[si];
@@ -2228,15 +2276,7 @@
           '<div><div class="blade-section-label">What we offer</div><h2 class="blade-section-title">OUR SERVICES</h2></div>' +
           '<p class="blade-section-desc">Choose a service to go straight to booking.</p>' +
           '</div>' + servicesBody + '</section>';
-        var aboutBody = (tenant.aboutText && String(tenant.aboutText).trim())
-          ? esc(String(tenant.aboutText).trim())
-          : esc(tenant.tagline || 'Tell your story in the app — clients will see it here.');
-        var aboutSection = '<section class="blade-about-block" id="about">' +
-          '<div class="blade-section-header blade-fade-up">' +
-          '<div><div class="blade-section-label">About</div><h2 class="blade-section-title">WHO WE ARE</h2></div>' +
-          '</div>' +
-          '<p class="blade-about-body">' + aboutBody + '</p>' +
-          '</section>';
+        // Hero already shows the story; skip duplicate "WHO WE ARE" block. `#about` is on the hero for nav / /about.
         var gUrls = galleryPageImageUrls(tenant);
         var gallerySection = '';
         if (gUrls.length) {
@@ -2316,7 +2356,7 @@
           '<li><a href="' + bookUrl + '">Book</a></li>' +
           '<li><a href="' + galleryUrl + '">Gallery</a></li>' +
           '</ul></footer>';
-        var hero = '<section class="blade-hero">' +
+        var hero = '<section class="blade-hero" id="about">' +
           '<div class="blade-hero-left">' +
           '<div class="blade-hero-eyebrow">' + esc(eyebrow) + '</div>' +
           '<h1 class="blade-hero-title"><em>' + esc(emLine) + '</em>' + esc(displayName) + '</h1>' +
@@ -2327,7 +2367,7 @@
           '</div></div>' +
           '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div></div>' +
           '<div class="blade-hero-vertical">' + esc(vertical) + '</div></section>';
-        return '<div class="blade-page">' + nav + hero + stats + servicesSection + aboutSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + sidebar + '</div>';
+        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + sidebar + '</div>';
       }
       /** Intentionally empty: business image stays profile-only in the app; headlines use display name + fonts. */
       function tattooHeadlineLogoHtml(tenant) {
@@ -2593,13 +2633,13 @@
         }).join('');
 
         var contact = '';
-        if (!isLuxeTheme(tenant)) {
+        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant)) {
           contact = (tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail) ?
             '<p class="tagline">' + (tenant.contactPhone ? '📞 '+tenant.contactPhone+' ' : '') + (tenant.contactEmail ? '✉️ '+tenant.contactEmail : '') + '</p>' : '';
         }
 
         var bookingPageHeaderHtml = '';
-        if (!isLuxeTheme(tenant)) {
+        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant)) {
           bookingPageHeaderHtml =
             '<div class="booking-page-header">' +
               (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
@@ -2671,7 +2711,7 @@
             (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
             (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '');
           var successHeaderHtml = '';
-          if (!isLuxeTheme(tenant)) {
+          if (!isLuxeTheme(tenant) && !isBladeTheme(tenant)) {
             successHeaderHtml =
               '<div class="booking-page-header">' +
                 tattooHeadlineLogoHtml(tenant) +
@@ -2744,7 +2784,9 @@
               heroFont: data.heroFont || '',
               webThemeId: data.webThemeId || '',
               luxeHeroTagline: data.luxeHeroTagline || '',
-              luxePromoHeadline: data.luxePromoHeadline || '' };
+              luxePromoHeadline: data.luxePromoHeadline || '',
+              bladeHeroTagline: data.bladeHeroTagline || '',
+              bladeHeroDescription: data.bladeHeroDescription || '' };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
             }
@@ -3319,18 +3361,30 @@
       function loadServices(tid) {
         return db.collection('tenants').doc(tid).collection('services').get()
           .then(function(snap){
-            return snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
+            var list = snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
               var x = d.data();
               var pr = x.price;
+              var so = x.sortOrder;
+              var priceNum = (typeof pr === 'number' && !isNaN(pr)) ? pr : null;
+              if (priceNum == null && pr != null && String(pr).trim() !== '') {
+                var parsed = parseFloat(String(pr));
+                if (!isNaN(parsed) && parsed > 0) priceNum = parsed;
+              }
               return {
                 id: d.id,
                 slug: x.slug,
                 name: x.name,
                 description: (x.description != null ? String(x.description) : '') || '',
-                price: (typeof pr === 'number' && !isNaN(pr)) ? pr : null,
-                imageUrl: x.imageUrl || ''
+                price: priceNum,
+                imageUrl: x.imageUrl || '',
+                sortOrder: (typeof so === 'number' && !isNaN(so)) ? so : 1e9
               };
             });
+            list.sort(function(a, b){
+              if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+              return (a.name || '').localeCompare(b.name || '');
+            });
+            return list;
           });
       }
 
@@ -3446,6 +3500,14 @@
                 var target = document.getElementById(p.sectionTarget);
                 if (target && target.scrollIntoView) {
                   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 0);
+            }
+            if (!showForm && isBladeHome && (location.hash || '').toLowerCase() === '#services') {
+              setTimeout(function() {
+                var sec = document.getElementById('services');
+                if (sec && sec.scrollIntoView) {
+                  sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
               }, 0);
             }

@@ -134,13 +134,11 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                     type: .select,
                     required: false,
                     options: [
-                        "Haircut",
-                        "Fade",
-                        "Haircut + beard",
+                        "Skin fade",
                         "Beard trim only",
                         "Lineup / edge-up",
-                        "Kids cut",
                         "Hot towel shave",
+                        "Full service",
                         "Other",
                     ]
                 ),
@@ -279,14 +277,10 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             ]
         case .barber:
             return [
-                ("Haircut", 30),
-                ("Fade", 45),
-                ("Haircut + beard", 45),
+                ("Skin fade", 45),
                 ("Beard trim", 20),
                 ("Lineup / edge-up", 20),
-                ("Hot towel shave", 45),
-                ("Kids cut", 25),
-                ("Consultation", 15),
+                ("Full service", 75),
             ]
         case .tattoos:
             return [
@@ -305,6 +299,47 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             ]
         case .custom:
             return []
+        }
+    }
+
+    /// Four Blade “OUR SERVICES” cards with web descriptions (`tenants/.../services.description`).
+    var bladeStarterServices: [(name: String, description: String, durationMinutes: Int)] {
+        switch self {
+        case .barber:
+            return [
+                ("Skin fade", "Clean fade with sharp detailing.", 45),
+                ("Beard trim", "Defined shape and clean finish.", 20),
+                ("Lineup / edge-up", "Crisp edges and a polished finish.", 20),
+                ("Full service", "Haircut, beard, and full grooming.", 75),
+            ]
+        case .hair:
+            return [
+                ("Women’s cut", "Custom cut designed for your look.", 45),
+                ("Color service", "Rich, balanced, and long-lasting color.", 90),
+                ("Blowout", "Smooth finish with volume and shine.", 45),
+                ("Full transform", "Cut, color, and complete styling.", 150),
+            ]
+        case .tattoos:
+            return [
+                ("Consultation", "Discuss your idea and design direction.", 30),
+                ("Small piece", "Perfect for minimal or fine line work.", 60),
+                ("Medium piece", "Detailed design with balanced coverage.", 120),
+                ("Full session", "Large-scale work or ongoing pieces.", 240),
+            ]
+        case .nails:
+            return [
+                ("Manicure", "Clean shaping with a polished finish.", 45),
+                ("Gel set", "Long-lasting color with high shine.", 60),
+                ("Acrylic set", "Strong, sculpted nails with precision.", 90),
+                ("Full service", "Complete nail care and design.", 90),
+            ]
+        case .custom:
+            return [
+                ("Consultation", "Discuss your needs and preferences.", 30),
+                ("Standard service", "Professional service tailored to you.", 45),
+                ("Premium service", "Enhanced service with added detail.", 60),
+                ("Full service", "Complete experience from start to finish.", 90),
+            ]
         }
     }
 }

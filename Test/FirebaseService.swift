@@ -404,11 +404,12 @@ class FirebaseService: ObservableObject {
         // Apply booking template immediately so services/form fields are ready right after sign up.
         // (Settings → "Save and apply to website" should no longer be required for initial setup.)
         let schema = template.formFields.map { $0.toFirestore() }
-        for item in template.defaultServices {
+        for (index, item) in template.defaultServices.enumerated() {
             _ = try await createTenantService(
                 tenantId: tenantId,
                 name: item.name,
-                durationMinutes: item.durationMinutes
+                durationMinutes: item.durationMinutes,
+                sortOrder: index
             )
         }
         let webThemeId = WebTheme.defaultTheme(forIndustry: template.rawValue).rawValue
@@ -461,29 +462,84 @@ class FirebaseService: ObservableObject {
 
     func fetchTenantServices(tenantId: String) async throws -> [TenantService] {
         let snapshot = try await db.collection("tenants").document(tenantId).collection("services").getDocuments()
-        return snapshot.documents.compactMap { doc -> TenantService? in
+        let mapped = snapshot.documents.compactMap { doc -> TenantService? in
             let d = doc.data()
             guard let slug = d["slug"] as? String, let name = d["name"] as? String else { return nil }
+            let rawPrice = d["price"]
+            let price: Double? = {
+                if let x = rawPrice as? Double, x > 0 { return x }
+                if let x = rawPrice as? Int, x > 0 { return Double(x) }
+                return nil
+            }()
             return TenantService(
                 id: doc.documentID,
                 slug: slug,
                 name: name,
                 durationMinutes: d["durationMinutes"] as? Int ?? 30,
+                description: d["description"] as? String,
+                sortOrder: d["sortOrder"] as? Int ?? Int.max,
+                price: price,
                 isActive: d["isActive"] as? Bool ?? true,
                 bookingModeOverride: d["bookingModeOverride"] as? String,
                 formSchema: d["formSchema"] as? [[String: Any]]
             )
         }
+        return mapped.sorted {
+            if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 
-    func createTenantService(tenantId: String, name: String, durationMinutes: Int, slug: String? = nil) async throws -> String {
+    /// Merge payload for name, slug, duration, optional description, optional starting price on Blade.
+    func tenantServiceDisplayUpdates(
+        name: String,
+        slug: String,
+        durationMinutes: Int,
+        description: String?,
+        startingPrice: Double?
+    ) -> [String: Any] {
+        var u: [String: Any] = [
+            "name": name,
+            "slug": slug,
+            "durationMinutes": durationMinutes
+        ]
+        let desc = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if desc.isEmpty {
+            u["description"] = FieldValue.delete()
+        } else {
+            u["description"] = desc
+        }
+        if let p = startingPrice, p > 0 {
+            u["price"] = p
+        } else {
+            u["price"] = FieldValue.delete()
+        }
+        return u
+    }
+
+    func createTenantService(
+        tenantId: String,
+        name: String,
+        durationMinutes: Int,
+        slug: String? = nil,
+        description: String? = nil,
+        sortOrder: Int = 0,
+        startingPrice: Double? = nil
+    ) async throws -> String {
         let slugValue = slug ?? self.slug(from: name)
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "slug": slugValue,
             "name": name,
             "durationMinutes": durationMinutes,
-            "isActive": true
+            "isActive": true,
+            "sortOrder": sortOrder
         ]
+        if let d = description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
+            data["description"] = d
+        }
+        if let p = startingPrice, p > 0 {
+            data["price"] = p
+        }
         let ref = try await db.collection("tenants").document(tenantId).collection("services").addDocument(data: data)
         return ref.documentID
     }

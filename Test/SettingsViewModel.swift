@@ -310,8 +310,13 @@ class SettingsViewModel: ObservableObject {
             for svc in existingServices {
                 try await firebaseService.deleteTenantService(tenantId: tid, serviceId: svc.id)
             }
-            for item in template.defaultServices {
-                _ = try await firebaseService.createTenantService(tenantId: tid, name: item.name, durationMinutes: item.durationMinutes)
+            for (index, item) in template.defaultServices.enumerated() {
+                _ = try await firebaseService.createTenantService(
+                    tenantId: tid,
+                    name: item.name,
+                    durationMinutes: item.durationMinutes,
+                    sortOrder: index
+                )
             }
             let currentStoredTheme = tenant?["webThemeId"] as? String
             let currentFamily = WebTheme(rawValue: currentStoredTheme ?? "")?.family ?? .classic

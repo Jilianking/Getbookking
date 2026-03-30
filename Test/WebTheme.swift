@@ -7,6 +7,49 @@
 
 import Foundation
 
+enum TemplateFamily: String, CaseIterable, Identifiable {
+    case classic
+    case luxe
+    case blade
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .classic: return "Classic"
+        case .luxe: return "Luxe"
+        case .blade: return "Blade"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .classic: return "rectangle.split.3x3"
+        case .luxe: return "sparkles"
+        case .blade: return "moon.stars"
+        }
+    }
+
+    var previewSubtitle: String {
+        switch self {
+        case .classic: return "Balanced portfolio layout with hero, gallery, and about"
+        case .luxe: return "Elegant cream palette, refined sections"
+        case .blade: return "Dark luxury, gold accents"
+        }
+    }
+
+    var sectionTags: [String] {
+        switch self {
+        case .classic:
+            return ["Hero", "Featured", "About", "Gallery", "Booking"]
+        case .luxe:
+            return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
+        case .blade:
+            return ["Hero", "Services", "Gallery", "Reviews", "Shop", "Booking"]
+        }
+    }
+}
+
 /// One web layout option. Each case maps to exactly one `BookingTemplate` industry.
 enum WebTheme: String, CaseIterable, Identifiable {
     /// Hair: hero → featured → meet + contact → sidebar (matches tattoo-style flow).
@@ -15,11 +58,9 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case barberShopV1 = "barber-shop-v1"
     /// Tattoo: full tattoo template on web.
     case tattooStudioV1 = "tattoo-studio-v1"
-    /// Nails: classic service card list home.
+    /// Nails: classic portfolio template.
     case nailSalonV1 = "nail-salon-v1"
-    /// Pet grooming: same structural layout as hair/barber (hero, featured, meet, sidebar).
-    case petGroomingV1 = "pet-grooming-v1"
-    /// Custom: default card list.
+    /// Custom: neutral classic portfolio template.
     case customStandard = "custom-standard"
     /// Luxe: elegant full-width hero, service cards, promo strip, team section. Works with any industry.
     case luxeV1 = "luxe-v1"
@@ -43,7 +84,6 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return .barber
         case .tattooStudioV1: return .tattoos
         case .nailSalonV1: return .nails
-        case .petGroomingV1: return .petGrooming
         case .customStandard: return .custom
         case .luxeV1: return .custom
         case .bladeV1: return .custom
@@ -56,7 +96,6 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Classic"
         case .tattooStudioV1: return "Classic"
         case .nailSalonV1: return "Classic"
-        case .petGroomingV1: return "Classic"
         case .customStandard: return "Classic"
         case .luxeV1: return "Luxe"
         case .bladeV1: return "Blade"
@@ -69,7 +108,6 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Hero, featured work, about, sidebar"
         case .tattooStudioV1: return "Hero, featured work, about, sidebar"
         case .nailSalonV1: return "Hero, featured work, about, sidebar"
-        case .petGroomingV1: return "Hero, featured work, about, sidebar"
         case .customStandard: return "Hero, featured work, about, sidebar"
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
@@ -82,10 +120,68 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "mustache.fill"
         case .tattooStudioV1: return "photo.on.rectangle.angled"
         case .nailSalonV1: return "square.grid.2x2"
-        case .petGroomingV1: return "pawprint.fill"
         case .customStandard: return "list.bullet.rectangle"
         case .luxeV1: return "sparkles"
         case .bladeV1: return "moon.stars"
+        }
+    }
+
+    /// Short marketing line for the template gallery card.
+    var previewSubtitle: String {
+        switch self {
+        case .bladeV1: return "Dark luxury, gold accents"
+        case .luxeV1: return "Elegant cream palette, refined sections"
+        case .hairSalonV1, .barberShopV1: return "Portfolio hero, featured work, book flow"
+        case .tattooStudioV1: return "Bold hero, featured grid, sidebar"
+        case .nailSalonV1, .customStandard: return "Neutral portfolio layout with gallery and about"
+        }
+    }
+
+    /// Section pills shown under each template card.
+    var sectionTags: [String] {
+        switch self {
+        case .bladeV1:
+            return ["Hero", "Services", "Gallery", "Reviews", "Shop", "Booking"]
+        case .luxeV1:
+            return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
+        case .nailSalonV1, .customStandard:
+            return ["Hero", "Featured", "About", "Gallery", "Booking"]
+        case .hairSalonV1, .barberShopV1, .tattooStudioV1:
+            return ["Hero", "Featured", "About", "Gallery", "Booking"]
+        }
+    }
+
+    var family: TemplateFamily {
+        switch self {
+        case .luxeV1: return .luxe
+        case .bladeV1: return .blade
+        default: return .classic
+        }
+    }
+
+    static func classicTheme(forIndustry industry: String?) -> WebTheme {
+        switch BookingTemplate(rawValue: industry ?? "") {
+        case .hair:
+            return .hairSalonV1
+        case .barber:
+            return .barberShopV1
+        case .tattoos:
+            return .tattooStudioV1
+        case .nails:
+            return .nailSalonV1
+        case .custom, .none:
+            return .customStandard
+        }
+    }
+
+    static func theme(for family: TemplateFamily, industry: String?) -> WebTheme {
+        switch family {
+        case .classic:
+            return classicTheme(forIndustry: industry)
+        case .luxe:
+            return .luxeV1
+        case .blade:
+            return .bladeV1
         }
     }
 

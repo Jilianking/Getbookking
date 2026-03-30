@@ -12,7 +12,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     case barber = "barber"
     case tattoos = "tattoos"
     case nails = "nails"
-    case petGrooming = "pet_grooming"
     case custom = "custom"
 
     var id: String { rawValue }
@@ -23,7 +22,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "Barber shop"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
-        case .petGrooming: return "Pet grooming"
         case .custom: return "Custom / Blank"
         }
     }
@@ -34,7 +32,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "mustache.fill"
         case .tattoos: return "paintbrush.fill"
         case .nails: return "hand.raised.fill"
-        case .petGrooming: return "pawprint.fill"
         case .custom: return "doc.plaintext"
         }
     }
@@ -264,36 +261,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 FormField(id: "design", key: "designPreference", label: "Design preference", type: .text, required: false),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
-        case .petGrooming:
-            return base + [
-                FormField(id: "pet_name", key: "petName", label: "Pet name", type: .text, required: false),
-                FormField(
-                    id: "pet_type",
-                    key: "petType",
-                    label: "Pet type",
-                    type: .select,
-                    required: false,
-                    options: ["Dog", "Cat", "Other"],
-                    placeholder: "Select type"
-                ),
-                FormField(id: "breed_size", key: "breedSize", label: "Breed / size", type: .text, required: false),
-                FormField(
-                    id: "coat",
-                    key: "coatNotes",
-                    label: "Coat (matted, shedding, double coat, etc.)",
-                    type: .text,
-                    required: false
-                ),
-                FormField(
-                    id: "behavior",
-                    key: "behaviorNotes",
-                    label: "Behavior (nervous, senior, reactive, etc.)",
-                    type: .text,
-                    required: false
-                ),
-                FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
-                FormField(id: "pet_photos", key: "petPhotos", label: "Reference photos", type: .file, required: false),
-            ]
         case .custom:
             return FormField.defaultFields
         }
@@ -335,15 +302,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Gel manicure", 60),
                 ("Acrylic full set", 90),
                 ("Nail art", 30),
-            ]
-        case .petGrooming:
-            return [
-                ("Full groom", 90),
-                ("Bath & brush", 60),
-                ("Nail trim", 30),
-                ("Deshedding treatment", 75),
-                ("Puppy / kitten intro", 45),
-                ("Teeth brushing add-on", 15),
             ]
         case .custom:
             return []

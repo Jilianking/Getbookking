@@ -162,7 +162,7 @@ struct SettingsView: View {
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile {
-                    Section(header: Text("Service"), footer: Text("Business type controls your booking form, default services, and which website templates appear in Website Design. Changing it asks for confirmation because your current services are replaced.")) {
+                    Section(header: Text("Service"), footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")) {
                         Picker("Business type", selection: $viewModel.selectedIndustry) {
                             ForEach(BookingTemplate.allCases) { template in
                                 Text(template.displayName).tag(template.rawValue)

@@ -11,7 +11,7 @@ import UIKit
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
-    @State private var selectedTab: DesignTab = .home
+    @State private var selectedTab: DesignTab = .template
     @State private var isShowingBuilder = false
     @State private var hoursPickerChoice: String = "custom"
     private static let hoursPresets = ["Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"]
@@ -94,7 +94,7 @@ struct DesignView: View {
     private var builderContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ForEach(DesignTab.allCases, id: \.self) { tab in
+                ForEach(visibleDesignTabs, id: \.self) { tab in
                     Button {
                         selectedTab = tab
                     } label: {
@@ -112,6 +112,11 @@ struct DesignView: View {
             .cornerRadius(8)
             .padding()
             .background(Color(.systemBackground))
+            .onChange(of: viewModel.webThemeId) { _, _ in
+                if isLuxeTemplate, selectedTab == .about {
+                    selectedTab = .home
+                }
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -135,6 +140,7 @@ struct DesignView: View {
                         contentUnavailable
                     } else {
                         switch selectedTab {
+                        case .template: templateContent
                         case .home: homeContent
                         case .gallery: galleryContent
                         case .book: bookContent
@@ -162,42 +168,81 @@ struct DesignView: View {
         .padding()
     }
 
+    private var activeTemplateDisplayName: String {
+        WebTheme(rawValue: viewModel.webThemeId)?.displayName ?? "Classic"
+    }
+
+    private var activeTemplateFamily: TemplateFamily {
+        WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+    }
+
+    private var isClassicTemplate: Bool { activeTemplateFamily == .classic }
+    private var isLuxeTemplate: Bool { activeTemplateFamily == .luxe }
+    private var isBladeTemplate: Bool { activeTemplateFamily == .blade }
+
+    private var visibleDesignTabs: [DesignTab] {
+        DesignTab.allCases.filter { tab in
+            if tab == .about, isLuxeTemplate { return false }
+            return true
+        }
+    }
+
+    /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.
+    private var luxeHeroTaglinePlaceholder: String {
+        let raw = viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let template = BookingTemplate(rawValue: raw) ?? .custom
+        switch template {
+        case .hair: return "Elevated hair, tailored to you."
+        case .barber: return "Sharp cuts. Clean results. Every time."
+        case .tattoos: return "Turn your idea into something permanent."
+        case .nails: return "Clean, polished, and done right."
+        case .custom: return "Designed to deliver better results."
+        }
+    }
+
+    /// Matches `defaultLuxePromoHeadlineForIndustry` in `web/index.html`.
+    private var luxePromoHeadlinePlaceholder: String {
+        let raw = viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let template = BookingTemplate(rawValue: raw) ?? .custom
+        switch template {
+        case .hair: return "Ready for Your Next Look?"
+        case .barber: return "Ready for Your Next Cut?"
+        case .tattoos: return "Ready for Your Next Piece?"
+        case .nails: return "Ready for Your Next Set?"
+        case .custom: return "Ready to Book Your Next Appointment?"
+        }
+    }
+
+    private var templateContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Template")
+                    .font(.title2.bold())
+                Text("Choose a template first. Your business type then fills in that template with industry-specific defaults.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            ForEach(TemplateFamily.allCases) { family in
+                TemplateFamilyCard(
+                    family: family,
+                    isActive: activeTemplateFamily == family,
+                    isBusy: viewModel.isLoading
+                ) {
+                    let theme = WebTheme.theme(for: family, industry: viewModel.industry)
+                    Task { await viewModel.applyWebTheme(theme) }
+                }
+            }
+        }
+    }
+
     private var homeContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Web templates
-            Text("Website templates")
-                .font(.headline)
-            Text("Choose a template for your public site.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.bottom, 4)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(WebTheme.themes(forIndustry: viewModel.industry)) { theme in
-                    Button(action: {
-                        Task { await viewModel.applyWebTheme(theme) }
-                    }) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Image(systemName: theme.icon)
-                                .font(.system(size: 22))
-                            Text(theme.displayName)
-                                .font(.caption.weight(.semibold))
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                            Text(theme.detail)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(3)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(viewModel.webThemeId == theme.rawValue ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                        .foregroundColor(viewModel.webThemeId == theme.rawValue ? .white : .primary)
-                        .cornerRadius(10)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.isLoading)
-                }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Site template")
+                    .font(.headline)
+                Text("You’re using \(activeTemplateDisplayName). Switch designs anytime in the Template tab.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
 
             // Hero
@@ -207,59 +252,86 @@ struct DesignView: View {
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
-            // Typography — hero, gallery, booking titles (Google Fonts on the public site)
-            Text("Typography")
-                .font(.headline)
-                .padding(.top, 8)
-            Text("Font for the large hero title on your public site. Body, sidebar, and other text use Inter. Save Home and deploy hosting.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Picker("Hero font", selection: $viewModel.heroFont) {
-                ForEach(DisplayFontOption.allCases) { opt in
-                    Text(opt.displayName).tag(opt.rawValue)
-                }
+            if isLuxeTemplate {
+                Text("Hero tagline")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 4)
+                Text("Shown under your name on the Luxe home hero only—not the same as booking or other pages.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField(
+                    "Line under your name",
+                    text: $viewModel.luxeHeroTagline,
+                    prompt: Text(luxeHeroTaglinePlaceholder),
+                    axis: .vertical
+                )
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
             }
 
-            // Featured work
-            Text("Featured work")
-                .font(.headline)
-            Picker("Featured work layout", selection: $viewModel.galleryGridLayout) {
-                Text("2 wide").tag("2x1")
-                Text("3 wide").tag("3x1")
-            }
-            .pickerStyle(.segmented)
-            FeaturedWorkHomeGallerySection(viewModel: viewModel)
-
-            Text("Home & booking sections")
-                .font(.headline)
-                .padding(.top, 8)
-            Group {
-                if viewModel.usesPortfolioStyleWebChrome {
-                    Text("Featured strip and /gallery page share one background. The booking page uses that behind a white card—pick a preset below.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("Featured strip on your home page and the booking form card.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            if isClassicTemplate || isLuxeTemplate {
+                // Featured work (same order as Luxe web: hero → featured → promo → about)
+                Text("Featured work")
+                    .font(.headline)
+                if isClassicTemplate {
+                    Picker("Featured work layout", selection: $viewModel.galleryGridLayout) {
+                        Text("2 wide").tag("2x1")
+                        Text("3 wide").tag("3x1")
+                    }
+                    .pickerStyle(.segmented)
                 }
+                FeaturedWorkHomeGallerySection(
+                    viewModel: viewModel,
+                    showFeaturedWorkExplanation: isClassicTemplate
+                )
             }
-            FeaturedWorkPresetPicker(viewModel: viewModel)
-            if viewModel.usesPortfolioStyleWebChrome {
-                Text("Booking form card sits on that background—default is white; override below if you want.")
+
+            if isClassicTemplate {
+                FeaturedWorkPresetPicker(viewModel: viewModel)
+                    .padding(.top, 8)
+            } else if isBladeTemplate {
+                Text("Blade notes")
+                    .font(.headline)
+                    .padding(.top, 8)
+                Text("Blade uses a fixed dark style. Manage city/area in About and gallery images in Gallery.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            HexColorRow(label: "Booking form card", hex: $viewModel.bookingFormCardBackgroundColorHex)
 
-            // Sidebar
-            Text("Sidebar")
-                .font(.headline)
-            Text("Icon color auto-detects: black on white backgrounds, white on colored backgrounds. Override per page if needed.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            HexColorRow(label: "Home page icon color", hex: $viewModel.sidebarIconColorHome)
-            HexColorRow(label: "Booking page icon color", hex: $viewModel.sidebarIconColorBooking)
+            if isLuxeTemplate {
+                Text("Promo headline")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 8)
+                Text("Large title in the cream Book Now section on Luxe home. The line below still uses your site tagline.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField(
+                    "Promo section headline",
+                    text: $viewModel.luxePromoHeadline,
+                    prompt: Text(luxePromoHeadlinePlaceholder)
+                )
+                .textFieldStyle(.roundedBorder)
+
+                Text("About Us")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 8)
+                Text("Shown below the promo on Luxe home (“Meet …” section).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Tell clients about you", text: $viewModel.aboutText, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(3...8)
+
+                Text("CONTACT")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                    .tracking(1)
+                    .padding(.top, 8)
+                Text("Location, hours, email, and social — same strip at the bottom of Luxe home.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                contactFieldsSection(includeBladeServiceArea: false)
+            }
 
             Button("Save Home") {
                 Task { await viewModel.saveHome() }
@@ -272,7 +344,7 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Gallery")
                 .font(.headline)
-            Text("These photos appear only on your /gallery page—not on the home featured strip.")
+            Text(isBladeTemplate ? "These photos power the Blade gallery strip and full /gallery page." : "These photos appear on your /gallery page.")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -282,23 +354,11 @@ struct DesignView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            Text("Gallery page")
-                .font(.headline)
-                .padding(.top, 8)
-            if viewModel.usesPortfolioStyleWebChrome {
-                Text("Background and text match Home → Featured section. Change colors on the Home tab (Featured work presets).")
+            if !isClassicTemplate {
+                Text("Gallery styling is built into the selected template. Manage images here.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-            } else {
-                Text("Full /gallery page background and text.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                HexColorRow(label: "Page background", hex: $viewModel.galleryPageBackgroundColorHex)
-                HexColorRow(label: "Page text", hex: $viewModel.galleryPageTextColorHex)
-                Button("Save gallery page colors") {
-                    Task { await viewModel.saveGalleryPageColors() }
-                }
-                .buttonStyle(.borderedProminent)
+                    .padding(.top, 8)
             }
         }
     }
@@ -371,19 +431,91 @@ struct DesignView: View {
         }
     }
 
+    @ViewBuilder
+    private func contactFieldsSection(includeBladeServiceArea: Bool) -> some View {
+        VStack(spacing: 12) {
+            IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
+                get: { viewModel.contactPhone },
+                set: { viewModel.contactPhone = Self.formatPhone($0) }
+            ))
+            .keyboardType(.phonePad)
+
+            IconFieldRow(icon: "envelope", placeholder: "example@example.com", text: $viewModel.contactEmail)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.emailAddress)
+
+            IconFieldRow(icon: "mappin.circle", placeholder: "123 Main St, City, State", text: $viewModel.contactAddress)
+
+            if includeBladeServiceArea {
+                IconFieldRow(icon: "building.2", placeholder: "St. Petersburg, FL", text: $viewModel.serviceArea)
+                Text("City or service area — short line for the Blade hero. Use your full street address above.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Image(systemName: "clock")
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
+                Picker("Hours", selection: $hoursPickerChoice) {
+                    ForEach(Self.hoursPresets, id: \.self) { preset in
+                        Text(preset).tag(preset)
+                    }
+                    Text("Custom").tag("custom")
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
+            .onChange(of: hoursPickerChoice) { _, new in
+                if new != "custom" { viewModel.businessHours = new }
+            }
+            .onAppear {
+                hoursPickerChoice = Self.hoursPresets.contains(viewModel.businessHours) ? viewModel.businessHours : "custom"
+            }
+            .onChange(of: viewModel.businessHours) { _, new in
+                if Self.hoursPresets.contains(new) { hoursPickerChoice = new }
+            }
+
+            if hoursPickerChoice == "custom" {
+                IconFieldRow(icon: "clock.badge", placeholder: "e.g. Sun 11am–5pm", text: $viewModel.businessHours)
+            }
+
+            IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
+                .textInputAutocapitalization(.never)
+
+            Toggle(isOn: $viewModel.showContactOnPage) {
+                HStack(spacing: 10) {
+                    Image(systemName: "eye")
+                        .foregroundColor(.secondary)
+                        .frame(width: 24)
+                    Text("Show contact on page")
+                        .font(.subheadline)
+                }
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
+        }
+    }
+
     private var aboutContent: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("ABOUT")
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
                 .tracking(1)
-            Text("This appears in the Meet section on your site.")
+            Text(isClassicTemplate ? "This appears in the Meet section on your site." : "This appears in the About section on your site.")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text("Meet section colors")
-                .font(.subheadline.weight(.medium))
-            HexColorRow(label: "Section background", hex: $viewModel.aboutSectionBackgroundColorHex)
-            HexColorRow(label: "Section text", hex: $viewModel.aboutSectionTextColorHex)
+            if isClassicTemplate {
+                Text("Meet section colors")
+                    .font(.subheadline.weight(.medium))
+                HexColorRow(label: "Section background", hex: $viewModel.aboutSectionBackgroundColorHex)
+                HexColorRow(label: "Section text", hex: $viewModel.aboutSectionTextColorHex)
+            }
             TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
@@ -394,65 +526,7 @@ struct DesignView: View {
                 .tracking(1)
                 .padding(.top, 8)
 
-            VStack(spacing: 12) {
-                IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
-                    get: { viewModel.contactPhone },
-                    set: { viewModel.contactPhone = Self.formatPhone($0) }
-                ))
-                .keyboardType(.phonePad)
-
-                IconFieldRow(icon: "envelope", placeholder: "example@example.com", text: $viewModel.contactEmail)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.emailAddress)
-
-                IconFieldRow(icon: "mappin.circle", placeholder: "123 Main St, City, State", text: $viewModel.contactAddress)
-
-                HStack(spacing: 10) {
-                    Image(systemName: "clock")
-                        .foregroundColor(.secondary)
-                        .frame(width: 24)
-                    Picker("Hours", selection: $hoursPickerChoice) {
-                        ForEach(Self.hoursPresets, id: \.self) { preset in
-                            Text(preset).tag(preset)
-                        }
-                        Text("Custom").tag("custom")
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(12)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-                .onChange(of: hoursPickerChoice) { _, new in
-                    if new != "custom" { viewModel.businessHours = new }
-                }
-                .onAppear {
-                    hoursPickerChoice = Self.hoursPresets.contains(viewModel.businessHours) ? viewModel.businessHours : "custom"
-                }
-                .onChange(of: viewModel.businessHours) { _, new in
-                    if Self.hoursPresets.contains(new) { hoursPickerChoice = new }
-                }
-
-                if hoursPickerChoice == "custom" {
-                    IconFieldRow(icon: "clock.badge", placeholder: "e.g. Sun 11am–5pm", text: $viewModel.businessHours)
-                }
-
-                IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
-                    .textInputAutocapitalization(.never)
-
-                Toggle(isOn: $viewModel.showContactOnPage) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "eye")
-                            .foregroundColor(.secondary)
-                            .frame(width: 24)
-                        Text("Show contact on page")
-                            .font(.subheadline)
-                    }
-                }
-                .padding(12)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-            }
+            contactFieldsSection(includeBladeServiceArea: isBladeTemplate)
 
             HStack(spacing: 12) {
                 Button("Discard") {
@@ -561,6 +635,10 @@ struct DesignView: View {
                 Text("Address")
                 TextField("123 Main St", text: $viewModel.contactAddress)
                     .textFieldStyle(.roundedBorder)
+                Text("City / area (Blade hero)")
+                    .font(.subheadline)
+                TextField("St. Petersburg, FL", text: $viewModel.serviceArea)
+                    .textFieldStyle(.roundedBorder)
                 Toggle("Show contact on page", isOn: $viewModel.showContactOnPage)
             }
             Button("Save contact") {
@@ -586,75 +664,83 @@ struct DesignView: View {
 
     private var shopContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Products")
-                .font(.headline)
-            Text("Add products to display in the shop section on your Luxe or Blade template.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if isClassicTemplate {
+                Text("Shop")
+                    .font(.headline)
+                Text("Shop is available on Luxe and Blade templates. Switch templates to enable product sections on the public site.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Products")
+                    .font(.headline)
+                Text("Add products to display in the shop section on your Luxe or Blade template.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
-            if viewModel.products.isEmpty && !viewModel.isUploadingProduct {
-                VStack(spacing: 12) {
-                    Image(systemName: "bag")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary)
-                    Text("No products yet")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
-            }
-
-            ForEach(viewModel.products) { product in
-                HStack(spacing: 12) {
-                    if !product.imageUrl.isEmpty, let url = URL(string: product.imageUrl) {
-                        AsyncImage(url: url) { img in
-                            img.resizable().scaledToFill()
-                        } placeholder: {
-                            Color(.systemGray5)
-                        }
-                        .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray5))
-                            .frame(width: 56, height: 56)
-                            .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+                if viewModel.products.isEmpty && !viewModel.isUploadingProduct {
+                    VStack(spacing: 12) {
+                        Image(systemName: "bag")
+                            .font(.system(size: 36))
+                            .foregroundColor(.secondary)
+                        Text("No products yet")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(product.name).font(.subheadline.weight(.medium))
-                        if !product.category.isEmpty {
-                            Text(product.category).font(.caption).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                }
+
+                ForEach(viewModel.products) { product in
+                    HStack(spacing: 12) {
+                        if !product.imageUrl.isEmpty, let url = URL(string: product.imageUrl) {
+                            AsyncImage(url: url) { img in
+                                img.resizable().scaledToFill()
+                            } placeholder: {
+                                Color(.systemGray5)
+                            }
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemGray5))
+                                .frame(width: 56, height: 56)
+                                .overlay(Image(systemName: "photo").foregroundColor(.secondary))
                         }
-                        HStack(spacing: 6) {
-                            if let sp = product.salePrice {
-                                Text("$\(String(format: "%.2f", sp))").font(.caption.weight(.semibold)).foregroundColor(.red)
-                                Text("$\(String(format: "%.2f", product.price))").font(.caption).strikethrough().foregroundColor(.secondary)
-                            } else {
-                                Text("$\(String(format: "%.2f", product.price))").font(.caption.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(product.name).font(.subheadline.weight(.medium))
+                            if !product.category.isEmpty {
+                                Text(product.category).font(.caption).foregroundColor(.secondary)
+                            }
+                            HStack(spacing: 6) {
+                                if let sp = product.salePrice {
+                                    Text("$\(String(format: "%.2f", sp))").font(.caption.weight(.semibold)).foregroundColor(.red)
+                                    Text("$\(String(format: "%.2f", product.price))").font(.caption).strikethrough().foregroundColor(.secondary)
+                                } else {
+                                    Text("$\(String(format: "%.2f", product.price))").font(.caption.weight(.semibold))
+                                }
                             }
                         }
+                        Spacer()
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteProduct(product) }
+                        } label: {
+                            Image(systemName: "trash").font(.caption).foregroundColor(.red)
+                        }
                     }
-                    Spacer()
-                    Button(role: .destructive) {
-                        Task { await viewModel.deleteProduct(product) }
-                    } label: {
-                        Image(systemName: "trash").font(.caption).foregroundColor(.red)
-                    }
+                    .padding(12)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(10)
                 }
-                .padding(12)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-            }
 
-            if viewModel.isUploadingProduct {
-                HStack { ProgressView(); Text("Adding product…").font(.caption).foregroundColor(.secondary) }
-            }
+                if viewModel.isUploadingProduct {
+                    HStack { ProgressView(); Text("Adding product…").font(.caption).foregroundColor(.secondary) }
+                }
 
-            Button { showAddProduct = true } label: {
-                Label("Add Product", systemImage: "plus.circle.fill").font(.subheadline.weight(.medium))
+                Button { showAddProduct = true } label: {
+                    Label("Add Product", systemImage: "plus.circle.fill").font(.subheadline.weight(.medium))
+                }
+                .sheet(isPresented: $showAddProduct) { addProductSheet }
             }
-            .sheet(isPresented: $showAddProduct) { addProductSheet }
         }
     }
 
@@ -838,6 +924,8 @@ struct GalleryImagesSection: View {
 // MARK: - Featured work on Home tab (separate from gallery page photos)
 struct FeaturedWorkHomeGallerySection: View {
     @ObservedObject var viewModel: DesignViewModel
+    /// Classic shows slot/gallery explainer; Luxe omits redundant copy.
+    var showFeaturedWorkExplanation: Bool = true
     @State private var selectedItems: [PhotosPickerItem] = []
 
     private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
@@ -854,11 +942,13 @@ struct FeaturedWorkHomeGallerySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Featured work photos")
-                .font(.subheadline.weight(.medium))
-            Text("These appear only on your home featured strip (first \(slots) slots for \(layoutCaptionLabel)). Add your full portfolio under the Gallery tab—they won’t show here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if showFeaturedWorkExplanation {
+                Text("Featured work photos")
+                    .font(.subheadline.weight(.medium))
+                Text("These appear only on your home featured strip (first \(slots) slots for \(layoutCaptionLabel)). Add your full portfolio under the Gallery tab—they won’t show here.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             Text("Featured on home")
                 .font(.caption.weight(.semibold))
@@ -1063,6 +1153,231 @@ struct AddServiceSheet: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Template gallery (mini SwiftUI previews)
+
+private struct TemplateFamilyCard: View {
+    let family: TemplateFamily
+    let isActive: Bool
+    let isBusy: Bool
+    let select: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TemplateMiniPreview(family: family)
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(Color(.secondarySystemGroupedBackground))
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(family.displayName)
+                        .font(.headline)
+                    Spacer()
+                    if isActive {
+                        Text("Active")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                            .foregroundColor(.accentColor)
+                    } else {
+                        Button(action: select) {
+                            Text("Select")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.accentColor)
+                        .disabled(isBusy)
+                    }
+                }
+                Text(family.previewSubtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(family.sectionTags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2.weight(.medium))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color(.systemGray5)))
+                        }
+                    }
+                }
+            }
+            .padding(14)
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color(.separator).opacity(0.45), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+    }
+}
+
+private struct TemplateMiniPreview: View {
+    let family: TemplateFamily
+
+    var body: some View {
+        Group {
+            switch family {
+            case .blade:
+                BladeTemplatePreview()
+            case .luxe:
+                LuxeTemplatePreview()
+            case .classic:
+                ClassicTemplatePreview(accentSymbol: family.icon)
+            }
+        }
+        .frame(height: 128)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct BladeTemplatePreview: View {
+    private let gold = Color(red: 0.79, green: 0.66, blue: 0.30)
+    private let cream = Color(red: 0.96, green: 0.94, blue: 0.91)
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.04),
+                    Color(red: 0.11, green: 0.10, blue: 0.08)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            VStack(alignment: .leading, spacing: 5) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(gold)
+                    .frame(width: 32, height: 2)
+                Text("CRAFTED FOR YOU")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundColor(gold)
+                    .tracking(0.6)
+                Text("YOUR STUDIO")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundColor(cream)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                HStack(spacing: 5) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(gold)
+                        .frame(width: 52, height: 13)
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(cream.opacity(0.35), lineWidth: 1)
+                        .frame(width: 48, height: 13)
+                }
+            }
+            .padding(12)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(gold.opacity(0.3))
+                .frame(width: 3, height: 40)
+                .padding(.trailing, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+private struct LuxeTemplatePreview: View {
+    private let cream = Color(red: 1.0, green: 0.99, blue: 0.98)
+    private let ink = Color(red: 0.11, green: 0.11, blue: 0.11)
+    private let accent = Color(red: 0.79, green: 0.66, blue: 0.43)
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            cream
+            VStack(spacing: 0) {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.2, green: 0.17, blue: 0.14),
+                            Color(red: 0.12, green: 0.10, blue: 0.08)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    VStack(spacing: 4) {
+                        Text("STUDIO")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white.opacity(0.9))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(accent)
+                            .frame(width: 56, height: 12)
+                    }
+                    .padding(.vertical, 10)
+                }
+                .frame(height: 72)
+                HStack(spacing: 5) {
+                    ForEach(0..<3, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 36, height: 44)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(ink.opacity(0.06), lineWidth: 0.5)
+                            )
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(cream)
+            }
+        }
+    }
+}
+
+private struct ClassicTemplatePreview: View {
+    let accentSymbol: String
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color(.systemGray6)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Image(systemName: accentSymbol)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Circle()
+                        .fill(Color(.systemGray4))
+                        .frame(width: 14, height: 14)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
+                ZStack(alignment: .bottom) {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(.systemGray3), Color(.systemGray4)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    VStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.85))
+                            .frame(width: 70, height: 10)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.accentColor.opacity(0.9))
+                            .frame(width: 50, height: 12)
+                    }
+                    .padding(.bottom, 12)
+                }
+                .frame(height: 68)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
             }
         }
     }

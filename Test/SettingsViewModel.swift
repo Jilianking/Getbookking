@@ -304,6 +304,7 @@ class SettingsViewModel: ObservableObject {
               let template = BookingTemplate(rawValue: selectedIndustry) else { return }
         await MainActor.run { isSavingService = true; errorMessage = nil; saveSuccess = false }
         do {
+            let tenant = try await firebaseService.fetchTenant(tenantId: tid)
             let schema = template.formFields.map { $0.toFirestore() }
             let existingServices = try await firebaseService.fetchTenantServices(tenantId: tid)
             for svc in existingServices {
@@ -312,9 +313,13 @@ class SettingsViewModel: ObservableObject {
             for item in template.defaultServices {
                 _ = try await firebaseService.createTenantService(tenantId: tid, name: item.name, durationMinutes: item.durationMinutes)
             }
+            let currentStoredTheme = tenant?["webThemeId"] as? String
+            let currentFamily = WebTheme(rawValue: currentStoredTheme ?? "")?.family ?? .classic
+            let nextTheme = WebTheme.theme(for: currentFamily, industry: template.rawValue)
             try await firebaseService.updateTenant(tenantId: tid, updates: [
                 "formSchema": schema,
                 "industry": template.rawValue,
+                "webThemeId": nextTheme.rawValue
             ])
             await MainActor.run {
                 isSavingService = false

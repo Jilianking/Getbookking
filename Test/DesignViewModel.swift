@@ -9,6 +9,7 @@ import Combine
 import FirebaseAuth
 
 enum DesignTab: String, CaseIterable {
+    case template
     case home
     case gallery
     case book
@@ -44,12 +45,12 @@ class DesignViewModel: ObservableObject {
     @Published var primaryColorHex: String = "#000000"
     @Published var primaryColorHoverHex: String = "#333333"
     @Published var successColorHex: String = "#22C55E"
-    @Published var fontFamily: String = "system"
-    /// Google Font for the public site **hero title** only; UI uses Inter on the web. Stored as `heroFont` on tenant.
-    @Published var heroFont: String = DisplayFontOption.kanit.rawValue
-    @Published var fontBodySize: String = "medium"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
+    /// Luxe home hero line under the business name only (not booking / promo tagline).
+    @Published var luxeHeroTagline: String = ""
+    /// Luxe cream promo strip headline (above tagline + Book Now).
+    @Published var luxePromoHeadline: String = ""
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -78,8 +79,7 @@ class DesignViewModel: ObservableObject {
 
     /// Portfolio-style web templates (featured strip, gallery, booking chrome, sidebar).
     var usesPortfolioStyleWebChrome: Bool {
-        industry == "tattoos" || industry == "hair" || industry == "barber" || industry == "pet_grooming"
-            || webThemeId == "luxe-v1" || webThemeId == "blade-v1"
+        (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic
     }
 
     // Sidebar appearance (empty = auto-detect: black on white bg, white on colored bg)
@@ -91,6 +91,8 @@ class DesignViewModel: ObservableObject {
     @Published var contactPhone: String = ""
     @Published var contactEmail: String = ""
     @Published var contactAddress: String = ""
+    /// Short line for marketing (e.g. city, state) — Blade hero eyebrow; full street stays in `contactAddress`.
+    @Published var serviceArea: String = ""
     @Published var businessHours: String = ""
     @Published var instagramHandle: String = ""
     @Published var showContactOnPage: Bool = true
@@ -216,13 +218,10 @@ class DesignViewModel: ObservableObject {
                 primaryColorHex = tenant?["primaryColor"] as? String ?? "#000000"
                 primaryColorHoverHex = tenant?["primaryColorHover"] as? String ?? "#333333"
                 successColorHex = tenant?["successColor"] as? String ?? "#22C55E"
-                fontFamily = tenant?["fontFamily"] as? String ?? "system"
-                heroFont = DisplayFontOption.fromStored(
-                    tenant?["heroFont"] as? String ?? tenant?["headlineFont"] as? String
-                ).rawValue
-                fontBodySize = tenant?["fontBodySize"] as? String ?? "medium"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
+                luxeHeroTagline = tenant?["luxeHeroTagline"] as? String ?? ""
+                luxePromoHeadline = tenant?["luxePromoHeadline"] as? String ?? ""
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -242,6 +241,7 @@ class DesignViewModel: ObservableObject {
                 contactPhone = tenant?["contactPhone"] as? String ?? ""
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
                 contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
+                serviceArea = (tenant?["serviceArea"] as? String) ?? ""
                 businessHours = tenant?["businessHours"] as? String ?? ""
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
@@ -288,6 +288,11 @@ class DesignViewModel: ObservableObject {
             galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
             galleryPageTextColorHex = featuredWorkTextColorHex
         }
+        let isClassicFamily = (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic
+        if isClassicFamily {
+            sidebarIconColorHome = ""
+            sidebarIconColorBooking = ""
+        }
         var updates: [String: Any] = [
             "displayName": displayName,
             "logoUrl": logoUrl,
@@ -301,21 +306,31 @@ class DesignViewModel: ObservableObject {
             "primaryColor": primaryColorHex,
             "primaryColorHover": primaryColorHoverHex,
             "successColor": successColorHex,
-            "fontFamily": fontFamily,
-            "heroFont": heroFont,
-            "headlineFont": heroFont,
-            "fontBodySize": fontBodySize,
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
+            "luxeHeroTagline": luxeHeroTagline,
+            "luxePromoHeadline": luxePromoHeadline,
             "sidebarIconColorHome": sidebarIconColorHome,
             "sidebarIconColorBooking": sidebarIconColorBooking,
             "featuredWorkBackgroundColor": featuredWorkBackgroundColorHex,
-            "featuredWorkTextColor": featuredWorkTextColorHex,
-            "bookingFormCardBackgroundColor": bookingFormCardBackgroundColorHex
+            "featuredWorkTextColor": featuredWorkTextColorHex
         ]
+        if !isClassicFamily {
+            updates["bookingFormCardBackgroundColor"] = bookingFormCardBackgroundColorHex
+        }
         if usesPortfolioStyleWebChrome {
             updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
+        }
+        if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .luxe {
+            updates["aboutText"] = aboutText
+            updates["contactPhone"] = contactPhone
+            updates["contactEmail"] = contactEmail
+            updates["contactAddress"] = contactAddress
+            updates["address"] = contactAddress
+            updates["businessHours"] = businessHours
+            updates["instagramHandle"] = instagramHandle
+            updates["showContactOnPage"] = showContactOnPage
         }
         await saveTenantUpdates(tid, updates)
     }
@@ -346,6 +361,7 @@ class DesignViewModel: ObservableObject {
             "contactEmail": contactEmail,
             "contactAddress": contactAddress,
             "address": contactAddress,
+            "serviceArea": serviceArea,
             "businessHours": businessHours,
             "instagramHandle": instagramHandle,
             "showContactOnPage": showContactOnPage,
@@ -471,6 +487,8 @@ class DesignViewModel: ObservableObject {
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
             "contactAddress": contactAddress,
+            "address": contactAddress,
+            "serviceArea": serviceArea,
             "showContactOnPage": showContactOnPage
         ]
         await saveTenantUpdates(tid, updates)

@@ -361,13 +361,6 @@ struct DesignView: View {
                 // Featured work (same order as Luxe web: hero → featured → promo → about)
                 Text("Featured work")
                     .font(.headline)
-                if isClassicTemplate {
-                    Picker("Featured work layout", selection: $viewModel.galleryGridLayout) {
-                        Text("2 wide").tag("2x1")
-                        Text("3 wide").tag("3x1")
-                    }
-                    .pickerStyle(.segmented)
-                }
                 FeaturedWorkHomeGallerySection(
                     viewModel: viewModel,
                     showFeaturedWorkExplanation: isClassicTemplate

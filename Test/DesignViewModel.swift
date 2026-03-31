@@ -129,6 +129,7 @@ class DesignViewModel: ObservableObject {
 
     /// Layout slot count for the home featured strip (web uses first this many URLs from `featuredWorkImages`).
     var featuredWorkImageSlotCount: Int {
+        if usesPortfolioStyleWebChrome { return 3 }
         let normalized = galleryGridLayout
             .lowercased()
             .replacingOccurrences(of: "×", with: "x")
@@ -146,6 +147,10 @@ class DesignViewModel: ObservableObject {
 
     /// Maps stored layouts onto horizontal strips `2x1` / `3x1` (columns × one row). Legacy `4x1` maps to `3x1`.
     func normalizeFeaturedGridLayoutPresets() {
+        if usesPortfolioStyleWebChrome {
+            galleryGridLayout = "3x1"
+            return
+        }
         let presets: Set<String> = ["2x1", "3x1"]
         let key = galleryGridLayout.lowercased().replacingOccurrences(of: "×", with: "x")
         if key == "4x1" {

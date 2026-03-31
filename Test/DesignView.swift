@@ -321,7 +321,7 @@ struct DesignView: View {
                 )
                 .lineLimit(4...10)
                 .textFieldStyle(.roundedBorder)
-                Text("The gold line above the hero uses city/area from the About tab.")
+                Text("The gold line above the hero uses city/area from Contact & location below when set.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -330,6 +330,14 @@ struct DesignView: View {
                     serviceToEdit: $bladeServiceToEdit,
                     onRequestReplaceStarters: { showBladeStarterConfirm = true }
                 )
+
+                Text("Contact & location (Blade)")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 8)
+                Text("Where section: large city/area title, street address, then phone. Hero eyebrow uses city/area. Saved with Save Home.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                contactFieldsSection(includeBladeServiceArea: true)
             }
 
             if isLuxeTemplate {
@@ -521,7 +529,7 @@ struct DesignView: View {
 
             if includeBladeServiceArea {
                 IconFieldRow(icon: "building.2", placeholder: "St. Petersburg, FL", text: $viewModel.serviceArea)
-                Text("City or service area — short line for the Blade hero. Use your full street address above.")
+                Text("City or area — Blade Where headline and gold hero line. Full street address goes above.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

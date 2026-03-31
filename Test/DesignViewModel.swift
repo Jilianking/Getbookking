@@ -343,6 +343,14 @@ class DesignViewModel: ObservableObject {
         if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .blade {
             updates["bladeHeroTagline"] = bladeHeroTagline
             updates["bladeHeroDescription"] = bladeHeroDescription
+            updates["contactPhone"] = contactPhone
+            updates["contactEmail"] = contactEmail
+            updates["contactAddress"] = contactAddress
+            updates["address"] = contactAddress
+            updates["serviceArea"] = serviceArea
+            updates["businessHours"] = businessHours
+            updates["instagramHandle"] = instagramHandle
+            updates["showContactOnPage"] = showContactOnPage
         }
         await saveTenantUpdates(tid, updates)
     }

@@ -1679,7 +1679,7 @@
       background: var(--bh-charcoal);
       border-top: 1px solid var(--bh-line);
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 56px;
       align-items: center;
     }
@@ -1749,7 +1749,32 @@
     }
     .blade-page .blade-hours-day { color: var(--bh-grey); letter-spacing: 0.06em; }
     .blade-page .blade-hours-val { color: var(--bh-cream); text-align: right; }
-    .blade-page .blade-address-block { margin-top: 28px; font-size: 15px; line-height: 1.85; color: var(--bh-cream); }
+    .blade-page .blade-where-city { margin: 8px 0 0; }
+    .blade-page .blade-address-block { margin-top: 20px; font-size: 15px; line-height: 1.85; color: var(--bh-cream); }
+    .blade-page a.blade-address-link {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(201, 168, 76, 0.25);
+      padding: 6px 0;
+      min-height: 44px;
+      box-sizing: border-box;
+    }
+    .blade-page a.blade-where-maps.blade-address-link {
+      padding: 4px 0 8px;
+    }
+    .blade-page a.blade-where-maps.blade-address-link .blade-where-city {
+      margin: 8px 0 0;
+      color: inherit;
+    }
+    .blade-page a.blade-where-maps .blade-where-address-body {
+      margin-top: 16px;
+      font-size: 15px;
+      line-height: 1.85;
+      color: var(--bh-cream);
+    }
     .blade-page .blade-address-phone {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 28px;
@@ -1758,6 +1783,13 @@
       margin-top: 20px;
       display: inline-block;
       text-decoration: none;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(201, 168, 76, 0.3);
+      padding: 8px 0;
+      min-height: 44px;
+      line-height: 1.2;
+      box-sizing: border-box;
     }
     .blade-page footer.blade-footer {
       background: var(--bh-black);
@@ -2274,7 +2306,6 @@
         var servicesSection = '<section class="blade-section" id="services">' +
           '<div class="blade-section-header blade-fade-up">' +
           '<div><div class="blade-section-label">What we offer</div><h2 class="blade-section-title">OUR SERVICES</h2></div>' +
-          '<p class="blade-section-desc">Choose a service to go straight to booking.</p>' +
           '</div>' + servicesBody + '</section>';
         // Hero already shows the story; skip duplicate "WHO WE ARE" block. `#about` is on the hero for nav / /about.
         var gUrls = galleryPageImageUrls(tenant);
@@ -2288,7 +2319,6 @@
           gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
             '<div class="blade-section-header blade-fade-up" style="padding-right:40px">' +
             '<div><div class="blade-section-label">Portfolio</div><h2 class="blade-section-title">THE GALLERY</h2></div>' +
-            '<p class="blade-section-desc">Open the full gallery anytime.</p>' +
             '</div>' +
             '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls) + bladeMarqueeChunk(gUrls) + '</div></section>';
         }
@@ -2299,15 +2329,11 @@
           '<div class="blade-fade-up">' +
           '<div class="blade-section-label">Reserve</div>' +
           '<h2 class="blade-book-title">BOOK YOUR<br><span>APPOINTMENT</span></h2>' +
-          '<p class="blade-section-desc" style="max-width:400px">Use the same booking form as the rest of your site.</p>' +
           hoursSnippet +
           '<div class="blade-hero-cta" style="margin-top:28px">' +
           '<a href="' + bookUrl + '" class="blade-btn-primary">Book now</a>' +
           '<a href="' + anchorHome + '#services" class="blade-btn-ghost">View services</a>' +
-          '</div></div>' +
-          '<div class="blade-fade-up" style="text-align:center">' +
-          '<a href="' + bookUrl + '" class="blade-btn-primary" style="display:inline-block">Open booking form</a>' +
-          '</div></section>';
+          '</div></div></section>';
         var revs = tenant.reviews || [];
         var testimonialSection = '';
         if (revs.length) {
@@ -2331,9 +2357,35 @@
         var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
         var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
         var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
-        var addrHtml = tenant.address
-          ? '<div class="blade-address-block">' + esc(tenant.address).replace(/\n/g, '<br>') + '</div>'
-          : '<div class="blade-address-block">' + (tenant.contactEmail ? esc(tenant.contactEmail) : 'Add your address in the app.') + '</div>';
+        var saWhere = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
+        var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
+        var addrLines = addrRaw ? addrRaw.split(/\n/).map(function(l){ return String(l).trim(); }).filter(function(x){ return x.length; }) : [];
+        var whereHeadline = saWhere || addrLines[0] || 'Location';
+        var whereHeadHtml = '<h3 class="blade-section-title blade-where-city" style="font-size:38px">' + esc(whereHeadline) + '</h3>';
+        var whereBlock;
+        if (addrRaw) {
+          var mapsQuery = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addrRaw.replace(/\n/g, ' '));
+          var innerAddrHtml = '';
+          if (saWhere) {
+            innerAddrHtml = esc(addrRaw).replace(/\n/g, '<br>');
+          } else if (addrLines.length > 1) {
+            innerAddrHtml = esc(addrLines.slice(1).join('\n')).replace(/\n/g, '<br>');
+          }
+          var bodyUnderHead = innerAddrHtml
+            ? '<div class="blade-address-block blade-where-address-body">' + innerAddrHtml + '</div>'
+            : '';
+          whereBlock = '<a href="' + esc(mapsQuery) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open address in maps">' +
+            whereHeadHtml + bodyUnderHead + '</a>';
+        } else if (tenant.contactEmail && String(tenant.contactEmail).trim()) {
+          var em = String(tenant.contactEmail).trim();
+          whereBlock = '<a href="' + esc('mailto:' + em) + '" class="blade-where-maps blade-address-link" aria-label="Email">' +
+            whereHeadHtml +
+            '<div class="blade-address-block blade-where-address-body">' + esc(em) + '</div></a>';
+        } else if (saWhere) {
+          whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your street address in the app for directions.</div>';
+        } else {
+          whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your address in the app.</div>';
+        }
         var infoSection = '<div class="blade-info-section" id="location">' +
           '<div class="blade-info-half blade-fade-up">' +
           '<div class="blade-section-label">When</div>' +
@@ -2341,8 +2393,7 @@
           '</div>' +
           '<div class="blade-info-half blade-fade-up">' +
           '<div class="blade-section-label">Where</div>' +
-          '<h3 class="blade-section-title" style="font-size:38px">LOCATION</h3>' +
-          addrHtml +
+          whereBlock +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="blade-address-phone">' + phoneDisplay + '</a>' : '') +
           '</div></div>';
         var y = new Date().getFullYear();

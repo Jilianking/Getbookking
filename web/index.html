@@ -2375,7 +2375,7 @@
               ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))
               : '#000000';
           } else if (usesThemedChrome(tenant)) {
-            iconColor = isBladeTheme(tenant) ? '#c9a84c' : '#FFFFFF';
+            iconColor = isBladeTheme(tenant) ? '#c9a84c' : (isClassicTheme(tenant) ? '#1a1a1a' : '#FFFFFF');
           } else {
             var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
             iconColor = (bg === '#FFFFFF' || bg === '#FFF') ? '#000000' : '#FFFFFF';
@@ -3204,7 +3204,8 @@
               luxeHeroTagline: data.luxeHeroTagline || '',
               luxePromoHeadline: data.luxePromoHeadline || '',
               bladeHeroTagline: data.bladeHeroTagline || '',
-              bladeHeroDescription: data.bladeHeroDescription || '' };
+              bladeHeroDescription: data.bladeHeroDescription || '',
+              shopEnabled: data.shopEnabled || false };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
             }

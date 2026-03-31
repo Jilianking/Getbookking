@@ -74,7 +74,8 @@ class DesignViewModel: ObservableObject {
     // Services
     @Published var services: [TenantService] = []
 
-    // Products (shop section on luxe template)
+    // Products (shop section)
+    @Published var shopEnabled: Bool = false
     @Published var products: [Product] = []
     @Published var isUploadingProduct = false
 
@@ -253,6 +254,7 @@ class DesignViewModel: ObservableObject {
                 businessHours = tenant?["businessHours"] as? String ?? ""
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
+                shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
                 industry = tenant?["industry"] as? String
                 let resolvedTheme = WebTheme.resolvedThemeId(
                     stored: tenant?["webThemeId"] as? String,
@@ -340,7 +342,8 @@ class DesignViewModel: ObservableObject {
             updates["instagramHandle"] = instagramHandle
             updates["showContactOnPage"] = showContactOnPage
         }
-        if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .blade {
+        let templateFamily = (WebTheme(rawValue: webThemeId)?.family ?? .classic)
+        if templateFamily == .blade || templateFamily == .stonecut {
             updates["bladeHeroTagline"] = bladeHeroTagline
             updates["bladeHeroDescription"] = bladeHeroDescription
             updates["contactPhone"] = contactPhone
@@ -744,7 +747,12 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Products
+    // MARK: - Shop / Products
+    func saveShopEnabled() async {
+        guard let tid = tenantId else { return }
+        await saveTenantUpdates(tid, ["shopEnabled": shopEnabled])
+    }
+
     func addProduct(name: String, category: String, price: Double, salePrice: Double?, imageData: Data?) async {
         guard let tid = tenantId else { return }
         await MainActor.run { isUploadingProduct = true }

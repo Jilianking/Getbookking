@@ -11,6 +11,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
     case classic
     case luxe
     case blade
+    case stonecut
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .classic: return "Classic"
         case .luxe: return "Luxe"
         case .blade: return "Blade"
+        case .stonecut: return "Stonecut"
         }
     }
 
@@ -27,6 +29,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .classic: return "rectangle.split.3x3"
         case .luxe: return "sparkles"
         case .blade: return "moon.stars"
+        case .stonecut: return "shield.lefthalf.filled"
         }
     }
 
@@ -35,6 +38,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .classic: return "Balanced portfolio layout with hero, gallery, and about"
         case .luxe: return "Elegant cream palette, refined sections"
         case .blade: return "Dark luxury, gold accents"
+        case .stonecut: return "Moody editorial layout with bold contrast"
         }
     }
 
@@ -46,6 +50,8 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
             return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
         case .blade:
             return ["Hero", "Services", "Gallery", "Reviews", "Shop", "Booking"]
+        case .stonecut:
+            return ["Hero", "Artists", "Portfolio", "Styles", "Process", "Booking"]
         }
     }
 }
@@ -66,13 +72,15 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case luxeV1 = "luxe-v1"
     /// Blade: dark editorial layout, gold accents, services, gallery strip, reviews. Works with any industry.
     case bladeV1 = "blade-v1"
+    /// Stonecut: dark editorial layout with red accents and dramatic typography. Works with any industry.
+    case stonecutV1 = "stonecut-v1"
 
     var id: String { rawValue }
 
     /// True for templates available to every industry (not tied to one business type).
     var isUniversal: Bool {
         switch self {
-        case .luxeV1, .bladeV1: return true
+        case .luxeV1, .bladeV1, .stonecutV1: return true
         default: return false
         }
     }
@@ -87,6 +95,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .customStandard: return .custom
         case .luxeV1: return .custom
         case .bladeV1: return .custom
+        case .stonecutV1: return .custom
         }
     }
 
@@ -99,6 +108,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .customStandard: return "Classic"
         case .luxeV1: return "Luxe"
         case .bladeV1: return "Blade"
+        case .stonecutV1: return "Stonecut"
         }
     }
 
@@ -111,6 +121,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .customStandard: return "Hero, featured work, about, sidebar"
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
+        case .stonecutV1: return "Dark split hero, artists, styles, process, ticker"
         }
     }
 
@@ -123,6 +134,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .customStandard: return "list.bullet.rectangle"
         case .luxeV1: return "sparkles"
         case .bladeV1: return "moon.stars"
+        case .stonecutV1: return "shield.lefthalf.filled"
         }
     }
 
@@ -131,6 +143,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         switch self {
         case .bladeV1: return "Dark luxury, gold accents"
         case .luxeV1: return "Elegant cream palette, refined sections"
+        case .stonecutV1: return "Dark editorial with crimson accents"
         case .hairSalonV1, .barberShopV1: return "Portfolio hero, featured work, book flow"
         case .tattooStudioV1: return "Bold hero, featured grid, sidebar"
         case .nailSalonV1, .customStandard: return "Neutral portfolio layout with gallery and about"
@@ -142,6 +155,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
         switch self {
         case .bladeV1:
             return ["Hero", "Services", "Gallery", "Reviews", "Shop", "Booking"]
+        case .stonecutV1:
+            return ["Hero", "Artists", "Portfolio", "Styles", "Process", "Booking"]
         case .luxeV1:
             return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
         case .nailSalonV1, .customStandard:
@@ -155,6 +170,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         switch self {
         case .luxeV1: return .luxe
         case .bladeV1: return .blade
+        case .stonecutV1: return .stonecut
         default: return .classic
         }
     }
@@ -182,6 +198,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return .luxeV1
         case .blade:
             return .bladeV1
+        case .stonecut:
+            return .stonecutV1
         }
     }
 

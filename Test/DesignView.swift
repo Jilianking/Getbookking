@@ -195,7 +195,7 @@ struct DesignView: View {
 
     private var isClassicTemplate: Bool { activeTemplateFamily == .classic }
     private var isLuxeTemplate: Bool { activeTemplateFamily == .luxe }
-    private var isBladeTemplate: Bool { activeTemplateFamily == .blade }
+    private var isBladeTemplate: Bool { activeTemplateFamily == .blade || activeTemplateFamily == .stonecut }
 
     private var visibleDesignTabs: [DesignTab] {
         DesignTab.allCases.filter { tab in
@@ -745,16 +745,15 @@ struct DesignView: View {
 
     private var shopContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            if isClassicTemplate {
-                Text("Shop")
-                    .font(.headline)
-                Text("Shop is available on Luxe and Blade templates. Switch templates to enable product sections on the public site.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else {
+            Toggle("Enable Shop page", isOn: $viewModel.shopEnabled)
+                .onChange(of: viewModel.shopEnabled) { _, _ in
+                    Task { await viewModel.saveShopEnabled() }
+                }
+
+            if viewModel.shopEnabled {
                 Text("Products")
                     .font(.headline)
-                Text("Add products to display in the shop section on your Luxe or Blade template.")
+                Text("Add products to display in the shop section on your site.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -1501,6 +1500,8 @@ private struct TemplateMiniPreview: View {
             switch family {
             case .blade:
                 BladeTemplatePreview()
+            case .stonecut:
+                StonecutTemplatePreview()
             case .luxe:
                 LuxeTemplatePreview()
             case .classic:
@@ -1509,6 +1510,43 @@ private struct TemplateMiniPreview: View {
         }
         .frame(height: 128)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct StonecutTemplatePreview: View {
+    private let ember = Color(red: 0.75, green: 0.13, blue: 0.10)
+    private let bone = Color(red: 0.91, green: 0.88, blue: 0.82)
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.03, green: 0.03, blue: 0.02),
+                    Color(red: 0.09, green: 0.08, blue: 0.06)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            VStack(alignment: .leading, spacing: 5) {
+                Text("STONECUT")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundColor(ember)
+                    .tracking(1.1)
+                Text("EDITORIAL")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundColor(bone)
+                    .tracking(0.4)
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(ember)
+                        .frame(width: 24, height: 2)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(bone.opacity(0.35))
+                        .frame(width: 16, height: 2)
+                }
+            }
+            .padding(10)
+        }
     }
 }
 

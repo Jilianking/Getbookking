@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kanit:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Teko:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&family=Poiret+One&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;700;900&family=DM+Serif+Display:ital@0;1&family=Syne:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
@@ -2173,6 +2174,804 @@
         left: auto;
       }
     }
+    /* ─── Studio 12 (studio-12-v1) — scoped under .studio12-page; keep in sync with css/studio12-theme.css ─── */
+
+    .studio12-page {
+      --s12-ivory: #faf7f2;
+      --s12-warm-white: #f5f0e8;
+      --s12-blush: #e8d5c4;
+      --s12-blush-dark: #d4b8a0;
+      --s12-clay: #b08060;
+      --s12-clay-dark: #8a6040;
+      --s12-espresso: #2a1f18;
+      --s12-espresso-mid: #3d2e24;
+      --s12-taupe: #8a7a6e;
+      --s12-taupe-light: #b0a090;
+      --s12-line: rgba(176, 128, 96, 0.18);
+      --s12-line-soft: rgba(176, 128, 96, 0.1);
+      background: var(--s12-ivory);
+      color: var(--s12-espresso);
+      font-family: "Jost", system-ui, sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+
+    .studio12-page *,
+    .studio12-page *::before,
+    .studio12-page *::after {
+      box-sizing: border-box;
+    }
+
+    .studio12-page::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.5;
+    }
+
+    .studio12-page .s12-topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 40px;
+      transition: background 0.4s, padding 0.4s;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .studio12-page .s12-topnav.scrolled {
+      background: rgba(250, 247, 242, 0.94);
+      backdrop-filter: blur(16px);
+      padding: 16px 40px;
+      border-bottom: 1px solid var(--s12-line);
+    }
+
+    .studio12-page .s12-nav-logo {
+      display: flex;
+      flex-direction: column;
+      line-height: 1;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .studio12-page .s12-nav-logo-main {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(16px, 4vw, 22px);
+      font-weight: 300;
+      letter-spacing: 0.22em;
+      color: var(--s12-espresso);
+    }
+
+    .studio12-page .s12-nav-logo-sub {
+      font-size: 8px;
+      font-weight: 400;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--s12-clay);
+      margin-top: 2px;
+    }
+
+    .studio12-page .s12-nav-links {
+      display: flex;
+      gap: clamp(16px, 3vw, 40px);
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      flex-wrap: wrap;
+    }
+
+    .studio12-page .s12-nav-links a {
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--s12-taupe);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    .studio12-page .s12-nav-links a:hover {
+      color: var(--s12-espresso);
+    }
+
+    .studio12-page .s12-nav-book {
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--s12-ivory);
+      background: var(--s12-espresso);
+      border: none;
+      padding: 12px 22px;
+      text-decoration: none;
+      transition: background 0.3s;
+      display: inline-block;
+    }
+
+    .studio12-page .s12-nav-book:hover {
+      background: var(--s12-espresso-mid);
+    }
+
+    .studio12-page .s12-hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      position: relative;
+      padding-top: 0;
+    }
+
+    .studio12-page .s12-hero-img-col {
+      position: relative;
+      overflow: hidden;
+      min-height: 50vh;
+    }
+
+    .studio12-page .s12-hero-img {
+      width: 100%;
+      height: 100%;
+      min-height: 50vh;
+      object-fit: cover;
+      display: block;
+    }
+
+    .studio12-page .s12-hero-img-fallback {
+      width: 100%;
+      height: 100%;
+      min-height: 50vh;
+      background: linear-gradient(170deg, #e8d5c4 0%, #d4b8a0 30%, #c4a888 60%, #b09070 100%);
+      position: relative;
+    }
+
+    .studio12-page .s12-hero-img-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, transparent 55%, var(--s12-ivory) 100%);
+      pointer-events: none;
+    }
+
+    .studio12-page .s12-hero-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 100px 40px 60px 36px;
+      position: relative;
+    }
+
+    .studio12-page .s12-hero-tag {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 9px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--s12-clay);
+      margin-bottom: 28px;
+    }
+
+    .studio12-page .s12-hero-tag::before {
+      content: "";
+      width: 28px;
+      height: 1px;
+      background: var(--s12-clay);
+    }
+
+    .studio12-page .s12-hero-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(40px, 5vw, 76px);
+      font-weight: 300;
+      line-height: 1.05;
+      color: var(--s12-espresso);
+      margin: 0 0 24px;
+    }
+
+    .studio12-page .s12-hero-title em {
+      font-style: italic;
+      color: var(--s12-clay);
+      display: block;
+    }
+
+    .studio12-page .s12-hero-sub {
+      font-size: 14px;
+      line-height: 1.85;
+      color: var(--s12-taupe);
+      max-width: 360px;
+      margin-bottom: 36px;
+    }
+
+    .studio12-page .s12-hero-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .studio12-page .s12-btn-dark,
+    .studio12-page .s12-btn-outline {
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      padding: 16px 36px;
+      text-decoration: none;
+      transition: background 0.3s, transform 0.3s, border-color 0.3s, color 0.3s;
+      display: inline-block;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .studio12-page .s12-btn-dark {
+      color: var(--s12-ivory);
+      background: var(--s12-espresso);
+    }
+
+    .studio12-page .s12-btn-dark:hover {
+      background: var(--s12-espresso-mid);
+      transform: translateY(-2px);
+    }
+
+    .studio12-page .s12-btn-outline {
+      color: var(--s12-espresso);
+      background: transparent;
+      border: 1px solid rgba(42, 31, 24, 0.2);
+    }
+
+    .studio12-page .s12-btn-outline:hover {
+      border-color: var(--s12-clay);
+      color: var(--s12-clay);
+    }
+
+    .studio12-page .s12-marquee {
+      background: var(--s12-espresso);
+      padding: 16px 0;
+      overflow: hidden;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .studio12-page .s12-marquee-inner {
+      display: flex;
+      gap: 48px;
+      animation: s12-strip 22s linear infinite;
+      width: max-content;
+    }
+
+    @keyframes s12-strip {
+      from {
+        transform: translateX(0);
+      }
+      to {
+        transform: translateX(-50%);
+      }
+    }
+
+    .studio12-page .s12-marquee-item {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 14px;
+      font-style: italic;
+      font-weight: 300;
+      letter-spacing: 0.08em;
+      color: rgba(250, 247, 242, 0.45);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 48px;
+    }
+
+    .studio12-page .s12-marquee-item::after {
+      content: "✦";
+      font-style: normal;
+      font-size: 8px;
+      color: var(--s12-clay);
+    }
+
+    .studio12-page .s12-philosophy {
+      padding: 100px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .studio12-page .s12-phil-label {
+      font-size: 9px;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: var(--s12-clay);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .studio12-page .s12-phil-label::before {
+      content: "";
+      width: 28px;
+      height: 1px;
+      background: var(--s12-clay);
+    }
+
+    .studio12-page .s12-phil-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(32px, 3.5vw, 52px);
+      font-weight: 300;
+      line-height: 1.1;
+      margin: 0 0 20px;
+    }
+
+    .studio12-page .s12-phil-title em {
+      font-style: italic;
+      color: var(--s12-clay);
+    }
+
+    .studio12-page .s12-phil-body {
+      font-size: 14px;
+      line-height: 1.95;
+      color: var(--s12-taupe);
+      margin-bottom: 12px;
+    }
+
+    .studio12-page .s12-services {
+      padding: 100px 40px;
+      background: var(--s12-warm-white);
+      border-top: 1px solid var(--s12-line);
+      border-bottom: 1px solid var(--s12-line);
+    }
+
+    .studio12-page .s12-section-label {
+      font-size: 9px;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: var(--s12-clay);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .studio12-page .s12-section-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(36px, 4vw, 56px);
+      font-weight: 300;
+      line-height: 1.05;
+      text-align: center;
+      margin: 0 0 56px;
+    }
+
+    .studio12-page .s12-section-title em {
+      font-style: italic;
+      color: var(--s12-clay);
+    }
+
+    .studio12-page .s12-svc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--s12-line);
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .studio12-page .s12-svc-cell {
+      background: var(--s12-warm-white);
+      padding: 36px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      transition: background 0.35s;
+    }
+
+    .studio12-page .s12-svc-cell:hover {
+      background: var(--s12-ivory);
+    }
+
+    .studio12-page .s12-svc-name {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 20px;
+      font-weight: 300;
+      margin: 0 0 6px;
+    }
+
+    .studio12-page .s12-svc-meta {
+      font-size: 12px;
+      color: var(--s12-taupe);
+      line-height: 1.6;
+    }
+
+    .studio12-page .s12-svc-dur {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--s12-taupe-light);
+      margin-top: 8px;
+    }
+
+    .studio12-page .s12-svc-price {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 26px;
+      font-weight: 300;
+      color: var(--s12-clay);
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .studio12-page .s12-gallery-dark {
+      background: var(--s12-espresso);
+      padding: 80px 0 80px 40px;
+      overflow: hidden;
+    }
+
+    .studio12-page .s12-gallery-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-right: 40px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .studio12-page .s12-gallery-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(36px, 4vw, 48px);
+      font-weight: 300;
+      color: var(--s12-ivory);
+      margin: 0;
+      line-height: 1;
+    }
+
+    .studio12-page .s12-gallery-title em {
+      font-style: italic;
+      color: var(--s12-blush-dark);
+    }
+
+    .studio12-page .s12-gallery-link {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--s12-taupe-light);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(176, 128, 96, 0.3);
+      padding-bottom: 4px;
+    }
+
+    .studio12-page .s12-gallery-scroll {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding-right: 40px;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+    }
+
+    .studio12-page .s12-gallery-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .studio12-page .s12-g-item {
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      width: 240px;
+      height: 320px;
+      overflow: hidden;
+    }
+
+    .studio12-page .s12-g-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s ease;
+    }
+
+    .studio12-page .s12-g-item:hover img {
+      transform: scale(1.05);
+    }
+
+    .studio12-page .s12-process {
+      padding: 100px 40px;
+      background: var(--s12-warm-white);
+      border-top: 1px solid var(--s12-line);
+    }
+
+    .studio12-page .s12-process-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--s12-line);
+    }
+
+    .studio12-page .s12-process-cell {
+      background: var(--s12-warm-white);
+      padding: 36px 28px;
+    }
+
+    .studio12-page .s12-step-num {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 64px;
+      font-weight: 300;
+      color: rgba(176, 128, 96, 0.12);
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    .studio12-page .s12-step-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 20px;
+      font-weight: 300;
+      margin: 0 0 8px;
+    }
+
+    .studio12-page .s12-step-desc {
+      font-size: 13px;
+      color: var(--s12-taupe);
+      line-height: 1.75;
+      margin: 0;
+    }
+
+    .studio12-page .s12-book-cta {
+      padding: 100px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .studio12-page .s12-book-cta-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(36px, 3.5vw, 56px);
+      font-weight: 300;
+      line-height: 1.05;
+      margin: 0 0 20px;
+    }
+
+    .studio12-page .s12-book-cta-title em {
+      font-style: italic;
+      color: var(--s12-clay);
+      display: block;
+    }
+
+    .studio12-page .s12-book-cta-body {
+      font-size: 14px;
+      color: var(--s12-taupe);
+      line-height: 1.9;
+      margin-bottom: 28px;
+    }
+
+    .studio12-page .s12-testimonials {
+      padding: 100px 40px;
+      background: var(--s12-espresso);
+      position: relative;
+    }
+
+    .studio12-page .s12-test-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(32px, 3.5vw, 48px);
+      font-weight: 300;
+      color: var(--s12-ivory);
+      margin: 0 0 48px;
+      line-height: 1.05;
+    }
+
+    .studio12-page .s12-test-title em {
+      font-style: italic;
+      color: var(--s12-blush-dark);
+    }
+
+    .studio12-page .s12-test-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .studio12-page .s12-test-card {
+      padding: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .studio12-page .s12-test-text {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 17px;
+      font-style: italic;
+      font-weight: 300;
+      color: rgba(245, 240, 232, 0.82);
+      line-height: 1.65;
+      margin: 0 0 20px;
+    }
+
+    .studio12-page .s12-test-author {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--s12-taupe-light);
+    }
+
+    .studio12-page .s12-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-top: 1px solid var(--s12-line);
+    }
+
+    .studio12-page .s12-info-half {
+      padding: 64px 40px;
+    }
+
+    .studio12-page .s12-info-half:first-child {
+      border-right: 1px solid var(--s12-line);
+    }
+
+    .studio12-page .s12-info-title {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 32px;
+      font-weight: 300;
+      margin: 0 0 28px;
+      line-height: 1.1;
+    }
+
+    .studio12-page .s12-hours-block {
+      font-size: 14px;
+      color: var(--s12-taupe);
+      white-space: pre-line;
+      line-height: 1.8;
+    }
+
+    .studio12-page .s12-address {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 17px;
+      line-height: 1.9;
+      margin-bottom: 16px;
+    }
+
+    .studio12-page .s12-phone {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 28px;
+      font-style: italic;
+      font-weight: 300;
+      color: var(--s12-clay);
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+
+    .studio12-page .s12-footer {
+      background: var(--s12-espresso);
+      padding: 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      align-items: center;
+      gap: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .studio12-page .s12-footer-brand {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 18px;
+      font-weight: 300;
+      letter-spacing: 0.22em;
+      color: var(--s12-blush);
+    }
+
+    .studio12-page .s12-footer-copy {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: rgba(176, 152, 130, 0.45);
+      text-align: center;
+    }
+
+    .studio12-page .s12-fade {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.75s ease, transform 0.75s ease;
+    }
+
+    .studio12-page .s12-fade.s12-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Booking page (shared form) */
+    .studio12-page.studio12-sub .s12-topnav {
+      position: relative;
+    }
+
+    .studio12-page.studio12-sub .booking-shell {
+      padding: 32px 24px 80px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .studio12-page.studio12-sub .booking-card {
+      background: var(--s12-warm-white) !important;
+      border: 1px solid var(--s12-line) !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    .studio12-page.studio12-sub .booking-form label {
+      font-size: 9px !important;
+      letter-spacing: 0.22em !important;
+      text-transform: uppercase !important;
+      color: var(--s12-taupe) !important;
+      font-weight: 400 !important;
+    }
+
+    .studio12-page.studio12-sub .booking-form input,
+    .studio12-page.studio12-sub .booking-form select,
+    .studio12-page.studio12-sub .booking-form textarea {
+      background: var(--s12-ivory) !important;
+      border: 1px solid rgba(176, 128, 96, 0.22) !important;
+      border-radius: 0 !important;
+      font-family: "Jost", system-ui, sans-serif !important;
+      font-weight: 300 !important;
+      color: var(--s12-espresso) !important;
+    }
+
+    .studio12-page.studio12-sub .booking-submit {
+      background: var(--s12-espresso) !important;
+      color: var(--s12-ivory) !important;
+      border-radius: 0 !important;
+      font-size: 10px !important;
+      letter-spacing: 0.28em !important;
+      text-transform: uppercase !important;
+      font-family: "Jost", system-ui, sans-serif !important;
+    }
+
+    .studio12-page.studio12-sub .booking-page-title {
+      font-family: "Cormorant Garamond", serif !important;
+      font-weight: 300 !important;
+    }
+
+    @media (max-width: 900px) {
+      .studio12-page .s12-hero {
+        grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-hero-img-col {
+        order: -1;
+        min-height: 42vh;
+      }
+      .studio12-page .s12-philosophy,
+      .studio12-page .s12-book-cta {
+        grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-svc-grid {
+        grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-process-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .studio12-page .s12-test-grid {
+        grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-info {
+        grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-info-half:first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--s12-line);
+      }
+      .studio12-page .s12-footer {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .studio12-page .s12-nav-links {
+        display: none;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .studio12-page .s12-process-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -2312,6 +3111,13 @@
       }
 
       function applyBranding(t) {
+        if (isStudio12Theme(t)) {
+          document.body.style.background = '#faf7f2';
+          document.body.style.color = '#2a1f18';
+          document.body.style.backgroundImage = '';
+          applyTenantTypography(t);
+          return;
+        }
         var bg = t.backgroundColor || '#FFFFFF';
         var card = t.cardSurfaceColor || '#F5F5F5';
         var txt = t.textColor || '#333333';
@@ -2322,7 +3128,7 @@
         [].forEach.call(document.querySelectorAll('.card'), function(el){ el.style.background = card; });
         [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el){ el.style.background = accent; el.style.color = '#fff'; });
         // Hair uses tattoo-style home; featured-band colors on body (same idea as tattoos)
-        if (t.industry === 'hair' && !isLuxeTheme(t) && !isBladeTheme(t)) {
+        if (t.industry === 'hair' && !isLuxeTheme(t) && !isBladeTheme(t) && !isStudio12Theme(t)) {
           var hw = t.featuredWorkBackgroundColor || '#FAF8F5';
           var hx = t.featuredWorkTextColor || '#1C1917';
           document.body.style.background = hw;
@@ -2404,10 +3210,14 @@
       function isStonecutTheme(tenant) {
         return tenant && tenant.resolvedWebThemeId === 'stonecut-v1';
       }
+      function isStudio12Theme(tenant) {
+        return tenant && tenant.resolvedWebThemeId === 'studio-12-v1';
+      }
       function isClassicTheme(tenant) {
         return tenant && !isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isStonecutTheme(tenant);
       }
       function usesThemedChrome(tenant) {
+        if (isStudio12Theme(tenant)) return false;
         return isPortfolioIndustry(tenant.industry) || isLuxeTheme(tenant) || isBladeTheme(tenant) || isStonecutTheme(tenant);
       }
       /** Classic top bar: brand left, nav links + hamburger right (links hidden on mobile, hamburger shown). */
@@ -3074,22 +3884,26 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
 
-        var nav = isBladeTheme(tenant)
-          ? bladeNavHtml(tenant, base + '/home')
-          : (isLuxeTheme(tenant)
-            ? luxeChromeNavHtml(tenant, 'light')
-            : tattooNavHtml(tenant));
+        var nav = isStudio12Theme(tenant)
+          ? studio12NavHtml(tenant)
+          : (isBladeTheme(tenant)
+            ? bladeNavHtml(tenant, base + '/home')
+            : (isLuxeTheme(tenant)
+              ? luxeChromeNavHtml(tenant, 'light')
+              : tattooNavHtml(tenant)));
 
-        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+        var sidebar = isStudio12Theme(tenant) ? '' : ('<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
-          '</div></div>';
+          '</div></div>');
 
-        var bookPageStyle = isBladeTheme(tenant)
+        var bookPageStyle = isStudio12Theme(tenant)
+          ? 'background:#faf7f2;color:#2a1f18'
+          : (isBladeTheme(tenant)
           ? 'background:#0a0a08;color:#f5f0e8'
-          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : ''));
-        var wrapClass = 'tattoo-page' + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) ? ' classic-home' : '');
+          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '')));
+        var wrapClass = 'tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : '');
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
@@ -3163,7 +3977,7 @@
       function resolvedWebThemeId(tenant) {
         var ind = String(tenant.industry || '').trim();
         var stored = String(tenant.webThemeId || '').trim();
-        var universal = ['luxe-v1', 'blade-v1', 'stonecut-v1'];
+        var universal = ['luxe-v1', 'blade-v1', 'stonecut-v1', 'studio-12-v1'];
         if (stored && universal.indexOf(stored) >= 0) return stored;
         var map = {
           'hair': ['hair-salon-v1'],
@@ -3276,6 +4090,20 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var displayName = tenant.displayName || 'Gallery';
+
+        if (isStudio12Theme(tenant)) {
+          var u12 = galleryPageImageUrls(tenant);
+          var imgs12 = u12.map(function(u) {
+            return '<div class="s12-g-item s12-fade"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+          }).join('');
+          if (!imgs12) {
+            imgs12 = '<p class="s12-phil-body" style="padding:48px 24px;color:rgba(250,247,242,0.7)">No gallery images yet. Add them in the app.</p>';
+          }
+          return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
+            '<div class="s12-gallery-dark" style="padding-top:88px;min-height:100vh">' +
+            '<div class="s12-gallery-head"><h2 class="s12-gallery-title">Gallery</h2></div>' +
+            '<div class="s12-gallery-scroll">' + imgs12 + '</div></div></div>';
+        }
 
         var nav = isBladeTheme(tenant)
           ? bladeNavHtml(tenant, base + '/home')
@@ -3457,6 +4285,187 @@
           defaultBio: 'Quality ink, thoughtful design, and a clean studio experience.',
           aboutHeading: 'Quality ink, <em>every session.</em>'
         });
+      }
+
+      function studio12NavHtml(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var homeUrl = base + '/home';
+        var displayName = tenant.displayName || 'Studio';
+        var sub = tenant.tagline || tenant.serviceArea || tenant.city || 'Hair studio';
+        return '<nav class="s12-topnav" id="s12-nav">' +
+          '<a href="' + homeUrl + '" class="s12-nav-logo">' +
+          '<span class="s12-nav-logo-main">' + esc(displayName) + '</span>' +
+          '<span class="s12-nav-logo-sub">' + esc(sub) + '</span></a>' +
+          '<ul class="s12-nav-links">' +
+          '<li><a href="' + homeUrl + '">Home</a></li>' +
+          '<li><a href="' + homeUrl + '#s12-services">Services</a></li>' +
+          '<li><a href="' + galleryUrl + '">Gallery</a></li>' +
+          '<li><a href="' + bookUrl + '">Book</a></li>' +
+          (tenant.shopEnabled ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
+          '</ul>' +
+          '<a class="s12-nav-book" href="' + bookUrl + '">Book now</a></nav>';
+      }
+
+      function bindStudio12Page() {
+        var nav = document.getElementById('s12-nav');
+        if (nav) {
+          var onScroll = function() { nav.classList.toggle('scrolled', window.scrollY > 50); };
+          onScroll();
+          window.addEventListener('scroll', onScroll, { passive: true });
+        }
+        var fades = document.querySelectorAll('.studio12-page .s12-fade');
+        if (!window.IntersectionObserver) {
+          for (var i = 0; i < fades.length; i++) fades[i].classList.add('s12-visible');
+          return;
+        }
+        var obs = new IntersectionObserver(function(entries) {
+          entries.forEach(function(en) {
+            if (en.isIntersecting) {
+              en.target.classList.add('s12-visible');
+              obs.unobserve(en.target);
+            }
+          });
+        }, { threshold: 0.07 });
+        for (var j = 0; j < fades.length; j++) obs.observe(fades[j]);
+      }
+
+      function studio12ShopPage(tenant) {
+        var cards = luxeTenantProductCardsHtml(tenant);
+        var inner = cards
+          ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">Our <em>products</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
+          : '<div class="s12-services" style="padding-top:120px"><p class="s12-phil-body" style="text-align:center">No products yet. Add them in the app.</p></div>';
+        return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + '</div>';
+      }
+
+      function studio12HomePage(tenant, services) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var homeUrl = base + '/home';
+        var displayName = tenant.displayName || 'Studio';
+        var svcList = services || [];
+        var marqueeNames = svcList.length
+          ? svcList.map(function(s) { return s.name; })
+          : ['Colour', 'Cut', 'Care', 'Balayage', 'Styling'];
+        var marqueeDup = marqueeNames.concat(marqueeNames);
+        var marqueeHtml = marqueeDup.map(function(n) {
+          return '<span class="s12-marquee-item">' + esc(n) + '</span>';
+        }).join('');
+        var heroImg = tenant.heroImageUrl
+          ? '<img class="s12-hero-img" src="' + esc(tenant.heroImageUrl) + '" alt="">'
+          : '<div class="s12-hero-img-fallback" aria-hidden="true"></div>';
+        var heroItalic = tenant.heroTagline || tenant.heroSubtitle || 'story.';
+        var heroLead = tenant.tagline || (tenant.aboutText ? String(tenant.aboutText).slice(0, 200) : '') ||
+          'A boutique studio dedicated to the art of hair — bespoke colour, precision cuts, and restorative treatments.';
+        var aboutFull = (tenant.aboutText || '').trim();
+        var philParas = aboutFull ? aboutFull.split(/\n\n+/) : [];
+        var philBody1 = philParas[0] || heroLead;
+        var philBody2 = philParas[1] || 'Every visit is intentional — from consultation to finish.';
+        var svcCells = '';
+        for (var si = 0; si < svcList.length; si++) {
+          var s = svcList[si];
+          var dur = s.durationMinutes ? (s.durationMinutes + ' min') : '';
+          var price = s.price != null && s.price > 0 ? ('$' + Math.round(s.price)) : '—';
+          var desc = s.description ? String(s.description) : 'Professional service tailored to you.';
+          svcCells += '<div class="s12-svc-cell s12-fade">' +
+            '<div><h3 class="s12-svc-name">' + esc(s.name) + '</h3>' +
+            '<p class="s12-svc-meta">' + esc(desc) + '</p>' +
+            (dur ? '<div class="s12-svc-dur">' + esc(dur) + '</div>' : '') + '</div>' +
+            '<div class="s12-svc-price">' + esc(String(price)) + '</div></div>';
+        }
+        if (!svcCells) {
+          svcCells = '<div class="s12-svc-cell s12-fade"><div><h3 class="s12-svc-name">Services</h3>' +
+            '<p class="s12-svc-meta">Add services in the GetBookKing app.</p></div><div class="s12-svc-price">—</div></div>';
+        }
+        var gUrls = galleryPageImageUrls(tenant);
+        var gItems = gUrls.map(function(u) {
+          return '<div class="s12-g-item s12-fade"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+        }).join('');
+        if (!gItems) {
+          gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div>';
+        }
+        var revs = tenant.reviews || [];
+        var testCards = '';
+        for (var ri = 0; ri < Math.min(revs.length, 3); ri++) {
+          var rv = revs[ri] || {};
+          testCards += '<div class="s12-test-card s12-fade">' +
+            '<p class="s12-test-text">“' + esc(rv.quote || '') + '”</p>' +
+            '<div class="s12-test-author">— ' + esc(rv.name || 'Client') +
+            (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
+        }
+        var testSection = testCards
+          ? '<section class="s12-testimonials"><div class="s12-phil-label s12-fade">Client love</div>' +
+            '<h2 class="s12-test-title s12-fade">Words from <em>our clients</em></h2>' +
+            '<div class="s12-test-grid">' + testCards + '</div></section>'
+          : '';
+        var hoursHtml = tenant.businessHours
+          ? '<div class="s12-hours-block">' + esc(tenant.businessHours) + '</div>'
+          : '<p class="s12-phil-body">Add business hours in the app.</p>';
+        var addr = tenant.address || tenant.contactAddress || tenant.serviceArea || '';
+        var addrHtml = addr ? '<div class="s12-address">' + esc(addr).replace(/\n/g, '<br>') + '</div>' : '';
+        var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
+        var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
+        var phoneEl = tenant.contactPhone && phoneHref
+          ? '<a class="s12-phone" href="' + phoneHref + '">' + esc(tenant.contactPhone) + '</a>'
+          : '';
+        var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
+        var igLink = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
+        var y = new Date().getFullYear();
+        return '<div class="studio12-page">' + studio12NavHtml(tenant) +
+          '<section class="s12-hero">' +
+          '<div class="s12-hero-img-col">' + heroImg + '<div class="s12-hero-img-overlay"></div></div>' +
+          '<div class="s12-hero-content">' +
+          '<div class="s12-hero-tag s12-fade">Colour · Cut · Care</div>' +
+          '<h1 class="s12-hero-title s12-fade">Hair that<br>reflects<br><em>' + esc(heroItalic) + '</em></h1>' +
+          '<p class="s12-hero-sub s12-fade">' + esc(heroLead) + '</p>' +
+          '<div class="s12-hero-actions s12-fade">' +
+          '<a class="s12-btn-dark" href="' + bookUrl + '">Reserve your visit</a>' +
+          '<a class="s12-btn-outline" href="' + homeUrl + '#s12-services">Explore services</a></div></div></section>' +
+          '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
+          '<section class="s12-philosophy">' +
+          '<div class="s12-fade"><div class="s12-phil-label">Our approach</div>' +
+          '<h2 class="s12-phil-title">Hair is more than<br>style.<br><em>It\'s you.</em></h2>' +
+          '<p class="s12-phil-body">' + esc(philBody1) + '</p>' +
+          '<p class="s12-phil-body">' + esc(philBody2) + '</p></div>' +
+          '<div class="s12-fade"><div class="s12-hero-img-fallback" style="min-height:360px;border-radius:2px"></div></div></section>' +
+          '<section class="s12-services" id="s12-services">' +
+          '<div class="s12-section-label s12-fade">What we offer</div>' +
+          '<h2 class="s12-section-title s12-fade">Our <em>services</em></h2>' +
+          '<div class="s12-svc-grid">' + svcCells + '</div></section>' +
+          '<section class="s12-gallery-dark">' +
+          '<div class="s12-gallery-head">' +
+          '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">Our work</div>' +
+          '<h2 class="s12-gallery-title">The <em>gallery</em></h2></div>' +
+          (igLink ? '<a class="s12-gallery-link s12-fade" href="' + igLink + '" target="_blank" rel="noopener">Instagram</a>' : '<a class="s12-gallery-link s12-fade" href="' + galleryUrl + '">View gallery</a>') +
+          '</div><div class="s12-gallery-scroll">' + gItems + '</div></section>' +
+          '<section class="s12-process">' +
+          '<div class="s12-section-label s12-fade">How it works</div>' +
+          '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">Your <em>experience</em></h2>' +
+          '<div class="s12-process-grid">' +
+          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">01</div><h3 class="s12-step-title">Book online</h3><p class="s12-step-desc">Choose your service and send a request. We\'ll confirm your appointment.</p></div>' +
+          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">02</div><h3 class="s12-step-title">Consultation</h3><p class="s12-step-desc">We listen to your goals and recommend the right approach.</p></div>' +
+          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">03</div><h3 class="s12-step-title">The service</h3><p class="s12-step-desc">Expert care in a calm, welcoming environment.</p></div>' +
+          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">04</div><h3 class="s12-step-title">Aftercare</h3><p class="s12-step-desc">Tips and product guidance so your look lasts.</p></div></div></section>' +
+          '<section class="s12-book-cta" id="s12-booking">' +
+          '<div class="s12-fade">' +
+          '<div class="s12-phil-label">Reserve</div>' +
+          '<h2 class="s12-book-cta-title">Ready for your<br><em>next look?</em></h2>' +
+          '<p class="s12-book-cta-body">Book online in minutes. We\'ll confirm your slot and follow up with everything you need.</p>' +
+          '<a class="s12-btn-dark" href="' + bookUrl + '">Request appointment</a></div>' +
+          '<div class="s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div></section>' +
+          testSection +
+          '<div class="s12-info">' +
+          '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Studio hours</div>' +
+          '<h3 class="s12-info-title">When to <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">visit</em></h3>' + hoursHtml + '</div>' +
+          '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Find us</div>' +
+          '<h3 class="s12-info-title">The <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">studio</em></h3>' +
+          addrHtml + phoneEl + '</div></div>' +
+          '<footer class="s12-footer">' +
+          '<div><div class="s12-footer-brand">' + esc(displayName) + '</div></div>' +
+          '<p class="s12-footer-copy">© ' + y + ' ' + esc(displayName) + '</p>' +
+          '<div></div></footer></div>';
       }
 
       function hairTattooStyleHomePage(tenant, services) {
@@ -3783,6 +4792,11 @@
                 bindTattooSidebar();
                 document.body.style.background = '#FFFDF9';
                 document.body.style.color = '#1a1a1a';
+              } else if (isStudio12Theme(tenant)) {
+                document.getElementById('root').innerHTML = studio12ShopPage(tenant);
+                bindStudio12Page();
+                document.body.style.background = '#faf7f2';
+                document.body.style.color = '#2a1f18';
               } else {
                 document.getElementById('root').innerHTML = classicShopPage(tenant);
                 bindTattooSidebar();
@@ -3804,15 +4818,20 @@
             var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
             var isBladeHome = (isBladeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
             var isStonecutHome = (isStonecutTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isHairHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'hair' && !p.isBookPath && !isGallery);
+            var isStudio12Home = (isStudio12Theme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
+            var isHairHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'hair' && !isStudio12Theme(tenant) && !p.isBookPath && !isGallery);
             var isBarberHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
             var isTattooHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
             var isNailsHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'nails' && !p.isBookPath && !isGallery);
             var isCustomHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'custom' && !p.isBookPath && !isGallery);
-            var isThemedHome = isTattooHome || isHairHome || isBarberHome || isNailsHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
+            var isThemedHome = isStudio12Home || isTattooHome || isHairHome || isBarberHome || isNailsHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
-              bindTattooSidebar();
+              if (isStudio12Theme(tenant)) {
+                bindStudio12Page();
+              } else {
+                bindTattooSidebar();
+              }
               if (isBladeTheme(tenant)) {
                 document.body.style.background = '#0a0a08';
                 document.body.style.color = '#f5f0e8';
@@ -3823,6 +4842,9 @@
               } else if (isLuxeTheme(tenant)) {
                 document.body.style.background = '#FFFDF9';
                 document.body.style.color = '#1a1a1a';
+              } else if (isStudio12Theme(tenant)) {
+                document.body.style.background = '#2a1f18';
+                document.body.style.color = '#faf7f2';
               } else if (isPortfolioIndustry(tenant.industry)) {
                 document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
                 document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
@@ -3839,6 +4861,8 @@
                 ? stonecutHomePage(tenant, services)
               : isLuxeHome
                 ? luxeHomePage(tenant, services)
+                : isStudio12Home
+                  ? studio12HomePage(tenant, services)
                 : isTattooHome
                   ? tattooHeroPage(tenant, services)
                   : isHairHome
@@ -3851,10 +4875,15 @@
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
               if (usesThemedChrome(tenant)) bindTattooSidebar();
+              if (isStudio12Theme(tenant)) bindStudio12Page();
               if (isBladeTheme(tenant)) bindBladeChrome();
             } else if (isThemedHome) {
               document.getElementById('root').innerHTML = homeContent;
-              bindTattooSidebar();
+              if (isStudio12Home) {
+                bindStudio12Page();
+              } else {
+                bindTattooSidebar();
+              }
               if (isBladeHome) bindBladeChrome();
               if (isStonecutHome) {
                 var scNav = document.getElementById('stonecut-nav');

@@ -196,6 +196,7 @@ struct DesignView: View {
     private var isClassicTemplate: Bool { activeTemplateFamily == .classic }
     private var isLuxeTemplate: Bool { activeTemplateFamily == .luxe }
     private var isBladeTemplate: Bool { activeTemplateFamily == .blade || activeTemplateFamily == .stonecut }
+    private var isStudio12Template: Bool { activeTemplateFamily == .studio12 }
 
     private var visibleDesignTabs: [DesignTab] {
         DesignTab.allCases.filter { tab in
@@ -299,6 +300,22 @@ struct DesignView: View {
             TextField("Business name", text: $viewModel.displayName)
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
+
+            if isStudio12Template {
+                Text("Studio 12 hero")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 4)
+                Text("Short intro under your headline on the home page. Philosophy copy comes from the About tab—use two paragraphs (blank line between) for two columns.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Tagline / hero intro", text: $viewModel.tagline, axis: .vertical)
+                    .lineLimit(2...6)
+                    .textFieldStyle(.roundedBorder)
+                Text("Images on the Gallery tab appear in the horizontal strip on your home page.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+            }
 
             if isBladeTemplate {
                 Text("Blade hero")
@@ -418,7 +435,13 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Gallery")
                 .font(.headline)
-            Text(isBladeTemplate ? "These photos power the Blade gallery strip and full /gallery page." : "These photos appear on your /gallery page.")
+            Text(
+                isBladeTemplate
+                    ? "These photos power the Blade gallery strip and full /gallery page."
+                    : isStudio12Template
+                        ? "Studio 12 uses these on your home page horizontal gallery and on /gallery."
+                        : "These photos appear on your /gallery page."
+            )
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -428,7 +451,12 @@ struct DesignView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            if !isClassicTemplate {
+            if isStudio12Template {
+                Text("Studio 12 lays images out in a wide scrolling row on the home page.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 8)
+            } else if !isClassicTemplate {
                 Text("Gallery styling is built into the selected template. Manage images here.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -1499,6 +1527,8 @@ private struct TemplateMiniPreview: View {
                 LuxeTemplatePreview()
             case .classic:
                 ClassicTemplatePreview(accentSymbol: family.icon)
+            case .studio12:
+                Studio12TemplatePreview()
             }
         }
         .frame(height: 128)
@@ -1585,6 +1615,52 @@ private struct BladeTemplatePreview: View {
                 .frame(width: 3, height: 40)
                 .padding(.trailing, 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+private struct Studio12TemplatePreview: View {
+    private let ivory = Color(red: 0.98, green: 0.97, blue: 0.95)
+    private let ink = Color(red: 0.16, green: 0.12, blue: 0.09)
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            ivory
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(.systemGray4))
+                        .frame(width: 44, height: 52)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("STUDIO")
+                            .font(.system(size: 6, weight: .semibold))
+                            .foregroundColor(ink.opacity(0.45))
+                            .tracking(0.8)
+                        Text("Twelve")
+                            .font(.system(size: 11, weight: .medium, design: .serif))
+                            .foregroundColor(ink)
+                            .italic()
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(ink.opacity(0.15))
+                            .frame(width: 72, height: 6)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                Rectangle()
+                    .fill(ink)
+                    .frame(height: 14)
+                    .overlay(
+                        HStack(spacing: 10) {
+                            ForEach(0..<4, id: \.self) { _ in
+                                Capsule()
+                                    .fill(ivory.opacity(0.25))
+                                    .frame(width: 28, height: 3)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                    )
+            }
         }
     }
 }

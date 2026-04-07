@@ -22,7 +22,7 @@ class BookingFormViewModel: ObservableObject {
         if !tenantServices.isEmpty {
             return tenantServices.filter { $0.isActive }.map { (id: $0.id, name: $0.name, slug: $0.slug) }
         }
-        return legacyServices.map { (id: $0.id, name: $0.name, slug: $0.name.lowercased().replacingOccurrences(of: " ", with: "-")) }
+        return legacyServices.map { (id: $0.id, name: $0.name, slug: $0.name.lowercased().replacingOccurrences(of: " ", with: "")) }
     }
 
     var useTenantData: Bool { tenantId != nil }

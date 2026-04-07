@@ -303,8 +303,9 @@ class DesignViewModel: ObservableObject {
             galleryPageBackgroundColorHex = featuredWorkBackgroundColorHex
             galleryPageTextColorHex = featuredWorkTextColorHex
         }
-        let isClassicFamily = (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic
-        if isClassicFamily {
+        let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
+        let isClassicOrStudio12 = fam == .classic || fam == .studio12
+        if isClassicOrStudio12 {
             sidebarIconColorHome = ""
             sidebarIconColorBooking = ""
         }
@@ -330,14 +331,14 @@ class DesignViewModel: ObservableObject {
             "featuredWorkBackgroundColor": featuredWorkBackgroundColorHex,
             "featuredWorkTextColor": featuredWorkTextColorHex
         ]
-        if !isClassicFamily {
+        if !isClassicOrStudio12 {
             updates["bookingFormCardBackgroundColor"] = bookingFormCardBackgroundColorHex
         }
         if usesPortfolioStyleWebChrome {
             updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
         }
-        if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .luxe {
+        if fam == .luxe {
             updates["aboutText"] = aboutText
             updates["contactPhone"] = contactPhone
             updates["contactEmail"] = contactEmail
@@ -347,8 +348,7 @@ class DesignViewModel: ObservableObject {
             updates["instagramHandle"] = instagramHandle
             updates["showContactOnPage"] = showContactOnPage
         }
-        let templateFamily = (WebTheme(rawValue: webThemeId)?.family ?? .classic)
-        if templateFamily == .blade || templateFamily == .stonecut {
+        if fam == .blade || fam == .stonecut {
             updates["bladeHeroTagline"] = bladeHeroTagline
             updates["bladeHeroDescription"] = bladeHeroDescription
             updates["contactPhone"] = contactPhone

@@ -128,21 +128,6 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber:
             return base + [
                 FormField(
-                    id: "barber_visit_type",
-                    key: "visitType",
-                    label: "Visit type",
-                    type: .select,
-                    required: false,
-                    options: [
-                        "Skin fade",
-                        "Beard trim only",
-                        "Lineup / edge-up",
-                        "Hot towel shave",
-                        "Full service",
-                        "Other",
-                    ]
-                ),
-                FormField(
                     id: "fade_or_style",
                     key: "fadeOrStyle",
                     label: "Fade / style",

@@ -254,7 +254,7 @@ class FirebaseService: ObservableObject {
         business.lowercased()
             .components(separatedBy: .alphanumerics.inverted)
             .filter { !$0.isEmpty }
-            .joined(separator: "-")
+            .joined()
     }
 
     func fetchTenantSlug(tenantId: String) async throws -> String? {
@@ -389,7 +389,7 @@ class FirebaseService: ObservableObject {
         industry: String,
         subscriptionPlan: String
     ) async throws {
-        let slugValue = slug(from: business).isEmpty ? "business-\(uid.prefix(8))" : slug(from: business)
+        let slugValue = slug(from: business).isEmpty ? "business\(uid.prefix(8))" : slug(from: business)
         let indNorm = industry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let trimmedIndustry = industry.trimmingCharacters(in: .whitespacesAndNewlines)
         let template = BookingTemplate(rawValue: indNorm) ?? BookingTemplate(rawValue: trimmedIndustry) ?? .custom

@@ -9,6 +9,13 @@ const functions = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const Stripe = require("stripe");
+const {
+  formSchemaForIndustry,
+  defaultServicesByIndustry,
+  resolveWebThemeId,
+  slugFromBusiness,
+  normalizeIndustry,
+} = require("./signupPayloads");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -653,3 +660,141 @@ exports.onTenantBookingRequestCreated = functions.firestore
     }
     return null;
   });
+
+/**
+ * Web sign-up wizard: creates Auth profile, tenant, and default services.
+ * Called from marketing/signup.html after Firebase Auth createUser on the client.
+ */
+exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Must be signed in."
+    );
+  }
+
+  const uid = context.auth.uid;
+  const {
+    teamSize,
+    industry: rawIndustry,
+    industryCustomLabel: rawIndustryLabel,
+    businessName,
+    city,
+    phone,
+    templatePreset,
+    fullName,
+    plan,
+  } = data;
+
+  if (!businessName || !rawIndustry) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "businessName and industry are required."
+    );
+  }
+
+  const industry = normalizeIndustry(rawIndustry);
+  const industryLabelTrim = (rawIndustryLabel || "").toString().trim().slice(0, 200);
+  if (industry === "custom" && !industryLabelTrim) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Please describe your business type for Custom industry."
+    );
+  }
+  const slug = slugFromBusiness(businessName);
+  const webThemeId = resolveWebThemeId(industry, templatePreset || "portfolio");
+  const formSchema = formSchemaForIndustry(industry);
+
+  const nameParts = (fullName || "").trim().split(/\s+/);
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const tenantRef = db.collection("tenants").doc();
+  const tenantId = tenantRef.id;
+
+  const tenantData = {
+    ownerId: uid,
+    businessName: businessName,
+    displayName: businessName,
+    slug: slug,
+    industry: industry,
+    formSchema,
+    teamSize: teamSize || "solo",
+    city: city || "",
+    serviceArea: city || "",
+    contactPhone: phone || "",
+    webThemeId: webThemeId,
+    resolvedWebThemeId: webThemeId,
+    templatePreset: templatePreset || "portfolio",
+    subscriptionPlan: plan || "solo",
+    trialStartDate: now,
+    createdAt: now,
+    updatedAt: now,
+    galleryGridLayout: "3x1",
+    shopEnabled: false,
+    aboutText: "",
+    contactEmail: context.auth.token.email || "",
+    contactAddress: "",
+    heroTagline: "",
+    heroSubtitle: "",
+  };
+
+  if (industry === "custom" && industryLabelTrim) {
+    tenantData.industryCustomLabel = industryLabelTrim;
+  }
+
+  const subscriptionPlan = plan || "solo";
+  const userDoc = {
+    email: context.auth.token.email || "",
+    firstName: firstName,
+    lastName: lastName,
+    displayName: fullName || "",
+    name: fullName || "",
+    tenantId: tenantId,
+    tenantSlug: slug,
+    role: "owner",
+    business: businessName,
+    industry,
+    profilePhotoUrl: "",
+    subscriptionPlan,
+    subscriptionStatus: "active",
+    availability: {
+      timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
+      daysOpen: [1, 2, 3, 4, 5],
+      timeZone: "America/New_York",
+    },
+    workflow: {
+      confirmationType: "request_approve",
+      responseTimeHours: 24,
+    },
+    createdAt: now,
+  };
+
+  const batch = db.batch();
+
+  batch.set(tenantRef, tenantData);
+  batch.set(db.collection("users").doc(uid), userDoc);
+
+  const services = defaultServicesByIndustry[industry] || [];
+  services.forEach((svc, idx) => {
+    const svcSlug = svc.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    const svcRef = tenantRef.collection("services").doc();
+    batch.set(svcRef, {
+      name: svc.name,
+      slug: svcSlug,
+      durationMinutes: svc.durationMinutes,
+      price: 0,
+      sortOrder: idx,
+      isActive: true,
+      createdAt: now,
+    });
+  });
+
+  await batch.commit();
+
+  return { tenantId, slug };
+});

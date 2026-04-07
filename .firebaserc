@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "test-app-96812"
+  },
+  "targets": {
+    "test-app-96812": {
+      "hosting": {
+        "booking": ["test-app-96812"],
+        "marketing": ["test-app-96812-marketing"]
+      }
+    }
   }
 }

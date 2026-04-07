@@ -1,17 +1,17 @@
 /**
  * Cloudflare Worker: tenant subdomains → Firebase Hosting path URLs.
  *
- * britney.getbookking.com/gallery  →  https://getbookking.com/britney/gallery
- * britney.getbookking.com/js/...  →  https://getbookking.com/js/...  (no tenant prefix)
+ * brandonsmith.getbookking.com/gallery  →  https://test-app-96812.web.app/brandonsmith/gallery
+ * brandonsmith.getbookking.com/js/...   →  https://test-app-96812.web.app/js/...  (no tenant prefix)
  *
  * Deploy: cd cloudflare/tenant-proxy && npx wrangler deploy
- * Route in Cloudflare: *.getbookking.com/* (Workers). Keep apex + www on Firebase as today.
+ * Route in Cloudflare: *.getbookking.com/* (Workers). Keep apex + www on marketing site.
  *
  * Also in Firebase Console → Authentication → Settings → Authorized domains:
- *   add getbookking.com if missing, and *.getbookking.com if the console allows wildcards.
+ *   add getbookking.com if missing.
  */
-const ORIGIN = "https://getbookking.com";
-const ORIGIN_HOST = "getbookking.com";
+const UPSTREAM = "https://test-app-96812.web.app";
+const TENANT_DOMAIN = "getbookking.com";
 
 const RESERVED = new Set([
   "www",
@@ -35,9 +35,10 @@ function isStaticPath(pathname) {
 
 function extractSubdomain(hostname) {
   const h = hostname.toLowerCase();
-  if (!h.endsWith("." + ORIGIN_HOST)) return null;
-  if (h === ORIGIN_HOST || h === "www." + ORIGIN_HOST) return null;
-  const sub = h.slice(0, -(ORIGIN_HOST.length + 1));
+  const suffix = "." + TENANT_DOMAIN;
+  if (!h.endsWith(suffix)) return null;
+  if (h === TENANT_DOMAIN || h === "www." + TENANT_DOMAIN) return null;
+  const sub = h.slice(0, -suffix.length);
   if (!sub || sub.includes(".")) return null;
   if (RESERVED.has(sub)) return null;
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(sub)) return null;
@@ -62,7 +63,12 @@ export default {
       upstreamPath = "/" + encodeURIComponent(sub) + (pathname === "/" ? "" : pathname);
     }
 
-    const upstreamUrl = ORIGIN + upstreamPath + url.search;
-    return fetch(new Request(upstreamUrl, request));
+    const upstreamUrl = UPSTREAM + upstreamPath + url.search;
+    return fetch(new Request(upstreamUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: "follow",
+    }));
   },
 };

@@ -12,6 +12,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
     case luxe
     case blade
     case stonecut
+    case studio12
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .luxe: return "Luxe"
         case .blade: return "Blade"
         case .stonecut: return "Stonecut"
+        case .studio12: return "Studio 12"
         }
     }
 
@@ -30,6 +32,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .luxe: return "sparkles"
         case .blade: return "moon.stars"
         case .stonecut: return "shield.lefthalf.filled"
+        case .studio12: return "rectangle.split.2x1"
         }
     }
 
@@ -39,6 +42,7 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
         case .luxe: return "Elegant cream palette, refined sections"
         case .blade: return "Dark luxury, gold accents"
         case .stonecut: return "Moody editorial layout with bold contrast"
+        case .studio12: return "Ivory editorial, marquee, horizontal gallery"
         }
     }
 
@@ -52,6 +56,8 @@ enum TemplateFamily: String, CaseIterable, Identifiable {
             return ["Hero", "Services", "Gallery", "Reviews", "Shop", "Booking"]
         case .stonecut:
             return ["Hero", "Artists", "Portfolio", "Styles", "Process", "Booking"]
+        case .studio12:
+            return ["Hero", "Marquee", "Philosophy", "Services", "Gallery", "Booking", "Reviews"]
         }
     }
 }
@@ -74,13 +80,15 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case bladeV1 = "blade-v1"
     /// Stonecut: dark editorial layout with red accents and dramatic typography. Works with any industry.
     case stonecutV1 = "stonecut-v1"
+    /// Studio 12: editorial layout (ivory, serif headlines, marquee, horizontal gallery). Universal (any industry).
+    case studio12V1 = "studio-12-v1"
 
     var id: String { rawValue }
 
     /// True for templates available to every industry (not tied to one business type).
     var isUniversal: Bool {
         switch self {
-        case .luxeV1, .bladeV1, .stonecutV1: return true
+        case .luxeV1, .bladeV1, .stonecutV1, .studio12V1: return true
         default: return false
         }
     }
@@ -89,6 +97,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var bookingIndustry: BookingTemplate {
         switch self {
         case .hairSalonV1: return .hair
+        case .studio12V1: return .custom
         case .barberShopV1: return .barber
         case .tattooStudioV1: return .tattoos
         case .nailSalonV1: return .nails
@@ -102,6 +111,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .hairSalonV1: return "Classic"
+        case .studio12V1: return "Studio 12"
         case .barberShopV1: return "Classic"
         case .tattooStudioV1: return "Classic"
         case .nailSalonV1: return "Classic"
@@ -122,6 +132,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
         case .stonecutV1: return "Dark split hero, artists, styles, process, ticker"
+        case .studio12V1: return "Marquee, services grid, gallery rail, testimonials"
         }
     }
 
@@ -135,6 +146,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .luxeV1: return "sparkles"
         case .bladeV1: return "moon.stars"
         case .stonecutV1: return "shield.lefthalf.filled"
+        case .studio12V1: return "rectangle.split.2x1"
         }
     }
 
@@ -144,6 +156,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .bladeV1: return "Dark luxury, gold accents"
         case .luxeV1: return "Elegant cream palette, refined sections"
         case .stonecutV1: return "Dark editorial with crimson accents"
+        case .studio12V1: return "Ivory editorial, marquee, horizontal gallery"
         case .hairSalonV1, .barberShopV1: return "Portfolio hero, featured work, book flow"
         case .tattooStudioV1: return "Bold hero, featured grid, sidebar"
         case .nailSalonV1, .customStandard: return "Neutral portfolio layout with gallery and about"
@@ -163,6 +176,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
         case .hairSalonV1, .barberShopV1, .tattooStudioV1:
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
+        case .studio12V1:
+            return ["Hero", "Marquee", "Philosophy", "Services", "Gallery", "Booking", "Reviews"]
         }
     }
 
@@ -171,6 +186,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .luxeV1: return .luxe
         case .bladeV1: return .blade
         case .stonecutV1: return .stonecut
+        case .studio12V1: return .studio12
         default: return .classic
         }
     }
@@ -200,6 +216,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return .bladeV1
         case .stonecut:
             return .stonecutV1
+        case .studio12:
+            return .studio12V1
         }
     }
 
@@ -223,5 +241,12 @@ enum WebTheme: String, CaseIterable, Identifiable {
         let allowed = Set(themes(forIndustry: industry).map(\.rawValue))
         if let s = stored, allowed.contains(s) { return s }
         return defaultTheme(forIndustry: industry).rawValue
+    }
+
+    /// Industry-specific Classic themes only (Studio 12 is its own `TemplateFamily` in the app).
+    static func classicVariants(forIndustry industry: String?) -> [WebTheme] {
+        guard let raw = industry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              let bt = BookingTemplate(rawValue: raw) else { return [] }
+        return allCases.filter { $0.family == .classic && $0.bookingIndustry == bt }
     }
 }

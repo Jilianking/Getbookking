@@ -15,7 +15,10 @@ struct DesignView: View {
     @State private var isShowingBuilder = false
     @State private var hoursPickerChoice: String = "custom"
     @State private var showBladeStarterConfirm = false
+    @State private var showStudio12ProcessStartersConfirm = false
     @State private var bladeServiceToEdit: TenantService?
+    @State private var isEditingStudio12ProcessStep = false
+    @State private var studio12ProcessStepEditIndex = 0
     private static let hoursPresets = ["Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"]
     var drawerState: DrawerState
     let sectionTitle: String
@@ -164,12 +167,31 @@ struct DesignView: View {
             }
         } message: {
             Text(
-                "Your current services will be removed and replaced with four Blade starter services for \(BookingTemplate(rawValue: viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")?.displayName ?? "your business type"). You can edit order and details below."
+                "Your current services will be removed and replaced with four starter services for \(BookingTemplate(rawValue: viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")?.displayName ?? "your business type"). You can edit order and details below."
             )
+        }
+        .alert("Replace experience steps?", isPresented: $showStudio12ProcessStartersConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Replace", role: .destructive) {
+                viewModel.resetStudio12ProcessStepsToIndustryDefaults()
+            }
+        } message: {
+            Text("Your current steps will be replaced with the default “How it works” steps for your business type. Tap Save Home to publish.")
         }
         .sheet(item: $bladeServiceToEdit) { service in
             EditTenantServiceSheet(service: service, viewModel: viewModel) {
                 bladeServiceToEdit = nil
+            }
+        }
+        .sheet(isPresented: $isEditingStudio12ProcessStep) {
+            Group {
+                if viewModel.studio12ProcessSteps.indices.contains(studio12ProcessStepEditIndex) {
+                    EditStudio12ProcessStepSheet(
+                        stepIndex: studio12ProcessStepEditIndex,
+                        viewModel: viewModel,
+                        onDismiss: { isEditingStudio12ProcessStep = false }
+                    )
+                }
             }
         }
     }
@@ -285,6 +307,13 @@ struct DesignView: View {
                     Task { await viewModel.applyWebTheme(theme) }
                 }
             }
+
+            Text("Pages on your site")
+                .font(.headline)
+                .padding(.top, 12)
+            Text("Each of Gallery, Book, About, and Shop has an Enable … page toggle at the bottom of that tab. When a page is off, it disappears from navigation; direct links show a short message with a link home. If you use online booking, keep at least one way for clients to reach Book.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -424,7 +453,7 @@ struct DesignView: View {
         }
     }
 
-    /// Studio 12 only: same order as the public home page (top → bottom). Gallery strip is edited on the Gallery tab.
+    /// Studio 12 only: home fields editable here; marquee uses services automatically; gallery strip is edited on the Gallery tab.
     @ViewBuilder
     private var studio12HomeSections: some View {
         Group {
@@ -443,20 +472,29 @@ struct DesignView: View {
 
             Text("2 · Hero headline")
                 .font(.headline)
-            Text("Eyebrow and two lines match your business type when left blank (e.g. hair: “Hair that” / “reflects”; tattoos: “Ink that” / “tells”). Override any field to customize.")
+            Text("Eyebrow matches your business type when left blank. Enter the main headline and the italic ending on one line, separated by space · middle dot · space (e.g. Hair that reflects · story.). The site shows the first part on two lines, then the last part in italics.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             TextField("Eyebrow", text: $viewModel.studio12HeroEyebrow, prompt: Text(Studio12IndustryCopy.heroEyebrow(for: studio12BookingTemplate)))
                 .textFieldStyle(.roundedBorder)
-            TextField("Headline line 1", text: $viewModel.studio12HeroLine1, prompt: Text(Studio12IndustryCopy.heroLine1(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
-            TextField("Headline line 2", text: $viewModel.studio12HeroLine2, prompt: Text(Studio12IndustryCopy.heroLine2(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
-            Text("Italic ending (inside the headline)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            TextField("Italic phrase", text: $viewModel.heroTagline, prompt: Text(Studio12IndustryCopy.heroItalicPlaceholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Headline · italic ending",
+                text: Binding(
+                    get: {
+                        Studio12IndustryCopy.joinHeroTitleEditorLine(
+                            headline: viewModel.studio12HeroHeadline,
+                            italic: viewModel.heroTagline
+                        )
+                    },
+                    set: {
+                        let parts = Studio12IndustryCopy.splitHeroTitleEditorLine($0)
+                        viewModel.studio12HeroHeadline = parts.headline
+                        viewModel.heroTagline = parts.italic
+                    }
+                ),
+                prompt: Text(Studio12IndustryCopy.heroTitleEditorPlaceholder(for: studio12BookingTemplate))
+            )
+            .textFieldStyle(.roundedBorder)
 
             Text("3 · Intro under headline")
                 .font(.headline)
@@ -472,28 +510,22 @@ struct DesignView: View {
             .lineLimit(2...6)
             .textFieldStyle(.roundedBorder)
 
-            Text("4 · Marquee")
+            Text("4 · Our approach")
                 .font(.headline)
-            Text("Scrolling names come from your services. Edit services on the Book tab.")
+            Text("Section headline: three parts separated by space · middle dot · space (matches industry defaults when blank). Body: two paragraphs — blank line between for two columns.")
                 .font(.caption)
                 .foregroundColor(.secondary)
-
-            Text("5 · Our approach")
-                .font(.headline)
-            Text("Headline (leave blank for industry defaults on the site). Body: two paragraphs — blank line between for two columns.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            TextField("Philosophy line 1", text: $viewModel.studio12PhilosophyHeadLine1, prompt: Text(Studio12IndustryCopy.philosophyLine1Placeholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
-            TextField("Philosophy line 2", text: $viewModel.studio12PhilosophyHeadLine2, prompt: Text(Studio12IndustryCopy.philosophyLine2Placeholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
-            TextField("Philosophy italic", text: $viewModel.studio12PhilosophyHeadItalic, prompt: Text(Studio12IndustryCopy.philosophyItalicPlaceholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Headline (part 1 · part 2 · italic)",
+                text: $viewModel.studio12PhilosophyHeadline,
+                prompt: Text(Studio12IndustryCopy.philosophyHeadlinePlaceholder(for: studio12BookingTemplate))
+            )
+            .textFieldStyle(.roundedBorder)
             TextField("Philosophy / story", text: $viewModel.aboutText, axis: .vertical)
                 .lineLimit(4...12)
                 .textFieldStyle(.roundedBorder)
 
-            Text("6 · Philosophy image")
+            Text("5 · Philosophy image")
                 .font(.headline)
             Text("Large image beside the philosophy copy.")
                 .font(.caption)
@@ -505,51 +537,46 @@ struct DesignView: View {
                 upload: { data in await viewModel.uploadStudio12PhilosophyImage(imageData: data) }
             )
 
-            Text("7 · Services grid")
+            Text("6 · Services grid")
                 .font(.headline)
-            Text("“What we offer” uses your services. Manage them on the Book tab.")
+            Toggle("Show “What we offer” on live site", isOn: $viewModel.studio12ShowServicesSection)
+            Text("When off, that section is hidden on the home page; the hero’s second button goes to Book instead. Services isn’t a separate page—there is no Services item in the top bar.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            BladeServicesHomeSection(
+                viewModel: viewModel,
+                serviceToEdit: $bladeServiceToEdit,
+                onRequestReplaceStarters: { showBladeStarterConfirm = true },
+                cardSectionTitle: "What we offer",
+                cardCaption: "Cards in the “What we offer” section use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page."
+            )
 
-            Text("8 · Home gallery strip")
+            Text("7 · Your experience")
                 .font(.headline)
-            Text("Horizontal photos on the home page are managed on the Gallery tab (same images as /gallery).")
+            Toggle("Show “How it works” on live site", isOn: $viewModel.studio12ShowProcessSection)
+            Text("When off, the step-by-step block above the booking call-to-action is hidden on your site.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            Studio12ProcessStepsHomeSection(
+                viewModel: viewModel,
+                onEditStep: { index in
+                    studio12ProcessStepEditIndex = index
+                    isEditingStudio12ProcessStep = true
+                },
+                onRequestReplaceDefaults: { showStudio12ProcessStartersConfirm = true }
+            )
 
-            Text("9 · Your experience")
+            Text("8 · Booking call-to-action")
                 .font(.headline)
-            Text("Four steps above the booking call-to-action.")
+            Text("Above testimonials. Headline: two parts separated by space · middle dot · space (industry defaults when blank).")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            ForEach(0 ..< min(4, viewModel.studio12ProcessSteps.count), id: \.self) { idx in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Step \(idx + 1)")
-                        .font(.subheadline.weight(.semibold))
-                    TextField("Title", text: Binding(
-                        get: { viewModel.studio12ProcessSteps[idx].title },
-                        set: { viewModel.studio12ProcessSteps[idx].title = $0 }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    TextField("Description", text: Binding(
-                        get: { viewModel.studio12ProcessSteps[idx].body },
-                        set: { viewModel.studio12ProcessSteps[idx].body = $0 }
-                    ), axis: .vertical)
-                    .lineLimit(2...5)
-                    .textFieldStyle(.roundedBorder)
-                }
-                .padding(.vertical, 6)
-            }
-
-            Text("10 · Booking call-to-action")
-                .font(.headline)
-            Text("Above testimonials. Leave blank for industry defaults (e.g. next look / next cut / next piece).")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            TextField("Title line (before italic)", text: $viewModel.studio12BookCtaLine1, prompt: Text(Studio12IndustryCopy.bookCtaLine1Placeholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
-            TextField("Italic phrase", text: $viewModel.studio12BookCtaItalic, prompt: Text(Studio12IndustryCopy.bookCtaItalicPlaceholder(for: studio12BookingTemplate)))
-                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Headline (line before italic · italic)",
+                text: $viewModel.studio12BookCtaHeadline,
+                prompt: Text(Studio12IndustryCopy.bookCtaHeadlinePlaceholder(for: studio12BookingTemplate))
+            )
+            .textFieldStyle(.roundedBorder)
             TextField(
                 "Supporting line",
                 text: $viewModel.studio12BookCtaBody,
@@ -565,7 +592,7 @@ struct DesignView: View {
                 upload: { data in await viewModel.uploadStudio12BookCtaImage(imageData: data) }
             )
 
-            Text("Client testimonials")
+            Text("9 · Client testimonials")
                 .font(.headline)
             Text("If you add reviews to your business profile, they can appear below the booking section on the site. Hours, address, and phone are edited on the About tab.")
                 .font(.caption)
@@ -604,6 +631,16 @@ struct DesignView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 8)
             }
+
+            Divider()
+            Toggle("Enable Gallery page", isOn: $viewModel.showGalleryPage)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.showGalleryPage) { _, _ in
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            Text("When off, /gallery and gallery links are hidden on your public site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -672,6 +709,16 @@ struct DesignView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+
+            Divider()
+            Toggle("Enable Book page", isOn: $viewModel.showBookPage)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.showBookPage) { _, _ in
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            Text("When off, /book and booking links are hidden on your public site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -783,6 +830,16 @@ struct DesignView: View {
                 .buttonStyle(.borderedProminent)
             }
             .padding(.top, 4)
+
+            Divider()
+            Toggle("Enable About page (/about)", isOn: $viewModel.showAboutPage)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.showAboutPage) { _, _ in
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            Text("When off, /about and About links are hidden on your public site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -908,11 +965,6 @@ struct DesignView: View {
 
     private var shopContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Toggle("Enable Shop page", isOn: $viewModel.shopEnabled)
-                .onChange(of: viewModel.shopEnabled) { _, _ in
-                    Task { await viewModel.saveShopEnabled() }
-                }
-
             if viewModel.shopEnabled {
                 Text("Products")
                     .font(.headline)
@@ -983,7 +1035,21 @@ struct DesignView: View {
                     Label("Add Product", systemImage: "plus.circle.fill").font(.subheadline.weight(.medium))
                 }
                 .sheet(isPresented: $showAddProduct) { addProductSheet }
+            } else {
+                Text("Turn on below to show a shop section and /shop on your public site.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
+
+            Divider()
+            Toggle("Enable Shop page", isOn: $viewModel.shopEnabled)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.shopEnabled) { _, _ in
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            Text("When off, /shop and shop links are hidden on your public site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -1449,7 +1515,7 @@ struct AddServiceSheet: View {
                         TextField("Amount (USD)", text: $priceText)
                             .keyboardType(.decimalPad)
                     } else {
-                        Text("Blade shows “Book for pricing” when this is off.")
+                        Text("Your site shows “Book for pricing” when this is off.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1498,6 +1564,8 @@ private struct BladeServicesHomeSection: View {
     @ObservedObject var viewModel: DesignViewModel
     @Binding var serviceToEdit: TenantService?
     let onRequestReplaceStarters: () -> Void
+    var cardSectionTitle: String = "Blade services"
+    var cardCaption: String = "Cards under OUR SERVICES use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page."
 
     private var controlsDisabled: Bool {
         viewModel.isApplyingBladeStarters || viewModel.isSavingBladeServices || viewModel.isLoading || !viewModel.hasTenant
@@ -1505,10 +1573,12 @@ private struct BladeServicesHomeSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Blade services")
-                .font(.subheadline.weight(.medium))
-                .padding(.top, 12)
-            Text("Cards under OUR SERVICES use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page.")
+            if !cardSectionTitle.isEmpty {
+                Text(cardSectionTitle)
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 12)
+            }
+            Text(cardCaption)
                 .font(.caption)
                 .foregroundColor(.secondary)
             if viewModel.services.isEmpty {
@@ -1577,6 +1647,148 @@ private struct BladeServicesHomeSection: View {
             }
             .buttonStyle(.bordered)
             .disabled(controlsDisabled)
+        }
+    }
+}
+
+private struct Studio12ProcessStepsHomeSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let onEditStep: (Int) -> Void
+    let onRequestReplaceDefaults: () -> Void
+
+    private var controlsDisabled: Bool {
+        viewModel.isLoading || !viewModel.hasTenant
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("How it works (steps)")
+                .font(.subheadline.weight(.medium))
+                .padding(.top, 4)
+            Text("Shown above the booking call-to-action. Use arrows to reorder, Edit for title and description, or add and remove steps (up to \(DesignViewModel.studio12ProcessStepsLimit)). Tap Save Home to publish.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if viewModel.studio12ProcessSteps.isEmpty {
+                Text("No steps—tap Replace to load industry defaults.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            ForEach(Array(viewModel.studio12ProcessSteps.enumerated()), id: \.element.id) { index, step in
+                HStack(alignment: .top, spacing: 10) {
+                    Text(String(format: "%02d", index + 1))
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(step.title.isEmpty ? "Untitled step" : step.title)
+                            .font(.subheadline.weight(.medium))
+                        if !step.body.isEmpty {
+                            Text(step.body)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(3)
+                        } else {
+                            Text("No description")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    VStack(spacing: 2) {
+                        Button {
+                            viewModel.moveStudio12ProcessStep(from: index, direction: -1)
+                        } label: {
+                            Image(systemName: "chevron.up")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .disabled(controlsDisabled || index == 0)
+                        Button {
+                            viewModel.moveStudio12ProcessStep(from: index, direction: 1)
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .disabled(controlsDisabled || index >= viewModel.studio12ProcessSteps.count - 1)
+                    }
+                    .buttonStyle(.borderless)
+                    Button("Edit") {
+                        onEditStep(index)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .disabled(controlsDisabled)
+                    Button(role: .destructive) {
+                        viewModel.deleteStudio12ProcessStep(at: index)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(controlsDisabled)
+                }
+                .padding(10)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(8)
+            }
+            Button {
+                viewModel.addStudio12ProcessStep()
+            } label: {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Add step")
+                }
+            }
+            .disabled(controlsDisabled || viewModel.studio12ProcessSteps.count >= DesignViewModel.studio12ProcessStepsLimit)
+            Button(action: onRequestReplaceDefaults) {
+                Text("Replace with industry default steps")
+            }
+            .buttonStyle(.bordered)
+            .disabled(controlsDisabled)
+        }
+    }
+}
+
+private struct EditStudio12ProcessStepSheet: View {
+    let stepIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var titleText = ""
+    @State private var bodyText = ""
+
+    private var placeholderPair: (String, String) {
+        let base = Studio12IndustryCopy.processSteps(for: Studio12IndustryCopy.template(from: viewModel.industry))
+        guard stepIndex >= 0, stepIndex < base.count else {
+            return ("Step title", "Description for guests")
+        }
+        let s = base[stepIndex]
+        return (s.title, s.body)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Title", text: $titleText, prompt: Text(placeholderPair.0))
+                TextField("Description", text: $bodyText, prompt: Text(placeholderPair.1), axis: .vertical)
+                    .lineLimit(3...10)
+            }
+            .navigationTitle("Edit step")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let t = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let b = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        viewModel.updateStudio12ProcessStep(at: stepIndex, title: t, body: b)
+                        onDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard viewModel.studio12ProcessSteps.indices.contains(stepIndex) else { return }
+            let s = viewModel.studio12ProcessSteps[stepIndex]
+            titleText = s.title
+            bodyText = s.body
         }
     }
 }

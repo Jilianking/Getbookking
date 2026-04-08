@@ -12,7 +12,7 @@ enum Studio12IndustryCopy {
         return BookingTemplate(rawValue: r) ?? .custom
     }
 
-    // MARK: Hero (eyebrow + two lines before italic)
+    // MARK: Hero (eyebrow + headline split on site + italic `<em>`)
 
     static func heroEyebrow(for t: BookingTemplate) -> String {
         switch t {
@@ -24,25 +24,19 @@ enum Studio12IndustryCopy {
         }
     }
 
-    static func heroLine1(for t: BookingTemplate) -> String {
+    /// One line before the italic hero word; site splits into two lines (`… that …` or balanced at a space).
+    static func heroHeadlinePlaceholder(for t: BookingTemplate) -> String {
         switch t {
-        case .hair: return "Hair that"
-        case .barber: return "Cuts that"
-        case .tattoos: return "Ink that"
-        case .nails: return "Nails that"
-        case .custom: return "Work that"
+        case .hair: return "Hair that reflects"
+        case .barber: return "Cuts that define"
+        case .tattoos: return "Ink that tells"
+        case .nails: return "Nails that elevate"
+        case .custom: return "Work that reflects"
         }
     }
 
-    static func heroLine2(for t: BookingTemplate) -> String {
-        switch t {
-        case .hair: return "reflects"
-        case .barber: return "define"
-        case .tattoos: return "tells"
-        case .nails: return "elevate"
-        case .custom: return "reflects"
-        }
-    }
+    /// Middle-dot separator for multi-part single lines in the Studio 12 editor.
+    static let studio12PartSeparator = " · "
 
     /// Suggested italic ending when the field is empty (web uses same as default before `heroTagline`).
     static func heroItalicPlaceholder(for t: BookingTemplate) -> String {
@@ -53,6 +47,27 @@ enum Studio12IndustryCopy {
         case .nails: return "every day."
         case .custom: return "you."
         }
+    }
+
+    /// Single editor line: main headline · italic ending (split on the **last** ` · `). Matches `joinBookCtaHeadline` / book CTA pattern.
+    static func joinHeroTitleEditorLine(headline: String, italic: String) -> String {
+        joinBookCtaHeadline(line1: headline, italic: italic)
+    }
+
+    static func splitHeroTitleEditorLine(_ raw: String) -> (headline: String, italic: String) {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return ("", "") }
+        guard let r = s.range(of: studio12PartSeparator, options: .backwards) else {
+            return (s, "")
+        }
+        let headline = String(s[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let italic = String(s[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (headline, italic)
+    }
+
+    /// Prompt for the combined hero title field in the app.
+    static func heroTitleEditorPlaceholder(for t: BookingTemplate) -> String {
+        joinHeroTitleEditorLine(headline: heroHeadlinePlaceholder(for: t), italic: heroItalicPlaceholder(for: t))
     }
 
     /// Hint for hero intro / tagline when empty on site.
@@ -103,6 +118,23 @@ enum Studio12IndustryCopy {
         }
     }
 
+    /// Three-part philosophy `<h2>`: line1 · line2 · italic.
+    static func philosophyHeadlinePlaceholder(for t: BookingTemplate) -> String {
+        [philosophyLine1Placeholder(for: t), philosophyLine2Placeholder(for: t), philosophyItalicPlaceholder(for: t)]
+            .joined(separator: studio12PartSeparator)
+    }
+
+    static func joinPhilosophyHeadline(line1: String, line2: String, italic: String) -> String {
+        [line1, line2, italic].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: studio12PartSeparator)
+    }
+
+    static func splitPhilosophyHeadline(_ raw: String) -> (String, String, String) {
+        let p = splitMiddleDotParts(raw, count: 3)
+        return (p[0], p[1], p[2])
+    }
+
     // MARK: Book CTA
 
     static func bookCtaLine1Placeholder(for t: BookingTemplate) -> String {
@@ -130,6 +162,57 @@ enum Studio12IndustryCopy {
         default:
             return "Book online in minutes. We'll confirm your slot and follow up with everything you need."
         }
+    }
+
+    /// CTA `<h2>`: line before italic · italic part.
+    static func bookCtaHeadlinePlaceholder(for t: BookingTemplate) -> String {
+        [bookCtaLine1Placeholder(for: t), bookCtaItalicPlaceholder(for: t)]
+            .joined(separator: studio12PartSeparator)
+    }
+
+    static func joinBookCtaHeadline(line1: String, italic: String) -> String {
+        [line1, italic].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: studio12PartSeparator)
+    }
+
+    static func splitBookCtaHeadline(_ raw: String) -> (String, String) {
+        let p = splitMiddleDotParts(raw, count: 2)
+        return (p[0], p[1])
+    }
+
+    static func joinProcessStepLine(title: String, body: String) -> String {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty, b.isEmpty { return "" }
+        return t + studio12PartSeparator + b
+    }
+
+    static func splitProcessStepLine(_ raw: String) -> (title: String, body: String) {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let r = s.range(of: studio12PartSeparator) else {
+            return (s, "")
+        }
+        let title = String(s[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = String(s[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (title, body)
+    }
+
+    private static func splitMiddleDotParts(_ raw: String, count: Int) -> [String] {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return Array(repeating: "", count: count) }
+        var parts = trimmed.components(separatedBy: studio12PartSeparator)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        while parts.count < count { parts.append("") }
+        if parts.count > count {
+            let tail = parts[(count - 1)...].joined(separator: studio12PartSeparator)
+            parts = Array(parts.prefix(count - 1)) + [tail]
+        }
+        return parts
+    }
+
+    static func processStepLinePlaceholder(step: Studio12ProcessStep) -> String {
+        joinProcessStepLine(title: step.title, body: step.body)
     }
 
     /// Default process steps when Firestore has none (per industry).

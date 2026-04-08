@@ -68,21 +68,24 @@ class DesignViewModel: ObservableObject {
     // MARK: - Studio 12 home only (`studio-12-v1`)
     /// Italic phrase in “Hair that reflects …” on Studio 12 hero (`heroTagline` in Firestore; web falls back to `heroSubtitle`).
     @Published var heroTagline: String = ""
-    /// Optional overrides; empty uses industry defaults on the site (`studio12HeroEyebrow` / `Line1` / `Line2`).
+    /// Optional overrides; empty uses industry defaults on the site (`studio12HeroEyebrow` / headline).
     @Published var studio12HeroEyebrow: String = ""
-    @Published var studio12HeroLine1: String = ""
-    @Published var studio12HeroLine2: String = ""
+    /// One line; the public site splits into two display lines (`… that …` or balanced at a space).
+    @Published var studio12HeroHeadline: String = ""
     @Published var studio12PhilosophyImageUrl: String = ""
     @Published var isUploadingStudio12Philosophy = false
-    @Published var studio12PhilosophyHeadLine1: String = ""
-    @Published var studio12PhilosophyHeadLine2: String = ""
-    @Published var studio12PhilosophyHeadItalic: String = ""
+    /// Three parts separated by ` · ` (space–middle dot–space); site renders as three lines with the last in italics.
+    @Published var studio12PhilosophyHeadline: String = ""
     @Published var studio12ProcessSteps: [Studio12ProcessStep] = Studio12IndustryCopy.processSteps(for: .custom)
-    @Published var studio12BookCtaLine1: String = ""
-    @Published var studio12BookCtaItalic: String = ""
+    /// Two parts separated by ` · `; site renders first line + italic second line.
+    @Published var studio12BookCtaHeadline: String = ""
     @Published var studio12BookCtaBody: String = ""
     @Published var studio12BookCtaImageUrl: String = ""
     @Published var isUploadingStudio12BookCta = false
+    /// When false, the “What we offer” grid is hidden on the public home page (default on).
+    @Published var studio12ShowServicesSection: Bool = true
+    /// When false, the “How it works / Your experience” block is hidden (default on).
+    @Published var studio12ShowProcessSection: Bool = true
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -102,6 +105,12 @@ class DesignViewModel: ObservableObject {
 
     // Products (shop section)
     @Published var shopEnabled: Bool = false
+    /// Public `/gallery` route and gallery nav links (default on).
+    @Published var showGalleryPage: Bool = true
+    /// Public `/book` route and booking nav / primary CTAs (default on).
+    @Published var showBookPage: Bool = true
+    /// Public `/about` route and About nav link to that URL (default on).
+    @Published var showAboutPage: Bool = true
     @Published var products: [Product] = []
     @Published var isUploadingProduct = false
 
@@ -266,16 +275,38 @@ class DesignViewModel: ObservableObject {
                 let hs = tenant?["heroSubtitle"] as? String ?? ""
                 heroTagline = ht.isEmpty ? hs : ht
                 studio12HeroEyebrow = tenant?["studio12HeroEyebrow"] as? String ?? ""
-                studio12HeroLine1 = tenant?["studio12HeroLine1"] as? String ?? ""
-                studio12HeroLine2 = tenant?["studio12HeroLine2"] as? String ?? ""
+                let heroHeadNew = (tenant?["studio12HeroHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !heroHeadNew.isEmpty {
+                    studio12HeroHeadline = tenant?["studio12HeroHeadline"] as? String ?? ""
+                } else {
+                    let l1 = (tenant?["studio12HeroLine1"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let l2 = (tenant?["studio12HeroLine2"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    studio12HeroHeadline = [l1, l2].filter { !$0.isEmpty }.joined(separator: " ")
+                }
                 studio12PhilosophyImageUrl = tenant?["studio12PhilosophyImageUrl"] as? String ?? ""
-                studio12PhilosophyHeadLine1 = tenant?["studio12PhilosophyHeadLine1"] as? String ?? ""
-                studio12PhilosophyHeadLine2 = tenant?["studio12PhilosophyHeadLine2"] as? String ?? ""
-                studio12PhilosophyHeadItalic = tenant?["studio12PhilosophyHeadItalic"] as? String ?? ""
-                studio12BookCtaLine1 = tenant?["studio12BookCtaLine1"] as? String ?? ""
-                studio12BookCtaItalic = tenant?["studio12BookCtaItalic"] as? String ?? ""
+                let philHeadNew = (tenant?["studio12PhilosophyHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !philHeadNew.isEmpty {
+                    studio12PhilosophyHeadline = tenant?["studio12PhilosophyHeadline"] as? String ?? ""
+                } else {
+                    studio12PhilosophyHeadline = Studio12IndustryCopy.joinPhilosophyHeadline(
+                        line1: tenant?["studio12PhilosophyHeadLine1"] as? String ?? "",
+                        line2: tenant?["studio12PhilosophyHeadLine2"] as? String ?? "",
+                        italic: tenant?["studio12PhilosophyHeadItalic"] as? String ?? ""
+                    )
+                }
+                let bookHeadNew = (tenant?["studio12BookCtaHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !bookHeadNew.isEmpty {
+                    studio12BookCtaHeadline = tenant?["studio12BookCtaHeadline"] as? String ?? ""
+                } else {
+                    studio12BookCtaHeadline = Studio12IndustryCopy.joinBookCtaHeadline(
+                        line1: tenant?["studio12BookCtaLine1"] as? String ?? "",
+                        italic: tenant?["studio12BookCtaItalic"] as? String ?? ""
+                    )
+                }
                 studio12BookCtaBody = tenant?["studio12BookCtaBody"] as? String ?? ""
                 studio12BookCtaImageUrl = tenant?["studio12BookCtaImageUrl"] as? String ?? ""
+                studio12ShowServicesSection = tenant?["studio12ShowServicesSection"] as? Bool ?? true
+                studio12ShowProcessSection = tenant?["studio12ShowProcessSection"] as? Bool ?? true
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -300,6 +331,9 @@ class DesignViewModel: ObservableObject {
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
+                showGalleryPage = tenant?["showGalleryPage"] as? Bool ?? true
+                showBookPage = tenant?["showBookPage"] as? Bool ?? true
+                showAboutPage = tenant?["showAboutPage"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
                 studio12ProcessSteps = Self.mergedStudio12ProcessSteps(
                     from: tenant?["studio12ProcessSteps"],
@@ -407,17 +441,22 @@ class DesignViewModel: ObservableObject {
         if fam == .studio12 {
             updates["heroTagline"] = heroTagline
             updates["studio12HeroEyebrow"] = studio12HeroEyebrow
-            updates["studio12HeroLine1"] = studio12HeroLine1
-            updates["studio12HeroLine2"] = studio12HeroLine2
+            updates["studio12HeroHeadline"] = studio12HeroHeadline
+            updates["studio12HeroLine1"] = ""
+            updates["studio12HeroLine2"] = ""
             updates["aboutText"] = aboutText
             updates["studio12PhilosophyImageUrl"] = studio12PhilosophyImageUrl
-            updates["studio12PhilosophyHeadLine1"] = studio12PhilosophyHeadLine1
-            updates["studio12PhilosophyHeadLine2"] = studio12PhilosophyHeadLine2
-            updates["studio12PhilosophyHeadItalic"] = studio12PhilosophyHeadItalic
-            updates["studio12BookCtaLine1"] = studio12BookCtaLine1
-            updates["studio12BookCtaItalic"] = studio12BookCtaItalic
+            updates["studio12PhilosophyHeadline"] = studio12PhilosophyHeadline
+            updates["studio12PhilosophyHeadLine1"] = ""
+            updates["studio12PhilosophyHeadLine2"] = ""
+            updates["studio12PhilosophyHeadItalic"] = ""
+            updates["studio12BookCtaHeadline"] = studio12BookCtaHeadline
+            updates["studio12BookCtaLine1"] = ""
+            updates["studio12BookCtaItalic"] = ""
             updates["studio12BookCtaBody"] = studio12BookCtaBody
             updates["studio12BookCtaImageUrl"] = studio12BookCtaImageUrl
+            updates["studio12ShowServicesSection"] = studio12ShowServicesSection
+            updates["studio12ShowProcessSection"] = studio12ShowProcessSection
             updates["studio12ProcessSteps"] = studio12ProcessSteps
                 .sorted { $0.id < $1.id }
                 .map { ["title": $0.title, "body": $0.body] }
@@ -777,10 +816,11 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    /// Replaces all tenant services with four Blade industry starters (names + descriptions for the web).
+    /// Replaces all tenant services with four industry starter services (Blade + Studio 12 home grids use the same list).
     func applyBladeStarterServices(isDemoMode: Bool = false) async {
         guard let tid = tenantId else { return }
-        guard (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .blade else { return }
+        let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
+        guard fam == .blade || fam == .studio12 else { return }
         let rawIndustry = industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let tmpl = BookingTemplate(rawValue: rawIndustry) ?? .custom
         await MainActor.run {
@@ -853,9 +893,19 @@ class DesignViewModel: ObservableObject {
     }
 
     // MARK: - Shop / Products
-    func saveShopEnabled() async {
+    /// Persists gallery, book, about, and shop visibility for the public site (nav + direct URLs).
+    func savePublicPageVisibility() async {
         guard let tid = tenantId else { return }
-        await saveTenantUpdates(tid, ["shopEnabled": shopEnabled])
+        await saveTenantUpdates(tid, [
+            "showGalleryPage": showGalleryPage,
+            "showBookPage": showBookPage,
+            "showAboutPage": showAboutPage,
+            "shopEnabled": shopEnabled
+        ])
+    }
+
+    func saveShopEnabled() async {
+        await savePublicPageVisibility()
     }
 
     func addProduct(name: String, category: String, price: Double, salePrice: Double?, imageData: Data?) async {
@@ -884,18 +934,60 @@ class DesignViewModel: ObservableObject {
         }
     }
 
+    /// Studio 12 “How it works” — max steps stored and rendered on web.
+    static let studio12ProcessStepsLimit = 12
+
+    func moveStudio12ProcessStep(from index: Int, direction: Int) {
+        let j = index + direction
+        guard studio12ProcessSteps.indices.contains(index), studio12ProcessSteps.indices.contains(j) else { return }
+        studio12ProcessSteps.swapAt(index, j)
+        normalizeStudio12ProcessStepIds()
+    }
+
+    func deleteStudio12ProcessStep(at index: Int) {
+        guard studio12ProcessSteps.indices.contains(index) else { return }
+        studio12ProcessSteps.remove(at: index)
+        normalizeStudio12ProcessStepIds()
+        if studio12ProcessSteps.isEmpty {
+            studio12ProcessSteps = Studio12IndustryCopy.processSteps(for: Studio12IndustryCopy.template(from: industry))
+        }
+    }
+
+    func addStudio12ProcessStep() {
+        guard studio12ProcessSteps.count < Self.studio12ProcessStepsLimit else { return }
+        studio12ProcessSteps.append(Studio12ProcessStep(id: studio12ProcessSteps.count, title: "New step", body: ""))
+        normalizeStudio12ProcessStepIds()
+    }
+
+    func resetStudio12ProcessStepsToIndustryDefaults() {
+        studio12ProcessSteps = Studio12IndustryCopy.processSteps(for: Studio12IndustryCopy.template(from: industry))
+    }
+
+    func updateStudio12ProcessStep(at index: Int, title: String, body: String) {
+        guard studio12ProcessSteps.indices.contains(index) else { return }
+        var steps = studio12ProcessSteps
+        steps[index].title = title
+        steps[index].body = body
+        studio12ProcessSteps = steps
+    }
+
+    private func normalizeStudio12ProcessStepIds() {
+        studio12ProcessSteps = studio12ProcessSteps.enumerated().map {
+            Studio12ProcessStep(id: $0.offset, title: $0.element.title, body: $0.element.body)
+        }
+    }
+
     private static func mergedStudio12ProcessSteps(from raw: Any?, industry: String?) -> [Studio12ProcessStep] {
         let base = Studio12IndustryCopy.processSteps(for: Studio12IndustryCopy.template(from: industry))
         guard let arr = raw as? [[String: Any]], !arr.isEmpty else { return base }
-        return (0..<4).map { i in
-            guard i < arr.count else { return base[i] }
-            let d = arr[i]
+        return Array(arr.prefix(Self.studio12ProcessStepsLimit)).enumerated().map { i, d in
             let tRaw = (d["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let bRaw = (d["body"] as? String ?? d["description"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = i < base.count ? base[i] : base[base.count - 1]
             return Studio12ProcessStep(
                 id: i,
-                title: tRaw.isEmpty ? base[i].title : tRaw,
-                body: bRaw.isEmpty ? base[i].body : bRaw
+                title: tRaw.isEmpty ? fallback.title : tRaw,
+                body: bRaw.isEmpty ? fallback.body : bRaw
             )
         }
     }

@@ -198,6 +198,10 @@ struct DesignView: View {
     private var isBladeTemplate: Bool { activeTemplateFamily == .blade || activeTemplateFamily == .stonecut }
     private var isStudio12Template: Bool { activeTemplateFamily == .studio12 }
 
+    private var studio12BookingTemplate: BookingTemplate {
+        Studio12IndustryCopy.template(from: viewModel.industry)
+    }
+
     private var visibleDesignTabs: [DesignTab] {
         DesignTab.allCases.filter { tab in
             if tab == .about, isLuxeTemplate { return false }
@@ -294,28 +298,15 @@ struct DesignView: View {
                     .foregroundColor(.secondary)
             }
 
+            if isStudio12Template {
+                studio12HomeSections
+            } else {
             // Hero
             Text("Hero")
                 .font(.headline)
             TextField("Business name", text: $viewModel.displayName)
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
-
-            if isStudio12Template {
-                Text("Studio 12 hero")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.top, 4)
-                Text("Short intro under your headline on the home page. Philosophy copy comes from the About tab—use two paragraphs (blank line between) for two columns.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                TextField("Tagline / hero intro", text: $viewModel.tagline, axis: .vertical)
-                    .lineLimit(2...6)
-                    .textFieldStyle(.roundedBorder)
-                Text("Images on the Gallery tab appear in the horizontal strip on your home page.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-            }
 
             if isBladeTemplate {
                 Text("Blade hero")
@@ -424,10 +415,161 @@ struct DesignView: View {
                 contactFieldsSection(includeBladeServiceArea: false)
             }
 
+            }
+
             Button("Save Home") {
                 Task { await viewModel.saveHome() }
             }
             .buttonStyle(.borderedProminent)
+        }
+    }
+
+    /// Studio 12 only: same order as the public home page (top → bottom). Gallery strip is edited on the Gallery tab.
+    @ViewBuilder
+    private var studio12HomeSections: some View {
+        Group {
+            Text("Studio 12 home")
+                .font(.title3.weight(.bold))
+            Text("Sections follow your live site. Use Save Home at the bottom.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("1 · Hero")
+                .font(.headline)
+                .padding(.top, 4)
+            TextField("Business name", text: $viewModel.displayName)
+                .textFieldStyle(.roundedBorder)
+            HeroImageUploadSection(viewModel: viewModel)
+
+            Text("2 · Hero headline")
+                .font(.headline)
+            Text("Eyebrow and two lines match your business type when left blank (e.g. hair: “Hair that” / “reflects”; tattoos: “Ink that” / “tells”). Override any field to customize.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField("Eyebrow", text: $viewModel.studio12HeroEyebrow, prompt: Text(Studio12IndustryCopy.heroEyebrow(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Headline line 1", text: $viewModel.studio12HeroLine1, prompt: Text(Studio12IndustryCopy.heroLine1(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Headline line 2", text: $viewModel.studio12HeroLine2, prompt: Text(Studio12IndustryCopy.heroLine2(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            Text("Italic ending (inside the headline)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField("Italic phrase", text: $viewModel.heroTagline, prompt: Text(Studio12IndustryCopy.heroItalicPlaceholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+
+            Text("3 · Intro under headline")
+                .font(.headline)
+            Text("Short paragraph under the hero title.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField(
+                "Hero intro",
+                text: $viewModel.tagline,
+                prompt: Text(Studio12IndustryCopy.heroIntroPlaceholder(for: studio12BookingTemplate)),
+                axis: .vertical
+            )
+            .lineLimit(2...6)
+            .textFieldStyle(.roundedBorder)
+
+            Text("4 · Marquee")
+                .font(.headline)
+            Text("Scrolling names come from your services. Edit services on the Book tab.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("5 · Our approach")
+                .font(.headline)
+            Text("Headline (leave blank for industry defaults on the site). Body: two paragraphs — blank line between for two columns.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField("Philosophy line 1", text: $viewModel.studio12PhilosophyHeadLine1, prompt: Text(Studio12IndustryCopy.philosophyLine1Placeholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Philosophy line 2", text: $viewModel.studio12PhilosophyHeadLine2, prompt: Text(Studio12IndustryCopy.philosophyLine2Placeholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Philosophy italic", text: $viewModel.studio12PhilosophyHeadItalic, prompt: Text(Studio12IndustryCopy.philosophyItalicPlaceholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Philosophy / story", text: $viewModel.aboutText, axis: .vertical)
+                .lineLimit(4...12)
+                .textFieldStyle(.roundedBorder)
+
+            Text("6 · Philosophy image")
+                .font(.headline)
+            Text("Large image beside the philosophy copy.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Studio12AuxImageUploadSection(
+                label: "Philosophy image",
+                imageUrl: $viewModel.studio12PhilosophyImageUrl,
+                isUploading: viewModel.isUploadingStudio12Philosophy,
+                upload: { data in await viewModel.uploadStudio12PhilosophyImage(imageData: data) }
+            )
+
+            Text("7 · Services grid")
+                .font(.headline)
+            Text("“What we offer” uses your services. Manage them on the Book tab.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("8 · Home gallery strip")
+                .font(.headline)
+            Text("Horizontal photos on the home page are managed on the Gallery tab (same images as /gallery).")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("9 · Your experience")
+                .font(.headline)
+            Text("Four steps above the booking call-to-action.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            ForEach(0 ..< min(4, viewModel.studio12ProcessSteps.count), id: \.self) { idx in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Step \(idx + 1)")
+                        .font(.subheadline.weight(.semibold))
+                    TextField("Title", text: Binding(
+                        get: { viewModel.studio12ProcessSteps[idx].title },
+                        set: { viewModel.studio12ProcessSteps[idx].title = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    TextField("Description", text: Binding(
+                        get: { viewModel.studio12ProcessSteps[idx].body },
+                        set: { viewModel.studio12ProcessSteps[idx].body = $0 }
+                    ), axis: .vertical)
+                    .lineLimit(2...5)
+                    .textFieldStyle(.roundedBorder)
+                }
+                .padding(.vertical, 6)
+            }
+
+            Text("10 · Booking call-to-action")
+                .font(.headline)
+            Text("Above testimonials. Leave blank for industry defaults (e.g. next look / next cut / next piece).")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField("Title line (before italic)", text: $viewModel.studio12BookCtaLine1, prompt: Text(Studio12IndustryCopy.bookCtaLine1Placeholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField("Italic phrase", text: $viewModel.studio12BookCtaItalic, prompt: Text(Studio12IndustryCopy.bookCtaItalicPlaceholder(for: studio12BookingTemplate)))
+                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Supporting line",
+                text: $viewModel.studio12BookCtaBody,
+                prompt: Text(Studio12IndustryCopy.bookCtaBodyPlaceholder(for: studio12BookingTemplate)),
+                axis: .vertical
+            )
+            .lineLimit(2...5)
+            .textFieldStyle(.roundedBorder)
+            Studio12AuxImageUploadSection(
+                label: "CTA side image",
+                imageUrl: $viewModel.studio12BookCtaImageUrl,
+                isUploading: viewModel.isUploadingStudio12BookCta,
+                upload: { data in await viewModel.uploadStudio12BookCtaImage(imageData: data) }
+            )
+
+            Text("Client testimonials")
+                .font(.headline)
+            Text("If you add reviews to your business profile, they can appear below the booking section on the site. Hours, address, and phone are edited on the About tab.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -937,6 +1079,66 @@ struct HeroImageUploadSection: View {
                         }
                     }
                     if viewModel.isUploadingHero {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
+// MARK: - Studio 12 auxiliary images (philosophy column, book CTA column)
+struct Studio12AuxImageUploadSection: View {
+    let label: String
+    @Binding var imageUrl: String
+    let isUploading: Bool
+    let upload: (Data) async -> Void
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(label)
+                .font(.subheadline.weight(.medium))
+            HStack(spacing: 16) {
+                if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 80, height: 56)
+                    .clipped()
+                    .cornerRadius(8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 56)
+                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack {
+                            Image(systemName: "photo.badge.plus")
+                            Text(imageUrl.isEmpty ? "Choose image" : "Change image")
+                        }
+                        .font(.subheadline)
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            guard let newItem = newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
+                                await upload(data)
+                            }
+                            await MainActor.run { selectedItem = nil }
+                        }
+                    }
+                    if isUploading {
                         ProgressView()
                             .scaleEffect(0.8)
                     }

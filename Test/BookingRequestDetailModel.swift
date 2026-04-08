@@ -64,12 +64,12 @@ enum BookingRequestDetailModel {
         }
     }
 
-    /// 0 tattoo / creative, 1 health, 2 trades service, 3 catch-all
+    /// 0 primary service / creative fields (tattoo, hair, nails, etc.), 1 health, 2 trades / logistics, 3 catch-all
     static func bucket(forKey key: String) -> Int {
         let k = key.lowercased()
-        let tattooKeys = ["placement", "size", "style", "description", "referenceimages", "hairtype", "stylepreference",
-                          "designpreference", "nailtype", "design", "visittype", "fadeorstyle", "facialhair", "cutdetails", "scalpsensitivity"]
-        if tattooKeys.contains(where: { k == $0 || k.hasPrefix($0) }) {
+        let primaryDetailKeys = ["placement", "size", "style", "description", "referenceimages", "hairtype", "stylepreference",
+                                 "designpreference", "nailtype", "design", "visittype", "fadeorstyle", "facialhair", "cutdetails", "scalpsensitivity"]
+        if primaryDetailKeys.contains(where: { k == $0 || k.hasPrefix($0) }) {
             return 0
         }
         if ["skintone", "allergies", "urgency", "health", "medical"].contains(where: { k.contains($0) }) {
@@ -81,7 +81,21 @@ enum BookingRequestDetailModel {
         return 3
     }
 
-    static let bucketTitles = ["Tattoo details", "Health & safety", "Service details", "Additional details"]
+    /// Section headers for `formSectionCards`; index 0 depends on tenant `BookingTemplate`.
+    static func bucketTitles(template: BookingTemplate?) -> [String] {
+        let primary: String
+        switch template {
+        case .tattoos:
+            primary = "Tattoo details"
+        case .hair, .barber:
+            primary = "Hair & style details"
+        case .nails:
+            primary = "Nail details"
+        case .custom, .none:
+            primary = "Request details"
+        }
+        return [primary, "Health & safety", "Service details", "Additional details"]
+    }
 
     struct FormRow: Identifiable {
         let id: String
@@ -275,6 +289,8 @@ struct BookingRequestFormMediaGalleryView: View {
 
 struct BookingRequestFormSectionsView: View {
     let responses: [String: Any]?
+    /// From tenant `industry`; when nil, primary section uses neutral "Request details".
+    var bookingTemplate: BookingTemplate?
 
     var body: some View {
         Group {
@@ -284,11 +300,15 @@ struct BookingRequestFormSectionsView: View {
         }
     }
 
+    private var bucketTitles: [String] {
+        BookingRequestDetailModel.bucketTitles(template: bookingTemplate)
+    }
+
     @ViewBuilder
     private func formSectionCards(_ responses: [String: Any]) -> some View {
         let rows = BookingRequestDetailModel.formRows(from: responses)
         let byBucket = BookingRequestDetailModel.rowsByBucket(rows)
-        ForEach(0 ..< BookingRequestDetailModel.bucketTitles.count, id: \.self) { idx in
+        ForEach(0 ..< bucketTitles.count, id: \.self) { idx in
             let sectionRows = byBucket[idx] ?? []
             let mediaKeys = BookingRequestDetailModel.mediaKeys(forBucket: idx)
             let mediaPairs: [(String, Any)] = mediaKeys.compactMap { key in
@@ -300,7 +320,7 @@ struct BookingRequestFormSectionsView: View {
                 EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    BookingRequestSectionHeader(title: BookingRequestDetailModel.bucketTitles[idx])
+                    BookingRequestSectionHeader(title: bucketTitles[idx])
                     ForEach(mediaPairs, id: \.0) { pair in
                         BookingRequestFormMediaGalleryView(
                             title: BookingRequestDetailModel.label(forKey: pair.0),

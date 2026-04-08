@@ -436,7 +436,10 @@ struct BookingRequestDetailView: View {
                     }
 
                     // Custom form fields (web / admin)
-                    BookingRequestFormSectionsView(responses: request.formResponses)
+                    BookingRequestFormSectionsView(
+                        responses: request.formResponses,
+                        bookingTemplate: viewModel.tenantBookingTemplate
+                    )
                 }
                 .padding(16)
             }

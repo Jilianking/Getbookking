@@ -4021,6 +4021,20 @@
               luxePromoHeadline: data.luxePromoHeadline || '',
               bladeHeroTagline: data.bladeHeroTagline || '',
               bladeHeroDescription: data.bladeHeroDescription || '',
+              heroTagline: data.heroTagline || '',
+              heroSubtitle: data.heroSubtitle || '',
+              studio12PhilosophyImageUrl: data.studio12PhilosophyImageUrl || '',
+              studio12PhilosophyHeadLine1: data.studio12PhilosophyHeadLine1 || '',
+              studio12PhilosophyHeadLine2: data.studio12PhilosophyHeadLine2 || '',
+              studio12PhilosophyHeadItalic: data.studio12PhilosophyHeadItalic || '',
+              studio12BookCtaLine1: data.studio12BookCtaLine1 || '',
+              studio12BookCtaItalic: data.studio12BookCtaItalic || '',
+              studio12BookCtaBody: data.studio12BookCtaBody || '',
+              studio12BookCtaImageUrl: data.studio12BookCtaImageUrl || '',
+              studio12ProcessSteps: data.studio12ProcessSteps || [],
+              studio12HeroEyebrow: data.studio12HeroEyebrow || '',
+              studio12HeroLine1: data.studio12HeroLine1 || '',
+              studio12HeroLine2: data.studio12HeroLine2 || '',
               shopEnabled: data.shopEnabled || false };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
@@ -4339,7 +4353,94 @@
         return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + '</div>';
       }
 
+      function studio12IndustryKey(tenant) {
+        var ind = String(tenant.industry || 'custom').toLowerCase();
+        if (ind === 'hair' || ind === 'barber' || ind === 'tattoos' || ind === 'nails') return ind;
+        return 'custom';
+      }
+
+      /** Defaults per business type — keep in sync with Studio12IndustryCopy.swift */
+      function studio12IndustryBundle(tenant) {
+        var k = studio12IndustryKey(tenant);
+        var bookBodyStd = "Book online in minutes. We'll confirm your slot and follow up with everything you need.";
+        var bookBodyTat = "Book online to start your request. We'll confirm timing and follow up with next steps.";
+        var B = {
+          hair: {
+            heroEyebrow: 'Colour · Cut · Care', heroLine1: 'Hair that', heroLine2: 'reflects', heroItalicDefault: 'story.',
+            heroLeadDefault: 'A boutique studio dedicated to the art of hair — bespoke colour, precision cuts, and restorative care.',
+            phil1: 'Hair is more than', phil2: 'style.', philEm: "It's you.",
+            philBody2Default: 'Every visit is intentional — from consultation to finish.',
+            marquee: ['Colour', 'Cut', 'Care', 'Balayage', 'Styling'],
+            bookL1: 'Ready for your', bookEm: 'next look?', bookBody: bookBodyStd,
+            process: [
+              { title: 'Book online', body: "Choose your service and send a request. We'll confirm your appointment." },
+              { title: 'Consultation', body: 'We listen to your goals and recommend the right approach.' },
+              { title: 'The service', body: 'Expert care in a calm, welcoming environment.' },
+              { title: 'Aftercare', body: 'Tips and product guidance so your look lasts.' }
+            ]
+          },
+          barber: {
+            heroEyebrow: 'Cuts · Fades · Detail', heroLine1: 'Cuts that', heroLine2: 'define', heroItalicDefault: 'you.',
+            heroLeadDefault: 'Sharp fades, clean lines, and consistent results — every chair, every visit.',
+            phil1: 'Precision is more than', phil2: 'a fade.', philEm: "It's confidence.",
+            philBody2Default: 'From consultation to final detail — we keep your style consistent.',
+            marquee: ['Fades', 'Tapers', 'Beard Work', 'Lineups', 'Detail'],
+            bookL1: 'Ready for your', bookEm: 'next cut?', bookBody: bookBodyStd,
+            process: [
+              { title: 'Book online', body: "Choose your service and send a request. We'll confirm your appointment." },
+              { title: 'Consultation', body: 'We align on style, length, and the details that matter to you.' },
+              { title: 'The cut', body: 'Clean execution with attention to line, blend, and finish.' },
+              { title: 'Aftercare', body: 'Product tips and timing so your cut stays sharp.' }
+            ]
+          },
+          tattoos: {
+            heroEyebrow: 'Design · Ink · Detail', heroLine1: 'Ink that', heroLine2: 'tells', heroItalicDefault: 'your story.',
+            heroLeadDefault: 'Custom work, clean execution, and a calm studio experience from idea to healed piece.',
+            phil1: 'Art is more than', phil2: 'ink on skin.', philEm: "It's permanence with intention.",
+            philBody2Default: 'We collaborate on design, placement, and pacing so your piece ages beautifully.',
+            marquee: ['Custom', 'Fine line', 'Blackwork', 'Color', 'Flash'],
+            bookL1: 'Ready for your', bookEm: 'next piece?', bookBody: bookBodyTat,
+            process: [
+              { title: 'Book online', body: "Send a request with timing and ideas. We'll follow up to plan next steps." },
+              { title: 'Design', body: 'We refine placement, size, and style before your appointment.' },
+              { title: 'The session', body: 'Professional application in a clean, focused environment.' },
+              { title: 'Healing', body: 'Aftercare guidance so your tattoo heals clean and stays bold.' }
+            ]
+          },
+          nails: {
+            heroEyebrow: 'Color · Care · Finish', heroLine1: 'Nails that', heroLine2: 'elevate', heroItalicDefault: 'every day.',
+            heroLeadDefault: 'Clean finishes, thoughtful details, and sets built to last — book your next appointment.',
+            phil1: 'Polish is more than', phil2: 'color.', philEm: "It's the details.",
+            philBody2Default: 'Hygiene-first care and precision application for a finish you can count on.',
+            marquee: ['Manicure', 'Gel', 'Pedicure', 'Nail Art', 'Care'],
+            bookL1: 'Ready for your', bookEm: 'next set?', bookBody: bookBodyStd,
+            process: [
+              { title: 'Book online', body: "Choose your service and send a request. We'll confirm your appointment." },
+              { title: 'Consultation', body: 'We confirm shape, length, color, and any nail-art details.' },
+              { title: 'The service', body: 'Careful prep and application for a clean, lasting finish.' },
+              { title: 'Aftercare', body: 'Home care tips so your set stays fresh longer.' }
+            ]
+          },
+          custom: {
+            heroEyebrow: 'Book · Visit · Connect', heroLine1: 'Work that', heroLine2: 'reflects', heroItalicDefault: 'you.',
+            heroLeadDefault: 'Professional service, thoughtful communication, and a smooth booking experience.',
+            phil1: 'Quality is more than', phil2: 'a checklist.', philEm: "It's consistency.",
+            philBody2Default: 'Every step is intentional — from first message to finished result.',
+            marquee: ['Consultation', 'Service', 'Follow-up', 'Booking', 'Care'],
+            bookL1: 'Ready to', bookEm: 'book?', bookBody: bookBodyStd,
+            process: [
+              { title: 'Book online', body: "Choose your service and send a request. We'll confirm your appointment." },
+              { title: 'Consultation', body: 'We clarify scope, timing, and what to expect.' },
+              { title: 'The service', body: 'Focused work with clear communication throughout.' },
+              { title: 'Follow-up', body: 'Clear next steps and guidance after your appointment.' }
+            ]
+          }
+        };
+        return B[k] || B.custom;
+      }
+
       function studio12HomePage(tenant, services) {
+        var s12 = studio12IndustryBundle(tenant);
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
@@ -4348,7 +4449,7 @@
         var svcList = services || [];
         var marqueeNames = svcList.length
           ? svcList.map(function(s) { return s.name; })
-          : ['Colour', 'Cut', 'Care', 'Balayage', 'Styling'];
+          : s12.marquee;
         var marqueeDup = marqueeNames.concat(marqueeNames);
         var marqueeHtml = marqueeDup.map(function(n) {
           return '<span class="s12-marquee-item">' + esc(n) + '</span>';
@@ -4356,13 +4457,13 @@
         var heroImg = tenant.heroImageUrl
           ? '<img class="s12-hero-img" src="' + esc(tenant.heroImageUrl) + '" alt="">'
           : '<div class="s12-hero-img-fallback" aria-hidden="true"></div>';
-        var heroItalic = tenant.heroTagline || tenant.heroSubtitle || 'story.';
+        var heroItalic = tenant.heroTagline || tenant.heroSubtitle || s12.heroItalicDefault;
         var heroLead = tenant.tagline || (tenant.aboutText ? String(tenant.aboutText).slice(0, 200) : '') ||
-          'A boutique studio dedicated to the art of hair — bespoke colour, precision cuts, and restorative treatments.';
+          s12.heroLeadDefault;
         var aboutFull = (tenant.aboutText || '').trim();
         var philParas = aboutFull ? aboutFull.split(/\n\n+/) : [];
         var philBody1 = philParas[0] || heroLead;
-        var philBody2 = philParas[1] || 'Every visit is intentional — from consultation to finish.';
+        var philBody2 = philParas[1] || s12.philBody2Default;
         var svcCells = '';
         for (var si = 0; si < svcList.length; si++) {
           var s = svcList[si];
@@ -4412,13 +4513,44 @@
           : '';
         var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
         var igLink = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
+        var phL1 = (tenant.studio12PhilosophyHeadLine1 || '').trim();
+        var phL2 = (tenant.studio12PhilosophyHeadLine2 || '').trim();
+        var phEm = (tenant.studio12PhilosophyHeadItalic || '').trim();
+        var philTitleHtml = '<h2 class="s12-phil-title">' + esc(phL1 || s12.phil1) + '<br>' +
+          esc(phL2 || s12.phil2) + '<br><em>' + esc(phEm || s12.philEm) + '</em></h2>';
+        var philImgCol = tenant.studio12PhilosophyImageUrl
+          ? '<img class="s12-hero-img" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt="" style="min-height:360px;border-radius:2px;object-fit:cover;width:100%">'
+          : '<div class="s12-hero-img-fallback" style="min-height:360px;border-radius:2px"></div>';
+        var defaultProc = s12.process;
+        var procSrc = (Array.isArray(tenant.studio12ProcessSteps) && tenant.studio12ProcessSteps.length)
+          ? tenant.studio12ProcessSteps : defaultProc;
+        var procCells = '';
+        for (var pi = 0; pi < 4; pi++) {
+          var step = procSrc[pi] || defaultProc[pi];
+          var num = ('0' + (pi + 1)).slice(-2);
+          var st = (step && step.title) ? String(step.title) : defaultProc[pi].title;
+          var sb = (step && (step.body != null || step.description != null))
+            ? String(step.body != null ? step.body : step.description) : defaultProc[pi].body;
+          procCells += '<div class="s12-process-cell s12-fade"><div class="s12-step-num">' + num + '</div>' +
+            '<h3 class="s12-step-title">' + esc(st) + '</h3>' +
+            '<p class="s12-step-desc">' + esc(sb) + '</p></div>';
+        }
+        var bcL1 = (tenant.studio12BookCtaLine1 || '').trim() || s12.bookL1;
+        var bcEm = (tenant.studio12BookCtaItalic || '').trim() || s12.bookEm;
+        var bcBody = (tenant.studio12BookCtaBody || '').trim() || s12.bookBody;
+        var heroEyebrow = (tenant.studio12HeroEyebrow || '').trim() || s12.heroEyebrow;
+        var heroL1 = (tenant.studio12HeroLine1 || '').trim() || s12.heroLine1;
+        var heroL2 = (tenant.studio12HeroLine2 || '').trim() || s12.heroLine2;
+        var bcImgCol = tenant.studio12BookCtaImageUrl
+          ? '<img class="s12-hero-img" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt="" style="min-height:280px;border-radius:2px;object-fit:cover;width:100%">'
+          : '<div class="s12-hero-img-fallback" style="min-height:280px"></div>';
         var y = new Date().getFullYear();
         return '<div class="studio12-page">' + studio12NavHtml(tenant) +
           '<section class="s12-hero">' +
           '<div class="s12-hero-img-col">' + heroImg + '<div class="s12-hero-img-overlay"></div></div>' +
           '<div class="s12-hero-content">' +
-          '<div class="s12-hero-tag s12-fade">Colour · Cut · Care</div>' +
-          '<h1 class="s12-hero-title s12-fade">Hair that<br>reflects<br><em>' + esc(heroItalic) + '</em></h1>' +
+          '<div class="s12-hero-tag s12-fade">' + esc(heroEyebrow) + '</div>' +
+          '<h1 class="s12-hero-title s12-fade">' + esc(heroL1) + '<br>' + esc(heroL2) + '<br><em>' + esc(heroItalic) + '</em></h1>' +
           '<p class="s12-hero-sub s12-fade">' + esc(heroLead) + '</p>' +
           '<div class="s12-hero-actions s12-fade">' +
           '<a class="s12-btn-dark" href="' + bookUrl + '">Reserve your visit</a>' +
@@ -4426,10 +4558,10 @@
           '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
           '<section class="s12-philosophy">' +
           '<div class="s12-fade"><div class="s12-phil-label">Our approach</div>' +
-          '<h2 class="s12-phil-title">Hair is more than<br>style.<br><em>It\'s you.</em></h2>' +
+          philTitleHtml +
           '<p class="s12-phil-body">' + esc(philBody1) + '</p>' +
           '<p class="s12-phil-body">' + esc(philBody2) + '</p></div>' +
-          '<div class="s12-fade"><div class="s12-hero-img-fallback" style="min-height:360px;border-radius:2px"></div></div></section>' +
+          '<div class="s12-fade">' + philImgCol + '</div></section>' +
           '<section class="s12-services" id="s12-services">' +
           '<div class="s12-section-label s12-fade">What we offer</div>' +
           '<h2 class="s12-section-title s12-fade">Our <em>services</em></h2>' +
@@ -4443,18 +4575,14 @@
           '<section class="s12-process">' +
           '<div class="s12-section-label s12-fade">How it works</div>' +
           '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">Your <em>experience</em></h2>' +
-          '<div class="s12-process-grid">' +
-          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">01</div><h3 class="s12-step-title">Book online</h3><p class="s12-step-desc">Choose your service and send a request. We\'ll confirm your appointment.</p></div>' +
-          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">02</div><h3 class="s12-step-title">Consultation</h3><p class="s12-step-desc">We listen to your goals and recommend the right approach.</p></div>' +
-          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">03</div><h3 class="s12-step-title">The service</h3><p class="s12-step-desc">Expert care in a calm, welcoming environment.</p></div>' +
-          '<div class="s12-process-cell s12-fade"><div class="s12-step-num">04</div><h3 class="s12-step-title">Aftercare</h3><p class="s12-step-desc">Tips and product guidance so your look lasts.</p></div></div></section>' +
+          '<div class="s12-process-grid">' + procCells + '</div></section>' +
           '<section class="s12-book-cta" id="s12-booking">' +
           '<div class="s12-fade">' +
           '<div class="s12-phil-label">Reserve</div>' +
-          '<h2 class="s12-book-cta-title">Ready for your<br><em>next look?</em></h2>' +
-          '<p class="s12-book-cta-body">Book online in minutes. We\'ll confirm your slot and follow up with everything you need.</p>' +
+          '<h2 class="s12-book-cta-title">' + esc(bcL1) + '<br><em>' + esc(bcEm) + '</em></h2>' +
+          '<p class="s12-book-cta-body">' + esc(bcBody) + '</p>' +
           '<a class="s12-btn-dark" href="' + bookUrl + '">Request appointment</a></div>' +
-          '<div class="s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div></section>' +
+          '<div class="s12-fade">' + bcImgCol + '</div></section>' +
           testSection +
           '<div class="s12-info">' +
           '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Studio hours</div>' +

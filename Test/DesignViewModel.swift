@@ -17,6 +17,13 @@ enum DesignTab: String, CaseIterable {
     case shop
 }
 
+/// Editable “Your experience” steps on Studio 12 home (`studio12ProcessSteps` in Firestore).
+struct Studio12ProcessStep: Identifiable, Equatable {
+    var id: Int
+    var title: String
+    var body: String
+}
+
 class DesignViewModel: ObservableObject {
     @Published var tenantId: String?
     @Published var tenantSlug: String?
@@ -57,6 +64,25 @@ class DesignViewModel: ObservableObject {
     @Published var bladeHeroTagline: String = ""
     /// Blade hero paragraph under the name (optional; falls back to About text on web).
     @Published var bladeHeroDescription: String = ""
+
+    // MARK: - Studio 12 home only (`studio-12-v1`)
+    /// Italic phrase in “Hair that reflects …” on Studio 12 hero (`heroTagline` in Firestore; web falls back to `heroSubtitle`).
+    @Published var heroTagline: String = ""
+    /// Optional overrides; empty uses industry defaults on the site (`studio12HeroEyebrow` / `Line1` / `Line2`).
+    @Published var studio12HeroEyebrow: String = ""
+    @Published var studio12HeroLine1: String = ""
+    @Published var studio12HeroLine2: String = ""
+    @Published var studio12PhilosophyImageUrl: String = ""
+    @Published var isUploadingStudio12Philosophy = false
+    @Published var studio12PhilosophyHeadLine1: String = ""
+    @Published var studio12PhilosophyHeadLine2: String = ""
+    @Published var studio12PhilosophyHeadItalic: String = ""
+    @Published var studio12ProcessSteps: [Studio12ProcessStep] = Studio12IndustryCopy.processSteps(for: .custom)
+    @Published var studio12BookCtaLine1: String = ""
+    @Published var studio12BookCtaItalic: String = ""
+    @Published var studio12BookCtaBody: String = ""
+    @Published var studio12BookCtaImageUrl: String = ""
+    @Published var isUploadingStudio12BookCta = false
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -236,6 +262,20 @@ class DesignViewModel: ObservableObject {
                 luxePromoHeadline = tenant?["luxePromoHeadline"] as? String ?? ""
                 bladeHeroTagline = tenant?["bladeHeroTagline"] as? String ?? ""
                 bladeHeroDescription = tenant?["bladeHeroDescription"] as? String ?? ""
+                let ht = tenant?["heroTagline"] as? String ?? ""
+                let hs = tenant?["heroSubtitle"] as? String ?? ""
+                heroTagline = ht.isEmpty ? hs : ht
+                studio12HeroEyebrow = tenant?["studio12HeroEyebrow"] as? String ?? ""
+                studio12HeroLine1 = tenant?["studio12HeroLine1"] as? String ?? ""
+                studio12HeroLine2 = tenant?["studio12HeroLine2"] as? String ?? ""
+                studio12PhilosophyImageUrl = tenant?["studio12PhilosophyImageUrl"] as? String ?? ""
+                studio12PhilosophyHeadLine1 = tenant?["studio12PhilosophyHeadLine1"] as? String ?? ""
+                studio12PhilosophyHeadLine2 = tenant?["studio12PhilosophyHeadLine2"] as? String ?? ""
+                studio12PhilosophyHeadItalic = tenant?["studio12PhilosophyHeadItalic"] as? String ?? ""
+                studio12BookCtaLine1 = tenant?["studio12BookCtaLine1"] as? String ?? ""
+                studio12BookCtaItalic = tenant?["studio12BookCtaItalic"] as? String ?? ""
+                studio12BookCtaBody = tenant?["studio12BookCtaBody"] as? String ?? ""
+                studio12BookCtaImageUrl = tenant?["studio12BookCtaImageUrl"] as? String ?? ""
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -261,6 +301,10 @@ class DesignViewModel: ObservableObject {
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
                 industry = tenant?["industry"] as? String
+                studio12ProcessSteps = Self.mergedStudio12ProcessSteps(
+                    from: tenant?["studio12ProcessSteps"],
+                    industry: tenant?["industry"] as? String
+                )
                 let resolvedTheme = WebTheme.resolvedThemeId(
                     stored: tenant?["webThemeId"] as? String,
                     industry: tenant?["industry"] as? String
@@ -360,6 +404,24 @@ class DesignViewModel: ObservableObject {
             updates["instagramHandle"] = instagramHandle
             updates["showContactOnPage"] = showContactOnPage
         }
+        if fam == .studio12 {
+            updates["heroTagline"] = heroTagline
+            updates["studio12HeroEyebrow"] = studio12HeroEyebrow
+            updates["studio12HeroLine1"] = studio12HeroLine1
+            updates["studio12HeroLine2"] = studio12HeroLine2
+            updates["aboutText"] = aboutText
+            updates["studio12PhilosophyImageUrl"] = studio12PhilosophyImageUrl
+            updates["studio12PhilosophyHeadLine1"] = studio12PhilosophyHeadLine1
+            updates["studio12PhilosophyHeadLine2"] = studio12PhilosophyHeadLine2
+            updates["studio12PhilosophyHeadItalic"] = studio12PhilosophyHeadItalic
+            updates["studio12BookCtaLine1"] = studio12BookCtaLine1
+            updates["studio12BookCtaItalic"] = studio12BookCtaItalic
+            updates["studio12BookCtaBody"] = studio12BookCtaBody
+            updates["studio12BookCtaImageUrl"] = studio12BookCtaImageUrl
+            updates["studio12ProcessSteps"] = studio12ProcessSteps
+                .sorted { $0.id < $1.id }
+                .map { ["title": $0.title, "body": $0.body] }
+        }
         await saveTenantUpdates(tid, updates)
     }
 
@@ -419,6 +481,44 @@ class DesignViewModel: ObservableObject {
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 isUploadingHero = false
+            }
+        }
+    }
+
+    func uploadStudio12PhilosophyImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingStudio12Philosophy = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12PhilosophyImageUrl": url])
+            await MainActor.run {
+                studio12PhilosophyImageUrl = url
+                isUploadingStudio12Philosophy = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingStudio12Philosophy = false
+            }
+        }
+    }
+
+    func uploadStudio12BookCtaImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingStudio12BookCta = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12BookCtaImageUrl": url])
+            await MainActor.run {
+                studio12BookCtaImageUrl = url
+                isUploadingStudio12BookCta = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingStudio12BookCta = false
             }
         }
     }
@@ -781,6 +881,22 @@ class DesignViewModel: ObservableObject {
             await MainActor.run { products.removeAll { $0.id == product.id }; invalidateWebPreview() }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private static func mergedStudio12ProcessSteps(from raw: Any?, industry: String?) -> [Studio12ProcessStep] {
+        let base = Studio12IndustryCopy.processSteps(for: Studio12IndustryCopy.template(from: industry))
+        guard let arr = raw as? [[String: Any]], !arr.isEmpty else { return base }
+        return (0..<4).map { i in
+            guard i < arr.count else { return base[i] }
+            let d = arr[i]
+            let tRaw = (d["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let bRaw = (d["body"] as? String ?? d["description"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return Studio12ProcessStep(
+                id: i,
+                title: tRaw.isEmpty ? base[i].title : tRaw,
+                body: bRaw.isEmpty ? base[i].body : bRaw
+            )
         }
     }
 }

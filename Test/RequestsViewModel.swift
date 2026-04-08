@@ -6,11 +6,19 @@ class RequestsViewModel: ObservableObject {
     @Published var requests: [Request] = []
     @Published var bookingRequests: [BookingRequest] = []
     @Published var tenantId: String?
+    /// Firestore `tenants/{id}.industry` (BookingTemplate raw value); drives booking detail section titles.
+    @Published var tenantIndustry: String?
     @Published var isLoading = false
     
     private let firebaseService = FirebaseService()
     
     var useTenantData: Bool { tenantId != nil }
+
+    /// For industry-specific copy (e.g. booking request form section titles).
+    var tenantBookingTemplate: BookingTemplate? {
+        guard let raw = tenantIndustry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        return BookingTemplate(rawValue: raw)
+    }
     
     func loadRequests(isDemoMode: Bool = false) async {
         await MainActor.run { isLoading = true }
@@ -20,6 +28,7 @@ class RequestsViewModel: ObservableObject {
                 requests = []
                 bookingRequests = []
                 tenantId = nil
+                tenantIndustry = nil
                 isLoading = false
             }
             return
@@ -34,10 +43,15 @@ class RequestsViewModel: ObservableObject {
             let tid = profile?.tenantId
             
             if let tid = tid {
-                let fetched = try await firebaseService.fetchTenantBookingRequests(tenantId: tid)
+                async let fetched = firebaseService.fetchTenantBookingRequests(tenantId: tid)
+                async let tenantDoc = firebaseService.fetchTenant(tenantId: tid)
+                let (bookingList, tenant) = try await (fetched, tenantDoc)
+                let industryRaw = (tenant?["industry"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 await MainActor.run {
                     tenantId = tid
-                    bookingRequests = fetched
+                    tenantIndustry = industryRaw?.isEmpty == false ? industryRaw : nil
+                    bookingRequests = bookingList
                     requests = []
                     isLoading = false
                 }
@@ -45,6 +59,7 @@ class RequestsViewModel: ObservableObject {
                 let fetched = try await firebaseService.fetchRequests()
                 await MainActor.run {
                     tenantId = nil
+                    tenantIndustry = nil
                     requests = fetched
                     bookingRequests = []
                     isLoading = false

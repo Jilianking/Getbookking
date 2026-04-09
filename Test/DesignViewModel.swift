@@ -416,27 +416,9 @@ class DesignViewModel: ObservableObject {
             updates["galleryPageBackgroundColor"] = featuredWorkBackgroundColorHex
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
         }
-        if fam == .luxe {
-            updates["aboutText"] = aboutText
-            updates["contactPhone"] = contactPhone
-            updates["contactEmail"] = contactEmail
-            updates["contactAddress"] = contactAddress
-            updates["address"] = contactAddress
-            updates["businessHours"] = businessHours
-            updates["instagramHandle"] = instagramHandle
-            updates["showContactOnPage"] = showContactOnPage
-        }
         if fam == .blade || fam == .stonecut {
             updates["bladeHeroTagline"] = bladeHeroTagline
             updates["bladeHeroDescription"] = bladeHeroDescription
-            updates["contactPhone"] = contactPhone
-            updates["contactEmail"] = contactEmail
-            updates["contactAddress"] = contactAddress
-            updates["address"] = contactAddress
-            updates["serviceArea"] = serviceArea
-            updates["businessHours"] = businessHours
-            updates["instagramHandle"] = instagramHandle
-            updates["showContactOnPage"] = showContactOnPage
         }
         if fam == .studio12 {
             updates["heroTagline"] = heroTagline
@@ -562,13 +544,43 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    func addGalleryImage(imageData: Data) async {
-        guard let tid = tenantId else { return }
+    /// Parallel gallery uploads (bounded concurrency); returned URLs match `items` order.
+    private func uploadGalleryBatch(tenantId: String, items: [Data], concurrency: Int = 4) async throws -> [String] {
+        guard !items.isEmpty else { return [] }
+        var result: [String] = []
+        result.reserveCapacity(items.count)
+        var i = 0
+        while i < items.count {
+            let upper = min(i + concurrency, items.count)
+            let slice = Array(items[i..<upper])
+            let base = i
+            let part: [(Int, String)] = try await withThrowingTaskGroup(of: (Int, String).self) { group in
+                for (offset, data) in slice.enumerated() {
+                    let idx = base + offset
+                    group.addTask {
+                        let url = try await self.firebaseService.uploadTenantGalleryImage(tenantId: tenantId, imageData: data)
+                        return (idx, url)
+                    }
+                }
+                var acc: [(Int, String)] = []
+                for try await x in group {
+                    acc.append(x)
+                }
+                return acc.sorted { $0.0 < $1.0 }
+            }
+            result.append(contentsOf: part.map { $0.1 })
+            i = upper
+        }
+        return result
+    }
+
+    func addGalleryImages(imageDataList: [Data]) async {
+        guard let tid = tenantId, !imageDataList.isEmpty else { return }
         await MainActor.run { isUploadingGallery = true; errorMessage = nil }
         do {
-            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            let urls = try await uploadGalleryBatch(tenantId: tid, items: imageDataList)
             var updated = galleryImages
-            updated.append(url)
+            updated.append(contentsOf: urls)
             try await firebaseService.updateTenant(tenantId: tid, updates: [
                 "galleryImages": updated,
                 "featuredWorkImages": featuredWorkImages
@@ -584,6 +596,10 @@ class DesignViewModel: ObservableObject {
                 isUploadingGallery = false
             }
         }
+    }
+
+    func addGalleryImage(imageData: Data) async {
+        await addGalleryImages(imageDataList: [imageData])
     }
 
     func removeGalleryImage(at index: Int) async {
@@ -605,13 +621,13 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    func addFeaturedWorkImage(imageData: Data) async {
-        guard let tid = tenantId else { return }
+    func addFeaturedWorkImages(imageDataList: [Data]) async {
+        guard let tid = tenantId, !imageDataList.isEmpty else { return }
         await MainActor.run { isUploadingFeaturedWork = true; errorMessage = nil }
         do {
-            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            let urls = try await uploadGalleryBatch(tenantId: tid, items: imageDataList)
             var updated = featuredWorkImages
-            updated.append(url)
+            updated.append(contentsOf: urls)
             try await firebaseService.updateTenant(tenantId: tid, updates: ["featuredWorkImages": updated])
             await MainActor.run {
                 featuredWorkImages = updated
@@ -624,6 +640,10 @@ class DesignViewModel: ObservableObject {
                 isUploadingFeaturedWork = false
             }
         }
+    }
+
+    func addFeaturedWorkImage(imageData: Data) async {
+        await addFeaturedWorkImages(imageDataList: [imageData])
     }
 
     func removeFeaturedWorkImage(at index: Int) async {

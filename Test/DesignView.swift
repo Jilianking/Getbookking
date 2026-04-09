@@ -117,12 +117,6 @@ struct DesignView: View {
             .cornerRadius(8)
             .padding()
             .background(Color(.systemBackground))
-            .onChange(of: viewModel.webThemeId) { _, _ in
-                if isLuxeTemplate, selectedTab == .about {
-                    selectedTab = .home
-                }
-            }
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let msg = viewModel.errorMessage {
@@ -225,10 +219,7 @@ struct DesignView: View {
     }
 
     private var visibleDesignTabs: [DesignTab] {
-        DesignTab.allCases.filter { tab in
-            if tab == .about, isLuxeTemplate { return false }
-            return true
-        }
+        DesignTab.allCases
     }
 
     /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.
@@ -358,7 +349,7 @@ struct DesignView: View {
                 )
                 .lineLimit(4...10)
                 .textFieldStyle(.roundedBorder)
-                Text("The gold line above the hero uses city/area from Contact & location below when set.")
+                Text("The gold line above the hero uses city/area from the About tab when set. Phone, email, address, hours, and city/area are only on About—use Save changes there.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -367,14 +358,6 @@ struct DesignView: View {
                     serviceToEdit: $bladeServiceToEdit,
                     onRequestReplaceStarters: { showBladeStarterConfirm = true }
                 )
-
-                Text("Contact & location (Blade)")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.top, 8)
-                Text("Where section: large city/area title, street address, then phone. Hero eyebrow uses city/area. Saved with Save Home.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                contactFieldsSection(includeBladeServiceArea: true)
             }
 
             if isLuxeTemplate {
@@ -423,25 +406,10 @@ struct DesignView: View {
                 )
                 .textFieldStyle(.roundedBorder)
 
-                Text("About Us")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.top, 8)
-                Text("Shown below the promo on Luxe home (“Meet …” section).")
+                Text("About story and contact (Meet block, footer, /about) are edited on the About tab—Save changes there.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                TextField("Tell clients about you", text: $viewModel.aboutText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(3...8)
-
-                Text("CONTACT")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .tracking(1)
                     .padding(.top, 8)
-                Text("Location, hours, email, and social — same strip at the bottom of Luxe home.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                contactFieldsSection(includeBladeServiceArea: false)
             }
 
             }
@@ -463,14 +431,14 @@ struct DesignView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            Text("1 · Hero")
+            Text("Hero")
                 .font(.headline)
                 .padding(.top, 4)
             TextField("Business name", text: $viewModel.displayName)
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
-            Text("2 · Hero headline")
+            Text("Hero headline")
                 .font(.headline)
             Text("Eyebrow matches your business type when left blank. Enter the main headline and the italic ending on one line, separated by space · middle dot · space (e.g. Hair that reflects · story.). The site shows the first part on two lines, then the last part in italics.")
                 .font(.caption)
@@ -496,7 +464,7 @@ struct DesignView: View {
             )
             .textFieldStyle(.roundedBorder)
 
-            Text("3 · Intro under headline")
+            Text("Intro under headline")
                 .font(.headline)
             Text("Short paragraph under the hero title.")
                 .font(.caption)
@@ -510,7 +478,7 @@ struct DesignView: View {
             .lineLimit(2...6)
             .textFieldStyle(.roundedBorder)
 
-            Text("4 · Our approach")
+            Text("Our approach")
                 .font(.headline)
             Text("Section headline: three parts separated by space · middle dot · space (matches industry defaults when blank). Body: two paragraphs — blank line between for two columns.")
                 .font(.caption)
@@ -525,7 +493,7 @@ struct DesignView: View {
                 .lineLimit(4...12)
                 .textFieldStyle(.roundedBorder)
 
-            Text("5 · Philosophy image")
+            Text("Philosophy image")
                 .font(.headline)
             Text("Large image beside the philosophy copy.")
                 .font(.caption)
@@ -537,7 +505,7 @@ struct DesignView: View {
                 upload: { data in await viewModel.uploadStudio12PhilosophyImage(imageData: data) }
             )
 
-            Text("6 · Services grid")
+            Text("Services grid")
                 .font(.headline)
             Toggle("Show “What we offer” on live site", isOn: $viewModel.studio12ShowServicesSection)
             Text("When off, that section is hidden on the home page; the hero’s second button goes to Book instead. Services isn’t a separate page—there is no Services item in the top bar.")
@@ -548,10 +516,11 @@ struct DesignView: View {
                 serviceToEdit: $bladeServiceToEdit,
                 onRequestReplaceStarters: { showBladeStarterConfirm = true },
                 cardSectionTitle: "What we offer",
-                cardCaption: "Cards in the “What we offer” section use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page."
+                cardCaption: "Cards in the “What we offer” section use list order, names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page.",
+                showOrderIndex: false
             )
 
-            Text("7 · Your experience")
+            Text("Your experience")
                 .font(.headline)
             Toggle("Show “How it works” on live site", isOn: $viewModel.studio12ShowProcessSection)
             Text("When off, the step-by-step block above the booking call-to-action is hidden on your site.")
@@ -566,7 +535,7 @@ struct DesignView: View {
                 onRequestReplaceDefaults: { showStudio12ProcessStartersConfirm = true }
             )
 
-            Text("8 · Booking call-to-action")
+            Text("Booking call-to-action")
                 .font(.headline)
             Text("Above testimonials. Headline: two parts separated by space · middle dot · space (industry defaults when blank).")
                 .font(.caption)
@@ -592,7 +561,7 @@ struct DesignView: View {
                 upload: { data in await viewModel.uploadStudio12BookCtaImage(imageData: data) }
             )
 
-            Text("9 · Client testimonials")
+            Text("Client testimonials")
                 .font(.headline)
             Text("If you add reviews to your business profile, they can appear below the booking section on the site. Hours, address, and phone are edited on the About tab.")
                 .font(.caption)
@@ -798,9 +767,21 @@ struct DesignView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
                 .tracking(1)
-            Text(isClassicTemplate ? "This appears in the Meet section on your site." : "This appears in the About section on your site.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Group {
+                if isClassicTemplate {
+                    Text("This appears in the Meet section on your site.")
+                } else if isLuxeTemplate {
+                    Text("Story and contact appear on your About page and on Luxe home (Meet section and footer).")
+                } else if isBladeTemplate {
+                    Text("Story appears on About. Contact, hours, and city/area power Where and Hours on Blade and Stonecut home.")
+                } else if isStudio12Template {
+                    Text("This appears on your About page and feeds the Our approach section on Studio 12 home.")
+                } else {
+                    Text("This appears in the About section on your site.")
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
             if isClassicTemplate {
                 Text("Meet section colors")
                     .font(.subheadline.weight(.medium))
@@ -1269,10 +1250,24 @@ struct GalleryImagesSection: View {
                         let itemsToUpload = newItems
                         guard !itemsToUpload.isEmpty else { return }
 
-                        for item in itemsToUpload {
-                            if let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty {
-                                await viewModel.addGalleryImage(imageData: data)
+                        let indexedPairs: [(Int, Data)] = await withTaskGroup(of: (Int, Data?).self, returning: [(Int, Data)].self) { group in
+                            for (i, item) in itemsToUpload.enumerated() {
+                                group.addTask {
+                                    guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+                                        return (i, nil)
+                                    }
+                                    return (i, data)
+                                }
                             }
+                            var collected: [(Int, Data)] = []
+                            for await (i, opt) in group {
+                                if let d = opt { collected.append((i, d)) }
+                            }
+                            return collected.sorted { $0.0 < $1.0 }
+                        }
+                        let orderedData = indexedPairs.map { $0.1 }
+                        if !orderedData.isEmpty {
+                            await viewModel.addGalleryImages(imageDataList: orderedData)
                         }
                         await MainActor.run { selectedItems.removeAll() }
                     }
@@ -1395,10 +1390,24 @@ struct FeaturedWorkHomeGallerySection: View {
             Task {
                 let itemsToUpload = newItems
                 guard !itemsToUpload.isEmpty else { return }
-                for item in itemsToUpload {
-                    if let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty {
-                        await viewModel.addFeaturedWorkImage(imageData: data)
+                let indexedPairs: [(Int, Data)] = await withTaskGroup(of: (Int, Data?).self, returning: [(Int, Data)].self) { group in
+                    for (i, item) in itemsToUpload.enumerated() {
+                        group.addTask {
+                            guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+                                return (i, nil)
+                            }
+                            return (i, data)
+                        }
                     }
+                    var collected: [(Int, Data)] = []
+                    for await (i, opt) in group {
+                        if let d = opt { collected.append((i, d)) }
+                    }
+                    return collected.sorted { $0.0 < $1.0 }
+                }
+                let orderedData = indexedPairs.map { $0.1 }
+                if !orderedData.isEmpty {
+                    await viewModel.addFeaturedWorkImages(imageDataList: orderedData)
                 }
                 await MainActor.run { selectedItems.removeAll() }
             }
@@ -1566,6 +1575,8 @@ private struct BladeServicesHomeSection: View {
     let onRequestReplaceStarters: () -> Void
     var cardSectionTitle: String = "Blade services"
     var cardCaption: String = "Cards under OUR SERVICES use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page."
+    /// When false (Studio 12 “What we offer”), row index labels are hidden.
+    var showOrderIndex: Bool = true
 
     private var controlsDisabled: Bool {
         viewModel.isApplyingBladeStarters || viewModel.isSavingBladeServices || viewModel.isLoading || !viewModel.hasTenant
@@ -1588,10 +1599,12 @@ private struct BladeServicesHomeSection: View {
             }
             ForEach(Array(viewModel.services.enumerated()), id: \.element.id) { index, service in
                 HStack(alignment: .top, spacing: 10) {
-                    Text(String(format: "%02d", index + 1))
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, alignment: .leading)
+                    if showOrderIndex {
+                        Text(String(format: "%02d", index + 1))
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 28, alignment: .leading)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(service.name)
                             .font(.subheadline.weight(.medium))
@@ -1675,10 +1688,6 @@ private struct Studio12ProcessStepsHomeSection: View {
             }
             ForEach(Array(viewModel.studio12ProcessSteps.enumerated()), id: \.element.id) { index, step in
                 HStack(alignment: .top, spacing: 10) {
-                    Text(String(format: "%02d", index + 1))
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, alignment: .leading)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(step.title.isEmpty ? "Untitled step" : step.title)
                             .font(.subheadline.weight(.medium))

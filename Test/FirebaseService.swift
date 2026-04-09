@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 import FirebaseFirestore
 import FirebaseStorage
 
@@ -557,7 +558,8 @@ class FirebaseService: ObservableObject {
         let ref = storage.reference().child("tenants/\(tenantId)/logo.jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1024, compressionQuality: 0.88)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -572,7 +574,8 @@ class FirebaseService: ObservableObject {
         let ref = storage.reference().child("users/\(uid)/profile.jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 900, compressionQuality: 0.85)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -623,7 +626,8 @@ class FirebaseService: ObservableObject {
         let ref = storage.reference().child("tenants/\(tenantId)/products/\(name)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -633,7 +637,8 @@ class FirebaseService: ObservableObject {
         let ref = storage.reference().child("tenants/\(tenantId)/hero.jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 2400, compressionQuality: 0.84)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }
@@ -644,7 +649,8 @@ class FirebaseService: ObservableObject {
         let ref = storage.reference().child("tenants/\(tenantId)/gallery/\(name)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(imageData, metadata: metadata)
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
     }

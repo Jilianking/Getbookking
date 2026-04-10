@@ -19,7 +19,7 @@ struct DesignView: View {
     @State private var bladeServiceToEdit: TenantService?
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
-    private static let hoursPresets = ["Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"]
+    private static let hoursWeeklyMenuTag = "__weekly__"
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -718,9 +718,10 @@ struct DesignView: View {
                     .foregroundColor(.secondary)
                     .frame(width: 24)
                 Picker("Hours", selection: $hoursPickerChoice) {
-                    ForEach(Self.hoursPresets, id: \.self) { preset in
+                    ForEach(DesignViewModel.businessHoursPresets, id: \.self) { preset in
                         Text(preset).tag(preset)
                     }
+                    Text("Weekly schedule").tag(Self.hoursWeeklyMenuTag)
                     Text("Custom").tag("custom")
                 }
                 .pickerStyle(.menu)
@@ -730,18 +731,58 @@ struct DesignView: View {
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
             .onChange(of: hoursPickerChoice) { _, new in
-                if new != "custom" { viewModel.businessHours = new }
+                if new == Self.hoursWeeklyMenuTag {
+                    viewModel.businessHoursUsesWeeklySchedule = true
+                    viewModel.syncBusinessHoursStringFromWeekly()
+                } else if new == "custom" {
+                    viewModel.businessHoursUsesWeeklySchedule = false
+                } else {
+                    viewModel.businessHoursUsesWeeklySchedule = false
+                    viewModel.businessHours = new
+                }
             }
             .onAppear {
-                hoursPickerChoice = Self.hoursPresets.contains(viewModel.businessHours) ? viewModel.businessHours : "custom"
+                syncHoursPickerSelectionWithViewModel()
             }
-            .onChange(of: viewModel.businessHours) { _, new in
-                if Self.hoursPresets.contains(new) { hoursPickerChoice = new }
+            .onChange(of: viewModel.businessHoursUsesWeeklySchedule) { _, _ in
+                syncHoursPickerSelectionWithViewModel()
+            }
+            .onChange(of: viewModel.businessHours) { _, _ in
+                if !viewModel.businessHoursUsesWeeklySchedule {
+                    syncHoursPickerSelectionWithViewModel()
+                }
+            }
+
+            if hoursPickerChoice == Self.hoursWeeklyMenuTag {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Set hours for each day. They appear on your site as a short summary.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    ForEach(0..<7, id: \.self) { dayIndex in
+                        businessHoursDayRow(dayIndex: dayIndex)
+                    }
+                }
+                .padding(12)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
             }
 
             if hoursPickerChoice == "custom" {
                 IconFieldRow(icon: "clock.badge", placeholder: "e.g. Sun 11am–5pm", text: $viewModel.businessHours)
             }
+
+            Toggle(isOn: $viewModel.showBusinessHoursOnPage) {
+                HStack(spacing: 10) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .foregroundColor(.secondary)
+                        .frame(width: 24)
+                    Text("Show hours on site")
+                        .font(.subheadline)
+                }
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
 
             IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
                 .textInputAutocapitalization(.never)
@@ -759,6 +800,58 @@ struct DesignView: View {
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
         }
+    }
+
+    private func syncHoursPickerSelectionWithViewModel() {
+        if viewModel.businessHoursUsesWeeklySchedule {
+            hoursPickerChoice = Self.hoursWeeklyMenuTag
+        } else if DesignViewModel.businessHoursPresets.contains(viewModel.businessHours) {
+            hoursPickerChoice = viewModel.businessHours
+        } else {
+            hoursPickerChoice = "custom"
+        }
+    }
+
+    @ViewBuilder
+    private func businessHoursDayRow(dayIndex: Int) -> some View {
+        let label = BusinessHoursWeekly.dayLabels[dayIndex]
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center) {
+                Text(label)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 40, alignment: .leading)
+                Spacer()
+                Toggle("Open", isOn: Binding(
+                    get: { !viewModel.businessHoursWeekly.slots[dayIndex].isClosed },
+                    set: { viewModel.setBusinessHoursDayClosed(index: dayIndex, closed: !$0) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+            if !viewModel.businessHoursWeekly.slots[dayIndex].isClosed {
+                HStack(spacing: 10) {
+                    DatePicker(
+                        "From",
+                        selection: Binding(
+                            get: { BusinessHoursWeekly.dateFromMinutes(viewModel.businessHoursWeekly.slots[dayIndex].openMinutes) },
+                            set: { viewModel.setBusinessHoursDayOpenMinutes(index: dayIndex, openMinutes: BusinessHoursWeekly.minutesFromDate($0)) }
+                        ),
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .labelsHidden()
+                    DatePicker(
+                        "To",
+                        selection: Binding(
+                            get: { BusinessHoursWeekly.dateFromMinutes(viewModel.businessHoursWeekly.slots[dayIndex].closeMinutes) },
+                            set: { viewModel.setBusinessHoursDayCloseMinutes(index: dayIndex, closeMinutes: BusinessHoursWeekly.minutesFromDate($0)) }
+                        ),
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .labelsHidden()
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private var aboutContent: some View {

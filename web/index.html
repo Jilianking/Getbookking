@@ -484,15 +484,6 @@
       padding-bottom: 20px;
       border-bottom: 1px solid rgba(127,127,127,0.35);
     }
-    .tattoo-sidebar-brand-title {
-      font-family: var(--font-hero);
-      font-size: 1.65rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      line-height: 1.2;
-      margin: 0;
-      color: inherit;
-    }
     .tattoo-sidebar-panel a { display: block; padding: 16px 0; font-size: 20px; color: inherit; opacity: 0.92; text-decoration: none; border-bottom: 1px solid rgba(127,127,127,0.35); }
     .tattoo-sidebar-panel a:last-child { border-bottom: none; }
     @media (max-width: 768px) {
@@ -736,6 +727,23 @@
     .gallery-page { min-height: 100vh; background: #000; color: #fff; font-family: var(--font-display); }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
     .gallery-title { font-family: var(--font-display); font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
+    .gallery-page.gallery-page--stonecut .gallery-title {
+      font-family: 'Unbounded', sans-serif;
+      font-size: clamp(22px, 5vw, 34px);
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    /* Stonecut subpages use `tattoo-nav`; match home `.stonecut-logo` wordmark */
+    .gallery-page.gallery-page--stonecut .tattoo-nav .tattoo-brand,
+    .tattoo-page.tattoo-page--stonecut .tattoo-nav .tattoo-brand {
+      font-family: 'Unbounded', sans-serif;
+      font-weight: normal;
+      font-size: 18px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: inherit;
+    }
     .gallery-shell { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; }
     .gallery-section { margin-bottom: 48px; }
     .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: inherit; opacity: 0.72; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(127,127,127,0.35); }
@@ -1919,6 +1927,12 @@
       grid-template-columns: 1fr 1fr;
       border-top: 1px solid var(--bh-line);
     }
+    .blade-page .blade-info-section.blade-info-section--single {
+      grid-template-columns: 1fr;
+    }
+    .blade-page .blade-info-section.blade-info-section--single .blade-info-half:first-child {
+      border-right: none;
+    }
     .blade-page .blade-info-half {
       padding: 72px 40px;
     }
@@ -2104,6 +2118,25 @@
       color: #e8e0d0;
       text-transform: uppercase;
     }
+    /* Drawer wordmark: matches Stonecut nav `.stonecut-logo` (Unbounded uppercase); all themes */
+    .tattoo-sidebar-panel .tattoo-sidebar-brand a.tattoo-sidebar-wordmark {
+      display: inline-block;
+      padding: 0;
+      margin: 0;
+      font-family: 'Unbounded', sans-serif;
+      font-size: 18px;
+      font-weight: normal;
+      letter-spacing: 0.12em;
+      line-height: 1.2;
+      text-decoration: none;
+      color: inherit;
+      text-transform: uppercase;
+      border-bottom: none;
+      opacity: 1;
+    }
+    .tattoo-sidebar-panel .tattoo-sidebar-brand a.tattoo-sidebar-wordmark:hover {
+      opacity: 0.88;
+    }
     .stonecut-page .stonecut-links { display: flex; list-style: none; gap: 28px; margin: 0; padding: 0; }
     .stonecut-page .stonecut-links a { text-decoration: none; color: #a09888; font-size: 10px; letter-spacing: .28em; text-transform: uppercase; }
     .stonecut-page .stonecut-links a:hover { color: #e8e0d0; }
@@ -2115,22 +2148,30 @@
       min-height: calc(100vh - 92px);
       border-bottom: 1px solid rgba(232,224,208,.08);
     }
-    .stonecut-page .stonecut-hero-left { padding: 56px 40px 72px; align-self: end; }
-    .stonecut-page .stonecut-tag { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin-bottom: 24px; }
+    .stonecut-page .stonecut-hero-left { padding: 28px 40px 72px; align-self: start; }
+    .stonecut-page .stonecut-tag { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin: 0 0 22px; }
     .stonecut-page .stonecut-title {
       font-family: 'Unbounded', sans-serif;
       font-weight: 900;
       font-size: clamp(40px, 6.5vw, 92px);
       line-height: .9;
       letter-spacing: -.03em;
-      margin: 0 0 24px;
+      margin: 0 0 8px;
       text-transform: uppercase;
     }
     .stonecut-page .stonecut-title em { font-family: 'DM Serif Display', serif; font-style: italic; font-size: .45em; color: #a09888; display: block; text-transform: none; }
-    .stonecut-page .stonecut-desc { max-width: 480px; color: #a09888; line-height: 1.8; font-size: 15px; margin: 0 0 28px; }
+    .stonecut-page .stonecut-hero-cta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      margin-top: 0;
+    }
+    .stonecut-page .stonecut-title + .stonecut-hero-cta { margin-top: 14px; }
+    .stonecut-page .stonecut-tag + .stonecut-hero-cta { margin-top: 0; }
     .stonecut-page .stonecut-btn { display: inline-block; text-decoration: none; text-transform: uppercase; letter-spacing: .22em; font-size: 10px; padding: 14px 28px; }
     .stonecut-page .stonecut-btn-primary { background: #c0221a; color: #e8e0d0; }
-    .stonecut-page .stonecut-btn-ghost { color: #a09888; margin-left: 14px; }
+    .stonecut-page .stonecut-btn-ghost { color: #a09888; }
     .stonecut-page .stonecut-hero-right { min-height: 360px; position: relative; background: linear-gradient(160deg, #1e1a16 0%, #0e0c0a 100%); }
     .stonecut-page .stonecut-hero-right img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(24%); }
     .stonecut-page .stonecut-section { padding: 96px 40px; border-bottom: 1px solid rgba(232,224,208,.08); }
@@ -2142,6 +2183,7 @@
     .stonecut-page .stonecut-service-card p { margin: 0 0 16px; color: #a09888; line-height: 1.7; font-size: 13px; }
     .stonecut-page .stonecut-price { color: #c0221a; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
     .stonecut-page .stonecut-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .stonecut-page .stonecut-info.stonecut-info--no-hours { grid-template-columns: 1fr; }
     .stonecut-page .stonecut-info-card { background: #0e0d0a; border: 1px solid rgba(232,224,208,.08); padding: 30px 24px; }
     .stonecut-page .stonecut-info-card h3 { font-family: 'Unbounded', sans-serif; font-size: 24px; margin: 8px 0 0; text-transform: uppercase; }
     .stonecut-page .stonecut-address-link { color: inherit; text-decoration: none; display: block; margin-top: 14px; line-height: 1.8; }
@@ -2994,6 +3036,14 @@
       border-top: 1px solid var(--s12-line);
     }
 
+    .studio12-page .s12-info.s12-info--when-hidden {
+      grid-template-columns: 1fr;
+    }
+
+    .studio12-page .s12-info.s12-info--when-hidden .s12-info-half:first-child {
+      border-right: none;
+    }
+
     .studio12-page .s12-info-half {
       padding: 64px 40px;
     }
@@ -3421,6 +3471,13 @@
       function tenantShowShopPage(tenant) {
         return tenant.shopEnabled === true;
       }
+      /** When false, hours blocks are omitted on the public site (independent of contact visibility). */
+      function tenantShowBusinessHours(tenant) {
+        return tenant.showBusinessHoursOnPage !== false;
+      }
+      function tenantBusinessHoursTrimmed(tenant) {
+        return String(tenant.businessHours || '').trim();
+      }
       function filterSidebarLinksForPageVisibility(tenant, links) {
         if (!Array.isArray(links)) return [];
         return links.filter(function(l) {
@@ -3589,6 +3646,19 @@
         return map[k] || map.custom;
       }
 
+      /** Stonecut hero `<em>` line — industry name; city / area stays in `.stonecut-tag` only. */
+      function stonecutIndustryDisplayName(industry) {
+        var k = String(industry || '').trim().toLowerCase();
+        var map = {
+          barber: 'Barber',
+          hair: 'Hair salon',
+          tattoos: 'Tattoo studio',
+          nails: 'Nail studio',
+          custom: 'Studio'
+        };
+        return map[k] || map.custom;
+      }
+
       function bladeHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
@@ -3599,7 +3669,7 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var tag = tenant.tagline || '';
@@ -3620,11 +3690,12 @@
         }
         if (heroDesc.length > 240) heroDesc = heroDesc.slice(0, 237) + '…';
         var sa = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
+        var hoursTrimBlade = tenantBusinessHoursTrimmed(tenant);
         var eyebrow = sa
           ? sa
           : ((tenant.address && String(tenant.address).trim())
             ? String(tenant.address).trim().split('\n')[0]
-            : (tenant.businessHours ? 'See our hours below' : displayName));
+            : ((tenantShowBusinessHours(tenant) && hoursTrimBlade) ? 'See our hours below' : displayName));
         var heroRight = tenant.heroImageUrl
           ? '<img class="blade-hero-image" src="' + esc(tenant.heroImageUrl) + '" alt="">'
           : '<div class="blade-hero-placeholder" role="img" aria-hidden="true"></div>';
@@ -3667,9 +3738,12 @@
             '</div>' +
             '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls) + bladeMarqueeChunk(gUrls) + '</div></section>';
         }
-        var hoursSnippet = tenant.businessHours
-          ? '<div class="blade-hours-block">' + esc(tenant.businessHours) + '</div>'
-          : '<p class="blade-section-desc" style="margin-top:20px">Hours from the app appear here.</p>';
+        var hoursSnippet = '';
+        if (tenantShowBusinessHours(tenant)) {
+          hoursSnippet = hoursTrimBlade
+            ? '<div class="blade-hours-block">' + esc(hoursTrimBlade) + '</div>'
+            : '<p class="blade-section-desc" style="margin-top:20px">Hours from the app appear here.</p>';
+        }
         var bookPanelCtas = tenantShowBookPage(tenant)
           ? '<div class="blade-hero-cta" style="margin-top:28px">' +
             '<a href="' + bookUrl + '" class="blade-btn-primary">Book now</a>' +
@@ -3702,9 +3776,12 @@
             '<div><div class="blade-section-label">Reviews</div><h2 class="blade-section-title">WHAT THEY SAY</h2></div></div>' +
             '<div class="blade-testimonials-grid">' + tCards + '</div></section>';
         }
-        var hoursInfo = tenant.businessHours
-          ? '<div class="blade-about-body" style="margin-top:16px;white-space:pre-line">' + esc(tenant.businessHours) + '</div>'
-          : '<p class="blade-about-body" style="margin-top:16px">Add business hours in the app.</p>';
+        var hoursInfo = '';
+        if (tenantShowBusinessHours(tenant)) {
+          hoursInfo = hoursTrimBlade
+            ? '<div class="blade-about-body" style="margin-top:16px;white-space:pre-line">' + esc(hoursTrimBlade) + '</div>'
+            : '<p class="blade-about-body" style="margin-top:16px">Add business hours in the app.</p>';
+        }
         var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
         var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
         var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
@@ -3737,11 +3814,15 @@
         } else {
           whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your address in the app.</div>';
         }
-        var infoSection = '<div class="blade-info-section" id="location">' +
-          '<div class="blade-info-half blade-fade-up">' +
-          '<div class="blade-section-label">When</div>' +
-          '<h3 class="blade-section-title" style="font-size:38px">HOURS</h3>' + hoursInfo +
-          '</div>' +
+        var bladeInfoSectionClass = 'blade-info-section' + (!tenantShowBusinessHours(tenant) ? ' blade-info-section--single' : '');
+        var whenHalfBlade = tenantShowBusinessHours(tenant)
+          ? ('<div class="blade-info-half blade-fade-up">' +
+            '<div class="blade-section-label">When</div>' +
+            '<h3 class="blade-section-title" style="font-size:38px">HOURS</h3>' + hoursInfo +
+            '</div>')
+          : '';
+        var infoSection = '<div class="' + bladeInfoSectionClass + '" id="location">' +
+          whenHalfBlade +
           '<div class="blade-info-half blade-fade-up">' +
           '<div class="blade-section-label">Where</div>' +
           whereBlock +
@@ -3784,7 +3865,7 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var svc = services || [];
@@ -3813,10 +3894,11 @@
         var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
         var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
         var heroImg = tenant.heroImageUrl ? ('<img src="' + esc(tenant.heroImageUrl) + '" alt="">') : '';
-        var heroTag = sa || 'Tattoo Studio';
-        var heroDesc = (tenant.bladeHeroDescription && String(tenant.bladeHeroDescription).trim())
-          ? String(tenant.bladeHeroDescription).trim()
-          : ((tenant.aboutText && String(tenant.aboutText).trim()) ? String(tenant.aboutText).trim() : 'Permanent work from artists who take it personally. Every piece is designed for your body and your story.');
+        var industryLine = stonecutIndustryDisplayName(tenant.industry);
+        var cityTagHtml = sa ? ('<div class="stonecut-tag">' + esc(sa) + '</div>') : '';
+        var heroCtaInner = (tenantShowBookPage(tenant) ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">Book a session</a>' : '') +
+          (tenantShowGalleryPage(tenant) ? '<a href="' + galleryUrl + '" class="stonecut-btn stonecut-btn-ghost">View portfolio</a>' : '');
+        var heroCta = heroCtaInner ? ('<div class="stonecut-hero-cta">' + heroCtaInner + '</div>') : '';
         var y = new Date().getFullYear();
         return '<div class="stonecut-page">' +
           '<nav class="stonecut-nav" id="stonecut-nav">' +
@@ -3832,18 +3914,20 @@
           '</div></nav>' +
           '<section class="stonecut-hero">' +
           '<div class="stonecut-hero-left">' +
-          '<div class="stonecut-tag">' + esc(heroTag) + '</div>' +
-          '<h1 class="stonecut-title"><em>' + esc(sa || 'Stonecut') + '</em>' + esc(displayName) + '</h1>' +
-          '<p class="stonecut-desc">' + esc(heroDesc) + '</p>' +
-          (tenantShowBookPage(tenant) ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">Book a session</a>' : '') +
-          (tenantShowGalleryPage(tenant) ? '<a href="' + galleryUrl + '" class="stonecut-btn stonecut-btn-ghost">View portfolio</a>' : '') +
+          '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em>' + esc(displayName) + '</h1>' +
+          cityTagHtml +
+          heroCta +
           '</div><div class="stonecut-hero-right">' + heroImg + '</div></section>' +
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">What we offer</div><h2 class="stonecut-heading">Services</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
-          '<section class="stonecut-section" id="location"><div class="stonecut-info">' +
-          '<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
-          (tenant.businessHours ? '<div style="margin-top:12px;white-space:pre-line;line-height:1.8;color:#a09888">' + esc(tenant.businessHours) + '</div>' : '<div style="margin-top:12px;color:#a09888">Add hours in the app.</div>') +
-          '</div>' +
+          '<section class="stonecut-section" id="location"><div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
+          (tenantShowBusinessHours(tenant)
+            ? ('<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
+              (tenantBusinessHoursTrimmed(tenant)
+                ? '<div style="margin-top:12px;white-space:pre-line;line-height:1.8;color:#a09888">' + esc(tenantBusinessHoursTrimmed(tenant)) + '</div>'
+                : '<div style="margin-top:12px;color:#a09888">Add hours in the app.</div>') +
+              '</div>')
+            : '') +
           '<div class="stonecut-info-card"><div class="stonecut-eyebrow">Where</div><h3>' + esc(whereHeadline) + '</h3>' +
           (mapQuery ? '<a href="' + esc(mapQuery) + '" class="stonecut-address-link" target="_blank" rel="noopener noreferrer">' + addrBody + '</a>' : '<div class="stonecut-address-link">' + addrBody + '</div>') +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="stonecut-phone">' + phoneDisplay + '</a>' : '') +
@@ -4164,7 +4248,7 @@
           : (isBladeTheme(tenant)
           ? 'background:#0a0a08;color:#f5f0e8'
           : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '')));
-        var wrapClass = 'tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : '');
+        var wrapClass = 'tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : '') + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
@@ -4204,7 +4288,8 @@
           var successWrapClass = 'tattoo-page' +
             (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
             (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
-            (isClassicTheme(tenant) ? ' classic-home' : '');
+            (isClassicTheme(tenant) ? ' classic-home' : '') +
+            (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
           var successHeaderHtml = '';
           if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
             successHeaderHtml =
@@ -4263,7 +4348,7 @@
               primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
               industry: data.industry || '', heroImageUrl: data.heroImageUrl || '', galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1', aboutText: data.aboutText || '',
-              reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', instagramHandle: data.instagramHandle || '',
+              reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
               sidebarLinks: data.sidebarLinks || [],
               sidebarIconColorHome: data.sidebarIconColorHome || '',
               sidebarIconColorBooking: data.sidebarIconColorBooking || '',
@@ -4357,16 +4442,18 @@
           return '<a href="'+esc(href)+'">'+esc(l.label || '')+'</a>';
         }).join('');
       }
-      /** Text wordmark (displayName + --font-hero); profile image is logoUrl / Settings only. */
-      function tattooSidebarBrandHtml(tenant) {
+      /** Drawer wordmark: same Unbounded uppercase treatment as Stonecut home nav (all themes). */
+      function tattooSidebarBrandHtml(tenant, base) {
         var name = (tenant && tenant.displayName) ? String(tenant.displayName).trim() : '';
         if (!name) return '';
+        var b = (base != null && String(base)) ? String(base).replace(/\/$/, '') : '';
+        var homeHref = b ? (b + '/home') : '#';
         return '<div class="tattoo-sidebar-brand">' +
-          '<p class="tattoo-sidebar-brand-title">' + esc(name) + '</p>' +
+          '<a href="' + esc(homeHref) + '" class="tattoo-sidebar-wordmark">' + esc(name) + '</a>' +
           '</div>';
       }
       function tattooSidebarPanelContentHtml(tenant, base, bookUrl) {
-        return tattooSidebarBrandHtml(tenant) + sidebarLinksHtml(tenant, base, bookUrl);
+        return tattooSidebarBrandHtml(tenant, base) + sidebarLinksHtml(tenant, base, bookUrl);
       }
       function galleryPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -4423,7 +4510,8 @@
         var galleryWrapClass = 'gallery-page' +
           (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
           (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
-          (isClassicTheme(tenant) ? ' classic-home' : '');
+          (isClassicTheme(tenant) ? ' classic-home' : '') +
+          (isStonecutTheme(tenant) ? ' gallery-page--stonecut' : '');
         var galleryTitleHtml = (isLuxeTheme(tenant) || isClassicTheme(tenant))
           ? ''
           : '<h1 class="gallery-title">' + esc(displayName) + '</h1>';
@@ -4550,7 +4638,7 @@
         if (igHandle) footerLinks += '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">Instagram</a>';
         var footAbout = tenantShowAboutPage(tenant) ? '#about' : '#services';
         if (tenant.address) footerLinks += '<a href="' + footAbout + '">Location</a>';
-        if (tenant.businessHours) footerLinks += '<a href="' + footAbout + '">Hours</a>';
+        if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) footerLinks += '<a href="' + footAbout + '">Hours</a>';
         var footerHtml = '<footer class="classic-footer">' +
           '<div class="classic-footer-brand">' + esc(displayName) + '</div>' +
           '<div class="classic-footer-links">' + footerLinks + '</div>' +
@@ -4835,9 +4923,18 @@
             '<h2 class="s12-test-title s12-fade">Words from <em>our clients</em></h2>' +
             '<div class="s12-test-grid">' + testCards + '</div></section>'
           : '';
-        var hoursHtml = tenant.businessHours
-          ? '<div class="s12-hours-block">' + esc(tenant.businessHours) + '</div>'
-          : '<p class="s12-phil-body">Add business hours in the app.</p>';
+        var hoursTrimS12 = tenantBusinessHoursTrimmed(tenant);
+        var hoursHtml = '';
+        if (tenantShowBusinessHours(tenant)) {
+          hoursHtml = hoursTrimS12
+            ? '<div class="s12-hours-block">' + esc(hoursTrimS12) + '</div>'
+            : '<p class="s12-phil-body">Add business hours in the app.</p>';
+        }
+        var s12InfoClass = 's12-info' + (!tenantShowBusinessHours(tenant) ? ' s12-info--when-hidden' : '');
+        var s12HoursHalf = tenantShowBusinessHours(tenant)
+          ? ('<div class="s12-info-half s12-fade"><div class="s12-phil-label">Studio hours</div>' +
+            '<h3 class="s12-info-title">When to <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">visit</em></h3>' + hoursHtml + '</div>')
+          : '';
         var addr = tenant.address || tenant.contactAddress || tenant.serviceArea || '';
         var addrHtml = addr ? '<div class="s12-address">' + esc(addr).replace(/\n/g, '<br>') + '</div>' : '';
         var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
@@ -4966,9 +5063,8 @@
           processSectionHtml +
           bookCtaSectionHtml +
           testSection +
-          '<div class="s12-info">' +
-          '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Studio hours</div>' +
-          '<h3 class="s12-info-title">When to <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">visit</em></h3>' + hoursHtml + '</div>' +
+          '<div class="' + s12InfoClass + '">' +
+          s12HoursHalf +
           '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Find us</div>' +
           '<h3 class="s12-info-title">The <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">studio</em></h3>' +
           addrHtml + phoneEl + '</div></div>' +
@@ -5043,7 +5139,7 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
@@ -5059,7 +5155,7 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
@@ -5075,14 +5171,15 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
         var inner = productCards
           ? '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
-        return '<div class="tattoo-page classic-home">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + sidebar + '</div>';
+        var shopWrapClass = 'tattoo-page classic-home' + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
+        return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + sidebar + '</div>';
       }
       /** Default Luxe hero line when `luxeHeroTagline` is empty; matches `BookingTemplate` / tenant `industry`. */
       function defaultLuxeHeroTaglineForIndustry(industry) {
@@ -5121,7 +5218,7 @@
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
-          tattooSidebarBrandHtml(tenant) +
+          tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
 
@@ -5209,10 +5306,17 @@
           if (tenant.contactPhone) connectParts.push(esc(tenant.contactPhone));
           var connectHtml = connectParts.length ? connectParts.join('<br>') : 'Add in app';
 
+          var luxeHoursTrim = tenantBusinessHoursTrimmed(tenant);
+          var luxeHoursBlock = '';
+          if (tenantShowBusinessHours(tenant)) {
+            luxeHoursBlock = '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' +
+              (luxeHoursTrim ? esc(luxeHoursTrim) : 'Add in app') + '</p></div>';
+          }
+
           contact = '<section class="luxe-contact">' +
             '<div class="luxe-contact-inner">' +
               '<div class="luxe-contact-item"><h3>Location</h3><p>' + (tenant.address ? esc(tenant.address) : 'Add in app') + '</p></div>' +
-              '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' + (tenant.businessHours ? esc(tenant.businessHours) : 'Add in app') + '</p></div>' +
+              luxeHoursBlock +
               '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
             '</div>' +
           '</section>';

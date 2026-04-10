@@ -7,6 +7,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFirestore
 
 enum DesignTab: String, CaseIterable {
     case template
@@ -136,8 +137,16 @@ class DesignViewModel: ObservableObject {
     /// Short line for marketing (e.g. city, state) — Blade hero eyebrow; full street stays in `contactAddress`.
     @Published var serviceArea: String = ""
     @Published var businessHours: String = ""
+    /// When true, `businessHours` is kept in sync with `businessHoursWeekly` and the map is saved to Firestore.
+    @Published var businessHoursUsesWeeklySchedule: Bool = false
+    @Published var businessHoursWeekly: BusinessHoursWeekly = .defaultOfficeHours
     @Published var instagramHandle: String = ""
     @Published var showContactOnPage: Bool = true
+    @Published var showBusinessHoursOnPage: Bool = true
+
+    static let businessHoursPresets = [
+        "Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"
+    ]
 
     private let firebaseService = FirebaseService()
 
@@ -328,8 +337,19 @@ class DesignViewModel: ObservableObject {
                 contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
                 serviceArea = (tenant?["serviceArea"] as? String) ?? ""
                 businessHours = tenant?["businessHours"] as? String ?? ""
+                let weeklyRaw = tenant?["businessHoursWeekly"] as? [String: Any]
+                let hasWeekly = weeklyRaw.map { !$0.isEmpty } ?? false
+                if hasWeekly, let parsed = BusinessHoursWeekly.fromFirestore(weeklyRaw) {
+                    businessHoursWeekly = parsed
+                    businessHoursUsesWeeklySchedule = true
+                    businessHours = parsed.formattedDisplayString()
+                } else {
+                    businessHoursUsesWeeklySchedule = false
+                    businessHoursWeekly = .defaultOfficeHours
+                }
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
+                showBusinessHoursOnPage = tenant?["showBusinessHoursOnPage"] as? Bool ?? true
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
                 showGalleryPage = tenant?["showGalleryPage"] as? Bool ?? true
                 showBookPage = tenant?["showBookPage"] as? Bool ?? true
@@ -466,20 +486,67 @@ class DesignViewModel: ObservableObject {
 
     func saveAbout() async {
         guard let tid = tenantId else { return }
-        let updates: [String: Any] = [
+        let hoursString: String = {
+            if businessHoursUsesWeeklySchedule {
+                return businessHoursWeekly.formattedDisplayString()
+            }
+            return businessHours
+        }()
+        var updates: [String: Any] = [
             "aboutText": aboutText,
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
             "contactAddress": contactAddress,
             "address": contactAddress,
             "serviceArea": serviceArea,
-            "businessHours": businessHours,
+            "businessHours": hoursString,
             "instagramHandle": instagramHandle,
             "showContactOnPage": showContactOnPage,
+            "showBusinessHoursOnPage": showBusinessHoursOnPage,
             "aboutSectionBackgroundColor": aboutSectionBackgroundColorHex,
             "aboutSectionTextColor": aboutSectionTextColorHex
         ]
+        if businessHoursUsesWeeklySchedule {
+            updates["businessHoursWeekly"] = businessHoursWeekly.firestoreDayMap()
+        } else {
+            updates["businessHoursWeekly"] = FieldValue.delete()
+        }
         await saveTenantUpdates(tid, updates)
+        await MainActor.run {
+            businessHours = hoursString
+        }
+    }
+
+    func syncBusinessHoursStringFromWeekly() {
+        guard businessHoursUsesWeeklySchedule else { return }
+        businessHours = businessHoursWeekly.formattedDisplayString()
+    }
+
+    func setBusinessHoursDayClosed(index: Int, closed: Bool) {
+        guard businessHoursWeekly.slots.indices.contains(index) else { return }
+        var w = businessHoursWeekly
+        w.slots[index].isClosed = closed
+        w.normalizeSlot(at: index)
+        businessHoursWeekly = w
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    func setBusinessHoursDayOpenMinutes(index: Int, openMinutes: Int) {
+        guard businessHoursWeekly.slots.indices.contains(index) else { return }
+        var w = businessHoursWeekly
+        w.slots[index].openMinutes = openMinutes
+        w.normalizeSlot(at: index)
+        businessHoursWeekly = w
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    func setBusinessHoursDayCloseMinutes(index: Int, closeMinutes: Int) {
+        guard businessHoursWeekly.slots.indices.contains(index) else { return }
+        var w = businessHoursWeekly
+        w.slots[index].closeMinutes = closeMinutes
+        w.normalizeSlot(at: index)
+        businessHoursWeekly = w
+        syncBusinessHoursStringFromWeekly()
     }
 
     /// Keeps builder in sync when logo is changed in Settings.

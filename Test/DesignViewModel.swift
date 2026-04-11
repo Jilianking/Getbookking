@@ -137,16 +137,11 @@ class DesignViewModel: ObservableObject {
     /// Short line for marketing (e.g. city, state) — Blade hero eyebrow; full street stays in `contactAddress`.
     @Published var serviceArea: String = ""
     @Published var businessHours: String = ""
-    /// When true, `businessHours` is kept in sync with `businessHoursWeekly` and the map is saved to Firestore.
-    @Published var businessHoursUsesWeeklySchedule: Bool = false
     @Published var businessHoursWeekly: BusinessHoursWeekly = .defaultOfficeHours
+    @Published var businessHoursExceptions: [BusinessHoursException] = []
     @Published var instagramHandle: String = ""
     @Published var showContactOnPage: Bool = true
     @Published var showBusinessHoursOnPage: Bool = true
-
-    static let businessHoursPresets = [
-        "Mon–Sat 11am–8pm", "Mon–Fri 9am–5pm", "Tue–Sat 10am–6pm", "By appointment"
-    ]
 
     private let firebaseService = FirebaseService()
 
@@ -337,15 +332,18 @@ class DesignViewModel: ObservableObject {
                 contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
                 serviceArea = (tenant?["serviceArea"] as? String) ?? ""
                 businessHours = tenant?["businessHours"] as? String ?? ""
+                businessHoursExceptions = BusinessHoursException.parseList(tenant?["businessHoursExceptions"])
                 let weeklyRaw = tenant?["businessHoursWeekly"] as? [String: Any]
                 let hasWeekly = weeklyRaw.map { !$0.isEmpty } ?? false
                 if hasWeekly, let parsed = BusinessHoursWeekly.fromFirestore(weeklyRaw) {
                     businessHoursWeekly = parsed
-                    businessHoursUsesWeeklySchedule = true
-                    businessHours = parsed.formattedDisplayString()
+                    businessHours = Self.businessHoursDisplayString(weekly: parsed, exceptions: businessHoursExceptions)
                 } else {
-                    businessHoursUsesWeeklySchedule = false
                     businessHoursWeekly = .defaultOfficeHours
+                    businessHours = Self.businessHoursDisplayString(
+                        weekly: businessHoursWeekly,
+                        exceptions: businessHoursExceptions
+                    )
                 }
                 instagramHandle = tenant?["instagramHandle"] as? String ?? ""
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
@@ -486,13 +484,8 @@ class DesignViewModel: ObservableObject {
 
     func saveAbout() async {
         guard let tid = tenantId else { return }
-        let hoursString: String = {
-            if businessHoursUsesWeeklySchedule {
-                return businessHoursWeekly.formattedDisplayString()
-            }
-            return businessHours
-        }()
-        var updates: [String: Any] = [
+        let hoursString = Self.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
+        let updates: [String: Any] = [
             "aboutText": aboutText,
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
@@ -504,47 +497,68 @@ class DesignViewModel: ObservableObject {
             "showContactOnPage": showContactOnPage,
             "showBusinessHoursOnPage": showBusinessHoursOnPage,
             "aboutSectionBackgroundColor": aboutSectionBackgroundColorHex,
-            "aboutSectionTextColor": aboutSectionTextColorHex
+            "aboutSectionTextColor": aboutSectionTextColorHex,
+            "businessHoursWeekly": businessHoursWeekly.firestoreDayMap(),
+            "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() }
         ]
-        if businessHoursUsesWeeklySchedule {
-            updates["businessHoursWeekly"] = businessHoursWeekly.firestoreDayMap()
-        } else {
-            updates["businessHoursWeekly"] = FieldValue.delete()
-        }
         await saveTenantUpdates(tid, updates)
         await MainActor.run {
             businessHours = hoursString
         }
     }
 
+    /// Weekly summary plus optional special dates for the public site.
+    static func businessHoursDisplayString(weekly: BusinessHoursWeekly, exceptions: [BusinessHoursException]) -> String {
+        var parts: [String] = [weekly.formattedDisplayString()]
+        let exLines = exceptions.sorted { $0.dateYmd < $1.dateYmd }.map { $0.formattedDisplayLine() }
+        if !exLines.isEmpty {
+            parts.append("— Special dates —")
+            parts.append(contentsOf: exLines)
+        }
+        return parts.joined(separator: "\n")
+    }
+
     func syncBusinessHoursStringFromWeekly() {
-        guard businessHoursUsesWeeklySchedule else { return }
-        businessHours = businessHoursWeekly.formattedDisplayString()
+        businessHours = Self.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
     }
 
-    func setBusinessHoursDayClosed(index: Int, closed: Bool) {
-        guard businessHoursWeekly.slots.indices.contains(index) else { return }
+    func replaceBusinessHoursDay(index: Int, schedule: DaySchedule) {
+        guard businessHoursWeekly.days.indices.contains(index) else { return }
         var w = businessHoursWeekly
-        w.slots[index].isClosed = closed
-        w.normalizeSlot(at: index)
+        w.days[index] = schedule
+        w.normalizeDay(at: index)
         businessHoursWeekly = w
         syncBusinessHoursStringFromWeekly()
     }
 
-    func setBusinessHoursDayOpenMinutes(index: Int, openMinutes: Int) {
-        guard businessHoursWeekly.slots.indices.contains(index) else { return }
-        var w = businessHoursWeekly
-        w.slots[index].openMinutes = openMinutes
-        w.normalizeSlot(at: index)
-        businessHoursWeekly = w
+    func setBusinessHoursExceptions(_ items: [BusinessHoursException]) {
+        businessHoursExceptions = items
         syncBusinessHoursStringFromWeekly()
     }
 
-    func setBusinessHoursDayCloseMinutes(index: Int, closeMinutes: Int) {
-        guard businessHoursWeekly.slots.indices.contains(index) else { return }
+    func upsertBusinessHoursException(_ item: BusinessHoursException) {
+        var list = businessHoursExceptions
+        if let i = list.firstIndex(where: { $0.id == item.id }) {
+            list[i] = item
+        } else {
+            list.append(item)
+        }
+        businessHoursExceptions = list.sorted { $0.dateYmd < $1.dateYmd }
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    func removeBusinessHoursException(id: String) {
+        businessHoursExceptions.removeAll { $0.id == id }
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    /// Copies `schedule` to each index in `indices` (0 = Mon … 6 = Sun).
+    func applySchedule(_ schedule: DaySchedule, toIndices indices: Set<Int>) {
         var w = businessHoursWeekly
-        w.slots[index].closeMinutes = closeMinutes
-        w.normalizeSlot(at: index)
+        for i in indices where w.days.indices.contains(i) {
+            w.days[i] = schedule
+            w.normalizeDay(at: i)
+        }
         businessHoursWeekly = w
         syncBusinessHoursStringFromWeekly()
     }

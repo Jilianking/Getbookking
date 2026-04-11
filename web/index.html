@@ -553,7 +553,17 @@
       position: relative;
       background: #F7F5F0;
     }
-    .classic-home .tattoo-nav .tattoo-brand { color: #1a1a1a; }
+    /* Match drawer wordmark: Unbounded, uppercase, wide tracking (see `.tattoo-sidebar-wordmark`) */
+    .classic-home .tattoo-nav .tattoo-brand {
+      font-family: 'Unbounded', sans-serif;
+      font-size: 18px;
+      font-weight: normal;
+      letter-spacing: 0.12em;
+      line-height: 1.2;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      text-decoration: none;
+    }
     .classic-home .tattoo-nav-links a { color: rgba(26,26,26,0.6); text-transform: none; letter-spacing: 0.02em; font-size: 14px; font-weight: 400; }
     .classic-home .tattoo-nav-links a:hover { color: #1a1a1a; }
     .classic-home .tattoo-nav .tattoo-nav-menu { color: #1a1a1a; }
@@ -585,11 +595,12 @@
       margin: 0 0 20px;
     }
     .classic-hero-name {
-      font-family: var(--font-hero);
-      font-size: clamp(42px, 6vw, 80px);
-      font-weight: 700;
-      line-height: 0.95;
-      letter-spacing: -0.02em;
+      font-family: 'Unbounded', sans-serif;
+      font-size: clamp(26px, 4.5vw, 40px);
+      font-weight: normal;
+      line-height: 1.2;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
       margin: 0 0 28px;
     }
     .classic-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -707,7 +718,14 @@
       align-items: center;
       justify-content: space-between;
     }
-    .classic-footer-brand { font-family: var(--font-hero); font-weight: 700; font-size: 1rem; }
+    .classic-home .classic-footer-brand {
+      font-family: 'Unbounded', sans-serif;
+      font-size: 18px;
+      font-weight: normal;
+      letter-spacing: 0.12em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
     .classic-footer-links { display: flex; gap: 24px; }
     .classic-footer-links a { color: rgba(26,26,26,0.5); text-decoration: none; font-size: 13px; }
     .classic-footer-links a:hover { color: #1a1a1a; }

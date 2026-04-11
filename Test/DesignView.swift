@@ -13,13 +13,13 @@ struct DesignView: View {
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .template
     @State private var isShowingBuilder = false
-    @State private var hoursPickerChoice: String = "custom"
+    @State private var businessHoursDaySheet: BusinessHoursDaySheetToken?
+    @State private var businessHoursExceptionSheet: BusinessHoursException?
     @State private var showBladeStarterConfirm = false
     @State private var showStudio12ProcessStartersConfirm = false
     @State private var bladeServiceToEdit: TenantService?
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
-    private static let hoursWeeklyMenuTag = "__weekly__"
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -713,62 +713,104 @@ struct DesignView: View {
                     .foregroundColor(.secondary)
             }
 
-            HStack(spacing: 10) {
-                Image(systemName: "clock")
-                    .foregroundColor(.secondary)
-                    .frame(width: 24)
-                Picker("Hours", selection: $hoursPickerChoice) {
-                    ForEach(DesignViewModel.businessHoursPresets, id: \.self) { preset in
-                        Text(preset).tag(preset)
-                    }
-                    Text("Weekly schedule").tag(Self.hoursWeeklyMenuTag)
-                    Text("Custom").tag("custom")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "clock")
+                        .foregroundColor(.secondary)
+                        .frame(width: 24)
+                    Text("Hours")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 0)
                 }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Tap a day to set hours (including split shifts). Your site shows a short summary.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                ForEach(0..<7, id: \.self) { dayIndex in
+                    Button {
+                        businessHoursDaySheet = BusinessHoursDaySheetToken(dayIndex: dayIndex)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(BusinessHoursWeekly.dayLabels[dayIndex])
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.primary)
+                                .frame(width: 40, alignment: .leading)
+                            Spacer(minLength: 8)
+                            Text(
+                                viewModel.businessHoursWeekly.days[dayIndex].summaryFormatted {
+                                    BusinessHoursWeekly.formatTime(minutes: $0)
+                                }
+                            )
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("Special dates")
+                    .font(.subheadline.weight(.semibold))
+                Text("Holidays or one-off hours. Listed after your weekly hours on the site.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                if viewModel.businessHoursExceptions.isEmpty {
+                    Text("None yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(viewModel.businessHoursExceptions) { ex in
+                        HStack(alignment: .center, spacing: 8) {
+                            Button {
+                                businessHoursExceptionSheet = ex
+                            } label: {
+                                HStack {
+                                    Text(ex.formattedDisplayLine())
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                        .multilineTextAlignment(.leading)
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            Button(role: .destructive) {
+                                viewModel.removeBusinessHoursException(id: ex.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.body)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Delete special date")
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
+                Button {
+                    businessHoursExceptionSheet = .newDefault()
+                } label: {
+                    Label("Add special date", systemImage: "plus.circle")
+                        .font(.subheadline)
+                }
             }
             .padding(12)
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
-            .onChange(of: hoursPickerChoice) { _, new in
-                if new == Self.hoursWeeklyMenuTag {
-                    viewModel.businessHoursUsesWeeklySchedule = true
-                    viewModel.syncBusinessHoursStringFromWeekly()
-                } else if new == "custom" {
-                    viewModel.businessHoursUsesWeeklySchedule = false
-                } else {
-                    viewModel.businessHoursUsesWeeklySchedule = false
-                    viewModel.businessHours = new
-                }
+            .sheet(item: $businessHoursDaySheet) { token in
+                BusinessHoursDayEditSheet(dayIndex: token.dayIndex, viewModel: viewModel)
             }
-            .onAppear {
-                syncHoursPickerSelectionWithViewModel()
-            }
-            .onChange(of: viewModel.businessHoursUsesWeeklySchedule) { _, _ in
-                syncHoursPickerSelectionWithViewModel()
-            }
-            .onChange(of: viewModel.businessHours) { _, _ in
-                if !viewModel.businessHoursUsesWeeklySchedule {
-                    syncHoursPickerSelectionWithViewModel()
-                }
-            }
-
-            if hoursPickerChoice == Self.hoursWeeklyMenuTag {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Set hours for each day. They appear on your site as a short summary.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    ForEach(0..<7, id: \.self) { dayIndex in
-                        businessHoursDayRow(dayIndex: dayIndex)
-                    }
-                }
-                .padding(12)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-            }
-
-            if hoursPickerChoice == "custom" {
-                IconFieldRow(icon: "clock.badge", placeholder: "e.g. Sun 11am–5pm", text: $viewModel.businessHours)
+            .sheet(item: $businessHoursExceptionSheet) { ex in
+                BusinessHoursExceptionEditSheet(exception: ex, viewModel: viewModel)
             }
 
             Toggle(isOn: $viewModel.showBusinessHoursOnPage) {
@@ -800,58 +842,6 @@ struct DesignView: View {
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
         }
-    }
-
-    private func syncHoursPickerSelectionWithViewModel() {
-        if viewModel.businessHoursUsesWeeklySchedule {
-            hoursPickerChoice = Self.hoursWeeklyMenuTag
-        } else if DesignViewModel.businessHoursPresets.contains(viewModel.businessHours) {
-            hoursPickerChoice = viewModel.businessHours
-        } else {
-            hoursPickerChoice = "custom"
-        }
-    }
-
-    @ViewBuilder
-    private func businessHoursDayRow(dayIndex: Int) -> some View {
-        let label = BusinessHoursWeekly.dayLabels[dayIndex]
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center) {
-                Text(label)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 40, alignment: .leading)
-                Spacer()
-                Toggle("Open", isOn: Binding(
-                    get: { !viewModel.businessHoursWeekly.slots[dayIndex].isClosed },
-                    set: { viewModel.setBusinessHoursDayClosed(index: dayIndex, closed: !$0) }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            }
-            if !viewModel.businessHoursWeekly.slots[dayIndex].isClosed {
-                HStack(spacing: 10) {
-                    DatePicker(
-                        "From",
-                        selection: Binding(
-                            get: { BusinessHoursWeekly.dateFromMinutes(viewModel.businessHoursWeekly.slots[dayIndex].openMinutes) },
-                            set: { viewModel.setBusinessHoursDayOpenMinutes(index: dayIndex, openMinutes: BusinessHoursWeekly.minutesFromDate($0)) }
-                        ),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .labelsHidden()
-                    DatePicker(
-                        "To",
-                        selection: Binding(
-                            get: { BusinessHoursWeekly.dateFromMinutes(viewModel.businessHoursWeekly.slots[dayIndex].closeMinutes) },
-                            set: { viewModel.setBusinessHoursDayCloseMinutes(index: dayIndex, closeMinutes: BusinessHoursWeekly.minutesFromDate($0)) }
-                        ),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .labelsHidden()
-                }
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     private var aboutContent: some View {
@@ -2272,6 +2262,239 @@ private struct ClassicTemplatePreview: View {
                 .padding(.top, 8)
             }
         }
+    }
+}
+
+// MARK: - Business hours weekly editor sheets
+
+private struct BusinessHoursDaySheetToken: Identifiable {
+    var id: Int { dayIndex }
+    let dayIndex: Int
+}
+
+private struct BusinessHoursDayEditSheet: View {
+    let dayIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: DaySchedule
+
+    init(dayIndex: Int, viewModel: DesignViewModel) {
+        self.dayIndex = dayIndex
+        self.viewModel = viewModel
+        _draft = State(initialValue: viewModel.businessHoursWeekly.days[dayIndex])
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    Toggle("Open", isOn: Binding(
+                        get: { !draft.isClosed },
+                        set: { open in
+                            draft.isClosed = !open
+                            if open && draft.ranges.isEmpty {
+                                draft.ranges = [BusinessHourTimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60)]
+                            }
+                            draft.normalize()
+                        }
+                    ))
+                }
+                if !draft.isClosed {
+                    Section {
+                        ForEach(draft.ranges.indices, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                DatePicker(
+                                    "From",
+                                    selection: Binding(
+                                        get: { BusinessHoursWeekly.dateFromMinutes(draft.ranges[i].startMinutes) },
+                                        set: { new in
+                                            var r = draft.ranges
+                                            r[i].startMinutes = BusinessHoursWeekly.minutesFromDate(new)
+                                            draft.ranges = r
+                                        }
+                                    ),
+                                    displayedComponents: [.hourAndMinute]
+                                )
+                                .labelsHidden()
+                                DatePicker(
+                                    "To",
+                                    selection: Binding(
+                                        get: { BusinessHoursWeekly.dateFromMinutes(draft.ranges[i].endMinutes) },
+                                        set: { new in
+                                            var r = draft.ranges
+                                            r[i].endMinutes = BusinessHoursWeekly.minutesFromDate(new)
+                                            draft.ranges = r
+                                        }
+                                    ),
+                                    displayedComponents: [.hourAndMinute]
+                                )
+                                .labelsHidden()
+                                if draft.ranges.count > 1 {
+                                    Button {
+                                        draft.ranges.remove(at: i)
+                                        draft.normalize()
+                                    } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        Button {
+                            draft.ranges.append(BusinessHourTimeRange(startMinutes: 12 * 60, endMinutes: 17 * 60))
+                            draft.normalize()
+                        } label: {
+                            Label("Add hours", systemImage: "plus.circle")
+                        }
+                    }
+                }
+                Section {
+                    Button("Apply to all weekdays") {
+                        draft.normalize()
+                        viewModel.applySchedule(draft, toIndices: Set(0..<5))
+                        dismiss()
+                    }
+                } header: {
+                    Text("Copy these hours")
+                } footer: {
+                    Text("Done saves only \(BusinessHoursWeekly.dayLabels[dayIndex]). Apply copies this schedule to Mon–Fri.")
+                }
+            }
+            .navigationTitle(BusinessHoursWeekly.dayLabels[dayIndex])
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        draft.normalize()
+                        viewModel.replaceBusinessHoursDay(index: dayIndex, schedule: draft)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct BusinessHoursExceptionEditSheet: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: BusinessHoursException
+
+    init(exception: BusinessHoursException, viewModel: DesignViewModel) {
+        self.viewModel = viewModel
+        _draft = State(initialValue: exception)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    DatePicker(
+                        "Date",
+                        selection: Binding(
+                            get: { Self.localDate(fromYmd: draft.dateYmd) },
+                            set: { draft.dateYmd = Self.ymd(from: $0) }
+                        ),
+                        displayedComponents: [.date]
+                    )
+                    Toggle("Closed all day", isOn: $draft.closedAllDay)
+                }
+                if !draft.closedAllDay {
+                    Section {
+                        ForEach(draft.ranges.indices, id: \.self) { i in
+                            HStack(spacing: 8) {
+                                DatePicker(
+                                    "From",
+                                    selection: Binding(
+                                        get: { BusinessHoursWeekly.dateFromMinutes(draft.ranges[i].startMinutes) },
+                                        set: { new in
+                                            var r = draft.ranges
+                                            r[i].startMinutes = BusinessHoursWeekly.minutesFromDate(new)
+                                            draft.ranges = r
+                                        }
+                                    ),
+                                    displayedComponents: [.hourAndMinute]
+                                )
+                                .labelsHidden()
+                                DatePicker(
+                                    "To",
+                                    selection: Binding(
+                                        get: { BusinessHoursWeekly.dateFromMinutes(draft.ranges[i].endMinutes) },
+                                        set: { new in
+                                            var r = draft.ranges
+                                            r[i].endMinutes = BusinessHoursWeekly.minutesFromDate(new)
+                                            draft.ranges = r
+                                        }
+                                    ),
+                                    displayedComponents: [.hourAndMinute]
+                                )
+                                .labelsHidden()
+                                if draft.ranges.count > 1 {
+                                    Button {
+                                        draft.ranges.remove(at: i)
+                                        draft.normalize()
+                                    } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        Button {
+                            draft.ranges.append(BusinessHourTimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60))
+                            draft.normalize()
+                        } label: {
+                            Label("Add hours", systemImage: "plus.circle")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Special date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if !draft.closedAllDay && draft.ranges.isEmpty {
+                            draft.ranges = [BusinessHourTimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60)]
+                        }
+                        draft.normalize()
+                        viewModel.upsertBusinessHoursException(draft)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onChange(of: draft.closedAllDay) { _, closed in
+            if !closed && draft.ranges.isEmpty {
+                draft.ranges = [BusinessHourTimeRange(startMinutes: 9 * 60, endMinutes: 17 * 60)]
+            }
+            draft.normalize()
+        }
+    }
+
+    private static let ymdFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar.current
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Calendar.current.timeZone
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static func localDate(fromYmd ymd: String) -> Date {
+        ymdFormatter.date(from: ymd) ?? Date()
+    }
+
+    private static func ymd(from date: Date) -> String {
+        ymdFormatter.string(from: date)
     }
 }
 

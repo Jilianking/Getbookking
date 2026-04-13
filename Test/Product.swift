@@ -10,6 +10,8 @@ struct Product: Identifiable {
     var id: String
     var name: String
     var category: String
+    /// Optional detail line (stored in Firestore for future web use).
+    var description: String
     var price: Double
     var salePrice: Double?
     var imageUrl: String

@@ -15,7 +15,6 @@ enum DesignTab: String, CaseIterable {
     case gallery
     case book
     case about
-    case shop
 }
 
 /// Editable “Your experience” steps on Studio 12 home (`studio12ProcessSteps` in Firestore).
@@ -1009,7 +1008,15 @@ class DesignViewModel: ObservableObject {
         await savePublicPageVisibility()
     }
 
-    func addProduct(name: String, category: String, price: Double, salePrice: Double?, imageData: Data?) async {
+    func addProduct(
+        name: String,
+        category: String,
+        description: String,
+        price: Double,
+        salePrice: Double?,
+        imageData: Data?,
+        isActive: Bool
+    ) async {
         guard let tid = tenantId else { return }
         await MainActor.run { isUploadingProduct = true }
         do {
@@ -1017,8 +1024,27 @@ class DesignViewModel: ObservableObject {
             if let data = imageData {
                 imageUrl = try await firebaseService.uploadProductImage(tenantId: tid, imageData: data)
             }
-            let docId = try await firebaseService.createTenantProduct(tenantId: tid, name: name, category: category, price: price, salePrice: salePrice, imageUrl: imageUrl)
-            let product = Product(id: docId, name: name, category: category, price: price, salePrice: salePrice, imageUrl: imageUrl, isActive: true)
+            let docId = try await firebaseService.createTenantProduct(
+                tenantId: tid,
+                name: name,
+                category: category,
+                description: description,
+                price: price,
+                salePrice: salePrice,
+                imageUrl: imageUrl,
+                isActive: isActive
+            )
+            let descTrim = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let product = Product(
+                id: docId,
+                name: name,
+                category: category,
+                description: descTrim,
+                price: price,
+                salePrice: salePrice,
+                imageUrl: imageUrl,
+                isActive: isActive
+            )
             await MainActor.run { products.append(product); isUploadingProduct = false; invalidateWebPreview() }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription; isUploadingProduct = false }

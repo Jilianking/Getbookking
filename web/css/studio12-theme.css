@@ -164,7 +164,13 @@
 .studio12-page .s12-hero-img-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to right, transparent 55%, var(--s12-ivory) 100%);
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 72%,
+    rgba(250, 247, 242, 0.35) 86%,
+    var(--s12-ivory) 100%
+  );
   pointer-events: none;
 }
 

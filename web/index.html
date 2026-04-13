@@ -745,6 +745,8 @@
     .gallery-page { min-height: 100vh; background: #000; color: #fff; font-family: var(--font-display); }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
     .gallery-title { font-family: var(--font-display); font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
+    .gallery-title .gallery-title-link { color: inherit; text-decoration: none; font: inherit; }
+    .gallery-title .gallery-title-link:hover { opacity: 0.85; }
     .gallery-page.gallery-page--stonecut .gallery-title {
       font-family: 'Unbounded', sans-serif;
       font-size: clamp(22px, 5vw, 34px);
@@ -766,8 +768,181 @@
     .gallery-section { margin-bottom: 48px; }
     .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: inherit; opacity: 0.72; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(127,127,127,0.35); }
     .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .gallery-grid .gallery-grid-link {
+      display: block;
+      border-radius: 8px;
+      overflow: hidden;
+      line-height: 0;
+      text-decoration: none;
+      color: inherit;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(255, 255, 255, 0.12);
+    }
+    .gallery-grid .gallery-grid-link:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+    }
     .gallery-grid img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; display: block; cursor: pointer; transition: opacity 0.2s; }
-    .gallery-grid img:hover { opacity: 0.85; }
+    .gallery-grid .gallery-grid-link img { border-radius: 0; }
+    .gallery-grid .gallery-grid-link:hover img { opacity: 0.85; }
+    .tattoo-featured-grid .gallery-lightbox-trigger {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+    .blade-gallery-item .gallery-lightbox-trigger {
+      display: block;
+      width: 100%;
+      height: 100%;
+      text-decoration: none;
+      color: inherit;
+    }
+    .hair-featured-item .gallery-lightbox-trigger {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+    /* Full-screen preview: tap thumbnail stays on /gallery */
+    .gallery-lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      box-sizing: border-box;
+    }
+    .gallery-lightbox.gallery-lightbox--open {
+      display: flex;
+    }
+    .gallery-lightbox-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 6, 8, 0.42);
+      cursor: pointer;
+      -webkit-backdrop-filter: blur(18px) saturate(1.1);
+      backdrop-filter: blur(18px) saturate(1.1);
+    }
+    .gallery-lightbox-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 100%;
+      max-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .gallery-lightbox-inner .gallery-lightbox-img {
+      pointer-events: auto;
+      max-width: min(100vw - 32px, 1400px);
+      max-height: min(88vh, 1200px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 4px;
+      display: block;
+      touch-action: pan-y;
+    }
+    .gallery-lightbox-nav {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10051;
+      width: 48px;
+      height: 48px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      font-size: 1.75rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      padding: 0;
+      font-family: system-ui, sans-serif;
+    }
+    .gallery-lightbox-nav:hover {
+      background: rgba(255, 255, 255, 0.26);
+    }
+    .gallery-lightbox-nav:disabled {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .gallery-lightbox-prev {
+      left: max(10px, env(safe-area-inset-left));
+    }
+    .gallery-lightbox-next {
+      right: max(10px, env(safe-area-inset-right));
+    }
+    .gallery-lightbox-counter {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10051;
+      margin: 0;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
+    .gallery-lightbox-close {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 10051;
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }
+    .gallery-lightbox-close:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+    .luxe-page .gallery-lightbox-backdrop {
+      background: rgba(255, 253, 249, 0.38);
+      -webkit-backdrop-filter: blur(16px) saturate(1.05);
+      backdrop-filter: blur(16px) saturate(1.05);
+    }
+    .luxe-page .gallery-lightbox-counter {
+      color: rgba(26, 26, 26, 0.85);
+      background: rgba(255, 255, 255, 0.65);
+    }
+    .luxe-page .gallery-lightbox-nav,
+    .luxe-page .gallery-lightbox-close {
+      background: rgba(26, 26, 26, 0.12);
+      color: #1a1a1a;
+    }
+    .luxe-page .gallery-lightbox-nav:hover,
+    .luxe-page .gallery-lightbox-close:hover {
+      background: rgba(26, 26, 26, 0.2);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .gallery-lightbox-backdrop {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+    }
     .gallery-empty-hint { text-align: center; padding: 48px 0; color: inherit; opacity: 0.5; }
     @media (max-width: 640px) {
       .gallery-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1278,6 +1453,30 @@
       transition: transform 0.2s;
     }
     .luxe-service-card:hover { transform: translateY(-4px); }
+    .luxe-service-card-img-wrap {
+      position: relative;
+      width: 100%;
+      margin-bottom: 14px;
+    }
+    .luxe-service-card-img-wrap img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+      margin-bottom: 0;
+    }
+    .luxe-service-lightbox-hit {
+      position: absolute;
+      inset: 0;
+      border: none;
+      border-radius: 10px;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
     .luxe-service-card img {
       width: 100%;
       height: 220px;
@@ -1358,6 +1557,267 @@
     .luxe-product-price { font-size: 0.95rem; font-weight: 600; color: #1a1a1a; }
     .luxe-product-price-sale { font-size: 0.95rem; font-weight: 600; color: #c0392b; }
     .luxe-product-price-original { font-size: 0.85rem; color: #999; text-decoration: line-through; }
+    button.luxe-product-card.luxe-product-card--btn {
+      -webkit-appearance: none;
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      max-width: none;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    button.luxe-product-card.luxe-product-card--btn:focus-visible {
+      outline: 2px solid #C9A96E;
+      outline-offset: 3px;
+    }
+    #bk-shop-chrome { position: relative; z-index: 1; }
+    .bk-shop-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .bk-shop-modal.bk-shop-open { display: flex; }
+    .bk-shop-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      cursor: pointer;
+    }
+    .bk-shop-modal-panel {
+      position: relative;
+      z-index: 1;
+      max-width: 420px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+      background: #fff;
+      color: #1a1a1a;
+      border-radius: 14px;
+      padding: 24px 22px 22px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+      box-sizing: border-box;
+    }
+    .bk-shop-modal-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #666;
+      border-radius: 8px;
+    }
+    .bk-shop-modal-close:hover { background: rgba(0,0,0,0.06); color: #111; }
+    .bk-shop-modal-title { margin: 0 40px 12px 0; font-size: 1.25rem; font-weight: 600; }
+    .bk-shop-modal-desc { margin: 0 0 14px; font-size: 0.95rem; line-height: 1.55; color: #555; }
+    .bk-shop-modal-price-row { margin-bottom: 18px; font-size: 1.1rem; font-weight: 600; }
+    .bk-shop-price-sale { color: #c0392b; }
+    .bk-shop-price-was { font-size: 0.9rem; font-weight: 400; color: #999; text-decoration: line-through; margin-left: 6px; }
+    .bk-shop-modal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .bk-shop-modal-qty-label { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+    .bk-shop-modal-qty {
+      width: 64px;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    .bk-shop-modal-add {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 999px;
+      background: #1a1a1a;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .bk-shop-modal-add:hover { background: #333; }
+    .bk-shop-cart-drawer {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10040;
+      pointer-events: none;
+    }
+    .bk-shop-cart-drawer.bk-shop-open { display: block; pointer-events: auto; }
+    .bk-shop-cart-drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      cursor: pointer;
+    }
+    .bk-shop-cart-drawer-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 100%;
+      max-width: 400px;
+      height: 100%;
+      background: #fff;
+      color: #1a1a1a;
+      box-shadow: -12px 0 40px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    .bk-shop-cart-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid #eee;
+    }
+    .bk-shop-cart-drawer-head h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+    .bk-shop-drawer-close {
+      border: none;
+      background: transparent;
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #666;
+      padding: 4px 8px;
+      border-radius: 8px;
+    }
+    .bk-shop-drawer-close:hover { background: rgba(0,0,0,0.06); }
+    .bk-shop-cart-lines { flex: 1; overflow: auto; padding: 12px 16px; }
+    .bk-shop-cart-empty { margin: 24px 0; text-align: center; color: #888; font-size: 0.95rem; }
+    .bk-shop-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .bk-shop-line-main { flex: 1; min-width: 0; }
+    .bk-shop-line-name { display: block; font-weight: 600; font-size: 0.95rem; }
+    .bk-shop-line-meta { display: block; font-size: 0.85rem; color: #666; margin-top: 4px; }
+    .bk-shop-line-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .bk-shop-line-actions button {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid #ddd;
+      background: #fafafa;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .bk-shop-line-actions button:hover { background: #eee; }
+    .bk-shop-line-qty { min-width: 24px; text-align: center; font-weight: 600; font-size: 0.9rem; }
+    .bk-shop-line-remove { border-color: #e0b4b4 !important; color: #a33; }
+    .bk-shop-cart-footer {
+      padding: 16px 18px 22px;
+      border-top: 1px solid #eee;
+      background: #fafafa;
+    }
+    .bk-shop-cart-total { margin: 0 0 12px; font-weight: 600; font-size: 1.05rem; }
+    .bk-shop-cart-checkout {
+      width: 100%;
+      padding: 14px 18px;
+      border: none;
+      border-radius: 10px;
+      background: #1a1a1a;
+      color: #fff;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .bk-shop-cart-checkout:hover { background: #333; }
+    .bk-shop-cart-checkout:disabled { opacity: 0.45; cursor: not-allowed; }
+    .bk-shop-cart-fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10030;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: none;
+      background: #1a1a1a;
+      color: #fff;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .bk-shop-cart-fab:hover { background: #333; }
+    .bk-shop-fab-icon { font-size: 1.35rem; line-height: 1; }
+    .bk-shop-fab-count {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #c0392b;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 20px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .blade-page .bk-shop-modal-panel,
+    .blade-page .bk-shop-cart-drawer-panel {
+      background: #14120f;
+      color: #f5f0e8;
+      border: 1px solid rgba(245,240,232,0.12);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.65);
+    }
+    .blade-page .bk-shop-modal-desc { color: rgba(245,240,232,0.72); }
+    .blade-page .bk-shop-modal-close,
+    .blade-page .bk-shop-drawer-close { color: rgba(245,240,232,0.65); }
+    .blade-page .bk-shop-modal-close:hover,
+    .blade-page .bk-shop-drawer-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .blade-page .bk-shop-modal-qty {
+      background: #0a0a08;
+      border-color: rgba(245,240,232,0.2);
+      color: #f5f0e8;
+    }
+    .blade-page .bk-shop-modal-add,
+    .blade-page .bk-shop-cart-checkout { background: #c9a96e; color: #0a0a08; }
+    .blade-page .bk-shop-modal-add:hover,
+    .blade-page .bk-shop-cart-checkout:hover { background: #d4b77d; }
+    .blade-page .bk-shop-cart-drawer-head { border-bottom-color: rgba(245,240,232,0.12); }
+    .blade-page .bk-shop-line { border-bottom-color: rgba(245,240,232,0.1); }
+    .blade-page .bk-shop-line-meta { color: rgba(245,240,232,0.55); }
+    .blade-page .bk-shop-line-actions button {
+      background: #1a1814;
+      border-color: rgba(245,240,232,0.15);
+      color: #f5f0e8;
+    }
+    .blade-page .bk-shop-line-actions button:hover { background: #252018; }
+    .blade-page .bk-shop-cart-footer {
+      background: #0f0d0a;
+      border-top-color: rgba(245,240,232,0.12);
+    }
+    .blade-page .bk-shop-cart-empty { color: rgba(245,240,232,0.45); }
+    .blade-page .bk-shop-cart-fab { background: #c9a96e; color: #0a0a08; }
+    .blade-page .bk-shop-cart-fab:hover { background: #d4b77d; }
+    .blade-page .bk-shop-price-was { color: rgba(245,240,232,0.4); }
     .luxe-team-section {
       padding: 80px 40px;
       background: #F5F0E8;
@@ -2053,7 +2513,8 @@
     .blade-page .blade-shop-page-shell .luxe-product-category { color: var(--bh-grey); }
     .blade-page.blade-page--sub .gallery-header { padding-top: 100px; }
     .blade-page.blade-page--sub .gallery-title { color: var(--bh-cream); font-family: 'Bebas Neue', sans-serif; }
-    .blade-page.blade-page--sub .gallery-grid img { border-radius: 4px; }
+    .blade-page.blade-page--sub .gallery-grid .gallery-grid-link { border-radius: 4px; }
+    .blade-page.blade-page--sub .gallery-grid img { border-radius: 0; }
     .blade-page.blade-page--sub .gallery-empty-hint { color: var(--bh-grey); }
     .blade-page .booking-shell {
       background: var(--bh-black) !important;
@@ -2234,6 +2695,60 @@
         left: auto;
       }
     }
+    /* Stonecut /shop + home shop preview: dark shell, product cards match editorial theme */
+    .stonecut-page .stonecut-shop-shell {
+      padding: 96px 40px 96px;
+      max-width: 1200px;
+      margin: 0 auto;
+      min-height: 50vh;
+      box-sizing: border-box;
+    }
+    .stonecut-page .stonecut-shop-inner { text-align: center; }
+    .stonecut-page .stonecut-shop-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 36px;
+      text-align: left;
+    }
+    .stonecut-page .stonecut-shop-preview .stonecut-shop-grid { margin-top: 28px; }
+    .stonecut-page .stonecut-shop-lead {
+      margin: 0 auto;
+      max-width: 520px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #a09888;
+    }
+    .stonecut-page .stonecut-shop-empty {
+      margin: 28px auto 0;
+      max-width: 420px;
+      color: #a09888;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .stonecut-page .stonecut-shop-preview { text-align: center; }
+    .stonecut-page .stonecut-shop-preview .stonecut-heading { margin-bottom: 12px; }
+    .stonecut-page .luxe-product-card img {
+      border-radius: 8px;
+      background: #1a1814;
+    }
+    .stonecut-page .luxe-product-placeholder {
+      background: #1a1814;
+      color: #c0221a;
+    }
+    .stonecut-page .luxe-product-category { color: #a09888; }
+    .stonecut-page .luxe-product-card h3 { color: #e8e0d0; }
+    .stonecut-page .luxe-product-price { color: #e8e0d0; }
+    .stonecut-page .luxe-product-price-sale { color: #c0221a; }
+    .stonecut-page .luxe-product-price-original { color: #6a6358; }
+    .stonecut-page button.luxe-product-card.luxe-product-card--btn:focus-visible {
+      outline-color: #c0221a;
+    }
+    @media (max-width: 900px) {
+      .stonecut-page .stonecut-shop-shell { padding: 88px 20px 72px; }
+      .stonecut-page .stonecut-shop-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    }
+
     /* ─── Studio 12 (studio-12-v1) — scoped under .studio12-page; keep in sync with css/studio12-theme.css ─── */
 
     .studio12-page {
@@ -2399,7 +2914,13 @@
     .studio12-page .s12-hero-img-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(to right, transparent 55%, var(--s12-ivory) 100%);
+      background: linear-gradient(
+        to right,
+        transparent 0%,
+        transparent 72%,
+        rgba(250, 247, 242, 0.35) 86%,
+        var(--s12-ivory) 100%
+      );
       pointer-events: none;
     }
 
@@ -2722,6 +3243,15 @@
       color: var(--s12-blush-dark);
     }
 
+    .studio12-page .s12-gallery-title .s12-gallery-title-link {
+      color: inherit;
+      text-decoration: none;
+      font: inherit;
+    }
+    .studio12-page .s12-gallery-title .s12-gallery-title-link:hover {
+      opacity: 0.85;
+    }
+
     .studio12-page .s12-gallery-link {
       font-size: 10px;
       letter-spacing: 0.22em;
@@ -2799,6 +3329,16 @@
         0 0 40px rgba(176, 128, 96, 0.16);
     }
 
+    .studio12-page .s12-gallery-marquee .s12-g-item .s12-gallery-full-link {
+      display: block;
+      width: 100%;
+      height: 100%;
+      text-decoration: none;
+      color: inherit;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(250, 247, 242, 0.15);
+    }
+
     .studio12-page .s12-gallery-marquee[data-gallery-count="1"] .s12-g-item {
       width: min(440px, 88vw);
       height: min(380px, 52vw);
@@ -2837,6 +3377,20 @@
       overflow: hidden;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
       transition: box-shadow 0.4s ease, transform 0.4s ease;
+    }
+
+    .studio12-page .s12-gallery-page-grid .s12-g-item .s12-gallery-full-link {
+      display: block;
+      width: 100%;
+      height: 100%;
+      text-decoration: none;
+      color: inherit;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(250, 247, 242, 0.15);
+    }
+    .studio12-page .s12-gallery-page-grid .s12-g-item .s12-gallery-full-link:focus-visible {
+      outline: 2px solid var(--s12-ivory);
+      outline-offset: 2px;
     }
 
     .studio12-page .s12-gallery-page-grid .s12-g-item:hover {
@@ -3747,7 +4301,7 @@
         if (tenantShowGalleryPage(tenant) && gUrls.length) {
           function bladeMarqueeChunk(urls) {
             return urls.map(function(u) {
-              return '<div class="blade-gallery-item"><a href="' + esc(galleryUrl) + '"><img src="' + esc(u) + '" alt=""></a></div>';
+              return '<div class="blade-gallery-item"><a class="gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt=""></a></div>';
             }).join('');
           }
           gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
@@ -3873,7 +4427,7 @@
           '</div></div>' +
           '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div></div>' +
           '<div class="blade-hero-vertical">' + esc(vertical) + '</div></section>';
-        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + sidebar + '</div>';
+        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
       function stonecutHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
@@ -3918,6 +4472,18 @@
           (tenantShowGalleryPage(tenant) ? '<a href="' + galleryUrl + '" class="stonecut-btn stonecut-btn-ghost">View portfolio</a>' : '');
         var heroCta = heroCtaInner ? ('<div class="stonecut-hero-cta">' + heroCtaInner + '</div>') : '';
         var y = new Date().getFullYear();
+        var shopPreviewSection = (function(){
+          if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
+          var cards = luxeTenantProductCardsHtml(tenant);
+          if (!cards) return '';
+          return '<section class="stonecut-section stonecut-shop-preview" id="shop">' +
+            '<div class="stonecut-eyebrow">Retail</div>' +
+            '<h2 class="stonecut-heading">Shop</h2>' +
+            '<p class="stonecut-shop-lead">Studio retail, curated for clients—see everything on the full shop.</p>' +
+            '<div class="stonecut-shop-grid">' + cards + '</div>' +
+            '<a href="' + base + '/shop" class="stonecut-btn stonecut-btn-primary" style="margin-top:28px;display:inline-block">Full shop</a>' +
+            '</section>';
+        })();
         return '<div class="stonecut-page">' +
           '<nav class="stonecut-nav" id="stonecut-nav">' +
           '<a href="' + base + '/home" class="stonecut-logo">' + esc(displayName) + '</a>' +
@@ -3938,6 +4504,7 @@
           '</div><div class="stonecut-hero-right">' + heroImg + '</div></section>' +
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">What we offer</div><h2 class="stonecut-heading">Services</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
+          shopPreviewSection +
           '<section class="stonecut-section" id="location"><div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
           (tenantShowBusinessHours(tenant)
             ? ('<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
@@ -4057,7 +4624,7 @@
           + '  <p class="hair-featured-sub">A few recent color and cut transformations from the studio.</p>'
           + '  <div class="hair-featured-grid">'
           + gallery.map(function(url){
-              return '<div class="hair-featured-item"><img src="'+esc(url)+'" alt=""></div>';
+              return '<div class="hair-featured-item"><a class="gallery-lightbox-trigger" href="'+esc(url)+'" data-gallery-full="'+esc(url)+'"><img src="'+esc(url)+'" alt=""></a></div>';
             }).join('')
           + '  </div>'
           + '</section>'
@@ -4127,6 +4694,7 @@
           +       featuredHtml
           +       aboutAndContactHtml
           + '  </div>'
+          + galleryLightboxShellHtml()
           + '</div>';
       }
       function field(f, services, presel) {
@@ -4473,23 +5041,34 @@
       function tattooSidebarPanelContentHtml(tenant, base, bookUrl) {
         return tattooSidebarBrandHtml(tenant, base) + sidebarLinksHtml(tenant, base, bookUrl);
       }
+      function galleryLightboxShellHtml() {
+        return '<div id="gallery-lightbox" class="gallery-lightbox" role="dialog" aria-modal="true" aria-label="Image preview">' +
+          '<div class="gallery-lightbox-backdrop"></div>' +
+          '<button type="button" class="gallery-lightbox-nav gallery-lightbox-prev" aria-label="Previous image">&#8249;</button>' +
+          '<button type="button" class="gallery-lightbox-nav gallery-lightbox-next" aria-label="Next image">&#8250;</button>' +
+          '<p class="gallery-lightbox-counter" aria-live="polite"></p>' +
+          '<div class="gallery-lightbox-inner">' +
+          '<button type="button" class="gallery-lightbox-close" aria-label="Close">&times;</button>' +
+          '<img class="gallery-lightbox-img" src="" alt="" draggable="false">' +
+          '</div></div>';
+      }
       function galleryPage(tenant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
-        var displayName = tenant.displayName || 'Gallery';
+        var galleryUrl = base + '/gallery';
 
         if (isStudio12Theme(tenant)) {
           var u12 = galleryPageImageUrls(tenant);
           var imgs12 = u12.map(function(u) {
-            return '<div class="s12-g-item s12-fade"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+            return '<div class="s12-g-item s12-fade"><a class="s12-gallery-full-link gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt="" loading="lazy"></a></div>';
           }).join('');
           var galleryBody = !imgs12
             ? '<div class="s12-gallery-empty-state"><p class="s12-phil-body" style="color:rgba(250,247,242,0.7)">No gallery images yet. Add them in the app.</p></div>'
             : '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(u12.length, 24) + '">' + imgs12 + '</div>';
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
             '<div class="s12-gallery-dark s12-gallery-dark--fullpage" style="min-height:100vh">' +
-            '<div class="s12-gallery-head"><h2 class="s12-gallery-title">Gallery</h2></div>' +
-            galleryBody + '</div></div>';
+            '<div class="s12-gallery-head"><h2 class="s12-gallery-title"><a href="' + esc(galleryUrl) + '" class="s12-gallery-title-link">Gallery</a></h2></div>' +
+            galleryBody + galleryLightboxShellHtml() + '</div></div>';
         }
 
         var nav = isBladeTheme(tenant)
@@ -4503,7 +5082,7 @@
           '</div></div>';
 
         var imgsHtml = galleryPageImageUrls(tenant).map(function(url) {
-          return '<img src="' + esc(url) + '" alt="" loading="lazy">';
+          return '<a class="gallery-grid-link gallery-lightbox-trigger" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
         }).join('');
 
         var content = imgsHtml
@@ -4530,13 +5109,16 @@
           (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
           (isClassicTheme(tenant) ? ' classic-home' : '') +
           (isStonecutTheme(tenant) ? ' gallery-page--stonecut' : '');
+        var displayName = tenant.displayName || 'Gallery';
+        var galleryHeadline = isStonecutTheme(tenant) ? 'Gallery' : displayName;
         var galleryTitleHtml = (isLuxeTheme(tenant) || isClassicTheme(tenant))
           ? ''
-          : '<h1 class="gallery-title">' + esc(displayName) + '</h1>';
+          : '<h1 class="gallery-title"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
         return '<div class="' + galleryWrapClass + '" style="'+galleryPageStyle+'">' +
           nav +
           '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + galleryTitleHtml + '</div>' +
           '<div class="gallery-shell">' + content + '</div>' +
+          galleryLightboxShellHtml() +
           sidebar +
           '</div>';
       }
@@ -4598,7 +5180,7 @@
           var gridStyle = 'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(1,1fr);';
           var featuredGridInner = gallery.length
             ? gallery.map(function(url){
-                return '<a href="'+esc(galleryUrl)+'"><img src="'+esc(url)+'" alt=""></a>';
+                return '<a class="gallery-lightbox-trigger" href="'+esc(url)+'" data-gallery-full="'+esc(url)+'"><img src="'+esc(url)+'" alt=""></a>';
               }).join('')
             : '<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>';
           featuredHtml = '<section id="featured" class="tattoo-featured-outer">' +
@@ -4663,7 +5245,7 @@
           '</footer>';
 
         return '<div class="tattoo-page classic-home classic-home-page">' +
-          nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + footerHtml + sidebar +
+          nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
           '</div>';
       }
 
@@ -4922,7 +5504,7 @@
         }
         var gUrls = galleryPageImageUrls(tenant);
         var gItems = gUrls.map(function(u) {
-          return '<div class="s12-g-item s12-fade"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+          return '<div class="s12-g-item s12-fade"><a class="s12-gallery-full-link gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt="" loading="lazy"></a></div>';
         }).join('');
         if (!gItems) {
           gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div>';
@@ -5089,7 +5671,7 @@
           '<footer class="s12-footer">' +
           '<div><div class="s12-footer-brand">' + esc(displayName) + '</div></div>' +
           '<p class="s12-footer-copy">© ' + y + ' ' + esc(displayName) + '</p>' +
-          '<div></div></footer></div>';
+          '<div></div></footer>' + galleryLightboxShellHtml() + '</div>';
       }
 
       function hairTattooStyleHomePage(tenant, services) {
@@ -5146,7 +5728,7 @@
           } else {
             priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price">$' + Number(prod.price).toFixed(2) + '</span></div>';
           }
-          productCards += '<div class="luxe-product-card">' + prodImg + (prod.category ? '<p class="luxe-product-category">' + esc(prod.category) + '</p>' : '') + '<h3>' + esc(prod.name) + '</h3>' + priceHtml + '</div>';
+          productCards += '<button type="button" class="luxe-product-card luxe-product-card--btn" data-product-id="' + esc(prod.id) + '">' + prodImg + (prod.category ? '<p class="luxe-product-category">' + esc(prod.category) + '</p>' : '') + '<h3>' + esc(prod.name) + '</h3>' + priceHtml + '</button>';
         }
         return productCards;
       }
@@ -5198,6 +5780,35 @@
           : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
         var shopWrapClass = 'tattoo-page classic-home' + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
         return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + sidebar + '</div>';
+      }
+      function stonecutShopPage(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Studio';
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarBrandHtml(tenant, base) +
+          sidebarLinksHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var nav = '<nav class="stonecut-nav" id="stonecut-nav">' +
+          '<a href="' + base + '/home" class="stonecut-logo">' + esc(displayName) + '</a>' +
+          '<div class="stonecut-nav-trailing">' +
+          '<ul class="stonecut-links">' +
+          '<li><a href="' + base + '/home#services">Services</a></li>' +
+          (tenantShowGalleryPage(tenant) ? '<li><a href="' + galleryUrl + '">Portfolio</a></li>' : '') +
+          (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
+          '<li><a href="' + base + '/home#location">Location</a></li>' +
+          (tenantShowBookPage(tenant) ? '<li><a href="' + bookUrl + '">Book</a></li>' : '') + '</ul>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '</div></nav>';
+        var productCards = luxeTenantProductCardsHtml(tenant);
+        var mainInner = productCards
+          ? '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><div class="stonecut-shop-grid">' + productCards + '</div>'
+          : '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><p class="stonecut-shop-empty">No products yet. Check back soon.</p>';
+        var main = '<main class="stonecut-shop-shell">' + mainInner + '</main>';
+        return '<div class="stonecut-page">' + nav + main + sidebar + '</div>';
       }
       /** Default Luxe hero line when `luxeHeroTagline` is empty; matches `BookingTemplate` / tenant `industry`. */
       function defaultLuxeHeroTaglineForIndustry(industry) {
@@ -5268,8 +5879,10 @@
           for (var i = 0; i < maxCards; i++) {
             var s = services[i];
             var imgTag = featuredImages[i]
-              ? '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy">'
-              : '<div class="luxe-service-placeholder">\u2726</div>';
+              ? ('<div class="luxe-service-card-img-wrap">' +
+                '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy">' +
+                '<button type="button" class="gallery-lightbox-trigger luxe-service-lightbox-hit" data-gallery-full="' + esc(featuredImages[i]) + '" aria-label="View larger"></button></div>')
+              : '<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder">\u2726</div></div>';
             serviceCards += '<a href="' + galleryUrl + '" class="luxe-service-card">' +
               imgTag +
               '<h3>' + esc(s.name) + '</h3>' +
@@ -5340,7 +5953,7 @@
           '</section>';
         }
 
-        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + contact + sidebar + '</div>';
+        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + contact + galleryLightboxShellHtml() + sidebar + '</div>';
       }
 
       function bindTattooSidebar() {
@@ -5357,12 +5970,438 @@
           a.addEventListener('click', function(){ sidebar.classList.remove('tattoo-sidebar-open'); });
         });
       }
+      function bindGalleryLightbox(root) {
+        if (!root) return;
+        var lb = root.querySelector('#gallery-lightbox');
+        if (!lb) return;
+        var img = lb.querySelector('.gallery-lightbox-img');
+        var backdrop = lb.querySelector('.gallery-lightbox-backdrop');
+        var closeBtn = lb.querySelector('.gallery-lightbox-close');
+        var prevBtn = lb.querySelector('.gallery-lightbox-prev');
+        var nextBtn = lb.querySelector('.gallery-lightbox-next');
+        var counterEl = lb.querySelector('.gallery-lightbox-counter');
+        if (!img) return;
+        var urls = [];
+        var idx = 0;
+        var touchStartX = null;
+        function collectUrls() {
+          var triggers = root.querySelectorAll('.gallery-lightbox-trigger');
+          var list = [];
+          var seen = Object.create(null);
+          for (var i = 0; i < triggers.length; i++) {
+            var u = triggers[i].getAttribute('data-gallery-full');
+            if (u && !seen[u]) {
+              seen[u] = true;
+              list.push(u);
+            }
+          }
+          return list;
+        }
+        function updateChrome() {
+          var n = urls.length;
+          if (counterEl) {
+            counterEl.textContent = n > 1 ? (idx + 1) + ' / ' + n : '';
+            counterEl.style.display = n > 1 ? '' : 'none';
+          }
+          var solo = n <= 1;
+          if (prevBtn) prevBtn.disabled = solo;
+          if (nextBtn) nextBtn.disabled = solo;
+        }
+        function showIndex(i) {
+          if (!urls.length) return;
+          idx = (i % urls.length + urls.length) % urls.length;
+          img.src = urls[idx];
+          img.alt = '';
+          updateChrome();
+        }
+        function goPrev() { showIndex(idx - 1); }
+        function goNext() { showIndex(idx + 1); }
+        var onKey = function(ev) {
+          if (ev.key === 'Escape') close();
+          else if (ev.key === 'ArrowLeft') goPrev();
+          else if (ev.key === 'ArrowRight') goNext();
+        };
+        function openFromTrigger(t) {
+          var src = t.getAttribute('data-gallery-full');
+          if (!src) return;
+          urls = collectUrls();
+          var j = urls.indexOf(src);
+          if (j < 0 || !urls.length) return;
+          idx = j;
+          img.src = urls[idx];
+          img.alt = '';
+          lb.classList.add('gallery-lightbox--open');
+          document.body.style.overflow = 'hidden';
+          document.addEventListener('keydown', onKey);
+          updateChrome();
+        }
+        function close() {
+          lb.classList.remove('gallery-lightbox--open');
+          img.src = '';
+          urls = [];
+          document.body.style.overflow = '';
+          document.removeEventListener('keydown', onKey);
+          if (counterEl) counterEl.textContent = '';
+        }
+        root.addEventListener('click', function(e) {
+          var t = e.target.closest('.gallery-lightbox-trigger');
+          if (!t || !root.contains(t)) return;
+          if (!t.getAttribute('data-gallery-full')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          openFromTrigger(t);
+        });
+        if (backdrop) backdrop.addEventListener('click', close);
+        if (closeBtn) {
+          closeBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            close();
+          });
+        }
+        if (prevBtn) {
+          prevBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            goPrev();
+          });
+        }
+        if (nextBtn) {
+          nextBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            goNext();
+          });
+        }
+        img.addEventListener('touchstart', function(e) {
+          if (e.changedTouches.length !== 1) return;
+          touchStartX = e.changedTouches[0].clientX;
+        }, { passive: true });
+        img.addEventListener('touchend', function(e) {
+          if (touchStartX == null || e.changedTouches.length !== 1) return;
+          var dx = e.changedTouches[0].clientX - touchStartX;
+          touchStartX = null;
+          if (urls.length <= 1) return;
+          if (dx > 56) goPrev();
+          else if (dx < -56) goNext();
+        }, { passive: true });
+      }
+      function shopCartStorageKey(tenantId) {
+        return 'bk_shop_cart_v1_' + tenantId;
+      }
+      function readShopCart(tenantId) {
+        try {
+          var raw = localStorage.getItem(shopCartStorageKey(tenantId));
+          if (!raw) return { lines: [] };
+          var o = JSON.parse(raw);
+          if (!o || !Array.isArray(o.lines)) return { lines: [] };
+          return { lines: o.lines };
+        } catch (e) {
+          return { lines: [] };
+        }
+      }
+      function writeShopCart(tenantId, cart) {
+        try {
+          localStorage.setItem(shopCartStorageKey(tenantId), JSON.stringify({ lines: cart.lines || [] }));
+        } catch (e) {}
+      }
+      function findProductById(tenant, id) {
+        var prods = tenant._products || [];
+        for (var i = 0; i < prods.length; i++) {
+          if (prods[i].id === id) return prods[i];
+        }
+        return null;
+      }
+      function effectiveUnitPrice(prod) {
+        var p = Number(prod.price) || 0;
+        var s = prod.salePrice != null ? Number(prod.salePrice) : NaN;
+        if (!isNaN(s) && s < p) return s;
+        return p;
+      }
+      function formatMoney(n) {
+        var x = Number(n);
+        if (isNaN(x)) x = 0;
+        return '$' + x.toFixed(2);
+      }
+      function addLineToShopCart(tenantId, prod, qty) {
+        var q = parseInt(qty, 10);
+        if (!q || q < 1) q = 1;
+        var cart = readShopCart(tenantId);
+        var found = false;
+        for (var i = 0; i < cart.lines.length; i++) {
+          if (cart.lines[i].productId === prod.id) {
+            cart.lines[i].qty += q;
+            cart.lines[i].name = prod.name || '';
+            cart.lines[i].unitPrice = effectiveUnitPrice(prod);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          cart.lines.push({
+            productId: prod.id,
+            qty: q,
+            name: prod.name || '',
+            unitPrice: effectiveUnitPrice(prod)
+          });
+        }
+        writeShopCart(tenantId, cart);
+      }
+      function updateShopCartLineQty(tenantId, id, delta) {
+        var cart = readShopCart(tenantId);
+        for (var i = 0; i < cart.lines.length; i++) {
+          if (cart.lines[i].productId === id) {
+            cart.lines[i].qty += delta;
+            if (cart.lines[i].qty <= 0) cart.lines.splice(i, 1);
+            break;
+          }
+        }
+        writeShopCart(tenantId, cart);
+      }
+      function removeShopCartLine(tenantId, id) {
+        var cart = readShopCart(tenantId);
+        var next = [];
+        for (var j = 0; j < cart.lines.length; j++) {
+          if (cart.lines[j].productId !== id) next.push(cart.lines[j]);
+        }
+        cart.lines = next;
+        writeShopCart(tenantId, cart);
+      }
+      function formatShopCartNotes(cart) {
+        var lines = cart && cart.lines ? cart.lines : [];
+        if (!lines.length) return '';
+        var parts = ['Products requested (from shop):'];
+        var total = 0;
+        for (var k = 0; k < lines.length; k++) {
+          var L = lines[k];
+          var unit = Number(L.unitPrice) || 0;
+          var sub = unit * (L.qty || 0);
+          total += sub;
+          parts.push('- ' + (L.name || 'Item') + ' × ' + (L.qty || 0) + ' @ ' + formatMoney(unit) + ' = ' + formatMoney(sub));
+        }
+        parts.push('Estimated total: ' + formatMoney(total));
+        return parts.join('\n');
+      }
+      function shopChromeHtml() {
+        return '<div id="bk-shop-chrome">' +
+          '<div class="bk-shop-modal" id="bk-shop-modal" role="dialog" aria-modal="true" aria-labelledby="bk-shop-modal-title">' +
+          '<div class="bk-shop-modal-backdrop" data-bk-shop-close="modal"></div>' +
+          '<div class="bk-shop-modal-panel">' +
+          '<button type="button" class="bk-shop-modal-close" data-bk-shop-close="modal" aria-label="Close">&times;</button>' +
+          '<h2 id="bk-shop-modal-title" class="bk-shop-modal-title"></h2>' +
+          '<p class="bk-shop-modal-desc"></p>' +
+          '<div class="bk-shop-modal-price-row"><span class="bk-shop-modal-price"></span></div>' +
+          '<div class="bk-shop-modal-actions">' +
+          '<label class="bk-shop-modal-qty-label">Qty <input type="number" class="bk-shop-modal-qty" id="bk-shop-modal-qty" min="1" value="1"></label>' +
+          '<button type="button" class="bk-shop-modal-add">Add to cart</button>' +
+          '</div></div></div>' +
+          '<div class="bk-shop-cart-drawer" id="bk-shop-cart-drawer">' +
+          '<div class="bk-shop-cart-drawer-backdrop" data-bk-shop-close="drawer"></div>' +
+          '<div class="bk-shop-cart-drawer-panel">' +
+          '<div class="bk-shop-cart-drawer-head"><h2>Your cart</h2><button type="button" class="bk-shop-drawer-close" data-bk-shop-close="drawer" aria-label="Close cart">&times;</button></div>' +
+          '<div class="bk-shop-cart-lines" id="bk-shop-cart-lines"></div>' +
+          '<div class="bk-shop-cart-footer">' +
+          '<p class="bk-shop-cart-total" id="bk-shop-cart-total"></p>' +
+          '<button type="button" class="bk-shop-cart-checkout" id="bk-shop-cart-checkout">Checkout / Book</button>' +
+          '</div></div></div>' +
+          '<button type="button" class="bk-shop-cart-fab" id="bk-shop-cart-fab" aria-label="Open shopping cart"><span class="bk-shop-fab-icon" aria-hidden="true">🛒</span><span class="bk-shop-fab-count" id="bk-shop-fab-count" style="display:none"></span></button>' +
+          '</div>';
+      }
+      function bindShopPage(tenant) {
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.insertAdjacentHTML('beforeend', shopChromeHtml());
+        var modal = document.getElementById('bk-shop-modal');
+        var drawer = document.getElementById('bk-shop-cart-drawer');
+        var fab = document.getElementById('bk-shop-cart-fab');
+        if (!modal || !drawer || !fab) return;
+        var modalQty = document.getElementById('bk-shop-modal-qty');
+        var modalAdd = modal.querySelector('.bk-shop-modal-add');
+        var cartLinesEl = document.getElementById('bk-shop-cart-lines');
+        var cartTotalEl = document.getElementById('bk-shop-cart-total');
+        var fabCount = document.getElementById('bk-shop-fab-count');
+        var checkoutBtn = document.getElementById('bk-shop-cart-checkout');
+
+        function closeModal() {
+          modal.classList.remove('bk-shop-open');
+          if (modal.dataset) modal.dataset.currentProductId = '';
+        }
+        function openModal() {
+          modal.classList.add('bk-shop-open');
+        }
+        function closeDrawer() {
+          drawer.classList.remove('bk-shop-open');
+        }
+        function openDrawer() {
+          drawer.classList.add('bk-shop-open');
+          renderCart();
+        }
+        function updateFabCount() {
+          var cart = readShopCart(tenant.id);
+          var n = 0;
+          for (var i = 0; i < cart.lines.length; i++) n += cart.lines[i].qty || 0;
+          if (n > 0) {
+            fabCount.textContent = String(n);
+            fabCount.style.display = '';
+          } else {
+            fabCount.textContent = '';
+            fabCount.style.display = 'none';
+          }
+        }
+        function renderCart() {
+          var cart = readShopCart(tenant.id);
+          var html = '';
+          var total = 0;
+          if (!cart.lines.length) {
+            html = '<p class="bk-shop-cart-empty">Your cart is empty.</p>';
+          } else {
+            for (var li = 0; li < cart.lines.length; li++) {
+              var L = cart.lines[li];
+              var unit = Number(L.unitPrice) || 0;
+              var sub = unit * (L.qty || 0);
+              total += sub;
+              var pidAttr = esc(L.productId);
+              html += '<div class="bk-shop-line" data-product-id="' + pidAttr + '">' +
+                '<div class="bk-shop-line-main">' +
+                '<span class="bk-shop-line-name">' + esc(L.name) + '</span>' +
+                '<span class="bk-shop-line-meta">' + formatMoney(unit) + ' × ' + L.qty + '</span>' +
+                '</div>' +
+                '<div class="bk-shop-line-actions">' +
+                '<button type="button" class="bk-shop-line-dec" data-pid="' + pidAttr + '" aria-label="Decrease quantity">−</button>' +
+                '<span class="bk-shop-line-qty">' + L.qty + '</span>' +
+                '<button type="button" class="bk-shop-line-inc" data-pid="' + pidAttr + '" aria-label="Increase quantity">+</button>' +
+                '<button type="button" class="bk-shop-line-remove" data-pid="' + pidAttr + '" aria-label="Remove">×</button>' +
+                '</div></div>';
+            }
+          }
+          cartLinesEl.innerHTML = html;
+          cartTotalEl.textContent = cart.lines.length ? ('Total ' + formatMoney(total)) : '';
+          checkoutBtn.disabled = !cart.lines.length;
+          updateFabCount();
+        }
+
+        window.__bkShopActiveTenant = tenant;
+        if (!window.__bkShopProductDelegate) {
+          window.__bkShopProductDelegate = true;
+          document.addEventListener('click', function(ev) {
+            var t = window.__bkShopActiveTenant;
+            if (!t) return;
+            var el = ev.target;
+            if (!el || !el.closest) return;
+            var btn = el.closest('.luxe-product-card--btn');
+            if (!btn) return;
+            var r = document.getElementById('root');
+            if (!r || !r.contains(btn)) return;
+            var pid = btn.getAttribute('data-product-id');
+            if (!pid) return;
+            var prod = findProductById(t, pid);
+            if (!prod) return;
+            ev.preventDefault();
+            var m = document.getElementById('bk-shop-modal');
+            if (!m) return;
+            var mt = m.querySelector('.bk-shop-modal-title');
+            var md = m.querySelector('.bk-shop-modal-desc');
+            var mp = m.querySelector('.bk-shop-modal-price');
+            var mq = document.getElementById('bk-shop-modal-qty');
+            m.dataset.currentProductId = prod.id;
+            if (mt) mt.textContent = prod.name || '';
+            if (md) {
+              var desc = prod.description ? String(prod.description) : '';
+              md.textContent = desc;
+              md.style.display = desc.trim() ? '' : 'none';
+            }
+            if (mp) {
+              var ep = effectiveUnitPrice(prod);
+              var orig = Number(prod.price) || 0;
+              var saleN = prod.salePrice != null ? Number(prod.salePrice) : NaN;
+              var onSale = !isNaN(saleN) && saleN < orig;
+              mp.innerHTML = onSale
+                ? '<span class="bk-shop-price-sale">' + formatMoney(ep) + '</span><span class="bk-shop-price-was">' + formatMoney(orig) + '</span>'
+                : formatMoney(ep);
+            }
+            if (mq) mq.value = '1';
+            m.classList.add('bk-shop-open');
+          });
+        }
+
+        modalAdd.addEventListener('click', function() {
+          var pid = modal.dataset && modal.dataset.currentProductId;
+          if (!pid) return;
+          var prod = findProductById(tenant, pid);
+          if (!prod) return;
+          var q = parseInt(modalQty.value, 10) || 1;
+          if (q < 1) q = 1;
+          addLineToShopCart(tenant.id, prod, q);
+          closeModal();
+          updateFabCount();
+        });
+
+        fab.addEventListener('click', function() {
+          openDrawer();
+        });
+
+        checkoutBtn.addEventListener('click', function() {
+          var cart = readShopCart(tenant.id);
+          if (!cart.lines.length) return;
+          var notes = formatShopCartNotes(cart);
+          try {
+            sessionStorage.setItem('bk_shop_cart_notes', notes);
+          } catch (e) {}
+          location.href = tenantBaseUrl(tenant) + '/book';
+        });
+
+        cartLinesEl.addEventListener('click', function(ev) {
+          var t = ev.target;
+          if (t.nodeType !== 1) return;
+          if (t.tagName !== 'BUTTON') t = t.closest('button');
+          if (!t || !cartLinesEl.contains(t)) return;
+          var pid = t.getAttribute('data-pid');
+          if (!pid) return;
+          if (t.classList.contains('bk-shop-line-dec')) updateShopCartLineQty(tenant.id, pid, -1);
+          else if (t.classList.contains('bk-shop-line-inc')) updateShopCartLineQty(tenant.id, pid, 1);
+          else if (t.classList.contains('bk-shop-line-remove')) removeShopCartLine(tenant.id, pid);
+          else return;
+          renderCart();
+        });
+
+        var closers = modal.querySelectorAll('[data-bk-shop-close="modal"]');
+        for (var ci = 0; ci < closers.length; ci++) {
+          closers[ci].addEventListener('click', closeModal);
+        }
+        var dclosers = drawer.querySelectorAll('[data-bk-shop-close="drawer"]');
+        for (var di = 0; di < dclosers.length; di++) {
+          dclosers[di].addEventListener('click', closeDrawer);
+        }
+
+        if (!window.__bkShopEscBound) {
+          window.__bkShopEscBound = true;
+          document.addEventListener('keydown', function(ev) {
+            if (ev.key !== 'Escape') return;
+            var m = document.getElementById('bk-shop-modal');
+            var d = document.getElementById('bk-shop-cart-drawer');
+            if (m && m.classList.contains('bk-shop-open')) {
+              m.classList.remove('bk-shop-open');
+              if (m.dataset) m.dataset.currentProductId = '';
+            } else if (d && d.classList.contains('bk-shop-open')) {
+              d.classList.remove('bk-shop-open');
+            }
+          });
+        }
+
+        updateFabCount();
+        checkoutBtn.disabled = !readShopCart(tenant.id).lines.length;
+      }
       function loadProducts(tid) {
         return db.collection('tenants').doc(tid).collection('products').get()
           .then(function(snap){
             return snap.docs.filter(function(d){ return d.data().isActive !== false; }).map(function(d){
               var x = d.data();
-              return { id: d.id, name: x.name || '', category: x.category || '', price: x.price || 0, salePrice: x.salePrice || null, imageUrl: x.imageUrl || '' };
+              return {
+                id: d.id,
+                name: x.name || '',
+                description: (x.description != null ? String(x.description) : '') || '',
+                category: x.category || '',
+                price: x.price || 0,
+                salePrice: x.salePrice || null,
+                imageUrl: x.imageUrl || ''
+              };
             });
           });
       }
@@ -5427,21 +6466,37 @@
                 document.getElementById('root').innerHTML = bladeShopPage(tenant);
                 bindTattooSidebar();
                 bindBladeChrome();
+                bindShopPage(tenant);
                 document.body.style.background = '#0a0a08';
                 document.body.style.color = '#f5f0e8';
               } else if (isLuxeTheme(tenant)) {
                 document.getElementById('root').innerHTML = luxeShopPage(tenant);
                 bindTattooSidebar();
+                bindShopPage(tenant);
                 document.body.style.background = '#FFFDF9';
                 document.body.style.color = '#1a1a1a';
               } else if (isStudio12Theme(tenant)) {
                 document.getElementById('root').innerHTML = studio12ShopPage(tenant);
                 bindStudio12Page();
+                bindShopPage(tenant);
                 document.body.style.background = '#faf7f2';
                 document.body.style.color = '#2a1f18';
+              } else if (isStonecutTheme(tenant)) {
+                document.getElementById('root').innerHTML = stonecutShopPage(tenant);
+                bindTattooSidebar();
+                bindShopPage(tenant);
+                var scNavShop = document.getElementById('stonecut-nav');
+                if (scNavShop) {
+                  var onScScrollShop = function() { scNavShop.classList.toggle('scrolled', window.scrollY > 60); };
+                  onScScrollShop();
+                  window.addEventListener('scroll', onScScrollShop, { passive: true });
+                }
+                document.body.style.background = '#060604';
+                document.body.style.color = '#e8e0d0';
               } else {
                 document.getElementById('root').innerHTML = classicShopPage(tenant);
                 bindTattooSidebar();
+                bindShopPage(tenant);
                 document.body.style.background = '#F7F5F0';
                 document.body.style.color = '#1a1a1a';
               }
@@ -5484,6 +6539,7 @@
             var isThemedHome = isStudio12Home || isTattooHome || isHairHome || isBarberHome || isNailsHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
             if (isGallery) {
               document.getElementById('root').innerHTML = galleryPage(tenant);
+              bindGalleryLightbox(document.getElementById('root'));
               if (isStudio12Theme(tenant)) {
                 bindStudio12Page();
               } else {
@@ -5534,8 +6590,18 @@
               if (usesThemedChrome(tenant)) bindTattooSidebar();
               if (isStudio12Theme(tenant)) bindStudio12Page();
               if (isBladeTheme(tenant)) bindBladeChrome();
+              try {
+                var shopNotes = sessionStorage.getItem('bk_shop_cart_notes');
+                if (shopNotes) {
+                  var notesTa = document.querySelector('textarea[data-key="notes"]') ||
+                    document.querySelector('#book-form textarea');
+                  if (notesTa) notesTa.value = shopNotes;
+                  sessionStorage.removeItem('bk_shop_cart_notes');
+                }
+              } catch (e) {}
             } else if (isThemedHome) {
               document.getElementById('root').innerHTML = homeContent;
+              bindGalleryLightbox(document.getElementById('root'));
               if (isStudio12Home) {
                 bindStudio12Page();
               } else {
@@ -5548,6 +6614,9 @@
                   var onScScroll = function() { scNav.classList.toggle('scrolled', window.scrollY > 60); };
                   onScScroll();
                   window.addEventListener('scroll', onScScroll, { passive: true });
+                }
+                if (tenantShowShopPage(tenant) && tenant._products && tenant._products.length) {
+                  bindShopPage(tenant);
                 }
               }
             } else {

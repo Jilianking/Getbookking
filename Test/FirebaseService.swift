@@ -595,6 +595,7 @@ class FirebaseService: ObservableObject {
                 id: doc.documentID,
                 name: name,
                 category: d["category"] as? String ?? "",
+                description: d["description"] as? String ?? "",
                 price: d["price"] as? Double ?? 0,
                 salePrice: d["salePrice"] as? Double,
                 imageUrl: d["imageUrl"] as? String ?? "",
@@ -603,14 +604,25 @@ class FirebaseService: ObservableObject {
         }
     }
 
-    func createTenantProduct(tenantId: String, name: String, category: String, price: Double, salePrice: Double?, imageUrl: String) async throws -> String {
+    func createTenantProduct(
+        tenantId: String,
+        name: String,
+        category: String,
+        description: String,
+        price: Double,
+        salePrice: Double?,
+        imageUrl: String,
+        isActive: Bool
+    ) async throws -> String {
         var data: [String: Any] = [
             "name": name,
             "category": category,
             "price": price,
             "imageUrl": imageUrl,
-            "isActive": true
+            "isActive": isActive
         ]
+        let desc = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !desc.isEmpty { data["description"] = desc }
         if let sp = salePrice { data["salePrice"] = sp }
         let ref = try await db.collection("tenants").document(tenantId).collection("products").addDocument(data: data)
         return ref.documentID

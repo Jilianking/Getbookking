@@ -711,7 +711,7 @@ struct DesignView: View {
     }
 
     @ViewBuilder
-    private func contactFieldsSection(includeBladeServiceArea: Bool) -> some View {
+    private func contactFieldsSection() -> some View {
         VStack(spacing: 12) {
             IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
                 get: { viewModel.contactPhone },
@@ -723,11 +723,9 @@ struct DesignView: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
 
-            IconFieldRow(icon: "mappin.circle", placeholder: "123 Main St, City, State", text: $viewModel.contactAddress)
+            IconFieldRow(icon: "mappin.circle", placeholder: "Street address", text: $viewModel.contactAddress)
 
-            if includeBladeServiceArea {
-                ServiceAreaCityStateFields(viewModel: viewModel)
-            }
+            ServiceAreaCityStateFields(viewModel: viewModel)
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
@@ -872,7 +870,7 @@ struct DesignView: View {
                 } else if isLuxeTemplate {
                     Text("Story and contact appear on your About page and on Luxe home (Meet section and footer).")
                 } else if isBladeTemplate {
-                    Text("Story appears on About. Contact, hours, and city/area power Where and Hours on Blade and Stonecut home.")
+                    Text("Story appears on About. Contact, hours, city & state (below), and street address power your Blade or Stonecut live site.")
                 } else if isStudio12Template {
                     Text("This appears on your About page and feeds the Our approach section on Studio 12 home.")
                 } else {
@@ -881,12 +879,6 @@ struct DesignView: View {
             }
             .font(.caption)
             .foregroundColor(.secondary)
-            if isClassicTemplate {
-                Text("Meet section colors")
-                    .font(.subheadline.weight(.medium))
-                HexColorRow(label: "Section background", hex: $viewModel.aboutSectionBackgroundColorHex)
-                HexColorRow(label: "Section text", hex: $viewModel.aboutSectionTextColorHex)
-            }
             TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
@@ -897,7 +889,7 @@ struct DesignView: View {
                 .tracking(1)
                 .padding(.top, 8)
 
-            contactFieldsSection(includeBladeServiceArea: isBladeTemplate)
+            contactFieldsSection()
 
             HStack(spacing: 12) {
                 Button("Discard") {
@@ -1084,7 +1076,7 @@ struct ServiceAreaCityStateFields: View {
             .padding(12)
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
-            Text("Blade / Stonecut: Where headline and gold hero line. Full street address goes above.")
+            Text("Short city and state for your public site (Classic, Luxe, Blade, Stonecut, or Studio 12). Use the field above for street address.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

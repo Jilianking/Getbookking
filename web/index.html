@@ -55,6 +55,8 @@
     .logo { max-height: 120px; margin-bottom: 20px; }
     h1 { font-size: 24px; margin: 0 0 8px; }
     .tagline { font-size: 14px; color: #666; margin-bottom: 36px; }
+    .tagline a { color: #444; text-decoration: underline; }
+    .tagline a:hover { color: #111; }
     .card-header {
       display: flex;
       align-items: flex-start;
@@ -472,7 +474,7 @@
     .tattoo-shell { max-width: 1400px; margin: 0 auto; padding: 0 32px 64px; }
     /* Sidebar: works on all screen sizes */
     .tattoo-sidebar { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
-    .tattoo-sidebar.tattoo-sidebar-open { pointer-events: auto; }
+    .tattoo-sidebar.tattoo-sidebar-open { pointer-events: auto; z-index: 102; }
     .tattoo-sidebar-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.25s; }
     .tattoo-sidebar-open .tattoo-sidebar-backdrop { opacity: 1; }
     .tattoo-sidebar-panel { position: absolute; top: 0; right: 0; bottom: 0; left: auto; width: 320px; max-width: 85vw; box-shadow: -2px 0 16px rgba(0,0,0,0.18); transform: translateX(100%); transition: transform 0.25s; padding: 32px 24px; }
@@ -710,6 +712,21 @@
       line-height: 1;
     }
     .classic-stat-label { font-size: 12px; color: rgba(247,245,240,0.45); margin-top: 6px; }
+    .classic-about-contact-lines {
+      margin-top: 28px;
+      font-size: 15px;
+      line-height: 1.85;
+      color: rgba(247,245,240,0.72);
+    }
+    .classic-about-contact-lines a {
+      color: rgba(247,245,240,0.92);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(247,245,240,0.25);
+    }
+    .classic-about-contact-lines a:hover {
+      color: #F7F5F0;
+      border-bottom-color: rgba(247,245,240,0.5);
+    }
     .classic-footer {
       background: #F7F5F0;
       border-top: 1px solid rgba(26,26,26,0.1);
@@ -1310,6 +1327,11 @@
     .hair-contact-line {
       font-size: 14px;
       color: #e5e7eb;
+    }
+    .hair-contact-line a {
+      color: inherit;
+      text-decoration: underline;
+      font-weight: 500;
     }
     .hair-about-link {
       font-size: 14px;
@@ -3846,6 +3868,16 @@
       line-height: 1.9;
       margin-bottom: 16px;
     }
+    .studio12-page a.s12-address-link {
+      display: inline-block;
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(74, 60, 52, 0.25);
+      margin-bottom: 16px;
+    }
+    .studio12-page a.s12-address-link:hover {
+      border-bottom-color: rgba(74, 60, 52, 0.45);
+    }
 
     .studio12-page .s12-phone {
       font-family: "Cormorant Garamond", serif;
@@ -4246,6 +4278,33 @@
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      /** True on iPhone / iPod / iPad, iPadOS (MacIntel + touch), or when URL has ?maps=apple (e.g. in-app WebView). */
+      function clientPrefersAppleMaps() {
+        if (typeof navigator === 'undefined') return false;
+        try {
+          if (typeof location !== 'undefined' && location.search && /[?&]maps=apple(?:&|$)/i.test(location.search)) return true;
+        } catch (e) { /* ignore */ }
+        var ua = navigator.userAgent || '';
+        if (/iPhone|iPod|iPad/i.test(ua)) return true;
+        var plat = navigator.platform || '';
+        if ((plat === 'MacIntel' || plat === 'iPad') && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1) return true;
+        return false;
+      }
+      /** Opens Apple Maps on Apple mobile clients; Google Maps elsewhere. */
+      function googleMapsSearchUrl(query) {
+        var q = String(query || '').trim().replace(/\n/g, ' ');
+        if (!q) return '';
+        if (clientPrefersAppleMaps()) {
+          return 'https://maps.apple.com/?q=' + encodeURIComponent(q);
+        }
+        return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+      }
+      function telHrefFromPhone(phone) {
+        if (!phone) return '';
+        var digits = String(phone).replace(/\D/g, '');
+        if (!digits) return '';
+        return digits.length === 10 ? ('tel:+1' + digits) : ('tel:+' + digits);
+      }
       function publicSitePageUnavailableHtml(tenant) {
         var base = tenantBaseUrl(tenant);
         return '<div class="container"><div class="card"><p>This page isn’t available.</p><p><a href="' + esc(base + '/home') + '">Back to home</a></p></div></div>';
@@ -4573,8 +4632,7 @@
             ? '<div class="blade-about-body" style="margin-top:16px;white-space:pre-line">' + esc(hoursTrimBlade) + '</div>'
             : '<p class="blade-about-body" style="margin-top:16px">Add business hours in the app.</p>';
         }
-        var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
-        var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
+        var phoneHref = telHrefFromPhone(tenant.contactPhone);
         var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
         var saWhere = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
         var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
@@ -4583,7 +4641,7 @@
         var whereHeadHtml = '<h3 class="blade-section-title blade-where-city" style="font-size:38px">' + esc(whereHeadline) + '</h3>';
         var whereBlock;
         if (addrRaw) {
-          var mapsQuery = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addrRaw.replace(/\n/g, ' '));
+          var mapsQuery = googleMapsSearchUrl(addrRaw);
           var innerAddrHtml = '';
           if (saWhere) {
             innerAddrHtml = esc(addrRaw).replace(/\n/g, '<br>');
@@ -4601,7 +4659,10 @@
             whereHeadHtml +
             '<div class="blade-address-block blade-where-address-body">' + esc(em) + '</div></a>';
         } else if (saWhere) {
-          whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your street address in the app for directions.</div>';
+          var saMaps = googleMapsSearchUrl(saWhere);
+          whereBlock = '<a href="' + esc(saMaps) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open in maps">' +
+            whereHeadHtml + '</a>' +
+            '<div class="blade-address-block" style="margin-top:12px;opacity:0.88;font-size:15px">Add your street address in the app for full directions.</div>';
         } else {
           whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your address in the app.</div>';
         }
@@ -4697,10 +4758,9 @@
         var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
         var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
         var whereHeadline = sa || (addrRaw ? addrRaw.split('\n')[0] : 'Location');
-        var mapQuery = addrRaw ? ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addrRaw.replace(/\n/g, ' '))) : '';
-        var addrBody = addrRaw ? esc(addrRaw).replace(/\n/g, '<br>') : 'Add your address in the app.';
-        var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
-        var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
+        var mapQuery = addrRaw ? googleMapsSearchUrl(addrRaw) : (sa ? googleMapsSearchUrl(sa) : '');
+        var addrBody = addrRaw ? esc(addrRaw).replace(/\n/g, '<br>') : (sa ? esc(sa) : 'Add your address in the app.');
+        var phoneHref = telHrefFromPhone(tenant.contactPhone);
         var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
         var heroImg = tenant.heroImageUrl ? ('<img src="' + esc(tenant.heroImageUrl) + '" alt="">') : '';
         var industryLine = stonecutIndustryDisplayName(tenant.industry);
@@ -4894,23 +4954,40 @@
           + '  </div>'
           + '</section>';
 
+        var hairAddrRaw = (tenant.address && String(tenant.address).trim())
+          || (tenant.contactAddress && String(tenant.contactAddress).trim())
+          || (tenant.serviceArea && String(tenant.serviceArea).trim())
+          || '';
+        var hairMaps = hairAddrRaw ? googleMapsSearchUrl(hairAddrRaw) : '';
+        var hairContactBits = [];
+        if (hairAddrRaw && hairMaps) {
+          hairContactBits.push('<a href="' + esc(hairMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(hairAddrRaw).replace(/\n/g, '<br>') + '</a>');
+        } else if (hairAddrRaw) {
+          hairContactBits.push(esc(hairAddrRaw).replace(/\n/g, '<br>'));
+        }
+        if (tenant.contactEmail) {
+          var hairEm = String(tenant.contactEmail).trim();
+          hairContactBits.push('✉️ <a href="mailto:' + esc(hairEm) + '">' + esc(hairEm) + '</a>');
+        }
+        var hairPhHref = telHrefFromPhone(tenant.contactPhone);
+        if (tenant.contactPhone && hairPhHref) {
+          hairContactBits.push('📞 <a href="' + esc(hairPhHref) + '">' + esc(tenant.contactPhone) + '</a>');
+        } else if (tenant.contactPhone) {
+          hairContactBits.push('📞 ' + esc(tenant.contactPhone));
+        }
+        var hairContactBlock = hairContactBits.length ? hairContactBits.join('<br>') : '';
+
         var aboutAndContactHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="hair-section hair-about-contact">'
           + '  <h2>About &amp; contact</h2>'
           + '  <p class="hair-section-lead">'
           +       esc(tenant.aboutText || tenant.tagline || 'We combine expert techniques with premium products to give your hair the care it deserves.')
           + '  </p>'
-          + '  <p class="hair-contact-line">'
-          + (tenant.contactEmail ? '✉️ '+esc(tenant.contactEmail)+' ' : '')
-          + (tenant.contactPhone ? '📞 '+esc(tenant.contactPhone) : '')
-          + '  </p>'
+          + (hairContactBlock ? '  <p class="hair-contact-line">' + hairContactBlock + '</p>' : '')
           + '</section>'
           : '<section class="hair-section hair-about-contact">'
           + '  <h2>Contact</h2>'
-          + '  <p class="hair-contact-line">'
-          + (tenant.contactEmail ? '✉️ '+esc(tenant.contactEmail)+' ' : '')
-          + (tenant.contactPhone ? '📞 '+esc(tenant.contactPhone) : '')
-          + '  </p>'
+          + (hairContactBlock ? '  <p class="hair-contact-line">' + hairContactBlock + '</p>' : '')
           + '</section>';
 
         return ''
@@ -5025,8 +5102,15 @@
 
         var contact = '';
         if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
-          contact = (tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail) ?
-            '<p class="tagline">' + (tenant.contactPhone ? '📞 '+tenant.contactPhone+' ' : '') + (tenant.contactEmail ? '✉️ '+tenant.contactEmail : '') + '</p>' : '';
+          if ((tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail)) {
+            var formPh = telHrefFromPhone(tenant.contactPhone);
+            var formPhonePart = tenant.contactPhone
+              ? ('📞 ' + (formPh ? '<a href="' + esc(formPh) + '">' + esc(tenant.contactPhone) + '</a>' : esc(tenant.contactPhone)))
+              : '';
+            var formEm = tenant.contactEmail ? String(tenant.contactEmail).trim() : '';
+            var formMailPart = formEm ? ('✉️ <a href="mailto:' + esc(formEm) + '">' + esc(tenant.contactEmail) + '</a>') : '';
+            contact = '<p class="tagline">' + [formPhonePart, formMailPart].filter(Boolean).join(' ') + '</p>';
+          }
         }
 
         var bookingPageHeaderHtml = '';
@@ -5525,6 +5609,34 @@
         var aboutBody = (tenant.aboutText || tenant.tagline)
           ? esc(tenant.aboutText || tenant.tagline || '')
           : opts.defaultBio;
+        var classicContactLines = '';
+        if (tenant.showContactOnPage !== false) {
+          var clAddr = (tenant.address && String(tenant.address).trim())
+            || (tenant.contactAddress && String(tenant.contactAddress).trim())
+            || (tenant.serviceArea && String(tenant.serviceArea).trim())
+            || '';
+          var clParts = [];
+          if (clAddr) {
+            var clMaps = googleMapsSearchUrl(clAddr);
+            if (clMaps) {
+              clParts.push('<a href="' + esc(clMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(clAddr).replace(/\n/g, '<br>') + '</a>');
+            } else {
+              clParts.push(esc(clAddr).replace(/\n/g, '<br>'));
+            }
+          }
+          var clTel = telHrefFromPhone(tenant.contactPhone);
+          if (tenant.contactPhone && clTel) {
+            clParts.push('<a href="' + esc(clTel) + '">' + esc(tenant.contactPhone) + '</a>');
+          } else if (tenant.contactPhone) {
+            clParts.push(esc(tenant.contactPhone));
+          }
+          if (tenant.contactEmail) {
+            clParts.push('<a href="mailto:' + esc(String(tenant.contactEmail).trim()) + '">' + esc(tenant.contactEmail) + '</a>');
+          }
+          if (clParts.length) {
+            classicContactLines = '<div class="classic-about-contact-lines">' + clParts.join('<br>') + '</div>';
+          }
+        }
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section">' +
           '<div class="classic-about-inner-v2">' +
@@ -5536,6 +5648,7 @@
           '<div class="classic-stat"><div class="classic-stat-value">500+</div><div class="classic-stat-label">Clients</div></div>' +
           '<div class="classic-stat"><div class="classic-stat-value">5\u2605</div><div class="classic-stat-label">Rated</div></div>' +
           '</div>' +
+          classicContactLines +
           '</div></section>'
           : '';
 
@@ -5544,7 +5657,16 @@
         var footerLinks = '';
         if (igHandle) footerLinks += '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">Instagram</a>';
         var footAbout = tenantShowAboutPage(tenant) ? '#about' : '#services';
-        if (tenant.address) footerLinks += '<a href="' + footAbout + '">Location</a>';
+        var footAddr = (tenant.address && String(tenant.address).trim())
+          || (tenant.contactAddress && String(tenant.contactAddress).trim())
+          || (tenant.serviceArea && String(tenant.serviceArea).trim())
+          || '';
+        var footMaps = footAddr ? googleMapsSearchUrl(footAddr) : '';
+        if (footAddr && footMaps) {
+          footerLinks += '<a href="' + esc(footMaps) + '" target="_blank" rel="noopener noreferrer">Location</a>';
+        } else if (footAddr) {
+          footerLinks += '<a href="' + footAbout + '">Location</a>';
+        }
         if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) footerLinks += '<a href="' + footAbout + '">Hours</a>';
         var footerHtml = '<footer class="classic-footer">' +
           '<div class="classic-footer-brand">' + esc(displayName) + '</div>' +
@@ -5845,11 +5967,16 @@
             '<h3 class="s12-info-title">When to <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">visit</em></h3>' + hoursHtml + '</div>')
           : '';
         var addr = tenant.address || tenant.contactAddress || tenant.serviceArea || '';
-        var addrHtml = addr ? '<div class="s12-address">' + esc(addr).replace(/\n/g, '<br>') + '</div>' : '';
-        var digits = tenant.contactPhone ? String(tenant.contactPhone).replace(/\D/g, '') : '';
-        var phoneHref = digits ? ('tel:' + (digits.length === 10 ? '+1' + digits : '+' + digits)) : '';
+        var addrTrim = addr ? String(addr).trim() : '';
+        var addrMapsS12 = addrTrim ? googleMapsSearchUrl(addrTrim) : '';
+        var addrHtml = addrTrim
+          ? (addrMapsS12
+            ? '<a class="s12-address s12-address-link" href="' + esc(addrMapsS12) + '" target="_blank" rel="noopener noreferrer">' + esc(addrTrim).replace(/\n/g, '<br>') + '</a>'
+            : '<div class="s12-address">' + esc(addrTrim).replace(/\n/g, '<br>') + '</div>')
+          : '';
+        var phoneHref = telHrefFromPhone(tenant.contactPhone);
         var phoneEl = tenant.contactPhone && phoneHref
-          ? '<a class="s12-phone" href="' + phoneHref + '">' + esc(tenant.contactPhone) + '</a>'
+          ? '<a class="s12-phone" href="' + esc(phoneHref) + '">' + esc(tenant.contactPhone) + '</a>'
           : '';
         var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
         var igLink = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
@@ -6231,7 +6358,10 @@
           var connectParts = [];
           if (igHandle) connectParts.push('<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>');
           if (tenant.contactEmail) connectParts.push('<a href="mailto:' + esc(tenant.contactEmail) + '">' + esc(tenant.contactEmail) + '</a>');
-          if (tenant.contactPhone) connectParts.push(esc(tenant.contactPhone));
+          if (tenant.contactPhone) {
+            var luxePhHref = telHrefFromPhone(tenant.contactPhone);
+            connectParts.push(luxePhHref ? ('<a href="' + esc(luxePhHref) + '">' + esc(tenant.contactPhone) + '</a>') : esc(tenant.contactPhone));
+          }
           var connectHtml = connectParts.length ? connectParts.join('<br>') : 'Add in app';
 
           var luxeHoursTrim = tenantBusinessHoursTrimmed(tenant);
@@ -6241,9 +6371,18 @@
               (luxeHoursTrim ? esc(luxeHoursTrim) : 'Add in app') + '</p></div>';
           }
 
+          var luxeLocRaw = (tenant.address && String(tenant.address).trim())
+            || (tenant.contactAddress && String(tenant.contactAddress).trim())
+            || (tenant.serviceArea && String(tenant.serviceArea).trim())
+            || '';
+          var luxeLocMaps = luxeLocRaw ? googleMapsSearchUrl(luxeLocRaw) : '';
+          var luxeLocationInner = luxeLocRaw && luxeLocMaps
+            ? '<a href="' + esc(luxeLocMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(luxeLocRaw).replace(/\n/g, '<br>') + '</a>'
+            : (luxeLocRaw ? esc(luxeLocRaw).replace(/\n/g, '<br>') : 'Add in app');
+
           contact = '<section class="luxe-contact">' +
             '<div class="luxe-contact-inner">' +
-              '<div class="luxe-contact-item"><h3>Location</h3><p>' + (tenant.address ? esc(tenant.address) : 'Add in app') + '</p></div>' +
+              '<div class="luxe-contact-item"><h3>Location</h3><p>' + luxeLocationInner + '</p></div>' +
               luxeHoursBlock +
               '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
             '</div>' +

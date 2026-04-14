@@ -726,10 +726,7 @@ struct DesignView: View {
             IconFieldRow(icon: "mappin.circle", placeholder: "123 Main St, City, State", text: $viewModel.contactAddress)
 
             if includeBladeServiceArea {
-                IconFieldRow(icon: "building.2", placeholder: "St. Petersburg, FL", text: $viewModel.serviceArea)
-                Text("City or area — Blade Where headline and gold hero line. Full street address goes above.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                ServiceAreaCityStateFields(viewModel: viewModel)
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -1039,10 +1036,7 @@ struct DesignView: View {
                 Text("Address")
                 TextField("123 Main St", text: $viewModel.contactAddress)
                     .textFieldStyle(.roundedBorder)
-                Text("City / area (Blade hero)")
-                    .font(.subheadline)
-                TextField("St. Petersburg, FL", text: $viewModel.serviceArea)
-                    .textFieldStyle(.roundedBorder)
+                ServiceAreaCityStateFields(viewModel: viewModel)
                 Toggle("Show contact on page", isOn: $viewModel.showContactOnPage)
             }
             Button("Save contact") {
@@ -1057,6 +1051,44 @@ struct DesignView: View {
         UIApplication.shared.open(url)
     }
 
+}
+
+// MARK: - City & state (serviceArea)
+
+struct ServiceAreaCityStateFields: View {
+    @ObservedObject var viewModel: DesignViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            IconFieldRow(
+                icon: "mappin.circle",
+                placeholder: "City",
+                text: $viewModel.serviceCity,
+                textInputAutocapitalization: .words
+            )
+            HStack(spacing: 10) {
+                Image(systemName: "map")
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
+                Picker("State", selection: $viewModel.serviceStateAbbr) {
+                    Text("State").tag("")
+                    ForEach(USStateServiceAreaFormatting.statesSortedByName) { row in
+                        Text(row.name).tag(row.abbr)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.primary)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
+            Text("Blade / Stonecut: Where headline and gold hero line. Full street address goes above.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
 }
 
 // MARK: - Hero image upload
@@ -2401,6 +2433,7 @@ struct IconFieldRow: View {
     let icon: String
     let placeholder: String
     @Binding var text: String
+    var textInputAutocapitalization: TextInputAutocapitalization = .never
 
     var body: some View {
         HStack(spacing: 10) {
@@ -2409,6 +2442,7 @@ struct IconFieldRow: View {
                 .frame(width: 24)
             TextField(placeholder, text: $text)
                 .font(.subheadline)
+                .textInputAutocapitalization(textInputAutocapitalization)
         }
         .padding(12)
         .background(Color(.secondarySystemGroupedBackground))

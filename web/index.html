@@ -2565,6 +2565,8 @@
       box-sizing: border-box;
     }
     .blade-page footer.blade-footer {
+      position: relative;
+      z-index: 101;
       background: var(--bh-black);
       border-top: 1px solid var(--bh-line);
       padding: 44px 40px;
@@ -2583,14 +2585,27 @@
     .blade-page .blade-footer-copy { font-size: 11px; letter-spacing: 0.12em; color: var(--bh-grey); margin: 0; }
     .blade-page .blade-footer-links { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; }
     .blade-page .blade-footer-links a {
+      display: inline-flex;
+      align-items: center;
       font-size: 11px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--bh-grey);
       text-decoration: none;
       transition: color 0.3s;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(201, 168, 76, 0.28);
+      padding: 10px 14px;
+      min-height: 44px;
+      box-sizing: border-box;
     }
     .blade-page .blade-footer-links a:hover { color: var(--bh-gold); }
+    .blade-page .blade-footer-links a:focus-visible {
+      outline: 2px solid var(--bh-gold);
+      outline-offset: 2px;
+      color: var(--bh-gold);
+    }
     .blade-page .blade-fade-up {
       opacity: 0;
       transform: translateY(28px);
@@ -4614,7 +4629,7 @@
           '<div class="blade-footer-logo">' + esc(displayName) + '</div>' +
           '<p class="blade-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
           '<ul class="blade-footer-links">' +
-          (igUrl ? '<li><a href="' + igUrl + '" target="_blank" rel="noopener">Instagram</a></li>' : '') +
+          (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">Instagram</a></li>' : '') +
           footerExtra +
           '</ul></footer>';
         var heroPrimary = tenantShowBookPage(tenant)

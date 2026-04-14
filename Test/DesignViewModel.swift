@@ -138,6 +138,9 @@ class DesignViewModel: ObservableObject {
     @Published var contactAddress: String = ""
     /// Short line for marketing (e.g. city, state) — Blade hero eyebrow; full street stays in `contactAddress`.
     @Published var serviceArea: String = ""
+    /// Parsed/edited with US state picker; composed into `serviceArea` on save.
+    @Published var serviceCity: String = ""
+    @Published var serviceStateAbbr: String = ""
     @Published var businessHours: String = ""
     @Published var businessHoursWeekly: BusinessHoursWeekly = .defaultOfficeHours
     @Published var businessHoursExceptions: [BusinessHoursException] = []
@@ -148,6 +151,20 @@ class DesignViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
 
     var hasTenant: Bool { tenantId != nil }
+
+    var serviceStateMenuLabel: String {
+        let abbr = serviceStateAbbr.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if abbr.isEmpty { return "State" }
+        return USStateServiceAreaFormatting.displayName(forAbbr: abbr) ?? abbr
+    }
+
+    func normalizeServiceCityTitleCase() {
+        serviceCity = USStateServiceAreaFormatting.titleCaseWords(serviceCity)
+    }
+
+    func composeServiceAreaForPersistence() {
+        serviceArea = USStateServiceAreaFormatting.composedServiceArea(city: serviceCity, stateAbbr: serviceStateAbbr)
+    }
 
     func invalidateWebPreview() {
         webPreviewReloadToken &+= 1
@@ -218,6 +235,9 @@ class DesignViewModel: ObservableObject {
                 services = []
                 industry = nil
                 webThemeId = ""
+                serviceArea = ""
+                serviceCity = ""
+                serviceStateAbbr = ""
                 isLoading = false
             }
             return
@@ -237,6 +257,9 @@ class DesignViewModel: ObservableObject {
                     services = []
                     industry = nil
                     webThemeId = ""
+                    serviceArea = ""
+                    serviceCity = ""
+                    serviceStateAbbr = ""
                     isLoading = false
                 }
                 return
@@ -334,6 +357,9 @@ class DesignViewModel: ObservableObject {
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
                 contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
                 serviceArea = (tenant?["serviceArea"] as? String) ?? ""
+                let parsedServiceArea = USStateServiceAreaFormatting.parseStoredServiceArea(serviceArea)
+                serviceCity = parsedServiceArea.city
+                serviceStateAbbr = parsedServiceArea.stateAbbr
                 businessHours = tenant?["businessHours"] as? String ?? ""
                 businessHoursExceptions = BusinessHoursException.parseList(tenant?["businessHoursExceptions"])
                 let weeklyRaw = tenant?["businessHoursWeekly"] as? [String: Any]
@@ -495,6 +521,8 @@ class DesignViewModel: ObservableObject {
 
     func saveAbout() async {
         guard let tid = tenantId else { return }
+        normalizeServiceCityTitleCase()
+        composeServiceAreaForPersistence()
         let hoursString = Self.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
         let updates: [String: Any] = [
             "aboutText": aboutText,
@@ -762,6 +790,8 @@ class DesignViewModel: ObservableObject {
 
     func saveContact() async {
         guard let tid = tenantId else { return }
+        normalizeServiceCityTitleCase()
+        composeServiceAreaForPersistence()
         let updates: [String: Any] = [
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,

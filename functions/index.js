@@ -733,6 +733,7 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
     createdAt: now,
     updatedAt: now,
     galleryGridLayout: "3x1",
+    galleryLayoutStyle: "classic_grid",
     shopEnabled: false,
     aboutText: "",
     contactEmail: context.auth.token.email || "",

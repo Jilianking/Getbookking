@@ -15,6 +15,7 @@ enum DesignTab: String, CaseIterable {
     case gallery
     case book
     case about
+    case shop
 }
 
 /// Editable “Your experience” steps on Studio 12 home (`studio12ProcessSteps` in Firestore).
@@ -48,6 +49,8 @@ class DesignViewModel: ObservableObject {
     @Published var featuredWorkImages: [String] = []
     @Published var isUploadingFeaturedWork = false
     @Published var galleryGridLayout: String = "3x1"
+    /// Full-page `/gallery` layout; independent of template (Classic, Luxe, Blade, Stonecut, Studio 12).
+    @Published var galleryLayoutStyle: GalleryLayoutStyle = .classicGrid
     @Published var backgroundColorHex: String = "#FFFFFF"
     @Published var cardSurfaceColorHex: String = "#F5F5F5"
     @Published var textColorHex: String = "#333333"
@@ -249,6 +252,7 @@ class DesignViewModel: ObservableObject {
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
                 heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""
                 galleryGridLayout = tenant?["galleryGridLayout"] as? String ?? "3x1"
+                galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant?["galleryLayoutStyle"] as? String)
                 let rawGallery = tenant?["galleryImages"] as? [String] ?? []
                 if tenant?["featuredWorkImages"] == nil {
                     /// Legacy: one list served home (prefix) + full gallery page; split into two fields.
@@ -411,6 +415,7 @@ class DesignViewModel: ObservableObject {
             "featuredWorkImages": featuredWorkImages,
             "galleryImages": galleryImages,
             "galleryGridLayout": galleryGridLayout,
+            "galleryLayoutStyle": galleryLayoutStyle.rawValue,
             "backgroundColor": backgroundColorHex,
             "cardSurfaceColor": cardSurfaceColorHex,
             "textColor": textColorHex,
@@ -479,6 +484,13 @@ class DesignViewModel: ObservableObject {
             "galleryPageBackgroundColor": galleryPageBackgroundColorHex,
             "galleryPageTextColor": galleryPageTextColorHex
         ])
+    }
+
+    /// Persists `/gallery` layout choice (any template).
+    func saveGalleryLayoutStyle() async {
+        guard let tid = tenantId else { return }
+        await saveTenantUpdates(tid, ["galleryLayoutStyle": galleryLayoutStyle.rawValue])
+        await MainActor.run { invalidateWebPreview() }
     }
 
     func saveAbout() async {

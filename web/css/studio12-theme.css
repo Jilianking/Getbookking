@@ -125,10 +125,32 @@
   text-decoration: none;
   transition: background 0.3s;
   display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .studio12-page .s12-nav-book:hover {
   background: var(--s12-espresso-mid);
+}
+
+.studio12-page .s12-nav-trailing {
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.studio12-page .s12-topnav .tattoo-nav-menu {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--s12-espresso);
+  font-size: 1.5rem;
+  padding: 8px 10px;
+  margin-right: 2px;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .studio12-page .s12-hero {
@@ -439,32 +461,17 @@
   flex-shrink: 0;
 }
 
-.studio12-page .s12-gallery-dark {
+.studio12-page .s12-gallery-light {
   position: relative;
   isolation: isolate;
-  background: linear-gradient(
-    168deg,
-    #5a4a3e 0%,
-    #45382f 42%,
-    #3a2f27 100%
-  );
+  background: var(--s12-ivory);
   padding: 80px 0 80px 40px;
   overflow: hidden;
+  border-top: 1px solid var(--s12-line);
+  border-bottom: 1px solid var(--s12-line);
 }
 
-/* Low-opacity film grain on dark gallery band only (not a border). */
-.studio12-page .s12-gallery-dark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-  opacity: 0.2;
-  mix-blend-mode: overlay;
-}
-
-.studio12-page .s12-gallery-dark > * {
+.studio12-page .s12-gallery-light > * {
   position: relative;
   z-index: 1;
 }
@@ -483,40 +490,40 @@
   font-family: "Cormorant Garamond", serif;
   font-size: clamp(36px, 4vw, 48px);
   font-weight: 300;
-  color: var(--s12-ivory);
+  color: var(--s12-espresso);
   margin: 0;
   line-height: 1;
 }
 
 .studio12-page .s12-gallery-title em {
   font-style: italic;
-  color: var(--s12-blush-dark);
+  color: var(--s12-clay);
 }
 
 .studio12-page .s12-gallery-link {
   font-size: 10px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--s12-taupe-light);
+  color: var(--s12-taupe);
   text-decoration: none;
-  border-bottom: 1px solid rgba(176, 128, 96, 0.3);
+  border-bottom: 1px solid rgba(42, 31, 24, 0.18);
   padding-bottom: 4px;
 }
 
 /* Studio 12 /gallery page: centered heading + same horizontal inset as page grid */
-.studio12-page .s12-gallery-dark--fullpage {
+.studio12-page .s12-gallery-light--fullpage {
   padding-left: 0;
   padding-right: 0;
 }
 
-.studio12-page .s12-gallery-dark--fullpage .s12-gallery-head {
+.studio12-page .s12-gallery-light--fullpage .s12-gallery-head {
   justify-content: center;
   padding-left: 40px;
   padding-right: 40px;
   margin-bottom: 28px;
 }
 
-.studio12-page .s12-gallery-dark--fullpage .s12-gallery-title {
+.studio12-page .s12-gallery-light--fullpage .s12-gallery-title {
   text-align: center;
   width: 100%;
 }
@@ -993,6 +1000,17 @@
   .studio12-page .s12-nav-links {
     display: none;
   }
+  .studio12-page .s12-nav-trailing {
+    display: flex;
+  }
+  .studio12-page .s12-topnav .tattoo-nav-menu {
+    display: block !important;
+    margin-right: 6px;
+  }
+  .studio12-page .s12-nav-book {
+    letter-spacing: 0.18em;
+    padding: 12px 22px;
+  }
   .studio12-page .s12-nav-logo-main {
     font-size: clamp(24px, 7.2vw, 36px);
   }
@@ -1002,10 +1020,10 @@
     letter-spacing: 0.32em;
   }
   .studio12-page .s12-topnav {
-    padding: 20px 24px;
+    padding: 20px 28px 20px 24px;
   }
   .studio12-page .s12-topnav.scrolled {
-    padding: 14px 24px;
+    padding: 14px 28px 14px 24px;
   }
 }
 

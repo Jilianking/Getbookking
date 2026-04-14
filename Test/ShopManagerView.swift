@@ -407,7 +407,7 @@ struct ShopCatalogView: View {
                 ContentUnavailableView {
                     Label("Shop page is off", systemImage: "bag")
                 } description: {
-                    Text("Turn on Shop page enabled in Shop settings or Web Page Design → Template.")
+                    Text("Turn on Shop page enabled in Shop settings or Web Page Design → Shop.")
                 }
             } else {
                 catalogList

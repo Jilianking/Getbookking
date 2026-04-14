@@ -144,6 +144,7 @@ struct DesignView: View {
                         case .gallery: galleryContent
                         case .book: bookContent
                         case .about: aboutContent
+                        case .shop: shopContent
                         }
                     }
                 }
@@ -301,18 +302,7 @@ struct DesignView: View {
             Text("Pages on your site")
                 .font(.headline)
                 .padding(.top, 12)
-            Text("Gallery, Book, and About each have an Enable … page toggle at the bottom of that tab. For your store, use Enable Shop page below. Add and edit products from Shop in the main menu.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            Divider()
-                .padding(.vertical, 8)
-            Toggle("Enable Shop page", isOn: $viewModel.shopEnabled)
-                .disabled(!viewModel.hasTenant || viewModel.isLoading)
-                .onChange(of: viewModel.shopEnabled) { _, _ in
-                    Task { await viewModel.savePublicPageVisibility() }
-                }
-            Text("When on, /shop and shop links appear on your public site. When off, they are hidden. You can also turn this on or off under Shop in the menu.")
+            Text("Gallery, Book, About, and Shop each have an Enable … page toggle at the bottom of that tab. Add and edit products from Shop in the main menu.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -594,6 +584,25 @@ struct DesignView: View {
                 .foregroundColor(.secondary)
 
             GalleryImagesSection(viewModel: viewModel)
+
+            Text("Full-page gallery layout")
+                .font(.subheadline.weight(.semibold))
+            Text("Choose how `/gallery` looks. This is separate from your site template (Classic, Luxe, Blade, Stonecut, or Studio 12).")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Picker("Full-page gallery layout", selection: $viewModel.galleryLayoutStyle) {
+                ForEach(GalleryLayoutStyle.allCases) { style in
+                    Text(style.menuTitle).tag(style)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(!viewModel.hasTenant || viewModel.isLoading)
+            .onChange(of: viewModel.galleryLayoutStyle) { _, _ in
+                Task { await viewModel.saveGalleryLayoutStyle() }
+            }
+            Text(viewModel.galleryLayoutStyle.detail)
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Text("Tip: Upload your best healed work here.")
                 .font(.caption)
@@ -912,6 +921,26 @@ struct DesignView: View {
                     Task { await viewModel.savePublicPageVisibility() }
                 }
             Text("When off, /about and About links are hidden on your public site.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var shopContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Shop")
+                .font(.headline)
+            Text("When the shop page is on, /shop and shop links appear on your public site. Add and edit products from Shop in the main menu.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Divider()
+            Toggle("Enable Shop page", isOn: $viewModel.shopEnabled)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.shopEnabled) { _, _ in
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            Text("When off, /shop and shop links are hidden. You can also turn this on or off under Shop in the menu.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

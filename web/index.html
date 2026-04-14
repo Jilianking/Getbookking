@@ -785,6 +785,103 @@
     .gallery-grid img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; display: block; cursor: pointer; transition: opacity 0.2s; }
     .gallery-grid .gallery-grid-link img { border-radius: 0; }
     .gallery-grid .gallery-grid-link:hover img { opacity: 0.85; }
+
+    /* Optional /gallery layouts (`galleryLayoutStyle`); independent of Classic / Luxe / Blade / Stonecut / Studio 12. */
+    .gallery-alt .gallery-grid-link {
+      display: block;
+      border-radius: 8px;
+      overflow: hidden;
+      line-height: 0;
+      text-decoration: none;
+      color: inherit;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(255, 255, 255, 0.12);
+    }
+    .gallery-alt .gallery-grid-link:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+    }
+    .gallery-alt .gallery-grid-link img {
+      width: 100%;
+      display: block;
+      border-radius: 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .gallery-alt .gallery-grid-link:hover img { opacity: 0.85; }
+    .gallery-alt--masonry {
+      column-count: 3;
+      column-gap: 12px;
+    }
+    .gallery-alt-masonry-cell {
+      break-inside: avoid;
+      margin-bottom: 12px;
+    }
+    /* Cinematic: uniform full-width band per row (same box for every image); cover fills, slight bias toward faces. */
+    .gallery-alt--cinematic {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+    .gallery-alt--cinematic .gallery-alt-cinematic-row {
+      width: 100%;
+    }
+    .gallery-alt--cinematic .gallery-alt-cinematic-row .gallery-grid-link {
+      display: block;
+      width: 100%;
+      height: max(260px, min(52vw, 520px, 58vh));
+      border-radius: 8px;
+      overflow: hidden;
+      line-height: 0;
+    }
+    /* Must beat `.gallery-alt .gallery-grid-link img` (3 classes) so cover + height apply. */
+    .gallery-alt--cinematic .gallery-alt-cinematic-row .gallery-grid-link img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 28%;
+    }
+    .gallery-alt--strip {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: 14px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling: touch;
+    }
+    .gallery-alt-strip-item {
+      flex: 0 0 min(260px, 78vw);
+      scroll-snap-align: start;
+    }
+    .gallery-alt--strip .gallery-alt-strip-item .gallery-grid-link img {
+      width: 100%;
+      height: 320px;
+      object-fit: cover;
+    }
+    @media (max-width: 640px) {
+      .gallery-alt--masonry {
+        column-count: 2;
+      }
+      .gallery-alt--strip .gallery-alt-strip-item .gallery-grid-link img {
+        height: 260px;
+      }
+    }
+    .studio12-page .s12-gallery-light .gallery-alt .gallery-grid-link {
+      -webkit-tap-highlight-color: rgba(42, 31, 24, 0.08);
+    }
+    .studio12-page .s12-gallery-light .gallery-alt .gallery-grid-link:focus-visible {
+      outline-color: var(--s12-espresso);
+    }
+    .blade-page.blade-page--sub .gallery-alt .gallery-grid-link {
+      border-radius: 4px;
+    }
+    .blade-page.blade-page--sub .gallery-alt .gallery-grid-link img {
+      border-radius: 0;
+    }
+
     .tattoo-featured-grid .gallery-lightbox-trigger {
       display: block;
       text-decoration: none;
@@ -2678,6 +2775,88 @@
     .stonecut-page .tattoo-sidebar.tattoo-sidebar-open .tattoo-sidebar-panel {
       transform: translateX(0);
     }
+    /* Stonecut /book + confirmation: match home surfaces and type */
+    .stonecut-page .booking-shell {
+      background: transparent;
+      color: inherit;
+      min-height: 100vh;
+    }
+    .stonecut-page .booking-page-title {
+      font-family: 'Unbounded', sans-serif;
+      font-size: clamp(22px, 5vw, 34px);
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #e8e0d0;
+    }
+    .stonecut-page .booking-page-subtitle {
+      color: #a09888;
+      opacity: 1;
+    }
+    .stonecut-page .booking-card {
+      color: #e8e0d0;
+      border: 1px solid rgba(232, 224, 208, 0.08);
+      box-shadow: none !important;
+    }
+    .stonecut-page .booking-form label { color: #a09888; font-weight: 500; }
+    .stonecut-page .booking-form input,
+    .stonecut-page .booking-form textarea,
+    .stonecut-page .booking-form select {
+      background: #060604;
+      border-color: rgba(232, 224, 208, 0.15);
+      color: #e8e0d0;
+    }
+    .stonecut-page .booking-form input:focus,
+    .stonecut-page .booking-form textarea:focus,
+    .stonecut-page .booking-form select:focus {
+      border-color: #c0221a;
+      box-shadow: 0 0 0 2px rgba(192, 34, 26, 0.25);
+    }
+    .stonecut-page .booking-submit {
+      background: #c0221a !important;
+      color: #e8e0d0 !important;
+      border: none;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 14px 28px;
+      border-radius: 0;
+    }
+    .stonecut-page .booking-submit:hover { filter: brightness(1.08); }
+    .stonecut-page .tagline { color: #a09888; }
+    .stonecut-page .upload-drop {
+      border-color: rgba(192, 34, 26, 0.45);
+      background: rgba(6, 6, 4, 0.5);
+    }
+    .stonecut-page .upload-drop:hover { border-color: rgba(192, 34, 26, 0.75); }
+    .stonecut-page .upload-drop.dragover {
+      border-color: #c0221a;
+      box-shadow: 0 0 0 3px rgba(192, 34, 26, 0.2);
+      background: rgba(192, 34, 26, 0.08);
+    }
+    .stonecut-page .upload-drop-title { color: #e8e0d0; }
+    .stonecut-page .upload-drop-sub { color: #a09888; }
+    .stonecut-page .upload-drop-filelist { color: #a09888; }
+    .stonecut-page .pref-days-button {
+      background: #060604;
+      border-color: rgba(232, 224, 208, 0.15);
+      color: #e8e0d0;
+    }
+    .stonecut-page .pref-days-button:focus {
+      border-color: #c0221a;
+      box-shadow: 0 0 0 2px rgba(192, 34, 26, 0.25);
+    }
+    .stonecut-page .pref-days-caret { color: #a09888; }
+    .stonecut-page .pref-days-menu {
+      background: #0e0d0a;
+      border-color: rgba(232, 224, 208, 0.12);
+    }
+    .stonecut-page .pref-days-option { color: #e8e0d0; }
+    .stonecut-page .pref-days-option:hover { background: rgba(192, 34, 26, 0.12); }
+    .stonecut-page .pref-days-option.active { background: rgba(192, 34, 26, 0.18); }
+    .stonecut-page .pref-days-option.active .pref-days-check { color: #c0221a; }
+    .stonecut-page .booking-success-flat .booking-success-lead { color: #c0221a !important; }
+    .stonecut-page .booking-success-flat .booking-success-detail { color: #a09888 !important; }
     @media (max-width: 900px) {
       .stonecut-page .stonecut-links { display: none; }
       .stonecut-page .stonecut-nav { padding: 16px 20px; }
@@ -2875,10 +3054,32 @@
       text-decoration: none;
       transition: background 0.3s;
       display: inline-block;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .studio12-page .s12-nav-book:hover {
       background: var(--s12-espresso-mid);
+    }
+
+    .studio12-page .s12-nav-trailing {
+      display: none;
+      align-items: center;
+      justify-content: flex-end;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .studio12-page .s12-topnav .tattoo-nav-menu {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--s12-espresso);
+      font-size: 1.5rem;
+      padding: 8px 10px;
+      margin-right: 2px;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
     }
 
     .studio12-page .s12-hero {
@@ -3189,32 +3390,17 @@
       flex-shrink: 0;
     }
 
-    .studio12-page .s12-gallery-dark {
+    .studio12-page .s12-gallery-light {
       position: relative;
       isolation: isolate;
-      background: linear-gradient(
-        168deg,
-        #5a4a3e 0%,
-        #45382f 42%,
-        #3a2f27 100%
-      );
+      background: var(--s12-ivory);
       padding: 80px 0 80px 40px;
       overflow: hidden;
+      border-top: 1px solid var(--s12-line);
+      border-bottom: 1px solid var(--s12-line);
     }
 
-    /* Low-opacity film grain on dark gallery band only (not a border). */
-    .studio12-page .s12-gallery-dark::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-      opacity: 0.2;
-      mix-blend-mode: overlay;
-    }
-
-    .studio12-page .s12-gallery-dark > * {
+    .studio12-page .s12-gallery-light > * {
       position: relative;
       z-index: 1;
     }
@@ -3233,14 +3419,14 @@
       font-family: "Cormorant Garamond", serif;
       font-size: clamp(36px, 4vw, 48px);
       font-weight: 300;
-      color: var(--s12-ivory);
+      color: var(--s12-espresso);
       margin: 0;
       line-height: 1;
     }
 
     .studio12-page .s12-gallery-title em {
       font-style: italic;
-      color: var(--s12-blush-dark);
+      color: var(--s12-clay);
     }
 
     .studio12-page .s12-gallery-title .s12-gallery-title-link {
@@ -3256,26 +3442,26 @@
       font-size: 10px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: var(--s12-taupe-light);
+      color: var(--s12-taupe);
       text-decoration: none;
-      border-bottom: 1px solid rgba(176, 128, 96, 0.3);
+      border-bottom: 1px solid rgba(42, 31, 24, 0.18);
       padding-bottom: 4px;
     }
 
     /* Dedicated /gallery: centered title, flush sides so grid (max-width) aligns visually */
-    .studio12-page .s12-gallery-dark--fullpage {
+    .studio12-page .s12-gallery-light--fullpage {
       padding-left: 0;
       padding-right: 0;
     }
 
-    .studio12-page .s12-gallery-dark--fullpage .s12-gallery-head {
+    .studio12-page .s12-gallery-light--fullpage .s12-gallery-head {
       justify-content: center;
       padding-left: 40px;
       padding-right: 40px;
       margin-bottom: 28px;
     }
 
-    .studio12-page .s12-gallery-dark--fullpage .s12-gallery-title {
+    .studio12-page .s12-gallery-light--fullpage .s12-gallery-title {
       text-align: center;
       width: 100%;
     }
@@ -3389,7 +3575,7 @@
       -webkit-tap-highlight-color: rgba(250, 247, 242, 0.15);
     }
     .studio12-page .s12-gallery-page-grid .s12-g-item .s12-gallery-full-link:focus-visible {
-      outline: 2px solid var(--s12-ivory);
+      outline: 2px solid var(--s12-espresso);
       outline-offset: 2px;
     }
 
@@ -3780,6 +3966,17 @@
       .studio12-page .s12-nav-links {
         display: none;
       }
+      .studio12-page .s12-nav-trailing {
+        display: flex;
+      }
+      .studio12-page .s12-topnav .tattoo-nav-menu {
+        display: block !important;
+        margin-right: 6px;
+      }
+      .studio12-page .s12-nav-book {
+        letter-spacing: 0.18em;
+        padding: 12px 22px;
+      }
       .studio12-page .s12-nav-logo-main {
         font-size: clamp(24px, 7.2vw, 36px);
       }
@@ -3789,10 +3986,10 @@
         letter-spacing: 0.32em;
       }
       .studio12-page .s12-topnav {
-        padding: 20px 24px;
+        padding: 20px 28px 20px 24px;
       }
       .studio12-page .s12-topnav.scrolled {
-        padding: 14px 24px;
+        padding: 14px 28px 14px 24px;
       }
     }
 
@@ -3948,6 +4145,13 @@
           applyTenantTypography(t);
           return;
         }
+        if (isStonecutTheme(t)) {
+          document.body.style.background = '#060604';
+          document.body.style.color = '#e8e0d0';
+          document.body.style.backgroundImage = '';
+          applyTenantTypography(t);
+          return;
+        }
         var bg = t.backgroundColor || '#FFFFFF';
         var card = t.cardSurfaceColor || '#F5F5F5';
         var txt = t.textColor || '#333333';
@@ -4006,11 +4210,11 @@
         if (!iconColor) {
           if (isGalleryPath) {
             iconColor = (usesThemedChrome(tenant) || isClassicTheme(tenant))
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : (tenant.featuredWorkTextColor || '#1C1917'))))
               : '#FFFFFF';
           } else if (isBookPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : (tenant.featuredWorkTextColor || '#1C1917'))))
               : '#000000';
           } else if (usesThemedChrome(tenant)) {
             iconColor = isBladeTheme(tenant) ? '#c9a84c' : (isClassicTheme(tenant) ? '#1a1a1a' : '#FFFFFF');
@@ -4429,6 +4633,24 @@
           '<div class="blade-hero-vertical">' + esc(vertical) + '</div></section>';
         return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
+      /** Stonecut top bar (fixed); same markup on home, shop, /book, and post-submit. */
+      function stonecutNavHtml(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Studio';
+        return '<nav class="stonecut-nav" id="stonecut-nav">' +
+          '<a href="' + base + '/home" class="stonecut-logo">' + esc(displayName) + '</a>' +
+          '<div class="stonecut-nav-trailing">' +
+          '<ul class="stonecut-links">' +
+          '<li><a href="' + base + '/home#services">Services</a></li>' +
+          (tenantShowGalleryPage(tenant) ? '<li><a href="' + galleryUrl + '">Portfolio</a></li>' : '') +
+          (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
+          '<li><a href="' + base + '/home#location">Location</a></li>' +
+          (tenantShowBookPage(tenant) ? '<li><a href="' + bookUrl + '">Book</a></li>' : '') + '</ul>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '</div></nav>';
+      }
       function stonecutHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
@@ -4485,17 +4707,7 @@
             '</section>';
         })();
         return '<div class="stonecut-page">' +
-          '<nav class="stonecut-nav" id="stonecut-nav">' +
-          '<a href="' + base + '/home" class="stonecut-logo">' + esc(displayName) + '</a>' +
-          '<div class="stonecut-nav-trailing">' +
-          '<ul class="stonecut-links">' +
-          '<li><a href="' + base + '/home#services">Services</a></li>' +
-          (tenantShowGalleryPage(tenant) ? '<li><a href="' + galleryUrl + '">Portfolio</a></li>' : '') +
-          (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
-          '<li><a href="' + base + '/home#location">Location</a></li>' +
-          (tenantShowBookPage(tenant) ? '<li><a href="' + bookUrl + '">Book</a></li>' : '') + '</ul>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>' +
+          stonecutNavHtml(tenant) +
           '<section class="stonecut-hero">' +
           '<div class="stonecut-hero-left">' +
           '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em>' + esc(displayName) + '</h1>' +
@@ -4821,9 +5033,11 @@
             ? bladeNavHtml(tenant, base + '/home')
             : (isLuxeTheme(tenant)
               ? luxeChromeNavHtml(tenant, 'light')
-              : tattooNavHtml(tenant)));
+              : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant))));
 
-        var sidebar = isStudio12Theme(tenant) ? '' : ('<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+        var sidebar = isStudio12Theme(tenant)
+          ? studio12SidebarHtml(tenant)
+          : ('<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
@@ -4833,9 +5047,11 @@
           ? 'background:#faf7f2;color:#2a1f18'
           : (isBladeTheme(tenant)
           ? 'background:#0a0a08;color:#f5f0e8'
-          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : '')));
-        var wrapClass = 'tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : '') + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
-        var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '#ffffff';
+          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isStonecutTheme(tenant) ? 'background:#060604;color:#e8e0d0' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : ''))));
+        var wrapClass = isStonecutTheme(tenant)
+          ? 'stonecut-page'
+          : ('tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : ''));
+        var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || (isStonecutTheme(tenant) ? '#0e0d0a' : '#ffffff');
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
             nav +
@@ -4857,12 +5073,28 @@
         var name = esc(tenant.displayName || 'Thank you');
         var lead = '✓ Request received';
         var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
+        if (isStudio12Theme(tenant)) {
+          return '' +
+            '<div class="tattoo-page studio12-page studio12-sub" style="background:#faf7f2;color:#2a1f18">' +
+            studio12NavHtml(tenant) +
+            '<div class="booking-shell">' +
+              '<div class="booking-page-header">' +
+                '<h1 class="booking-page-title">' + name + '</h1>' +
+              '</div>' +
+              '<div class="booking-success-flat">' +
+                '<p class="booking-success-lead">' + lead + '</p>' +
+                '<p class="booking-success-detail">' + detail + '</p>' +
+              '</div>' +
+            '</div>' +
+            studio12SidebarHtml(tenant) +
+            '</div>';
+        }
         if (usesThemedChrome(tenant)) {
           var base = tenantBaseUrl(tenant);
           var bookUrl = base + '/book';
           var nav = isBladeTheme(tenant)
             ? bladeNavHtml(tenant, base + '/home')
-            : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : tattooNavHtml(tenant));
+            : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant)));
           var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
             '<div class="tattoo-sidebar-backdrop"></div>' +
             '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
@@ -4870,12 +5102,13 @@
             '</div></div>';
           var bookPageStyle = isBladeTheme(tenant)
             ? 'background:#0a0a08;color:#f5f0e8'
-            : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : tattooSiteThemeInlineStyle(tenant));
-          var successWrapClass = 'tattoo-page' +
+            : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isStonecutTheme(tenant) ? 'background:#060604;color:#e8e0d0' : tattooSiteThemeInlineStyle(tenant)));
+          var successWrapClass = isStonecutTheme(tenant)
+            ? 'stonecut-page'
+            : ('tattoo-page' +
             (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
             (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
-            (isClassicTheme(tenant) ? ' classic-home' : '') +
-            (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
+            (isClassicTheme(tenant) ? ' classic-home' : ''));
           var successHeaderHtml = '';
           if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
             successHeaderHtml =
@@ -4933,7 +5166,9 @@
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
-              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '', galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1', aboutText: data.aboutText || '',
+              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '', galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
+              galleryLayoutStyle: data.galleryLayoutStyle,
+              aboutText: data.aboutText || '',
               reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
               sidebarLinks: data.sidebarLinks || [],
               sidebarIconColorHome: data.sidebarIconColorHome || '',
@@ -4987,7 +5222,17 @@
         if (isLuxeTheme(tenant)) return 'background:#FFFDF9;color:#1a1a1a';
         if (isBladeTheme(tenant)) return 'background:#141410;color:#f5f0e8';
         if (isStonecutTheme(tenant)) return 'background:#0e0d0a;color:#e8e0d0';
+        if (isStudio12Theme(tenant)) return 'background:#faf7f2;color:#2a1f18';
         return tattooSiteThemeInlineStyle(tenant);
+      }
+      function studio12SidebarHtml(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        return '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
+          '</div></div>';
       }
       function sidebarLinksHtml(tenant, base, bookUrl) {
         var galleryUrl = base + '/gallery';
@@ -5041,6 +5286,41 @@
       function tattooSidebarPanelContentHtml(tenant, base, bookUrl) {
         return tattooSidebarBrandHtml(tenant, base) + sidebarLinksHtml(tenant, base, bookUrl);
       }
+      /**
+       * Normalized `/gallery` layout id. Any template can use any allowed layout.
+       * `classic_grid` = portfolio grid or Studio 12 native grid.
+       * Legacy `default`, `cinematic`, `featured_thumbnails`, unknown → classic_grid.
+       */
+      function effectiveGalleryLayoutStyle(tenant) {
+        var s = String(tenant.galleryLayoutStyle != null ? tenant.galleryLayoutStyle : '')
+          .toLowerCase()
+          .trim()
+          .replace(/-/g, '_');
+        if (s === 'masonry') return 'masonry';
+        if (s === 'horizontal_strip') return 'horizontal_strip';
+        return 'classic_grid';
+      }
+
+      function galleryLightboxCell(url, linkClass) {
+        linkClass = linkClass || '';
+        return '<a class="gallery-grid-link gallery-lightbox-trigger ' + linkClass + '" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
+      }
+
+      /** HTML for optional layouts (not used when style is `default`). */
+      function galleryAltLayoutInnerHtml(urls, mode) {
+        if (mode === 'masonry') {
+          return '<div class="gallery-alt gallery-alt--masonry">' + urls.map(function(u) {
+            return '<div class="gallery-alt-masonry-cell">' + galleryLightboxCell(u) + '</div>';
+          }).join('') + '</div>';
+        }
+        if (mode === 'horizontal_strip') {
+          return '<div class="gallery-alt gallery-alt--strip">' + urls.map(function(u) {
+            return '<div class="gallery-alt-strip-item">' + galleryLightboxCell(u) + '</div>';
+          }).join('') + '</div>';
+        }
+        return '';
+      }
+
       function galleryLightboxShellHtml() {
         return '<div id="gallery-lightbox" class="gallery-lightbox" role="dialog" aria-modal="true" aria-label="Image preview">' +
           '<div class="gallery-lightbox-backdrop"></div>' +
@@ -5059,16 +5339,22 @@
 
         if (isStudio12Theme(tenant)) {
           var u12 = galleryPageImageUrls(tenant);
-          var imgs12 = u12.map(function(u) {
-            return '<div class="s12-g-item s12-fade"><a class="s12-gallery-full-link gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt="" loading="lazy"></a></div>';
-          }).join('');
-          var galleryBody = !imgs12
-            ? '<div class="s12-gallery-empty-state"><p class="s12-phil-body" style="color:rgba(250,247,242,0.7)">No gallery images yet. Add them in the app.</p></div>'
-            : '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(u12.length, 24) + '">' + imgs12 + '</div>';
+          var gLay = effectiveGalleryLayoutStyle(tenant);
+          var galleryBody;
+          if (!u12.length) {
+            galleryBody = '<div class="s12-gallery-empty-state"><p class="s12-phil-body">No gallery images yet. Add them in the app.</p></div>';
+          } else if (gLay === 'classic_grid') {
+            var imgs12 = u12.map(function(u) {
+              return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
+            }).join('');
+            galleryBody = '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(u12.length, 24) + '">' + imgs12 + '</div>';
+          } else {
+            galleryBody = galleryAltLayoutInnerHtml(u12, gLay);
+          }
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
-            '<div class="s12-gallery-dark s12-gallery-dark--fullpage" style="min-height:100vh">' +
+            '<div class="s12-gallery-light s12-gallery-light--fullpage" style="min-height:100vh">' +
             '<div class="s12-gallery-head"><h2 class="s12-gallery-title"><a href="' + esc(galleryUrl) + '" class="s12-gallery-title-link">Gallery</a></h2></div>' +
-            galleryBody + galleryLightboxShellHtml() + '</div></div>';
+            galleryBody + '</div>' + studio12SidebarHtml(tenant) + '</div>';
         }
 
         var nav = isBladeTheme(tenant)
@@ -5081,13 +5367,19 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var imgsHtml = galleryPageImageUrls(tenant).map(function(url) {
-          return '<a class="gallery-grid-link gallery-lightbox-trigger" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
-        }).join('');
-
-        var content = imgsHtml
-          ? '<div class="gallery-grid">' + imgsHtml + '</div>'
-          : '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
+        var gUrlsAll = galleryPageImageUrls(tenant);
+        var gLayStd = effectiveGalleryLayoutStyle(tenant);
+        var content;
+        if (!gUrlsAll.length) {
+          content = '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
+        } else if (gLayStd === 'classic_grid') {
+          var imgsHtml = gUrlsAll.map(function(url) {
+            return '<a class="gallery-grid-link gallery-lightbox-trigger" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
+          }).join('');
+          content = '<div class="gallery-grid">' + imgsHtml + '</div>';
+        } else {
+          content = galleryAltLayoutInnerHtml(gUrlsAll, gLayStd);
+        }
         var gPageBg, gPageFg, galleryPageStyle;
         if (isBladeTheme(tenant)) {
           gPageBg = '#0a0a08';
@@ -5295,7 +5587,9 @@
           '<span class="s12-nav-logo-main">' + esc(displayName) + '</span>' +
           '<span class="s12-nav-logo-sub">' + esc(sub) + '</span></a>' +
           '<ul class="s12-nav-links">' + navLis + '</ul>' +
-          bookCorner + '</nav>';
+          bookCorner +
+          '<div class="s12-nav-trailing">' +
+          '<button type="button" class="tattoo-nav-menu" aria-label="Menu">&#9776;</button></div></nav>';
       }
 
       function bindStudio12Page() {
@@ -5326,7 +5620,7 @@
         var inner = cards
           ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">Our <em>products</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
           : '<div class="s12-services" style="padding-top:120px"><p class="s12-phil-body" style="text-align:center">No products yet. Add them in the app.</p></div>';
-        return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + '</div>';
+        return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + studio12SidebarHtml(tenant) + '</div>';
       }
 
       function studio12IndustryKey(tenant) {
@@ -5504,7 +5798,7 @@
         }
         var gUrls = galleryPageImageUrls(tenant);
         var gItems = gUrls.map(function(u) {
-          return '<div class="s12-g-item s12-fade"><a class="s12-gallery-full-link gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt="" loading="lazy"></a></div>';
+          return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
         }).join('');
         if (!gItems) {
           gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div>';
@@ -5626,7 +5920,7 @@
         }
         s12HeroActions += '<a class="s12-btn-outline" href="' + exploreHref + '">' + esc(exploreLabel) + '</a></div>';
         var gallerySectionHtml = tenantShowGalleryPage(tenant)
-          ? '<section class="s12-gallery-dark">' +
+          ? '<section class="s12-gallery-light">' +
           '<div class="s12-gallery-head">' +
           '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">Our work</div>' +
           '<h2 class="s12-gallery-title">The <em>gallery</em></h2></div>' +
@@ -5671,7 +5965,7 @@
           '<footer class="s12-footer">' +
           '<div><div class="s12-footer-brand">' + esc(displayName) + '</div></div>' +
           '<p class="s12-footer-copy">© ' + y + ' ' + esc(displayName) + '</p>' +
-          '<div></div></footer>' + galleryLightboxShellHtml() + '</div>';
+          '<div></div></footer>' + studio12SidebarHtml(tenant) + '</div>';
       }
 
       function hairTattooStyleHomePage(tenant, services) {
@@ -5784,25 +6078,13 @@
       function stonecutShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
-        var galleryUrl = base + '/gallery';
-        var displayName = tenant.displayName || 'Studio';
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
           '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
-        var nav = '<nav class="stonecut-nav" id="stonecut-nav">' +
-          '<a href="' + base + '/home" class="stonecut-logo">' + esc(displayName) + '</a>' +
-          '<div class="stonecut-nav-trailing">' +
-          '<ul class="stonecut-links">' +
-          '<li><a href="' + base + '/home#services">Services</a></li>' +
-          (tenantShowGalleryPage(tenant) ? '<li><a href="' + galleryUrl + '">Portfolio</a></li>' : '') +
-          (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
-          '<li><a href="' + base + '/home#location">Location</a></li>' +
-          (tenantShowBookPage(tenant) ? '<li><a href="' + bookUrl + '">Book</a></li>' : '') + '</ul>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
-          '</div></nav>';
+        var nav = stonecutNavHtml(tenant);
         var productCards = luxeTenantProductCardsHtml(tenant);
         var mainInner = productCards
           ? '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><div class="stonecut-shop-grid">' + productCards + '</div>'
@@ -5981,9 +6263,9 @@
         var nextBtn = lb.querySelector('.gallery-lightbox-next');
         var counterEl = lb.querySelector('.gallery-lightbox-counter');
         if (!img) return;
+        var isStudio12Page = !!root.querySelector('.studio12-page');
         var urls = [];
         var idx = 0;
-        var touchStartX = null;
         function collectUrls() {
           var triggers = root.querySelectorAll('.gallery-lightbox-trigger');
           var list = [];
@@ -6070,18 +6352,21 @@
             goNext();
           });
         }
-        img.addEventListener('touchstart', function(e) {
-          if (e.changedTouches.length !== 1) return;
-          touchStartX = e.changedTouches[0].clientX;
-        }, { passive: true });
-        img.addEventListener('touchend', function(e) {
-          if (touchStartX == null || e.changedTouches.length !== 1) return;
-          var dx = e.changedTouches[0].clientX - touchStartX;
-          touchStartX = null;
-          if (urls.length <= 1) return;
-          if (dx > 56) goPrev();
-          else if (dx < -56) goNext();
-        }, { passive: true });
+        if (!isStudio12Page) {
+          var touchStartX = null;
+          img.addEventListener('touchstart', function(e) {
+            if (e.changedTouches.length !== 1) return;
+            touchStartX = e.changedTouches[0].clientX;
+          }, { passive: true });
+          img.addEventListener('touchend', function(e) {
+            if (touchStartX == null || e.changedTouches.length !== 1) return;
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            touchStartX = null;
+            if (urls.length <= 1) return;
+            if (dx > 56) goPrev();
+            else if (dx < -56) goNext();
+          }, { passive: true });
+        }
       }
       function shopCartStorageKey(tenantId) {
         return 'bk_shop_cart_v1_' + tenantId;
@@ -6478,6 +6763,7 @@
               } else if (isStudio12Theme(tenant)) {
                 document.getElementById('root').innerHTML = studio12ShopPage(tenant);
                 bindStudio12Page();
+                bindTattooSidebar();
                 bindShopPage(tenant);
                 document.body.style.background = '#faf7f2';
                 document.body.style.color = '#2a1f18';
@@ -6501,7 +6787,8 @@
                 document.body.style.color = '#1a1a1a';
               }
               applyBranding(tenant);
-              applySidebarIconColor(tenant, false, true);
+              if (isStudio12Theme(tenant)) applySidebarIconColor(tenant, false, false);
+              else applySidebarIconColor(tenant, false, true);
               return;
             }
             if (p.isGalleryPath && !tenantShowGalleryPage(tenant)) {
@@ -6542,6 +6829,7 @@
               bindGalleryLightbox(document.getElementById('root'));
               if (isStudio12Theme(tenant)) {
                 bindStudio12Page();
+                bindTattooSidebar();
               } else {
                 bindTattooSidebar();
               }
@@ -6556,8 +6844,8 @@
                 document.body.style.background = '#FFFDF9';
                 document.body.style.color = '#1a1a1a';
               } else if (isStudio12Theme(tenant)) {
-                document.body.style.background = '#2a1f18';
-                document.body.style.color = '#faf7f2';
+                document.body.style.background = '#faf7f2';
+                document.body.style.color = '#2a1f18';
               } else if (isPortfolioIndustry(tenant.industry)) {
                 document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
                 document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
@@ -6587,9 +6875,17 @@
                         : classicPortfolioHomePage(tenant, services);
             if (showForm) {
               document.getElementById('root').innerHTML = form(tenant, services, presel);
-              if (usesThemedChrome(tenant)) bindTattooSidebar();
+              if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
               if (isStudio12Theme(tenant)) bindStudio12Page();
               if (isBladeTheme(tenant)) bindBladeChrome();
+              if (isStonecutTheme(tenant)) {
+                var scNavBook = document.getElementById('stonecut-nav');
+                if (scNavBook) {
+                  var onScScrollBook = function() { scNavBook.classList.toggle('scrolled', window.scrollY > 60); };
+                  onScScrollBook();
+                  window.addEventListener('scroll', onScScrollBook, { passive: true });
+                }
+              }
               try {
                 var shopNotes = sessionStorage.getItem('bk_shop_cart_notes');
                 if (shopNotes) {
@@ -6604,6 +6900,7 @@
               bindGalleryLightbox(document.getElementById('root'));
               if (isStudio12Home) {
                 bindStudio12Page();
+                bindTattooSidebar();
               } else {
                 bindTattooSidebar();
               }
@@ -6907,10 +7204,19 @@
                   });
                 }).then(function(){
                   var doneHtml = bookingSuccessHtml(tenant);
-                  document.getElementById('root').innerHTML = usesThemedChrome(tenant) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
+                  document.getElementById('root').innerHTML = (usesThemedChrome(tenant) || isStudio12Theme(tenant)) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
                   applyBranding(tenant);
-                  if (usesThemedChrome(tenant)) bindTattooSidebar();
+                  if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
+                  if (isStudio12Theme(tenant)) bindStudio12Page();
                   if (isBladeTheme(tenant)) bindBladeChrome();
+                  if (isStonecutTheme(tenant)) {
+                    var scNavDone = document.getElementById('stonecut-nav');
+                    if (scNavDone) {
+                      var onScScrollDone = function() { scNavDone.classList.toggle('scrolled', window.scrollY > 60); };
+                      onScScrollDone();
+                      window.addEventListener('scroll', onScScrollDone, { passive: true });
+                    }
+                  }
                   applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){
                   errEl.textContent = (e && e.message) ? e.message : 'Something went wrong. Please try again.';

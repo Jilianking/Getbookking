@@ -542,7 +542,7 @@
     @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; gap: 24px; } .tattoo-about h2 { font-size: 1.8rem; } }
     /* ─── Classic redesign (warm cream, split hero, services, stats) ─── */
     .classic-home {
-      background: #F7F5F0;
+      background: #ffffff;
       color: #1a1a1a;
       font-family: var(--font-display);
       min-height: 100vh;
@@ -553,7 +553,8 @@
     }
     .classic-home .tattoo-nav {
       position: relative;
-      background: #F7F5F0;
+      background: #ffffff;
+      border-bottom: 1px solid rgba(26, 26, 26, 0.08);
     }
     /* Match drawer wordmark: Unbounded, uppercase, wide tracking (see `.tattoo-sidebar-wordmark`) */
     .classic-home .tattoo-nav .tattoo-brand {
@@ -649,12 +650,12 @@
       color: rgba(26,26,26,0.4);
       margin: 0 0 8px;
     }
-    .classic-home .tattoo-featured-outer { background: #F7F5F0 !important; color: #1a1a1a !important; }
+    .classic-home .tattoo-featured-outer { background: #ffffff !important; color: #1a1a1a !important; }
     .classic-home .tattoo-featured-inner { padding-top: 64px; }
     .classic-home .tattoo-featured-inner h2 { font-size: 1.6rem; }
     .classic-home .tattoo-featured-grid img { border-radius: 8px; }
     .classic-services-section {
-      background: #F7F5F0;
+      background: #ffffff;
     }
     .classic-services {
       max-width: 1400px;
@@ -668,17 +669,88 @@
       margin: 0 0 24px;
     }
     .classic-service-list { border-top: 1px solid rgba(26,26,26,0.12); }
-    .classic-service-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 18px 0;
+    /* “What I offer”: FAQ-style row + disclosure (marketing site pattern). */
+    .classic-service-item {
       border-bottom: 1px solid rgba(26,26,26,0.12);
     }
-    .classic-service-info { flex: 1; min-width: 0; }
-    .classic-service-name { font-weight: 600; font-size: 15px; }
-    .classic-service-desc { font-size: 13px; color: rgba(26,26,26,0.5); margin-top: 2px; }
-    .classic-service-price { font-weight: 600; font-size: 15px; flex-shrink: 0; margin-left: 24px; }
+    .classic-service-trigger {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      padding: 18px 0;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .classic-service-trigger::-webkit-details-marker {
+      display: none;
+    }
+    .classic-service-trigger::marker {
+      content: '';
+    }
+    .classic-service-name-wrap {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+    .classic-service-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .classic-service-meta-end {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .classic-service-price {
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .classic-service-toggle {
+      font-size: 22px;
+      font-weight: 300;
+      line-height: 1;
+      color: rgba(26, 26, 26, 0.35);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .classic-service-item[open] .classic-service-toggle {
+      transform: rotate(45deg);
+    }
+    .classic-service-panel {
+      padding: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: rgba(26, 26, 26, 0.55);
+    }
+    .classic-service-panel p {
+      margin: 0 0 8px;
+    }
+    .classic-service-panel p:last-child {
+      margin-bottom: 0;
+    }
+    .classic-service-panel .classic-service-dur {
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(26, 26, 26, 0.4);
+      margin-bottom: 10px;
+    }
+    .classic-service-panel-empty {
+      margin: 0;
+      font-style: italic;
+      color: rgba(26, 26, 26, 0.38);
+    }
+    /* No description: plain row (no + / disclosure). */
+    .classic-service-item--static .classic-service-static-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      padding: 18px 0;
+    }
     .classic-about-section {
       background: #1a1a1a;
       color: #F7F5F0;
@@ -728,12 +800,15 @@
       border-bottom-color: rgba(247,245,240,0.5);
     }
     .classic-footer {
-      background: #F7F5F0;
+      background: #ffffff;
       border-top: 1px solid rgba(26,26,26,0.1);
       padding: 24px 40px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 16px;
+      text-align: center;
     }
     .classic-home .classic-footer-brand {
       font-family: 'Unbounded', sans-serif;
@@ -743,10 +818,26 @@
       line-height: 1.2;
       text-transform: uppercase;
     }
-    .classic-footer-links { display: flex; gap: 24px; }
+    .classic-footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+    }
     .classic-footer-links a { color: rgba(26,26,26,0.5); text-decoration: none; font-size: 13px; }
     .classic-footer-links a:hover { color: #1a1a1a; }
-    .classic-home.gallery-page .gallery-header { padding: 20px 24px 8px; }
+    .classic-footer-copy {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: rgba(26, 26, 26, 0.45);
+      max-width: 560px;
+    }
+    /* Classic /gallery: calmer header rhythm (Studio 12–like symmetry). */
+    .gallery-page.classic-home .gallery-header {
+      padding: 48px clamp(20px, 5vw, 40px) 32px;
+      text-align: center;
+    }
     @media (max-width: 768px) {
       .classic-home-page .tattoo-nav .tattoo-brand { display: none; }
       .classic-home-page .tattoo-nav { position: absolute; top: 0; right: 0; left: 0; z-index: 10; background: transparent; padding: 12px 20px; }
@@ -781,6 +872,58 @@
       text-transform: uppercase;
       color: inherit;
     }
+    /* Short gallery: pin footer to viewport bottom (flex; lightbox/sidebar are fixed). */
+    .gallery-page.gallery-page--stonecut {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+    /* Classic / Blade / Luxe gallery: same sticky-footer column (fixed lightbox + sidebar). */
+    .gallery-page.classic-home,
+    .gallery-page.blade-page.blade-page--sub,
+    .gallery-page.luxe-page.luxe-page--sub {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+    .gallery-page.classic-home .gallery-shell,
+    .gallery-page.blade-page.blade-page--sub .gallery-shell,
+    .gallery-page.luxe-page.luxe-page--sub .gallery-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .gallery-page.classic-home .gallery-shell {
+      padding-top: clamp(8px, 2vw, 16px);
+      padding-left: clamp(20px, 5vw, 40px);
+      padding-right: clamp(20px, 5vw, 40px);
+    }
+    .gallery-page.classic-home footer.classic-footer,
+    .tattoo-page.classic-home footer.classic-footer {
+      margin-top: auto;
+      flex-shrink: 0;
+    }
+    .blade-page.blade-page--sub footer.blade-footer {
+      margin-top: auto;
+      flex-shrink: 0;
+    }
+    .gallery-page.luxe-page.luxe-page--sub .luxe-contact,
+    .luxe-page.luxe-page--sub .luxe-contact {
+      margin-top: auto;
+      flex-shrink: 0;
+    }
+    .gallery-page.luxe-page.luxe-page--sub .luxe-footer-legal,
+    .luxe-page.luxe-page--sub .luxe-footer-legal {
+      flex-shrink: 0;
+    }
+    /* Luxe book when contact strip hidden: only legal footer follows shell. */
+    .luxe-page.luxe-page--sub .booking-shell + .luxe-footer-legal {
+      margin-top: auto;
+    }
+    .luxe-page.luxe-page--sub .luxe-shop-page-shell + .luxe-footer-legal {
+      margin-top: auto;
+    }
     .gallery-shell { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; }
     .gallery-section { margin-bottom: 48px; }
     .gallery-section-title { font-size: 1.2rem; font-weight: 600; color: inherit; opacity: 0.72; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(127,127,127,0.35); }
@@ -802,6 +945,19 @@
     .gallery-grid img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; display: block; cursor: pointer; transition: opacity 0.2s; }
     .gallery-grid .gallery-grid-link img { border-radius: 0; }
     .gallery-grid .gallery-grid-link:hover img { opacity: 0.85; }
+
+    /* Classic /gallery grid: centered block + auto-fill (Studio 12–like), not rigid 3×N. */
+    .gallery-page.classic-home .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      max-width: 1280px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .gallery-page.classic-home .gallery-grid img {
+      height: clamp(200px, 32vw, 320px);
+    }
 
     /* Optional /gallery layouts (`galleryLayoutStyle`); independent of Classic / Luxe / Blade / Stonecut / Studio 12. */
     .gallery-alt .gallery-grid-link {
@@ -863,7 +1019,13 @@
       display: flex;
       flex-direction: row;
       flex-wrap: nowrap;
+      justify-content: center;
       gap: 14px;
+      width: max-content;
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+      box-sizing: border-box;
       overflow-x: auto;
       padding-bottom: 10px;
       scroll-snap-type: x proximity;
@@ -872,6 +1034,112 @@
     .gallery-alt-strip-item {
       flex: 0 0 min(260px, 78vw);
       scroll-snap-align: start;
+    }
+    /* Horizontal strip (/gallery): shared frame + strip chrome (Studio 12 reference). */
+    .gallery-page--horizontal-strip .gallery-alt--strip {
+      padding-inline: clamp(12px, 4vw, 28px);
+      scroll-padding-inline: clamp(12px, 4vw, 28px);
+      gap: clamp(14px, 2vw, 20px);
+    }
+    .gallery-page--horizontal-strip .gallery-alt-strip-item {
+      scroll-snap-align: center;
+    }
+    .gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link,
+    .gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link img {
+      border-radius: 12px;
+    }
+    /* Match `.studio12-page .s12-gallery-light--fullpage .s12-gallery-head`: title inset only, 28px to strip. */
+    .gallery-page--horizontal-strip .gallery-header {
+      padding-left: 40px;
+      padding-right: 40px;
+      padding-bottom: 0;
+      margin-bottom: 28px;
+    }
+    .gallery-page--horizontal-strip .gallery-title--strip-standard {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: clamp(36px, 4vw, 48px);
+      font-weight: 300;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      margin: 0 auto;
+      max-width: 100%;
+      text-align: center;
+    }
+    .gallery-page.gallery-page--stonecut.gallery-page--horizontal-strip .gallery-title.gallery-title--strip-standard {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: clamp(36px, 4vw, 48px);
+      font-weight: 300;
+      letter-spacing: 0.02em;
+      text-transform: none;
+    }
+    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-title.gallery-title--strip-standard {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 300;
+      letter-spacing: 0.02em;
+    }
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
+      padding: 48px 40px 0;
+      text-align: center;
+    }
+    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
+      padding-top: 100px;
+    }
+    .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-header {
+      padding-top: 108px;
+    }
+    /* Match fullpage gallery section: no lateral max-width / padding on shell (strip runs full content width). */
+    .gallery-page--horizontal-strip .gallery-shell {
+      max-width: none;
+      width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      padding-left: 0;
+      padding-right: 0;
+      padding-top: 0;
+      /* Match title→strip gap (~28px); avoids a heavy band above footer vs header rhythm */
+      padding-bottom: clamp(24px, 4vw, 32px);
+      box-sizing: border-box;
+    }
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-shell {
+      padding-left: 0;
+      padding-right: 0;
+      max-width: none;
+    }
+    /* Vertical center (title + strip): Classic/Blade/Luxe/Stonecut + Studio 12 horizontal_strip. */
+    .gallery-page-strip-main {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      width: 100%;
+    }
+    .studio12-page .s12-gallery-light--fullpage.s12-gallery-light--strip-centered {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding-bottom: clamp(28px, 5vw, 48px);
+    }
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-page-strip-main .gallery-shell,
+    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-page-strip-main .gallery-shell,
+    .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-page-strip-main .gallery-shell {
+      flex: 0 0 auto;
+      min-height: 0;
+    }
+    /* Studio 12 /gallery uses `.studio12-page` (no `.gallery-page`); mirror strip chrome above. */
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--strip {
+      padding-inline: clamp(12px, 4vw, 28px);
+      scroll-padding-inline: clamp(12px, 4vw, 28px);
+      gap: clamp(14px, 2vw, 20px);
+    }
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt-strip-item {
+      scroll-snap-align: center;
+    }
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--strip .gallery-grid-link,
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--strip .gallery-grid-link img {
+      border-radius: 12px;
     }
     .gallery-alt--strip .gallery-alt-strip-item .gallery-grid-link img {
       width: 100%;
@@ -908,11 +1176,6 @@
       display: block;
       width: 100%;
       height: 100%;
-      text-decoration: none;
-      color: inherit;
-    }
-    .hair-featured-item .gallery-lightbox-trigger {
-      display: block;
       text-decoration: none;
       color: inherit;
     }
@@ -1063,354 +1326,32 @@
       .gallery-grid img { height: 180px; }
       .gallery-title { font-size: 2rem; }
       .gallery-header { padding: 64px 16px 16px; }
-    }
-    /* Hair layout – Velvera-style landing */
-    .hair-page {
-      min-height: 100vh;
-      padding: 24px 16px 40px;
-    }
-    .hair-shell {
-      max-width: 1120px;
-      margin: 0 auto;
-      font-family: var(--font-display);
-    }
-    .hair-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-    }
-    .hair-logo-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .hair-logo-mark {
-      width: 24px;
-      height: 24px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #fbbf24, #f97316);
-    }
-    .hair-brand {
-      font-weight: 600;
-      color: #f9fafb;
-    }
-    .hair-nav {
-      display: flex;
-      gap: 16px;
-      font-size: 14px;
-    }
-    .hair-nav a {
-      color: #e5e7eb;
-      text-decoration: none;
-    }
-    .hair-nav a:hover {
-      color: #fbbf24;
-    }
-    .hair-hero {
-      position: relative;
-      display: grid;
-      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-      gap: 32px;
-      padding: 40px 32px 32px;
-      border-radius: 0;
-      color: #f9fafb;
-      margin-bottom: 32px;
-      min-height: 100vh;
-      overflow: hidden;
-    }
-    .hair-hero::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image: var(--hair-hero-bg, radial-gradient(circle at top left, #1f2937 0%, #020617 45%, #020617 100%));
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      z-index: -2;
-    }
-    .hair-hero::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      z-index: -1;
-    }
-    .hair-hero-left {
-      max-width: 520px;
-    }
-    .hair-overline {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-      color: #a5b4fc;
-      margin: 0 0 10px;
-    }
-    .hair-hero h1 {
-      font-family: var(--font-hero);
-      font-size: clamp(32px, 4vw, 44px);
-      font-weight: 700;
-      margin: 0 0 16px;
-      letter-spacing: -0.03em;
-    }
-    .hair-hero .hair-tagline {
-      font-size: 16px;
-      line-height: 1.8;
-      color: #e5e7eb;
-      margin: 0 0 24px;
-    }
-    .hair-cta {
-      display: inline-block;
-      padding: 12px 28px;
-      border-radius: 999px;
-      background: #fb7185;
-      color: #111827;
-      font-weight: 600;
-      font-size: 15px;
-      text-decoration: none;
-      box-shadow: 0 10px 32px rgba(248,113,113,0.45);
-    }
-    .hair-cta:hover {
-      background: #f97373;
-    }
-    .hair-hero-right {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-    }
-    .hair-hero-card {
-      max-width: 320px;
-      background: radial-gradient(circle at top left, #111827 0%, #020617 70%);
-      border-radius: 24px;
-      padding: 20px 20px 18px;
-      box-shadow: 0 24px 60px rgba(15,23,42,1);
-      border: 1px solid rgba(196,181,253,0.45);
-    }
-    .hair-hero-quote {
-      font-size: 14px;
-      line-height: 1.7;
-      margin: 0 0 14px;
-      color: #e5e7eb;
-    }
-    .hair-hero-client {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .hair-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #4f46e5, #ec4899);
-    }
-    .hair-client-name {
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .hair-client-service {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-    .hair-section {
-      margin-bottom: 40px;
-    }
-    .hair-section h2 {
-      font-size: 22px;
-      font-weight: 600;
-      margin: 0 0 12px;
-      color: #f9fafb;
-    }
-    .hair-section-lead {
-      font-size: 15px;
-      line-height: 1.7;
-      color: #cbd5e1;
-      margin: 0 0 20px;
-    }
-    .hair-services-wrapper {
-      padding: 0 4px 8px;
-    }
-    .hair-services {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 20px;
-    }
-    .hair-service-card {
-      display: flex;
-      flex-direction: column;
-      border-radius: 18px;
-      overflow: hidden;
-      background: #020617;
-      text-decoration: none;
-      color: #e5e7eb;
-      box-shadow: 0 14px 40px rgba(15,23,42,0.8);
-    }
-    .hair-service-image-wrap {
-      position: relative;
-      overflow: hidden;
-    }
-    .hair-service-image {
-      width: 100%;
-      height: 140px;
-      object-fit: cover;
-      display: block;
-    }
-    .hair-service-price-badge {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(15,23,42,0.85);
-      color: #fbbf24;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .hair-service-body {
-      padding: 14px 14px 16px;
-    }
-    .hair-service-body h3 {
-      margin: 0 0 6px;
-      font-size: 15px;
-      font-weight: 600;
-    }
-    .hair-service-body p {
-      margin: 0;
-      font-size: 13px;
-      color: #cbd5e1;
-    }
-    .hair-process-steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-    .hair-process-step {
-      background: #020617;
-      border-radius: 18px;
-      padding: 16px 18px;
-      border: 1px solid rgba(55,65,81,0.8);
-    }
-    .hair-process-step .step-num {
-      font-size: 13px;
-      font-weight: 600;
-      color: #a5b4fc;
-    }
-    .hair-process-step h3 {
-      margin: 4px 0 6px;
-      font-size: 15px;
-      color: #f9fafb;
-    }
-    .hair-process-step p {
-      margin: 0;
-      font-size: 14px;
-      color: #cbd5e1;
-    }
-    .hair-review-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 16px;
-    }
-    .hair-review-card {
-      background: #020617;
-      border-radius: 18px;
-      padding: 16px 18px;
-      border: 1px solid rgba(55,65,81,0.9);
-    }
-    .hair-review-card p {
-      margin: 0 0 10px;
-      font-size: 14px;
-      color: #e5e7eb;
-    }
-    .hair-review-meta {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-    .hair-contact-line {
-      font-size: 14px;
-      color: #e5e7eb;
-    }
-    .hair-contact-line a {
-      color: inherit;
-      text-decoration: underline;
-      font-weight: 500;
-    }
-    .hair-about-link {
-      font-size: 14px;
-      color: #9ca3af;
-    }
-    .hair-about-link a {
-      color: #e5e7eb;
-      text-decoration: underline;
-      font-weight: 500;
-    }
-    .hair-about-contact {
-      max-width: 720px;
-    }
-    .hair-chip-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 4px 0 20px;
-    }
-    .hair-chip {
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: rgba(196,181,253,0.14);
-      color: #e5e7ff;
-    }
-    .hair-featured {
-      padding: 24px 4px 8px;
-    }
-    .hair-featured h2 {
-      margin-bottom: 8px;
-    }
-    .hair-featured-sub {
-      font-size: 15px;
-      line-height: 1.6;
-      color: #6b7280;
-      margin: 0 0 16px;
-    }
-    .hair-featured-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .hair-featured-item {
-      border-radius: 16px;
-      overflow: hidden;
-    }
-    .hair-featured-item img {
-      width: 100%;
-      height: 160px;
-      object-fit: cover;
-      display: block;
-    }
-    @media (max-width: 768px) {
-      .hair-page {
-        padding: 20px 14px 32px;
+      .gallery-page.classic-home .gallery-header {
+        padding: 40px clamp(16px, 5vw, 32px) 24px;
       }
-      .hair-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
+      .gallery-page--horizontal-strip .gallery-header {
+        padding-top: 64px;
+        padding-left: clamp(20px, 5vw, 40px);
+        padding-right: clamp(20px, 5vw, 40px);
+        padding-bottom: 0;
+        margin-bottom: 28px;
       }
-      .hair-nav {
-        flex-wrap: wrap;
+      .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
+        padding: 40px clamp(20px, 5vw, 40px) 0;
+        margin-bottom: 28px;
       }
-      .hair-hero {
-        grid-template-columns: minmax(0, 1fr);
-        padding: 32px 20px 24px;
-        min-height: 85vh;
+      .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
+        padding-top: 100px;
       }
-      .hair-hero-right {
-        justify-content: flex-start;
-        margin-top: 16px;
+      .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-header {
+        padding-top: 92px;
       }
-      .hair-featured-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .gallery-page.classic-home .gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
       }
-      .hair-services {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .gallery-page.classic-home .gallery-grid img {
+        height: clamp(160px, 42vw, 260px);
       }
     }
     /* ─── Luxe template ─── */
@@ -1463,7 +1404,7 @@
       font-weight: 500;
     }
     .luxe-nav-links a:hover { color: #fff; }
-    /* Cream subpages (shop / gallery / book): dark chrome; home hero keeps white nav above */
+    /* Cream subpages (shop / gallery / book): dark chrome on cream; home uses .luxe-nav--topbar strip above hero */
     .luxe-nav--light .luxe-nav-brand {
       color: #1a1a1a;
     }
@@ -1475,6 +1416,14 @@
     }
     .luxe-nav--light .tattoo-nav-menu {
       color: #1a1a1a;
+    }
+    /* Luxe home: opaque cream strip above hero (links use .luxe-nav--light). */
+    .luxe-nav.luxe-nav--topbar {
+      position: relative;
+      z-index: 20;
+      background: #FFFDF9;
+      border-bottom: 1px solid rgba(26, 26, 26, 0.1);
+      box-shadow: 0 1px 0 rgba(42, 31, 24, 0.06), 0 6px 20px rgba(0, 0, 0, 0.04);
     }
     .luxe-page--sub .gallery-header {
       padding-top: 108px;
@@ -2007,6 +1956,18 @@
       text-decoration: none;
     }
     .luxe-contact-item a:hover { color: #fff; text-decoration: underline; }
+    .luxe-footer-legal {
+      background: #141414;
+      padding: 28px 40px 36px;
+      text-align: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .luxe-footer-copy {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: rgba(255, 255, 255, 0.42);
+    }
     .luxe-page .booking-shell {
       background: #FFFDF9;
       color: #1a1a1a;
@@ -2063,6 +2024,7 @@
       .luxe-promo,
       .luxe-team-section,
       .luxe-contact,
+      .luxe-footer-legal,
       .luxe-shop-page-shell { padding-left: 20px; padding-right: 20px; }
       .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
       .luxe-team-grid { grid-template-columns: 1fr; }
@@ -2088,6 +2050,17 @@
       padding-top: 88px;
     }
     .blade-page--sub { padding-top: 96px; }
+    /* Book / shop / success roots (fixed chrome excluded): footer pins to viewport when content is short. */
+    .tattoo-page.blade-page.blade-page--sub,
+    .tattoo-page.classic-home,
+    .luxe-page.luxe-page--sub,
+    .studio12-page.studio12-sub,
+    .blade-page.blade-page--sub {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
     .blade-page .blade-topnav {
       position: fixed;
       top: 0; left: 0; right: 0;
@@ -2593,10 +2566,11 @@
       border-top: 1px solid var(--bh-line);
       padding: 44px 40px;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 20px;
+      justify-content: center;
+      gap: 24px;
+      text-align: center;
     }
     .blade-page .blade-footer-logo {
       font-family: 'Bebas Neue', sans-serif;
@@ -2604,8 +2578,24 @@
       letter-spacing: 0.18em;
       color: var(--bh-gold);
     }
-    .blade-page .blade-footer-copy { font-size: 11px; letter-spacing: 0.12em; color: var(--bh-grey); margin: 0; }
-    .blade-page .blade-footer-links { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; }
+    .blade-page .blade-footer-copy {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--bh-grey);
+      margin: 0;
+      width: 100%;
+      max-width: 560px;
+      text-align: center;
+    }
+    .blade-page .blade-footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
     .blade-page .blade-footer-links a {
       display: inline-flex;
       align-items: center;
@@ -2653,6 +2643,25 @@
     .blade-page .booking-shell {
       background: var(--bh-black) !important;
       color: var(--bh-cream) !important;
+    }
+    .tattoo-page.blade-page.blade-page--sub .booking-shell,
+    .luxe-page.luxe-page--sub .booking-shell,
+    .tattoo-page.classic-home .booking-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+      justify-content: flex-start;
+    }
+    .blade-page.blade-page--sub .blade-shop-page-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .luxe-page.luxe-page--sub .luxe-shop-page-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .tattoo-page.classic-home .luxe-shop-page-shell {
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .blade-page .booking-page-title { color: var(--bh-cream) !important; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
     .blade-page .booking-page-subtitle { color: var(--bh-grey) !important; }
@@ -2704,12 +2713,23 @@
     }
     /* ─── Stonecut (stonecut-v1) dark editorial theme ─── */
     .stonecut-page {
+      display: flex;
+      flex-direction: column;
       min-height: 100vh;
+      min-height: 100dvh;
       background: #060604;
       color: #e8e0d0;
       font-family: 'Syne', sans-serif;
       overflow-x: hidden;
       padding-top: 92px;
+    }
+    .stonecut-page > footer {
+      margin-top: auto;
+      flex-shrink: 0;
+    }
+    .stonecut-page > main.stonecut-shop-shell {
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .stonecut-page .stonecut-nav {
       position: fixed;
@@ -2802,6 +2822,14 @@
     .stonecut-page .stonecut-address-link { color: inherit; text-decoration: none; display: block; margin-top: 14px; line-height: 1.8; }
     .stonecut-page .stonecut-phone { display: inline-block; margin-top: 16px; color: #c0221a; text-decoration: none; letter-spacing: .08em; }
     .stonecut-page footer { border-top: 1px solid rgba(232,224,208,.08); padding: 36px 40px; color: #a09888; background: #060604; }
+    .gallery-page.gallery-page--stonecut footer {
+      margin-top: auto;
+      flex-shrink: 0;
+      border-top: 1px solid rgba(232,224,208,.08);
+      padding: 36px 40px;
+      color: #a09888;
+      background: #060604;
+    }
     .stonecut-page .tattoo-sidebar-panel {
       left: auto;
       right: 0;
@@ -2816,7 +2844,13 @@
     .stonecut-page .booking-shell {
       background: transparent;
       color: inherit;
-      min-height: 100vh;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding-top: 20px;
+      padding-left: 16px;
+      padding-right: 16px;
+      padding-bottom: 48px;
+      justify-content: flex-start;
     }
     .stonecut-page .booking-page-title {
       font-family: 'Unbounded', sans-serif;
@@ -3893,10 +3927,11 @@
     .studio12-page .s12-footer {
       background: var(--s12-espresso);
       padding: 40px;
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      display: flex;
+      flex-direction: column;
       align-items: center;
       gap: 20px;
+      text-align: center;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
     }
 
@@ -3913,6 +3948,8 @@
       letter-spacing: 0.1em;
       color: rgba(176, 152, 130, 0.45);
       text-align: center;
+      margin: 0;
+      max-width: 560px;
     }
 
     .studio12-page .s12-fade {
@@ -3932,9 +3969,26 @@
     }
 
     .studio12-page.studio12-sub .booking-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
       padding: 24px 24px 80px;
       max-width: 560px;
       margin: 0 auto;
+      justify-content: flex-start;
+    }
+    .studio12-page.studio12-sub .s12-gallery-light--fullpage {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+    }
+    .studio12-page.studio12-sub footer.s12-footer {
+      margin-top: auto;
+      flex-shrink: 0;
+    }
+    .studio12-page.studio12-sub > .s12-services {
+      flex: 1 1 auto;
+      min-height: 0;
     }
 
     .studio12-page.studio12-sub .booking-card {
@@ -4007,8 +4061,7 @@
         border-bottom: 1px solid var(--s12-line);
       }
       .studio12-page .s12-footer {
-        grid-template-columns: 1fr;
-        text-align: center;
+        padding: 32px 24px;
       }
       .studio12-page .s12-nav-links {
         display: none;
@@ -4199,6 +4252,14 @@
           applyTenantTypography(t);
           return;
         }
+        /* Classic portfolio shell: fixed white (tenant featured-work colors no longer drive the page). */
+        if (isClassicTheme(t) && !isStudio12Theme(t)) {
+          document.body.style.background = '#ffffff';
+          document.body.style.color = '#1a1a1a';
+          document.body.style.backgroundImage = '';
+          applyTenantTypography(t);
+          return;
+        }
         var bg = t.backgroundColor || '#FFFFFF';
         var card = t.cardSurfaceColor || '#F5F5F5';
         var txt = t.textColor || '#333333';
@@ -4257,14 +4318,16 @@
         if (!iconColor) {
           if (isGalleryPath) {
             iconColor = (usesThemedChrome(tenant) || isClassicTheme(tenant))
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : (tenant.featuredWorkTextColor || '#1C1917'))))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : ((isClassicTheme(tenant) && !isStudio12Theme(tenant)) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))))
               : '#FFFFFF';
           } else if (isBookPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : (tenant.featuredWorkTextColor || '#1C1917'))))
+              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : ((isClassicTheme(tenant) && !isStudio12Theme(tenant)) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))))
               : '#000000';
           } else if (usesThemedChrome(tenant)) {
-            iconColor = isBladeTheme(tenant) ? '#c9a84c' : (isClassicTheme(tenant) ? '#1a1a1a' : '#FFFFFF');
+            iconColor = isBladeTheme(tenant)
+              ? '#c9a84c'
+              : ((isClassicTheme(tenant) || isLuxeTheme(tenant)) ? '#1a1a1a' : '#FFFFFF');
           } else {
             var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
             iconColor = (bg === '#FFFFFF' || bg === '#FFF') ? '#000000' : '#FFFFFF';
@@ -4381,13 +4444,15 @@
           '</div>' +
         '</nav>';
       }
-      /** Luxe top bar: `hero` = white on dark hero; `light` = dark on cream (shop / gallery / book). */
+      /** Luxe top bar: `hero` = cream strip + dark links above hero; `light` = same palette on subpages (absolute over shell). */
       function luxeChromeNavHtml(tenant, variant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
         var displayName = tenant.displayName || 'Welcome';
-        var navClass = variant === 'light' ? 'luxe-nav luxe-nav--light' : 'luxe-nav';
+        var navClass = variant === 'light'
+          ? 'luxe-nav luxe-nav--light'
+          : 'luxe-nav luxe-nav--light luxe-nav--topbar';
         var inner = '<a href="' + base + '/home">Home</a>';
         if (tenantShowGalleryPage(tenant)) inner += '<a href="' + galleryUrl + '">Gallery</a>';
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
@@ -4680,19 +4745,7 @@
           whereBlock +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="blade-address-phone">' + phoneDisplay + '</a>' : '') +
           '</div></div>';
-        var y = new Date().getFullYear();
-        var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
-        var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
-        var footerExtra = '';
-        if (tenantShowBookPage(tenant)) footerExtra += '<li><a href="' + bookUrl + '">Book</a></li>';
-        if (tenantShowGalleryPage(tenant)) footerExtra += '<li><a href="' + galleryUrl + '">Gallery</a></li>';
-        var footer = '<footer class="blade-footer">' +
-          '<div class="blade-footer-logo">' + esc(displayName) + '</div>' +
-          '<p class="blade-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
-          '<ul class="blade-footer-links">' +
-          (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">Instagram</a></li>' : '') +
-          footerExtra +
-          '</ul></footer>';
+        var footer = bladeSiteFooterHtml(tenant);
         var heroPrimary = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="blade-btn-primary">Book appointment</a>'
           : '';
@@ -4768,7 +4821,6 @@
         var heroCtaInner = (tenantShowBookPage(tenant) ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">Book a session</a>' : '') +
           (tenantShowGalleryPage(tenant) ? '<a href="' + galleryUrl + '" class="stonecut-btn stonecut-btn-ghost">View portfolio</a>' : '');
         var heroCta = heroCtaInner ? ('<div class="stonecut-hero-cta">' + heroCtaInner + '</div>') : '';
-        var y = new Date().getFullYear();
         var shopPreviewSection = (function(){
           if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
           var cards = luxeTenantProductCardsHtml(tenant);
@@ -4804,7 +4856,7 @@
           (mapQuery ? '<a href="' + esc(mapQuery) + '" class="stonecut-address-link" target="_blank" rel="noopener noreferrer">' + addrBody + '</a>' : '<div class="stonecut-address-link">' + addrBody + '</div>') +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="stonecut-phone">' + phoneDisplay + '</a>' : '') +
           '</div></div></section>' +
-          '<footer>© ' + y + ' ' + esc(displayName) + '. All rights reserved.</footer>' +
+          stonecutSiteFooterHtml(tenant) +
           sidebar +
           '</div>';
       }
@@ -4846,160 +4898,6 @@
       /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
       function galleryPageImageUrls(tenant) {
         return tenant.galleryImages || [];
-      }
-      function hairLayoutPage(tenant, services) {
-        var base = tenantBaseUrl(tenant);
-        var title = esc(tenant.displayName || 'Let your hair shine with strength & beauty');
-        var taglineText = tenant.tagline || 'A haircut is just the beginning. Experience hair artistry that enhances your beauty and confidence.';
-        var statLabel = 'Happy customers';
-        var statValue = tenant.happyCustomers || '32K+';
-        var heroBg = tenant.heroImageUrl || '';
-        var tagNames = (services || []).slice(0, 3).map(function(s){ return s.name; });
-        if (tagNames.length === 0) {
-          tagNames = ['Balayage', 'Color correction', 'Treatments'];
-        }
-        var chipsHtml = tagNames.map(function(name){
-          return '<span class="hair-chip">'+esc(name)+'</span>';
-        }).join('');
-        var review = (tenant.reviews && tenant.reviews.length) ? tenant.reviews[0] : null;
-
-        var hairNav = '';
-        if (tenantShowGalleryPage(tenant)) hairNav += '    <a href="'+base+'#featured">Featured</a>\n';
-        if (tenantShowAboutPage(tenant)) hairNav += '    <a href="'+base+'#about">About</a>\n';
-        var header = ''
-          + '<header class="hair-header">'
-          + '  <div class="hair-logo-title">'
-          + '    <div class="hair-logo-mark"></div>'
-          + '    <span class="hair-brand">'+esc(tenant.displayName || 'Velvéra')+'</span>'
-          + '  </div>'
-          + '  <nav class="hair-nav">'
-          + hairNav
-          + '  </nav>'
-          + '</header>';
-
-        var heroRight = review ? (
-          '<div class="hair-hero-right">'
-        + '  <div class="hair-hero-card">'
-        + '    <p class="hair-hero-quote">“'+esc(review.quote || '')+'”</p>'
-        + '    <div class="hair-hero-client">'
-        + '      <div class="hair-avatar"></div>'
-        + '      <div>'
-        + '        <div class="hair-client-name">'+esc(review.name || '')+'</div>'
-        + '        <div class="hair-client-service">'+esc(review.service || '')+'</div>'
-        + '      </div>'
-        + '    </div>'
-        + '  </div>'
-        + '</div>'
-        ) : '';
-
-        var hero = ''
-          + '<section class="hair-hero"'+(heroBg ? ' style="--hair-hero-bg:url('+esc(heroBg)+')"' : '')+'>'
-          + '  <div class="hair-hero-left">'
-          + '    <p class="hair-overline">'+statValue+' '+statLabel+'</p>'
-          + '    <h1>'+title+'</h1>'
-          + '    <div class="hair-chip-row">'+chipsHtml+'</div>'
-          + '    <p class="hair-tagline">'+esc(taglineText)+'</p>'
-          + (tenantShowBookPage(tenant) ? '    <a href="'+base+'/book" class="hair-cta">Book an appointment</a>\n' : '')
-          + '  </div>'
-          +    heroRight
-          + '</section>';
-
-        var gallery = tenantShowGalleryPage(tenant) ? featuredUrlsForHomeStrip(tenant, 4) : [];
-        var featuredHtml = (tenantShowGalleryPage(tenant) && gallery.length) ? (
-          '<section id="featured" class="hair-section hair-featured">'
-          + '  <h2>Featured looks</h2>'
-          + '  <p class="hair-featured-sub">A few recent color and cut transformations from the studio.</p>'
-          + '  <div class="hair-featured-grid">'
-          + gallery.map(function(url){
-              return '<div class="hair-featured-item"><a class="gallery-lightbox-trigger" href="'+esc(url)+'" data-gallery-full="'+esc(url)+'"><img src="'+esc(url)+'" alt=""></a></div>';
-            }).join('')
-          + '  </div>'
-          + '</section>'
-        ) : '';
-
-        var serviceCards = (services || []).map(function(s){
-          var img = s.imageUrl || tenant.heroImageUrl || '';
-          var priceText = s.price ? 'From $'+s.price : '';
-          var desc = s.description || '';
-          var svcBookUrl = base + '/book/' + (s.slug || '');
-          var inner = ''
-            + '  <div class="hair-service-image-wrap">'
-            + (img ? '    <img src="'+esc(img)+'" alt="'+esc(s.name)+'" class="hair-service-image">' : '')
-            + (priceText ? '    <div class="hair-service-price-badge">'+esc(priceText)+'</div>' : '')
-            + '  </div>'
-            + '  <div class="hair-service-body">'
-            + '    <h3>'+esc(s.name)+'</h3>'
-            + '    <p>'+esc(desc)+'</p>'
-            + '  </div>';
-          if (tenantShowBookPage(tenant)) {
-            return '<a href="'+svcBookUrl+'" class="hair-service-card">' + inner + '</a>';
-          }
-          return '<div class="hair-service-card">' + inner + '</div>';
-        }).join('');
-
-        var servicesHtml = ''
-          + '<section id="services" class="hair-section hair-services-wrapper">'
-          + '  <h2>Expert premium hair services tailored for you</h2>'
-          + '  <p class="hair-section-lead">From precision cuts to custom color and deep treatments, every service is designed to bring your hair back to life.</p>'
-          + '  <div class="hair-services">'+serviceCards+'</div>'
-          + '</section>';
-
-        var reviewsHtml = ''
-          + '<section id="reviews" class="hair-section hair-reviews">'
-          + '  <h2>What our clients say</h2>'
-          + '  <div class="hair-review-grid">'
-          + '    <article class="hair-review-card"><p>“Absolutely love my new look! The perfect cut and color transformed my hair.”</p><div class="hair-review-meta">Emma Rose · Balayage &amp; Styling</div></article>'
-          + '    <article class="hair-review-card"><p>“Healthy hair like never before. My damaged strands feel soft and full again.”</p><div class="hair-review-meta">Jane Doe · Treatment</div></article>'
-          + '    <article class="hair-review-card"><p>“Volume and shine restored. My hair finally has that salon-fresh bounce.”</p><div class="hair-review-meta">Olivia Tate · Repair Treatment</div></article>'
-          + '  </div>'
-          + '</section>';
-
-        var hairAddrRaw = (tenant.address && String(tenant.address).trim())
-          || (tenant.contactAddress && String(tenant.contactAddress).trim())
-          || (tenant.serviceArea && String(tenant.serviceArea).trim())
-          || '';
-        var hairMaps = hairAddrRaw ? googleMapsSearchUrl(hairAddrRaw) : '';
-        var hairContactBits = [];
-        if (hairAddrRaw && hairMaps) {
-          hairContactBits.push('<a href="' + esc(hairMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(hairAddrRaw).replace(/\n/g, '<br>') + '</a>');
-        } else if (hairAddrRaw) {
-          hairContactBits.push(esc(hairAddrRaw).replace(/\n/g, '<br>'));
-        }
-        if (tenant.contactEmail) {
-          var hairEm = String(tenant.contactEmail).trim();
-          hairContactBits.push('✉️ <a href="mailto:' + esc(hairEm) + '">' + esc(hairEm) + '</a>');
-        }
-        var hairPhHref = telHrefFromPhone(tenant.contactPhone);
-        if (tenant.contactPhone && hairPhHref) {
-          hairContactBits.push('📞 <a href="' + esc(hairPhHref) + '">' + esc(tenant.contactPhone) + '</a>');
-        } else if (tenant.contactPhone) {
-          hairContactBits.push('📞 ' + esc(tenant.contactPhone));
-        }
-        var hairContactBlock = hairContactBits.length ? hairContactBits.join('<br>') : '';
-
-        var aboutAndContactHtml = tenantShowAboutPage(tenant)
-          ? '<section id="about" class="hair-section hair-about-contact">'
-          + '  <h2>About &amp; contact</h2>'
-          + '  <p class="hair-section-lead">'
-          +       esc(tenant.aboutText || tenant.tagline || 'We combine expert techniques with premium products to give your hair the care it deserves.')
-          + '  </p>'
-          + (hairContactBlock ? '  <p class="hair-contact-line">' + hairContactBlock + '</p>' : '')
-          + '</section>'
-          : '<section class="hair-section hair-about-contact">'
-          + '  <h2>Contact</h2>'
-          + (hairContactBlock ? '  <p class="hair-contact-line">' + hairContactBlock + '</p>' : '')
-          + '</section>';
-
-        return ''
-          + '<div class="hair-page">'
-          + '  <div class="hair-shell">'
-          +       header
-          +       hero
-          +       featuredHtml
-          +       aboutAndContactHtml
-          + '  </div>'
-          + galleryLightboxShellHtml()
-          + '</div>';
       }
       function field(f, services, presel) {
         var key = (f.key||'').replace(/[^a-zA-Z0-9_]/g,'');
@@ -5077,6 +4975,9 @@
       }
       /** Tattoo template: one editable theme for Featured, Gallery, Book, sidebar. */
       function tattooSiteThemeInlineStyle(tenant) {
+        if (isClassicTheme(tenant) && !isStudio12Theme(tenant)) {
+          return 'background:#ffffff;color:#1a1a1a';
+        }
         var bg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
         var fg = tenant.featuredWorkTextColor || '#1C1917';
         return 'background:'+bg+';color:'+fg;
@@ -5101,7 +5002,7 @@
         }).join('');
 
         var contact = '';
-        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
+        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
           if ((tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail)) {
             var formPh = telHrefFromPhone(tenant.contactPhone);
             var formPhonePart = tenant.contactPhone
@@ -5114,7 +5015,7 @@
         }
 
         var bookingPageHeaderHtml = '';
-        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
+        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
           bookingPageHeaderHtml =
             '<div class="booking-page-header">' +
               (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
@@ -5151,6 +5052,12 @@
           ? 'stonecut-page'
           : ('tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : ''));
         var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || (isStonecutTheme(tenant) ? '#0e0d0a' : '#ffffff');
+        var bookSiteFooter = '';
+        if (isStudio12Theme(tenant)) bookSiteFooter = studio12SiteFooterHtml(tenant);
+        else if (isStonecutTheme(tenant)) bookSiteFooter = stonecutSiteFooterHtml(tenant);
+        else if (isBladeTheme(tenant)) bookSiteFooter = bladeSiteFooterHtml(tenant);
+        else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
+        else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
             nav +
@@ -5164,6 +5071,7 @@
                 '</form>' +
               '</div>' +
             '</div>' +
+            bookSiteFooter +
             sidebar +
           '</div>';
       }
@@ -5185,6 +5093,7 @@
                 '<p class="booking-success-detail">' + detail + '</p>' +
               '</div>' +
             '</div>' +
+            studio12SiteFooterHtml(tenant) +
             studio12SidebarHtml(tenant) +
             '</div>';
         }
@@ -5209,13 +5118,18 @@
             (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
             (isClassicTheme(tenant) ? ' classic-home' : ''));
           var successHeaderHtml = '';
-          if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
+          if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
             successHeaderHtml =
               '<div class="booking-page-header">' +
                 tattooHeadlineLogoHtml(tenant) +
                 '<h1 class="booking-page-title">' + name + '</h1>' +
               '</div>';
           }
+          var successFooter = '';
+          if (isBladeTheme(tenant)) successFooter = bladeSiteFooterHtml(tenant);
+          else if (isLuxeTheme(tenant)) successFooter = luxeContactSectionHtml(tenant);
+          else if (isStonecutTheme(tenant)) successFooter = stonecutSiteFooterHtml(tenant);
+          else if (isClassicTheme(tenant)) successFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
           return '' +
             '<div class="' + successWrapClass + '" style="'+bookPageStyle+'">' +
               nav +
@@ -5226,6 +5140,7 @@
                   '<p class="booking-success-detail">' + detail + '</p>' +
                 '</div>' +
               '</div>' +
+              successFooter +
               sidebar +
             '</div>';
         }
@@ -5431,6 +5346,107 @@
           '<img class="gallery-lightbox-img" src="" alt="" draggable="false">' +
           '</div></div>';
       }
+      /** Classic home-style bottom bar (brand + Instagram / Location / Hours). `nameFallback` when `displayName` empty (e.g. barber opts). */
+      function classicSiteFooterHtml(tenant, nameFallback) {
+        var base = tenantBaseUrl(tenant);
+        var displayName = (tenant.displayName && String(tenant.displayName).trim()) ? tenant.displayName : (nameFallback || 'Studio');
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
+        var footerLinks = '';
+        if (igHandle) footerLinks += '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">Instagram</a>';
+        var footAbout = tenantShowAboutPage(tenant) ? (base + '/home#about') : (base + '/home#services');
+        var footAddr = (tenant.address && String(tenant.address).trim())
+          || (tenant.contactAddress && String(tenant.contactAddress).trim())
+          || (tenant.serviceArea && String(tenant.serviceArea).trim())
+          || '';
+        var footMaps = footAddr ? googleMapsSearchUrl(footAddr) : '';
+        if (footAddr && footMaps) {
+          footerLinks += '<a href="' + esc(footMaps) + '" target="_blank" rel="noopener noreferrer">Location</a>';
+        } else if (footAddr) {
+          footerLinks += '<a href="' + footAbout + '">Location</a>';
+        }
+        if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) footerLinks += '<a href="' + footAbout + '">Hours</a>';
+        var y = new Date().getFullYear();
+        return '<footer class="classic-footer">' +
+          '<div class="classic-footer-brand">' + esc(displayName) + '</div>' +
+          '<div class="classic-footer-links">' + footerLinks + '</div>' +
+          '<p class="classic-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '</footer>';
+      }
+      /** Blade `blade-footer`: wordmark, Instagram / Book / Gallery, then © line. */
+      function bladeSiteFooterHtml(tenant) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var galleryUrl = base + '/gallery';
+        var displayName = tenant.displayName || 'Studio';
+        var y = new Date().getFullYear();
+        var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
+        var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
+        var footerExtra = '';
+        if (tenantShowBookPage(tenant)) footerExtra += '<li><a href="' + bookUrl + '">Book</a></li>';
+        if (tenantShowGalleryPage(tenant)) footerExtra += '<li><a href="' + galleryUrl + '">Gallery</a></li>';
+        return '<footer class="blade-footer">' +
+          '<div class="blade-footer-logo">' + esc(displayName) + '</div>' +
+          '<ul class="blade-footer-links">' +
+          (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">Instagram</a></li>' : '') +
+          footerExtra +
+          '</ul>' +
+          '<p class="blade-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '</footer>';
+      }
+      /** Stonecut home-style © line. */
+      function stonecutSiteFooterHtml(tenant) {
+        var y = new Date().getFullYear();
+        var displayName = tenant.displayName || 'Studio';
+        return '<footer>© ' + y + ' ' + esc(displayName) + '. All rights reserved.</footer>';
+      }
+      /** Studio 12: brand then © line (matches other templates). */
+      function studio12SiteFooterHtml(tenant) {
+        var y = new Date().getFullYear();
+        var displayName = tenant.displayName || 'Studio';
+        return '<footer class="s12-footer">' +
+          '<div class="s12-footer-brand">' + esc(displayName) + '</div>' +
+          '<p class="s12-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '</footer>';
+      }
+      /** Luxe: contact strip + © legal line below (legal only when contact hidden). */
+      function luxeContactSectionHtml(tenant) {
+        var y = new Date().getFullYear();
+        var displayName = tenant.displayName || 'Studio';
+        var legal = '<footer class="luxe-footer-legal"><p class="luxe-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p></footer>';
+        if (tenant.showContactOnPage === false) return legal;
+        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
+        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
+        var connectParts = [];
+        if (igHandle) connectParts.push('<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>');
+        if (tenant.contactEmail) connectParts.push('<a href="mailto:' + esc(tenant.contactEmail) + '">' + esc(tenant.contactEmail) + '</a>');
+        if (tenant.contactPhone) {
+          var luxePhHref = telHrefFromPhone(tenant.contactPhone);
+          connectParts.push(luxePhHref ? ('<a href="' + esc(luxePhHref) + '">' + esc(tenant.contactPhone) + '</a>') : esc(tenant.contactPhone));
+        }
+        var connectHtml = connectParts.length ? connectParts.join('<br>') : 'Add in app';
+        var luxeHoursTrim = tenantBusinessHoursTrimmed(tenant);
+        var luxeHoursBlock = '';
+        if (tenantShowBusinessHours(tenant)) {
+          luxeHoursBlock = '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' +
+            (luxeHoursTrim ? esc(luxeHoursTrim) : 'Add in app') + '</p></div>';
+        }
+        var luxeLocRaw = (tenant.address && String(tenant.address).trim())
+          || (tenant.contactAddress && String(tenant.contactAddress).trim())
+          || (tenant.serviceArea && String(tenant.serviceArea).trim())
+          || '';
+        var luxeLocMaps = luxeLocRaw ? googleMapsSearchUrl(luxeLocRaw) : '';
+        var luxeLocationInner = luxeLocRaw && luxeLocMaps
+          ? '<a href="' + esc(luxeLocMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(luxeLocRaw).replace(/\n/g, '<br>') + '</a>'
+          : (luxeLocRaw ? esc(luxeLocRaw).replace(/\n/g, '<br>') : 'Add in app');
+        return '<section class="luxe-contact">' +
+          '<div class="luxe-contact-inner">' +
+            '<div class="luxe-contact-item"><h3>Location</h3><p>' + luxeLocationInner + '</p></div>' +
+            luxeHoursBlock +
+            '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
+          '</div>' +
+        '</section>' + legal;
+      }
       function galleryPage(tenant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
@@ -5450,10 +5466,16 @@
           } else {
             galleryBody = galleryAltLayoutInnerHtml(u12, gLay);
           }
+          var s12GalleryInner = '<div class="s12-gallery-head"><h2 class="s12-gallery-title"><a href="' + esc(galleryUrl) + '" class="s12-gallery-title-link">Gallery</a></h2></div>' +
+            galleryBody;
+          var s12LightClasses = 's12-gallery-light s12-gallery-light--fullpage';
+          if (gLay === 'horizontal_strip') {
+            s12GalleryInner = '<div class="gallery-page-strip-main s12-gallery-strip-main">' + s12GalleryInner + '</div>';
+            s12LightClasses += ' s12-gallery-light--strip-centered';
+          }
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
-            '<div class="s12-gallery-light s12-gallery-light--fullpage" style="min-height:100vh">' +
-            '<div class="s12-gallery-head"><h2 class="s12-gallery-title"><a href="' + esc(galleryUrl) + '" class="s12-gallery-title-link">Gallery</a></h2></div>' +
-            galleryBody + '</div>' + studio12SidebarHtml(tenant) + '</div>';
+            '<div class="' + s12LightClasses + '">' +
+            s12GalleryInner + '</div>' + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
         }
 
         var nav = isBladeTheme(tenant)
@@ -5468,6 +5490,7 @@
 
         var gUrlsAll = galleryPageImageUrls(tenant);
         var gLayStd = effectiveGalleryLayoutStyle(tenant);
+        var stripPage = gLayStd === 'horizontal_strip';
         var content;
         if (!gUrlsAll.length) {
           content = '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
@@ -5487,8 +5510,8 @@
           gPageBg = '#FFFDF9';
           gPageFg = '#1a1a1a';
         } else if (isClassicTheme(tenant)) {
-          gPageBg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
-          gPageFg = tenant.featuredWorkTextColor || '#1C1917';
+          gPageBg = '#ffffff';
+          gPageFg = '#1a1a1a';
         } else {
           gPageBg = tenant.galleryPageBackgroundColor || '#000000';
           gPageFg = tenant.galleryPageTextColor || '#ffffff';
@@ -5499,16 +5522,32 @@
           (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
           (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
           (isClassicTheme(tenant) ? ' classic-home' : '') +
-          (isStonecutTheme(tenant) ? ' gallery-page--stonecut' : '');
+          (isStonecutTheme(tenant) ? ' gallery-page--stonecut' : '') +
+          (stripPage ? ' gallery-page--horizontal-strip' : '');
         var displayName = tenant.displayName || 'Gallery';
-        var galleryHeadline = isStonecutTheme(tenant) ? 'Gallery' : displayName;
-        var galleryTitleHtml = (isLuxeTheme(tenant) || isClassicTheme(tenant))
-          ? ''
-          : '<h1 class="gallery-title"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
+        var galleryHeadline = (isStonecutTheme(tenant) || stripPage) ? 'Gallery' : displayName;
+        var galleryTitleHtml = '';
+        if (isLuxeTheme(tenant) || isClassicTheme(tenant)) {
+          if (stripPage) {
+            galleryTitleHtml = '<h1 class="gallery-title gallery-title--strip-standard"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
+          }
+        } else {
+          galleryTitleHtml = '<h1 class="gallery-title' + (stripPage ? ' gallery-title--strip-standard' : '') + '"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
+        }
+        var gallerySiteFooter = '';
+        if (isBladeTheme(tenant)) gallerySiteFooter = bladeSiteFooterHtml(tenant);
+        else if (isLuxeTheme(tenant)) gallerySiteFooter = luxeContactSectionHtml(tenant);
+        else if (isStonecutTheme(tenant)) gallerySiteFooter = stonecutSiteFooterHtml(tenant);
+        else if (isClassicTheme(tenant)) gallerySiteFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
+        var galleryHeaderBlock = '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + galleryTitleHtml + '</div>';
+        var galleryShellBlock = '<div class="gallery-shell">' + content + '</div>';
+        var galleryMainBlock = stripPage
+          ? ('<div class="gallery-page-strip-main">' + galleryHeaderBlock + galleryShellBlock + '</div>')
+          : (galleryHeaderBlock + galleryShellBlock);
         return '<div class="' + galleryWrapClass + '" style="'+galleryPageStyle+'">' +
           nav +
-          '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + galleryTitleHtml + '</div>' +
-          '<div class="gallery-shell">' + content + '</div>' +
+          galleryMainBlock +
+          gallerySiteFooter +
           galleryLightboxShellHtml() +
           sidebar +
           '</div>';
@@ -5587,16 +5626,35 @@
         var servicesHtml = '';
         if (services && services.length > 0) {
           var rows = '';
+          var showClassicServiceDur = tenant.classicShowServiceDuration !== false;
           for (var si = 0; si < services.length; si++) {
             var s = services[si];
             var priceTxt = (typeof s.price === 'number' && s.price > 0) ? '$' + Number(s.price).toFixed(0) : '';
-            rows += '<div class="classic-service-row">' +
-              '<div class="classic-service-info">' +
-              '<div class="classic-service-name">' + esc(s.name) + '</div>' +
-              (s.description ? '<div class="classic-service-desc">' + esc(s.description) + '</div>' : '') +
-              '</div>' +
-              '<div class="classic-service-price">' + priceTxt + '</div>' +
-              '</div>';
+            var descTrim = (s.description && String(s.description).trim()) ? String(s.description).trim() : '';
+            var dur = (typeof s.durationMinutes === 'number' && s.durationMinutes > 0) ? s.durationMinutes : null;
+            if (!descTrim) {
+              rows += '<div class="classic-service-item classic-service-item--static">' +
+                '<div class="classic-service-static-row">' +
+                '<span class="classic-service-name-wrap"><span class="classic-service-name">' + esc(s.name) + '</span></span>' +
+                '<span class="classic-service-meta-end">' +
+                (priceTxt ? '<span class="classic-service-price">' + priceTxt + '</span>' : '') +
+                '</span></div></div>';
+            } else {
+              var panelInner = '';
+              if (showClassicServiceDur && dur != null) {
+                panelInner += '<p class="classic-service-dur">About ' + esc(String(dur)) + ' min</p>';
+              }
+              panelInner += '<p>' + esc(descTrim).replace(/\n/g, '<br>') + '</p>';
+              rows += '<details class="classic-service-item">' +
+                '<summary class="classic-service-trigger">' +
+                '<span class="classic-service-name-wrap"><span class="classic-service-name">' + esc(s.name) + '</span></span>' +
+                '<span class="classic-service-meta-end">' +
+                (priceTxt ? '<span class="classic-service-price">' + priceTxt + '</span>' : '') +
+                '<span class="classic-service-toggle" aria-hidden="true">+</span>' +
+                '</span></summary>' +
+                '<div class="classic-service-panel">' + panelInner + '</div>' +
+                '</details>';
+            }
           }
           servicesHtml = '<section id="services" class="classic-services-section">' +
             '<div class="classic-services">' +
@@ -5652,26 +5710,7 @@
           '</div></section>'
           : '';
 
-        var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
-        var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
-        var footerLinks = '';
-        if (igHandle) footerLinks += '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">Instagram</a>';
-        var footAbout = tenantShowAboutPage(tenant) ? '#about' : '#services';
-        var footAddr = (tenant.address && String(tenant.address).trim())
-          || (tenant.contactAddress && String(tenant.contactAddress).trim())
-          || (tenant.serviceArea && String(tenant.serviceArea).trim())
-          || '';
-        var footMaps = footAddr ? googleMapsSearchUrl(footAddr) : '';
-        if (footAddr && footMaps) {
-          footerLinks += '<a href="' + esc(footMaps) + '" target="_blank" rel="noopener noreferrer">Location</a>';
-        } else if (footAddr) {
-          footerLinks += '<a href="' + footAbout + '">Location</a>';
-        }
-        if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) footerLinks += '<a href="' + footAbout + '">Hours</a>';
-        var footerHtml = '<footer class="classic-footer">' +
-          '<div class="classic-footer-brand">' + esc(displayName) + '</div>' +
-          '<div class="classic-footer-links">' + footerLinks + '</div>' +
-          '</footer>';
+        var footerHtml = classicSiteFooterHtml(tenant, opts.defaultName);
 
         return '<div class="tattoo-page classic-home classic-home-page">' +
           nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
@@ -5757,7 +5796,7 @@
         var inner = cards
           ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">Our <em>products</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
           : '<div class="s12-services" style="padding-top:120px"><p class="s12-phil-body" style="text-align:center">No products yet. Add them in the app.</p></div>';
-        return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + studio12SidebarHtml(tenant) + '</div>';
+        return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
 
       function studio12IndustryKey(tenant) {
@@ -6055,7 +6094,6 @@
         var bcImgCol = tenant.studio12BookCtaImageUrl
           ? '<img class="s12-hero-img" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt="" style="min-height:280px;border-radius:2px;object-fit:cover;width:100%">'
           : '<div class="s12-hero-img-fallback" style="min-height:280px"></div>';
-        var y = new Date().getFullYear();
         var s12HeroActions = '<div class="s12-hero-actions s12-fade">';
         if (tenantShowBookPage(tenant)) {
           s12HeroActions += '<a class="s12-btn-dark" href="' + bookUrl + '">Reserve your visit</a>';
@@ -6104,10 +6142,7 @@
           '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Find us</div>' +
           '<h3 class="s12-info-title">The <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">studio</em></h3>' +
           addrHtml + phoneEl + '</div></div>' +
-          '<footer class="s12-footer">' +
-          '<div><div class="s12-footer-brand">' + esc(displayName) + '</div></div>' +
-          '<p class="s12-footer-copy">© ' + y + ' ' + esc(displayName) + '</p>' +
-          '<div></div></footer>' + studio12SidebarHtml(tenant) + '</div>';
+          studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
 
       function hairTattooStyleHomePage(tenant, services) {
@@ -6182,7 +6217,7 @@
         var inner = productCards
           ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#555;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
-        return '<div class="luxe-page luxe-page--sub">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
+        return '<div class="luxe-page luxe-page--sub">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + luxeContactSectionHtml(tenant) + sidebar + '</div>';
       }
       function bladeShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -6198,7 +6233,7 @@
         var inner = productCards
           ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Add them in the app.</p></div>';
-        return '<div class="blade-page blade-page--sub">' + nav + '<div class="blade-shop-page-shell">' + inner + '</div>' + sidebar + '</div>';
+        return '<div class="blade-page blade-page--sub">' + nav + '<div class="blade-shop-page-shell">' + inner + '</div>' + bladeSiteFooterHtml(tenant) + sidebar + '</div>';
       }
       function classicShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -6215,7 +6250,7 @@
           ? '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
         var shopWrapClass = 'tattoo-page classic-home' + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
-        return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + sidebar + '</div>';
+        return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + classicSiteFooterHtml(tenant, tenant.displayName || 'Studio') + sidebar + '</div>';
       }
       function stonecutShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -6232,7 +6267,7 @@
           ? '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><div class="stonecut-shop-grid">' + productCards + '</div>'
           : '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><p class="stonecut-shop-empty">No products yet. Check back soon.</p>';
         var main = '<main class="stonecut-shop-shell">' + mainInner + '</main>';
-        return '<div class="stonecut-page">' + nav + main + sidebar + '</div>';
+        return '<div class="stonecut-page">' + nav + main + stonecutSiteFooterHtml(tenant) + sidebar + '</div>';
       }
       /** Default Luxe hero line when `luxeHeroTagline` is empty; matches `BookingTemplate` / tenant `industry`. */
       function defaultLuxeHeroTaglineForIndustry(industry) {
@@ -6351,43 +6386,7 @@
         '</section>'
           : '';
 
-        var contact = '';
-        if (tenant.showContactOnPage !== false) {
-          var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
-          var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
-          var connectParts = [];
-          if (igHandle) connectParts.push('<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">@' + esc(igHandle) + '</a>');
-          if (tenant.contactEmail) connectParts.push('<a href="mailto:' + esc(tenant.contactEmail) + '">' + esc(tenant.contactEmail) + '</a>');
-          if (tenant.contactPhone) {
-            var luxePhHref = telHrefFromPhone(tenant.contactPhone);
-            connectParts.push(luxePhHref ? ('<a href="' + esc(luxePhHref) + '">' + esc(tenant.contactPhone) + '</a>') : esc(tenant.contactPhone));
-          }
-          var connectHtml = connectParts.length ? connectParts.join('<br>') : 'Add in app';
-
-          var luxeHoursTrim = tenantBusinessHoursTrimmed(tenant);
-          var luxeHoursBlock = '';
-          if (tenantShowBusinessHours(tenant)) {
-            luxeHoursBlock = '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' +
-              (luxeHoursTrim ? esc(luxeHoursTrim) : 'Add in app') + '</p></div>';
-          }
-
-          var luxeLocRaw = (tenant.address && String(tenant.address).trim())
-            || (tenant.contactAddress && String(tenant.contactAddress).trim())
-            || (tenant.serviceArea && String(tenant.serviceArea).trim())
-            || '';
-          var luxeLocMaps = luxeLocRaw ? googleMapsSearchUrl(luxeLocRaw) : '';
-          var luxeLocationInner = luxeLocRaw && luxeLocMaps
-            ? '<a href="' + esc(luxeLocMaps) + '" target="_blank" rel="noopener noreferrer">' + esc(luxeLocRaw).replace(/\n/g, '<br>') + '</a>'
-            : (luxeLocRaw ? esc(luxeLocRaw).replace(/\n/g, '<br>') : 'Add in app');
-
-          contact = '<section class="luxe-contact">' +
-            '<div class="luxe-contact-inner">' +
-              '<div class="luxe-contact-item"><h3>Location</h3><p>' + luxeLocationInner + '</p></div>' +
-              luxeHoursBlock +
-              '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
-            '</div>' +
-          '</section>';
-        }
+        var contact = luxeContactSectionHtml(tenant);
 
         return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + contact + galleryLightboxShellHtml() + sidebar + '</div>';
       }
@@ -6856,12 +6855,19 @@
                 var parsed = parseFloat(String(pr));
                 if (!isNaN(parsed) && parsed > 0) priceNum = parsed;
               }
+              var dm = x.durationMinutes;
+              var durNum = (typeof dm === 'number' && !isNaN(dm) && dm > 0) ? Math.round(dm) : null;
+              if (durNum == null && dm != null && String(dm).trim() !== '') {
+                var pdi = parseInt(String(dm), 10);
+                if (!isNaN(pdi) && pdi > 0) durNum = pdi;
+              }
               return {
                 id: d.id,
                 slug: x.slug,
                 name: x.name,
                 description: (x.description != null ? String(x.description) : '') || '',
                 price: priceNum,
+                durationMinutes: durNum,
                 imageUrl: x.imageUrl || '',
                 sortOrder: (typeof so === 'number' && !isNaN(so)) ? so : 1e9
               };
@@ -6937,7 +6943,7 @@
                 document.getElementById('root').innerHTML = classicShopPage(tenant);
                 bindTattooSidebar();
                 bindShopPage(tenant);
-                document.body.style.background = '#F7F5F0';
+                document.body.style.background = '#ffffff';
                 document.body.style.color = '#1a1a1a';
               }
               applyBranding(tenant);
@@ -7000,6 +7006,9 @@
               } else if (isStudio12Theme(tenant)) {
                 document.body.style.background = '#faf7f2';
                 document.body.style.color = '#2a1f18';
+              } else if (isClassicTheme(tenant) && !isStudio12Theme(tenant)) {
+                document.body.style.background = '#ffffff';
+                document.body.style.color = '#1a1a1a';
               } else if (isPortfolioIndustry(tenant.industry)) {
                 document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
                 document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';

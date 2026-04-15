@@ -528,6 +528,15 @@
   width: 100%;
 }
 
+/* /gallery horizontal_strip: vertically center title + strip (see index.html `gallery-page-strip-main`). */
+.studio12-page .s12-gallery-light--fullpage.s12-gallery-light--strip-centered {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: clamp(28px, 5vw, 48px);
+}
+
 /* Gallery strip: infinite marquee; tile size scales with data-gallery-count (set in index.html). */
 .studio12-page .s12-gallery-marquee {
   overflow: hidden;

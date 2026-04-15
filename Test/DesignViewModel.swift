@@ -90,6 +90,9 @@ class DesignViewModel: ObservableObject {
     /// When false, the “How it works / Your experience” block is hidden (default on).
     @Published var studio12ShowProcessSection: Bool = true
 
+    /// Classic home “What I offer”: when false, duration lines are hidden on the live site (`classicShowServiceDuration` in Firestore).
+    @Published var classicShowServiceDuration: Bool = true
+
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
     @Published var featuredWorkBackgroundColorHex: String = "#FAF8F5"
@@ -337,6 +340,7 @@ class DesignViewModel: ObservableObject {
                 studio12BookCtaImageUrl = tenant?["studio12BookCtaImageUrl"] as? String ?? ""
                 studio12ShowServicesSection = tenant?["studio12ShowServicesSection"] as? Bool ?? true
                 studio12ShowProcessSection = tenant?["studio12ShowProcessSection"] as? Bool ?? true
+                classicShowServiceDuration = tenant?["classicShowServiceDuration"] as? Bool ?? true
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -467,6 +471,9 @@ class DesignViewModel: ObservableObject {
         if fam == .blade || fam == .stonecut {
             updates["bladeHeroTagline"] = bladeHeroTagline
             updates["bladeHeroDescription"] = bladeHeroDescription
+        }
+        if fam == .classic {
+            updates["classicShowServiceDuration"] = classicShowServiceDuration
         }
         if fam == .studio12 {
             updates["heroTagline"] = heroTagline
@@ -829,7 +836,7 @@ class DesignViewModel: ObservableObject {
 
     func addService(
         name: String,
-        durationMinutes: Int,
+        durationMinutes: Int?,
         description: String? = nil,
         startingPrice: Double? = nil
     ) async {
@@ -857,7 +864,7 @@ class DesignViewModel: ObservableObject {
         serviceId: String,
         name: String,
         description: String?,
-        durationMinutes: Int,
+        durationMinutes: Int?,
         startingPrice: Double?
     ) async -> Bool {
         guard let tid = tenantId else { return false }
@@ -958,11 +965,11 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    /// Replaces all tenant services with four industry starter services (Blade + Studio 12 home grids use the same list).
+    /// Replaces all tenant services with four industry starter services (Blade, Studio 12, and Classic home use the same list).
     func applyBladeStarterServices(isDemoMode: Bool = false) async {
         guard let tid = tenantId else { return }
         let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
-        guard fam == .blade || fam == .studio12 else { return }
+        guard fam == .blade || fam == .studio12 || fam == .classic else { return }
         let rawIndustry = industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let tmpl = BookingTemplate(rawValue: rawIndustry) ?? .custom
         await MainActor.run {

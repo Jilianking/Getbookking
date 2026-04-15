@@ -388,8 +388,19 @@ struct DesignView: View {
             }
 
             if isClassicTemplate {
-                FeaturedWorkPresetPicker(viewModel: viewModel)
-                    .padding(.top, 8)
+                Toggle("Show duration on live site", isOn: $viewModel.classicShowServiceDuration)
+                Text("When off, “About X min” is hidden under each service on your Classic home even if duration is set per service.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                BladeServicesHomeSection(
+                    viewModel: viewModel,
+                    serviceToEdit: $bladeServiceToEdit,
+                    onRequestReplaceStarters: { showBladeStarterConfirm = true },
+                    cardSectionTitle: "What I offer",
+                    cardCaption: "Your Classic home lists these services in this order. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately.",
+                    showOrderIndex: false
+                )
+                .padding(.top, 8)
             }
 
             if isLuxeTemplate {
@@ -1420,62 +1431,6 @@ struct FeaturedWorkHomeGallerySection: View {
     }
 }
 
-// MARK: - Featured work color presets (paired bg + text)
-struct FeaturedWorkPresetPicker: View {
-    @ObservedObject var viewModel: DesignViewModel
-    private let columns = [GridItem(.adaptive(minimum: 88), spacing: 12)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Featured section colors")
-                .font(.subheadline.weight(.medium))
-            Text("Preset pairs—background and text stay readable together.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                ForEach(FeaturedWorkColorPresets.all) { preset in
-                    Button {
-                        viewModel.applyFeaturedWorkPreset(preset)
-                    } label: {
-                        VStack(spacing: 6) {
-                            Circle()
-                                .fill(Color(hex: preset.backgroundHex))
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Circle()
-                                        .strokeBorder(
-                                            isSelected(preset) ? Color.accentColor : Color.primary.opacity(0.2),
-                                            lineWidth: isSelected(preset) ? 3 : 1
-                                        )
-                                )
-                            Text(preset.name)
-                                .font(.caption2)
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .frame(minWidth: 72)
-                        }
-                        .padding(8)
-                        .background(isSelected(preset) ? Color.accentColor.opacity(0.12) : Color(.secondarySystemGroupedBackground))
-                        .cornerRadius(10)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func isSelected(_ preset: FeaturedWorkColorPreset) -> Bool {
-        normalizeHex(preset.backgroundHex) == normalizeHex(viewModel.featuredWorkBackgroundColorHex)
-    }
-
-    private func normalizeHex(_ s: String) -> String {
-        var x = s.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if x.hasPrefix("#") { x.removeFirst() }
-        return x
-    }
-}
-
 // MARK: - Color row with picker
 struct HexColorRow: View {
     let label: String
@@ -1503,6 +1458,7 @@ struct AddServiceSheet: View {
     @ObservedObject var viewModel: DesignViewModel
     var disabled: Bool = false
     @State private var name = ""
+    @State private var includeDuration = false
     @State private var duration = 30
     @State private var descriptionText = ""
     @State private var showStartingPrice = false
@@ -1523,7 +1479,10 @@ struct AddServiceSheet: View {
                     TextField("Service name", text: $name)
                     TextField("Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
                         .lineLimit(2...6)
-                    Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    Toggle("Include duration", isOn: $includeDuration)
+                    if includeDuration {
+                        Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    }
                     Toggle("Show starting price", isOn: $showStartingPrice)
                     if showStartingPrice {
                         TextField("Amount (USD)", text: $priceText)
@@ -1547,11 +1506,12 @@ struct AddServiceSheet: View {
                             Task {
                                 await viewModel.addService(
                                     name: name,
-                                    durationMinutes: duration,
+                                    durationMinutes: includeDuration ? duration : nil,
                                     description: desc.isEmpty ? nil : desc,
                                     startingPrice: price
                                 )
                                 name = ""
+                                includeDuration = false
                                 duration = 30
                                 descriptionText = ""
                                 showStartingPrice = false
@@ -1813,23 +1773,41 @@ private struct EditTenantServiceSheet: View {
     let onDismiss: () -> Void
     @State private var name = ""
     @State private var descriptionText = ""
+    @State private var includeDuration = false
     @State private var duration = 30
     @State private var showStartingPrice = false
     @State private var priceText = ""
+
+    private var descriptionFieldTitle: String {
+        let fam = WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+        if fam == .blade || fam == .stonecut { return "Description (Blade card)" }
+        return "Description"
+    }
+
+    private var startingPriceHelp: String {
+        let fam = WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+        if fam == .blade || fam == .stonecut {
+            return "Guests see “Book for pricing” on Blade when this is off."
+        }
+        return "When off, starting price is hidden on your site where supported."
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Service name", text: $name)
-                TextField("Description (Blade card)", text: $descriptionText, axis: .vertical)
+                TextField(descriptionFieldTitle, text: $descriptionText, axis: .vertical)
                     .lineLimit(3...8)
-                Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                Toggle("Include duration", isOn: $includeDuration)
+                if includeDuration {
+                    Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                }
                 Toggle("Show starting price", isOn: $showStartingPrice)
                 if showStartingPrice {
                     TextField("Amount (USD)", text: $priceText)
                         .keyboardType(.decimalPad)
                 } else {
-                    Text("Guests see “Book for pricing” on Blade when this is off.")
+                    Text(startingPriceHelp)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1849,7 +1827,7 @@ private struct EditTenantServiceSheet: View {
                                 serviceId: service.id,
                                 name: name,
                                 description: desc.isEmpty ? nil : desc,
-                                durationMinutes: duration,
+                                durationMinutes: includeDuration ? duration : nil,
                                 startingPrice: price
                             )
                             if ok { onDismiss() }
@@ -1862,7 +1840,13 @@ private struct EditTenantServiceSheet: View {
         .onAppear {
             name = service.name
             descriptionText = service.description ?? ""
-            duration = service.durationMinutes
+            if let dm = service.durationMinutes, dm > 0 {
+                includeDuration = true
+                duration = dm
+            } else {
+                includeDuration = false
+                duration = 30
+            }
             if let p = service.price, p > 0 {
                 showStartingPrice = true
                 priceText = p.rounded() == p ? String(format: "%.0f", p) : String(format: "%.2f", p)

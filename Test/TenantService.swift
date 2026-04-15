@@ -10,7 +10,8 @@ struct TenantService: Identifiable {
     var id: String
     var slug: String
     var name: String
-    var durationMinutes: Int
+    /// When `nil`, no duration is stored (Classic “+” panel and optional booking hints stay empty).
+    var durationMinutes: Int?
     /// Shown on Blade service cards and anywhere the web reads `description`.
     var description: String?
     /// Blade / web display order (`sortOrder` in Firestore). Lower values appear first (01, 02, …).

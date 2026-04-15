@@ -472,11 +472,18 @@ class FirebaseService: ObservableObject {
                 if let x = rawPrice as? Int, x > 0 { return Double(x) }
                 return nil
             }()
+            let rawDur = d["durationMinutes"]
+            let durationParsed: Int? = {
+                if let n = rawDur as? Int, n > 0 { return n }
+                if let n = rawDur as? Double, n > 0 { return Int(n) }
+                if let s = rawDur as? String, let v = Int(s.trimmingCharacters(in: .whitespaces)), v > 0 { return v }
+                return nil
+            }()
             return TenantService(
                 id: doc.documentID,
                 slug: slug,
                 name: name,
-                durationMinutes: d["durationMinutes"] as? Int ?? 30,
+                durationMinutes: durationParsed,
                 description: d["description"] as? String,
                 sortOrder: d["sortOrder"] as? Int ?? Int.max,
                 price: price,
@@ -495,15 +502,19 @@ class FirebaseService: ObservableObject {
     func tenantServiceDisplayUpdates(
         name: String,
         slug: String,
-        durationMinutes: Int,
+        durationMinutes: Int?,
         description: String?,
         startingPrice: Double?
     ) -> [String: Any] {
         var u: [String: Any] = [
             "name": name,
-            "slug": slug,
-            "durationMinutes": durationMinutes
+            "slug": slug
         ]
+        if let dm = durationMinutes, dm > 0 {
+            u["durationMinutes"] = dm
+        } else {
+            u["durationMinutes"] = FieldValue.delete()
+        }
         let desc = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if desc.isEmpty {
             u["description"] = FieldValue.delete()
@@ -521,7 +532,7 @@ class FirebaseService: ObservableObject {
     func createTenantService(
         tenantId: String,
         name: String,
-        durationMinutes: Int,
+        durationMinutes: Int?,
         slug: String? = nil,
         description: String? = nil,
         sortOrder: Int = 0,
@@ -531,10 +542,12 @@ class FirebaseService: ObservableObject {
         var data: [String: Any] = [
             "slug": slugValue,
             "name": name,
-            "durationMinutes": durationMinutes,
             "isActive": true,
             "sortOrder": sortOrder
         ]
+        if let dm = durationMinutes, dm > 0 {
+            data["durationMinutes"] = dm
+        }
         if let d = description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
             data["description"] = d
         }

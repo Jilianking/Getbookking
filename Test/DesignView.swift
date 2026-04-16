@@ -397,7 +397,7 @@ struct DesignView: View {
                     serviceToEdit: $bladeServiceToEdit,
                     onRequestReplaceStarters: { showBladeStarterConfirm = true },
                     cardSectionTitle: "What I offer",
-                    cardCaption: "Your Classic home lists these services in this order. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately.",
+                    cardCaption: "Your Classic site lists these as a menu: title, optional duration, and description on the left; price on the right. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately.",
                     showOrderIndex: false
                 )
                 .padding(.top, 8)
@@ -893,6 +893,44 @@ struct DesignView: View {
             TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...8)
+
+            if isClassicTemplate {
+                Divider()
+                    .padding(.top, 4)
+                Text("ABOUT STATS")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                    .tracking(1)
+                Text("The three headline figures under your story on the dark About section (Classic home and /about).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Toggle("Show stats row on live site", isOn: $viewModel.classicShowAboutStats)
+                Text("When off, that row is hidden; your story and contact lines stay.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Group {
+                    Text("First stat")
+                        .font(.caption.weight(.medium))
+                    TextField("Value (e.g. 8+)", text: $viewModel.classicStatYearsValue)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Caption (e.g. Years exp.)", text: $viewModel.classicStatYearsLabel)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Second stat")
+                        .font(.caption.weight(.medium))
+                        .padding(.top, 6)
+                    TextField("Value (e.g. 500+)", text: $viewModel.classicStatClientsValue)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Caption (e.g. Clients)", text: $viewModel.classicStatClientsLabel)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Third stat")
+                        .font(.caption.weight(.medium))
+                        .padding(.top, 6)
+                    TextField("Value (e.g. 5★)", text: $viewModel.classicStatRatedValue)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Caption (e.g. Rated)", text: $viewModel.classicStatRatedLabel)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
 
             Text("CONTACT")
                 .font(.caption.weight(.semibold))

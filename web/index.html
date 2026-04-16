@@ -640,7 +640,9 @@
     }
     .classic-hero-right img { width: 100%; height: 100%; object-fit: cover; }
     .classic-hero-placeholder {
-      width: 100%; height: 100%; min-height: 320px;
+      width: 100%;
+      height: 100%;
+      min-height: 320px;
       background: linear-gradient(160deg, #d6d3ce 0%, #e8e5e0 50%, #c8c5bf 100%);
     }
     .classic-section-eyebrow {
@@ -669,87 +671,63 @@
       margin: 0 0 24px;
     }
     .classic-service-list { border-top: 1px solid rgba(26,26,26,0.12); }
-    /* “What I offer”: FAQ-style row + disclosure (marketing site pattern). */
+    /* “What I offer”: menu list (layout E — copy left, price right; no numbers, no accordion). */
     .classic-service-item {
       border-bottom: 1px solid rgba(26,26,26,0.12);
     }
-    .classic-service-trigger {
+    .classic-service-item--e {
+      padding: 16px 0;
+    }
+    .classic-service-e-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       gap: 20px;
-      padding: 18px 0;
-      cursor: pointer;
-      list-style: none;
-      user-select: none;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .classic-service-trigger::-webkit-details-marker {
-      display: none;
-    }
-    .classic-service-trigger::marker {
-      content: '';
-    }
-    .classic-service-name-wrap {
+    .classic-service-e-copy {
       flex: 1;
       min-width: 0;
-      text-align: left;
-    }
-    .classic-service-name {
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .classic-service-meta-end {
-      display: inline-flex;
-      align-items: center;
-      gap: 16px;
-      flex-shrink: 0;
-    }
-    .classic-service-price {
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .classic-service-toggle {
-      font-size: 22px;
-      font-weight: 300;
-      line-height: 1;
-      color: rgba(26, 26, 26, 0.35);
-      transition: transform 0.2s ease;
-      flex-shrink: 0;
-    }
-    .classic-service-item[open] .classic-service-toggle {
-      transform: rotate(45deg);
-    }
-    .classic-service-panel {
-      padding: 0 0 18px;
-      font-size: 14px;
-      line-height: 1.65;
-      color: rgba(26, 26, 26, 0.55);
-    }
-    .classic-service-panel p {
-      margin: 0 0 8px;
-    }
-    .classic-service-panel p:last-child {
-      margin-bottom: 0;
-    }
-    .classic-service-panel .classic-service-dur {
-      font-size: 12px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: rgba(26, 26, 26, 0.4);
-      margin-bottom: 10px;
-    }
-    .classic-service-panel-empty {
-      margin: 0;
-      font-style: italic;
-      color: rgba(26, 26, 26, 0.38);
-    }
-    /* No description: plain row (no + / disclosure). */
-    .classic-service-item--static .classic-service-static-row {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-      padding: 18px 0;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .classic-service-e-price-col {
+      flex-shrink: 0;
+      text-align: right;
+      padding-top: 1px;
+    }
+    .classic-service-e-title {
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.35;
+      color: #1a1a1a;
+      margin: 0;
+    }
+    .classic-service-e-dur {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(26, 26, 26, 0.42);
+      margin: 0;
+    }
+    .classic-service-e-desc {
+      font-size: 13px;
+      line-height: 1.55;
+      color: rgba(26, 26, 26, 0.52);
+      margin: 0;
+      white-space: pre-line;
+      max-height: 7.5em;
+      overflow: hidden;
+    }
+    .classic-service-menu-price {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: rgba(26, 26, 26, 0.72);
+      margin: 0;
     }
     .classic-about-section {
       background: #1a1a1a;
@@ -4341,6 +4319,10 @@
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      function classicStatPick(tenant, key, fallback) {
+        var v = tenant && tenant[key] != null ? String(tenant[key]).trim() : '';
+        return v ? v : fallback;
+      }
       /** True on iPhone / iPod / iPad, iPadOS (MacIntel + touch), or when URL has ?maps=apple (e.g. in-app WebView). */
       function clientPrefersAppleMaps() {
         if (typeof navigator === 'undefined') return false;
@@ -5632,29 +5614,27 @@
             var priceTxt = (typeof s.price === 'number' && s.price > 0) ? '$' + Number(s.price).toFixed(0) : '';
             var descTrim = (s.description && String(s.description).trim()) ? String(s.description).trim() : '';
             var dur = (typeof s.durationMinutes === 'number' && s.durationMinutes > 0) ? s.durationMinutes : null;
-            if (!descTrim) {
-              rows += '<div class="classic-service-item classic-service-item--static">' +
-                '<div class="classic-service-static-row">' +
-                '<span class="classic-service-name-wrap"><span class="classic-service-name">' + esc(s.name) + '</span></span>' +
-                '<span class="classic-service-meta-end">' +
-                (priceTxt ? '<span class="classic-service-price">' + priceTxt + '</span>' : '') +
-                '</span></div></div>';
-            } else {
-              var panelInner = '';
-              if (showClassicServiceDur && dur != null) {
-                panelInner += '<p class="classic-service-dur">About ' + esc(String(dur)) + ' min</p>';
-              }
-              panelInner += '<p>' + esc(descTrim).replace(/\n/g, '<br>') + '</p>';
-              rows += '<details class="classic-service-item">' +
-                '<summary class="classic-service-trigger">' +
-                '<span class="classic-service-name-wrap"><span class="classic-service-name">' + esc(s.name) + '</span></span>' +
-                '<span class="classic-service-meta-end">' +
-                (priceTxt ? '<span class="classic-service-price">' + priceTxt + '</span>' : '') +
-                '<span class="classic-service-toggle" aria-hidden="true">+</span>' +
-                '</span></summary>' +
-                '<div class="classic-service-panel">' + panelInner + '</div>' +
-                '</details>';
-            }
+            var durHtml = showClassicServiceDur && dur != null
+              ? '<p class="classic-service-e-dur">About ' + esc(String(dur)) + ' min</p>'
+              : '';
+            var descHtml = descTrim
+              ? '<div class="classic-service-e-desc">' + esc(descTrim).replace(/\n/g, '<br>') + '</div>'
+              : '';
+            var priceHtml = priceTxt
+              ? '<p class="classic-service-menu-price">' + esc(priceTxt) + '</p>'
+              : '';
+            var priceCol = priceTxt
+              ? '<div class="classic-service-e-price-col">' + priceHtml + '</div>'
+              : '';
+            rows += '<div class="classic-service-item classic-service-item--e">' +
+              '<div class="classic-service-e-row">' +
+              '<div class="classic-service-e-copy">' +
+              '<p class="classic-service-e-title">' + esc(s.name) + '</p>' +
+              durHtml +
+              descHtml +
+              '</div>' +
+              priceCol +
+              '</div></div>';
           }
           servicesHtml = '<section id="services" class="classic-services-section">' +
             '<div class="classic-services">' +
@@ -5695,17 +5675,28 @@
             classicContactLines = '<div class="classic-about-contact-lines">' + clParts.join('<br>') + '</div>';
           }
         }
+        var classicStatsHtml = '';
+        if (tenant.classicShowAboutStats !== false) {
+          var yv = classicStatPick(tenant, 'classicStatYearsValue', '8+');
+          var yl = classicStatPick(tenant, 'classicStatYearsLabel', 'Years exp.');
+          var cv = classicStatPick(tenant, 'classicStatClientsValue', '500+');
+          var cl = classicStatPick(tenant, 'classicStatClientsLabel', 'Clients');
+          var rv = classicStatPick(tenant, 'classicStatRatedValue', '5\u2605');
+          var rl = classicStatPick(tenant, 'classicStatRatedLabel', 'Rated');
+          classicStatsHtml =
+            '<div class="classic-stats">' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + esc(yv) + '</div><div class="classic-stat-label">' + esc(yl) + '</div></div>' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + esc(cv) + '</div><div class="classic-stat-label">' + esc(cl) + '</div></div>' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + esc(rv) + '</div><div class="classic-stat-label">' + esc(rl) + '</div></div>' +
+            '</div>';
+        }
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section">' +
           '<div class="classic-about-inner-v2">' +
           '<p class="classic-section-eyebrow">About</p>' +
           '<h2>' + opts.aboutHeading + '</h2>' +
           '<p class="classic-about-bio-v2">' + aboutBody + '</p>' +
-          '<div class="classic-stats">' +
-          '<div class="classic-stat"><div class="classic-stat-value">8+</div><div class="classic-stat-label">Years exp.</div></div>' +
-          '<div class="classic-stat"><div class="classic-stat-value">500+</div><div class="classic-stat-label">Clients</div></div>' +
-          '<div class="classic-stat"><div class="classic-stat-value">5\u2605</div><div class="classic-stat-label">Rated</div></div>' +
-          '</div>' +
+          classicStatsHtml +
           classicContactLines +
           '</div></section>'
           : '';

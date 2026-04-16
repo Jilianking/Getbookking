@@ -93,6 +93,15 @@ class DesignViewModel: ObservableObject {
     /// Classic home “What I offer”: when false, duration lines are hidden on the live site (`classicShowServiceDuration` in Firestore).
     @Published var classicShowServiceDuration: Bool = true
 
+    /// Classic dark About band: three headline stats row (`classicShowAboutStats` in Firestore).
+    @Published var classicShowAboutStats: Bool = true
+    @Published var classicStatYearsValue: String = "8+"
+    @Published var classicStatYearsLabel: String = "Years exp."
+    @Published var classicStatClientsValue: String = "500+"
+    @Published var classicStatClientsLabel: String = "Clients"
+    @Published var classicStatRatedValue: String = "5★"
+    @Published var classicStatRatedLabel: String = "Rated"
+
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
     @Published var featuredWorkBackgroundColorHex: String = "#FAF8F5"
@@ -341,6 +350,13 @@ class DesignViewModel: ObservableObject {
                 studio12ShowServicesSection = tenant?["studio12ShowServicesSection"] as? Bool ?? true
                 studio12ShowProcessSection = tenant?["studio12ShowProcessSection"] as? Bool ?? true
                 classicShowServiceDuration = tenant?["classicShowServiceDuration"] as? Bool ?? true
+                classicShowAboutStats = tenant?["classicShowAboutStats"] as? Bool ?? true
+                classicStatYearsValue = (tenant?["classicStatYearsValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "8+"
+                classicStatYearsLabel = (tenant?["classicStatYearsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Years exp."
+                classicStatClientsValue = (tenant?["classicStatClientsValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "500+"
+                classicStatClientsLabel = (tenant?["classicStatClientsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Clients"
+                classicStatRatedValue = (tenant?["classicStatRatedValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "5★"
+                classicStatRatedLabel = (tenant?["classicStatRatedLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Rated"
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -531,7 +547,7 @@ class DesignViewModel: ObservableObject {
         normalizeServiceCityTitleCase()
         composeServiceAreaForPersistence()
         let hoursString = Self.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
-        let updates: [String: Any] = [
+        var updates: [String: Any] = [
             "aboutText": aboutText,
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
@@ -547,6 +563,15 @@ class DesignViewModel: ObservableObject {
             "businessHoursWeekly": businessHoursWeekly.firestoreDayMap(),
             "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() }
         ]
+        if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic {
+            updates["classicShowAboutStats"] = classicShowAboutStats
+            updates["classicStatYearsValue"] = classicStatYearsValue
+            updates["classicStatYearsLabel"] = classicStatYearsLabel
+            updates["classicStatClientsValue"] = classicStatClientsValue
+            updates["classicStatClientsLabel"] = classicStatClientsLabel
+            updates["classicStatRatedValue"] = classicStatRatedValue
+            updates["classicStatRatedLabel"] = classicStatRatedLabel
+        }
         await saveTenantUpdates(tid, updates)
         await MainActor.run {
             businessHours = hoursString

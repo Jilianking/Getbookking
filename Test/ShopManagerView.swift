@@ -400,6 +400,7 @@ struct ShopCatalogView: View {
     @State private var newProductVisible = true
     @State private var newProductImageItem: PhotosPickerItem? = nil
     @State private var newProductImageData: Data? = nil
+    @State private var newProductCropItem: SingleImageCropSheetItem?
 
     var body: some View {
         Group {
@@ -419,6 +420,19 @@ struct ShopCatalogView: View {
             addProductSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $newProductCropItem, onDismiss: { newProductCropItem = nil }) { item in
+            UploadImagePreparationSheet(
+                images: [item.image],
+                advice: UploadImageAdvice.product,
+                navigationTitle: "Product photo",
+                allowedChoices: UploadCropPresetMenu.product,
+                defaultChoice: .square,
+                onUseJPEGData: { dataList in
+                    newProductImageData = dataList.first
+                    newProductCropItem = nil
+                }
+            )
         }
     }
 
@@ -524,6 +538,9 @@ struct ShopCatalogView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    Text(UploadImageAdvice.product)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     PhotosPicker(selection: $newProductImageItem, matching: .images) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -562,8 +579,16 @@ struct ShopCatalogView: View {
                     .buttonStyle(.plain)
                     .onChange(of: newProductImageItem) { _, item in
                         Task {
-                            if let data = try? await item?.loadTransferable(type: Data.self) {
-                                await MainActor.run { newProductImageData = data }
+                            guard let item else { return }
+                            guard let data = try? await item.loadTransferable(type: Data.self),
+                                  !data.isEmpty,
+                                  let uiImage = UIImage(data: data) else {
+                                await MainActor.run { newProductImageItem = nil }
+                                return
+                            }
+                            await MainActor.run {
+                                newProductCropItem = SingleImageCropSheetItem(image: uiImage)
+                                newProductImageItem = nil
                             }
                         }
                     }

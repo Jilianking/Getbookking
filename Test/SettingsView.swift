@@ -6,11 +6,13 @@
 
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
     @State private var profilePhotoPickerItem: PhotosPickerItem?
+    @State private var profilePhotoCropItem: SingleImageCropSheetItem?
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
@@ -58,7 +60,7 @@ struct SettingsView: View {
                 if !authViewModel.isDemoMode && viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
                         header: Text("Profile picture"),
-                        footer: Text("Used for your account profile. Website logo is managed in Web Page Design.")
+                        footer: Text("Used for your account profile. Website logo is managed in Web Page Design. \(UploadImageAdvice.profile)")
                             .font(.caption2)
                     ) {
                         HStack(alignment: .center, spacing: 12) {
@@ -149,14 +151,15 @@ struct SettingsView: View {
                     .onChange(of: profilePhotoPickerItem) { _, newItem in
                         Task {
                             guard let newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
-                                await viewModel.uploadProfilePhoto(imageData: data)
-                                await MainActor.run {
-                                    let trimmed = viewModel.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    authViewModel.accountPhotoUrl = trimmed.isEmpty ? nil : trimmed
-                                }
+                            guard let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty,
+                                  let uiImage = UIImage(data: data) else {
+                                await MainActor.run { profilePhotoPickerItem = nil }
+                                return
                             }
-                            await MainActor.run { profilePhotoPickerItem = nil }
+                            await MainActor.run {
+                                profilePhotoCropItem = SingleImageCropSheetItem(image: uiImage)
+                                profilePhotoPickerItem = nil
+                            }
                         }
                     }
                 }
@@ -294,6 +297,26 @@ struct SettingsView: View {
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            }
+            .sheet(item: $profilePhotoCropItem, onDismiss: { profilePhotoCropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: UploadImageAdvice.profile,
+                    navigationTitle: "Profile photo",
+                    allowedChoices: UploadCropPresetMenu.profile,
+                    defaultChoice: .square,
+                    onUseJPEGData: { dataList in
+                        profilePhotoCropItem = nil
+                        guard let data = dataList.first else { return }
+                        Task {
+                            await viewModel.uploadProfilePhoto(imageData: data)
+                            await MainActor.run {
+                                let trimmed = viewModel.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                                authViewModel.accountPhotoUrl = trimmed.isEmpty ? nil : trimmed
+                            }
+                        }
+                    }
+                )
             }
         }
         .navigationViewStyle(.stack)

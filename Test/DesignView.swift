@@ -387,18 +387,22 @@ struct DesignView: View {
                 )
             }
 
-            if isClassicTemplate {
-                Toggle("Show duration on live site", isOn: $viewModel.classicShowServiceDuration)
-                Text("When off, “About X min” is hidden under each service on your Classic home even if duration is set per service.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if isLuxeTemplate {
+                Toggle("Show featured strip on live site", isOn: $viewModel.luxeShowFeaturedWorkStrip)
+                    .padding(.top, 8)
+            }
+
+            if isClassicTemplate || isLuxeTemplate {
                 BladeServicesHomeSection(
                     viewModel: viewModel,
                     serviceToEdit: $bladeServiceToEdit,
                     onRequestReplaceStarters: { showBladeStarterConfirm = true },
                     cardSectionTitle: "What I offer",
-                    cardCaption: "Your Classic site lists these as a menu: title, optional duration, and description on the left; price on the right. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately.",
-                    showOrderIndex: false
+                    cardCaption: isClassicTemplate
+                        ? "Your Classic site lists these as a menu: title, optional duration, and description on the left; price on the right. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately."
+                        : "The first four services match your featured cards in order. Use Show featured strip (above) and Show services section (toggle below) on the live site. Reorder with the arrows; tap Edit for name, duration, description, and price. Changes save immediately.",
+                    showOrderIndex: false,
+                    luxeShowHomeServicesSection: isLuxeTemplate ? $viewModel.luxeShowHomeServicesSection : nil
                 )
                 .padding(.top, 8)
             }
@@ -511,6 +515,9 @@ struct DesignView: View {
                 .foregroundColor(.secondary)
             Studio12AuxImageUploadSection(
                 label: "Philosophy image",
+                advice: UploadImageAdvice.studioAux,
+                allowedCropChoices: [.portrait4_5],
+                defaultCropChoice: .portrait4_5,
                 imageUrl: $viewModel.studio12PhilosophyImageUrl,
                 isUploading: viewModel.isUploadingStudio12Philosophy,
                 upload: { data in await viewModel.uploadStudio12PhilosophyImage(imageData: data) }
@@ -567,6 +574,9 @@ struct DesignView: View {
             .textFieldStyle(.roundedBorder)
             Studio12AuxImageUploadSection(
                 label: "CTA side image",
+                advice: UploadImageAdvice.studioAux,
+                allowedCropChoices: [.landscape4_3],
+                defaultCropChoice: .landscape4_3,
                 imageUrl: $viewModel.studio12BookCtaImageUrl,
                 isUploading: viewModel.isUploadingStudio12BookCta,
                 upload: { data in await viewModel.uploadStudio12BookCtaImage(imageData: data) }
@@ -594,7 +604,7 @@ struct DesignView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            GalleryImagesSection(viewModel: viewModel)
+            GalleryImagesSection(viewModel: viewModel, isStudio12Site: isStudio12Template)
 
             Text("Full-page gallery layout")
                 .font(.subheadline.weight(.semibold))
@@ -1136,11 +1146,36 @@ struct ServiceAreaCityStateFields: View {
 struct HeroImageUploadSection: View {
     @ObservedObject var viewModel: DesignViewModel
     @State private var selectedItem: PhotosPickerItem?
+    @State private var cropSheetItem: SingleImageCropSheetItem?
+
+    private var heroTemplateFamily: TemplateFamily {
+        WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+    }
+
+    private var isLuxeTemplate: Bool { heroTemplateFamily == .luxe }
+    private var isStudio12Template: Bool { heroTemplateFamily == .studio12 }
+
+    /// Hero image frame is fixed per template; the crop sheet locks to this single aspect.
+    /// Classic / Luxe / Blade / Stonecut → 16:9. Studio 12 → 4:5 portrait.
+    private var heroLockedCropChoice: UploadCropAspectChoice {
+        isStudio12Template ? .portrait4_5 : .landscape16_9
+    }
+
+    private var heroCropChoices: [UploadCropAspectChoice] { [heroLockedCropChoice] }
+
+    private var heroDefaultCropChoice: UploadCropAspectChoice { heroLockedCropChoice }
+
+    private var heroAdvice: String {
+        isLuxeTemplate ? UploadImageAdvice.heroLuxe : UploadImageAdvice.hero
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Hero background image")
                 .font(.subheadline.weight(.medium))
+            Text(heroAdvice)
+                .font(.caption)
+                .foregroundColor(.secondary)
             HStack(spacing: 16) {
                 if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
                    let url = URL(string: urlString) {
@@ -1172,11 +1207,19 @@ struct HeroImageUploadSection: View {
                     }
                     .onChange(of: selectedItem) { _, newItem in
                         Task {
-                            guard let newItem = newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
-                                await viewModel.uploadHeroImage(imageData: data)
+                            guard let newItem else {
+                                return
                             }
-                            await MainActor.run { selectedItem = nil }
+                            if let data = try? await newItem.loadTransferable(type: Data.self),
+                               !data.isEmpty,
+                               let uiImage = UIImage(data: data) {
+                                await MainActor.run {
+                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                                    selectedItem = nil
+                                }
+                            } else {
+                                await MainActor.run { selectedItem = nil }
+                            }
                         }
                     }
                     if viewModel.isUploadingHero {
@@ -1187,21 +1230,42 @@ struct HeroImageUploadSection: View {
                 Spacer()
             }
         }
+        .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
+            UploadImagePreparationSheet(
+                images: [item.image],
+                advice: heroAdvice,
+                navigationTitle: "Hero image",
+                allowedChoices: heroCropChoices,
+                defaultChoice: heroDefaultCropChoice,
+                onUseJPEGData: { dataList in
+                    guard let data = dataList.first else { return }
+                    cropSheetItem = nil
+                    Task { await viewModel.uploadHeroImage(imageData: data) }
+                }
+            )
+        }
     }
 }
 
 // MARK: - Studio 12 auxiliary images (philosophy column, book CTA column)
 struct Studio12AuxImageUploadSection: View {
     let label: String
+    let advice: String
+    let allowedCropChoices: [UploadCropAspectChoice]
+    let defaultCropChoice: UploadCropAspectChoice
     @Binding var imageUrl: String
     let isUploading: Bool
     let upload: (Data) async -> Void
     @State private var selectedItem: PhotosPickerItem?
+    @State private var cropSheetItem: SingleImageCropSheetItem?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(label)
                 .font(.subheadline.weight(.medium))
+            Text(advice)
+                .font(.caption)
+                .foregroundColor(.secondary)
             HStack(spacing: 16) {
                 if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
                     AsyncImage(url: url) { image in
@@ -1232,11 +1296,17 @@ struct Studio12AuxImageUploadSection: View {
                     }
                     .onChange(of: selectedItem) { _, newItem in
                         Task {
-                            guard let newItem = newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty {
-                                await upload(data)
+                            guard let newItem else { return }
+                            if let data = try? await newItem.loadTransferable(type: Data.self),
+                               !data.isEmpty,
+                               let uiImage = UIImage(data: data) {
+                                await MainActor.run {
+                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                                    selectedItem = nil
+                                }
+                            } else {
+                                await MainActor.run { selectedItem = nil }
                             }
-                            await MainActor.run { selectedItem = nil }
                         }
                     }
                     if isUploading {
@@ -1247,21 +1317,60 @@ struct Studio12AuxImageUploadSection: View {
                 Spacer()
             }
         }
+        .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
+            UploadImagePreparationSheet(
+                images: [item.image],
+                advice: advice,
+                navigationTitle: label,
+                allowedChoices: allowedCropChoices,
+                defaultChoice: defaultCropChoice,
+                onUseJPEGData: { dataList in
+                    guard let data = dataList.first else { return }
+                    cropSheetItem = nil
+                    Task { await upload(data) }
+                }
+            )
+        }
     }
 }
 
 // MARK: - Gallery page images only
 struct GalleryImagesSection: View {
     @ObservedObject var viewModel: DesignViewModel
+    /// When the live site template is Studio 12, gallery presets and copy match the home strip + /gallery tiles.
+    var isStudio12Site: Bool = false
     @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var galleryBatchCrop: MultiImageCropSheetItem?
 
     /// Wraps thumbnails in rows; parent `ScrollView` handles vertical scrolling.
     private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
+
+    private var galleryAdvice: String {
+        isStudio12Site ? UploadImageAdvice.galleryStudio12 : UploadImageAdvice.gallery
+    }
+
+    /// Gallery cells are a fixed shape per layout style; the crop sheet locks to that shape.
+    /// Classic grid → 4:3 (matches `.gallery-grid img` cell). Horizontal strip → 4:5 (matches strip cell).
+    /// Masonry keeps the native aspect (no crop) so the column layout reads like Pinterest.
+    private var galleryLockedCropChoice: UploadCropAspectChoice {
+        switch viewModel.galleryLayoutStyle {
+        case .masonry: return .original
+        case .horizontalStrip: return .portrait4_5
+        case .classicGrid: return isStudio12Site ? .portrait4_5 : .landscape4_3
+        }
+    }
+
+    private var galleryAllowedCropChoices: [UploadCropAspectChoice] { [galleryLockedCropChoice] }
+
+    private var galleryDefaultCropChoice: UploadCropAspectChoice { galleryLockedCropChoice }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Gallery page photos")
                 .font(.subheadline.weight(.medium))
+            Text(galleryAdvice)
+                .font(.caption)
+                .foregroundColor(.secondary)
             LazyVGrid(columns: thumbGridColumns, alignment: .leading, spacing: 12) {
                 ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
                     if let url = URL(string: urlString) {
@@ -1320,10 +1429,14 @@ struct GalleryImagesSection: View {
                             return collected.sorted { $0.0 < $1.0 }
                         }
                         let orderedData = indexedPairs.map { $0.1 }
-                        if !orderedData.isEmpty {
-                            await viewModel.addGalleryImages(imageDataList: orderedData)
+                        let images: [UIImage] = orderedData.compactMap { UIImage(data: $0) }
+                        await MainActor.run {
+                            selectedItems.removeAll()
+                            if images.isEmpty {
+                                return
+                            }
+                            galleryBatchCrop = MultiImageCropSheetItem(images: images)
                         }
-                        await MainActor.run { selectedItems.removeAll() }
                     }
                 }
             }
@@ -1336,6 +1449,20 @@ struct GalleryImagesSection: View {
                 }
             }
         }
+        .sheet(item: $galleryBatchCrop, onDismiss: { galleryBatchCrop = nil }) { batch in
+            UploadImagePreparationSheet(
+                images: batch.images,
+                advice: galleryAdvice,
+                navigationTitle: "Gallery photos",
+                allowedChoices: galleryAllowedCropChoices,
+                defaultChoice: galleryDefaultCropChoice,
+                onUseJPEGData: { dataList in
+                    galleryBatchCrop = nil
+                    guard !dataList.isEmpty else { return }
+                    Task { await viewModel.addGalleryImages(imageDataList: dataList) }
+                }
+            )
+        }
     }
 }
 
@@ -1345,6 +1472,7 @@ struct FeaturedWorkHomeGallerySection: View {
     /// Classic shows slot/gallery explainer; Luxe omits redundant copy.
     var showFeaturedWorkExplanation: Bool = true
     @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var featuredBatchCrop: MultiImageCropSheetItem?
 
     private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
 
@@ -1367,6 +1495,9 @@ struct FeaturedWorkHomeGallerySection: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            Text(UploadImageAdvice.featured)
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Text("Featured on home")
                 .font(.caption.weight(.semibold))
@@ -1398,6 +1529,20 @@ struct FeaturedWorkHomeGallerySection: View {
                         .foregroundColor(.secondary)
                 }
             }
+        }
+        .sheet(item: $featuredBatchCrop, onDismiss: { featuredBatchCrop = nil }) { batch in
+            UploadImagePreparationSheet(
+                images: batch.images,
+                advice: UploadImageAdvice.featured,
+                navigationTitle: "Featured photos",
+                allowedChoices: [.portrait4_5],
+                defaultChoice: .portrait4_5,
+                onUseJPEGData: { dataList in
+                    featuredBatchCrop = nil
+                    guard !dataList.isEmpty else { return }
+                    Task { await viewModel.addFeaturedWorkImages(imageDataList: dataList) }
+                }
+            )
         }
     }
 
@@ -1460,10 +1605,14 @@ struct FeaturedWorkHomeGallerySection: View {
                     return collected.sorted { $0.0 < $1.0 }
                 }
                 let orderedData = indexedPairs.map { $0.1 }
-                if !orderedData.isEmpty {
-                    await viewModel.addFeaturedWorkImages(imageDataList: orderedData)
+                let images: [UIImage] = orderedData.compactMap { UIImage(data: $0) }
+                await MainActor.run {
+                    selectedItems.removeAll()
+                    if images.isEmpty {
+                        return
+                    }
+                    featuredBatchCrop = MultiImageCropSheetItem(images: images)
                 }
-                await MainActor.run { selectedItems.removeAll() }
             }
         }
     }
@@ -1580,6 +1729,8 @@ private struct BladeServicesHomeSection: View {
     var cardCaption: String = "Cards under OUR SERVICES use this order (01, 02…), names, descriptions, and pricing. Use arrows to reorder; changes save to your booking page."
     /// When false (Studio 12 “What we offer”), row index labels are hidden.
     var showOrderIndex: Bool = true
+    /// Luxe only: optional home menu under featured cards (`luxeShowHomeServicesSection` in Firestore).
+    var luxeShowHomeServicesSection: Binding<Bool>? = nil
 
     private var controlsDisabled: Bool {
         viewModel.isApplyingBladeStarters || viewModel.isSavingBladeServices || viewModel.isLoading || !viewModel.hasTenant
@@ -1595,6 +1746,10 @@ private struct BladeServicesHomeSection: View {
             Text(cardCaption)
                 .font(.caption)
                 .foregroundColor(.secondary)
+            if let luxeHomeSvcToggle = luxeShowHomeServicesSection {
+                Toggle("Show services section on live site", isOn: luxeHomeSvcToggle)
+                    .padding(.top, 4)
+            }
             if viewModel.services.isEmpty {
                 Text("No services yet—add one or replace with industry starters.")
                     .font(.caption)

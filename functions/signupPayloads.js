@@ -5,6 +5,12 @@ const minimalFormSchema = [
   { key: "name", label: "Full Name", type: "text", required: true },
   { key: "email", label: "Email", type: "email", required: true },
   { key: "phone", label: "Phone", type: "phone", required: true },
+  {
+    key: "referenceImages",
+    label: "Reference photos (optional)",
+    type: "file",
+    required: false,
+  },
   { key: "notes", label: "Notes", type: "textarea", required: false },
 ];
 
@@ -246,6 +252,12 @@ function formSchemaForIndustry(industry) {
           key: "designPreference",
           label: "Design preference",
           type: "text",
+          required: false,
+        },
+        {
+          key: "referenceImages",
+          label: "Reference photos (optional)",
+          type: "file",
           required: false,
         },
         { key: "notes", label: "Notes", type: "textarea", required: false },

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Book an appointment</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -581,8 +581,9 @@
     .classic-home .tattoo-nav-links .classic-nav-book:hover { opacity: 0.85; color: #F7F5F0; }
     .classic-hero {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      min-height: 65vh;
+      /* 5fr/7fr gives the photo ~58% of the row so it reads as the hero
+         while the text column still has room for the title + CTAs. */
+      grid-template-columns: 5fr 7fr;
     }
     .classic-hero-left {
       padding: 56px 40px;
@@ -639,6 +640,28 @@
       overflow: hidden;
     }
     .classic-hero-right img { width: 100%; height: 100%; object-fit: cover; }
+    /* Soft black-to-transparent fade on the image's left edge so the 16:9 photo
+       bleeds into the dark text column instead of hitting a hard vertical seam. */
+    .classic-hero-right:has(> img)::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to right,
+        #0b0b0b 0%,
+        rgba(11, 11, 11, 0.75) 25%,
+        rgba(11, 11, 11, 0) 55%
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+    /* Classic hero image slot is a fixed 16:9 frame; `align-self:start` prevents CSS Grid
+       from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
+    .classic-hero-right:has(> img) {
+      aspect-ratio: 16 / 9;
+      min-height: 0;
+      align-self: start;
+    }
     .classic-hero-placeholder {
       width: 100%;
       height: 100%;
@@ -669,6 +692,47 @@
       font-size: 1.6rem;
       font-weight: 600;
       margin: 0 0 24px;
+    }
+    .classic-services-section--expandable .classic-services-details {
+      border: 1px solid rgba(26,26,26,0.12);
+      border-radius: 12px;
+      background: #fafafa;
+      overflow: hidden;
+    }
+    .classic-services-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .classic-services-summary::-webkit-details-marker { display: none; }
+    .classic-services-summary::marker { content: ''; }
+    .classic-services-summary-text { flex: 1; min-width: 0; }
+    .classic-services-summary-text h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+    .classic-services-summary-text .classic-section-eyebrow {
+      margin-bottom: 6px;
+    }
+    .classic-services-expand-hint {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(26,26,26,0.42);
+      flex-shrink: 0;
+    }
+    .classic-services-details[open] .classic-services-expand-hint {
+      opacity: 0.65;
+    }
+    .classic-services-details .classic-service-list {
+      margin: 0;
+      padding: 8px 24px 20px;
+      border-top: 1px solid rgba(26,26,26,0.1);
     }
     .classic-service-list { border-top: 1px solid rgba(26,26,26,0.12); }
     /* “What I offer”: menu list (layout E — copy left, price right; no numbers, no accordion). */
@@ -736,8 +800,9 @@
     }
     .classic-about-section .classic-section-eyebrow { color: rgba(247,245,240,0.35); }
     .classic-about-inner-v2 {
-      max-width: 700px;
-      margin: 0 auto;
+      max-width: 1400px;
+      margin-left: 0;
+      margin-right: auto;
     }
     .classic-about-section h2 {
       font-family: var(--font-display);
@@ -818,10 +883,27 @@
     }
     @media (max-width: 768px) {
       .classic-home-page .tattoo-nav .tattoo-brand { display: none; }
-      .classic-home-page .tattoo-nav { position: absolute; top: 0; right: 0; left: 0; z-index: 10; background: transparent; padding: 12px 20px; }
+      .classic-home-page .tattoo-nav {
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 10;
+        background: transparent;
+        padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 12px 20px;
+      }
       .classic-hero { grid-template-columns: 1fr; }
-      .classic-hero-left { padding: 12px 20px 32px; }
-      .classic-hero-right { max-height: 400px; }
+      /* Thin overlay bar (wordmark hidden); smaller inset than Studio 12 — avoids huge gap above eyebrow. */
+      .classic-hero-left {
+        justify-content: flex-start;
+        padding: calc(clamp(72px, 10vh, 118px) + env(safe-area-inset-top, 0px)) 20px 32px;
+      }
+      /* Mobile: let `.classic-hero-right:has(> img)` aspect-ratio drive the height
+         so the crop renders exactly. No forced max-height or top-anchored cover. */
+      .classic-hero-right { min-height: 0; }
+      /* Mobile: grid is single-column so the left-edge fade is meaningless
+         (it would just darken the top of the image). Kill it. */
+      .classic-hero-right:has(> img)::before { display: none; }
       .classic-services { padding: 48px 20px; }
       .classic-about-section { padding: 56px 20px; }
       .classic-stats { gap: 28px; }
@@ -1059,6 +1141,17 @@
       padding: 48px 40px 0;
       text-align: center;
     }
+    /* Classic nav is in-flow (not overlaying strip); large inset duplicated nav clearance and pushed “Gallery” too low. */
+    @media (max-width: 900px) {
+      .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
+        padding-top: clamp(28px, 4vw, 48px);
+        padding-left: clamp(20px, 5vw, 40px);
+        padding-right: clamp(20px, 5vw, 40px);
+        padding-bottom: 0;
+        margin-bottom: 28px;
+        text-align: center;
+      }
+    }
     .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
       padding-top: 100px;
     }
@@ -1124,6 +1217,14 @@
       height: 320px;
       object-fit: cover;
     }
+    /* Classic horizontal_strip: same-size frames as default strip (`cover`); no radius; `center` matches lightbox crop bias. */
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link,
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link img {
+      border-radius: 0;
+    }
+    .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link img {
+      object-position: center;
+    }
     @media (max-width: 640px) {
       .gallery-alt--masonry {
         column-count: 2;
@@ -1145,12 +1246,12 @@
       border-radius: 0;
     }
 
-    .tattoo-featured-grid .gallery-lightbox-trigger {
+    .tattoo-featured-grid .tattoo-featured-cell {
       display: block;
       text-decoration: none;
       color: inherit;
     }
-    .blade-gallery-item .gallery-lightbox-trigger {
+    .blade-gallery-item .blade-gallery-thumb {
       display: block;
       width: 100%;
       height: 100%;
@@ -1189,16 +1290,35 @@
       justify-content: center;
       pointer-events: none;
     }
-    .gallery-lightbox-inner .gallery-lightbox-img {
+    /* Fixed 4:5 stage: same chrome for all layouts; lightbox uses `contain` so the full photo is visible (letterbox). Strip/masonry/grid thumbnails stay `cover`. */
+    .gallery-lightbox-inner .gallery-lightbox-stage {
       pointer-events: auto;
-      max-width: min(100vw - 32px, 1400px);
-      max-height: min(88vh, 1200px);
+      width: min(88vw, 720px);
+      max-width: 100%;
+      aspect-ratio: 4 / 5;
+      max-height: min(85vh, 880px);
+      overflow: hidden;
+      border-radius: 8px;
+      box-shadow:
+        0 24px 64px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+      background: rgba(8, 10, 16, 0.42);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gallery-lightbox-inner .gallery-lightbox-stage .gallery-lightbox-img {
       width: auto;
       height: auto;
+      max-width: 100%;
+      max-height: 100%;
       object-fit: contain;
-      border-radius: 4px;
+      object-position: center;
       display: block;
+      border-radius: 0;
       touch-action: pan-y;
+      pointer-events: auto;
     }
     .gallery-lightbox-nav {
       position: fixed;
@@ -1314,10 +1434,6 @@
         padding-bottom: 0;
         margin-bottom: 28px;
       }
-      .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
-        padding: 40px clamp(20px, 5vw, 40px) 0;
-        margin-bottom: 28px;
-      }
       .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
         padding-top: 100px;
       }
@@ -1413,7 +1529,9 @@
     }
     .luxe-hero {
       position: relative;
-      min-height: 92vh;
+      width: 100%;
+      /* Fixed 16:9 hero frame; uploads are cropped to 16:9 in the app so `cover` never re-crops. */
+      aspect-ratio: 16 / 9;
       display: flex;
       align-items: center;
       background-size: cover;
@@ -1484,13 +1602,13 @@
     }
     .luxe-services-section {
       padding: 80px 40px;
-      max-width: 1200px;
+      max-width: 1380px;
       margin: 0 auto;
     }
     .luxe-services-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 24px;
+      gap: 32px;
     }
     .luxe-service-card {
       text-decoration: none;
@@ -1502,56 +1620,131 @@
     .luxe-service-card-img-wrap {
       position: relative;
       width: 100%;
-      margin-bottom: 14px;
+      margin-bottom: 0;
     }
     .luxe-service-card-img-wrap img {
       width: 100%;
-      height: 220px;
+      height: 275px;
       object-fit: cover;
       border-radius: 10px;
       display: block;
       margin-bottom: 0;
     }
-    .luxe-service-lightbox-hit {
-      position: absolute;
-      inset: 0;
-      border: none;
-      border-radius: 10px;
-      padding: 0;
-      margin: 0;
-      background: transparent;
-      cursor: pointer;
-      touch-action: manipulation;
-    }
     .luxe-service-card img {
       width: 100%;
-      height: 220px;
+      height: 275px;
       object-fit: cover;
       border-radius: 10px;
       display: block;
-      margin-bottom: 14px;
+      margin-bottom: 0;
     }
     .luxe-service-placeholder {
       width: 100%;
-      height: 220px;
+      height: 275px;
       border-radius: 10px;
       background: #f0ebe3;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 14px;
+      margin-bottom: 0;
       font-size: 2rem;
       color: #C9A96E;
     }
-    .luxe-service-card h3 {
+    /** Full-bleed stripe behind the “What we offer” card (distinct from page #FFFDF9 + featured strip). */
+    .luxe-home-services-band {
+      background: linear-gradient(180deg, #faf6f0 0%, #f0e9e0 55%, #ebe4d9 100%);
+      padding: 28px 0 36px;
+      border-top: 1px solid rgba(26, 26, 26, 0.07);
+      border-bottom: 1px solid rgba(26, 26, 26, 0.05);
+    }
+    .luxe-home-services-section {
+      padding: 32px 40px 40px;
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid rgba(201, 169, 110, 0.35);
+      box-shadow: 0 18px 48px rgba(26, 26, 26, 0.14);
+      position: relative;
+      z-index: 1;
+    }
+    .luxe-home-services-section .luxe-section-heading {
+      margin-bottom: 8px;
+    }
+    .luxe-home-service-list { border-top: 1px solid rgba(26,26,26,0.1); }
+    .luxe-home-service-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(26,26,26,0.1);
+    }
+    .luxe-home-service-copy { flex: 1; min-width: 0; }
+    .luxe-home-service-name {
       font-size: 1rem;
       font-weight: 600;
       margin: 0 0 4px;
+      color: #1a1a1a;
     }
-    .luxe-service-link {
-      font-size: 13px;
+    .luxe-home-service-dur {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(26, 26, 26, 0.42);
+      margin: 0 0 6px;
+    }
+    .luxe-home-service-desc {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #666;
+      margin: 0;
+      white-space: pre-line;
+    }
+    .luxe-home-service-price {
+      flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 600;
       color: #C9A96E;
-      font-weight: 500;
+      padding-top: 2px;
+    }
+    .luxe-home-services-section--expandable .luxe-home-services-details {
+      border: 1px solid rgba(201, 169, 110, 0.35);
+      border-radius: 16px;
+      background: #fafafa;
+      overflow: hidden;
+      box-shadow: 0 18px 48px rgba(26, 26, 26, 0.14);
+    }
+    .luxe-home-services-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 18px 22px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .luxe-home-services-summary::-webkit-details-marker { display: none; }
+    .luxe-home-services-summary::marker { content: ''; }
+    .luxe-home-services-summary-text { flex: 1; min-width: 0; }
+    .luxe-home-services-summary-text h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+    .luxe-home-services-summary-text .luxe-section-label { margin-bottom: 6px; }
+    .luxe-home-services-expand-hint {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(26,26,26,0.42);
+      flex-shrink: 0;
+    }
+    .luxe-home-services-details[open] .luxe-home-services-expand-hint { opacity: 0.65; }
+    .luxe-home-services-details .luxe-home-service-list {
+      margin: 0;
+      padding: 8px 22px 18px;
+      border-top: 1px solid rgba(26,26,26,0.1);
     }
     .luxe-promo {
       background: #E8E0D0;
@@ -1999,6 +2192,7 @@
       }
       .luxe-services-grid { grid-template-columns: repeat(2, 1fr); }
       .luxe-services-section,
+      .luxe-home-services-section,
       .luxe-promo,
       .luxe-team-section,
       .luxe-contact,
@@ -2007,7 +2201,6 @@
       .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
       .luxe-team-grid { grid-template-columns: 1fr; }
       .luxe-contact-inner { grid-template-columns: 1fr; }
-      .luxe-hero { min-height: 75vh; }
     }
     /* ─── Blade (blade-v1) universal dark theme — scoped under .blade-page ─── */
     .blade-page {
@@ -2106,15 +2299,32 @@
     .blade-page .blade-nav-book:hover { background: var(--bh-gold-light); color: var(--bh-black); }
     .blade-page .blade-nav-menu-btn {
       display: none !important;
+      -webkit-appearance: none;
+      appearance: none;
       background: none !important;
       border: none !important;
-      font-size: 1.45rem !important;
+      font-size: 0;
+      line-height: 0;
       cursor: pointer;
       padding: 8px !important;
       color: var(--bh-gold) !important;
+      -webkit-text-fill-color: var(--bh-gold) !important;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+    }
+    .blade-page .blade-nav-menu-btn .blade-nav-menu-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .blade-page .blade-nav-menu-btn .blade-nav-menu-icon svg {
+      display: block;
+      width: 22px;
+      height: 16px;
     }
     .blade-page .blade-hero {
-      min-height: calc(100vh - 88px);
       display: grid;
       grid-template-columns: 1fr 1fr;
       position: relative;
@@ -2123,8 +2333,8 @@
     .blade-page .blade-hero-left {
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
-      padding: 0 40px 64px;
+      justify-content: flex-start;
+      padding: 40px 40px 64px;
       position: relative;
       z-index: 2;
     }
@@ -2206,14 +2416,23 @@
       overflow: hidden;
       min-height: 320px;
     }
+    /* Blade hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
+       from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
+    .blade-page .blade-hero-right:has(> .blade-hero-image) {
+      aspect-ratio: 16 / 9;
+      min-height: 0;
+      align-self: start;
+    }
     .blade-page .blade-hero-image {
       width: 100%;
       height: 100%;
-      min-height: 400px;
       object-fit: cover;
       filter: grayscale(25%) contrast(1.05);
       transform: scale(1.02);
       transition: transform 8s ease;
+    }
+    .blade-page .blade-hero-right:has(> .blade-hero-image) .blade-hero-image {
+      min-height: 0;
     }
     .blade-page .blade-hero-right:hover .blade-hero-image { transform: scale(1.05); }
     .blade-page .blade-hero-placeholder {
@@ -2665,9 +2884,45 @@
     .blade-page .booking-submit:hover { background: var(--bh-gold-light) !important; }
     .blade-page .booking-success-flat .booking-success-lead { color: var(--bh-gold) !important; }
     .blade-page .booking-success-flat .booking-success-detail { color: var(--bh-grey) !important; }
+    /* Blade dark-theme booking form: reference-images dropzone + preferred-days dropdown.
+       Base form CSS is light-themed; override here so text is readable and borders match the gold accent. */
+    .blade-page .upload-drop {
+      background: rgba(201, 168, 76, 0.04);
+      border: 2px dashed rgba(201, 168, 76, 0.45);
+    }
+    .blade-page .upload-drop:hover {
+      border-color: rgba(201, 168, 76, 0.8);
+    }
+    .blade-page .upload-drop.dragover {
+      border-color: var(--bh-gold);
+      box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.2);
+      background: rgba(201, 168, 76, 0.08);
+    }
+    .blade-page .upload-drop-title { color: #ffffff; }
+    .blade-page .upload-drop-sub { color: rgba(255, 255, 255, 0.75); }
+    .blade-page .upload-drop-filelist { color: rgba(255, 255, 255, 0.65); }
+    .blade-page .pref-days-button {
+      background: transparent;
+      border: 2px solid var(--bh-line);
+      color: var(--bh-cream);
+    }
+    .blade-page .pref-days-button:focus {
+      border-color: var(--bh-gold);
+      box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25);
+    }
+    .blade-page .pref-days-caret { color: var(--bh-gold); }
+    .blade-page .pref-days-menu {
+      background: #111111;
+      border: 2px solid var(--bh-line);
+    }
+    .blade-page .pref-days-option { color: var(--bh-cream); }
+    .blade-page .pref-days-option:hover { background: rgba(201, 168, 76, 0.12); }
+    .blade-page .pref-days-option.active { background: rgba(201, 168, 76, 0.18); }
+    .blade-page .pref-days-option.active .pref-days-check { color: var(--bh-gold); }
     @media (max-width: 900px) {
+      /* Mobile: hamburger opens `#tattoo-sidebar` (logo + Book in bar; page links in drawer). */
       .blade-page .blade-nav-links { display: none !important; }
-      .blade-page .blade-nav-menu-btn { display: block !important; }
+      .blade-page .blade-nav-menu-btn { display: flex !important; }
       .blade-page .blade-hero { grid-template-columns: 1fr; }
       .blade-page .blade-hero-left { padding: 32px 24px 48px; }
       .blade-page .blade-hero-vertical { display: none; }
@@ -2756,7 +3011,6 @@
     .stonecut-page .stonecut-hero {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      min-height: calc(100vh - 92px);
       border-bottom: 1px solid rgba(232,224,208,.08);
     }
     .stonecut-page .stonecut-hero-left { padding: 28px 40px 72px; align-self: start; }
@@ -2784,6 +3038,13 @@
     .stonecut-page .stonecut-btn-primary { background: #c0221a; color: #e8e0d0; }
     .stonecut-page .stonecut-btn-ghost { color: #a09888; }
     .stonecut-page .stonecut-hero-right { min-height: 360px; position: relative; background: linear-gradient(160deg, #1e1a16 0%, #0e0c0a 100%); }
+    /* Stonecut hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
+       from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
+    .stonecut-page .stonecut-hero-right:has(> img) {
+      aspect-ratio: 16 / 9;
+      min-height: 0;
+      align-self: start;
+    }
     .stonecut-page .stonecut-hero-right img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(24%); }
     .stonecut-page .stonecut-section { padding: 96px 40px; border-bottom: 1px solid rgba(232,224,208,.08); }
     .stonecut-page .stonecut-eyebrow { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin-bottom: 18px; }
@@ -2910,7 +3171,8 @@
       .stonecut-page .stonecut-links { display: none; }
       .stonecut-page .stonecut-nav { padding: 16px 20px; }
       .stonecut-page .stonecut-nav .tattoo-nav-menu { display: block !important; }
-      .stonecut-page .stonecut-hero { grid-template-columns: 1fr; min-height: auto; }
+      .stonecut-page .stonecut-hero { grid-template-columns: 1fr; }
+      .stonecut-page .stonecut-hero-right { min-height: 0; }
       .stonecut-page .stonecut-hero-left { padding: 28px 20px 40px; }
       .stonecut-page .stonecut-section { padding: 72px 20px; }
       .stonecut-page .stonecut-services { grid-template-columns: 1fr; }
@@ -3026,7 +3288,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 24px 40px;
+      padding: calc(24px + env(safe-area-inset-top, 0px)) 40px 24px 40px;
       transition: background 0.35s, padding 0.35s, box-shadow 0.35s;
       flex-wrap: wrap;
       gap: 16px;
@@ -3038,7 +3300,7 @@
     .studio12-page .s12-topnav.scrolled {
       background: rgba(250, 247, 242, 0.98);
       backdrop-filter: blur(12px);
-      padding: 16px 40px;
+      padding: calc(16px + env(safe-area-inset-top, 0px)) 40px 16px 40px;
       border-bottom: 1px solid var(--s12-line);
       box-shadow: 0 10px 36px rgba(42, 31, 24, 0.07);
     }
@@ -3132,17 +3394,29 @@
     }
 
     .studio12-page .s12-hero {
-      min-height: 100vh;
       display: grid;
       grid-template-columns: 1fr 1fr;
       position: relative;
       padding-top: 0;
     }
 
+    /* Home only: fixed `.s12-topnav` sits over the first paint; subpages use `.studio12-sub { padding-top }` on the root. */
+    .studio12-page:not(.studio12-sub) .s12-hero {
+      padding-top: calc(clamp(88px, 11vh, 132px) + env(safe-area-inset-top, 0px));
+    }
+
     .studio12-page .s12-hero-img-col {
       position: relative;
       overflow: hidden;
       min-height: 50vh;
+    }
+    /* Studio 12 hero image slot is a fixed 4:5 portrait frame; upload is cropped to 4:5 in-app. */
+    /* Studio 12 hero image slot is a fixed 4:5 frame. `align-self:start` prevents CSS Grid
+       from stretching the cell past 4:5 so the in-app crop renders pixel-for-pixel. */
+    .studio12-page .s12-hero-img-col:has(> img.s12-hero-img) {
+      aspect-ratio: 4 / 5;
+      min-height: 0;
+      align-self: start;
     }
 
     .studio12-page .s12-hero-img {
@@ -3151,6 +3425,33 @@
       min-height: 50vh;
       object-fit: cover;
       display: block;
+    }
+    .studio12-page .s12-hero-img-col:has(> img.s12-hero-img) .s12-hero-img {
+      min-height: 0 !important;
+    }
+
+    /* Main split hero only: anchor `cover` to the top so heads aren’t clipped by default centering. */
+    .studio12-page .s12-hero .s12-hero-img-col > .s12-hero-img {
+      object-position: center top;
+    }
+
+    /* Studio 12 auxiliary image slots each have a fixed frame; uploads are cropped in-app. */
+    .studio12-page .s12-aux-img-wrap {
+      position: relative;
+      overflow: hidden;
+      border-radius: 2px;
+      max-width: 100%;
+      aspect-ratio: 4 / 5;
+    }
+    .studio12-page .s12-philosophy .s12-aux-img-wrap { aspect-ratio: 4 / 5; }
+    .studio12-page .s12-book-cta .s12-aux-img-wrap { aspect-ratio: 4 / 3; }
+    .studio12-page .s12-aux-img-wrap .s12-hero-img {
+      width: 100%;
+      height: 100%;
+      min-height: 0 !important;
+      object-fit: cover;
+      display: block;
+      border-radius: 2px;
     }
 
     .studio12-page .s12-hero-img-fallback {
@@ -3553,6 +3854,8 @@
       width: clamp(200px, 17vw, 260px);
       height: clamp(260px, 30vw, 320px);
       overflow: hidden;
+      /* Letterbox behind `object-fit: contain` so uploads aren’t cropped again in the strip. */
+      background: rgba(28, 22, 18, 0.96);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
       transition: box-shadow 0.4s ease, transform 0.4s ease;
     }
@@ -3610,6 +3913,7 @@
       aspect-ratio: 4 / 5;
       max-height: 420px;
       overflow: hidden;
+      background: rgba(28, 22, 18, 0.96);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
       transition: box-shadow 0.4s ease, transform 0.4s ease;
     }
@@ -3713,6 +4017,13 @@
       height: 100%;
       object-fit: cover;
       transition: transform 0.45s ease;
+    }
+
+    /* Home marquee + /gallery grid: full bitmap inside tile (pairs with app crop). */
+    .studio12-page .s12-gallery-marquee .s12-g-item img,
+    .studio12-page .s12-gallery-page-grid .s12-g-item img {
+      object-fit: contain;
+      object-position: center;
     }
 
     .studio12-page .s12-gallery-marquee .s12-g-item:hover img {
@@ -3943,7 +4254,7 @@
 
     /* Subpages (/book, /gallery, /shop): fixed bar matches home; offset in-flow content below nav */
     .studio12-page.studio12-sub {
-      padding-top: 84px;
+      padding-top: calc(84px + env(safe-area-inset-top, 0px));
     }
 
     .studio12-page.studio12-sub .booking-shell {
@@ -3951,7 +4262,7 @@
       min-height: 0;
       width: 100%;
       padding: 24px 24px 80px;
-      max-width: 560px;
+      max-width: 960px;
       margin: 0 auto;
       justify-content: flex-start;
     }
@@ -4014,9 +4325,20 @@
       .studio12-page .s12-hero {
         grid-template-columns: 1fr;
       }
+      /* Wrapped hamburger + Book row is taller than desktop nav; image column is first (order: -1). */
+      .studio12-page:not(.studio12-sub) .s12-hero {
+        padding-top: calc(clamp(112px, 20vh, 200px) + env(safe-area-inset-top, 0px));
+      }
+      /* Subpages: same wrapped nav as home; base 84px is too short for /gallery horizontal_strip etc. */
+      .studio12-page.studio12-sub {
+        padding-top: calc(clamp(112px, 20vh, 200px) + env(safe-area-inset-top, 0px));
+      }
       .studio12-page .s12-hero-img-col {
         order: -1;
         min-height: 42vh;
+      }
+      .studio12-page .s12-hero-img-col:has(> img.s12-hero-img) {
+        min-height: 0;
       }
       .studio12-page .s12-philosophy,
       .studio12-page .s12-book-cta {
@@ -4064,10 +4386,10 @@
         letter-spacing: 0.32em;
       }
       .studio12-page .s12-topnav {
-        padding: 20px 28px 20px 24px;
+        padding: calc(20px + env(safe-area-inset-top, 0px)) 28px 20px 24px;
       }
       .studio12-page .s12-topnav.scrolled {
-        padding: 14px 28px 14px 24px;
+        padding: calc(14px + env(safe-area-inset-top, 0px)) 28px 14px 24px;
       }
     }
 
@@ -4314,11 +4636,46 @@
 
         var btns = document.querySelectorAll('.tattoo-nav-menu');
         for (var i = 0; i < btns.length; i++) {
-          btns[i].style.color = iconColor;
+          var b = btns[i];
+          /* Blade hamburger on dark bar: always theme gold so tenant sidebar icon overrides / iOS button styling can't hide it. */
+          if (isBladeTheme(tenant) && b.classList && b.classList.contains('blade-nav-menu-btn')) {
+            b.style.setProperty('color', '#c9a84c', 'important');
+            b.style.setProperty('-webkit-text-fill-color', '#c9a84c', 'important');
+          } else {
+            b.style.color = iconColor;
+          }
         }
       }
 
       function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      /** Integer pixel dimension from Firestore for hero JPEG; fallback when missing (legacy tenants). */
+      function tenantHeroPixelDim(v, fallback) {
+        var n = Number(v);
+        if (!isFinite(n) || n < 1) return fallback;
+        return Math.floor(n);
+      }
+      /** GCD-reduced positive integers for CSS `aspect-ratio` from raw pixel dimensions. */
+      function tenantPixelPairReduced(w, h) {
+        w = Math.floor(Number(w));
+        h = Math.floor(Number(h));
+        if (!isFinite(w) || w < 1) w = 16;
+        if (!isFinite(h) || h < 1) h = 9;
+        function gcd(a, b) {
+          a = Math.abs(a); b = Math.abs(b);
+          while (b) { var t = b; b = a % b; a = t; }
+          return a || 1;
+        }
+        var g = gcd(w, h);
+        return { w: w / g, h: h / g };
+      }
+      /** Inline custom properties for one image box; each element sets its own --hero-ar-* scope. */
+      function tenantPixelAspectCssVars(w, h) {
+        var ar = tenantPixelPairReduced(w, h);
+        return '--hero-ar-w:' + ar.w + ';--hero-ar-h:' + ar.h + ';';
+      }
+      function tenantHeroAspectCssVars(tenant) {
+        return tenantPixelAspectCssVars(tenant.heroImagePixelWidth, tenant.heroImagePixelHeight);
+      }
       function classicStatPick(tenant, key, fallback) {
         var v = tenant && tenant[key] != null ? String(tenant[key]).trim() : '';
         return v ? v : fallback;
@@ -4469,7 +4826,11 @@
           '<div class="blade-nav-trailing">' +
           '<ul class="blade-nav-links">' + lis + '</ul>' +
           bookBtn +
-          '<button class="tattoo-nav-menu blade-nav-menu-btn" type="button" aria-label="Menu">&#9776;</button>' +
+          '<button class="tattoo-nav-menu blade-nav-menu-btn" type="button" aria-label="Menu">' +
+          '<span class="blade-nav-menu-icon" aria-hidden="true">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 22 16" fill="none">' +
+          '<path d="M1 1.5h20M1 8h20M1 14.5h20" stroke="#c9a84c" stroke-width="2" stroke-linecap="round"/>' +
+          '</svg></span></button>' +
           '</div></nav>';
       }
       function bindBladeChrome() {
@@ -4626,7 +4987,7 @@
         if (tenantShowGalleryPage(tenant) && gUrls.length) {
           function bladeMarqueeChunk(urls) {
             return urls.map(function(u) {
-              return '<div class="blade-gallery-item"><a class="gallery-lightbox-trigger" href="' + esc(u) + '" data-gallery-full="' + esc(u) + '"><img src="' + esc(u) + '" alt=""></a></div>';
+              return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img src="' + esc(u) + '" alt=""></div></div>';
             }).join('');
           }
           gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
@@ -5162,7 +5523,10 @@
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
-              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '', galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
+              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '',
+              heroImagePixelWidth: tenantHeroPixelDim(data.heroImagePixelWidth, 16),
+              heroImagePixelHeight: tenantHeroPixelDim(data.heroImagePixelHeight, 9),
+              galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
               galleryLayoutStyle: data.galleryLayoutStyle,
               aboutText: data.aboutText || '',
               reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
@@ -5187,6 +5551,8 @@
               heroTagline: data.heroTagline || '',
               heroSubtitle: data.heroSubtitle || '',
               studio12PhilosophyImageUrl: data.studio12PhilosophyImageUrl || '',
+              studio12PhilosophyImagePixelWidth: tenantHeroPixelDim(data.studio12PhilosophyImagePixelWidth, 16),
+              studio12PhilosophyImagePixelHeight: tenantHeroPixelDim(data.studio12PhilosophyImagePixelHeight, 9),
               studio12PhilosophyHeadline: data.studio12PhilosophyHeadline || '',
               studio12PhilosophyHeadLine1: data.studio12PhilosophyHeadLine1 || '',
               studio12PhilosophyHeadLine2: data.studio12PhilosophyHeadLine2 || '',
@@ -5196,6 +5562,8 @@
               studio12BookCtaItalic: data.studio12BookCtaItalic || '',
               studio12BookCtaBody: data.studio12BookCtaBody || '',
               studio12BookCtaImageUrl: data.studio12BookCtaImageUrl || '',
+              studio12BookCtaImagePixelWidth: tenantHeroPixelDim(data.studio12BookCtaImagePixelWidth, 16),
+              studio12BookCtaImagePixelHeight: tenantHeroPixelDim(data.studio12BookCtaImagePixelHeight, 9),
               studio12ProcessSteps: data.studio12ProcessSteps || [],
               studio12HeroEyebrow: data.studio12HeroEyebrow || '',
               studio12HeroHeadline: data.studio12HeroHeadline || '',
@@ -5206,7 +5574,21 @@
               showGalleryPage: data.showGalleryPage !== false,
               showBookPage: data.showBookPage !== false,
               showAboutPage: data.showAboutPage !== false,
-              shopEnabled: data.shopEnabled || false };
+              shopEnabled: data.shopEnabled || false,
+              classicFeaturedWorkEyebrow: data.classicFeaturedWorkEyebrow || '',
+              classicFeaturedWorkHeading: data.classicFeaturedWorkHeading || '',
+              classicFeaturedWorkSub: data.classicFeaturedWorkSub || '',
+              classicFeaturedWorkEmpty: data.classicFeaturedWorkEmpty || '',
+              classicServicesEyebrow: data.classicServicesEyebrow || '',
+              classicServicesHeading: data.classicServicesHeading || '',
+              classicServicesExpandableCard: data.classicServicesExpandableCard === true,
+              luxeFeaturedWorkEyebrow: data.luxeFeaturedWorkEyebrow || '',
+              luxeFeaturedWorkHeading: data.luxeFeaturedWorkHeading || '',
+              luxeShowFeaturedWorkStrip: data.luxeShowFeaturedWorkStrip !== false,
+              luxeHomeServicesEyebrow: data.luxeHomeServicesEyebrow || '',
+              luxeHomeServicesHeading: data.luxeHomeServicesHeading || '',
+              luxeShowHomeServicesSection: data.luxeShowHomeServicesSection === true,
+              luxeHomeServicesExpandableCard: data.luxeHomeServicesExpandableCard === true };
             if (Object.prototype.hasOwnProperty.call(data, 'featuredWorkImages')) {
               row.featuredWorkImages = data.featuredWorkImages || [];
             }
@@ -5299,7 +5681,7 @@
 
       function galleryLightboxCell(url, linkClass) {
         linkClass = linkClass || '';
-        return '<a class="gallery-grid-link gallery-lightbox-trigger ' + linkClass + '" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
+        return '<div class="gallery-grid-link ' + linkClass + '"><img src="' + esc(url) + '" alt="" loading="lazy"></div>';
       }
 
       /** HTML for optional layouts (not used when style is `default`). */
@@ -5325,8 +5707,9 @@
           '<p class="gallery-lightbox-counter" aria-live="polite"></p>' +
           '<div class="gallery-lightbox-inner">' +
           '<button type="button" class="gallery-lightbox-close" aria-label="Close">&times;</button>' +
+          '<div class="gallery-lightbox-stage">' +
           '<img class="gallery-lightbox-img" src="" alt="" draggable="false">' +
-          '</div></div>';
+          '</div></div></div>';
       }
       /** Classic home-style bottom bar (brand + Instagram / Location / Hours). `nameFallback` when `displayName` empty (e.g. barber opts). */
       function classicSiteFooterHtml(tenant, nameFallback) {
@@ -5478,7 +5861,7 @@
           content = '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
         } else if (gLayStd === 'classic_grid') {
           var imgsHtml = gUrlsAll.map(function(url) {
-            return '<a class="gallery-grid-link gallery-lightbox-trigger" href="' + esc(url) + '" data-gallery-full="' + esc(url) + '"><img src="' + esc(url) + '" alt="" loading="lazy"></a>';
+            return '<div class="gallery-grid-link"><img src="' + esc(url) + '" alt="" loading="lazy"></div>';
           }).join('');
           content = '<div class="gallery-grid">' + imgsHtml + '</div>';
         } else {
@@ -5537,6 +5920,11 @@
 
       /** Shared Classic redesign: warm cream, split hero, services list, dark about with stats, clean footer. */
       function classicHomePage(tenant, services, opts) {
+        function classicTenantTrim(key) {
+          var v = tenant[key];
+          if (v == null) return '';
+          return String(v).trim();
+        }
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
@@ -5571,6 +5959,7 @@
         var heroImgHtml = tenant.heroImageUrl
           ? '<img src="' + esc(tenant.heroImageUrl) + '" alt="' + esc(displayName) + '">'
           : '<div class="classic-hero-placeholder"></div>';
+        var heroRightStyle = '';
 
         var heroActions = '';
         if (tenantShowBookPage(tenant)) heroActions += '<a href="' + bookUrl + '" class="classic-btn-primary">' + esc(opts.bookLabel) + '</a>';
@@ -5580,8 +5969,16 @@
           (heroTag ? '<p class="classic-hero-tag">' + esc(heroTag) + '</p>' : '') +
           '<h1 class="classic-hero-name">' + esc(displayName) + '</h1>' +
           '<div class="classic-hero-actions">' + heroActions + '</div></div>' +
-          '<div class="classic-hero-right">' + heroImgHtml + '</div>' +
+          '<div class="classic-hero-right"' + heroRightStyle + '>' + heroImgHtml + '</div>' +
           '</section>';
+
+        var classicFeaturedEyebrow = classicTenantTrim('classicFeaturedWorkEyebrow') || 'Featured work';
+        var classicFeaturedHeading = classicTenantTrim('classicFeaturedWorkHeading') || opts.featuredHeading;
+        var classicFeaturedSub = classicTenantTrim('classicFeaturedWorkSub') || opts.featuredSub;
+        var classicFeaturedEmpty = classicTenantTrim('classicFeaturedWorkEmpty') || opts.featuredEmpty;
+        var classicSvcEyebrow = classicTenantTrim('classicServicesEyebrow') || 'Services';
+        var classicSvcHeading = classicTenantTrim('classicServicesHeading') || 'What I offer';
+        var classicSvcExpand = tenant.classicServicesExpandableCard === true;
 
         var featuredHtml = '';
         if (tenantShowGalleryPage(tenant)) {
@@ -5592,14 +5989,14 @@
           var gridStyle = 'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(1,1fr);';
           var featuredGridInner = gallery.length
             ? gallery.map(function(url){
-                return '<a class="gallery-lightbox-trigger" href="'+esc(url)+'" data-gallery-full="'+esc(url)+'"><img src="'+esc(url)+'" alt=""></a>';
+                return '<div class="tattoo-featured-cell"><img src="'+esc(url)+'" alt=""></div>';
               }).join('')
             : '<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>';
           featuredHtml = '<section id="featured" class="tattoo-featured-outer">' +
             '<div class="tattoo-featured-inner">' +
-            '<p class="classic-section-eyebrow">Featured work</p>' +
-            '<h2>' + opts.featuredHeading + '</h2>' +
-            '<p class="tattoo-featured-sub">' + (gallery.length ? opts.featuredSub : opts.featuredEmpty) + '</p>' +
+            '<p class="classic-section-eyebrow">' + esc(classicFeaturedEyebrow) + '</p>' +
+            '<h2>' + esc(classicFeaturedHeading) + '</h2>' +
+            '<p class="tattoo-featured-sub">' + esc(gallery.length ? classicFeaturedSub : classicFeaturedEmpty) + '</p>' +
             '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
             '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">View full gallery \u2192</a>' +
             '</div></section>';
@@ -5636,12 +6033,28 @@
               priceCol +
               '</div></div>';
           }
-          servicesHtml = '<section id="services" class="classic-services-section">' +
-            '<div class="classic-services">' +
-            '<p class="classic-section-eyebrow">Services</p>' +
-            '<h2>What I offer</h2>' +
-            '<div class="classic-service-list">' + rows + '</div>' +
-            '</div></section>';
+          var listBlock = '<div class="classic-service-list">' + rows + '</div>';
+          if (classicSvcExpand) {
+            servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable">' +
+              '<div class="classic-services">' +
+              '<details class="classic-services-details">' +
+              '<summary class="classic-services-summary">' +
+              '<div class="classic-services-summary-text">' +
+              '<p class="classic-section-eyebrow">' + esc(classicSvcEyebrow) + '</p>' +
+              '<h2>' + esc(classicSvcHeading) + '</h2>' +
+              '</div>' +
+              '<span class="classic-services-expand-hint">View menu</span>' +
+              '</summary>' +
+              listBlock +
+              '</details></div></section>';
+          } else {
+            servicesHtml = '<section id="services" class="classic-services-section">' +
+              '<div class="classic-services">' +
+              '<p class="classic-section-eyebrow">' + esc(classicSvcEyebrow) + '</p>' +
+              '<h2>' + esc(classicSvcHeading) + '</h2>' +
+              listBlock +
+              '</div></section>';
+          }
         }
 
         var aboutBody = (tenant.aboutText || tenant.tagline)
@@ -5938,6 +6351,7 @@
         var heroImg = tenant.heroImageUrl
           ? '<img class="s12-hero-img" src="' + esc(tenant.heroImageUrl) + '" alt="">'
           : '<div class="s12-hero-img-fallback" aria-hidden="true"></div>';
+        var s12HeroColStyle = '';
         var heroItalic = tenant.heroTagline || tenant.heroSubtitle || s12.heroItalicDefault;
         var heroLead = tenant.tagline || (tenant.aboutText ? String(tenant.aboutText).slice(0, 200) : '') ||
           s12.heroLeadDefault;
@@ -6025,7 +6439,8 @@
         var philTitleHtml = '<h2 class="s12-phil-title">' + esc(phL1) + '<br>' +
           esc(phL2) + '<br><em>' + esc(phEm) + '</em></h2>';
         var philImgCol = tenant.studio12PhilosophyImageUrl
-          ? '<img class="s12-hero-img" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt="" style="min-height:360px;border-radius:2px;object-fit:cover;width:100%">'
+          ? ('<div class="s12-aux-img-wrap">' +
+            '<img class="s12-hero-img" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt=""></div>')
           : '<div class="s12-hero-img-fallback" style="min-height:360px;border-radius:2px"></div>';
         var defaultProc = s12.process;
         var procSrc = (Array.isArray(tenant.studio12ProcessSteps) && tenant.studio12ProcessSteps.length)
@@ -6083,7 +6498,8 @@
           heroL2 = (tenant.studio12HeroLine2 || '').trim() || s12.heroLine2;
         }
         var bcImgCol = tenant.studio12BookCtaImageUrl
-          ? '<img class="s12-hero-img" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt="" style="min-height:280px;border-radius:2px;object-fit:cover;width:100%">'
+          ? ('<div class="s12-aux-img-wrap">' +
+            '<img class="s12-hero-img" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt=""></div>')
           : '<div class="s12-hero-img-fallback" style="min-height:280px"></div>';
         var s12HeroActions = '<div class="s12-hero-actions s12-fade">';
         if (tenantShowBookPage(tenant)) {
@@ -6109,7 +6525,7 @@
           : '';
         return '<div class="studio12-page">' + studio12NavHtml(tenant) +
           '<section class="s12-hero">' +
-          '<div class="s12-hero-img-col">' + heroImg + '<div class="s12-hero-img-overlay"></div></div>' +
+          '<div class="s12-hero-img-col"' + s12HeroColStyle + '>' + heroImg + '<div class="s12-hero-img-overlay"></div></div>' +
           '<div class="s12-hero-content">' +
           '<div class="s12-hero-tag s12-fade">' + esc(heroEyebrow) + '</div>' +
           '<h1 class="s12-hero-title s12-fade">' + esc(heroL1) + '<br>' + esc(heroL2) + '<br><em>' + esc(heroItalic) + '</em></h1>' +
@@ -6287,6 +6703,11 @@
       }
 
       function luxeHomePage(tenant, services) {
+        function luxeTenantTrim(key) {
+          var v = tenant[key];
+          if (v == null) return '';
+          return String(v).trim();
+        }
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
@@ -6302,8 +6723,8 @@
           '</div></div>';
 
         var heroStyle = tenant.heroImageUrl
-          ? 'background-image:url(' + esc(tenant.heroImageUrl) + ')'
-          : 'background:linear-gradient(135deg,#3c3429 0%,#5c4f3d 50%,#2c2419 100%)';
+          ? 'background-image:url(' + esc(tenant.heroImageUrl) + ');'
+          : 'background:linear-gradient(135deg,#3c3429 0%,#5c4f3d 50%,#2c2419 100%);';
         var luxeHeroLine = tenant.luxeHeroTagline
           ? String(tenant.luxeHeroTagline)
           : defaultLuxeHeroTaglineForIndustry(tenant.industry);
@@ -6321,29 +6742,79 @@
           '</div>' +
         '</section>';
 
+        var stripEyebrow = luxeTenantTrim('luxeFeaturedWorkEyebrow') || 'Gallery';
+        var stripHeading = luxeTenantTrim('luxeFeaturedWorkHeading') || 'Featured work';
+        var showFeaturedStrip = tenantShowGalleryPage(tenant) && tenant.luxeShowFeaturedWorkStrip !== false;
+
         var servicesSection = '';
-        if (tenantShowGalleryPage(tenant)) {
+        if (showFeaturedStrip) {
           var maxCards = Math.min(services.length, 4);
           var featuredImages = featuredUrlsForHomeStrip(tenant, 4);
           var serviceCards = '';
           for (var i = 0; i < maxCards; i++) {
-            var s = services[i];
             var imgTag = featuredImages[i]
               ? ('<div class="luxe-service-card-img-wrap">' +
-                '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy">' +
-                '<button type="button" class="gallery-lightbox-trigger luxe-service-lightbox-hit" data-gallery-full="' + esc(featuredImages[i]) + '" aria-label="View larger"></button></div>')
+                '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy"></div>')
               : '<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder">\u2726</div></div>';
-            serviceCards += '<a href="' + galleryUrl + '" class="luxe-service-card">' +
+            serviceCards += '<a href="' + esc(galleryUrl) + '" class="luxe-service-card" aria-label="Open gallery">' +
               imgTag +
-              '<h3>' + esc(s.name) + '</h3>' +
-              '<span class="luxe-service-link">View gallery \u2192</span>' +
             '</a>';
           }
           servicesSection = '<section id="gallery" class="luxe-services-section">' +
-            '<p class="luxe-section-label">Gallery</p>' +
-            '<h2 class="luxe-section-heading">Featured work</h2>' +
+            '<p class="luxe-section-label">' + esc(stripEyebrow) + '</p>' +
+            '<h2 class="luxe-section-heading">' + esc(stripHeading) + '</h2>' +
             '<div class="luxe-services-grid">' + serviceCards + '</div>' +
           '</section>';
+        }
+
+        var homeServicesSection = '';
+        if (tenant.luxeShowHomeServicesSection === true && services && services.length > 0) {
+          var menuEyebrow = luxeTenantTrim('luxeHomeServicesEyebrow') || 'Services';
+          var menuHeading = luxeTenantTrim('luxeHomeServicesHeading') || 'What we offer';
+          var showLuxeHomeMenuDur = tenant.classicShowServiceDuration !== false;
+          var menuRows = '';
+          for (var li = 0; li < services.length; li++) {
+            var ls = services[li];
+            var pTxt = (typeof ls.price === 'number' && ls.price > 0) ? '$' + Number(ls.price).toFixed(0) : '';
+            var dTrim = (ls.description && String(ls.description).trim()) ? String(ls.description).trim() : '';
+            var luxeDur = (typeof ls.durationMinutes === 'number' && ls.durationMinutes > 0) ? ls.durationMinutes : null;
+            var durH = showLuxeHomeMenuDur && luxeDur != null
+              ? '<p class="luxe-home-service-dur">About ' + esc(String(luxeDur)) + ' min</p>'
+              : '';
+            var descH = dTrim
+              ? '<p class="luxe-home-service-desc">' + esc(dTrim).replace(/\n/g, '<br>') + '</p>'
+              : '';
+            var priceH = pTxt ? '<div class="luxe-home-service-price">' + esc(pTxt) + '</div>' : '';
+            menuRows += '<div class="luxe-home-service-row">' +
+              '<div class="luxe-home-service-copy">' +
+              '<p class="luxe-home-service-name">' + esc(ls.name) + '</p>' +
+              durH +
+              descH +
+              '</div>' +
+              priceH +
+              '</div>';
+          }
+          var listInner = '<div class="luxe-home-service-list">' + menuRows + '</div>';
+          if (tenant.luxeHomeServicesExpandableCard === true) {
+            homeServicesSection = '<section id="services" class="luxe-home-services-section luxe-home-services-section--expandable">' +
+              '<details class="luxe-home-services-details">' +
+              '<summary class="luxe-home-services-summary">' +
+              '<div class="luxe-home-services-summary-text">' +
+              '<p class="luxe-section-label">' + esc(menuEyebrow) + '</p>' +
+              '<h2 class="luxe-section-heading">' + esc(menuHeading) + '</h2>' +
+              '</div>' +
+              '<span class="luxe-home-services-expand-hint">View menu</span>' +
+              '</summary>' +
+              listInner +
+              '</details></section>';
+          } else {
+            homeServicesSection = '<section id="services" class="luxe-home-services-section">' +
+              '<p class="luxe-section-label">' + esc(menuEyebrow) + '</p>' +
+              '<h2 class="luxe-section-heading">' + esc(menuHeading) + '</h2>' +
+              listInner +
+              '</section>';
+          }
+          homeServicesSection = '<div class="luxe-home-services-band">' + homeServicesSection + '</div>';
         }
 
         var promoTag = tenant.tagline || 'Book with confidence.';
@@ -6379,7 +6850,7 @@
 
         var contact = luxeContactSectionHtml(tenant);
 
-        return '<div class="luxe-page">' + nav + hero + servicesSection + promo + teamSection + contact + galleryLightboxShellHtml() + sidebar + '</div>';
+        return '<div class="luxe-page">' + nav + hero + servicesSection + homeServicesSection + promo + teamSection + contact + galleryLightboxShellHtml() + sidebar + '</div>';
       }
 
       function bindTattooSidebar() {

@@ -6,6 +6,7 @@
 
 import Foundation
 import Combine
+import UIKit
 import FirebaseAuth
 import FirebaseFirestore
 
@@ -41,6 +42,9 @@ class DesignViewModel: ObservableObject {
     @Published var displayName: String = ""
     @Published var logoUrl: String = ""
     @Published var heroImageUrl: String = ""
+    /// Pixel size of the last uploaded hero JPEG; public site (all templates) matches this aspect so the live hero matches the in-app crop.
+    @Published var heroImagePixelWidth: Int = 16
+    @Published var heroImagePixelHeight: Int = 9
     @Published var isUploadingHero = false
     /// Shown only on `/gallery` (not on home featured strip).
     @Published var galleryImages: [String] = []
@@ -63,6 +67,18 @@ class DesignViewModel: ObservableObject {
     @Published var luxeHeroTagline: String = ""
     /// Luxe cream promo strip headline (above tagline + Book Now).
     @Published var luxePromoHeadline: String = ""
+    /// Luxe home featured card strip (under hero): eyebrow + heading; empty uses “Gallery” / “Featured work” on the web.
+    @Published var luxeFeaturedWorkEyebrow: String = ""
+    @Published var luxeFeaturedWorkHeading: String = ""
+    /// When false, the featured card strip is hidden on Luxe home (Gallery page must still be on to show it when true).
+    @Published var luxeShowFeaturedWorkStrip: Bool = true
+    /// Optional list under the featured strip on Luxe home; empty labels use “Services” / “What we offer”.
+    @Published var luxeHomeServicesEyebrow: String = ""
+    @Published var luxeHomeServicesHeading: String = ""
+    /// When true, the home service list appears under the featured strip on the live Luxe site.
+    @Published var luxeShowHomeServicesSection: Bool = false
+    /// When true, the Luxe home service list is wrapped in `<details>` (starts collapsed on the web).
+    @Published var luxeHomeServicesExpandableCard: Bool = false
     /// Blade hero italic line before the business name.
     @Published var bladeHeroTagline: String = ""
     /// Blade hero paragraph under the name (optional; falls back to About text on web).
@@ -76,6 +92,8 @@ class DesignViewModel: ObservableObject {
     /// One line; the public site splits into two display lines (`… that …` or balanced at a space).
     @Published var studio12HeroHeadline: String = ""
     @Published var studio12PhilosophyImageUrl: String = ""
+    @Published var studio12PhilosophyImagePixelWidth: Int = 16
+    @Published var studio12PhilosophyImagePixelHeight: Int = 9
     @Published var isUploadingStudio12Philosophy = false
     /// Three parts separated by ` · ` (space–middle dot–space); site renders as three lines with the last in italics.
     @Published var studio12PhilosophyHeadline: String = ""
@@ -84,6 +102,8 @@ class DesignViewModel: ObservableObject {
     @Published var studio12BookCtaHeadline: String = ""
     @Published var studio12BookCtaBody: String = ""
     @Published var studio12BookCtaImageUrl: String = ""
+    @Published var studio12BookCtaImagePixelWidth: Int = 16
+    @Published var studio12BookCtaImagePixelHeight: Int = 9
     @Published var isUploadingStudio12BookCta = false
     /// When false, the “What we offer” grid is hidden on the public home page (default on).
     @Published var studio12ShowServicesSection: Bool = true
@@ -92,6 +112,16 @@ class DesignViewModel: ObservableObject {
 
     /// Classic home “What I offer”: when false, duration lines are hidden on the live site (`classicShowServiceDuration` in Firestore).
     @Published var classicShowServiceDuration: Bool = true
+    /// Classic featured strip copy; empty strings use industry defaults on the web.
+    @Published var classicFeaturedWorkEyebrow: String = ""
+    @Published var classicFeaturedWorkHeading: String = ""
+    @Published var classicFeaturedWorkSub: String = ""
+    @Published var classicFeaturedWorkEmpty: String = ""
+    /// Classic “What I offer” block labels; empty uses “Services” / “What I offer”.
+    @Published var classicServicesEyebrow: String = ""
+    @Published var classicServicesHeading: String = ""
+    /// When true, the live Classic home wraps the service list in `<details>` (tap to expand).
+    @Published var classicServicesExpandableCard: Bool = false
 
     /// Classic dark About band: three headline stats row (`classicShowAboutStats` in Firestore).
     @Published var classicShowAboutStats: Bool = true
@@ -286,6 +316,15 @@ class DesignViewModel: ObservableObject {
                 displayName = tenant?["displayName"] as? String ?? ""
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
                 heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""
+                if let w = Self.intFromFirestore(tenant?["heroImagePixelWidth"]),
+                   let h = Self.intFromFirestore(tenant?["heroImagePixelHeight"]),
+                   w > 0, h > 0 {
+                    heroImagePixelWidth = w
+                    heroImagePixelHeight = h
+                } else {
+                    heroImagePixelWidth = 16
+                    heroImagePixelHeight = 9
+                }
                 galleryGridLayout = tenant?["galleryGridLayout"] as? String ?? "3x1"
                 galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant?["galleryLayoutStyle"] as? String)
                 let rawGallery = tenant?["galleryImages"] as? [String] ?? []
@@ -311,6 +350,13 @@ class DesignViewModel: ObservableObject {
                 tagline = tenant?["tagline"] as? String ?? ""
                 luxeHeroTagline = tenant?["luxeHeroTagline"] as? String ?? ""
                 luxePromoHeadline = tenant?["luxePromoHeadline"] as? String ?? ""
+                luxeFeaturedWorkEyebrow = tenant?["luxeFeaturedWorkEyebrow"] as? String ?? ""
+                luxeFeaturedWorkHeading = tenant?["luxeFeaturedWorkHeading"] as? String ?? ""
+                luxeShowFeaturedWorkStrip = tenant?["luxeShowFeaturedWorkStrip"] as? Bool ?? true
+                luxeHomeServicesEyebrow = tenant?["luxeHomeServicesEyebrow"] as? String ?? ""
+                luxeHomeServicesHeading = tenant?["luxeHomeServicesHeading"] as? String ?? ""
+                luxeShowHomeServicesSection = tenant?["luxeShowHomeServicesSection"] as? Bool ?? false
+                luxeHomeServicesExpandableCard = tenant?["luxeHomeServicesExpandableCard"] as? Bool ?? false
                 bladeHeroTagline = tenant?["bladeHeroTagline"] as? String ?? ""
                 bladeHeroDescription = tenant?["bladeHeroDescription"] as? String ?? ""
                 let ht = tenant?["heroTagline"] as? String ?? ""
@@ -326,6 +372,15 @@ class DesignViewModel: ObservableObject {
                     studio12HeroHeadline = [l1, l2].filter { !$0.isEmpty }.joined(separator: " ")
                 }
                 studio12PhilosophyImageUrl = tenant?["studio12PhilosophyImageUrl"] as? String ?? ""
+                if let w = Self.intFromFirestore(tenant?["studio12PhilosophyImagePixelWidth"]),
+                   let h = Self.intFromFirestore(tenant?["studio12PhilosophyImagePixelHeight"]),
+                   w > 0, h > 0 {
+                    studio12PhilosophyImagePixelWidth = w
+                    studio12PhilosophyImagePixelHeight = h
+                } else {
+                    studio12PhilosophyImagePixelWidth = 16
+                    studio12PhilosophyImagePixelHeight = 9
+                }
                 let philHeadNew = (tenant?["studio12PhilosophyHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !philHeadNew.isEmpty {
                     studio12PhilosophyHeadline = tenant?["studio12PhilosophyHeadline"] as? String ?? ""
@@ -347,9 +402,25 @@ class DesignViewModel: ObservableObject {
                 }
                 studio12BookCtaBody = tenant?["studio12BookCtaBody"] as? String ?? ""
                 studio12BookCtaImageUrl = tenant?["studio12BookCtaImageUrl"] as? String ?? ""
+                if let w = Self.intFromFirestore(tenant?["studio12BookCtaImagePixelWidth"]),
+                   let h = Self.intFromFirestore(tenant?["studio12BookCtaImagePixelHeight"]),
+                   w > 0, h > 0 {
+                    studio12BookCtaImagePixelWidth = w
+                    studio12BookCtaImagePixelHeight = h
+                } else {
+                    studio12BookCtaImagePixelWidth = 16
+                    studio12BookCtaImagePixelHeight = 9
+                }
                 studio12ShowServicesSection = tenant?["studio12ShowServicesSection"] as? Bool ?? true
                 studio12ShowProcessSection = tenant?["studio12ShowProcessSection"] as? Bool ?? true
                 classicShowServiceDuration = tenant?["classicShowServiceDuration"] as? Bool ?? true
+                classicFeaturedWorkEyebrow = tenant?["classicFeaturedWorkEyebrow"] as? String ?? ""
+                classicFeaturedWorkHeading = tenant?["classicFeaturedWorkHeading"] as? String ?? ""
+                classicFeaturedWorkSub = tenant?["classicFeaturedWorkSub"] as? String ?? ""
+                classicFeaturedWorkEmpty = tenant?["classicFeaturedWorkEmpty"] as? String ?? ""
+                classicServicesEyebrow = tenant?["classicServicesEyebrow"] as? String ?? ""
+                classicServicesHeading = tenant?["classicServicesHeading"] as? String ?? ""
+                classicServicesExpandableCard = tenant?["classicServicesExpandableCard"] as? Bool ?? false
                 classicShowAboutStats = tenant?["classicShowAboutStats"] as? Bool ?? true
                 classicStatYearsValue = (tenant?["classicStatYearsValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "8+"
                 classicStatYearsLabel = (tenant?["classicStatYearsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Years exp."
@@ -458,6 +529,8 @@ class DesignViewModel: ObservableObject {
             "displayName": displayName,
             "logoUrl": logoUrl,
             "heroImageUrl": heroImageUrl,
+            "heroImagePixelWidth": heroImagePixelWidth,
+            "heroImagePixelHeight": heroImagePixelHeight,
             "featuredWorkImages": featuredWorkImages,
             "galleryImages": galleryImages,
             "galleryGridLayout": galleryGridLayout,
@@ -490,6 +563,22 @@ class DesignViewModel: ObservableObject {
         }
         if fam == .classic {
             updates["classicShowServiceDuration"] = classicShowServiceDuration
+            updates["classicFeaturedWorkEyebrow"] = classicFeaturedWorkEyebrow
+            updates["classicFeaturedWorkHeading"] = classicFeaturedWorkHeading
+            updates["classicFeaturedWorkSub"] = classicFeaturedWorkSub
+            updates["classicFeaturedWorkEmpty"] = classicFeaturedWorkEmpty
+            updates["classicServicesEyebrow"] = classicServicesEyebrow
+            updates["classicServicesHeading"] = classicServicesHeading
+            updates["classicServicesExpandableCard"] = classicServicesExpandableCard
+        }
+        if fam == .luxe {
+            updates["luxeFeaturedWorkEyebrow"] = luxeFeaturedWorkEyebrow
+            updates["luxeFeaturedWorkHeading"] = luxeFeaturedWorkHeading
+            updates["luxeShowFeaturedWorkStrip"] = luxeShowFeaturedWorkStrip
+            updates["luxeHomeServicesEyebrow"] = luxeHomeServicesEyebrow
+            updates["luxeHomeServicesHeading"] = luxeHomeServicesHeading
+            updates["luxeShowHomeServicesSection"] = luxeShowHomeServicesSection
+            updates["luxeHomeServicesExpandableCard"] = luxeHomeServicesExpandableCard
         }
         if fam == .studio12 {
             updates["heroTagline"] = heroTagline
@@ -499,6 +588,8 @@ class DesignViewModel: ObservableObject {
             updates["studio12HeroLine2"] = ""
             updates["aboutText"] = aboutText
             updates["studio12PhilosophyImageUrl"] = studio12PhilosophyImageUrl
+            updates["studio12PhilosophyImagePixelWidth"] = studio12PhilosophyImagePixelWidth
+            updates["studio12PhilosophyImagePixelHeight"] = studio12PhilosophyImagePixelHeight
             updates["studio12PhilosophyHeadline"] = studio12PhilosophyHeadline
             updates["studio12PhilosophyHeadLine1"] = ""
             updates["studio12PhilosophyHeadLine2"] = ""
@@ -508,6 +599,8 @@ class DesignViewModel: ObservableObject {
             updates["studio12BookCtaItalic"] = ""
             updates["studio12BookCtaBody"] = studio12BookCtaBody
             updates["studio12BookCtaImageUrl"] = studio12BookCtaImageUrl
+            updates["studio12BookCtaImagePixelWidth"] = studio12BookCtaImagePixelWidth
+            updates["studio12BookCtaImagePixelHeight"] = studio12BookCtaImagePixelHeight
             updates["studio12ShowServicesSection"] = studio12ShowServicesSection
             updates["studio12ShowProcessSection"] = studio12ShowProcessSection
             updates["studio12ProcessSteps"] = studio12ProcessSteps
@@ -644,9 +737,16 @@ class DesignViewModel: ObservableObject {
         await MainActor.run { isUploadingHero = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantHeroImage(tenantId: tid, imageData: imageData)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["heroImageUrl": url])
+            let dims = Self.pixelDimensionsOfJPEGData(imageData) ?? (w: 16, h: 9)
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "heroImageUrl": url,
+                "heroImagePixelWidth": dims.w,
+                "heroImagePixelHeight": dims.h
+            ])
             await MainActor.run {
                 heroImageUrl = url
+                heroImagePixelWidth = dims.w
+                heroImagePixelHeight = dims.h
                 isUploadingHero = false
                 invalidateWebPreview()
             }
@@ -658,14 +758,37 @@ class DesignViewModel: ObservableObject {
         }
     }
 
+    private static func intFromFirestore(_ value: Any?) -> Int? {
+        switch value {
+        case let i as Int: return i
+        case let n as NSNumber: return n.intValue
+        default: return nil
+        }
+    }
+
+    private static func pixelDimensionsOfJPEGData(_ data: Data) -> (w: Int, h: Int)? {
+        guard let img = UIImage(data: data) else { return nil }
+        let w = Int(round(img.size.width * img.scale))
+        let h = Int(round(img.size.height * img.scale))
+        guard w > 0, h > 0 else { return nil }
+        return (w, h)
+    }
+
     func uploadStudio12PhilosophyImage(imageData: Data) async {
         guard let tid = tenantId else { return }
         await MainActor.run { isUploadingStudio12Philosophy = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12PhilosophyImageUrl": url])
+            let dims = Self.pixelDimensionsOfJPEGData(imageData) ?? (w: 16, h: 9)
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "studio12PhilosophyImageUrl": url,
+                "studio12PhilosophyImagePixelWidth": dims.w,
+                "studio12PhilosophyImagePixelHeight": dims.h
+            ])
             await MainActor.run {
                 studio12PhilosophyImageUrl = url
+                studio12PhilosophyImagePixelWidth = dims.w
+                studio12PhilosophyImagePixelHeight = dims.h
                 isUploadingStudio12Philosophy = false
                 invalidateWebPreview()
             }
@@ -682,9 +805,16 @@ class DesignViewModel: ObservableObject {
         await MainActor.run { isUploadingStudio12BookCta = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
-            try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12BookCtaImageUrl": url])
+            let dims = Self.pixelDimensionsOfJPEGData(imageData) ?? (w: 16, h: 9)
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "studio12BookCtaImageUrl": url,
+                "studio12BookCtaImagePixelWidth": dims.w,
+                "studio12BookCtaImagePixelHeight": dims.h
+            ])
             await MainActor.run {
                 studio12BookCtaImageUrl = url
+                studio12BookCtaImagePixelWidth = dims.w
+                studio12BookCtaImagePixelHeight = dims.h
                 isUploadingStudio12BookCta = false
                 invalidateWebPreview()
             }
@@ -1199,6 +1329,7 @@ extension FormField {
         FormField(id: "name", key: "name", label: "Full Name", type: .text, required: true),
         FormField(id: "email", key: "email", label: "Email", type: .email, required: true),
         FormField(id: "phone", key: "phone", label: "Phone", type: .phone, required: true),
+        FormField(id: "referenceImages", key: "referenceImages", label: "Reference photos (optional)", type: .file, required: false),
         FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false)
     ]
 }

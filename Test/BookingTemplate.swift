@@ -242,6 +242,13 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             return base + [
                 FormField(id: "nail_type", key: "nailType", label: "Nail type (gel, acrylic, natural)", type: .text, required: false),
                 FormField(id: "design", key: "designPreference", label: "Design preference", type: .text, required: false),
+                FormField(
+                    id: "referenceImages",
+                    key: "referenceImages",
+                    label: "Reference photos (optional)",
+                    type: .file,
+                    required: false
+                ),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
         case .custom:

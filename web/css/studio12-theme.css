@@ -48,7 +48,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 40px;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 40px 24px 40px;
   transition: background 0.35s, padding 0.35s, box-shadow 0.35s;
   flex-wrap: wrap;
   gap: 16px;
@@ -60,7 +60,7 @@
 .studio12-page .s12-topnav.scrolled {
   background: rgba(250, 247, 242, 0.98);
   backdrop-filter: blur(12px);
-  padding: 16px 40px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 40px 16px 40px;
   border-bottom: 1px solid var(--s12-line);
   box-shadow: 0 10px 36px rgba(42, 31, 24, 0.07);
 }
@@ -161,6 +161,11 @@
   padding-top: 0;
 }
 
+/* Home only: fixed topnav would cover the hero image; subpages use `.studio12-sub { padding-top }` on the root. */
+.studio12-page:not(.studio12-sub) .s12-hero {
+  padding-top: calc(clamp(88px, 11vh, 132px) + env(safe-area-inset-top, 0px));
+}
+
 .studio12-page .s12-hero-img-col {
   position: relative;
   overflow: hidden;
@@ -173,6 +178,11 @@
   min-height: 50vh;
   object-fit: cover;
   display: block;
+}
+
+/* Main split hero only: bias `cover` toward the top (avoids “whole upload” feeling cropped at the hairline). */
+.studio12-page .s12-hero .s12-hero-img-col > .s12-hero-img {
+  object-position: center top;
 }
 
 .studio12-page .s12-hero-img-fallback {
@@ -579,6 +589,8 @@
   width: clamp(200px, 17vw, 260px);
   height: clamp(260px, 30vw, 320px);
   overflow: hidden;
+  /* Letterbox behind `object-fit: contain` so app-cropped photos aren’t trimmed again. */
+  background: rgba(28, 22, 18, 0.96);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
   transition: box-shadow 0.4s ease, transform 0.4s ease;
 }
@@ -626,6 +638,7 @@
   aspect-ratio: 4 / 5;
   max-height: 420px;
   overflow: hidden;
+  background: rgba(28, 22, 18, 0.96);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
   transition: box-shadow 0.4s ease, transform 0.4s ease;
 }
@@ -715,6 +728,13 @@
   height: 100%;
   object-fit: cover;
   transition: transform 0.45s ease;
+}
+
+/* Marquee + /gallery grid: show full bitmap (matches app crop editor); letterbox inside tile. */
+.studio12-page .s12-gallery-marquee .s12-g-item img,
+.studio12-page .s12-gallery-page-grid .s12-g-item img {
+  object-fit: contain;
+  object-position: center;
 }
 
 .studio12-page .s12-gallery-marquee .s12-g-item:hover img {
@@ -924,7 +944,7 @@
 
 /* Subpages: same fixed header as home; body offset so content clears bar */
 .studio12-page.studio12-sub {
-  padding-top: 84px;
+  padding-top: calc(84px + env(safe-area-inset-top, 0px));
 }
 
 .studio12-page.studio12-sub .booking-shell {
@@ -978,6 +998,14 @@
   .studio12-page .s12-hero {
     grid-template-columns: 1fr;
   }
+  /* Wrapped hamburger + Book row; hero image column is first (order: -1). */
+  .studio12-page:not(.studio12-sub) .s12-hero {
+    padding-top: calc(clamp(112px, 20vh, 200px) + env(safe-area-inset-top, 0px));
+  }
+  /* Subpages: base 84px too short when nav wraps (e.g. /gallery horizontal_strip). */
+  .studio12-page.studio12-sub {
+    padding-top: calc(clamp(112px, 20vh, 200px) + env(safe-area-inset-top, 0px));
+  }
   .studio12-page .s12-hero-img-col {
     order: -1;
     min-height: 42vh;
@@ -1029,10 +1057,10 @@
     letter-spacing: 0.32em;
   }
   .studio12-page .s12-topnav {
-    padding: 20px 28px 20px 24px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 28px 20px 24px;
   }
   .studio12-page .s12-topnav.scrolled {
-    padding: 14px 28px 14px 24px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 28px 14px 24px;
   }
 }
 

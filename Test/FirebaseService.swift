@@ -399,7 +399,8 @@ class FirebaseService: ObservableObject {
             displayName: business,
             slug: slugValue,
             industry: template.rawValue,
-            ownerUid: uid
+            ownerUid: uid,
+            subscriptionPlan: subscriptionPlan
         )
 
         // Apply booking template immediately so services/form fields are ready right after sign up.
@@ -680,13 +681,20 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
-    private func createTenant(displayName: String, slug: String, industry: String, ownerUid: String) async throws -> String {
+    private func createTenant(
+        displayName: String,
+        slug: String,
+        industry: String,
+        ownerUid: String,
+        subscriptionPlan: String
+    ) async throws -> String {
         let ref = db.collection("tenants").document()
         try await ref.setData([
             "slug": slug,
             "displayName": displayName,
             "industry": industry,
             "ownerUid": ownerUid,
+            "subscriptionPlan": subscriptionPlan,
             "isActive": true,
             "bookingModeDefault": "request",
             "requireApprovalForSlotBookings": true,

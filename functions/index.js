@@ -23,6 +23,22 @@ const openaiApiKey = defineSecret("OPENAI_API_KEY");
 admin.initializeApp();
 const db = admin.firestore();
 
+/** Canonical plan slug: `basic` | `studio` | `shop` (accepts legacy client values). */
+function normalizeSubscriptionPlan(plan) {
+  const p = (plan || "").toString().trim().toLowerCase();
+  const legacy = {
+    solo: "basic",
+    free: "basic",
+    starter: "basic",
+    growth: "studio",
+    pro: "studio",
+    enterprise: "shop",
+  };
+  if (legacy[p]) return legacy[p];
+  if (p === "basic" || p === "studio" || p === "shop") return p;
+  return "basic";
+}
+
 /**
  * Creates a Stripe Connect Account Link for the authenticated provider.
  * If the tenant has no Connect account, creates one first and saves stripeAccountId to Firestore.
@@ -714,7 +730,10 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
   const tenantRef = db.collection("tenants").doc();
   const tenantId = tenantRef.id;
 
+  const subscriptionPlan = normalizeSubscriptionPlan(plan);
+
   const tenantData = {
+    ownerUid: uid,
     ownerId: uid,
     businessName: businessName,
     displayName: businessName,
@@ -728,7 +747,7 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
     webThemeId: webThemeId,
     resolvedWebThemeId: webThemeId,
     templatePreset: templatePreset || "portfolio",
-    subscriptionPlan: plan || "solo",
+    subscriptionPlan,
     trialStartDate: now,
     createdAt: now,
     updatedAt: now,
@@ -746,7 +765,6 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
     tenantData.industryCustomLabel = industryLabelTrim;
   }
 
-  const subscriptionPlan = plan || "solo";
   const userDoc = {
     email: context.auth.token.email || "",
     firstName: firstName,

@@ -27,6 +27,10 @@ class SettingsViewModel: ObservableObject {
     @Published var profilePhotoUrl: String = ""
     @Published var isUploadingLogo = false
     @Published var accountDisplayName: String = ""
+    /// Resolved from `tenants/{id}.subscriptionPlan` (same source as web); defaults to Basic.
+    @Published var tenantSubscriptionPlan: SubscriptionPlan = .basic
+    /// True when the signed-in user is `tenants.ownerUid`.
+    @Published var isTenantOwner: Bool = false
 
     private let firebaseService = FirebaseService()
 
@@ -67,6 +71,8 @@ class SettingsViewModel: ObservableObject {
                 selectedIndustry = BookingTemplate.custom.rawValue
                 profilePhotoUrl = ""
                 accountDisplayName = "Demo User"
+                tenantSubscriptionPlan = .basic
+                isTenantOwner = false
                 isLoading = false
             }
             return
@@ -79,10 +85,16 @@ class SettingsViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             var industry: String?
             var tid: String?
+            var planResolved = SubscriptionPlan.basic
+            var ownerMatch = false
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
                     industry = tenant["industry"] as? String
+                    planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
+                    if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
+                        ownerMatch = (ownerUid == uid)
+                    }
                 }
             }
             await MainActor.run {
@@ -90,6 +102,8 @@ class SettingsViewModel: ObservableObject {
                     let fullName = "\(p.firstName) \(p.lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
                     hasProfile = true
                     tenantId = tid
+                    tenantSubscriptionPlan = planResolved
+                    isTenantOwner = ownerMatch
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
                     profilePhotoUrl = p.profilePhotoUrl
                     accountDisplayName = !fullName.isEmpty ? fullName : (!p.name.isEmpty ? p.name : p.business)
@@ -106,6 +120,8 @@ class SettingsViewModel: ObservableObject {
                 } else {
                     hasProfile = false
                     tenantId = nil
+                    tenantSubscriptionPlan = .basic
+                    isTenantOwner = false
                     selectedIndustry = BookingTemplate.custom.rawValue
                     profilePhotoUrl = ""
                     accountDisplayName = ""

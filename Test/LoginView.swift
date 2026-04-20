@@ -199,7 +199,7 @@ struct SignUpFormView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var selectedPlan: SubscriptionPlan = .free
+    @State private var selectedPlan: SubscriptionPlan = .basic
     @State private var isPasswordVisible = false
     @State private var isConfirmVisible = false
 

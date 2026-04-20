@@ -11,8 +11,6 @@ import UIKit
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
-    @State private var profilePhotoPickerItem: PhotosPickerItem?
-    @State private var profilePhotoCropItem: SingleImageCropSheetItem?
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
@@ -26,25 +24,35 @@ struct SettingsView: View {
         NavigationView {
             List {
                 Section(header: Text("Account")) {
-                    if authViewModel.isDemoMode {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            Text("Demo mode")
-                                .foregroundColor(.secondary)
-                        }
-                    } else if let email = authViewModel.currentUserEmail {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(
-                                    viewModel.accountDisplayName.isEmpty
-                                    ? (authViewModel.currentUserDisplayName ?? "User")
-                                    : viewModel.accountDisplayName
-                                )
-                                    .font(.subheadline.weight(.medium))
-                                Text(email)
-                                    .font(.caption)
+                    NavigationLink {
+                        AccountSettingsDetailView(viewModel: viewModel)
+                            .environmentObject(authViewModel)
+                    } label: {
+                        if authViewModel.isDemoMode {
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                Text("Demo mode")
                                     .foregroundColor(.secondary)
+                            }
+                        } else if let email = authViewModel.currentUserEmail {
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(
+                                        viewModel.accountDisplayName.isEmpty
+                                        ? (authViewModel.currentUserDisplayName ?? "User")
+                                        : viewModel.accountDisplayName
+                                    )
+                                    .font(.subheadline.weight(.medium))
+                                    Text(email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        } else {
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                Text("Account")
                             }
                         }
                     }
@@ -58,114 +66,25 @@ struct SettingsView: View {
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile, viewModel.tenantId != nil {
-                    Section(
-                        header: Text("Profile picture"),
-                        footer: Text("Used for your account profile. Website logo is managed in Web Page Design. \(UploadImageAdvice.profile)")
-                            .font(.caption2)
-                    ) {
-                        HStack(alignment: .center, spacing: 12) {
-                            PhotosPicker(
-                                selection: $profilePhotoPickerItem,
-                                matching: .images,
-                                photoLibrary: .shared()
-                            ) {
-                                ZStack(alignment: .bottomTrailing) {
-                                    Group {
-                                        if viewModel.profilePhotoUrl.isEmpty {
-                                            Circle()
-                                                .fill(Color(.secondarySystemGroupedBackground))
-                                                .overlay(
-                                                    Image(systemName: "person.fill")
-                                                        .font(.system(size: 22))
-                                                        .foregroundColor(.secondary)
-                                                )
-                                        } else if let url = URL(string: viewModel.profilePhotoUrl) {
-                                            AsyncImage(url: url) { phase in
-                                                switch phase {
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                case .failure:
-                                                    Image(systemName: "exclamationmark.triangle")
-                                                        .font(.caption)
-                                                        .foregroundColor(.secondary)
-                                                default:
-                                                    Color(.secondarySystemGroupedBackground)
-                                                        .overlay(ProgressView().scaleEffect(0.7))
-                                                }
-                                            }
-                                        } else {
-                                            Circle()
-                                                .fill(Color(.secondarySystemGroupedBackground))
-                                        }
-                                    }
-                                    .frame(width: 52, height: 52)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle()
-                                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                                    )
-
-                                    Image(systemName: "camera.circle.fill")
-                                        .symbolRenderingMode(.multicolor)
-                                        .font(.system(size: 20))
-                                        .background(
-                                            Circle()
-                                                .fill(Color(.systemBackground))
-                                                .frame(width: 16, height: 16)
-                                        )
-                                        .offset(x: 1, y: 1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel.isUploadingLogo)
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Tap photo to change")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                if viewModel.isUploadingLogo {
-                                    ProgressView()
-                                        .scaleEffect(0.85)
-                                }
-                                if !viewModel.profilePhotoUrl.isEmpty {
-                                    Button(role: .destructive) {
-                                        Task {
-                                            await viewModel.removeProfilePhoto()
-                                            await MainActor.run {
-                                                authViewModel.accountPhotoUrl = nil
-                                            }
-                                        }
-                                    } label: {
-                                        Text("Remove")
-                                            .font(.caption.weight(.medium))
-                                    }
-                                    .disabled(viewModel.isUploadingLogo)
-                                }
-                            }
-                            Spacer(minLength: 0)
+                    Section(header: Text("Plan")) {
+                        HStack {
+                            Text("Current plan")
+                            Spacer()
+                            Text(viewModel.tenantSubscriptionPlan.displayName)
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 2)
-                    }
-                    .onChange(of: profilePhotoPickerItem) { _, newItem in
-                        Task {
-                            guard let newItem else { return }
-                            guard let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty,
-                                  let uiImage = UIImage(data: data) else {
-                                await MainActor.run { profilePhotoPickerItem = nil }
-                                return
-                            }
-                            await MainActor.run {
-                                profilePhotoCropItem = SingleImageCropSheetItem(image: uiImage)
-                                profilePhotoPickerItem = nil
-                            }
-                        }
+                        Text(viewModel.tenantSubscriptionPlan.shortDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                if !authViewModel.isDemoMode && viewModel.hasProfile {
-                    Section(header: Text("Service"), footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")) {
+                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
+                    Section(
+                        header: Text("Owner settings"),
+                        footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
+                            .font(.caption2)
+                    ) {
                         Picker("Business type", selection: $viewModel.selectedIndustry) {
                             ForEach(BookingTemplate.allCases) { template in
                                 Text(template.displayName).tag(template.rawValue)
@@ -202,7 +121,9 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
 
+                if !authViewModel.isDemoMode && viewModel.hasProfile {
                     Section(header: Text("Scheduling & Availability")) {
                         Picker("Booking confirmation", selection: $viewModel.confirmationType) {
                             ForEach(BookingConfirmationType.allCases, id: \.self) { type in
@@ -298,26 +219,6 @@ struct SettingsView: View {
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
-            .sheet(item: $profilePhotoCropItem, onDismiss: { profilePhotoCropItem = nil }) { item in
-                UploadImagePreparationSheet(
-                    images: [item.image],
-                    advice: UploadImageAdvice.profile,
-                    navigationTitle: "Profile photo",
-                    allowedChoices: UploadCropPresetMenu.profile,
-                    defaultChoice: .square,
-                    onUseJPEGData: { dataList in
-                        profilePhotoCropItem = nil
-                        guard let data = dataList.first else { return }
-                        Task {
-                            await viewModel.uploadProfilePhoto(imageData: data)
-                            await MainActor.run {
-                                let trimmed = viewModel.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-                                authViewModel.accountPhotoUrl = trimmed.isEmpty ? nil : trimmed
-                            }
-                        }
-                    }
-                )
-            }
         }
         .navigationViewStyle(.stack)
     }
@@ -353,6 +254,178 @@ struct SettingsView: View {
 
             Tap Continue to apply, or Cancel to keep your previous type.
             """
+        }
+    }
+}
+
+// MARK: - Account detail (profile photo)
+private struct AccountSettingsDetailView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @ObservedObject var viewModel: SettingsViewModel
+    @State private var profilePhotoPickerItem: PhotosPickerItem?
+    @State private var profilePhotoCropItem: SingleImageCropSheetItem?
+
+    private var accountName: String {
+        viewModel.accountDisplayName.isEmpty
+            ? (authViewModel.currentUserDisplayName ?? "User")
+            : viewModel.accountDisplayName
+    }
+
+    var body: some View {
+        List {
+            if authViewModel.isDemoMode {
+                Section {
+                    Text("Profile photo isn’t available in demo mode.")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                if let email = authViewModel.currentUserEmail {
+                    Section {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(accountName)
+                                .font(.headline)
+                            Text(email)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if viewModel.hasProfile, viewModel.tenantId != nil {
+                    Section(
+                        header: Text("Profile photo"),
+                        footer: Text("Used for your account profile. Website logo is managed in Web Page Design. \(UploadImageAdvice.profile)")
+                            .font(.caption2)
+                    ) {
+                        HStack(alignment: .center, spacing: 12) {
+                            PhotosPicker(
+                                selection: $profilePhotoPickerItem,
+                                matching: .images,
+                                photoLibrary: .shared()
+                            ) {
+                                ZStack(alignment: .bottomTrailing) {
+                                    Group {
+                                        if viewModel.profilePhotoUrl.isEmpty {
+                                            Circle()
+                                                .fill(Color(.secondarySystemGroupedBackground))
+                                                .overlay(
+                                                    Image(systemName: "person.fill")
+                                                        .font(.system(size: 22))
+                                                        .foregroundColor(.secondary)
+                                                )
+                                        } else if let url = URL(string: viewModel.profilePhotoUrl) {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                case .failure:
+                                                    Image(systemName: "exclamationmark.triangle")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                default:
+                                                    Color(.secondarySystemGroupedBackground)
+                                                        .overlay(ProgressView().scaleEffect(0.7))
+                                                }
+                                            }
+                                        } else {
+                                            Circle()
+                                                .fill(Color(.secondarySystemGroupedBackground))
+                                        }
+                                    }
+                                    .frame(width: 52, height: 52)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                                    )
+
+                                    Image(systemName: "camera.circle.fill")
+                                        .symbolRenderingMode(.multicolor)
+                                        .font(.system(size: 20))
+                                        .background(
+                                            Circle()
+                                                .fill(Color(.systemBackground))
+                                                .frame(width: 16, height: 16)
+                                        )
+                                        .offset(x: 1, y: 1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.isUploadingLogo)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Tap photo to change")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                if viewModel.isUploadingLogo {
+                                    ProgressView()
+                                        .scaleEffect(0.85)
+                                }
+                                if !viewModel.profilePhotoUrl.isEmpty {
+                                    Button(role: .destructive) {
+                                        Task {
+                                            await viewModel.removeProfilePhoto()
+                                            await MainActor.run {
+                                                authViewModel.accountPhotoUrl = nil
+                                            }
+                                        }
+                                    } label: {
+                                        Text("Remove")
+                                            .font(.caption.weight(.medium))
+                                    }
+                                    .disabled(viewModel.isUploadingLogo)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } else if authViewModel.currentUserEmail != nil {
+                    Section {
+                        Text("Your business profile is still loading. Try again in a moment.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Account")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: profilePhotoPickerItem) { _, newItem in
+            Task {
+                guard let newItem else { return }
+                guard let data = try? await newItem.loadTransferable(type: Data.self), !data.isEmpty,
+                      let uiImage = UIImage(data: data) else {
+                    await MainActor.run { profilePhotoPickerItem = nil }
+                    return
+                }
+                await MainActor.run {
+                    profilePhotoCropItem = SingleImageCropSheetItem(image: uiImage)
+                    profilePhotoPickerItem = nil
+                }
+            }
+        }
+        .sheet(item: $profilePhotoCropItem, onDismiss: { profilePhotoCropItem = nil }) { item in
+            UploadImagePreparationSheet(
+                images: [item.image],
+                advice: UploadImageAdvice.profile,
+                navigationTitle: "Profile photo",
+                allowedChoices: UploadCropPresetMenu.profile,
+                defaultChoice: .square,
+                onUseJPEGData: { dataList in
+                    profilePhotoCropItem = nil
+                    guard let data = dataList.first else { return }
+                    Task {
+                        await viewModel.uploadProfilePhoto(imageData: data)
+                        await MainActor.run {
+                            let trimmed = viewModel.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                            authViewModel.accountPhotoUrl = trimmed.isEmpty ? nil : trimmed
+                        }
+                    }
+                }
+            )
         }
     }
 }

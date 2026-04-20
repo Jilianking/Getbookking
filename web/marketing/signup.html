@@ -405,14 +405,14 @@
   <div class="signup-wrap">
     <div class="signup-card">
 
-      <!-- STEP 1 — Solo vs Team -->
+      <!-- STEP 1 — team size (not subscription tier; values solo/team for backend) -->
       <div class="step-panel active" id="step1">
         <h2>How will you use GetBookKing?</h2>
         <p class="subtitle">We'll tailor the experience to fit your setup.</p>
         <div class="choice-grid">
           <button class="choice-btn" data-value="solo" onclick="pickChoice(this, 'teamSize')">
-            <div class="choice-label">Solo</div>
-            <div class="choice-desc">Just me</div>
+            <div class="choice-label">Just me</div>
+            <div class="choice-desc">One person, one calendar</div>
           </button>
           <button class="choice-btn" data-value="team" onclick="pickChoice(this, 'teamSize')">
             <div class="choice-label">Team</div>
@@ -526,9 +526,9 @@
         <h2>Choose your plan</h2>
         <p class="subtitle">Start with a free month on any plan. No credit card needed.</p>
         <div class="plan-pick-grid">
-          <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
+          <div class="plan-pick" data-value="basic" onclick="pickPlan(this)">
             <div class="plan-pick-left">
-              <div class="plan-pick-name">Solo</div>
+              <div class="plan-pick-name">Basic</div>
               <div class="plan-pick-desc">Up to 2 employees</div>
             </div>
             <div class="plan-pick-price">$49<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
@@ -540,10 +540,10 @@
             </div>
             <div class="plan-pick-price">$79<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
-          <div class="plan-pick" data-value="enterprise" onclick="pickPlan(this)">
+          <div class="plan-pick" data-value="shop" onclick="pickPlan(this)">
             <div class="plan-pick-left">
-              <div class="plan-pick-name">Enterprise</div>
-              <div class="plan-pick-desc">Unlimited employees</div>
+              <div class="plan-pick-name">Shop</div>
+              <div class="plan-pick-desc">6+ employees &amp; retail</div>
             </div>
             <div class="plan-pick-price">$149<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
@@ -616,12 +616,14 @@
       plan: null,
     };
 
-    /* Pre-fill plan from query string (from pricing CTA) */
+    /* Pre-fill plan from query string (from pricing CTA); legacy slugs map to canonical. */
     (function() {
       const params = new URLSearchParams(location.search);
-      const p = params.get('plan');
-      if (p && ['solo','studio','enterprise'].includes(p)) {
-        state.plan = p;
+      const p = (params.get('plan') || '').trim().toLowerCase();
+      const legacy = { solo: 'basic', free: 'basic', starter: 'basic', growth: 'studio', pro: 'studio', enterprise: 'shop' };
+      const canon = legacy[p] || p;
+      if (['basic', 'studio', 'shop'].includes(canon)) {
+        state.plan = canon;
       }
     })();
 

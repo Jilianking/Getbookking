@@ -11,16 +11,37 @@ import FirebaseAuth
 
 /// Subscription plan chosen at sign-up (stored in Firestore; payment later).
 enum SubscriptionPlan: String, CaseIterable {
-    case free = "free"
-    case pro = "pro"
-    case enterprise = "enterprise"
-    
-    var displayName: String { rawValue.capitalized }
+    case basic = "basic"
+    case studio = "studio"
+    case shop = "shop"
+
+    var displayName: String {
+        switch self {
+        case .basic: return "Basic"
+        case .studio: return "Studio"
+        case .shop: return "Shop"
+        }
+    }
+
     var shortDescription: String {
         switch self {
-        case .free: return "Get started"
-        case .pro: return "More features"
-        case .enterprise: return "For teams"
+        case .basic: return "Up to 2 seats"
+        case .studio: return "3–5 seats, team tools"
+        case .shop: return "6+ seats, shop & scale"
+        }
+    }
+
+    /// Aligns with `normalizeSubscriptionPlan` in Cloud Functions / web sign-up.
+    static func normalized(fromFirestore raw: String?) -> SubscriptionPlan {
+        let p = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch p {
+        case "solo", "free", "starter": return .basic
+        case "growth", "pro": return .studio
+        case "enterprise": return .shop
+        case SubscriptionPlan.basic.rawValue: return .basic
+        case SubscriptionPlan.studio.rawValue: return .studio
+        case SubscriptionPlan.shop.rawValue: return .shop
+        default: return .basic
         }
     }
 }

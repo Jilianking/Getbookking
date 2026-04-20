@@ -30,6 +30,10 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
+    match /tenantInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if true;
 

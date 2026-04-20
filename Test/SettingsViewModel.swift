@@ -7,6 +7,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFunctions
 
 class SettingsViewModel: ObservableObject {
     @Published var confirmationType: BookingConfirmationType = .requestApprove
@@ -31,8 +32,13 @@ class SettingsViewModel: ObservableObject {
     @Published var tenantSubscriptionPlan: SubscriptionPlan = .basic
     /// True when the signed-in user is `tenants.ownerUid`.
     @Published var isTenantOwner: Bool = false
+    /// Shareable team invite URL (owner creates via Cloud Function).
+    @Published var teamInviteShareURL: URL?
+    @Published var isCreatingTeamInvite = false
+    @Published var teamInviteError: String?
 
     private let firebaseService = FirebaseService()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     let dayLabels: [(Int, String)] = [
         (0, "Sun"), (1, "Mon"), (2, "Tue"), (3, "Wed"),
@@ -55,7 +61,7 @@ class SettingsViewModel: ObservableObject {
     }
 
     func loadData(isDemoMode: Bool = false) async {
-        await MainActor.run { isLoading = true; errorMessage = nil }
+        await MainActor.run { isLoading = true; errorMessage = nil; teamInviteError = nil }
         if isDemoMode {
             await MainActor.run {
                 confirmationType = .requestApprove
@@ -73,6 +79,9 @@ class SettingsViewModel: ObservableObject {
                 accountDisplayName = "Demo User"
                 tenantSubscriptionPlan = .basic
                 isTenantOwner = false
+                teamInviteShareURL = nil
+                teamInviteError = nil
+                isCreatingTeamInvite = false
                 isLoading = false
             }
             return
@@ -354,6 +363,38 @@ class SettingsViewModel: ObservableObject {
             await MainActor.run {
                 isSavingService = false
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Owner-only: creates a single-use invite link (7-day expiry) via Cloud Function.
+    func createTeamInviteLink() async {
+        await MainActor.run {
+            isCreatingTeamInvite = true
+            teamInviteError = nil
+            teamInviteShareURL = nil
+        }
+        do {
+            let result = try await functions.httpsCallable("createTenantInvite").call([
+                "baseUrl": Constants.Hosting.bookingWebOrigin,
+            ])
+            guard let data = result.data as? [String: Any],
+                  let joinUrlString = data["joinUrl"] as? String,
+                  let url = URL(string: joinUrlString) else {
+                throw NSError(
+                    domain: "SettingsViewModel",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid response from server."]
+                )
+            }
+            await MainActor.run {
+                teamInviteShareURL = url
+                isCreatingTeamInvite = false
+            }
+        } catch {
+            await MainActor.run {
+                teamInviteError = error.localizedDescription
+                isCreatingTeamInvite = false
             }
         }
     }

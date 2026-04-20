@@ -61,7 +61,7 @@ class AILogoGeneratorViewModel: ObservableObject {
     @Published var selectedIconTheme: LogoIconTheme = .barber
 
     private let firebaseService = FirebaseService()
-    private let functions = Functions.functions()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     private var previousGeneratedImage: UIImage?
 
     func loadData(isDemoMode: Bool = false) async {

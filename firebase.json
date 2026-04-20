@@ -4,7 +4,10 @@
       "target": "booking",
       "public": "web",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**"],
-      "rewrites": [{ "source": "**", "destination": "/index.html" }],
+      "rewrites": [
+        { "source": "/join", "destination": "/join.html" },
+        { "source": "**", "destination": "/index.html" }
+      ],
       "headers": [
         {
           "source": "**",

@@ -32,5 +32,15 @@ struct Constants {
         static let name = "Admin App"
         static let version = "1.0.0"
     }
+
+    /// Firebase Hosting origin for the booking `web` target (no trailing slash). Used for team invite links.
+    struct Hosting {
+        static let bookingWebOrigin = "https://test-app-96812.web.app"
+    }
+
+    /// Region for callable Cloud Functions (must match `firebase functions:log` / console and `web/join.html`).
+    struct Firebase {
+        static let cloudFunctionsRegion = "us-central1"
+    }
 }
 

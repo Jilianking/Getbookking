@@ -8,6 +8,7 @@
 const functions = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 const Stripe = require("stripe");
 const {
   formSchemaForIndustry,
@@ -816,4 +817,210 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
   await batch.commit();
 
   return { tenantId, slug };
+});
+
+// ── Team invites (opaque token = Firestore doc id) ─────────────────────────
+
+const TENANT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function parseInviteToken(data) {
+  const token = ((data && data.token) || "").toString().trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) return null;
+  return token;
+}
+
+/** Public preview for join page (business name only). */
+exports.getTenantInvitePreview = functions.https.onCall(async (data) => {
+  const token = parseInviteToken(data);
+  if (!token) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid invite link.");
+  }
+  const snap = await db.collection("tenantInvites").doc(token).get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError("not-found", "This invite link is not valid.");
+  }
+  const inv = snap.data();
+  if (inv.usedAt) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This invite was already used."
+    );
+  }
+  const exp = inv.expiresAt;
+  if (exp && exp.toMillis && exp.toMillis() < Date.now()) {
+    throw new functions.https.HttpsError("failed-precondition", "This invite has expired.");
+  }
+  const tenantSnap = await db.collection("tenants").doc(inv.tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const t = tenantSnap.data();
+  const businessName = t.displayName || t.businessName || "Business";
+  return { businessName };
+});
+
+/** Owner-only: single-use invite; pass baseUrl for full join link. */
+exports.createTenantInvite = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User profile not found.");
+  }
+  const userData = userDoc.data();
+  const tenantId = (data && data.tenantId) || userData.tenantId;
+  if (!tenantId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No tenant linked to this account."
+    );
+  }
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = tenantSnap.data();
+  if (tenant.ownerUid !== uid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can create team invites."
+    );
+  }
+  const token = crypto.randomBytes(32).toString("hex");
+  const now = admin.firestore.Timestamp.now();
+  const expiresAt = admin.firestore.Timestamp.fromMillis(
+    now.toMillis() + TENANT_INVITE_TTL_MS
+  );
+  await db.collection("tenantInvites").doc(token).set({
+    tenantId,
+    createdByUid: uid,
+    createdAt: now,
+    expiresAt,
+    role: "staff",
+  });
+  const baseUrl = ((data && data.baseUrl) || "")
+    .toString()
+    .trim()
+    .replace(/\/+$/, "");
+  const joinUrl = baseUrl ? `${baseUrl}/join?t=${encodeURIComponent(token)}` : null;
+  return { token, joinUrl };
+});
+
+/** After Auth sign-in/up: attach user as staff and consume invite (transaction). */
+exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const token = parseInviteToken(data);
+  if (!token) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid invite link.");
+  }
+  const uid = context.auth.uid;
+  const inviteRef = db.collection("tenantInvites").doc(token);
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "This invite link is not valid.");
+  }
+  const inv = inviteSnap.data();
+  if (inv.usedAt) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This invite was already used."
+    );
+  }
+  const exp = inv.expiresAt;
+  if (exp && exp.toMillis && exp.toMillis() < Date.now()) {
+    throw new functions.https.HttpsError("failed-precondition", "This invite has expired.");
+  }
+  const tenantId = inv.tenantId;
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = tenantSnap.data();
+  if (tenant.ownerUid === uid) {
+    return { ok: true, tenantId, alreadyOwner: true };
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.exists ? userSnap.data() : {};
+
+  if (userData.tenantId && userData.tenantId !== tenantId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This account already belongs to another business. Use a different account to accept this invite."
+    );
+  }
+  if (userData.tenantId === tenantId && userData.role === "staff") {
+    return { ok: true, tenantId, alreadyMember: true };
+  }
+
+  const slug = tenant.slug || "";
+  const displayName = tenant.displayName || tenant.businessName || "";
+  const industry = tenant.industry || "custom";
+  const subscriptionPlan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  const email =
+    (context.auth.token && context.auth.token.email) || userData.email || "";
+  const tokenName =
+    (context.auth.token && context.auth.token.name) ||
+    (email ? email.split("@")[0] : "") ||
+    "Team member";
+  const nameParts = tokenName.trim().split(/\s+/);
+  const defaultFirst = nameParts[0] || "Team";
+  const defaultLast = nameParts.slice(1).join(" ") || "Member";
+
+  const defaultAvailability = {
+    timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
+    daysOpen: [1, 2, 3, 4, 5],
+    timeZone: "America/New_York",
+  };
+  const defaultWorkflow = {
+    confirmationType: "request_approve",
+    responseTimeHours: 24,
+  };
+
+  await db.runTransaction(async (tx) => {
+    const invFresh = await tx.get(inviteRef);
+    if (!invFresh.exists) {
+      throw new functions.https.HttpsError("not-found", "Invite not found.");
+    }
+    const inv2 = invFresh.data();
+    if (inv2.usedAt) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This invite was already used."
+      );
+    }
+    tx.update(inviteRef, {
+      usedAt: admin.firestore.FieldValue.serverTimestamp(),
+      usedByUid: uid,
+    });
+    tx.set(
+      userRef,
+      {
+        tenantId,
+        tenantSlug: slug,
+        role: "staff",
+        business: displayName,
+        industry,
+        subscriptionPlan,
+        subscriptionStatus: userData.subscriptionStatus || "active",
+        email,
+        firstName: userData.firstName || defaultFirst,
+        lastName: userData.lastName || defaultLast,
+        displayName: userData.displayName || tokenName.trim(),
+        name: userData.name || tokenName.trim(),
+        profilePhotoUrl: userData.profilePhotoUrl || "",
+        availability: userData.availability || defaultAvailability,
+        workflow: userData.workflow || defaultWorkflow,
+        createdAt: userData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  return { ok: true, tenantId };
 });

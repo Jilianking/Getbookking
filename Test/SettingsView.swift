@@ -81,6 +81,48 @@ struct SettingsView: View {
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
                     Section(
+                        header: Text("Team invites"),
+                        footer: Text("Creates a single-use link (expires in 7 days). Anyone with the link can sign up or sign in once to join as staff.")
+                            .font(.caption2)
+                    ) {
+                        Button(action: {
+                            Task { await viewModel.createTeamInviteLink() }
+                        }) {
+                            HStack {
+                                Text("Create team invite link")
+                                if viewModel.isCreatingTeamInvite {
+                                    Spacer()
+                                    ProgressView()
+                                        .scaleEffect(0.9)
+                                }
+                            }
+                        }
+                        .disabled(viewModel.isCreatingTeamInvite)
+                        if let err = viewModel.teamInviteError {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        if let url = viewModel.teamInviteShareURL {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Invite link ready")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(url.absoluteString)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(3)
+                                    .truncationMode(.middle)
+                                ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on GetBookKing.")) {
+                                    Label("Share link", systemImage: "square.and.arrow.up")
+                                        .font(.body.weight(.medium))
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+
+                    Section(
                         header: Text("Owner settings"),
                         footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
                             .font(.caption2)

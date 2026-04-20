@@ -51,7 +51,7 @@ final class InsightsViewModel: ObservableObject {
     @Published var paymentTransactionsReturned = 0
 
     private let firebaseService = FirebaseService()
-    private let functions = Functions.functions()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     func loadData(isDemoMode: Bool = false) async {
         await MainActor.run {

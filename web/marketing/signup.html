@@ -526,24 +526,24 @@
         <h2>Choose your plan</h2>
         <p class="subtitle">Start with a free month on any plan. No credit card needed.</p>
         <div class="plan-pick-grid">
-          <div class="plan-pick" data-value="basic" onclick="pickPlan(this)">
+          <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
             <div class="plan-pick-left">
-              <div class="plan-pick-name">Basic</div>
-              <div class="plan-pick-desc">Up to 2 employees</div>
+              <div class="plan-pick-name">Solo</div>
+              <div class="plan-pick-desc">1 employee</div>
             </div>
-            <div class="plan-pick-price">$49<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+            <div class="plan-pick-price">$39<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
           <div class="plan-pick" data-value="studio" onclick="pickPlan(this)">
             <div class="plan-pick-left">
               <div class="plan-pick-name">Studio</div>
-              <div class="plan-pick-desc">3–5 employees</div>
+              <div class="plan-pick-desc">2–5 employees</div>
             </div>
             <div class="plan-pick-price">$79<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
           <div class="plan-pick" data-value="shop" onclick="pickPlan(this)">
             <div class="plan-pick-left">
               <div class="plan-pick-name">Shop</div>
-              <div class="plan-pick-desc">6+ employees &amp; retail</div>
+              <div class="plan-pick-desc">6+ employees</div>
             </div>
             <div class="plan-pick-price">$149<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
@@ -620,9 +620,9 @@
     (function() {
       const params = new URLSearchParams(location.search);
       const p = (params.get('plan') || '').trim().toLowerCase();
-      const legacy = { solo: 'basic', free: 'basic', starter: 'basic', growth: 'studio', pro: 'studio', enterprise: 'shop' };
+      const legacy = { basic: 'solo', free: 'solo', starter: 'solo', solo: 'solo', growth: 'studio', pro: 'studio', enterprise: 'shop' };
       const canon = legacy[p] || p;
-      if (['basic', 'studio', 'shop'].includes(canon)) {
+      if (['solo', 'studio', 'shop'].includes(canon)) {
         state.plan = canon;
       }
     })();

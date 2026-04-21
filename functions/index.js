@@ -24,20 +24,21 @@ const openaiApiKey = defineSecret("OPENAI_API_KEY");
 admin.initializeApp();
 const db = admin.firestore();
 
-/** Canonical plan slug: `basic` | `studio` | `shop` (accepts legacy client values). */
+/** Canonical plan slug: `solo` | `studio` | `shop` (accepts legacy `basic` and older aliases). */
 function normalizeSubscriptionPlan(plan) {
   const p = (plan || "").toString().trim().toLowerCase();
   const legacy = {
-    solo: "basic",
-    free: "basic",
-    starter: "basic",
+    basic: "solo",
+    free: "solo",
+    starter: "solo",
+    solo: "solo",
     growth: "studio",
     pro: "studio",
     enterprise: "shop",
   };
   if (legacy[p]) return legacy[p];
-  if (p === "basic" || p === "studio" || p === "shop") return p;
-  return "basic";
+  if (p === "solo" || p === "studio" || p === "shop") return p;
+  return "solo";
 }
 
 /**
@@ -823,6 +824,19 @@ exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) =>
 
 const TENANT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Seat caps: Solo 1 employee, Studio 2–5 employees, Shop 6+ (large cap). */
+function maxSeatsForPlanNormalized(plan) {
+  const p = normalizeSubscriptionPlan(plan);
+  if (p === "solo") return 1;
+  if (p === "studio") return 5;
+  return 500;
+}
+
+async function countUsersForTenant(tenantId) {
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  return snap.size;
+}
+
 function parseInviteToken(data) {
   const token = ((data && data.token) || "").toString().trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
@@ -855,6 +869,13 @@ exports.getTenantInvitePreview = functions.https.onCall(async (data) => {
     throw new functions.https.HttpsError("not-found", "Business not found.");
   }
   const t = tenantSnap.data();
+  const plan = normalizeSubscriptionPlan(t.subscriptionPlan);
+  if (plan === "solo") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting team invites on its current plan."
+    );
+  }
   const businessName = t.displayName || t.businessName || "Business";
   return { businessName };
 });
@@ -886,6 +907,23 @@ exports.createTenantInvite = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Only the business owner can create team invites."
+    );
+  }
+  const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  if (plan === "solo") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Solo plan is owner only. Upgrade to Studio or Shop to invite team members."
+    );
+  }
+  const memberCount = await countUsersForTenant(tenantId);
+  const maxSeats = maxSeatsForPlanNormalized(plan);
+  if (memberCount >= maxSeats) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      plan === "studio"
+        ? "Studio plan allows up to 5 team members."
+        : "Team member limit reached for this plan."
     );
   }
   const token = crypto.randomBytes(32).toString("hex");
@@ -958,19 +996,52 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
     return { ok: true, tenantId, alreadyMember: true };
   }
 
+  const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  if (plan === "solo") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is on the Solo plan (owner only) and cannot add team members."
+    );
+  }
+  const memberCount = await countUsersForTenant(tenantId);
+  const maxSeats = maxSeatsForPlanNormalized(plan);
+  if (memberCount >= maxSeats) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      plan === "studio"
+        ? "Studio plan allows up to 5 team members."
+        : "Team member limit reached for this plan."
+    );
+  }
+
   const slug = tenant.slug || "";
-  const displayName = tenant.displayName || tenant.businessName || "";
+  const tenantBusinessLabel = tenant.displayName || tenant.businessName || "";
   const industry = tenant.industry || "custom";
-  const subscriptionPlan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  const subscriptionPlan = plan;
   const email =
     (context.auth.token && context.auth.token.email) || userData.email || "";
-  const tokenName =
-    (context.auth.token && context.auth.token.name) ||
-    (email ? email.split("@")[0] : "") ||
-    "Team member";
-  const nameParts = tokenName.trim().split(/\s+/);
-  const defaultFirst = nameParts[0] || "Team";
-  const defaultLast = nameParts.slice(1).join(" ") || "Member";
+
+  const rawJoinFirst = ((data && data.firstName) || "").toString().trim().slice(0, 80);
+  const rawJoinLast = ((data && data.lastName) || "").toString().trim().slice(0, 80);
+  const rawJoinPhone = ((data && data.phone) || "").toString().trim().slice(0, 40);
+  const phoneDigits = rawJoinPhone.replace(/\D/g, "");
+  if (!rawJoinFirst || !rawJoinLast || !rawJoinPhone) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "First name, last name, and phone are required."
+    );
+  }
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Enter a valid phone number (at least 10 digits)."
+    );
+  }
+
+  const firstName = rawJoinFirst;
+  const lastName = rawJoinLast;
+  const personName = `${rawJoinFirst} ${rawJoinLast}`.trim();
+  const personDisplay = personName;
 
   const defaultAvailability = {
     timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
@@ -998,28 +1069,26 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
       usedAt: admin.firestore.FieldValue.serverTimestamp(),
       usedByUid: uid,
     });
-    tx.set(
-      userRef,
-      {
-        tenantId,
-        tenantSlug: slug,
-        role: "staff",
-        business: displayName,
-        industry,
-        subscriptionPlan,
-        subscriptionStatus: userData.subscriptionStatus || "active",
-        email,
-        firstName: userData.firstName || defaultFirst,
-        lastName: userData.lastName || defaultLast,
-        displayName: userData.displayName || tokenName.trim(),
-        name: userData.name || tokenName.trim(),
-        profilePhotoUrl: userData.profilePhotoUrl || "",
-        availability: userData.availability || defaultAvailability,
-        workflow: userData.workflow || defaultWorkflow,
-        createdAt: userData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const userPatch = {
+      tenantId,
+      tenantSlug: slug,
+      role: "staff",
+      business: tenantBusinessLabel,
+      industry,
+      subscriptionPlan,
+      subscriptionStatus: userData.subscriptionStatus || "active",
+      email,
+      firstName,
+      lastName,
+      displayName: personDisplay,
+      name: personName,
+      phone: rawJoinPhone,
+      profilePhotoUrl: userData.profilePhotoUrl || "",
+      availability: userData.availability || defaultAvailability,
+      workflow: userData.workflow || defaultWorkflow,
+      createdAt: userData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    };
+    tx.set(userRef, userPatch, { merge: true });
   });
 
   return { ok: true, tenantId };

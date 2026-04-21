@@ -31,9 +31,34 @@
       border: 1px solid #d1d1d6;
       border-radius: 10px;
       font-size: 1rem;
-      margin-bottom: 14px;
     }
     input:focus { outline: none; border-color: #007aff; }
+    #lastName { text-transform: none; }
+    .field-margin { margin-bottom: 14px; }
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .input-wrap input {
+      flex: 1;
+      min-width: 0;
+      padding-right: 44px;
+    }
+    .toggle-visibility {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      padding: 8px;
+      cursor: pointer;
+      color: #636366;
+      line-height: 0;
+      border-radius: 8px;
+    }
+    .toggle-visibility:active { background: #e5e5ea; }
     .btn {
       width: 100%;
       padding: 14px;
@@ -46,7 +71,6 @@
     }
     .btn-primary { background: #007aff; color: #fff; }
     .btn-primary:disabled { background: #aeaeb2; cursor: not-allowed; }
-    .btn-secondary { background: #e5e5ea; color: #1c1c1e; margin-top: 10px; }
     .err { color: #ff3b30; font-size: 0.85rem; margin-top: 8px; }
     .ok { color: #34c759; font-size: 0.95rem; margin-top: 12px; font-weight: 500; }
     .muted { font-size: 0.8rem; color: #8e8e93; margin-top: 16px; }
@@ -55,28 +79,53 @@
 <body>
   <div class="card" id="app">
     <h1 id="title">Join team</h1>
-    <p class="sub" id="subtitle">Sign in or create an account to accept this invite.</p>
+    <p class="sub" id="subtitle">Create your account to accept this invite.</p>
     <div id="formBlock">
+      <label for="firstName">First name</label>
+      <input class="field-margin" id="firstName" type="text" autocomplete="given-name" placeholder="First name" />
+      <label for="lastName">Last name</label>
+      <input class="field-margin" id="lastName" type="text" autocomplete="family-name" autocapitalize="words" placeholder="Last name" />
+      <label for="phone">Phone</label>
+      <input class="field-margin" id="phone" type="tel" autocomplete="tel" inputmode="numeric" placeholder="(555) 123-4567" maxlength="14" />
       <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="username" placeholder="you@example.com" />
+      <input class="field-margin" id="email" type="email" autocomplete="username" placeholder="you@example.com" />
       <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" />
-      <button type="button" class="btn btn-primary" id="btnSignIn">Sign in &amp; join</button>
-      <button type="button" class="btn btn-secondary" id="btnSignUp">Create account &amp; join</button>
+      <div class="input-wrap field-margin">
+        <input id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" />
+        <button type="button" class="toggle-visibility" id="togglePassword" aria-label="Show password" title="Show password">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      <label for="password2">Confirm password</label>
+      <div class="input-wrap field-margin">
+        <input id="password2" type="password" autocomplete="new-password" placeholder="Re-enter password" />
+        <button type="button" class="toggle-visibility" id="togglePassword2" aria-label="Show confirm password" title="Show password">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      <button type="button" class="btn btn-primary" id="btnCreateAccount">Create account</button>
       <div class="err" id="errMsg" style="display:none;"></div>
     </div>
     <div id="successBlock" style="display:none;">
-      <p class="ok" id="successText">You’re on the team. Open the GetBookKing admin app to continue.</p>
-      <p class="muted">You can close this tab.</p>
+      <p class="ok" id="successText">You’re on the team. Opening the app…</p>
+      <p class="muted">If nothing happens, install GetBookKing from the App Store.</p>
     </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
-  <script src="/js/firebase-config.js"></script>
+  <!-- Always load config from Firebase Hosting origin (works on join.*, apex /join, and web.app). -->
+  <script src="https://test-app-96812.web.app/js/firebase-config.js"></script>
   <script>
     (function () {
+      /** After join: App Store or marketing URL (replace with your App Store link when published). */
+      var APP_REDIRECT_URL = "https://getbookking.com";
+
       var params = new URLSearchParams(window.location.search);
       var token = (params.get("t") || "").trim().toLowerCase();
       var errEl = document.getElementById("errMsg");
@@ -92,11 +141,61 @@
         errEl.textContent = "";
       }
 
+      /** Title-case each word (e.g. van der berg → Van Der Berg). */
+      function titleCaseWords(s) {
+        return s
+          .trim()
+          .split(/\s+/)
+          .map(function (w) {
+            return w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : "";
+          })
+          .filter(Boolean)
+          .join(" ");
+      }
+
+      function phoneDigits(s) {
+        return (s || "").replace(/\D/g, "");
+      }
+
+      /** US display (xxx) xxx-xxxx — first 10 digits. */
+      function formatPhoneUS(el) {
+        var d = phoneDigits(el.value).slice(0, 10);
+        var out = "";
+        if (d.length === 0) out = "";
+        else if (d.length <= 3) out = "(" + d;
+        else if (d.length <= 6) out = "(" + d.slice(0, 3) + ") " + d.slice(3);
+        else out = "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6);
+        el.value = out;
+      }
+
+      function isValidEmail(email) {
+        if (!email || email.indexOf("@") < 1) return false;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      }
+
+      function wirePasswordToggle(btnId, inputId) {
+        var btn = document.getElementById(btnId);
+        var input = document.getElementById(inputId);
+        if (!btn || !input) return;
+        btn.addEventListener("click", function () {
+          var show = input.type === "password";
+          input.type = show ? "text" : "password";
+          btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+          btn.setAttribute("title", show ? "Hide password" : "Show password");
+        });
+      }
+
       if (!/^[a-f0-9]{64}$/.test(token)) {
         document.getElementById("subtitle").textContent = "This invite link is missing or invalid.";
         formBlock.style.display = "none";
         return;
       }
+
+      document.getElementById("phone").addEventListener("input", function () {
+        formatPhoneUS(this);
+      });
+      wirePasswordToggle("togglePassword", "password");
+      wirePasswordToggle("togglePassword2", "password2");
 
       firebase.initializeApp(firebaseConfig);
       var auth = firebase.auth();
@@ -109,7 +208,7 @@
           var name = (res.data && res.data.businessName) || "this business";
           document.getElementById("title").textContent = "Join " + name;
           document.getElementById("subtitle").textContent =
-            "Sign in or create an account to join " + name + " on GetBookKing.";
+            "All fields are required. Create your account to join " + name + " on GetBookKing.";
         })
         .catch(function () {
           document.getElementById("subtitle").textContent =
@@ -117,12 +216,32 @@
           formBlock.style.display = "none";
         });
 
+      function joinPayload() {
+        return {
+          token: token,
+          firstName: document.getElementById("firstName").value.trim(),
+          lastName: document.getElementById("lastName").value.trim(),
+          phone: document.getElementById("phone").value.trim(),
+        };
+      }
+
       function afterAuth() {
         clearErr();
-        return accept({ token: token })
+        var payload = joinPayload();
+        var u = auth.currentUser;
+        var fn = payload.firstName;
+        var ln = payload.lastName;
+        return u
+          .updateProfile({ displayName: fn + " " + ln })
+          .then(function () {
+            return accept(payload);
+          })
           .then(function () {
             formBlock.style.display = "none";
             successBlock.style.display = "block";
+            setTimeout(function () {
+              window.location.href = APP_REDIRECT_URL;
+            }, 1200);
           })
           .catch(function (e) {
             var msg =
@@ -133,34 +252,48 @@
           });
       }
 
-      document.getElementById("btnSignIn").onclick = function () {
+      document.getElementById("btnCreateAccount").onclick = function () {
         clearErr();
-        var email = document.getElementById("email").value.trim();
-        var password = document.getElementById("password").value;
-        if (!email || !password) {
-          showErr("Enter email and password.");
+        var fn = document.getElementById("firstName").value.trim();
+        var lnRaw = document.getElementById("lastName").value.trim();
+        var ln = titleCaseWords(lnRaw);
+        document.getElementById("lastName").value = ln;
+
+        if (!fn) {
+          showErr("Enter your first name.");
           return;
         }
-        auth
-          .signInWithEmailAndPassword(email, password)
-          .then(afterAuth)
-          .catch(function (e) {
-            showErr(e.message || "Sign-in failed.");
-          });
-      };
-
-      document.getElementById("btnSignUp").onclick = function () {
-        clearErr();
+        if (!ln) {
+          showErr("Enter your last name.");
+          return;
+        }
+        var phEl = document.getElementById("phone");
+        formatPhoneUS(phEl);
+        var pd = phoneDigits(phEl.value);
+        if (pd.length !== 10) {
+          showErr("Enter a complete US phone number: (555) 123-4567.");
+          return;
+        }
         var email = document.getElementById("email").value.trim();
+        if (!isValidEmail(email)) {
+          showErr("Enter a valid email with @ and a domain (e.g. you@example.com).");
+          return;
+        }
         var password = document.getElementById("password").value;
-        if (!email || !password) {
-          showErr("Enter email and password.");
+        var password2 = document.getElementById("password2").value;
+        if (!password) {
+          showErr("Enter a password.");
           return;
         }
         if (password.length < 6) {
           showErr("Password must be at least 6 characters.");
           return;
         }
+        if (password !== password2) {
+          showErr("Passwords do not match.");
+          return;
+        }
+
         auth
           .createUserWithEmailAndPassword(email, password)
           .then(afterAuth)

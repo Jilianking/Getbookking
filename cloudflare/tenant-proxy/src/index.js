@@ -4,17 +4,20 @@
  * brandonsmith.getbookking.com/gallery  →  https://test-app-96812.web.app/brandonsmith/gallery
  * brandonsmith.getbookking.com/js/...   →  https://test-app-96812.web.app/js/...  (no tenant prefix)
  *
- * Deploy: cd cloudflare/tenant-proxy && npx wrangler deploy
- * Route in Cloudflare: *.getbookking.com/* (Workers). Keep apex + www on marketing site.
+ * Team invites:
+ *   - Apex / www: getbookking.com/join* → Firebase (when apex is proxied through Cloudflare).
+ *   - Recommended: join.getbookking.com/join* (covered by *.getbookking.com/*): same upstream;
+ *     add DNS CNAME `join` (proxied). Add `join.getbookking.com` to Firebase Auth authorized domains.
  *
- * Also in Firebase Console → Authentication → Settings → Authorized domains:
- *   add getbookking.com if missing.
+ * Deploy: cd cloudflare/tenant-proxy && npx wrangler deploy
+ * Routes: see wrangler.toml
  */
 const UPSTREAM = "https://test-app-96812.web.app";
 const TENANT_DOMAIN = "getbookking.com";
 
 const RESERVED = new Set([
   "www",
+  "join", // team invite host join.getbookking.com — not a tenant slug
   "app",
   "api",
   "admin",
@@ -45,16 +48,55 @@ function extractSubdomain(hostname) {
   return sub;
 }
 
+function isApexOrWwwHost(hostname) {
+  const h = hostname.toLowerCase();
+  return h === TENANT_DOMAIN || h === "www." + TENANT_DOMAIN;
+}
+
+function isJoinDedicatedHost(hostname) {
+  return hostname.toLowerCase() === "join." + TENANT_DOMAIN;
+}
+
+/** Team invite page: /join (and static assets under /join/ if any). */
+function isJoinInvitePath(pathname) {
+  let p = pathname || "/";
+  if (!p.startsWith("/")) p = "/" + p;
+  return p === "/join" || p.startsWith("/join/");
+}
+
+function proxyToUpstream(request, pathname, search) {
+  const upstreamUrl = UPSTREAM + pathname + search;
+  return fetch(
+    new Request(upstreamUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: "follow",
+    })
+  );
+}
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+    let pathname = url.pathname || "/";
+    if (!pathname.startsWith("/")) pathname = "/" + pathname;
+
+    if (isApexOrWwwHost(url.hostname) && isJoinInvitePath(pathname)) {
+      return proxyToUpstream(request, pathname, url.search);
+    }
+
+    if (isJoinDedicatedHost(url.hostname)) {
+      if (isJoinInvitePath(pathname) || isStaticPath(pathname)) {
+        return proxyToUpstream(request, pathname, url.search);
+      }
+      return new Response("Not found", { status: 404 });
+    }
+
     const sub = extractSubdomain(url.hostname);
     if (!sub) {
       return fetch(request);
     }
-
-    let pathname = url.pathname || "/";
-    if (!pathname.startsWith("/")) pathname = "/" + pathname;
 
     let upstreamPath;
     if (isStaticPath(pathname)) {
@@ -63,12 +105,6 @@ export default {
       upstreamPath = "/" + encodeURIComponent(sub) + (pathname === "/" ? "" : pathname);
     }
 
-    const upstreamUrl = UPSTREAM + upstreamPath + url.search;
-    return fetch(new Request(upstreamUrl, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      redirect: "follow",
-    }));
+    return proxyToUpstream(request, upstreamPath, url.search);
   },
 };

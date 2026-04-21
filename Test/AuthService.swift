@@ -11,13 +11,13 @@ import FirebaseAuth
 
 /// Subscription plan chosen at sign-up (stored in Firestore; payment later).
 enum SubscriptionPlan: String, CaseIterable {
-    case basic = "basic"
+    case solo = "solo"
     case studio = "studio"
     case shop = "shop"
 
     var displayName: String {
         switch self {
-        case .basic: return "Basic"
+        case .solo: return "Solo"
         case .studio: return "Studio"
         case .shop: return "Shop"
         }
@@ -25,9 +25,23 @@ enum SubscriptionPlan: String, CaseIterable {
 
     var shortDescription: String {
         switch self {
-        case .basic: return "Up to 2 seats"
-        case .studio: return "3–5 seats, team tools"
-        case .shop: return "6+ seats, shop & scale"
+        case .solo: return "1 employee"
+        case .studio: return "2–5 employees"
+        case .shop: return "6+ employees"
+        }
+    }
+
+    /// Solo is owner-only; team invites require Studio or Shop.
+    var allowsTeamInvites: Bool {
+        self != .solo
+    }
+
+    /// Total members (owner + staff) allowed for this plan tier.
+    var maxSeats: Int {
+        switch self {
+        case .solo: return 1
+        case .studio: return 5
+        case .shop: return 500
         }
     }
 
@@ -35,13 +49,13 @@ enum SubscriptionPlan: String, CaseIterable {
     static func normalized(fromFirestore raw: String?) -> SubscriptionPlan {
         let p = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch p {
-        case "solo", "free", "starter": return .basic
+        case "basic", "solo", "free", "starter": return .solo
         case "growth", "pro": return .studio
         case "enterprise": return .shop
-        case SubscriptionPlan.basic.rawValue: return .basic
+        case SubscriptionPlan.solo.rawValue: return .solo
         case SubscriptionPlan.studio.rawValue: return .studio
         case SubscriptionPlan.shop.rawValue: return .shop
-        default: return .basic
+        default: return .solo
         }
     }
 }

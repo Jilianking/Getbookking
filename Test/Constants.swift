@@ -33,9 +33,15 @@ struct Constants {
         static let version = "1.0.0"
     }
 
-    /// Firebase Hosting origin for the booking `web` target (no trailing slash). Used for team invite links.
+    /// Public origin for team invite links: `{bookingWebOrigin}/join?t=…`
+    /// Uses `join.getbookking.com` so Cloudflare `*.getbookking.com` worker can proxy to Firebase without apex DNS.
+    /// Add DNS: CNAME `join` → zone apex, **proxied** (orange cloud). Firebase Auth → authorized domains: `join.getbookking.com`.
     struct Hosting {
-        static let bookingWebOrigin = "https://test-app-96812.web.app"
+        static let bookingWebOrigin = "https://join.getbookking.com"
+        /// Marketing Hosting (`web/marketing`; Firebase target `marketing`). Use `https://test-app-96812-marketing.web.app` if testing without a custom domain on apex.
+        static let marketingWebOrigin = "https://getbookking.com"
+        /// Public sign-up wizard (`signup.html`).
+        static var marketingSignUpURL: String { "\(marketingWebOrigin)/signup.html" }
     }
 
     /// Region for callable Cloud Functions (must match `firebase functions:log` / console and `web/join.html`).

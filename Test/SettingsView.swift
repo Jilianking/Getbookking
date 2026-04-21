@@ -7,6 +7,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import FirebaseAuth
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -24,36 +25,38 @@ struct SettingsView: View {
         NavigationView {
             List {
                 Section(header: Text("Account")) {
-                    NavigationLink {
-                        AccountSettingsDetailView(viewModel: viewModel)
-                            .environmentObject(authViewModel)
-                    } label: {
-                        if authViewModel.isDemoMode {
+                    if authViewModel.isDemoMode {
+                        HStack {
+                            Image(systemName: "person.crop.circle")
+                            Text("Demo mode")
+                                .foregroundColor(.secondary)
+                        }
+                    } else if let email = authViewModel.currentUserEmail {
+                        NavigationLink {
+                            AccountSettingsDetailView(viewModel: viewModel)
+                                .environmentObject(authViewModel)
+                        } label: {
                             HStack {
                                 Image(systemName: "person.crop.circle")
-                                Text("Demo mode")
-                                    .foregroundColor(.secondary)
-                            }
-                        } else if let email = authViewModel.currentUserEmail {
-                            HStack {
-                                Image(systemName: "person.crop.circle")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(
                                         viewModel.accountDisplayName.isEmpty
-                                        ? (authViewModel.currentUserDisplayName ?? "User")
-                                        : viewModel.accountDisplayName
+                                            ? (authViewModel.currentUserDisplayName ?? "Account")
+                                            : viewModel.accountDisplayName
                                     )
                                     .font(.subheadline.weight(.medium))
                                     Text(email)
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
-                        } else {
-                            HStack {
-                                Image(systemName: "person.crop.circle")
-                                Text("Account")
-                            }
+                        }
+                    } else {
+                        HStack {
+                            Image(systemName: "person.crop.circle")
+                            Text("Account")
                         }
                     }
                     Button(action: { showingLogoutAlert = true }) {
@@ -65,21 +68,9 @@ struct SettingsView: View {
                     }
                 }
 
-                if !authViewModel.isDemoMode && viewModel.hasProfile, viewModel.tenantId != nil {
-                    Section(header: Text("Plan")) {
-                        HStack {
-                            Text("Current plan")
-                            Spacer()
-                            Text(viewModel.tenantSubscriptionPlan.displayName)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(viewModel.tenantSubscriptionPlan.shortDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
+                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner
+                    && viewModel.tenantSubscriptionPlan.allowsTeamInvites
+                {
                     Section(
                         header: Text("Team invites"),
                         footer: Text("Creates a single-use link (expires in 7 days). Anyone with the link can sign up or sign in once to join as staff.")
@@ -107,11 +98,22 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Invite link ready")
                                     .font(.subheadline.weight(.semibold))
-                                Text(url.absoluteString)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(3)
-                                    .truncationMode(.middle)
+                                Link(destination: url) {
+                                    Text(url.absoluteString)
+                                        .font(.caption)
+                                        .foregroundColor(.accentColor)
+                                        .multilineTextAlignment(.leading)
+                                        .lineLimit(4)
+                                        .truncationMode(.middle)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                Button(action: {
+                                    UIPasteboard.general.string = url.absoluteString
+                                }) {
+                                    Label("Copy link", systemImage: "doc.on.doc")
+                                        .font(.subheadline.weight(.medium))
+                                }
                                 ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on GetBookKing.")) {
                                     Label("Share link", systemImage: "square.and.arrow.up")
                                         .font(.body.weight(.medium))
@@ -121,7 +123,19 @@ struct SettingsView: View {
                             .padding(.vertical, 4)
                         }
                     }
+                }
 
+                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner
+                    && !viewModel.tenantSubscriptionPlan.allowsTeamInvites
+                {
+                    Section(header: Text("Team invites")) {
+                        Text("Solo is owner only. Upgrade to Studio or Shop to invite team members.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
                     Section(
                         header: Text("Owner settings"),
                         footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
@@ -300,42 +314,35 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Account detail (profile photo)
+// MARK: - Account detail (name, plan, profile photo)
 private struct AccountSettingsDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
     @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var profilePhotoCropItem: SingleImageCropSheetItem?
 
-    private var accountName: String {
-        viewModel.accountDisplayName.isEmpty
-            ? (authViewModel.currentUserDisplayName ?? "User")
-            : viewModel.accountDisplayName
-    }
-
     var body: some View {
         List {
             if authViewModel.isDemoMode {
                 Section {
-                    Text("Profile photo isn’t available in demo mode.")
+                    Text("Account details aren’t available in demo mode.")
                         .foregroundStyle(.secondary)
                 }
             } else {
                 if let email = authViewModel.currentUserEmail {
                     Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(accountName)
-                                .font(.headline)
-                            Text(email)
-                                .font(.subheadline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Signed in as")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Text(email)
+                                .font(.body)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
-                        header: Text("Profile photo"),
                         footer: Text("Used for your account profile. Website logo is managed in Web Page Design. \(UploadImageAdvice.profile)")
                             .font(.caption2)
                     ) {
@@ -424,9 +431,49 @@ private struct AccountSettingsDetailView: View {
                         }
                         .padding(.vertical, 2)
                     }
-                } else if authViewModel.currentUserEmail != nil {
+                }
+                if viewModel.hasProfile {
+                    Section(header: Text("Name")) {
+                        TextField("Full name", text: $viewModel.accountFullNameDraft)
+                            .textContentType(.name)
+                            .submitLabel(.done)
+                            .disabled(viewModel.isSavingAccountName)
+                            .onSubmit {
+                                let trimmed = viewModel.accountFullNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let current = viewModel.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty, trimmed != current else { return }
+                                Task {
+                                    await viewModel.saveAccountFullName()
+                                    if let name = Auth.auth().currentUser?.displayName {
+                                        await MainActor.run {
+                                            authViewModel.currentUserDisplayName = name
+                                        }
+                                    }
+                                }
+                            }
+                        if viewModel.isSavingAccountName {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.85)
+                                Text("Saving…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                if viewModel.hasProfile, viewModel.tenantId != nil {
+                    Section(header: Text("Plan")) {
+                        HStack {
+                            Text("Current plan")
+                            Spacer()
+                            Text(viewModel.tenantSubscriptionPlan.displayName)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else if authViewModel.currentUserEmail != nil && !viewModel.hasProfile {
                     Section {
-                        Text("Your business profile is still loading. Try again in a moment.")
+                        Text("Your business profile is still loading. Pull to refresh on Settings, or try again in a moment.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

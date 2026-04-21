@@ -28,8 +28,12 @@ class SettingsViewModel: ObservableObject {
     @Published var profilePhotoUrl: String = ""
     @Published var isUploadingLogo = false
     @Published var accountDisplayName: String = ""
-    /// Resolved from `tenants/{id}.subscriptionPlan` (same source as web); defaults to Basic.
-    @Published var tenantSubscriptionPlan: SubscriptionPlan = .basic
+    /// Editable full name (Settings → Account); persisted to Firestore + Firebase Auth display name.
+    @Published var accountFullNameDraft: String = ""
+    @Published var isSavingAccountName = false
+    @Published var accountNameSaveSuccess = false
+    /// Resolved from `tenants/{id}.subscriptionPlan` (same source as web); defaults to Solo.
+    @Published var tenantSubscriptionPlan: SubscriptionPlan = .solo
     /// True when the signed-in user is `tenants.ownerUid`.
     @Published var isTenantOwner: Bool = false
     /// Shareable team invite URL (owner creates via Cloud Function).
@@ -47,6 +51,26 @@ class SettingsViewModel: ObservableObject {
 
     var sortedDaysOpen: [Int] {
         Array(daysOpen).sorted()
+    }
+
+    /// Human-readable name for headers (avoids legacy staff placeholder last name `Member`).
+    static func accountDisplayString(from profile: ProviderProfile) -> String {
+        let fn = profile.firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ln = profile.lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let composed = "\(fn) \(ln)".trimmingCharacters(in: .whitespacesAndNewlines)
+        if !composed.isEmpty {
+            if ln.lowercased() == "member", !fn.isEmpty { return fn }
+            return composed
+        }
+        let rawName = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if rawName.isEmpty {
+            return profile.business.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return rawName.replacingOccurrences(
+            of: #"\s+Member$"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
     }
 
     func hasInvalidSlot(_ slot: TimeSlot) -> Bool {
@@ -77,7 +101,8 @@ class SettingsViewModel: ObservableObject {
                 selectedIndustry = BookingTemplate.custom.rawValue
                 profilePhotoUrl = ""
                 accountDisplayName = "Demo User"
-                tenantSubscriptionPlan = .basic
+                accountFullNameDraft = "Demo User"
+                tenantSubscriptionPlan = .solo
                 isTenantOwner = false
                 teamInviteShareURL = nil
                 teamInviteError = nil
@@ -94,7 +119,7 @@ class SettingsViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             var industry: String?
             var tid: String?
-            var planResolved = SubscriptionPlan.basic
+            var planResolved = SubscriptionPlan.solo
             var ownerMatch = false
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
@@ -108,14 +133,15 @@ class SettingsViewModel: ObservableObject {
             }
             await MainActor.run {
                 if let p = profile {
-                    let fullName = "\(p.firstName) \(p.lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
                     hasProfile = true
                     tenantId = tid
                     tenantSubscriptionPlan = planResolved
                     isTenantOwner = ownerMatch
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
                     profilePhotoUrl = p.profilePhotoUrl
-                    accountDisplayName = !fullName.isEmpty ? fullName : (!p.name.isEmpty ? p.name : p.business)
+                    let shown = Self.accountDisplayString(from: p)
+                    accountDisplayName = shown
+                    accountFullNameDraft = shown
                     confirmationType = p.workflow.confirmationType
                     responseTimeHours = p.workflow.responseTimeHours
                     depositAmount = p.workflow.depositAmount
@@ -129,11 +155,12 @@ class SettingsViewModel: ObservableObject {
                 } else {
                     hasProfile = false
                     tenantId = nil
-                    tenantSubscriptionPlan = .basic
+                    tenantSubscriptionPlan = .solo
                     isTenantOwner = false
                     selectedIndustry = BookingTemplate.custom.rawValue
                     profilePhotoUrl = ""
                     accountDisplayName = ""
+                    accountFullNameDraft = ""
                 }
                 isLoading = false
             }
@@ -172,6 +199,47 @@ class SettingsViewModel: ObservableObject {
             await MainActor.run { profilePhotoUrl = "" }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func saveAccountFullName() async {
+        guard let user = Auth.auth().currentUser else { return }
+        let uid = user.uid
+        let trimmed = accountFullNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await MainActor.run {
+            isSavingAccountName = true
+            errorMessage = nil
+            accountNameSaveSuccess = false
+        }
+        do {
+            let parts = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            let firstName = parts.first ?? ""
+            let lastName = parts.dropFirst().joined(separator: " ")
+            try await firebaseService.updateProviderProfile(uid: uid, updates: [
+                "firstName": firstName,
+                "lastName": lastName,
+                "name": trimmed,
+                "displayName": trimmed,
+            ])
+            let change = user.createProfileChangeRequest()
+            change.displayName = trimmed
+            try await change.commitChanges()
+            await MainActor.run {
+                accountDisplayName = trimmed
+                accountFullNameDraft = trimmed
+                isSavingAccountName = false
+                accountNameSaveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    accountNameSaveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isSavingAccountName = false
+            }
         }
     }
 

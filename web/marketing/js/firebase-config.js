@@ -2,6 +2,14 @@
  * Firebase config for web booking page.
  * Uses compat SDK - loaded via script tags in index.html.
  */
+/**
+ * Stripe publishable key (pk_test_… / pk_live_…). Used for embedded checkout on signup.html if the
+ * createProviderSubscriptionCheckout callable does not return publishableKey (set STRIPE_PUBLISHABLE_KEY on Functions).
+ * Safe to expose in the browser; pair with secret key only on the server.
+ */
+window.stripePublishableKey =
+  "pk_test_51TP6NMCeE17fSOZIRoGV8tDxkkL70jTwci1hWWj3fXnbBr6ShlFddU6gexd3XunYhd7JeOejslpDASXBvZj0iZ8f00OMYp9uSD";
+
 const firebaseConfig = {
   apiKey: "AIzaSyB9DwVkkCM-0cpYhkWRnTfScHIRNIDyJ3g",
   authDomain: "test-app-96812.firebaseapp.com",

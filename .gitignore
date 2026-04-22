@@ -49,3 +49,11 @@ fastlane/test_output
 *.xcscmblueprint
 *.swp
 
+# Firebase / Cloud Functions — local params (e.g. firebase deploy writes .env.<projectId>)
+functions/.env
+functions/.env.*
+
+# Firebase CLI debug logs (can contain sensitive request metadata)
+firebase-debug.log
+**/firebase-debug.log
+

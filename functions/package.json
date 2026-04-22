@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Cloud Functions for GetBookKing payments (Stripe Connect)",
+  "description": "Cloud Functions for Get Bookking payments (Stripe Connect)",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

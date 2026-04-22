@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign Up — GetBookKing</title>
+  <title>Sign Up — Get Bookking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
@@ -177,6 +177,200 @@
 
     .field input::placeholder {
       color: var(--text-tertiary);
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .password-wrap {
+      position: relative;
+      display: block;
+    }
+
+    .password-wrap > input {
+      padding-right: 52px;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--brand-warm);
+      cursor: pointer;
+      padding: 8px 4px;
+      line-height: 1;
+    }
+
+    .password-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .password-reqs {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      line-height: 1.55;
+    }
+
+    .password-reqs li {
+      padding-left: 1.1em;
+      text-indent: -1.1em;
+    }
+
+    .password-reqs li::before {
+      content: '○ ';
+      color: var(--border-strong);
+    }
+
+    .password-reqs li.met {
+      color: var(--text-secondary);
+    }
+
+    .password-reqs li.met::before {
+      content: '✓ ';
+      color: #2d7a4d;
+    }
+
+    .password-mismatch-hint {
+      font-size: 12px;
+      color: #C0392B;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .account-signin-email {
+      margin: 0 0 18px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .account-signin-email strong {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .checkout-summary {
+      margin: 0 0 20px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--brand-offwhite);
+    }
+
+    .checkout-plan-line {
+      font-size: 15px;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      line-height: 1.45;
+    }
+
+    .checkout-bullets {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .checkout-bullets li { margin-bottom: 8px; }
+    .checkout-bullets li:last-child { margin-bottom: 0; }
+
+    .checkout-stripe-note {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin: -8px 0 16px;
+      line-height: 1.45;
+    }
+
+    .checkout-checkbox-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+
+    .checkout-checkbox-label input {
+      margin-top: 3px;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--brand-dark);
+    }
+
+    .checkout-checkbox-label a {
+      color: var(--brand-warm);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .checkout-support {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 8px;
+    }
+
+    .checkout-support a {
+      color: var(--brand-warm);
+    }
+
+    .checkout-embedded-wrap {
+      display: none;
+      margin: 0 0 20px;
+    }
+
+    .checkout-embedded-wrap.visible {
+      display: block;
+    }
+
+    .checkout-embedded-loading {
+      padding: 28px 16px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .checkout-embedded-loading .spinner {
+      margin: 0 auto 12px;
+      display: block;
+      border-color: var(--brand-warm);
+      border-top-color: transparent;
+    }
+
+    .checkout-embedded-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    .checkout-embedded-label span {
+      font-weight: 400;
+      color: var(--text-tertiary);
+    }
+
+    #checkoutEmbedded {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      min-height: 120px;
     }
 
     /* ── TEMPLATE PICKER ── */
@@ -396,10 +590,10 @@
 
   <!-- HEADER -->
   <header class="signup-header">
-    <a href="index.html">GetBookKing</a>
-    <span class="step-indicator" id="stepIndicator">Step 1 of 7</span>
+    <a href="index.html">Get Bookking</a>
+    <span class="step-indicator" id="stepIndicator">Step 1 of 6</span>
   </header>
-  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 14.28%"></div></div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 16.67%"></div></div>
 
   <!-- CARD -->
   <div class="signup-wrap">
@@ -407,7 +601,7 @@
 
       <!-- STEP 1 — team size (not subscription tier; values solo/team for backend) -->
       <div class="step-panel active" id="step1">
-        <h2>How will you use GetBookKing?</h2>
+        <h2>How will you use Get Bookking?</h2>
         <p class="subtitle">We'll tailor the experience to fit your setup.</p>
         <div class="choice-grid">
           <button class="choice-btn" data-value="solo" onclick="pickChoice(this, 'teamSize')">
@@ -427,7 +621,7 @@
       <!-- STEP 2 — Industry -->
       <div class="step-panel" id="step2">
         <h2>What type of business?</h2>
-        <p class="subtitle">This helps us pick your default services and template.</p>
+        <p class="subtitle">This helps us pick your default services and booking form.</p>
         <div class="choice-grid">
           <button class="choice-btn" data-value="barber" onclick="pickIndustry(this)">
             <div class="choice-label">Barbershop</div>
@@ -459,10 +653,45 @@
       <!-- STEP 3 — About you -->
       <div class="step-panel" id="step3">
         <h2>Tell us about you</h2>
-        <p class="subtitle">Your name appears on your profile and booking site.</p>
+        <p class="subtitle">Your name and phone appear on your profile and booking site. Add email, phone, and a password — we only ask once.</p>
         <div class="field">
-          <label for="fullName">Full name</label>
-          <input id="fullName" type="text" placeholder="Brandon Smith" oninput="validateAboutYou()">
+          <label for="firstName">First name</label>
+          <input id="firstName" type="text" placeholder="Brandon" autocapitalize="words" autocorrect="off" oninput="validateAboutYou()" onblur="titleCaseWordsBlur(this)">
+        </div>
+        <div class="field">
+          <label for="lastName">Last name</label>
+          <input id="lastName" type="text" placeholder="Smith" autocapitalize="words" autocorrect="off" oninput="validateAboutYou()" onblur="titleCaseWordsBlur(this)">
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" autocomplete="email" oninput="validateAboutYou()">
+          <p class="field-hint">Used to sign in to the app and web, and for receipts.</p>
+        </div>
+        <div class="field">
+          <label for="bizPhone">Phone number</label>
+          <input id="bizPhone" type="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="validateAboutYou()">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="password-wrap">
+            <input id="password" type="password" placeholder="8+ characters" autocomplete="new-password" oninput="onPasswordFieldsInput()">
+            <button type="button" class="password-toggle" id="passwordToggle" onclick="togglePasswordVisibility('password', 'passwordToggle')" aria-label="Show password">Show</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="passwordConfirm">Confirm password</label>
+          <div class="password-wrap">
+            <input id="passwordConfirm" type="password" placeholder="Re-enter password" autocomplete="new-password" oninput="onPasswordFieldsInput()">
+            <button type="button" class="password-toggle" id="passwordConfirmToggle" onclick="togglePasswordVisibility('passwordConfirm', 'passwordConfirmToggle')" aria-label="Show confirm password">Show</button>
+          </div>
+          <p class="password-mismatch-hint" id="passwordMismatchHint">Passwords do not match.</p>
+          <ul class="password-reqs" id="passwordReqsList" aria-live="polite">
+            <li id="reqLen">At least 8 characters</li>
+            <li id="reqUpper">One uppercase letter</li>
+            <li id="reqLower">One lowercase letter</li>
+            <li id="reqDigit">One number</li>
+          </ul>
+          <p class="field-hint" style="margin-top:4px">Symbols (!@#…) are optional — add one if you like.</p>
         </div>
         <div class="btn-row">
           <button class="btn-back" onclick="goTo(2)">Back</button>
@@ -476,15 +705,17 @@
         <p class="subtitle">We'll use this to set up your booking site.</p>
         <div class="field">
           <label for="bizName">Business name</label>
-          <input id="bizName" type="text" placeholder="e.g. Brandon Smith Barbershop" oninput="validateBusinessStep()">
+          <input id="bizName" type="text" placeholder="e.g. Brandon Smith Barbershop" autocapitalize="words" autocorrect="off" oninput="validateBusinessStep()" onblur="titleCaseWordsBlur(this)">
         </div>
         <div class="field">
-          <label for="bizCity">City / area</label>
-          <input id="bizCity" type="text" placeholder="e.g. St. Petersburg, FL" oninput="validateBusinessStep()">
+          <label for="bizCity">City</label>
+          <input id="bizCity" type="text" placeholder="e.g. St. Petersburg" autocapitalize="words" autocorrect="off" oninput="validateBusinessStep()" onblur="titleCaseWordsBlur(this)">
         </div>
         <div class="field">
-          <label for="bizPhone">Phone number</label>
-          <input id="bizPhone" type="tel" placeholder="(555) 123-4567" oninput="validateBusinessStep()">
+          <label for="bizState">State</label>
+          <select id="bizState" onchange="validateBusinessStep()">
+            <option value="">Select state</option>
+          </select>
         </div>
         <div class="btn-row">
           <button class="btn-back" onclick="goTo(3)">Back</button>
@@ -492,39 +723,10 @@
         </div>
       </div>
 
-      <!-- STEP 5 — Template (skippable) -->
+      <!-- STEP 5 — Plan -->
       <div class="step-panel" id="step5">
-        <h2>Pick a look</h2>
-        <p class="subtitle">Optional — you can change this anytime. Skip to use the default for your industry.</p>
-        <div class="tpl-pick-grid">
-          <div class="tpl-pick" data-value="obsidian" onclick="pickTpl(this)">
-            <div class="tpl-preview prev-obsidian"><span class="tpl-name">Obsidian</span></div>
-            <div class="tpl-pick-label">Dark editorial</div>
-          </div>
-          <div class="tpl-pick" data-value="blanc" onclick="pickTpl(this)">
-            <div class="tpl-preview prev-blanc"><span class="tpl-name">Blanc</span></div>
-            <div class="tpl-pick-label">Soft luxury</div>
-          </div>
-          <div class="tpl-pick" data-value="ember" onclick="pickTpl(this)">
-            <div class="tpl-preview prev-ember"><span class="tpl-name">EMBER</span></div>
-            <div class="tpl-pick-label">Brutalist</div>
-          </div>
-          <div class="tpl-pick selected" data-value="portfolio" onclick="pickTpl(this)">
-            <div class="tpl-preview prev-portfolio"><span class="tpl-name">Portfolio</span></div>
-            <div class="tpl-pick-label">Classic for your industry</div>
-          </div>
-        </div>
-        <div class="btn-row">
-          <button class="btn-back" onclick="goTo(4)">Back</button>
-          <button type="button" class="btn-back" onclick="skipTemplate()">Skip for now</button>
-          <button class="btn-next" id="btn5" onclick="goTo(6)">Continue</button>
-        </div>
-      </div>
-
-      <!-- STEP 6 — Plan -->
-      <div class="step-panel" id="step6">
         <h2>Choose your plan</h2>
-        <p class="subtitle">Start with a free month on any plan. No credit card needed.</p>
+        <p class="subtitle">You’ve already entered your details. Next, you’ll confirm your plan and enter payment on the last step — 30-day trial, then billing.</p>
         <div class="plan-pick-grid">
           <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
             <div class="plan-pick-left">
@@ -549,27 +751,38 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn-back" onclick="goTo(5)">Back</button>
-          <button class="btn-next" id="btn6" disabled onclick="goTo(7)">Continue</button>
+          <button class="btn-back" onclick="goTo(4)">Back</button>
+          <button class="btn-next" id="btn6" disabled onclick="goTo(6)">Continue</button>
         </div>
       </div>
 
-      <!-- STEP 7 — Account -->
-      <div class="step-panel" id="step7">
-        <h2>Create your account</h2>
-        <p class="subtitle">Email and password — you'll use this to sign in on the app and web.</p>
-        <div class="field">
-          <label for="email">Email</label>
-          <input id="email" type="email" placeholder="you@example.com" oninput="validateAccountStep()">
+      <!-- STEP 6 — Account & Stripe checkout -->
+      <div class="step-panel" id="step6">
+        <h2>Review & secure checkout</h2>
+        <p class="subtitle">Check the Terms box below and we’ll load the secure card form on this page (no extra button). Your subscription includes a <strong>30-day free trial</strong>.</p>
+        <div class="checkout-summary" id="checkoutSummary">
+          <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — then <strong id="checkoutPlanPrice">$39</strong>/month after your trial ends.</div>
+          <ul class="checkout-bullets">
+            <li><strong>No charge today</strong> for the subscription price. Your card is kept on file with Stripe; the first plan charge happens when the 30-day trial ends unless you cancel first.</li>
+            <li>Cancel anytime before the trial ends from the app or billing portal to avoid the first subscription charge.</li>
+            <li>Billing is monthly in USD. Applicable taxes may be added at checkout or on your invoice where required.</li>
+            <li>Your bank statement may show <strong>GETBOOKKING</strong> or our payment processor’s name.</li>
+          </ul>
         </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" type="password" placeholder="At least 6 characters" oninput="validateAccountStep()">
+        <p class="checkout-stripe-note">Payments are processed securely by Stripe. Get Bookking does not store your full card number on our servers.</p>
+        <div class="checkout-embedded-wrap" id="checkoutEmbeddedWrap" aria-live="polite">
+          <div class="checkout-embedded-label">Payment details <span>(secured by Stripe)</span></div>
+          <div id="checkoutEmbedded"></div>
         </div>
+        <p class="account-signin-email" id="accountSignInEmail" style="display:none">Account email: <strong id="accountSignInEmailValue"></strong></p>
+        <label class="checkout-checkbox-label">
+          <input type="checkbox" id="agreeTerms" onchange="validateAccountStep()" />
+          <span>I agree to the <a href="terms.html" target="_blank" rel="noopener noreferrer">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <p class="checkout-support">Questions? <a href="mailto:support@getbookking.com">support@getbookking.com</a></p>
         <div class="error-msg" id="errorMsg"></div>
         <div class="btn-row">
-          <button class="btn-back" onclick="goTo(6)">Back</button>
-          <button class="btn-next" id="btn7" disabled onclick="doSignUp()">Create my account</button>
+          <button class="btn-back" onclick="goTo(5)">Back</button>
         </div>
       </div>
 
@@ -594,13 +807,33 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js"></script>
+  <script src="https://js.stripe.com/v3/"></script>
 
   <script>
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const fns  = firebase.app().functions("us-central1");
 
-    const TOTAL_STEPS = 7;
+    /** Stripe Embedded Checkout instance; destroyed when leaving step 6. */
+    var embeddedCheckoutInst = null;
+    var embeddedCheckoutLoading = false;
+    var embeddedCheckoutLoadTimer = null;
+
+    /** [abbr, name] — filled into #bizState on load */
+    var US_STATES_LIST = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
+
+    function populateBizStateSelect() {
+      var sel = document.getElementById('bizState');
+      if (!sel || sel.options.length > 1) return;
+      US_STATES_LIST.slice().sort(function(a, b) { return a[1].localeCompare(b[1]); }).forEach(function(row) {
+        var o = document.createElement('option');
+        o.value = row[0];
+        o.textContent = row[1];
+        sel.appendChild(o);
+      });
+    }
+
+    const TOTAL_STEPS = 6;
     let currentStep = 1;
 
     const state = {
@@ -608,9 +841,11 @@
       industry: null,
       bizName: '',
       bizCity: '',
+      bizState: '',
       bizPhone: '',
       templatePreset: 'portfolio',
-      fullName: '',
+      firstName: '',
+      lastName: '',
       email: '',
       password: '',
       plan: null,
@@ -627,15 +862,96 @@
       }
     })();
 
+    var PLAN_CHECKOUT_INFO = {
+      solo: { name: 'Solo', price: '$39' },
+      studio: { name: 'Studio', price: '$79' },
+      shop: { name: 'Shop', price: '$149' },
+    };
+
+    function refreshCheckoutSummary() {
+      var plan = state.plan || 'solo';
+      var info = PLAN_CHECKOUT_INFO[plan] || PLAN_CHECKOUT_INFO.solo;
+      var nameEl = document.getElementById('checkoutPlanName');
+      var priceEl = document.getElementById('checkoutPlanPrice');
+      if (nameEl) nameEl.textContent = info.name + ' plan';
+      if (priceEl) priceEl.textContent = info.price;
+    }
+
+    function teardownEmbeddedCheckout() {
+      if (embeddedCheckoutLoadTimer) {
+        clearTimeout(embeddedCheckoutLoadTimer);
+        embeddedCheckoutLoadTimer = null;
+      }
+      embeddedCheckoutLoading = false;
+      try {
+        if (embeddedCheckoutInst && typeof embeddedCheckoutInst.destroy === 'function') {
+          embeddedCheckoutInst.destroy();
+        }
+      } catch (x) {
+        console.warn('teardownEmbeddedCheckout', x);
+      }
+      embeddedCheckoutInst = null;
+      var wrap = document.getElementById('checkoutEmbeddedWrap');
+      if (wrap) wrap.classList.remove('visible');
+      var mount = document.getElementById('checkoutEmbedded');
+      if (mount) mount.innerHTML = '';
+      validateAccountStep();
+    }
+
+    function scheduleEmbeddedCheckoutIfReady() {
+      if (currentStep !== 6) return;
+      if (embeddedCheckoutLoadTimer) clearTimeout(embeddedCheckoutLoadTimer);
+      embeddedCheckoutLoadTimer = setTimeout(function() {
+        embeddedCheckoutLoadTimer = null;
+        void tryMountEmbeddedCheckoutWhenReady();
+      }, 200);
+    }
+
+    /** Readable message from Firebase httpsCallable / HttpsError (avoids showing only "internal"). */
+    function formatFirebaseHttpsError(err) {
+      if (!err) return 'Something went wrong. Please try again.';
+      var d = err.details;
+      if (typeof d === 'string' && d.trim()) return d.trim();
+      var msg = (err.message && String(err.message).trim()) || '';
+      if (msg && msg.toLowerCase() !== 'internal' && msg !== err.code) return msg;
+      var code = err.code || '';
+      if (code === 'functions/internal' || code === 'internal') {
+        return 'Checkout failed on the server. Check the browser console, Firebase Functions logs, and Stripe configuration (secrets + price IDs).';
+      }
+      if (code.indexOf('failed-precondition') !== -1 || code === 'functions/failed-precondition') {
+        return msg || (d != null ? String(d) : 'This request could not be completed.');
+      }
+      return msg || code || 'Something went wrong. Please try again.';
+    }
+
     /* ── Navigation ── */
     function goTo(step) {
+      if (currentStep === 6 && step !== 6) {
+        teardownEmbeddedCheckout();
+      }
       document.getElementById('step' + currentStep).classList.remove('active');
       currentStep = step;
       document.getElementById('step' + currentStep).classList.add('active');
       document.getElementById('stepIndicator').textContent = 'Step ' + step + ' of ' + TOTAL_STEPS;
       document.getElementById('progressFill').style.width = ((step / TOTAL_STEPS) * 100) + '%';
 
-      if (step === 6 && state.plan) {
+      if (step === 3) {
+        updatePasswordReqIndicators();
+        validateAboutYou();
+      }
+      if (step === 4) validateBusinessStep();
+      if (step === 6) {
+        refreshCheckoutSummary();
+        var emInput = document.getElementById('email');
+        var signLine = document.getElementById('accountSignInEmail');
+        var signVal = document.getElementById('accountSignInEmailValue');
+        if (emInput && signLine && signVal) {
+          signVal.textContent = emInput.value.trim() || '—';
+          signLine.style.display = 'block';
+        }
+        validateAccountStep();
+      }
+      if (step === 5 && state.plan) {
         document.querySelectorAll('.plan-pick').forEach(p => {
           p.classList.toggle('selected', p.dataset.value === state.plan);
         });
@@ -666,25 +982,77 @@
       validateIndustryStep();
     }
 
-    function pickTpl(el) {
-      document.querySelectorAll('.tpl-pick').forEach(p => p.classList.remove('selected'));
-      el.classList.add('selected');
-      state.templatePreset = el.dataset.value;
-    }
-
-    function skipTemplate() {
-      state.templatePreset = 'portfolio';
-      document.querySelectorAll('.tpl-pick').forEach(p => p.classList.remove('selected'));
-      var def = document.querySelector('.tpl-pick[data-value="portfolio"]');
-      if (def) def.classList.add('selected');
-      goTo(6);
-    }
-
     function pickPlan(el) {
       document.querySelectorAll('.plan-pick').forEach(p => p.classList.remove('selected'));
       el.classList.add('selected');
       state.plan = el.dataset.value;
       document.getElementById('btn6').disabled = false;
+      if (currentStep === 6) {
+        refreshCheckoutSummary();
+        scheduleEmbeddedCheckoutIfReady();
+      }
+    }
+
+    /** Title-case each whitespace-separated word (matches app `USStateServiceAreaFormatting.titleCaseWords` behavior). */
+    function titleCaseWords(raw) {
+      var s = (raw || '').trim();
+      if (!s) return '';
+      return s.split(/\s+/).map(function(part) {
+        if (!part.length) return '';
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      }).join(' ');
+    }
+
+    function titleCaseWordsBlur(el) {
+      if (!el || typeof el.value !== 'string') return;
+      var next = titleCaseWords(el.value);
+      if (next !== el.value) el.value = next;
+      if (el.id === 'firstName' || el.id === 'lastName') validateAboutYou();
+      if (el.id === 'bizName' || el.id === 'bizCity') validateBusinessStep();
+    }
+
+    function togglePasswordVisibility(inputId, buttonId) {
+      var input = document.getElementById(inputId);
+      var btn = document.getElementById(buttonId);
+      if (!input || !btn) return;
+      var visible = input.type === 'text';
+      input.type = visible ? 'password' : 'text';
+      btn.textContent = visible ? 'Show' : 'Hide';
+      var showLab = inputId === 'passwordConfirm' ? 'Show confirm password' : 'Show password';
+      var hideLab = inputId === 'passwordConfirm' ? 'Hide confirm password' : 'Hide password';
+      btn.setAttribute('aria-label', visible ? showLab : hideLab);
+    }
+
+    function passwordMeetsPolicy(pw) {
+      if (!pw || pw.length < 8) return false;
+      if (!/[A-Z]/.test(pw)) return false;
+      if (!/[a-z]/.test(pw)) return false;
+      if (!/[0-9]/.test(pw)) return false;
+      return true;
+    }
+
+    function updatePasswordReqIndicators() {
+      var pw = document.getElementById('password').value;
+      var lenEl = document.getElementById('reqLen');
+      var upEl = document.getElementById('reqUpper');
+      var loEl = document.getElementById('reqLower');
+      var diEl = document.getElementById('reqDigit');
+      if (lenEl) lenEl.classList.toggle('met', pw.length >= 8);
+      if (upEl) upEl.classList.toggle('met', /[A-Z]/.test(pw));
+      if (loEl) loEl.classList.toggle('met', /[a-z]/.test(pw));
+      if (diEl) diEl.classList.toggle('met', /[0-9]/.test(pw));
+      var pw2 = document.getElementById('passwordConfirm').value;
+      var hint = document.getElementById('passwordMismatchHint');
+      if (hint) {
+        var show = pw2.length > 0 && pw !== pw2;
+        hint.style.display = show ? 'block' : 'none';
+      }
+    }
+
+    function onPasswordFieldsInput() {
+      updatePasswordReqIndicators();
+      validateAboutYou();
+      validateAccountStep();
     }
 
     /* ── Validation ── */
@@ -699,35 +1067,73 @@
     }
 
     function validateAboutYou() {
-      var ok = document.getElementById('fullName').value.trim().length > 0;
-      document.getElementById('btn3').disabled = !ok;
+      var fn = document.getElementById('firstName').value.trim().length > 0;
+      var ln = document.getElementById('lastName').value.trim().length > 0;
+      var em = document.getElementById('email').value.trim();
+      var at = em.indexOf('@');
+      var emailOk = at > 0 && at === em.lastIndexOf('@') && at < em.length - 1;
+      var phoneOk = document.getElementById('bizPhone').value.replace(/\D/g, '').length >= 10;
+      var pw = document.getElementById('password').value;
+      var pw2 = document.getElementById('passwordConfirm').value;
+      var policyOk = passwordMeetsPolicy(pw);
+      var matchOk = pw.length > 0 && pw === pw2;
+      document.getElementById('btn3').disabled = !(fn && ln && emailOk && phoneOk && policyOk && matchOk);
     }
 
     function validateBusinessStep() {
+      var st = document.getElementById('bizState').value;
       var ok = document.getElementById('bizName').value.trim().length > 0
-            && document.getElementById('bizCity').value.trim().length > 0;
+            && document.getElementById('bizCity').value.trim().length > 0
+            && st.length === 2;
       document.getElementById('btn4').disabled = !ok;
     }
 
     function validateAccountStep() {
-      var email = document.getElementById('email').value.trim();
-      var pw = document.getElementById('password').value;
-      document.getElementById('btn7').disabled = !(email.includes('@') && pw.length >= 6);
+      scheduleEmbeddedCheckoutIfReady();
     }
 
-    /* ── Sign Up ── */
-    async function doSignUp() {
-      var btn = document.getElementById('btn7');
-      var errEl = document.getElementById('errorMsg');
-      errEl.style.display = 'none';
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>Creating account…';
+    /**
+     * When step 6 is active and plan + password + terms are satisfied, creates/signs in the user
+     * and mounts Stripe Embedded Checkout (no separate payment button).
+     */
+    async function tryMountEmbeddedCheckoutWhenReady() {
+      if (currentStep !== 6) return;
+      if (embeddedCheckoutInst || embeddedCheckoutLoading) return;
 
-      state.fullName = document.getElementById('fullName').value.trim();
+      if (!state.plan) return;
+
+      var pwVal = document.getElementById('password').value;
+      var pw2Val = document.getElementById('passwordConfirm').value;
+      if (!passwordMeetsPolicy(pwVal) || pwVal !== pw2Val) return;
+
+      var agreeEl = document.getElementById('agreeTerms');
+      if (!agreeEl || !agreeEl.checked) return;
+
+      var errEl = document.getElementById('errorMsg');
+      var wrap = document.getElementById('checkoutEmbeddedWrap');
+      var mountEl = document.getElementById('checkoutEmbedded');
+
+      embeddedCheckoutLoading = true;
+      errEl.style.display = 'none';
+      if (wrap) wrap.classList.add('visible');
+      if (mountEl) {
+        mountEl.innerHTML = '<div class="checkout-embedded-loading"><span class="spinner"></span>Preparing secure checkout…</div>';
+      }
+
+      ['firstName', 'lastName', 'bizName', 'bizCity'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = titleCaseWords(el.value);
+      });
+      validateAboutYou();
+      validateBusinessStep();
+
+      state.firstName = document.getElementById('firstName').value.trim();
+      state.lastName  = document.getElementById('lastName').value.trim();
       state.email    = document.getElementById('email').value.trim();
-      state.password = document.getElementById('password').value;
+      state.password = pwVal;
       state.bizName  = document.getElementById('bizName').value.trim();
       state.bizCity  = document.getElementById('bizCity').value.trim();
+      state.bizState = document.getElementById('bizState').value;
       state.bizPhone = document.getElementById('bizPhone').value.trim();
 
       var industryCustomLabel = '';
@@ -735,39 +1141,99 @@
         industryCustomLabel = document.getElementById('industryCustom').value.trim();
       }
 
-      try {
-        var cred = await auth.createUserWithEmailAndPassword(state.email, state.password);
-        await cred.user.updateProfile({ displayName: state.fullName });
+      var displayName = (state.firstName + ' ' + state.lastName).trim();
 
-        var finalize = fns.httpsCallable('finalizeProviderSignUp');
+      try {
+        var user;
+        try {
+          var cred = await auth.createUserWithEmailAndPassword(state.email, state.password);
+          user = cred.user;
+        } catch (regErr) {
+          if (regErr && regErr.code === 'auth/email-already-in-use') {
+            try {
+              await auth.signInWithEmailAndPassword(state.email, state.password);
+              user = auth.currentUser;
+            } catch (signErr) {
+              embeddedCheckoutLoading = false;
+              if (mountEl) mountEl.innerHTML = '';
+              if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
+              errEl.textContent = 'This email already has an account. Use the password from step 3, or choose a different email.';
+              errEl.style.display = 'block';
+              return;
+            }
+          } else {
+            throw regErr;
+          }
+        }
+        if (user) {
+          await user.updateProfile({ displayName: displayName });
+        }
+
+        var startCheckout = fns.httpsCallable('createProviderSubscriptionCheckout');
+        var marketingOrigin = window.location.origin;
         var payload = {
+          marketingOrigin: marketingOrigin,
           teamSize:       state.teamSize,
           industry:       state.industry,
           businessName:   state.bizName,
           city:           state.bizCity,
+          stateAbbr:      state.bizState,
           phone:          state.bizPhone,
           templatePreset: state.templatePreset,
-          fullName:       state.fullName,
+          firstName:      state.firstName,
+          lastName:       state.lastName,
           plan:           state.plan,
         };
         if (state.industry === 'custom') {
           payload.industryCustomLabel = industryCustomLabel;
         }
 
-        var result = await finalize(payload);
-
-        var slug = result.data.slug || '';
-
-        document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
-        document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
-
-        showSuccess();
+        var checkout = await startCheckout(payload);
+        var clientSecret = checkout.data && checkout.data.clientSecret;
+        if (!clientSecret) {
+          throw new Error('No checkout session from server. Configure Stripe subscription prices on the server.');
+        }
+        var pk =
+          (checkout.data && checkout.data.publishableKey && String(checkout.data.publishableKey).trim()) ||
+          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
+        if (!pk) {
+          throw new Error(
+            'Stripe publishable key is missing. Set window.stripePublishableKey in js/firebase-config.js, ' +
+            'or deploy the createProviderSubscriptionCheckout function with STRIPE_PUBLISHABLE_KEY set.'
+          );
+        }
+        if (typeof Stripe !== 'function') {
+          throw new Error('Stripe.js did not load.');
+        }
+        var stripe = Stripe(pk);
+        var opts = {
+          fetchClientSecret: function() {
+            return Promise.resolve(clientSecret);
+          },
+        };
+        var embedded;
+        if (typeof stripe.createEmbeddedCheckoutPage === 'function') {
+          embedded = await stripe.createEmbeddedCheckoutPage(opts);
+        } else if (typeof stripe.initEmbeddedCheckout === 'function') {
+          embedded = await stripe.initEmbeddedCheckout(opts);
+        } else {
+          throw new Error('This version of Stripe.js does not support embedded Checkout.');
+        }
+        if (mountEl) mountEl.innerHTML = '';
+        embedded.mount('#checkoutEmbedded');
+        embeddedCheckoutInst = embedded;
+        embeddedCheckoutLoading = false;
+        if (wrap) {
+          wrap.classList.add('visible');
+          wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
       } catch (e) {
-        console.error('signup error', e);
-        errEl.textContent = e.message || 'Something went wrong. Please try again.';
+        console.error('embedded checkout', e);
+        embeddedCheckoutLoading = false;
+        if (mountEl) mountEl.innerHTML = '';
+        if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
+        errEl.textContent = formatFirebaseHttpsError(e);
         errEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Create my account';
       }
     }
 
@@ -777,6 +1243,93 @@
       document.getElementById('stepIndicator').textContent = 'Done!';
       document.getElementById('progressFill').style.width = '100%';
     }
+
+    function showCheckoutCanceledOnStep6() {
+      teardownEmbeddedCheckout();
+      currentStep = 6;
+      document.querySelectorAll('.step-panel').forEach(function(p) { p.classList.remove('active'); });
+      var s6 = document.getElementById('step6');
+      if (s6) s6.classList.add('active');
+      var ind = document.getElementById('stepIndicator');
+      if (ind) ind.textContent = 'Step 6 of 6';
+      var bar = document.getElementById('progressFill');
+      if (bar) bar.style.width = ((6 / TOTAL_STEPS) * 100) + '%';
+      var errEl = document.getElementById('errorMsg');
+      if (errEl) {
+        errEl.textContent = 'Checkout was canceled. Try again when you are ready.';
+        errEl.style.display = 'block';
+      }
+      var emInput = document.getElementById('email');
+      var signLine = document.getElementById('accountSignInEmail');
+      var signVal = document.getElementById('accountSignInEmailValue');
+      if (emInput && signLine && signVal) {
+        signVal.textContent = emInput.value.trim() || '—';
+        signLine.style.display = 'block';
+      }
+      refreshCheckoutSummary();
+      validateAccountStep();
+    }
+
+    /* Stripe return: success completes provisioning; cancel returns to step 6 */
+    document.addEventListener('DOMContentLoaded', function() {
+      populateBizStateSelect();
+      var params = new URLSearchParams(window.location.search);
+      var checkout = params.get('checkout');
+      var sessionId = params.get('session_id');
+
+      if (checkout === 'cancel') {
+        history.replaceState({}, '', 'signup.html');
+        showCheckoutCanceledOnStep6();
+        return;
+      }
+
+      if (checkout !== 'success' || !sessionId) return;
+
+      document.querySelectorAll('.step-panel').forEach(function(p) { p.classList.remove('active'); });
+      var loading = document.createElement('div');
+      loading.id = 'checkoutResumeLoading';
+      loading.style.cssText = 'text-align:center;padding:48px 24px;font-size:15px;color:var(--text-secondary);';
+      loading.textContent = 'Finishing your setup…';
+      var card = document.querySelector('.signup-card');
+      if (card) card.insertBefore(loading, card.firstChild);
+
+      var checkoutResumeFinished = false;
+      function checkoutResumeFail(msg) {
+        if (checkoutResumeFinished) return;
+        checkoutResumeFinished = true;
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        history.replaceState({}, '', 'signup.html');
+        alert(msg);
+      }
+      var unsubCheckout = auth.onAuthStateChanged(function(user) {
+        if (checkoutResumeFinished) return;
+        if (!user) return;
+        checkoutResumeFinished = true;
+        unsubCheckout();
+        (async function() {
+          try {
+            var complete = fns.httpsCallable('completeProviderSubscriptionCheckout');
+            var result = await complete({ sessionId: sessionId });
+            history.replaceState({}, '', 'signup.html');
+            if (loading.parentNode) loading.parentNode.removeChild(loading);
+            var slug = (result.data && result.data.slug) || '';
+            document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
+            document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
+            showSuccess();
+          } catch (e) {
+            console.error('complete checkout', e);
+            if (loading.parentNode) loading.parentNode.removeChild(loading);
+            alert(formatFirebaseHttpsError(e));
+            history.replaceState({}, '', 'signup.html');
+          }
+        })();
+      });
+      setTimeout(function() {
+        if (checkoutResumeFinished) return;
+        try { unsubCheckout(); } catch (x) {}
+        checkoutResumeFail('Still waiting for sign-in. Use the same email and password you entered at signup, then reload this page.');
+      }, 12000);
+    });
   </script>
 
 </body>

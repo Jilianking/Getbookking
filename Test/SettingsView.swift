@@ -114,7 +114,7 @@ struct SettingsView: View {
                                     Label("Copy link", systemImage: "doc.on.doc")
                                         .font(.subheadline.weight(.medium))
                                 }
-                                ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on GetBookKing.")) {
+                                ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on Get Bookking.")) {
                                     Label("Share link", systemImage: "square.and.arrow.up")
                                         .font(.body.weight(.medium))
                                 }

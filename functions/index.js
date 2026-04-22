@@ -1,12 +1,19 @@
 /**
- * Cloud Functions for GetBookKing.
+ * Cloud Functions for Get Bookking.
  * Set secrets:
  *   firebase functions:secrets:set STRIPE_SECRET_KEY
  *   firebase functions:secrets:set OPENAI_API_KEY
+ *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
+ *     (JSON: {"solo":"price_...","studio":"price_...","shop":"price_..."} from Stripe Dashboard)
+ *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
+ *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
+ *
+ * Optional: set string param STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…) via Firebase
+ * params / functions .env so createProviderSubscriptionCheckout can return it to signup.html.
  */
 
 const functions = require("firebase-functions");
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const Stripe = require("stripe");
@@ -20,6 +27,12 @@ const {
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
+/** JSON map: solo, studio, shop → Stripe Price id (recurring subscription). */
+const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
+/** Stripe Dashboard → Webhooks → Signing secret (whsec_…). */
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+/** Publishable key (pk_…) returned to signup.html when set; safe to expose in the browser. */
+const stripePublishableKeyParam = defineString("STRIPE_PUBLISHABLE_KEY", { default: "" });
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -39,6 +52,338 @@ function normalizeSubscriptionPlan(plan) {
   if (legacy[p]) return legacy[p];
   if (p === "solo" || p === "studio" || p === "shop") return p;
   return "solo";
+}
+
+const US_STATE_ABBRS = new Set([
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
+  "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
+  "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
+  "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+]);
+
+function titleCaseCityWords(raw) {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  return s
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function composeServiceArea(city, stateAbbr) {
+  const c = titleCaseCityWords(city);
+  const st = (stateAbbr || "").trim().toUpperCase();
+  if (!c && !st) return "";
+  if (!st) return c;
+  if (!c) return st;
+  return `${c}, ${st}`;
+}
+
+function parseStripeSubscriptionPriceIds() {
+  const raw = stripeSubscriptionPriceIds.value();
+  if (!raw || !String(raw).trim()) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Set secret STRIPE_SUBSCRIPTION_PRICE_IDS to JSON: " +
+        '{"solo":"price_...","studio":"price_...","shop":"price_..."}'
+    );
+  }
+  let map;
+  try {
+    map = JSON.parse(String(raw).trim());
+  } catch (e) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Invalid STRIPE_SUBSCRIPTION_PRICE_IDS (must be JSON)."
+    );
+  }
+  return map;
+}
+
+function stripePriceIdForPlan(planNorm) {
+  const map = parseStripeSubscriptionPriceIds();
+  const id = map[planNorm];
+  if (!id || typeof id !== "string") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `No Stripe price id for plan "${planNorm}" in STRIPE_SUBSCRIPTION_PRICE_IDS.`
+    );
+  }
+  return id.trim();
+}
+
+/**
+ * Validates marketing wizard payload and returns a plain object safe to store in `pendingProviderSignups`.
+ */
+function normalizeSignupWizardPayload(data) {
+  const teamSize = (data.teamSize || "").toString().trim() || "solo";
+  const rawIndustry = data.industry;
+  const industryCustomLabel = (data.industryCustomLabel || "").toString().trim().slice(0, 200);
+  const businessName = (data.businessName || "").toString().trim();
+  const city = (data.city || "").toString().trim();
+  const stateAbbr = (data.stateAbbr || data.state || "").toString().trim().toUpperCase();
+  const phone = (data.phone || "").toString().trim();
+  const templatePreset = (data.templatePreset || "portfolio").toString().trim();
+  const firstName = (data.firstName || "").toString().trim();
+  const lastName = (data.lastName || "").toString().trim();
+  const planRaw = (data.plan || "").toString().trim();
+  if (!planRaw) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Choose a subscription plan."
+    );
+  }
+  const plan = normalizeSubscriptionPlan(planRaw);
+
+  if (!businessName || !rawIndustry) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "businessName and industry are required."
+    );
+  }
+  const industry = normalizeIndustry(rawIndustry);
+  if (industry === "custom" && !industryCustomLabel) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Please describe your business type for Custom industry."
+    );
+  }
+  if (!firstName || !lastName) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "First and last name are required."
+    );
+  }
+  if (!city || !stateAbbr || !US_STATE_ABBRS.has(stateAbbr)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "City and a valid US state are required."
+    );
+  }
+  if (!phone) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Phone number is required."
+    );
+  }
+
+  return {
+    teamSize,
+    industry,
+    industryCustomLabel,
+    businessName,
+    city,
+    stateAbbr,
+    phone,
+    templatePreset,
+    firstName,
+    lastName,
+    plan,
+  };
+}
+
+/**
+ * Creates tenant + user profile + default services (idempotent if user already has tenantId).
+ */
+async function provisionNewProviderFromWizard(uid, email, pending, billing) {
+  const userRef = db.collection("users").doc(uid);
+  const existingUser = await userRef.get();
+  if (existingUser.exists && existingUser.data().tenantId) {
+    const tid = existingUser.data().tenantId;
+    const tSnap = await db.collection("tenants").doc(tid).get();
+    const slug = tSnap.exists ? tSnap.data().slug || "" : "";
+    await db.collection("pendingProviderSignups").doc(uid).delete().catch(() => {});
+    return { tenantId: tid, slug };
+  }
+
+  const {
+    teamSize,
+    industry,
+    industryCustomLabel,
+    businessName,
+    city,
+    stateAbbr,
+    phone,
+    templatePreset,
+    firstName,
+    lastName,
+    plan,
+  } = pending;
+
+  const slug = slugFromBusiness(businessName);
+  const webThemeId = resolveWebThemeId(industry, templatePreset || "portfolio");
+  const formSchema = formSchemaForIndustry(industry);
+  const cityDisplay = titleCaseCityWords(city);
+  const serviceArea = composeServiceArea(cityDisplay, stateAbbr);
+  const displayName = `${firstName} ${lastName}`.trim();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const tenantRef = db.collection("tenants").doc();
+  const tenantId = tenantRef.id;
+  const subscriptionPlan = normalizeSubscriptionPlan(plan);
+
+  const subscriptionStatus =
+    billing.subscriptionStatus &&
+    ["active", "trialing", "past_due"].includes(billing.subscriptionStatus)
+      ? billing.subscriptionStatus
+      : "trialing";
+
+  const tenantData = {
+    ownerUid: uid,
+    ownerId: uid,
+    businessName,
+    displayName: businessName,
+    slug,
+    industry,
+    formSchema,
+    teamSize: teamSize || "solo",
+    city: cityDisplay,
+    contactState: stateAbbr,
+    serviceArea,
+    contactPhone: phone,
+    webThemeId,
+    resolvedWebThemeId: webThemeId,
+    templatePreset: templatePreset || "portfolio",
+    subscriptionPlan,
+    trialStartDate: now,
+    createdAt: now,
+    updatedAt: now,
+    galleryGridLayout: "3x1",
+    galleryLayoutStyle: "classic_grid",
+    shopEnabled: false,
+    aboutText: "",
+    contactEmail: email || "",
+    contactAddress: "",
+    heroTagline: "",
+    heroSubtitle: "",
+  };
+
+  if (billing.stripeCustomerId) {
+    tenantData.stripeCustomerId = billing.stripeCustomerId;
+  }
+  if (billing.stripeSubscriptionId) {
+    tenantData.stripeSubscriptionId = billing.stripeSubscriptionId;
+  }
+
+  if (industry === "custom" && industryCustomLabel) {
+    tenantData.industryCustomLabel = industryCustomLabel;
+  }
+
+  const userDoc = {
+    email: email || "",
+    firstName,
+    lastName,
+    displayName,
+    name: displayName,
+    tenantId,
+    tenantSlug: slug,
+    role: "owner",
+    business: businessName,
+    industry,
+    profilePhotoUrl: "",
+    subscriptionPlan,
+    subscriptionStatus,
+    availability: {
+      timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
+      daysOpen: [1, 2, 3, 4, 5],
+      timeZone: "America/New_York",
+    },
+    workflow: {
+      confirmationType: "request_approve",
+      responseTimeHours: 24,
+    },
+    createdAt: now,
+  };
+
+  const batch = db.batch();
+  batch.set(tenantRef, tenantData);
+  batch.set(userRef, userDoc);
+
+  const services = defaultServicesByIndustry[industry] || [];
+  services.forEach((svc, idx) => {
+    const svcSlug = svc.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    const svcRef = tenantRef.collection("services").doc();
+    batch.set(svcRef, {
+      name: svc.name,
+      slug: svcSlug,
+      durationMinutes: svc.durationMinutes,
+      price: 0,
+      sortOrder: idx,
+      isActive: true,
+      createdAt: now,
+    });
+  });
+
+  await batch.commit();
+  return { tenantId, slug };
+}
+
+async function finalizeFromCheckoutSession(stripe, session) {
+  const uid = (session.metadata && session.metadata.firebaseUid) || session.client_reference_id;
+  if (!uid || typeof uid !== "string") {
+    console.error("checkout.session missing firebase uid metadata");
+    return null;
+  }
+
+  const paidOk =
+    session.payment_status === "paid" ||
+    session.payment_status === "no_payment_required";
+  if (!paidOk || session.mode !== "subscription") {
+    console.warn("checkout session not paid / not subscription", session.id);
+    return null;
+  }
+
+  const pendingRef = db.collection("pendingProviderSignups").doc(uid);
+  const pendingSnap = await pendingRef.get();
+  if (!pendingSnap.exists) {
+    const u = await db.collection("users").doc(uid).get();
+    if (u.exists && u.data().tenantId) {
+      const tid = u.data().tenantId;
+      const tSnap = await db.collection("tenants").doc(tid).get();
+      return { tenantId: tid, slug: tSnap.exists ? tSnap.data().slug || "" : "" };
+    }
+    console.warn("no pending signup for uid", uid);
+    return null;
+  }
+
+  const pending = pendingSnap.data();
+  const email =
+    session.customer_details && session.customer_details.email
+      ? session.customer_details.email
+      : session.customer_email || "";
+
+  let subStatus = "active";
+  if (session.subscription && typeof session.subscription === "object") {
+    const st = session.subscription.status;
+    if (st === "trialing" || st === "active") {
+      subStatus = st;
+    }
+  } else if (session.subscription) {
+    const subId = String(session.subscription);
+    const sub = await stripe.subscriptions.retrieve(subId);
+    if (sub.status === "trialing" || sub.status === "active") {
+      subStatus = sub.status;
+    }
+  }
+
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : session.customer && session.customer.id;
+  const subscriptionId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription && session.subscription.id;
+
+  const result = await provisionNewProviderFromWizard(uid, email, pending, {
+    stripeCustomerId: customerId || null,
+    stripeSubscriptionId: subscriptionId || null,
+    subscriptionStatus: subStatus,
+  });
+
+  await pendingRef.delete().catch(() => {});
+  return result;
 }
 
 /**
@@ -680,145 +1025,194 @@ exports.onTenantBookingRequestCreated = functions.firestore
   });
 
 /**
- * Web sign-up wizard: creates Auth profile, tenant, and default services.
- * Called from marketing/signup.html after Firebase Auth createUser on the client.
+ * Marketing wizard: after Firebase Auth sign-up, stores pending data and returns a Stripe
+ * Checkout Session client secret for embedded Checkout on signup.html.
  */
-exports.finalizeProviderSignUp = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      "unauthenticated",
-      "Must be signed in."
+exports.createProviderSubscriptionCheckout = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const uid = context.auth.uid;
+    const email = context.auth.token.email || "";
+    if (!email) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Account must have an email."
+      );
+    }
+
+    const userSnap = await db.collection("users").doc(uid).get();
+    if (userSnap.exists && userSnap.data().tenantId) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "This account already has a business set up."
+      );
+    }
+
+    const normalized = normalizeSignupWizardPayload(data);
+    const priceId = stripePriceIdForPlan(normalized.plan);
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured."
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const pendingRef = db.collection("pendingProviderSignups").doc(uid);
+    await pendingRef.set(
+      {
+        ...normalized,
+        email,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
     );
-  }
 
-  const uid = context.auth.uid;
-  const {
-    teamSize,
-    industry: rawIndustry,
-    industryCustomLabel: rawIndustryLabel,
-    businessName,
-    city,
-    phone,
-    templatePreset,
-    fullName,
-    plan,
-  } = data;
+    const origin = (data.marketingOrigin || "")
+      .toString()
+      .trim()
+      .replace(/\/$/, "");
+    const base =
+      origin && /^https:\/\//i.test(origin)
+        ? origin
+        : "https://getbookking.com";
 
-  if (!businessName || !rawIndustry) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "businessName and industry are required."
-    );
-  }
+    const returnUrl = `${base}/signup.html?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
 
-  const industry = normalizeIndustry(rawIndustry);
-  const industryLabelTrim = (rawIndustryLabel || "").toString().trim().slice(0, 200);
-  if (industry === "custom" && !industryLabelTrim) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Please describe your business type for Custom industry."
-    );
-  }
-  const slug = slugFromBusiness(businessName);
-  const webThemeId = resolveWebThemeId(industry, templatePreset || "portfolio");
-  const formSchema = formSchemaForIndustry(industry);
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        ui_mode: "embedded",
+        customer_email: email,
+        client_reference_id: uid,
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: { firebaseUid: uid },
+        subscription_data: {
+          trial_period_days: 30,
+          metadata: { firebaseUid: uid },
+        },
+        return_url: returnUrl,
+      });
+    } catch (stripeErr) {
+      console.error("createProviderSubscriptionCheckout Stripe", stripeErr);
+      const raw =
+        stripeErr && stripeErr.message ? String(stripeErr.message) : String(stripeErr);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not start checkout: ${raw}`
+      );
+    }
 
-  const nameParts = (fullName || "").trim().split(/\s+/);
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ") || "";
+    if (!session.client_secret) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe did not return an embedded checkout client secret. Confirm Checkout supports ui_mode=embedded for this API version and account."
+      );
+    }
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
-
-  const tenantRef = db.collection("tenants").doc();
-  const tenantId = tenantRef.id;
-
-  const subscriptionPlan = normalizeSubscriptionPlan(plan);
-
-  const tenantData = {
-    ownerUid: uid,
-    ownerId: uid,
-    businessName: businessName,
-    displayName: businessName,
-    slug: slug,
-    industry: industry,
-    formSchema,
-    teamSize: teamSize || "solo",
-    city: city || "",
-    serviceArea: city || "",
-    contactPhone: phone || "",
-    webThemeId: webThemeId,
-    resolvedWebThemeId: webThemeId,
-    templatePreset: templatePreset || "portfolio",
-    subscriptionPlan,
-    trialStartDate: now,
-    createdAt: now,
-    updatedAt: now,
-    galleryGridLayout: "3x1",
-    galleryLayoutStyle: "classic_grid",
-    shopEnabled: false,
-    aboutText: "",
-    contactEmail: context.auth.token.email || "",
-    contactAddress: "",
-    heroTagline: "",
-    heroSubtitle: "",
-  };
-
-  if (industry === "custom" && industryLabelTrim) {
-    tenantData.industryCustomLabel = industryLabelTrim;
-  }
-
-  const userDoc = {
-    email: context.auth.token.email || "",
-    firstName: firstName,
-    lastName: lastName,
-    displayName: fullName || "",
-    name: fullName || "",
-    tenantId: tenantId,
-    tenantSlug: slug,
-    role: "owner",
-    business: businessName,
-    industry,
-    profilePhotoUrl: "",
-    subscriptionPlan,
-    subscriptionStatus: "active",
-    availability: {
-      timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
-      daysOpen: [1, 2, 3, 4, 5],
-      timeZone: "America/New_York",
-    },
-    workflow: {
-      confirmationType: "request_approve",
-      responseTimeHours: 24,
-    },
-    createdAt: now,
-  };
-
-  const batch = db.batch();
-
-  batch.set(tenantRef, tenantData);
-  batch.set(db.collection("users").doc(uid), userDoc);
-
-  const services = defaultServicesByIndustry[industry] || [];
-  services.forEach((svc, idx) => {
-    const svcSlug = svc.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "");
-    const svcRef = tenantRef.collection("services").doc();
-    batch.set(svcRef, {
-      name: svc.name,
-      slug: svcSlug,
-      durationMinutes: svc.durationMinutes,
-      price: 0,
-      sortOrder: idx,
-      isActive: true,
-      createdAt: now,
-    });
+    const pkOut = stripePublishableKeyParam.value().trim();
+    const out = { clientSecret: session.client_secret };
+    if (pkOut) {
+      out.publishableKey = pkOut;
+    }
+    return out;
   });
 
-  await batch.commit();
+/**
+ * After returning from Stripe Checkout, client passes sessionId; verifies payment then provisions tenant.
+ */
+exports.completeProviderSubscriptionCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const uid = context.auth.uid;
+    const sessionId = ((data && data.sessionId) || "").toString().trim();
+    if (!sessionId) {
+      throw new functions.https.HttpsError("invalid-argument", "sessionId is required.");
+    }
 
-  return { tenantId, slug };
-});
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription"],
+    });
+
+    if ((session.metadata && session.metadata.firebaseUid) !== uid) {
+      throw new functions.https.HttpsError("permission-denied", "Invalid checkout session.");
+    }
+
+    const result = await finalizeFromCheckoutSession(stripe, session);
+    if (!result) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Payment is not complete or signup data expired. Start again or contact support."
+      );
+    }
+    return result;
+  });
+
+/**
+ * Stripe webhook: completes provisioning when Checkout succeeds (backup if user closes tab before client completes).
+ */
+exports.stripeSubscriptionWebhook = functions
+  .runWith({ secrets: [stripeSecretKey, stripeWebhookSecret] })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const secretKey = stripeSecretKey.value();
+    const whSecret = stripeWebhookSecret.value();
+    if (!secretKey || !whSecret) {
+      console.error("stripeSubscriptionWebhook: missing secrets");
+      res.status(503).send("Not configured");
+      return;
+    }
+
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const sig = req.headers["stripe-signature"];
+    let event;
+    try {
+      const payload = req.rawBody || req.body;
+      if (!Buffer.isBuffer(payload)) {
+        console.error("stripeSubscriptionWebhook: rawBody missing; verify webhook payload");
+        res.status(400).send("Webhook payload error");
+        return;
+      }
+      event = stripe.webhooks.constructEvent(payload, sig, whSecret);
+    } catch (err) {
+      console.error("stripe webhook signature", err.message);
+      res.status(400).send(`Webhook Error: ${err.message}`);
+      return;
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      try {
+        const full = await stripe.checkout.sessions.retrieve(session.id, {
+          expand: ["subscription"],
+        });
+        await finalizeFromCheckoutSession(stripe, full);
+      } catch (e) {
+        console.error("stripeSubscriptionWebhook finalize", e);
+      }
+    }
+
+    res.json({ received: true });
+  });
 
 // ── Team invites (opaque token = Firestore doc id) ─────────────────────────
 

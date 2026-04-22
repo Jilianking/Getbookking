@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Join team — GetBookKing</title>
+  <title>Join team — Get Bookking</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -112,7 +112,7 @@
     </div>
     <div id="successBlock" style="display:none;">
       <p class="ok" id="successText">You’re on the team. Opening the app…</p>
-      <p class="muted">If nothing happens, install GetBookKing from the App Store.</p>
+      <p class="muted">If nothing happens, install Get Bookking from the App Store.</p>
     </div>
   </div>
 
@@ -208,7 +208,7 @@
           var name = (res.data && res.data.businessName) || "this business";
           document.getElementById("title").textContent = "Join " + name;
           document.getElementById("subtitle").textContent =
-            "All fields are required. Create your account to join " + name + " on GetBookKing.";
+            "All fields are required. Create your account to join " + name + " on Get Bookking.";
         })
         .catch(function () {
           document.getElementById("subtitle").textContent =

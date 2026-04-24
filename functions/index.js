@@ -4,7 +4,7 @@
  *   firebase functions:secrets:set STRIPE_SECRET_KEY
  *   firebase functions:secrets:set OPENAI_API_KEY
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
- *     (JSON: {"solo":"price_...","studio":"price_...","shop":"price_..."} from Stripe Dashboard)
+ *     (JSON map solo/studio/shop → price_…; copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
  *

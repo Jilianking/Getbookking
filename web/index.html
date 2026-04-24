@@ -465,7 +465,21 @@
     .tattoo-nav-links { display: flex; align-items: center; gap: 28px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
     .tattoo-nav-links a { color: rgba(255,255,255,0.85); text-decoration: none; font-weight: 500; }
     .tattoo-nav-links a:hover { color: #fff; }
-    .tattoo-nav-menu { background: none; border: none; color: #fff; font-size: 1.5rem; padding: 8px; cursor: pointer; line-height: 1; flex-shrink: 0; }
+    /* Icon-only: global `button { width: 100% }` would stretch the bar and center ☰ in the viewport. */
+    .tattoo-nav-menu {
+      width: auto;
+      max-width: none;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.5rem;
+      padding: 8px;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
+      font-weight: 400;
+      border-radius: 0;
+    }
     .tattoo-nav .tattoo-nav-menu { display: none; }
     .tattoo-hero-section {
       min-height: 60vh; display: flex; align-items: center; justify-content: center;
@@ -571,6 +585,7 @@
     .classic-home .tattoo-nav-links a { color: rgba(26,26,26,0.6); text-transform: none; letter-spacing: 0.02em; font-size: 14px; font-weight: 400; }
     .classic-home .tattoo-nav-links a:hover { color: #1a1a1a; }
     .classic-home .tattoo-nav .tattoo-nav-menu { color: #1a1a1a; }
+    .classic-home .classic-hero-nav-menu { color: #1a1a1a; }
     .classic-home .tattoo-nav-links .classic-nav-book {
       background: #1a1a1a;
       color: #F7F5F0;
@@ -602,6 +617,47 @@
       text-transform: uppercase;
       color: rgba(26,26,26,0.45);
       margin: 0 0 20px;
+    }
+    /* Classic home: business name + menu one row (mobile); industry line below. Desktop hides in-hero menu. */
+    .classic-home-page .classic-hero-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0;
+      margin-bottom: 12px;
+      text-align: left;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      align-self: stretch;
+    }
+    .classic-home-page .classic-hero-title-row .classic-hero-name {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+    .classic-home-page .classic-hero-nav-menu {
+      flex-shrink: 0;
+    }
+    .classic-home-page .classic-hero-left {
+      text-align: left;
+    }
+    .classic-home-page .classic-hero-left > .classic-hero-tag {
+      margin: 0 0 20px;
+    }
+    @media (min-width: 769px) {
+      .classic-home-page .classic-hero-title-row {
+        display: block;
+        margin-bottom: 0;
+      }
+      .classic-home-page .classic-hero-title-row .classic-hero-name {
+        margin: 0 0 28px;
+        padding-right: 0;
+      }
+      .classic-home-page .classic-hero-nav-menu {
+        display: none !important;
+      }
     }
     .classic-hero-name {
       font-family: 'Unbounded', sans-serif;
@@ -872,21 +928,62 @@
       text-align: center;
     }
     @media (max-width: 768px) {
-      .classic-home-page .tattoo-nav .tattoo-brand { display: none; }
+      /* Menu lives in `.classic-hero-title-row` with the headline; hide duplicate overlay nav. */
       .classic-home-page .tattoo-nav {
-        position: absolute;
-        top: 0;
-        right: 0;
-        left: 0;
-        z-index: 10;
-        background: transparent;
-        padding: calc(12px + env(safe-area-inset-top, 0px)) 20px 12px 20px;
+        display: none !important;
+      }
+      /* One horizontal gutter (20px) with the nav + drawer; drop hero band padding so text is not double-inset. */
+      .classic-home-page .classic-hero {
+        padding-left: 0;
+        padding-right: 0;
       }
       .classic-hero { grid-template-columns: 1fr; }
-      /* Thin overlay bar (wordmark hidden); smaller inset than Studio 12 — avoids huge gap above eyebrow. */
-      .classic-hero-left {
+      /* Industry line under title: single line, ellipsis if needed. */
+      .classic-home-page .classic-hero-left > .classic-hero-tag {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* Safe-area + compact top: first row is title + menu; menu is anchored to hero column's top-right. */
+      .classic-home-page .classic-hero-left {
+        position: relative;
         justify-content: flex-start;
-        padding: calc(clamp(72px, 10vh, 118px) + env(safe-area-inset-top, 0px)) 20px 32px;
+        padding-top: calc(12px + env(safe-area-inset-top, 0px));
+        padding-bottom: 32px;
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+      }
+      .classic-home-page .classic-hero-title-row {
+        position: static !important;
+      }
+      .classic-home-page .classic-hero-title-row .classic-hero-name {
+        padding-right: 56px !important;
+      }
+      /* Pin ☰ flush to viewport right (within safe area) regardless of parent sizing.
+         Uses position: fixed so it's anchored to the viewport and can't be offset by any ancestor. */
+      .classic-home-page .classic-hero-nav-menu {
+        position: fixed !important;
+        top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+        right: max(8px, env(safe-area-inset-right)) !important;
+        left: auto !important;
+        margin: 0 !important;
+        padding: 8px !important;
+        z-index: 1000 !important;
+        transform: none !important;
+      }
+      .classic-home-page .tattoo-featured-inner {
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+      }
+      .classic-home-page .classic-services {
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+      }
+      .classic-home-page .tattoo-sidebar-panel {
+        padding-top: calc(24px + env(safe-area-inset-top, 0px));
+        padding-bottom: 32px;
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
       }
       /* Mobile: let `.classic-hero-right:has(> img)` aspect-ratio drive the height
          so the crop renders exactly. No forced max-height or top-anchored cover. */
@@ -5960,10 +6057,16 @@
         var heroActions = '';
         if (tenantShowBookPage(tenant)) heroActions += '<a href="' + bookUrl + '" class="classic-btn-primary">' + esc(opts.bookLabel) + '</a>';
         if (tenantShowGalleryPage(tenant)) heroActions += '<a href="' + galleryUrl + '" class="classic-btn-ghost">View work</a>';
+        var heroTitleRow =
+          '<div class="classic-hero-title-row">' +
+          '<h1 class="classic-hero-name">' + esc(displayName) + '</h1>' +
+          '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">&#9776;</button>' +
+          '</div>';
+        var heroIndustry = heroTag ? '<p class="classic-hero-tag">' + esc(heroTag) + '</p>' : '';
         var heroHtml = '<section class="classic-hero">' +
           '<div class="classic-hero-left">' +
-          (heroTag ? '<p class="classic-hero-tag">' + esc(heroTag) + '</p>' : '') +
-          '<h1 class="classic-hero-name">' + esc(displayName) + '</h1>' +
+          heroTitleRow +
+          heroIndustry +
           '<div class="classic-hero-actions">' + heroActions + '</div></div>' +
           '<div class="classic-hero-right"' + heroRightStyle + '>' + heroImgHtml + '</div>' +
           '</section>';
@@ -6551,7 +6654,7 @@
       function hairTattooStyleHomePage(tenant, services) {
         return classicHomePage(tenant, services || [], {
           defaultName: 'Salon',
-          industryLabel: 'Hair',
+          industryLabel: 'Hair salon',
           bookLabel: 'Book now',
           galleryPlaceholder: 'Add transformation photos in the app.',
           featuredHeading: 'Recent looks',

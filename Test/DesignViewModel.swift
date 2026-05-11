@@ -131,6 +131,10 @@ class DesignViewModel: ObservableObject {
     @Published var classicStatClientsLabel: String = "Clients"
     @Published var classicStatRatedValue: String = "5★"
     @Published var classicStatRatedLabel: String = "Rated"
+    /// Classic dark About band: small eyebrow above the headline (empty uses “About” on the web).
+    @Published var classicAboutEyebrow: String = ""
+    /// Classic About headline (plain text). Empty uses the industry default HTML on the web.
+    @Published var classicAboutHeading: String = ""
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -210,6 +214,498 @@ class DesignViewModel: ObservableObject {
 
     func invalidateWebPreview() {
         webPreviewReloadToken &+= 1
+    }
+
+    /// Matches `studio12SplitHeroHeadline` in `web/index.html`.
+    private static func splitStudio12HeroHeadline(_ raw: String) -> (line1: String, line2: String) {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return ("", "") }
+        let ns = s as NSString
+        let length = ns.length
+        if let regex = try? NSRegularExpression(pattern: "^(.+?)\\s+that\\s+(.+)$", options: [.caseInsensitive]),
+           let r = regex.firstMatch(in: s, range: NSRange(location: 0, length: length)),
+           r.numberOfRanges == 3 {
+            let l1 = ns.substring(with: r.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines) + " that"
+            let l2 = ns.substring(with: r.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (l1, l2)
+        }
+        let mid = length / 2
+        let leftRange = NSRange(location: 0, length: max(0, mid))
+        let leftMatch = ns.range(of: " ", options: .backwards, range: leftRange)
+        let leftIdx = leftMatch.location != NSNotFound ? leftMatch.location : -1
+        let rightSearchLen = max(0, length - mid)
+        let rightMatch = ns.range(of: " ", options: [], range: NSRange(location: mid, length: rightSearchLen))
+        let rightIdx = rightMatch.location != NSNotFound ? rightMatch.location : -1
+        let breakAt: Int
+        if leftIdx < 0 {
+            breakAt = rightIdx
+        } else if rightIdx < 0 {
+            breakAt = leftIdx
+        } else {
+            breakAt = (mid - leftIdx <= rightIdx - mid) ? leftIdx : rightIdx
+        }
+        if breakAt <= 0 || breakAt >= length - 1 {
+            return (s, "")
+        }
+        let line1 = ns.substring(with: NSRange(location: 0, length: breakAt)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let line2 = ns.substring(with: NSRange(location: breakAt + 1, length: length - breakAt - 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (line1, line2)
+    }
+
+    /// Matches `studio12SplitMiddleDot` in `web/index.html`.
+    private static func studio12SplitMiddleDotParts(_ raw: String, count: Int) -> [String] {
+        let sep = " · "
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return Array(repeating: "", count: count) }
+        var parts = s.components(separatedBy: sep).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        while parts.count < count { parts.append("") }
+        if parts.count > count {
+            let tail = parts[(count - 1)...].joined(separator: sep)
+            parts = Array(parts.prefix(count - 1)) + [tail]
+        }
+        return parts
+    }
+
+    private static func trimmedFirestoreString(_ doc: [String: Any], key: String) -> String {
+        (doc[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Firestore `webCopyOverrides` map values coerced to strings (preserves unrelated keys when merging).
+    private static func coercedStringMap(_ value: Any?) -> [String: String] {
+        guard let dict = value as? [String: Any] else { return [:] }
+        var out: [String: String] = [:]
+        for (k, v) in dict {
+            if let s = v as? String {
+                out[k] = s
+            } else if v is NSNull {
+                continue
+            } else if let n = v as? NSNumber {
+                out[k] = n.stringValue
+            }
+        }
+        return out
+    }
+
+    /// Updates one field on `tenants/{tenantId}/services/{serviceId}` from preview `data-edit-key` (`svc:<id>:name|description`).
+    private func persistQuickEditServiceField(fieldKey: String, trimmed: String) async throws {
+        guard let tid = tenantId else { return }
+        let parts = fieldKey.split(separator: ":").map(String.init)
+        guard parts.count == 3, parts[0] == "svc" else { return }
+        let serviceId = parts[1]
+        let field = parts[2]
+        guard !serviceId.isEmpty, ["name", "description"].contains(field) else { return }
+        var svc = await MainActor.run { services.first { $0.id == serviceId } }
+        if svc == nil {
+            let fetched = try await firebaseService.fetchTenantServices(tenantId: tid)
+            await MainActor.run { services = fetched }
+            svc = await MainActor.run { services.first { $0.id == serviceId } }
+        }
+        guard let service = svc else {
+            await MainActor.run { errorMessage = "That service was not found. Open Builder and refresh, then try again." }
+            return
+        }
+        if field == "name", trimmed.isEmpty {
+            await MainActor.run { errorMessage = "Service name can’t be empty." }
+            return
+        }
+        let updates: [String: Any]
+        switch field {
+        case "name":
+            let slug = firebaseService.slug(from: trimmed)
+            updates = firebaseService.tenantServiceDisplayUpdates(
+                name: trimmed,
+                slug: slug,
+                durationMinutes: service.durationMinutes,
+                description: service.description,
+                startingPrice: service.price
+            )
+        case "description":
+            updates = firebaseService.tenantServiceDisplayUpdates(
+                name: service.name,
+                slug: service.slug,
+                durationMinutes: service.durationMinutes,
+                description: trimmed.isEmpty ? nil : trimmed,
+                startingPrice: service.price
+            )
+        default:
+            return
+        }
+        try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
+        let refreshed = try await firebaseService.fetchTenantServices(tenantId: tid)
+        await MainActor.run {
+            services = refreshed
+            errorMessage = nil
+        }
+    }
+
+    /// Persists one `wc.*` quick-edit slot into `webCopyOverrides` (empty value removes override).
+    private func persistWebCopyOverride(tenantId: String, key: String, value: String) async throws {
+        guard key.hasPrefix("wc.") else { return }
+        guard let doc = try await firebaseService.fetchTenant(tenantId: tenantId) else { return }
+        var map = Self.coercedStringMap(doc["webCopyOverrides"])
+        if value.isEmpty {
+            map.removeValue(forKey: key)
+        } else {
+            map[key] = value
+        }
+        try await firebaseService.updateTenant(tenantId: tenantId, updates: ["webCopyOverrides": map])
+    }
+
+    /// Inline quick edit from the in-app WKWebView preview (`data-edit-key` in `web/index.html`).
+    func saveQuickEdit(fieldKey: String, value: String) async {
+        guard let tid = tenantId else { return }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
+        await MainActor.run { errorMessage = nil }
+        do {
+            switch fieldKey {
+            case "displayName":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
+                await MainActor.run {
+                    displayName = trimmed
+                    invalidateWebPreview()
+                }
+            case "tagline":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["tagline": trimmed])
+                await MainActor.run {
+                    tagline = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxeHeroTagline":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHeroTagline": trimmed])
+                await MainActor.run {
+                    luxeHeroTagline = trimmed
+                    invalidateWebPreview()
+                }
+            case "bladeHeroTagline":
+                guard fam == .blade else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["bladeHeroTagline": trimmed])
+                await MainActor.run {
+                    bladeHeroTagline = trimmed
+                    invalidateWebPreview()
+                }
+            case "bladeHeroDescription":
+                guard fam == .blade else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["bladeHeroDescription": trimmed])
+                await MainActor.run {
+                    bladeHeroDescription = trimmed
+                    invalidateWebPreview()
+                }
+            case "serviceArea":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["serviceArea": trimmed])
+                await MainActor.run {
+                    serviceArea = trimmed
+                    let parsed = USStateServiceAreaFormatting.parseStoredServiceArea(trimmed)
+                    serviceCity = parsed.city
+                    serviceStateAbbr = parsed.stateAbbr
+                    invalidateWebPreview()
+                }
+            case "contactAddress":
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "contactAddress": trimmed,
+                    "address": trimmed,
+                ])
+                await MainActor.run {
+                    contactAddress = trimmed
+                    invalidateWebPreview()
+                }
+            case "businessHours":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["businessHours": trimmed])
+                await MainActor.run {
+                    businessHours = trimmed
+                    invalidateWebPreview()
+                }
+            case "instagramHandle":
+                let ig = trimmed.replacingOccurrences(of: "^@+", with: "", options: .regularExpression)
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["instagramHandle": ig])
+                await MainActor.run {
+                    instagramHandle = ig
+                    invalidateWebPreview()
+                }
+            case "contactPhone":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["contactPhone": trimmed])
+                await MainActor.run {
+                    contactPhone = trimmed
+                    invalidateWebPreview()
+                }
+            case "contactEmail":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["contactEmail": trimmed])
+                await MainActor.run {
+                    contactEmail = trimmed
+                    invalidateWebPreview()
+                }
+            case "aboutText":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["aboutText": trimmed])
+                await MainActor.run {
+                    aboutText = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicAboutEyebrow":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicAboutEyebrow": trimmed])
+                await MainActor.run {
+                    classicAboutEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicAboutHeading":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicAboutHeading": trimmed])
+                await MainActor.run {
+                    classicAboutHeading = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatYearsValue":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatYearsValue": trimmed])
+                await MainActor.run {
+                    classicStatYearsValue = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatYearsLabel":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatYearsLabel": trimmed])
+                await MainActor.run {
+                    classicStatYearsLabel = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatClientsValue":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatClientsValue": trimmed])
+                await MainActor.run {
+                    classicStatClientsValue = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatClientsLabel":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatClientsLabel": trimmed])
+                await MainActor.run {
+                    classicStatClientsLabel = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatRatedValue":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatRatedValue": trimmed])
+                await MainActor.run {
+                    classicStatRatedValue = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicStatRatedLabel":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatRatedLabel": trimmed])
+                await MainActor.run {
+                    classicStatRatedLabel = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicFeaturedWorkEyebrow":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkEyebrow": trimmed])
+                await MainActor.run {
+                    classicFeaturedWorkEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicFeaturedWorkHeading":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkHeading": trimmed])
+                await MainActor.run {
+                    classicFeaturedWorkHeading = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicFeaturedWorkSub":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkSub": trimmed])
+                await MainActor.run {
+                    classicFeaturedWorkSub = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicFeaturedWorkEmpty":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkEmpty": trimmed])
+                await MainActor.run {
+                    classicFeaturedWorkEmpty = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicServicesEyebrow":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicServicesEyebrow": trimmed])
+                await MainActor.run {
+                    classicServicesEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "classicServicesHeading":
+                guard fam == .classic else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicServicesHeading": trimmed])
+                await MainActor.run {
+                    classicServicesHeading = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxePromoHeadline":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxePromoHeadline": trimmed])
+                await MainActor.run {
+                    luxePromoHeadline = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxeFeaturedWorkEyebrow":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeFeaturedWorkEyebrow": trimmed])
+                await MainActor.run {
+                    luxeFeaturedWorkEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxeFeaturedWorkHeading":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeFeaturedWorkHeading": trimmed])
+                await MainActor.run {
+                    luxeFeaturedWorkHeading = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxeHomeServicesEyebrow":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHomeServicesEyebrow": trimmed])
+                await MainActor.run {
+                    luxeHomeServicesEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "luxeHomeServicesHeading":
+                guard fam == .luxe else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHomeServicesHeading": trimmed])
+                await MainActor.run {
+                    luxeHomeServicesHeading = trimmed
+                    invalidateWebPreview()
+                }
+            case "heroTagline":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["heroTagline": trimmed])
+                await MainActor.run {
+                    heroTagline = trimmed
+                    invalidateWebPreview()
+                }
+            case "studio12HeroEyebrow":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12HeroEyebrow": trimmed])
+                await MainActor.run {
+                    studio12HeroEyebrow = trimmed
+                    invalidateWebPreview()
+                }
+            case "studio12HeroLine1":
+                guard fam == .studio12 else { return }
+                guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
+                let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
+                let line2: String
+                if !mergedHero.isEmpty {
+                    line2 = Self.splitStudio12HeroHeadline(mergedHero).line2
+                } else {
+                    line2 = Self.trimmedFirestoreString(doc, key: "studio12HeroLine2")
+                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12HeroLine1": trimmed,
+                    "studio12HeroLine2": line2,
+                    "studio12HeroHeadline": "",
+                ])
+                await MainActor.run { invalidateWebPreview() }
+            case "studio12HeroLine2":
+                guard fam == .studio12 else { return }
+                guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
+                let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
+                let line1: String
+                if !mergedHero.isEmpty {
+                    line1 = Self.splitStudio12HeroHeadline(mergedHero).line1
+                } else {
+                    line1 = Self.trimmedFirestoreString(doc, key: "studio12HeroLine1")
+                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12HeroLine1": line1,
+                    "studio12HeroLine2": trimmed,
+                    "studio12HeroHeadline": "",
+                ])
+                await MainActor.run { invalidateWebPreview() }
+            case "studio12BookCtaLine1":
+                guard fam == .studio12 else { return }
+                guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
+                let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
+                let italic: String
+                if !mergedBook.isEmpty {
+                    let parts = Self.studio12SplitMiddleDotParts(mergedBook, count: 2)
+                    italic = parts.count > 1 ? parts[1] : ""
+                } else {
+                    italic = Self.trimmedFirestoreString(doc, key: "studio12BookCtaItalic")
+                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12BookCtaLine1": trimmed,
+                    "studio12BookCtaItalic": italic,
+                    "studio12BookCtaHeadline": "",
+                ])
+                await MainActor.run { invalidateWebPreview() }
+            case "studio12BookCtaItalic":
+                guard fam == .studio12 else { return }
+                guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
+                let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
+                let bookLine1: String
+                if !mergedBook.isEmpty {
+                    let parts = Self.studio12SplitMiddleDotParts(mergedBook, count: 2)
+                    bookLine1 = parts.first ?? ""
+                } else {
+                    bookLine1 = Self.trimmedFirestoreString(doc, key: "studio12BookCtaLine1")
+                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12BookCtaLine1": bookLine1,
+                    "studio12BookCtaItalic": trimmed,
+                    "studio12BookCtaHeadline": "",
+                ])
+                await MainActor.run { invalidateWebPreview() }
+            case "studio12BookCtaBody":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12BookCtaBody": trimmed])
+                await MainActor.run {
+                    studio12BookCtaBody = trimmed
+                    invalidateWebPreview()
+                }
+            case "studio12PhilosophyHeadLine1":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12PhilosophyHeadLine1": trimmed,
+                    "studio12PhilosophyHeadline": "",
+                ])
+                await MainActor.run {
+                    studio12PhilosophyHeadline = ""
+                    invalidateWebPreview()
+                }
+            case "studio12PhilosophyHeadLine2":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12PhilosophyHeadLine2": trimmed,
+                    "studio12PhilosophyHeadline": "",
+                ])
+                await MainActor.run {
+                    studio12PhilosophyHeadline = ""
+                    invalidateWebPreview()
+                }
+            case "studio12PhilosophyHeadItalic":
+                guard fam == .studio12 else { return }
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "studio12PhilosophyHeadItalic": trimmed,
+                    "studio12PhilosophyHeadline": "",
+                ])
+                await MainActor.run {
+                    studio12PhilosophyHeadline = ""
+                    invalidateWebPreview()
+                }
+            default:
+                if fieldKey.hasPrefix("svc:") {
+                    try await persistQuickEditServiceField(fieldKey: fieldKey, trimmed: trimmed)
+                    await MainActor.run { invalidateWebPreview() }
+                } else if fieldKey.hasPrefix("wc.") {
+                    let rest = String(fieldKey.dropFirst(3))
+                    guard !rest.isEmpty,
+                          rest.range(of: "^[a-zA-Z0-9_.-]+$", options: .regularExpression) != nil else { break }
+                    try await persistWebCopyOverride(tenantId: tid, key: fieldKey, value: trimmed)
+                    await MainActor.run { invalidateWebPreview() }
+                }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
     }
 
     func applyFeaturedWorkPreset(_ preset: FeaturedWorkColorPreset) {
@@ -428,6 +924,8 @@ class DesignViewModel: ObservableObject {
                 classicStatClientsLabel = (tenant?["classicStatClientsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Clients"
                 classicStatRatedValue = (tenant?["classicStatRatedValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "5★"
                 classicStatRatedLabel = (tenant?["classicStatRatedLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Rated"
+                classicAboutEyebrow = tenant?["classicAboutEyebrow"] as? String ?? ""
+                classicAboutHeading = tenant?["classicAboutHeading"] as? String ?? ""
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 snapFeaturedWorkColorsToNearestPreset()
@@ -570,6 +1068,8 @@ class DesignViewModel: ObservableObject {
             updates["classicServicesEyebrow"] = classicServicesEyebrow
             updates["classicServicesHeading"] = classicServicesHeading
             updates["classicServicesExpandableCard"] = classicServicesExpandableCard
+            updates["classicAboutEyebrow"] = classicAboutEyebrow
+            updates["classicAboutHeading"] = classicAboutHeading
         }
         if fam == .luxe {
             updates["luxeFeaturedWorkEyebrow"] = luxeFeaturedWorkEyebrow
@@ -664,6 +1164,8 @@ class DesignViewModel: ObservableObject {
             updates["classicStatClientsLabel"] = classicStatClientsLabel
             updates["classicStatRatedValue"] = classicStatRatedValue
             updates["classicStatRatedLabel"] = classicStatRatedLabel
+            updates["classicAboutEyebrow"] = classicAboutEyebrow
+            updates["classicAboutHeading"] = classicAboutHeading
         }
         await saveTenantUpdates(tid, updates)
         await MainActor.run {

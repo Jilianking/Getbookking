@@ -2,8 +2,8 @@
 //  UploadImagePreparationSheet.swift
 //  Test
 //
-//  Slot-specific aspect presets, then a dimmed full-image view with a draggable
-//  (and pinch-resizable) crop frame for single-photo uploads. Multi-select still
+//  Slot-specific aspect presets, then a fixed-aspect crop window (Instagram-style):
+//  pan and pinch the photo behind the mask; optional 90° rotate. Multi-select still
 //  uses center crop per image with the chosen aspect.
 //
 
@@ -25,14 +25,14 @@ struct MultiImageCropSheetItem: Identifiable {
 // MARK: - Short guidance per upload context
 
 enum UploadImageAdvice {
-    static let hero = "Hero is a fixed 16:9 frame. Drag the white frame over your photo; pinch to resize. What the frame shows is exactly what visitors see."
+    static let hero = "Hero uses a fixed frame on your site. Drag to move your photo, pinch to zoom—what you see inside the white border is what visitors see (16:9 and other ratios in the menu)."
     /// Luxe full-bleed wide hero (Design → Home + crop sheet when Luxe is selected).
-    static let heroLuxe = "Luxe hero is a fixed 16:9 frame across the whole page. Drag the white frame to pick the exact crop; keep the subject clear of the left side where your text sits."
-    static let studioAux = "Side image is a fixed frame (philosophy 4:5, CTA 4:3). Drag the white frame to pick your crop. Simple backgrounds keep nearby text readable."
-    static let gallery = "Gallery cells are a fixed shape for every photo. Drag the frame to pick your crop. Several photos at once use the same framing with a center crop on each."
+    static let heroLuxe = "Luxe hero is a wide fixed frame. Move and zoom your photo behind the border; keep the subject clear of the left where your text sits."
+    static let studioAux = "Side images use a fixed frame (philosophy 4:5, CTA 4:3). Move and zoom your photo behind the border. Simple backgrounds keep nearby text readable."
+    static let gallery = "Gallery uses a fixed cell shape. Move and zoom behind the border. Several photos at once use the same framing with a center crop on each."
     /// Studio 12 live site shows the full uploaded bitmap inside gallery tiles (no second browser crop).
-    static let galleryStudio12 = "Studio 12 home strip and /gallery tiles show your whole upload (letterboxed if needed). Portrait 4:5 is closest to strip tiles—drag the frame to compose. Several photos at once use center crop with the same framing."
-    static let featured = "Strong single shots for the home strip—finished work or a signature look. Drag the crop frame; multi-select uses center crop on each with the same framing."
+    static let galleryStudio12 = "Studio 12 tiles show your whole upload (letterboxed if needed). Portrait 4:5 is closest to strip tiles—compose inside the border. Several photos at once use center crop with the same framing."
+    static let featured = "Strong single shots for the home strip. Move and zoom inside the border; multi-select uses center crop on each with the same framing."
     static let product = "Clear product on a simple background; square or centered framing reads best in the shop grid."
     static let profile = "Face-forward or logo-style image; square framing matches the round avatar on your account."
 }
@@ -94,80 +94,20 @@ enum UploadCropPresetMenu {
     static let profile: [UploadCropAspectChoice] = [.square, .original]
 }
 
-// MARK: - Single-image crop for export (pixel space, upright image)
+// MARK: - Single-image crop for export (fixed mask → pixel rect on working image)
 
+/// Replay data for `FixedMaskCropExport.pixelCropRect` / `croppedUsingFixedMask`.
 struct InteractiveCropParameters: Equatable {
-    /// Crop rectangle in pixels of `normalizedForUploadCrop()` CGImage coordinates.
-    var cropRectPixels: CGRect
-}
-
-// MARK: - Crop box geometry (pixel space, fixed aspect)
-
-private enum CropBoxMath {
-    /// Largest axis-aligned rect with given aspect inside pw × ph, centered.
-    static func initialMaxCrop(pixelW pw: CGFloat, pixelH ph: CGFloat, aspectWidthOverHeight aspect: CGFloat) -> CGRect {
-        guard pw > 1, ph > 1, aspect > 0 else {
-            return CGRect(x: 0, y: 0, width: max(1, pw), height: max(1, ph))
-        }
-        let ai = pw / ph
-        let w: CGFloat
-        let h: CGFloat
-        let x: CGFloat
-        let y: CGFloat
-        if ai >= aspect {
-            h = ph
-            w = h * aspect
-            x = (pw - w) / 2
-            y = 0
-        } else {
-            w = pw
-            h = w / aspect
-            x = 0
-            y = (ph - h) / 2
-        }
-        return CGRect(x: x, y: y, width: w, height: h).standardized
-    }
-
-    static func clampOriginPreservingSize(_ r: CGRect, pixelW pw: CGFloat, pixelH ph: CGFloat) -> CGRect {
-        let s = r.standardized
-        let x = min(max(0, s.origin.x), pw - s.width)
-        let y = min(max(0, s.origin.y), ph - s.height)
-        return CGRect(origin: CGPoint(x: x, y: y), size: s.size)
-    }
-
-    /// Minimum width/height in pixels (both enforced via aspect).
-    static func minCropSize(pixelW pw: CGFloat, pixelH ph: CGFloat, aspect: CGFloat) -> CGFloat {
-        let m = min(pw, ph)
-        return max(32, m * 0.06)
-    }
-
-    /// Scale `r` uniformly about its center by `factor`, keep aspect, clamp inside image.
-    static func scaleRectAboutCenter(
-        _ r: CGRect,
-        factor: CGFloat,
-        pixelW pw: CGFloat,
-        pixelH ph: CGFloat,
-        aspect: CGFloat
-    ) -> CGRect {
-        let s = r.standardized
-        guard s.width > 0, s.height > 0, factor > 0, pw > 0, ph > 0 else { return s }
-        let cx = s.midX
-        let cy = s.midY
-        let minW = minCropSize(pixelW: pw, pixelH: ph, aspect: aspect)
-        let maxByW = min(pw, ph * aspect)
-        let maxByH = min(ph, pw / aspect)
-        var nw = min(max(s.width * factor, minW), maxByW)
-        var nh = nw / aspect
-        if nh > maxByH {
-            nh = maxByH
-            nw = nh * aspect
-        }
-        var x = cx - nw / 2
-        var y = cy - nh / 2
-        x = min(max(0, x), pw - nw)
-        y = min(max(0, y), ph - nh)
-        return CGRect(x: x, y: y, width: nw, height: nh).standardized
-    }
+    var editorWidth: CGFloat
+    var editorHeight: CGFloat
+    var maskAspectWidthOverHeight: CGFloat
+    /// Pinch multiplier on top of the minimum “cover” scale (≥ 1).
+    var userScale: CGFloat
+    /// Pan of the image center vs editor center, in points.
+    var offsetWidth: CGFloat
+    var offsetHeight: CGFloat
+    var imagePixelWidth: CGFloat
+    var imagePixelHeight: CGFloat
 }
 
 // MARK: - UIImage helpers
@@ -236,63 +176,182 @@ extension UIImage {
     func jpegDataForUploadCropExport(compressionQuality: CGFloat = 0.92) -> Data? {
         jpegData(compressionQuality: compressionQuality)
     }
+
+    /// 90° clockwise in pixel space (scale 1); chain for 180° / 270°.
+    func rotatedClockwise90ForUpload() -> UIImage {
+        let img = normalizedForUploadCrop()
+        guard let cg = img.cgImage else { return img }
+        let w = CGFloat(cg.width)
+        let h = CGFloat(cg.height)
+        guard w > 1, h > 1 else { return img }
+        let outSize = CGSize(width: h, height: w)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: outSize, format: format)
+        return renderer.image { ctx in
+            ctx.cgContext.translateBy(x: outSize.width, y: 0)
+            ctx.cgContext.rotate(by: .pi / 2)
+            img.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+    }
 }
 
-// MARK: - Draggable crop frame over full image (single image)
+// MARK: - Fixed mask ↔ pixel crop (export must match on-screen geometry)
 
-private struct DraggableCropBoxEditor: View {
-    let image: UIImage
+private enum FixedMaskCropExport {
+    /// Largest axis-aligned mask with aspect `a` inside W×H.
+    static func maskSize(containerWidth W: CGFloat, containerHeight H: CGFloat, aspectWidthOverHeight a: CGFloat) -> (mw: CGFloat, mh: CGFloat) {
+        guard W > 1, H > 1, a > 0 else { return (min(W, 1), min(H, 1)) }
+        var mw = min(W, H * a)
+        var mh = mw / a
+        if mh > H {
+            mh = H
+            mw = mh * a
+        }
+        return (mw, mh)
+    }
+
+    static func pixelCropRect(parameters p: InteractiveCropParameters) -> CGRect {
+        pixelCropRect(
+            editorWidth: p.editorWidth,
+            editorHeight: p.editorHeight,
+            aspectWidthOverHeight: p.maskAspectWidthOverHeight,
+            pixelW: p.imagePixelWidth,
+            pixelH: p.imagePixelHeight,
+            userScale: p.userScale,
+            offset: CGSize(width: p.offsetWidth, height: p.offsetHeight)
+        )
+    }
+
+    static func pixelCropRect(
+        editorWidth W: CGFloat,
+        editorHeight H: CGFloat,
+        aspectWidthOverHeight a: CGFloat,
+        pixelW pw: CGFloat,
+        pixelH ph: CGFloat,
+        userScale: CGFloat,
+        offset: CGSize
+    ) -> CGRect {
+        let (Mw, Mh) = maskSize(containerWidth: W, containerHeight: H, aspectWidthOverHeight: a)
+        let mx = (W - Mw) / 2
+        let my = (H - Mh) / 2
+        let base = max(Mw / max(pw, 1), Mh / max(ph, 1))
+        let s = max(1, userScale)
+        let imgW = pw * base * s
+        let imgH = ph * base * s
+        let cx = W / 2 + offset.width
+        let cy = H / 2 + offset.height
+        let imLeft = cx - imgW / 2
+        let imTop = cy - imgH / 2
+
+        func toPixel(vx: CGFloat, vy: CGFloat) -> CGPoint {
+            CGPoint(x: (vx - imLeft) * pw / max(imgW, 1), y: (vy - imTop) * ph / max(imgH, 1))
+        }
+
+        let p00 = toPixel(vx: mx, vy: my)
+        let p10 = toPixel(vx: mx + Mw, vy: my)
+        let p01 = toPixel(vx: mx, vy: my + Mh)
+        let p11 = toPixel(vx: mx + Mw, vy: my + Mh)
+        let minX = min(p00.x, p10.x, p01.x, p11.x)
+        let maxX = max(p00.x, p10.x, p01.x, p11.x)
+        let minY = min(p00.y, p10.y, p01.y, p11.y)
+        let maxY = max(p00.y, p10.y, p01.y, p11.y)
+        let bounds = CGRect(x: 0, y: 0, width: pw, height: ph)
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            .standardized
+            .intersection(bounds)
+    }
+
+    /// Keep the scaled image covering the full mask after pan or zoom.
+    static func clampOffset(
+        offset: CGSize,
+        editorWidth W: CGFloat,
+        editorHeight H: CGFloat,
+        aspectWidthOverHeight a: CGFloat,
+        pixelW pw: CGFloat,
+        pixelH ph: CGFloat,
+        userScale: CGFloat
+    ) -> CGSize {
+        let (Mw, Mh) = maskSize(containerWidth: W, containerHeight: H, aspectWidthOverHeight: a)
+        let mx = (W - Mw) / 2
+        let my = (H - Mh) / 2
+        let base = max(Mw / max(pw, 1), Mh / max(ph, 1))
+        let s = max(1, userScale)
+        let imgW = pw * base * s
+        let imgH = ph * base * s
+
+        let oxMin = mx + Mw - W / 2 - imgW / 2
+        let oxMax = mx - W / 2 + imgW / 2
+        let oyMin = my + Mh - H / 2 - imgH / 2
+        let oyMax = my - H / 2 + imgH / 2
+
+        let ox: CGFloat
+        if oxMin <= oxMax {
+            ox = min(max(offset.width, oxMin), oxMax)
+        } else {
+            ox = (oxMin + oxMax) / 2
+        }
+        let oy: CGFloat
+        if oyMin <= oyMax {
+            oy = min(max(offset.height, oyMin), oyMax)
+        } else {
+            oy = (oyMin + oyMax) / 2
+        }
+        return CGSize(width: ox, height: oy)
+    }
+}
+
+// MARK: - Fixed crop mask; pan / pinch image behind it (+ rotate via binding)
+
+private struct FixedMaskImageEditor: View {
+    @Binding var workingImage: UIImage
     let aspectWidthOverHeight: CGFloat
-    @Binding var cropRectPixels: CGRect
+    @Binding var userScale: CGFloat
+    @Binding var offset: CGSize
 
-    @State private var dragStartCrop: CGRect?
-    @State private var pinchStartCrop: CGRect?
+    private static let maxUserScale: CGFloat = 8
 
-    private var normalized: UIImage { image.normalizedForUploadCrop() }
+    @State private var dragStartOffset: CGSize?
+    @State private var pinchStartScale: CGFloat?
 
     private var pixelWH: (CGFloat, CGFloat) {
-        guard let cg = normalized.cgImage else { return (1, 1) }
+        let im = workingImage.normalizedForUploadCrop()
+        guard let cg = im.cgImage else { return (1, 1) }
         return (CGFloat(cg.width), CGFloat(cg.height))
     }
 
     var body: some View {
         GeometryReader { geo in
-            let container = geo.size
+            let W = geo.size.width
+            let H = geo.size.height
+            let (Mw, Mh) = FixedMaskCropExport.maskSize(containerWidth: W, containerHeight: H, aspectWidthOverHeight: aspectWidthOverHeight)
             let (pw, ph) = pixelWH
-            let s = min(container.width / pw, container.height / ph)
-            let iw = pw * s
-            let ih = ph * s
-            let ix = (container.width - iw) / 2
-            let iy = (container.height - ih) / 2
-            let imageRect = CGRect(x: ix, y: iy, width: iw, height: ih)
 
-            let crop = cropRectPixels.standardized
-            let cropViewW = crop.width / pw * imageRect.width
-            let cropViewH = crop.height / ph * imageRect.height
-            let cropMidX = imageRect.minX + crop.midX / pw * imageRect.width
-            let cropMidY = imageRect.minY + crop.midY / ph * imageRect.height
+            let baseScale = max(Mw / max(pw, 1), Mh / max(ph, 1))
+            let visScale = max(1, userScale)
+            let imgW = pw * baseScale * visScale
+            let imgH = ph * baseScale * visScale
 
             ZStack {
-                Image(uiImage: normalized)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: container.width, height: container.height)
+                Color.black.opacity(0.82)
 
                 ZStack {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.52))
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .frame(width: max(1, cropViewW), height: max(1, cropViewH))
-                        .position(x: cropMidX, y: cropMidY)
-                        .blendMode(.destinationOut)
+                    Image(uiImage: workingImage.normalizedForUploadCrop())
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: imgW, height: imgH)
+                        .position(x: Mw / 2 + offset.width, y: Mh / 2 + offset.height)
                 }
-                .compositingGroup()
+                .frame(width: max(1, Mw), height: max(1, Mh))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .position(x: W / 2, y: H / 2)
 
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .strokeBorder(Color.white, lineWidth: 2.5)
-                    .frame(width: max(1, cropViewW), height: max(1, cropViewH))
-                    .position(x: cropMidX, y: cropMidY)
+                    .frame(width: max(1, Mw), height: max(1, Mh))
+                    .position(x: W / 2, y: H / 2)
+                    .allowsHitTesting(false)
                     .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -302,46 +361,56 @@ private struct DraggableCropBoxEditor: View {
             )
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 2)
+                DragGesture(minimumDistance: 1)
                     .onChanged { g in
-                        if dragStartCrop == nil { dragStartCrop = cropRectPixels.standardized }
-                        guard let start = dragStartCrop else { return }
-                        let dpx = g.translation.width / s
-                        let dpy = g.translation.height / s
-                        let moved = start.offsetBy(dx: dpx, dy: dpy)
-                        cropRectPixels = CropBoxMath.clampOriginPreservingSize(moved, pixelW: pw, pixelH: ph)
+                        if dragStartOffset == nil { dragStartOffset = offset }
+                        guard let start = dragStartOffset else { return }
+                        let next = CGSize(width: start.width + g.translation.width, height: start.height + g.translation.height)
+                        offset = FixedMaskCropExport.clampOffset(
+                            offset: next,
+                            editorWidth: W,
+                            editorHeight: H,
+                            aspectWidthOverHeight: aspectWidthOverHeight,
+                            pixelW: pw,
+                            pixelH: ph,
+                            userScale: userScale
+                        )
                     }
                     .onEnded { _ in
-                        dragStartCrop = nil
+                        dragStartOffset = nil
                     }
             )
             .simultaneousGesture(
                 MagnificationGesture()
                     .onChanged { mag in
-                        if pinchStartCrop == nil { pinchStartCrop = cropRectPixels.standardized }
-                        guard let start = pinchStartCrop else { return }
-                        cropRectPixels = CropBoxMath.scaleRectAboutCenter(
-                            start,
-                            factor: mag,
+                        if pinchStartScale == nil { pinchStartScale = userScale }
+                        guard let start = pinchStartScale else { return }
+                        let next = min(Self.maxUserScale, max(1, start * mag))
+                        userScale = next
+                        offset = FixedMaskCropExport.clampOffset(
+                            offset: offset,
+                            editorWidth: W,
+                            editorHeight: H,
+                            aspectWidthOverHeight: aspectWidthOverHeight,
                             pixelW: pw,
                             pixelH: ph,
-                            aspect: aspectWidthOverHeight
+                            userScale: userScale
                         )
                     }
-                    .onEnded { mag in
-                        guard let start = pinchStartCrop else { return }
-                        cropRectPixels = CropBoxMath.scaleRectAboutCenter(
-                            start,
-                            factor: mag,
-                            pixelW: pw,
-                            pixelH: ph,
-                            aspect: aspectWidthOverHeight
-                        )
-                        pinchStartCrop = nil
+                    .onEnded { _ in
+                        pinchStartScale = nil
                     }
             )
             .onChange(of: geo.size) { _, _ in
-                cropRectPixels = CropBoxMath.clampOriginPreservingSize(cropRectPixels, pixelW: pw, pixelH: ph)
+                offset = FixedMaskCropExport.clampOffset(
+                    offset: offset,
+                    editorWidth: W,
+                    editorHeight: H,
+                    aspectWidthOverHeight: aspectWidthOverHeight,
+                    pixelW: pw,
+                    pixelH: ph,
+                    userScale: userScale
+                )
             }
         }
     }
@@ -369,10 +438,13 @@ enum UploadImageCropExport {
 
         guard let img = images.first,
               allowsInteractive,
-              let p = interactive,
-              p.cropRectPixels.width > 1,
-              p.cropRectPixels.height > 1,
-              let cropped = img.croppedToPixelRect(p.cropRectPixels)
+              let p = interactive
+        else {
+            return images.compactMap { $0.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport() }
+        }
+        let cropRect = FixedMaskCropExport.pixelCropRect(parameters: p)
+        guard cropRect.width > 1, cropRect.height > 1,
+              let cropped = img.normalizedForUploadCrop().croppedToPixelRect(cropRect)
         else {
             return images.compactMap { $0.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport() }
         }
@@ -394,7 +466,10 @@ struct UploadImagePreparationSheet: View {
     let onUseJPEGData: ([Data]) -> Void
 
     @State private var choice: UploadCropAspectChoice
-    @State private var cropRectPixels: CGRect = .zero
+    /// Upright pixel bitmap shown in the editor (rotates in-place for 90° steps).
+    @State private var workingImageForCrop = UIImage()
+    @State private var editorUserScale: CGFloat = 1
+    @State private var editorOffset: CGSize = .zero
 
     init(
         images: [UIImage],
@@ -438,10 +513,18 @@ struct UploadImagePreparationSheet: View {
         return min(300, max(140, fitH))
     }
 
-    /// Taller region so vertical photos show with room to move the crop frame.
+    /// Match the editor region to the chosen crop shape so wide hero crops do not waste vertical space.
     private var editorContainerSize: CGSize {
         let w = contentWidth
-        let h = min(480, max(240, w * 1.22))
+        guard let aspect = previewAspect, aspect > 0 else {
+            return CGSize(width: w, height: min(480, max(240, w * 1.22)))
+        }
+
+        let cropHeight = w / aspect
+        let breathingRoom: CGFloat = aspect >= 1 ? 36 : 0
+        let minHeight: CGFloat = aspect >= 1 ? 180 : 240
+        let maxHeight: CGFloat = aspect >= 1 ? 340 : 480
+        let h = min(maxHeight, max(minHeight, cropHeight + breathingRoom))
         return CGSize(width: w, height: h)
     }
 
@@ -449,15 +532,10 @@ struct UploadImagePreparationSheet: View {
         images.count == 1 && previewAspect != nil
     }
 
-    private func resetCropRectForCurrentChoice() {
-        guard let asp = choice.aspectWidthOverHeight,
-              let cg = previewImage.normalizedForUploadCrop().cgImage else {
-            cropRectPixels = .zero
-            return
-        }
-        let pw = CGFloat(cg.width)
-        let ph = CGFloat(cg.height)
-        cropRectPixels = CropBoxMath.initialMaxCrop(pixelW: pw, pixelH: ph, aspectWidthOverHeight: asp)
+    private func resetEditorFromPreview() {
+        workingImageForCrop = previewImage.normalizedForUploadCrop()
+        editorUserScale = 1
+        editorOffset = .zero
     }
 
     private func previewOriginal(width w: CGFloat, height h: CGFloat) -> some View {
@@ -478,23 +556,36 @@ struct UploadImagePreparationSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if images.count > 1 {
-                        Text("Several photos: the same framing is center-cropped on each. Add one photo at a time to drag and resize the frame.")
+                        Text("Several photos: the same framing is center-cropped on each. Add one photo at a time to move and zoom inside the border.")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
                     } else if previewAspect != nil {
-                        Text("Drag the white frame to choose the area. Pinch to resize it.")
+                        Text("Move your photo behind the border; pinch to zoom. Rotate if needed—what’s inside the border is what uploads.")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
 
                     VStack(spacing: 12) {
                         if useInteractiveEditor, let asp = previewAspect {
-                            DraggableCropBoxEditor(
-                                image: previewImage,
+                            FixedMaskImageEditor(
+                                workingImage: $workingImageForCrop,
                                 aspectWidthOverHeight: asp,
-                                cropRectPixels: $cropRectPixels
+                                userScale: $editorUserScale,
+                                offset: $editorOffset
                             )
                             .frame(width: editorContainerSize.width, height: editorContainerSize.height)
+
+                            HStack {
+                                Button {
+                                    workingImageForCrop = workingImageForCrop.rotatedClockwise90ForUpload()
+                                    editorUserScale = 1
+                                    editorOffset = .zero
+                                } label: {
+                                    Label("Rotate 90°", systemImage: "rotate.right")
+                                }
+                                .buttonStyle(.bordered)
+                                Spacer()
+                            }
                         } else if previewAspect != nil {
                             let w = contentWidth
                             let h = previewHeight(forContentWidth: w)
@@ -541,11 +632,27 @@ struct UploadImagePreparationSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirmButtonTitle) {
-                        let interactive: InteractiveCropParameters? = useInteractiveEditor
-                            ? InteractiveCropParameters(cropRectPixels: cropRectPixels.standardized)
-                            : nil
+                        let interactive: InteractiveCropParameters? = {
+                            guard useInteractiveEditor,
+                                  let asp = choice.aspectWidthOverHeight,
+                                  let cg = workingImageForCrop.normalizedForUploadCrop().cgImage
+                            else { return nil }
+                            let pw = CGFloat(cg.width)
+                            let ph = CGFloat(cg.height)
+                            return InteractiveCropParameters(
+                                editorWidth: editorContainerSize.width,
+                                editorHeight: editorContainerSize.height,
+                                maskAspectWidthOverHeight: asp,
+                                userScale: editorUserScale,
+                                offsetWidth: editorOffset.width,
+                                offsetHeight: editorOffset.height,
+                                imagePixelWidth: pw,
+                                imagePixelHeight: ph
+                            )
+                        }()
+                        let exportImages = useInteractiveEditor ? [workingImageForCrop] : images
                         let list = UploadImageCropExport.jpegDataList(
-                            from: images,
+                            from: exportImages,
                             choice: choice,
                             interactive: interactive,
                             allowsInteractive: useInteractiveEditor
@@ -557,10 +664,10 @@ struct UploadImagePreparationSheet: View {
                 }
             }
             .onAppear {
-                resetCropRectForCurrentChoice()
+                resetEditorFromPreview()
             }
             .onChange(of: choice) { _, _ in
-                resetCropRectForCurrentChoice()
+                resetEditorFromPreview()
             }
         }
     }

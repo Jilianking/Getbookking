@@ -20,6 +20,9 @@ struct DesignView: View {
     @State private var bladeServiceToEdit: TenantService?
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
+    @State private var isQuickEditEnabled = false
+    @State private var quickEditSheet: QuickEditSheetPayload?
+    @State private var quickEditHeroImageSheet = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -51,8 +54,18 @@ struct DesignView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Group {
                         if !isShowingBuilder {
-                            HStack(spacing: 16) {
-                                Button("Edit") {
+                            HStack(spacing: 12) {
+                                if viewModel.hasTenant, !authViewModel.isDemoMode {
+                                    Text("Preview")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(isQuickEditEnabled ? Color.secondary : Color.primary)
+                                    Toggle("", isOn: $isQuickEditEnabled)
+                                        .labelsHidden()
+                                        .toggleStyle(.switch)
+                                        .accessibilityLabel("Quick edit")
+                                }
+                                Button("Builder") {
+                                    isQuickEditEnabled = false
                                     isShowingBuilder = true
                                 }
                                 if viewModel.hasTenant, URL(string: viewModel.bookingUrl) != nil {
@@ -73,8 +86,96 @@ struct DesignView: View {
                     viewModel.syncLogoUrlFromExternal(url)
                 }
             }
+            .sheet(item: $quickEditSheet) { payload in
+                PreviewQuickEditSheet(
+                    fieldKey: payload.fieldKey,
+                    title: Self.quickEditFieldTitle(payload.fieldKey),
+                    initialText: payload.currentText,
+                    viewModel: viewModel,
+                    onDismiss: { quickEditSheet = nil }
+                )
+            }
+            .sheet(isPresented: $quickEditHeroImageSheet) {
+                NavigationStack {
+                    Form {
+                        HeroImageUploadSection(viewModel: viewModel)
+                    }
+                    .navigationTitle("Hero image")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { quickEditHeroImageSheet = false }
+                        }
+                    }
+                }
+            }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private struct QuickEditSheetPayload: Identifiable {
+        let id = UUID()
+        let fieldKey: String
+        let currentText: String
+    }
+
+    private static func quickEditFieldTitle(_ key: String) -> String {
+        switch key {
+        case "displayName": return "Business name"
+        case "tagline": return "Tagline"
+        case "luxeHeroTagline": return "Hero line"
+        case "bladeHeroTagline": return "Hero headline"
+        case "bladeHeroDescription": return "Hero description"
+        case "serviceArea": return "City / area"
+        case "contactAddress": return "Street address"
+        case "contactPhone": return "Phone"
+        case "contactEmail": return "Email"
+        case "aboutText": return "About text"
+        case "classicAboutEyebrow": return "About section label"
+        case "classicAboutHeading": return "About headline"
+        case "classicStatYearsValue": return "Stat — years value"
+        case "classicStatYearsLabel": return "Stat — years label"
+        case "classicStatClientsValue": return "Stat — clients value"
+        case "classicStatClientsLabel": return "Stat — clients label"
+        case "classicStatRatedValue": return "Stat — rating value"
+        case "classicStatRatedLabel": return "Stat — rating label"
+        case "classicFeaturedWorkEyebrow": return "Featured section label"
+        case "classicFeaturedWorkHeading": return "Featured section title"
+        case "classicFeaturedWorkSub": return "Featured section subtext"
+        case "classicFeaturedWorkEmpty": return "Featured empty-state text"
+        case "classicServicesEyebrow": return "Services section label"
+        case "classicServicesHeading": return "Services section title"
+        case "luxePromoHeadline": return "Promo headline"
+        case "luxeFeaturedWorkEyebrow": return "Gallery section label"
+        case "luxeFeaturedWorkHeading": return "Gallery section title"
+        case "luxeHomeServicesEyebrow": return "Services section label"
+        case "luxeHomeServicesHeading": return "Services section title"
+        case "heroTagline": return "Hero accent line"
+        case "studio12HeroEyebrow": return "Hero eyebrow"
+        case "studio12HeroLine1": return "Hero headline (line 1)"
+        case "studio12HeroLine2": return "Hero headline (line 2)"
+        case "studio12BookCtaLine1": return "Booking headline"
+        case "studio12BookCtaItalic": return "Booking headline accent"
+        case "studio12BookCtaBody": return "Booking section text"
+        case "businessHours": return "Business hours"
+        case "instagramHandle": return "Instagram handle"
+        case "studio12PhilosophyHeadLine1": return "Philosophy headline (line 1)"
+        case "studio12PhilosophyHeadLine2": return "Philosophy headline (line 2)"
+        case "studio12PhilosophyHeadItalic": return "Philosophy headline (accent)"
+        case "heroImage": return "Hero image"
+        default:
+            if key.hasPrefix("svc:") {
+                let parts = key.split(separator: ":").map(String.init)
+                if parts.count == 3, parts[2] == "name" { return "Service name" }
+                if parts.count == 3, parts[2] == "description" { return "Service description" }
+                return "Service"
+            }
+            if key.hasPrefix("wc.") {
+                let tail = String(key.dropFirst(3)).replacingOccurrences(of: ".", with: " → ")
+                return "Site text: \(tail)"
+            }
+            return "Edit text"
+        }
     }
 
     /// Same path as `bookingUrl` with a cache-busting query so WKWebView reloads after Firestore updates (token bumps in `DesignViewModel`).
@@ -90,7 +191,25 @@ struct DesignView: View {
     private var previewContent: some View {
         WebViewPreview(
             url: sitePreviewURL,
-            height: nil
+            height: nil,
+            quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
+            onQuickEditTap: { key, text in
+                if key == "heroImage" {
+                    quickEditHeroImageSheet = true
+                    return
+                }
+                if key.hasPrefix("svc:") {
+                    let parts = key.split(separator: ":").map(String.init)
+                    if parts.count == 3, parts[0] == "svc" {
+                        let serviceId = parts[1]
+                        if let service = viewModel.services.first(where: { $0.id == serviceId }) {
+                            bladeServiceToEdit = service
+                            return
+                        }
+                    }
+                }
+                quickEditSheet = QuickEditSheetPayload(fieldKey: key, currentText: text)
+            }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
@@ -2594,6 +2713,54 @@ private struct BusinessHoursExceptionEditSheet: View {
 
     private static func ymd(from date: Date) -> String {
         ymdFormatter.string(from: date)
+    }
+}
+
+// MARK: - Preview quick edit (WKWebView `data-edit-key`)
+private struct PreviewQuickEditSheet: View {
+    let fieldKey: String
+    let title: String
+    let initialText: String
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+
+    @State private var draft: String = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(title, text: $draft)
+                        .textInputAutocapitalization(.sentences)
+                }
+                if let err = viewModel.errorMessage, !err.isEmpty {
+                    Section {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            await viewModel.saveQuickEdit(fieldKey: fieldKey, value: draft)
+                            await MainActor.run {
+                                guard viewModel.errorMessage == nil else { return }
+                                onDismiss()
+                            }
+                        }
+                    }
+                }
+            }
+            .onAppear { draft = initialText }
+        }
     }
 }
 

@@ -934,6 +934,29 @@ struct DesignView: View {
 
     private var bookContent: some View {
         VStack(alignment: .leading, spacing: 24) {
+            Text("Booking form style")
+                .font(.headline)
+            Text("Layout for your /book page. Colors follow your site theme (Template tab).")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Picker("Booking form style", selection: $viewModel.bookingFormStyleId) {
+                ForEach(BookingFormStyle.allCases) { style in
+                    Text(style.displayName).tag(style.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!viewModel.hasTenant || viewModel.isLoading)
+            .onChange(of: viewModel.bookingFormStyleId) { _, _ in
+                Task { await viewModel.saveBookingFormStyle() }
+            }
+            if let style = BookingFormStyle(rawValue: viewModel.bookingFormStyleId) {
+                Text(style.subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Divider()
+
             Text("Services")
                 .font(.headline)
             ForEach(viewModel.services) { service in

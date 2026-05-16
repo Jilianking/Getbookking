@@ -365,10 +365,290 @@
       transform: none;
       box-shadow: none;
     }
-    /* Force black submit button on white booking background */
-    .booking-shell .booking-submit {
+    /* Force black submit button on white booking background (standard layout only) */
+    .booking-shell:not(.booking-shell--guided) .booking-submit {
       background: #000 !important;
       color: #fff !important;
+    }
+    /* Guided booking layout (theme tokens set inline on .booking-shell--guided) */
+    .booking-shell--guided {
+      padding: 48px 16px 32px;
+      align-items: stretch;
+      justify-content: flex-start;
+    }
+    .booking-guided {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      color: var(--bk-fg, inherit);
+    }
+    .booking-guided-header {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 0.5px solid var(--bk-border, rgba(0,0,0,0.12));
+    }
+    .booking-guided-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--bk-muted, rgba(0,0,0,0.45));
+      margin: 0 0 10px;
+    }
+    .booking-guided-title {
+      font-family: var(--font-hero, var(--font-display, inherit));
+      font-size: clamp(1.75rem, 5vw, 2rem);
+      font-weight: 600;
+      line-height: 1.1;
+      margin: 0 0 8px;
+      color: var(--bk-fg, inherit);
+    }
+    .booking-guided-sub {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--bk-muted, rgba(0,0,0,0.55));
+      margin: 0;
+    }
+    .booking-guided-steps {
+      margin-bottom: 20px;
+    }
+    .booking-guided-step-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .booking-guided-step-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--bk-accent, #111);
+      color: var(--bk-accent-fg, #fff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 9px;
+      font-weight: 600;
+    }
+    .booking-guided-step-dot.is-inactive {
+      background: var(--bk-surface-2, rgba(0,0,0,0.06));
+      color: var(--bk-muted, rgba(0,0,0,0.4));
+      border: 0.5px solid var(--bk-border, rgba(0,0,0,0.12));
+    }
+    .booking-guided-step-line {
+      flex: 1;
+      height: 0.5px;
+      background: var(--bk-border, rgba(0,0,0,0.12));
+    }
+    .booking-guided-step-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--bk-muted, rgba(0,0,0,0.45));
+    }
+    .booking-guided-step-labels span.is-active {
+      color: var(--bk-fg, inherit);
+    }
+    .booking-form--guided {
+      background: var(--bk-surface, #fff);
+      border: 0.5px solid var(--bk-border, rgba(0,0,0,0.1));
+      border-radius: 16px;
+      padding: 20px 18px 8px;
+      box-shadow: 0 12px 40px var(--bk-shadow, rgba(0,0,0,0.08));
+    }
+    .booking-guided-section-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--bk-muted, rgba(0,0,0,0.45));
+      margin: 0 0 12px;
+    }
+    .booking-guided-divider {
+      height: 0.5px;
+      background: var(--bk-border, rgba(0,0,0,0.1));
+      margin: 20px 0;
+    }
+    .booking-guided-service-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 0;
+    }
+    .booking-guided-service-card {
+      border: 0.5px solid var(--bk-border, rgba(0,0,0,0.12));
+      border-radius: 12px;
+      padding: 14px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      background: var(--bk-surface-2, rgba(0,0,0,0.02));
+      text-align: left;
+    }
+    .booking-guided-service-card:hover {
+      border-color: var(--bk-muted, rgba(0,0,0,0.35));
+    }
+    .booking-guided-service-card.is-active {
+      border-color: var(--bk-accent, #111);
+      background: var(--bk-surface-active, rgba(0,0,0,0.04));
+    }
+    .booking-guided-service-card .name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--bk-fg, inherit);
+      margin: 0 0 4px;
+    }
+    .booking-guided-service-card .meta {
+      font-size: 11px;
+      color: var(--bk-muted, rgba(0,0,0,0.5));
+      margin: 0;
+    }
+    .booking-guided-field-label {
+      display: block;
+      font-size: 11px;
+      color: var(--bk-muted, rgba(0,0,0,0.55));
+      margin-bottom: 6px;
+      letter-spacing: 0.04em;
+    }
+    .booking-form--guided .field-input,
+    .booking-form--guided input.field-input,
+    .booking-form--guided select.field-input,
+    .booking-form--guided textarea.field-input {
+      width: 100%;
+      background: var(--bk-input-bg, rgba(0,0,0,0.04));
+      border: 0.5px solid var(--bk-border, rgba(0,0,0,0.12));
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: var(--bk-fg, inherit);
+      font-family: inherit;
+      margin-bottom: 14px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .booking-form--guided .field-input:focus {
+      border-color: var(--bk-accent, #111);
+      color: var(--bk-fg, inherit);
+    }
+    .booking-form--guided select.field-input {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23666' stroke-width='1.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+    .booking-form--guided textarea.field-input {
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.6;
+    }
+    .booking-guided-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 14px;
+    }
+    .booking-guided-pill {
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 0.5px solid var(--bk-border, rgba(0,0,0,0.12));
+      color: var(--bk-muted, rgba(0,0,0,0.55));
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .booking-guided-pill:hover {
+      border-color: var(--bk-muted, rgba(0,0,0,0.35));
+      color: var(--bk-fg, inherit);
+    }
+    .booking-guided-pill.is-active {
+      border-color: var(--bk-accent, #111);
+      color: var(--bk-accent-fg, #fff);
+      background: var(--bk-accent, #111);
+    }
+    .booking-guided-upload {
+      border: 0.5px dashed var(--bk-border, rgba(0,0,0,0.2));
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      margin-bottom: 0;
+      background: var(--bk-surface-2, rgba(0,0,0,0.02));
+    }
+    .booking-guided-upload:hover {
+      border-color: var(--bk-muted, rgba(0,0,0,0.35));
+    }
+    .booking-guided-upload-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bk-surface-2, rgba(0,0,0,0.06));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .booking-guided-upload-text {
+      font-size: 12px;
+      color: var(--bk-muted, rgba(0,0,0,0.55));
+      margin: 0;
+    }
+    .booking-guided-upload-sub {
+      font-size: 10px;
+      color: var(--bk-muted, rgba(0,0,0,0.4));
+      margin: 0;
+    }
+    .booking-guided-bottom {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 0.5px solid var(--bk-border, rgba(0,0,0,0.1));
+    }
+    .booking-guided-progress {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .booking-guided-prog-seg {
+      height: 2px;
+      border-radius: 2px;
+      flex: 1;
+      background: var(--bk-border, rgba(0,0,0,0.15));
+    }
+    .booking-guided-prog-seg.is-active {
+      background: var(--bk-accent, #111);
+    }
+    .booking-form--guided .booking-submit {
+      width: 100%;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--bk-accent, #111) !important;
+      color: var(--bk-accent-fg, #fff) !important;
+      box-shadow: none;
+    }
+    .booking-form--guided .booking-submit:hover {
+      background: var(--bk-accent-hover, #333) !important;
+    }
+    .booking-guided-deposit-note {
+      font-size: 10px;
+      color: var(--bk-muted, rgba(0,0,0,0.45));
+      text-align: center;
+      margin: 10px 0 0;
+    }
+    .booking-form--guided .pref-days-dropdown,
+    .booking-form--guided .upload-drop {
+      margin-bottom: 14px;
+    }
+    .booking-shell--guided .booking-form--guided .booking-submit {
+      background: var(--bk-accent, #111) !important;
+      color: var(--bk-accent-fg, #fff) !important;
+    }
+    .booking-shell--guided .booking-form--guided .booking-submit:hover {
+      background: var(--bk-accent-hover, #333) !important;
     }
     .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
     .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
@@ -547,6 +827,25 @@
     .tattoo-featured-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
     /* Same 4:5 as `UploadImagePreparationSheet` featured uploads — fixed pixel heights re-cropped portraits. */
     .tattoo-featured-grid img { width: 100%; aspect-ratio: 4 / 5; height: auto; object-fit: cover; border-radius: 12px; display: block; }
+    .tattoo-featured-slot-add {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      min-height: 120px;
+      border-radius: 12px;
+      border: 2px dashed rgba(10, 132, 255, 0.35);
+      background: rgba(10, 132, 255, 0.06);
+      box-sizing: border-box;
+    }
+    .classic-home .tattoo-featured-slot-add { border-radius: 8px; }
+    .tattoo-featured-slot-locked {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      min-height: 120px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.04);
+      opacity: 0.42;
+      box-sizing: border-box;
+    }
     .tattoo-featured-placeholder {
       grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: inherit; opacity: 0.55;
       font-size: 14px; background: rgba(0,0,0,0.04); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.12);
@@ -1649,11 +1948,13 @@
       content: '';
       position: absolute;
       inset: 0;
+      z-index: 2;
+      pointer-events: none;
       background: linear-gradient(90deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.18) 100%);
     }
     .luxe-hero-inner {
       position: relative;
-      z-index: 1;
+      z-index: 3;
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
@@ -1663,18 +1964,17 @@
       gap: 24px;
       align-items: center;
     }
-    /** In-app quick edit: invisible tap target for Luxe CSS hero background (opens native hero picker). */
+    /** Full-bleed invisible tap target for Luxe CSS hero background (native hero picker). Sits under copy/CTA so text stays editable. */
     .luxe-hero-image-hit {
       position: absolute;
-      bottom: 18px;
-      right: 18px;
-      width: 48px;
-      height: 48px;
-      z-index: 4;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
       border: 0;
       padding: 0;
       margin: 0;
-      border-radius: 10px;
+      border-radius: 0;
       background: transparent;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
@@ -1780,6 +2080,14 @@
       margin-bottom: 0;
       font-size: 2rem;
       color: #C9A96E;
+    }
+    .luxe-service-placeholder--add {
+      border: 2px dashed rgba(201, 169, 110, 0.55);
+      background: rgba(240, 235, 227, 0.85);
+    }
+    .luxe-service-placeholder--locked {
+      opacity: 0.38;
+      pointer-events: none;
     }
     /** Full-bleed stripe behind the “What we offer” card (distinct from page #FFFDF9 + featured strip). */
     .luxe-home-services-band {
@@ -3183,6 +3491,13 @@
     }
     .stonecut-page .stonecut-hero-right img,
     .stonecut-page .stonecut-hero-right .stonecut-hero-photo { width: 100%; height: 100%; object-fit: cover; filter: grayscale(24%); }
+    .stonecut-page .stonecut-hero-right .stonecut-hero-photo--empty {
+      display: block;
+      min-height: 200px;
+      height: 100%;
+      filter: none;
+      background: rgba(255, 255, 255, 0.06);
+    }
     .stonecut-page .stonecut-section { padding: 96px 40px; border-bottom: 1px solid rgba(232,224,208,.08); }
     .stonecut-page .stonecut-eyebrow { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin-bottom: 18px; }
     .stonecut-page .stonecut-heading { font-family: 'Unbounded', sans-serif; font-size: clamp(30px, 4.2vw, 58px); line-height: .95; margin: 0 0 28px; text-transform: uppercase; }
@@ -4813,6 +5128,12 @@
         var k = 'svc:' + sid + ':' + field;
         return '<span data-edit-key="' + esc(k) + '">' + inner + '</span>';
       }
+      /** Whole service row/card tap → native Edit service sheet (`svc:<id>:edit`). */
+      function svcEditAttr(serviceId) {
+        var sid = serviceId ? String(serviceId) : '';
+        if (!sid) return '';
+        return ' data-edit-key="svc:' + esc(sid) + ':edit" role="button" aria-label="Edit service"';
+      }
       /** Integer pixel dimension from Firestore for hero JPEG; fallback when missing (legacy tenants). */
       function tenantHeroPixelDim(v, fallback) {
         var n = Number(v);
@@ -5122,7 +5443,7 @@
         var heroEyebrowEditKey = sa ? 'serviceArea' : ((tenant.address && String(tenant.address).trim()) ? 'contactAddress' : ((tenantShowBusinessHours(tenant) && hoursTrimBlade) ? 'businessHours' : 'displayName'));
         var heroRight = tenant.heroImageUrl
           ? '<img class="blade-hero-image" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
-          : '<div class="blade-hero-placeholder" role="img" aria-hidden="true"></div>';
+          : '<div class="blade-hero-placeholder" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>';
         var vertical = emLine.length > 52 ? emLine.slice(0, 50) + '…' : emLine;
         var svc = services || [];
         var serviceCards = '';
@@ -5133,7 +5454,7 @@
           var priceTxt = (typeof s.price === 'number' && s.price > 0) ? ('From $' + Number(s.price).toFixed(0)) : 'Book for pricing';
           var href = base + '/book/' + (s.slug || '');
           var sidBl = s.id ? String(s.id) : '';
-          serviceCards += '<a href="' + esc(href) + '" class="blade-service-card blade-fade-up">' +
+          serviceCards += '<a href="' + esc(href) + '" class="blade-service-card blade-fade-up"' + svcEditAttr(sidBl) + '>' +
             '<div class="blade-service-num">' + num + '</div>' +
             '<div class="blade-gold-rule"></div>' +
             '<div class="blade-service-name">' + svcSpan(sidBl, 'name', s.name || 'Service') + '</div>' +
@@ -5152,16 +5473,17 @@
         var gUrls = galleryPageImageUrls(tenant);
         var gallerySection = '';
         if (tenantShowGalleryPage(tenant) && gUrls.length) {
-          function bladeMarqueeChunk(urls) {
-            return urls.map(function(u) {
-              return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img src="' + esc(u) + '" alt=""></div></div>';
+          function bladeMarqueeChunk(urls, includeEditKeys) {
+            return urls.map(function(u, gi) {
+              var editKey = includeEditKeys ? (' data-edit-key="featuredWork:' + gi + '"') : '';
+              return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img' + editKey + ' src="' + esc(u) + '" alt=""></div></div>';
             }).join('');
           }
           gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
             '<div class="blade-section-header blade-fade-up" style="padding-right:40px">' +
             '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.galleryEyebrow', 'Portfolio') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.galleryTitle', 'THE GALLERY') + '</h2></div>' +
             '</div>' +
-            '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls) + bladeMarqueeChunk(gUrls) + '</div></section>';
+            '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls, true) + bladeMarqueeChunk(gUrls, false) + '</div></section>';
         }
         var hoursSnippet = '';
         if (tenantShowBusinessHours(tenant)) {
@@ -5312,9 +5634,9 @@
           var sidSc = s.id ? String(s.id) : '';
           var cardInner = '<h3>' + svcSpan(sidSc, 'name', s.name || 'Service') + '</h3><p>' + svcSpanMultiline(sidSc, 'description', desc) + '</p><div class="stonecut-price">' + esc(priceTxt) + '</div>';
           if (tenantShowBookPage(tenant)) {
-            serviceCards += '<a href="' + esc(href) + '" class="stonecut-service-card">' + cardInner + '</a>';
+            serviceCards += '<a href="' + esc(href) + '" class="stonecut-service-card"' + svcEditAttr(sidSc) + '>' + cardInner + '</a>';
           } else {
-            serviceCards += '<div class="stonecut-service-card">' + cardInner + '</div>';
+            serviceCards += '<div class="stonecut-service-card"' + svcEditAttr(sidSc) + '>' + cardInner + '</div>';
           }
         }
         if (!serviceCards) {
@@ -5356,7 +5678,7 @@
           heroCta +
           '</div><div class="stonecut-hero-right">' + (tenant.heroImageUrl
             ? '<img class="stonecut-hero-photo" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
-            : '') + '</div></section>' +
+            : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') + '</div></section>' +
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
           shopPreviewSection +
@@ -5410,6 +5732,12 @@
         }
         var g = tenant.galleryImages || [];
         return g.slice(0, maxCells);
+      }
+      /** URL at slot `index` for home featured strip; empty string = empty slot (supports sparse arrays). */
+      function featuredStripSlotUrl(urls, index) {
+        if (!urls || index < 0 || index >= urls.length) return '';
+        var u = urls[index];
+        return (u != null && String(u).trim() !== '') ? String(u).trim() : '';
       }
       /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
       function galleryPageImageUrls(tenant) {
@@ -5498,6 +5826,284 @@
         var fg = tenant.featuredWorkTextColor || '#1C1917';
         return 'background:'+bg+';color:'+fg;
       }
+      /** Matches `BookingFormStyle` in the app. */
+      function bookingFormStyleResolved(tenant) {
+        var raw = String((tenant && tenant.bookingFormStyleId) || '').trim().toLowerCase();
+        return raw === 'guided' ? 'guided' : 'standard';
+      }
+      function usesGuidedBookingForm(tenant) {
+        return bookingFormStyleResolved(tenant) === 'guided';
+      }
+      function guidedBookingInlineStyle(tenant) {
+        var parts = [];
+        var fg = tenant.textColor || '';
+        var accent = tenant.primaryColor || '';
+        var surface = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '';
+        if (isBladeTheme(tenant)) {
+          if (!fg) fg = '#f5f0e8';
+          if (!surface) surface = '#141410';
+          if (!accent) accent = '#c9a227';
+          parts.push('--bk-border:rgba(245,240,232,0.15)');
+          parts.push('--bk-muted:rgba(245,240,232,0.55)');
+          parts.push('--bk-input-bg:rgba(245,240,232,0.06)');
+          parts.push('--bk-surface-2:rgba(245,240,232,0.04)');
+          parts.push('--bk-shadow:rgba(0,0,0,0.35)');
+        } else if (isLuxeTheme(tenant)) {
+          if (!fg) fg = '#1a1a1a';
+          if (!surface) surface = '#FFFDF9';
+          if (!accent) accent = '#8B6914';
+        } else if (isStonecutTheme(tenant)) {
+          if (!fg) fg = '#e8e0d0';
+          if (!surface) surface = '#0e0d0a';
+          if (!accent) accent = '#c4a574';
+          parts.push('--bk-border:rgba(232,224,208,0.15)');
+          parts.push('--bk-muted:rgba(232,224,208,0.55)');
+          parts.push('--bk-input-bg:rgba(232,224,208,0.06)');
+          parts.push('--bk-surface-2:rgba(232,224,208,0.04)');
+          parts.push('--bk-shadow:rgba(0,0,0,0.4)');
+        } else if (isStudio12Theme(tenant)) {
+          if (!fg) fg = '#2a1f18';
+          if (!surface) surface = '#fffdf9';
+          if (!accent) accent = '#6b4c38';
+        } else {
+          if (!fg) fg = '#1a1a1a';
+          if (!surface) surface = '#ffffff';
+          if (!accent) accent = '#111111';
+        }
+        if (fg) parts.push('--bk-fg:' + fg);
+        if (accent) {
+          parts.push('--bk-accent:' + accent);
+          parts.push('--bk-accent-hover:' + accent);
+          parts.push('--bk-accent-fg:#ffffff');
+        }
+        if (surface) {
+          parts.push('--bk-surface:' + surface);
+          parts.push('--bk-surface-active:rgba(128,128,128,0.08)');
+        }
+        if (!parts.some(function(p) { return p.indexOf('--bk-border') === 0; })) {
+          parts.push('--bk-border:rgba(0,0,0,0.12)');
+        }
+        if (!parts.some(function(p) { return p.indexOf('--bk-muted') === 0; })) {
+          parts.push('--bk-muted:rgba(0,0,0,0.5)');
+        }
+        if (!parts.some(function(p) { return p.indexOf('--bk-input-bg') === 0; })) {
+          parts.push('--bk-input-bg:rgba(0,0,0,0.04)');
+        }
+        if (!parts.some(function(p) { return p.indexOf('--bk-surface-2') === 0; })) {
+          parts.push('--bk-surface-2:rgba(0,0,0,0.03)');
+        }
+        if (!parts.some(function(p) { return p.indexOf('--bk-shadow') === 0; })) {
+          parts.push('--bk-shadow:rgba(0,0,0,0.08)');
+        }
+        return parts.join(';');
+      }
+      function guidedSectionKeyForField(f) {
+        var key = f.key || '';
+        if (key === 'service') return 'service';
+        if (key === 'name' || key === 'email' || key === 'phone') return 'contact';
+        if (key === 'preferredDays' || key === 'preferredTime' || key === 'preferredTimeOfDay') return 'schedule';
+        if (key === 'notes' || key === 'referenceImages') return 'details';
+        return 'other';
+      }
+      function guidedSectionLabel(sectionKey) {
+        var labels = {
+          service: 'Select service',
+          contact: 'Your details',
+          schedule: 'Availability',
+          details: 'Project details',
+          other: 'Additional information'
+        };
+        return labels[sectionKey] || 'Additional information';
+      }
+      function guidedServiceMetaLine(s) {
+        var bits = [];
+        if (typeof s.price === 'number' && s.price > 0) {
+          bits.push('From $' + Number(s.price).toFixed(0));
+        } else if (s.priceLabel) {
+          bits.push(String(s.priceLabel));
+        } else {
+          bits.push('Book for pricing');
+        }
+        if (s.durationMinutes) bits.push(s.durationMinutes + ' min');
+        return bits.join(' · ');
+      }
+      function guidedFieldHtml(f, services, presel) {
+        var key = f.key || '';
+        var keySafe = key.replace(/[^a-zA-Z0-9_]/g, '');
+        var name = 'f_' + keySafe;
+        var req = f.required ? ' required' : '';
+        var label = esc(f.label || key);
+        if (key === 'service') {
+          var initVal = presel ? presel.id : '';
+          var cards = (services || []).map(function(s) {
+            var active = (presel && presel.id === s.id) ? ' is-active' : '';
+            return '<button type="button" class="booking-guided-service-card' + active + '" data-guided-service-id="' + esc(s.id) + '" data-guided-service-name="' + esc(s.name) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+              '<p class="name">' + esc(s.name) + '</p>' +
+              '<p class="meta">' + esc(guidedServiceMetaLine(s)) + '</p>' +
+            '</button>';
+          }).join('');
+          return '<input type="hidden" id="' + name + '" name="' + name + '" data-key="service" value="' + esc(initVal) + '"' + req + '>' +
+            '<div class="booking-guided-service-grid" data-guided-service-grid role="group" aria-label="Services">' + cards + '</div>';
+        }
+        if (key === 'preferredTime' || key === 'preferredTimeOfDay') {
+          var times = ['Morning', 'Afternoon', 'Night', 'Flexible'];
+          var pills = times.map(function(t) {
+            return '<span class="booking-guided-pill" role="button" tabindex="0" data-pill-value="' + esc(t) + '">' + esc(t) + '</span>';
+          }).join('');
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<div class="booking-guided-pill-row" data-guided-pills data-pill-single="true" data-pill-target="' + name + '">' + pills + '</div>' +
+            '<input type="hidden" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" value=""' + req + '>';
+        }
+        if (key === 'preferredDays') {
+          var days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+          var dayPills = days.map(function(d) {
+            return '<span class="booking-guided-pill" role="button" tabindex="0" data-pill-value="' + d + '">' + d + '</span>';
+          }).join('');
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<div class="booking-guided-pill-row" data-guided-pills data-pill-multi="true" data-pill-target="' + name + '">' + dayPills + '</div>' +
+            '<input type="hidden" id="' + name + '" name="' + name + '" data-key="preferredDays" value=""' + req + '>';
+        }
+        if (key === 'referenceImages') {
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<div class="booking-guided-upload upload-drop" data-reference-images-drop tabindex="0" role="button" aria-label="Upload reference images or PDFs">' +
+              '<div class="booking-guided-upload-icon" aria-hidden="true">↑</div>' +
+              '<p class="booking-guided-upload-text">Drop photos or PDFs here</p>' +
+              '<p class="booking-guided-upload-sub">or tap to choose files</p>' +
+              '<p class="upload-drop-filelist" data-upload-filelist style="font-size:11px;margin-top:6px"></p>' +
+              '<input type="file" accept="image/*,application/pdf" multiple id="' + name + '" name="' + name + '" data-key="referenceImages" data-type="file" class="upload-drop-input">' +
+            '</div>';
+        }
+        if (f.type === 'select' && (f.options || []).length) {
+          var opts = f.options || [];
+          var optPills = opts.map(function(o) {
+            return '<span class="booking-guided-pill" role="button" tabindex="0" data-pill-value="' + esc(o) + '">' + esc(o) + '</span>';
+          }).join('');
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<div class="booking-guided-pill-row" data-guided-pills data-pill-single="true" data-pill-target="' + name + '">' + optPills + '</div>' +
+            '<input type="hidden" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" value=""' + req + '>';
+        }
+        if (f.type === 'boolean') {
+          var boolPills = ['yes', 'no'].map(function(v) {
+            return '<span class="booking-guided-pill" role="button" tabindex="0" data-pill-value="' + v + '">' + (v === 'yes' ? 'Yes' : 'No') + '</span>';
+          }).join('');
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<div class="booking-guided-pill-row" data-guided-pills data-pill-single="true" data-pill-target="' + name + '">' + boolPills + '</div>' +
+            '<input type="hidden" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" value=""' + req + '>';
+        }
+        if (f.type === 'file') {
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<input type="file" accept="image/*,application/pdf" multiple id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" data-type="file" class="field-input"' + req + '>';
+        }
+        if (f.type === 'textarea') {
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<textarea class="field-input" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" placeholder="' + esc(f.placeholder || f.label || key) + '"' + req + '></textarea>';
+        }
+        if (f.type === 'select') {
+          var firstOpt = '<option value="">' + esc(f.placeholder || ('Select ' + (f.label || key))) + '</option>';
+          var oo = (f.options || []).map(function(o) { return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('');
+          return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+            '<select class="field-input" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '"' + req + '>' + firstOpt + oo + '</select>';
+        }
+        var typ = f.type === 'email' ? 'email' : f.type === 'phone' ? 'tel' : 'text';
+        return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
+          '<input class="field-input" type="' + typ + '" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" placeholder="' + esc(f.placeholder || f.label || key) + '"' + req + '>';
+      }
+      function formGuidedFieldsHtml(fields, services, presel) {
+        var html = '';
+        var lastSection = '';
+        for (var i = 0; i < fields.length; i++) {
+          var f = fields[i];
+          var sec = guidedSectionKeyForField(f);
+          if (sec !== lastSection) {
+            if (html) html += '<div class="booking-guided-divider"></div>';
+            html += '<p class="booking-guided-section-label">' + esc(guidedSectionLabel(sec)) + '</p>';
+            lastSection = sec;
+          }
+          if (f.key === 'service') {
+            html += guidedFieldHtml({ key: 'service', label: 'Service', type: 'select', required: true }, services, presel);
+          } else {
+            html += guidedFieldHtml(f, services, presel);
+          }
+        }
+        return html;
+      }
+      function setupGuidedBookingForm(fm) {
+        if (!fm || !fm.classList.contains('booking-form--guided')) return;
+        var serviceHidden = fm.querySelector('[data-key="service"]');
+        var grid = fm.querySelector('[data-guided-service-grid]');
+        if (grid && serviceHidden) {
+          var cards = grid.querySelectorAll('[data-guided-service-id]');
+          function activateCard(card) {
+            for (var ci = 0; ci < cards.length; ci++) cards[ci].classList.remove('is-active');
+            card.classList.add('is-active');
+            serviceHidden.value = card.getAttribute('data-guided-service-id') || '';
+            card.setAttribute('aria-pressed', 'true');
+            for (var cj = 0; cj < cards.length; cj++) {
+              if (cards[cj] !== card) cards[cj].setAttribute('aria-pressed', 'false');
+            }
+          }
+          for (var si = 0; si < cards.length; si++) {
+            (function(card) {
+              card.addEventListener('click', function(e) {
+                e.preventDefault();
+                activateCard(card);
+              });
+            })(cards[si]);
+          }
+          if (!serviceHidden.value && cards.length === 1) activateCard(cards[0]);
+        }
+        var pillGroups = fm.querySelectorAll('[data-guided-pills]');
+        for (var gi = 0; gi < pillGroups.length; gi++) {
+          (function(group) {
+            var targetId = group.getAttribute('data-pill-target');
+            var hidden = targetId ? document.getElementById(targetId) : null;
+            if (!hidden) return;
+            var multi = group.hasAttribute('data-pill-multi');
+            var pills = group.querySelectorAll('.booking-guided-pill');
+            function selectedValues() {
+              var val = hidden.value || '';
+              return val ? val.split(',').map(function(x) { return x.trim(); }).filter(Boolean) : [];
+            }
+            function syncPills() {
+              var sel = selectedValues();
+              for (var pi = 0; pi < pills.length; pi++) {
+                var pv = pills[pi].getAttribute('data-pill-value');
+                pills[pi].classList.toggle('is-active', sel.indexOf(pv) >= 0);
+              }
+            }
+            function setSingle(val) {
+              hidden.value = val || '';
+              for (var pj = 0; pj < pills.length; pj++) {
+                var pval = pills[pj].getAttribute('data-pill-value');
+                pills[pj].classList.toggle('is-active', pval === val);
+              }
+            }
+            function toggleMulti(val) {
+              var sel = selectedValues();
+              var idx = sel.indexOf(val);
+              if (idx >= 0) sel.splice(idx, 1);
+              else sel.push(val);
+              hidden.value = sel.join(',');
+              syncPills();
+            }
+            for (var pk = 0; pk < pills.length; pk++) {
+              (function(pill) {
+                var val = pill.getAttribute('data-pill-value');
+                function onPick(e) {
+                  if (e) { e.preventDefault(); e.stopPropagation(); }
+                  if (multi) toggleMulti(val);
+                  else setSingle(val);
+                }
+                pill.addEventListener('click', onPick);
+                pill.addEventListener('keydown', function(e) {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(e); }
+                });
+              })(pills[pk]);
+            }
+            syncPills();
+          })(pillGroups[gi]);
+        }
+      }
       function form(tenant, services, presel) {
         var schema = tenant.formSchema || [];
         var useSchema = Array.isArray(schema) && schema.length > 0;
@@ -5574,6 +6180,55 @@
         else if (isBladeTheme(tenant)) bookSiteFooter = bladeSiteFooterHtml(tenant);
         else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
         else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
+        if (usesGuidedBookingForm(tenant)) {
+          var guidedFieldsHtml = formGuidedFieldsHtml(fields, services, presel);
+          var guidedVars = guidedBookingInlineStyle(tenant);
+          var guidedBookSub = tenant.tagline
+            ? esc(tenant.tagline)
+            : 'Tell us what you need — we\u2019ll follow up to confirm your appointment.';
+          var guidedInner =
+            '<div class="booking-guided">' +
+              '<header class="booking-guided-header">' +
+                '<p class="booking-guided-eyebrow">Book an appointment</p>' +
+                '<h1 class="booking-guided-title">' + esc(tenant.displayName || 'Request') + '</h1>' +
+                '<p class="booking-guided-sub">' + guidedBookSub + '</p>' +
+              '</header>' +
+              '<div class="booking-guided-steps" aria-hidden="true">' +
+                '<div class="booking-guided-step-labels">' +
+                  '<span class="is-active">Service</span><span>Details</span><span>Confirm</span>' +
+                '</div>' +
+                '<div class="booking-guided-step-row">' +
+                  '<span class="booking-guided-step-dot">1</span>' +
+                  '<span class="booking-guided-step-line"></span>' +
+                  '<span class="booking-guided-step-dot is-inactive">2</span>' +
+                  '<span class="booking-guided-step-line"></span>' +
+                  '<span class="booking-guided-step-dot is-inactive">3</span>' +
+                '</div>' +
+              '</div>' +
+              '<form id="book-form" class="booking-form booking-form--guided">' +
+                guidedFieldsHtml +
+                '<div class="booking-guided-bottom">' +
+                  '<div class="booking-guided-progress">' +
+                    '<span class="booking-guided-prog-seg is-active"></span>' +
+                    '<span class="booking-guided-prog-seg is-active"></span>' +
+                    '<span class="booking-guided-prog-seg"></span>' +
+                  '</div>' +
+                  '<p id="form-error" class="error" style="display:none"></p>' +
+                  '<button type="submit" class="booking-submit" data-accent>Request booking</button>' +
+                  '<p class="booking-guided-deposit-note">No payment required — we\u2019ll confirm by message.</p>' +
+                '</div>' +
+              '</form>' +
+            '</div>';
+          return '' +
+            '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="' + bookPageStyle + '"' : '') + '>' +
+              nav +
+              '<div class="booking-shell booking-shell--guided"' + (guidedVars ? ' style="' + guidedVars + '"' : '') + '>' +
+                guidedInner +
+              '</div>' +
+              bookSiteFooter +
+              sidebar +
+            '</div>';
+        }
         return '' +
           '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
             nav +
@@ -5717,6 +6372,7 @@
               headlineFont: data.headlineFont || '',
               heroFont: data.heroFont || '',
               webThemeId: data.webThemeId || '',
+              bookingFormStyleId: data.bookingFormStyleId || '',
               luxeHeroTagline: data.luxeHeroTagline || '',
               luxePromoHeadline: data.luxePromoHeadline || '',
               bladeHeroTagline: data.bladeHeroTagline || '',
@@ -6161,7 +6817,7 @@
 
         var heroImgHtml = tenant.heroImageUrl
           ? '<img data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="' + esc(displayName) + '">'
-          : '<div class="classic-hero-placeholder"></div>';
+          : '<div class="classic-hero-placeholder" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>';
         var heroRightStyle = '';
 
         var heroActions = '';
@@ -6173,12 +6829,15 @@
           '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">&#9776;</button>' +
           '</div>';
         var taglineTrim = classicTenantTrim('tagline');
-        var heroIndustry = '';
+        var heroTagInner;
         if (taglineTrim) {
-          heroIndustry = '<p class="classic-hero-tag"><span data-edit-key="tagline">' + esc(taglineTrim) + '</span></p>';
+          heroTagInner = '<span data-edit-key="tagline">' + esc(taglineTrim) + '</span>';
         } else if (heroTag) {
-          heroIndustry = '<p class="classic-hero-tag"><span data-edit-key="tagline">' + esc(heroTag) + '</span></p>';
+          heroTagInner = '<span data-edit-key="tagline">' + esc(heroTag) + '</span>';
+        } else {
+          heroTagInner = wcSpan(tenant, 'wc.classic.heroTagline', 'Book with confidence');
         }
+        var heroIndustry = '<p class="classic-hero-tag">' + heroTagInner + '</p>';
         var heroHtml = '<section class="classic-hero">' +
           '<div class="classic-hero-left">' +
           heroTitleRow +
@@ -6202,11 +6861,19 @@
           var maxCells = 3;
           var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
           var gridStyle = 'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(1,1fr);';
-          var featuredGridInner = gallery.length
-            ? gallery.map(function(url){
-                return '<div class="tattoo-featured-cell"><img src="'+esc(url)+'" alt=""></div>';
-              }).join('')
-            : '<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>';
+          var featuredGridInner = (function() {
+            var cells = [];
+            for (var fi = 0; fi < maxCells; fi++) {
+              var fk = 'featuredWork:' + fi;
+              var slotUrl = featuredStripSlotUrl(gallery, fi);
+              if (slotUrl) {
+                cells.push('<div class="tattoo-featured-cell"><img data-edit-key="' + esc(fk) + '" src="' + esc(slotUrl) + '" alt=""></div>');
+              } else {
+                cells.push('<div class="tattoo-featured-cell tattoo-featured-slot-add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div>');
+              }
+            }
+            return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>');
+          })();
           featuredHtml = '<section id="featured" class="tattoo-featured-outer">' +
             '<div class="tattoo-featured-inner">' +
             '<p class="classic-section-eyebrow"><span data-edit-key="classicFeaturedWorkEyebrow">' + esc(classicFeaturedEyebrow) + '</span></p>' +
@@ -6246,7 +6913,7 @@
                 descBlock = '<div class="classic-service-e-desc">' + descBr + '</div>';
               }
             }
-            rows += '<div class="classic-service-item classic-service-item--e">' +
+            rows += '<div class="classic-service-item classic-service-item--e"' + svcEditAttr(sidCl) + '>' +
               '<div class="classic-service-e-row">' +
               '<div class="classic-service-e-copy">' +
               titleH +
@@ -6339,7 +7006,7 @@
         var aboutHeadingCustom = classicTenantTrim('classicAboutHeading');
         var aboutHeadingHtml = aboutHeadingCustom
           ? ('<h2><span data-edit-key="classicAboutHeading">' + esc(aboutHeadingCustom) + '</span></h2>')
-          : ('<h2>' + opts.aboutHeading + '</h2>');
+          : ('<h2><span data-edit-key="classicAboutHeading">' + opts.aboutHeading + '</span></h2>');
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section">' +
           '<div class="classic-about-inner-v2">' +
@@ -6587,7 +7254,7 @@
         }).join('');
         var heroImg = tenant.heroImageUrl
           ? '<img class="s12-hero-img" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
-          : '<div class="s12-hero-img-fallback" aria-hidden="true"></div>';
+          : '<div class="s12-hero-img-fallback" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>';
         var s12HeroColStyle = '';
         var heroItalic = tenant.heroTagline || tenant.heroSubtitle || s12.heroItalicDefault;
         var heroLead = tenant.tagline || (tenant.aboutText ? String(tenant.aboutText).slice(0, 200) : '') ||
@@ -6604,7 +7271,7 @@
             var price = s.price != null && s.price > 0 ? ('$' + Math.round(s.price)) : '—';
             var desc = (s.description && String(s.description).trim()) ? String(s.description).trim() : 'Professional service tailored to you.';
             var sid12 = s.id ? String(s.id) : '';
-            svcCells += '<div class="s12-svc-cell s12-fade">' +
+            svcCells += '<div class="s12-svc-cell s12-fade"' + svcEditAttr(sid12) + '>' +
               '<div><h3 class="s12-svc-name">' + svcSpan(sid12, 'name', s.name || 'Service') + '</h3>' +
               '<p class="s12-svc-meta">' + svcSpanMultiline(sid12, 'description', desc) + '</p>' +
               (dur ? '<div class="s12-svc-dur">' + esc(dur) + '</div>' : '') + '</div>' +
@@ -6973,13 +7640,13 @@
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
         var hero = '<section class="luxe-hero" style="' + heroStyle + '">' +
+          '<button type="button" class="luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +
               '<h1><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +
               '<p><span data-edit-key="luxeHeroTagline">' + esc(luxeHeroLine) + '</span></p>' +
               luxeHeroCta +
             '</div>' +
-            '<button type="button" class="luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '</div>' +
         '</section>';
 
@@ -6989,17 +7656,19 @@
 
         var servicesSection = '';
         if (showFeaturedStrip) {
-          var maxCards = Math.min(services.length, 4);
+          var maxCards = 4;
           var featuredImages = featuredUrlsForHomeStrip(tenant, 4);
           var serviceCards = '';
           for (var i = 0; i < maxCards; i++) {
-            var imgTag = featuredImages[i]
+            var fk = 'featuredWork:' + i;
+            var slotUrl = featuredStripSlotUrl(featuredImages, i);
+            var imgTag = slotUrl
               ? ('<div class="luxe-service-card-img-wrap">' +
-                '<img src="' + esc(featuredImages[i]) + '" alt="" loading="lazy"></div>')
-              : '<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder">\u2726</div></div>';
-            serviceCards += '<a href="' + esc(galleryUrl) + '" class="luxe-service-card" aria-label="Open gallery">' +
+                '<img data-edit-key="' + esc(fk) + '" src="' + esc(slotUrl) + '" alt="" loading="lazy"></div>')
+              : ('<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder luxe-service-placeholder--add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo">\u2726</div></div>');
+            serviceCards += '<div class="luxe-service-card">' +
               imgTag +
-            '</a>';
+            '</div>';
           }
           servicesSection = '<section id="gallery" class="luxe-services-section">' +
             '<p class="luxe-section-label"><span data-edit-key="luxeFeaturedWorkEyebrow">' + esc(stripEyebrow) + '</span></p>' +
@@ -7034,7 +7703,7 @@
                 descH = '<p class="luxe-home-service-desc">' + brDescLx + '</p>';
               }
             }
-            menuRows += '<div class="luxe-home-service-row">' +
+            menuRows += '<div class="luxe-home-service-row"' + svcEditAttr(sidLx) + '>' +
               '<div class="luxe-home-service-copy">' +
               '<p class="luxe-home-service-name">' + luxeNameInner + '</p>' +
               durH +
@@ -7089,8 +7758,8 @@
         var teamSection = tenantShowAboutPage(tenant)
           ? '<section id="about" class="luxe-team-section">' +
           '<div class="luxe-team-inner">' +
-            '<p class="luxe-section-label">About Us</p>' +
-            '<h2 class="luxe-section-heading">Meet <span data-edit-key="displayName">' + esc(displayName) + '</span></h2>' +
+            '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.aboutEyebrow', 'About Us') + '</p>' +
+            '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.teamMeetPrefix', 'Meet') + ' <span data-edit-key="displayName">' + esc(displayName) + '</span></h2>' +
             '<p class="luxe-team-bio"><span data-edit-key="aboutText">' + aboutBody + '</span></p>' +
             teamCards +
           '</div>' +
@@ -8012,6 +8681,7 @@
               if (fm) {
               setupDropzones(fm);
               setupPreferredDaysDropdown(fm);
+              setupGuidedBookingForm(fm);
               fm.addEventListener('submit', function(ev){
                 ev.preventDefault();
                 var errEl = document.getElementById('form-error');

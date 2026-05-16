@@ -148,6 +148,8 @@ class DesignViewModel: ObservableObject {
 
     // Form fields
     @Published var formFields: [FormField] = []
+    /// `/book` layout: `standard` (dropdowns) or `guided` (service grid + pills). Independent of `webThemeId`.
+    @Published var bookingFormStyleId: String = BookingFormStyle.standard.rawValue
 
     // Services
     @Published var services: [TenantService] = []
@@ -946,6 +948,7 @@ class DesignViewModel: ObservableObject {
                 galleryPageTextColorHex = tenant?["galleryPageTextColor"] as? String ?? "#1C1917"
                 aboutSectionBackgroundColorHex = tenant?["aboutSectionBackgroundColor"] as? String ?? "#111111"
                 aboutSectionTextColorHex = tenant?["aboutSectionTextColor"] as? String ?? "#FFFFFF"
+                bookingFormStyleId = BookingFormStyle.resolved(stored: tenant?["bookingFormStyleId"] as? String).rawValue
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
                     formFields = schema.compactMap { FormField.fromFirestore($0) }
                     if formFields.isEmpty { formFields = FormField.defaultFields }
@@ -1442,26 +1445,13 @@ class DesignViewModel: ObservableObject {
         await addFeaturedWorkImages(imageDataList: [imageData])
     }
 
-    /// Replaces the image at `index`, or appends when `index == featuredWorkImages.count` (next empty slot). Used by Quick edit taps on `featuredWork:<n>`.
+    /// Replaces the image at `index`, or pads sparse slots when uploading out of order. Used by Quick edit taps on `featuredWork:<n>`.
     func replaceOrAppendFeaturedWorkImage(at index: Int, imageData: Data) async {
         guard let tid = tenantId else { return }
         let slots = featuredWorkImageSlotCount
         guard index >= 0, index < slots else {
             await MainActor.run {
                 errorMessage = "That featured slot is not available for this layout."
-            }
-            return
-        }
-        let count = await MainActor.run { featuredWorkImages.count }
-        guard index <= count else {
-            await MainActor.run {
-                errorMessage = "Fill earlier featured slots first, then add the next one."
-            }
-            return
-        }
-        if index == count, count >= slots {
-            await MainActor.run {
-                errorMessage = "All featured slots are full. Remove a photo in Builder to add a different one."
             }
             return
         }
@@ -1473,6 +1463,9 @@ class DesignViewModel: ObservableObject {
                 return
             }
             var updated = await MainActor.run { featuredWorkImages }
+            while updated.count < index {
+                updated.append("")
+            }
             if index < updated.count {
                 updated[index] = newURL
             } else {
@@ -1514,7 +1507,17 @@ class DesignViewModel: ObservableObject {
     func saveFormFields() async {
         guard let tid = tenantId else { return }
         let schema = formFields.map { $0.toFirestore() }
-        await saveTenantUpdates(tid, ["formSchema": schema])
+        await saveTenantUpdates(tid, [
+            "formSchema": schema,
+            "bookingFormStyleId": BookingFormStyle.resolved(stored: bookingFormStyleId).rawValue,
+        ])
+    }
+
+    func saveBookingFormStyle() async {
+        guard let tid = tenantId else { return }
+        await saveTenantUpdates(tid, [
+            "bookingFormStyleId": BookingFormStyle.resolved(stored: bookingFormStyleId).rawValue,
+        ])
     }
 
     func saveContact() async {

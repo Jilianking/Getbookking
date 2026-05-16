@@ -212,6 +212,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
                 '.classic-hero-tag [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
+                '[data-edit-key^="svc:"][role="button"]{display:block!important;cursor:pointer!important;}' +
+                'a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key]{cursor:pointer!important;}' +
                 'button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}';
               document.head.appendChild(sheet);
               function resolveEditTarget(ev) {
@@ -346,6 +348,12 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (inlineEl && ev.target && inlineEl.contains(ev.target)) return;
                 var t = resolveEditTarget(ev);
                 if (!t) return;
+                var tapKey = t.getAttribute('data-edit-key');
+                if (tapKey && (tapKey === 'heroImage' || tapKey.indexOf('featuredWork:') === 0 || tapKey.indexOf('svc:') === 0)) {
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+                }
                 ev.preventDefault();
                 ev.stopPropagation();
                 activateQuickEditTarget(t);

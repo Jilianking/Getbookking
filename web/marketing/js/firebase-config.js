@@ -28,3 +28,9 @@ const firebaseConfig = {
  * Leave empty until configured; Adobe headline fonts won’t load without it.
  */
 window.adobeFontsKitId = "";
+
+/**
+ * iOS App Store product page URL (optional). Example: https://apps.apple.com/app/id0000000000
+ * When set, account.html and signup success "Download the app" use this link.
+ */
+window.appStoreUrl = "";

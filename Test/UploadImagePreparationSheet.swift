@@ -463,6 +463,8 @@ struct UploadImagePreparationSheet: View {
     let allowedChoices: [UploadCropAspectChoice]
     let defaultChoice: UploadCropAspectChoice
     let confirmButtonTitle: String
+    /// When `false`, omits advice and the extra crop hints (Quick edit / power users who already know the editor).
+    let showsInstructionalCopy: Bool
     let onUseJPEGData: ([Data]) -> Void
 
     @State private var choice: UploadCropAspectChoice
@@ -478,11 +480,13 @@ struct UploadImagePreparationSheet: View {
         allowedChoices: [UploadCropAspectChoice],
         defaultChoice: UploadCropAspectChoice,
         confirmButtonTitle: String = "Use photo",
+        showsInstructionalCopy: Bool = true,
         onUseJPEGData: @escaping ([Data]) -> Void
     ) {
         self.images = images
         self.advice = advice
         self.navigationTitle = navigationTitle
+        self.showsInstructionalCopy = showsInstructionalCopy
         self.allowedChoices = allowedChoices.isEmpty ? [.original] : allowedChoices
         let resolvedDefault = self.allowedChoices.contains(defaultChoice)
             ? defaultChoice
@@ -549,20 +553,24 @@ struct UploadImagePreparationSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text(advice)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: showsInstructionalCopy ? 20 : 12) {
+                    if showsInstructionalCopy {
+                        if !advice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(advice)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
-                    if images.count > 1 {
-                        Text("Several photos: the same framing is center-cropped on each. Add one photo at a time to move and zoom inside the border.")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    } else if previewAspect != nil {
-                        Text("Move your photo behind the border; pinch to zoom. Rotate if needed—what’s inside the border is what uploads.")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        if images.count > 1 {
+                            Text("Several photos: the same framing is center-cropped on each. Add one photo at a time to move and zoom inside the border.")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        } else if previewAspect != nil {
+                            Text("Move your photo behind the border; pinch to zoom. Rotate if needed—what’s inside the border is what uploads.")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     VStack(spacing: 12) {
@@ -621,7 +629,7 @@ struct UploadImagePreparationSheet: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(showsInstructionalCopy ? 20 : 16)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(navigationTitle)

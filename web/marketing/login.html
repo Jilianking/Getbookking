@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/logo-dark-32.png" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/logo-dark-128.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/logo-dark-256.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand-dark: #2C2018;
+      --brand-warm: #8B6F47;
+      --brand-cream: #F5EDD8;
+      --brand-offwhite: #FDFAF6;
+      --text-primary: #1A1410;
+      --text-secondary: #6B5E4A;
+      --text-tertiary: #9A8A7A;
+      --border: #E8E0D4;
+      --error: #b42318;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: var(--brand-offwhite);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+    .acct-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      height: 64px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .acct-header a.brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 200;
+      font-size: 16px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-primary);
+      text-decoration: none;
+      line-height: 1;
+    }
+    .acct-header a.brand img { width: 22px; height: 22px; display: block; flex-shrink: 0; }
+    .acct-header nav { display: flex; gap: 20px; align-items: center; font-size: 14px; }
+    .acct-header nav a { color: var(--text-secondary); text-decoration: none; }
+    .acct-header nav a:hover { color: var(--text-primary); }
+    .acct-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+    .acct-card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 40px 36px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+    .acct-card h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: 26px;
+      font-weight: 400;
+      margin-bottom: 8px;
+    }
+    .acct-card .subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-secondary); }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      margin-bottom: 18px;
+    }
+    input:focus { outline: none; border-color: var(--brand-warm); box-shadow: 0 0 0 2px rgba(139, 111, 71, 0.15); }
+    .btn-primary {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-primary:hover { opacity: 0.92; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+    .error-msg { color: var(--error); font-size: 14px; margin-top: 12px; display: none; }
+    .error-msg.visible { display: block; }
+    .footer-links { text-align: center; margin-top: 24px; font-size: 14px; color: var(--text-secondary); }
+    .footer-links a { color: var(--brand-warm); font-weight: 500; text-decoration: none; }
+    .footer-links a:hover { text-decoration: underline; }
+    @media (max-width: 520px) { .acct-header { padding: 0 20px; } }
+  </style>
+</head>
+<body>
+  <header class="acct-header">
+    <a class="brand" href="index.html" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-64.png" alt="" width="22" height="22" />
+      <span>Get Bookking</span>
+    </a>
+    <nav>
+      <a href="signup.html">Start free</a>
+    </nav>
+  </header>
+
+  <div class="acct-wrap">
+    <div class="acct-card">
+      <h1>Log in</h1>
+      <p class="subtitle">Manage your subscription and open your live site.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required />
+        <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
+      </form>
+      <p class="error-msg" id="errorMsg"></p>
+      <div class="footer-links">
+        <a href="#" id="forgotLink">Forgot password?</a>
+        &nbsp;&middot;&nbsp;
+        <a href="signup.html">Create an account</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script>
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+
+    function showError(msg) {
+      var el = document.getElementById('errorMsg');
+      el.textContent = msg || '';
+      el.classList.toggle('visible', !!msg);
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function(ev) {
+      ev.preventDefault();
+      var email = document.getElementById('email').value.trim();
+      var password = document.getElementById('password').value;
+      var btn = document.getElementById('submitBtn');
+      showError('');
+      btn.disabled = true;
+      auth.signInWithEmailAndPassword(email, password)
+        .then(function() {
+          window.location.href = 'account.html';
+        })
+        .catch(function(e) {
+          btn.disabled = false;
+          var code = e && e.code ? e.code : '';
+          if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+            showError('Incorrect email or password.');
+          } else if (code === 'auth/invalid-email') {
+            showError('Enter a valid email address.');
+          } else {
+            showError((e && e.message) ? e.message : 'Could not log in.');
+          }
+        });
+    });
+
+    document.getElementById('forgotLink').addEventListener('click', function(ev) {
+      ev.preventDefault();
+      var email = document.getElementById('email').value.trim();
+      if (!email) {
+        showError('Enter your email above, then tap Forgot password again.');
+        return;
+      }
+      showError('');
+      auth.sendPasswordResetEmail(email)
+        .then(function() {
+          alert('Check your email for a reset link.');
+        })
+        .catch(function(e) {
+          showError((e && e.message) ? e.message : 'Could not send reset email.');
+        });
+    });
+
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        window.location.replace('account.html');
+      }
+    });
+  </script>
+</body>
+</html>

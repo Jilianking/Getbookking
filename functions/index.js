@@ -10,6 +10,10 @@
  *
  * Optional: set string param STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…) via Firebase
  * params / functions .env so createProviderSubscriptionCheckout can return it to signup.html.
+ *
+ * Optional: MARKETING_ORIGIN (https://getbookking.com or your marketing host) for Stripe Billing
+ * Portal return_url → …/account.html. Enable the portal in Stripe Dashboard → Billing → Customer portal.
+ * Callable getBillingSummary: read-only Stripe subscription + invoices for account.html.
  */
 
 const functions = require("firebase-functions");
@@ -33,6 +37,7 @@ const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS")
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 /** Publishable key (pk_…) returned to signup.html when set; safe to expose in the browser. */
 const stripePublishableKeyParam = defineString("STRIPE_PUBLISHABLE_KEY", { default: "" });
+const marketingOriginParam = defineString("MARKETING_ORIGIN", { default: "https://getbookking.com" });
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -1487,3 +1492,309 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
 
   return { ok: true, tenantId };
 });
+
+/** Allowed origins for Stripe Billing Portal `return_url` (marketing + staging). */
+const BILLING_PORTAL_RETURN_ORIGINS = new Set([
+  "https://getbookking.com",
+  "https://www.getbookking.com",
+  "https://getbooking.com",
+  "https://www.getbooking.com",
+  "https://test-app-96812.web.app",
+  "http://localhost:5000",
+  "http://localhost:5050",
+  "http://127.0.0.1:5000",
+]);
+
+function isAllowedReturnOrigin(origin) {
+  const o = (origin || "").toString().trim().replace(/\/$/, "");
+  if (!o) return false;
+  if (BILLING_PORTAL_RETURN_ORIGINS.has(o)) return true;
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(o)) return true;
+  return false;
+}
+
+function billingPortalReturnBase(data) {
+  const fromClient =
+    (data && data.returnOrigin && String(data.returnOrigin).trim().replace(/\/$/, "")) || "";
+  if (fromClient && isAllowedReturnOrigin(fromClient)) {
+    return fromClient;
+  }
+  let base = marketingOriginParam.value().trim().replace(/\/$/, "");
+  if (!base || !/^https:\/\//i.test(base)) {
+    base = "https://getbookking.com";
+  }
+  return base;
+}
+
+function stripeErrorMessage(err) {
+  if (!err) return "Unknown error";
+  if (typeof err.message === "string" && err.message.trim()) return err.message.trim();
+  if (err.raw && typeof err.raw.message === "string") return err.raw.message.trim();
+  try {
+    return JSON.stringify(err).slice(0, 500);
+  } catch (_) {
+    return String(err);
+  }
+}
+
+function formatPaymentMethodLabel(pm) {
+  if (!pm || typeof pm !== "object") return "";
+  if (pm.card && pm.card.last4) {
+    const b = (pm.card.brand || "Card").toString();
+    const brand = b.charAt(0).toUpperCase() + b.slice(1).replace(/_/g, " ");
+    return `${brand} ···· ${pm.card.last4}`;
+  }
+  if (pm.us_bank_account && pm.us_bank_account.last4) {
+    return `Bank ···· ${pm.us_bank_account.last4}`;
+  }
+  return "";
+}
+
+/**
+ * Marketing account page: Stripe Customer Portal (subscription, payment method, invoices).
+ * Enable: Stripe Dashboard → Settings → Billing → Customer portal; allow return URL host there.
+ */
+exports.createBillingPortalSession = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    try {
+      const uid = context.auth.uid;
+      const userSnap = await db.collection("users").doc(uid).get();
+      if (!userSnap.exists) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "No account profile found. Complete sign-up first."
+        );
+      }
+      const userData = userSnap.data() || {};
+      const tenantId = (userData.tenantId || "").toString().trim();
+      if (!tenantId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "No business linked to this account yet."
+        );
+      }
+      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+      if (!tenantSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Business not found.");
+      }
+      const tenantData = tenantSnap.data() || {};
+      const stripeCustomerId = (tenantData.stripeCustomerId || "").toString().trim();
+      if (!stripeCustomerId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Billing is not set up for this business yet. If you just subscribed, wait a minute and try again, or contact support."
+        );
+      }
+      const secretKey = stripeSecretKey.value();
+      if (!secretKey) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe is not configured. Run: firebase functions:secrets:set STRIPE_SECRET_KEY"
+        );
+      }
+      const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+      const base = billingPortalReturnBase(data);
+      const returnUrl = `${base}/account.html`;
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: stripeCustomerId,
+        return_url: returnUrl,
+      });
+      if (!session || !session.url) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe did not return a portal URL."
+        );
+      }
+      return { url: session.url };
+    } catch (e) {
+      if (e && typeof e.code === "string" && e.code.startsWith("functions/") && e.code !== "functions/ok") {
+        throw e;
+      }
+      console.error("createBillingPortalSession", e);
+      const raw = stripeErrorMessage(e);
+      const baseHint = billingPortalReturnBase(data);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Could not open billing portal. In Stripe: enable Customer portal and allow return URL ${baseHint}/account.html. ${raw}`
+      );
+    }
+  });
+
+/**
+ * Marketing account page: read-only subscription status, plan label, renewal, card mask, recent invoices.
+ */
+exports.getBillingSummary = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    try {
+      const uid = context.auth.uid;
+      const userSnap = await db.collection("users").doc(uid).get();
+      if (!userSnap.exists) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "No account profile found. Complete sign-up first."
+        );
+      }
+      const userData = userSnap.data() || {};
+      const tenantId = (userData.tenantId || "").toString().trim();
+      const firestorePlanOnly = normalizeSubscriptionPlan(userData.subscriptionPlan);
+      if (!tenantId) {
+        return {
+          ok: true,
+          hasStripeCustomer: false,
+          firestorePlan: firestorePlanOnly,
+          message: "No business linked to this account yet.",
+        };
+      }
+      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+      if (!tenantSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Business not found.");
+      }
+      const tenantData = tenantSnap.data() || {};
+      const firestorePlan = normalizeSubscriptionPlan(
+        userData.subscriptionPlan || tenantData.subscriptionPlan
+      );
+      const stripeCustomerId = (tenantData.stripeCustomerId || "").toString().trim();
+      if (!stripeCustomerId) {
+        return {
+          ok: true,
+          hasStripeCustomer: false,
+          firestorePlan,
+          message: "Billing is not set up for this business yet.",
+        };
+      }
+      const secretKey = stripeSecretKey.value();
+      if (!secretKey) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe is not configured. Run: firebase functions:secrets:set STRIPE_SECRET_KEY"
+        );
+      }
+      const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+      const stripeSubscriptionId = (tenantData.stripeSubscriptionId || "").toString().trim();
+
+      let sub = null;
+      if (stripeSubscriptionId) {
+        try {
+          sub = await stripe.subscriptions.retrieve(stripeSubscriptionId, {
+            expand: ["items.data.price.product", "default_payment_method"],
+          });
+        } catch (err) {
+          console.warn("getBillingSummary retrieve subscription", stripeSubscriptionId, err.message);
+        }
+      }
+      if (!sub) {
+        const list = await stripe.subscriptions.list({
+          customer: stripeCustomerId,
+          status: "all",
+          limit: 12,
+        });
+        const prefer = new Set(["active", "trialing", "past_due", "paused"]);
+        const ranked = [...list.data].sort((a, b) => {
+          const aP = prefer.has(a.status) ? 0 : 1;
+          const bP = prefer.has(b.status) ? 0 : 1;
+          if (aP !== bP) return aP - bP;
+          return b.created - a.created;
+        });
+        const pick = ranked[0];
+        if (pick) {
+          try {
+            sub = await stripe.subscriptions.retrieve(pick.id, {
+              expand: ["items.data.price.product", "default_payment_method"],
+            });
+          } catch (err) {
+            console.warn("getBillingSummary retrieve picked subscription", pick.id, err.message);
+            sub = pick;
+          }
+        }
+      }
+
+      let paymentMethodLabel = "";
+      const dpm = sub && sub.default_payment_method;
+      if (dpm && typeof dpm === "object") {
+        paymentMethodLabel = formatPaymentMethodLabel(dpm);
+      } else if (typeof dpm === "string" && dpm) {
+        try {
+          const pm = await stripe.paymentMethods.retrieve(dpm);
+          paymentMethodLabel = formatPaymentMethodLabel(pm);
+        } catch (_) {}
+      }
+      if (!paymentMethodLabel) {
+        const cust = await stripe.customers.retrieve(stripeCustomerId, {
+          expand: ["invoice_settings.default_payment_method"],
+        });
+        if (!cust.deleted && cust.invoice_settings && cust.invoice_settings.default_payment_method) {
+          const pm = cust.invoice_settings.default_payment_method;
+          if (typeof pm === "object") paymentMethodLabel = formatPaymentMethodLabel(pm);
+        }
+      }
+
+      let subscriptionPayload = null;
+      if (sub) {
+        const item0 = sub.items && sub.items.data && sub.items.data[0];
+        let planName = "";
+        let unitAmount = null;
+        let currency = "usd";
+        let interval = "";
+        if (item0 && item0.price) {
+          const price = item0.price;
+          const product = price.product;
+          if (typeof product === "object" && product && product.name) {
+            planName = String(product.name);
+          } else {
+            planName = (price.nickname || "").toString();
+          }
+          unitAmount = price.unit_amount;
+          currency = (price.currency || "usd").toString();
+          interval = price.recurring && price.recurring.interval ? String(price.recurring.interval) : "";
+        }
+        subscriptionPayload = {
+          id: sub.id,
+          status: sub.status,
+          planName,
+          unitAmount,
+          currency,
+          interval,
+          currentPeriodEnd: sub.current_period_end || null,
+          cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+        };
+      }
+
+      const invList = await stripe.invoices.list({ customer: stripeCustomerId, limit: 8 });
+      const invoices = invList.data.map((inv) => ({
+        id: inv.id,
+        number: inv.number || inv.id,
+        created: inv.created,
+        amountPaid: inv.amount_paid,
+        currency: (inv.currency || "usd").toString(),
+        status: inv.status,
+        hostedInvoiceUrl: inv.hosted_invoice_url || "",
+      }));
+
+      return {
+        ok: true,
+        hasStripeCustomer: true,
+        firestorePlan,
+        paymentMethodLabel: paymentMethodLabel || "",
+        subscription: subscriptionPayload,
+        invoices,
+      };
+    } catch (e) {
+      if (e && typeof e.code === "string" && e.code.startsWith("functions/") && e.code !== "functions/ok") {
+        throw e;
+      }
+      console.error("getBillingSummary", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Could not load billing summary. ${stripeErrorMessage(e)}`
+      );
+    }
+  });

@@ -23,6 +23,7 @@ struct DesignView: View {
     @State private var isQuickEditEnabled = false
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
+    @State private var quickEditFeaturedSlot: QuickEditFeaturedSlotPayload?
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -109,6 +110,18 @@ struct DesignView: View {
                     }
                 }
             }
+            .sheet(item: $quickEditFeaturedSlot) { payload in
+                QuickEditFeaturedWorkSlotSheet(
+                    slotIndex: payload.slotIndex,
+                    viewModel: viewModel,
+                    onDone: { quickEditFeaturedSlot = nil }
+                )
+            }
+            .sheet(item: $bladeServiceToEdit) { service in
+                EditTenantServiceSheet(service: service, viewModel: viewModel) {
+                    bladeServiceToEdit = nil
+                }
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -117,6 +130,123 @@ struct DesignView: View {
         let id = UUID()
         let fieldKey: String
         let currentText: String
+    }
+
+    private struct QuickEditFeaturedSlotPayload: Identifiable {
+        let slotIndex: Int
+        var id: Int { slotIndex }
+    }
+
+    private struct QuickEditFeaturedWorkSlotSheet: View {
+        let slotIndex: Int
+        @ObservedObject var viewModel: DesignViewModel
+        var onDone: () -> Void
+        @State private var selectedItem: PhotosPickerItem?
+        @State private var cropSheetItem: SingleImageCropSheetItem?
+
+        private var hasImageAtSlot: Bool {
+            viewModel.featuredWorkImages.indices.contains(slotIndex)
+        }
+
+        private var slotImageURL: URL? {
+            guard hasImageAtSlot else { return nil }
+            let s = viewModel.featuredWorkImages[slotIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s.isEmpty, let url = URL(string: s) else { return nil }
+            return url
+        }
+
+        /// Matches home featured strip (4:5); compact like hero thumbnail but portrait.
+        private let previewThumbSize = CGSize(width: 64, height: 80)
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section {
+                        Text("Featured photo")
+                            .font(.subheadline.weight(.medium))
+                        HStack(alignment: .center, spacing: 16) {
+                            Group {
+                                if let url = slotImageURL {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Color.gray.opacity(0.2)
+                                    }
+                                    .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+                                }
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                PhotosPicker(
+                                    selection: $selectedItem,
+                                    matching: .images,
+                                    photoLibrary: .shared()
+                                ) {
+                                    HStack {
+                                        Image(systemName: "photo.badge.plus")
+                                        Text(hasImageAtSlot ? "Replace photo" : "Add photo")
+                                    }
+                                    .font(.subheadline)
+                                }
+                                .onChange(of: selectedItem) { _, newItem in
+                                    Task {
+                                        guard let newItem else { return }
+                                        if let data = try? await newItem.loadTransferable(type: Data.self),
+                                           !data.isEmpty,
+                                           let uiImage = UIImage(data: data) {
+                                            await MainActor.run {
+                                                cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                                                selectedItem = nil
+                                            }
+                                        } else {
+                                            await MainActor.run { selectedItem = nil }
+                                        }
+                                    }
+                                }
+                                if viewModel.isUploadingFeaturedWork {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                            .scaleEffect(0.85)
+                                        Text("Uploading…")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .navigationTitle("Photo")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: onDone)
+                    }
+                }
+                .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
+                    UploadImagePreparationSheet(
+                        images: [item.image],
+                        advice: "",
+                        navigationTitle: "Photo",
+                        allowedChoices: [.portrait4_5],
+                        defaultChoice: .portrait4_5,
+                        showsInstructionalCopy: false,
+                        onUseJPEGData: { dataList in
+                            guard let data = dataList.first else { return }
+                            cropSheetItem = nil
+                            Task { await viewModel.replaceOrAppendFeaturedWorkImage(at: slotIndex, imageData: data) }
+                        }
+                    )
+                }
+            }
+        }
     }
 
     private static func quickEditFieldTitle(_ key: String) -> String {
@@ -164,8 +294,12 @@ struct DesignView: View {
         case "studio12PhilosophyHeadItalic": return "Philosophy headline (accent)"
         case "heroImage": return "Hero image"
         default:
+            if key.hasPrefix("featuredWork:") {
+                return "Featured work"
+            }
             if key.hasPrefix("svc:") {
                 let parts = key.split(separator: ":").map(String.init)
+                if parts.count == 3, parts[2] == "edit" { return "Edit service" }
                 if parts.count == 3, parts[2] == "name" { return "Service name" }
                 if parts.count == 3, parts[2] == "description" { return "Service description" }
                 return "Service"
@@ -193,22 +327,53 @@ struct DesignView: View {
             url: sitePreviewURL,
             height: nil,
             quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
-            onQuickEditTap: { key, text in
-                if key == "heroImage" {
-                    quickEditHeroImageSheet = true
-                    return
-                }
-                if key.hasPrefix("svc:") {
-                    let parts = key.split(separator: ":").map(String.init)
-                    if parts.count == 3, parts[0] == "svc" {
-                        let serviceId = parts[1]
-                        if let service = viewModel.services.first(where: { $0.id == serviceId }) {
-                            bladeServiceToEdit = service
+            onQuickEdit: { event in
+                switch event {
+                case let .inlineSaveBatch(changes):
+                    guard !changes.isEmpty else { return }
+                    Task {
+                        let pairs = changes.map { (fieldKey: $0.key, value: $0.value) }
+                        await viewModel.saveQuickEditBatch(pairs)
+                    }
+                case let .openSheet(key, text):
+                    if key == "heroImage" {
+                        quickEditHeroImageSheet = true
+                        return
+                    }
+                    if key.hasPrefix("featuredWork:") {
+                        let tail = String(key.dropFirst("featuredWork:".count))
+                        if let idx = Int(tail), idx >= 0, idx < viewModel.featuredWorkImageSlotCount {
+                            quickEditFeaturedSlot = QuickEditFeaturedSlotPayload(slotIndex: idx)
                             return
                         }
                     }
+                    guard key.hasPrefix("svc:") else {
+                        quickEditSheet = QuickEditSheetPayload(fieldKey: key, currentText: text)
+                        return
+                    }
+                    let parts = key.split(separator: ":").map(String.init)
+                    guard parts.count == 3,
+                          parts[0] == "svc",
+                          ["edit", "name", "description"].contains(parts[2]) else {
+                        quickEditSheet = QuickEditSheetPayload(fieldKey: key, currentText: text)
+                        return
+                    }
+                    let serviceId = parts[1]
+                    if let service = viewModel.services.first(where: { $0.id == serviceId }) {
+                        bladeServiceToEdit = service
+                        return
+                    }
+                    Task {
+                        await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                        await MainActor.run {
+                            if let service = viewModel.services.first(where: { $0.id == serviceId }) {
+                                bladeServiceToEdit = service
+                            } else {
+                                viewModel.errorMessage = "Could not open that service. Pull to refresh in Builder or reopen Design."
+                            }
+                        }
+                    }
                 }
-                quickEditSheet = QuickEditSheetPayload(fieldKey: key, currentText: text)
             }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -290,11 +455,6 @@ struct DesignView: View {
             }
         } message: {
             Text("Your current steps will be replaced with the default “How it works” steps for your business type. Tap Save Home to publish.")
-        }
-        .sheet(item: $bladeServiceToEdit) { service in
-            EditTenantServiceSheet(service: service, viewModel: viewModel) {
-                bladeServiceToEdit = nil
-            }
         }
         .sheet(isPresented: $isEditingStudio12ProcessStep) {
             Group {

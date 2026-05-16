@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign Up — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/logo-dark-32.png" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/logo-dark-128.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/logo-dark-256.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
@@ -49,17 +52,33 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .signup-header a {
-      font-family: 'Instrument Serif', serif;
-      font-size: 22px;
+    .signup-header > a {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 200;
+      font-size: 16px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
       color: var(--text-primary);
       text-decoration: none;
+      line-height: 1;
     }
+    .signup-header > a img { width: 22px; height: 22px; display: block; flex-shrink: 0; }
 
     .signup-header .step-indicator {
       font-size: 13px;
       color: var(--text-tertiary);
     }
+
+    .signup-header nav a.signup-header-login {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+    .signup-header nav a.signup-header-login:hover { color: var(--text-primary); }
 
     /* ── PROGRESS ── */
     .progress-bar {
@@ -590,8 +609,14 @@
 
   <!-- HEADER -->
   <header class="signup-header">
-    <a href="index.html">Get Bookking</a>
-    <span class="step-indicator" id="stepIndicator">Step 1 of 6</span>
+    <a href="index.html" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-64.png" alt="" width="22" height="22" />
+      <span>Get Bookking</span>
+    </a>
+    <nav style="display:flex;align-items:center;gap:16px;margin-left:auto;">
+      <a href="login.html" class="signup-header-login">Log in</a>
+      <span class="step-indicator" id="stepIndicator">Step 1 of 6</span>
+    </nav>
   </header>
   <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 16.67%"></div></div>
 
@@ -1242,6 +1267,9 @@
       document.getElementById('stepSuccess').classList.add('active');
       document.getElementById('stepIndicator').textContent = 'Done!';
       document.getElementById('progressFill').style.width = '100%';
+      var appU = typeof window.appStoreUrl === 'string' ? window.appStoreUrl.trim() : '';
+      var appLink = document.getElementById('appStoreLink');
+      if (appLink && appU) appLink.href = appU;
     }
 
     function showCheckoutCanceledOnStep6() {

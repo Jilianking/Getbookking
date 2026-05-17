@@ -25,7 +25,7 @@ enum BookingFormStyle: String, CaseIterable, Identifiable {
         case .standard:
             return "Classic card with dropdowns and stacked fields."
         case .guided:
-            return "Service grid, pill choices, and section labels. Uses your theme colors."
+            return "4-step wizard: service, tattoo details, your info, then confirm. Uses your theme colors."
         }
     }
 

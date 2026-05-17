@@ -411,6 +411,9 @@
     .booking-guided-steps {
       margin-bottom: 20px;
     }
+    .booking-guided--steps-first .booking-guided-steps {
+      margin-top: 0;
+    }
     .booking-guided-step-row {
       display: flex;
       align-items: center;
@@ -649,6 +652,139 @@
     }
     .booking-shell--guided .booking-form--guided .booking-submit:hover {
       background: var(--bk-accent-hover, #333) !important;
+    }
+    .booking-guided--wizard .booking-guided-step-panel[hidden] {
+      display: none !important;
+    }
+    .booking-guided--wizard .booking-form--guided {
+      overflow: hidden;
+    }
+    .booking-guided--wizard .booking-guided-step-panel {
+      overflow: hidden;
+      max-height: min(68vh, 480px);
+    }
+    .booking-guided--wizard .booking-guided-step-panel .field-input,
+    .booking-guided--wizard .booking-guided-step-panel textarea.field-input {
+      margin-bottom: 0;
+    }
+    .booking-guided-contact-fields .field-input,
+    .booking-guided-contact-fields textarea.field-input {
+      margin-bottom: 12px;
+    }
+    .booking-guided-contact-fields .field-input:last-child,
+    .booking-guided-contact-fields textarea.field-input:last-child {
+      margin-bottom: 0;
+    }
+    .booking-guided-step-panel .booking-guided-pill-row {
+      margin-bottom: 0;
+    }
+    .booking-guided-step-panel .booking-guided-upload {
+      margin-bottom: 0;
+    }
+    .booking-guided-step-panel--project {
+      overflow-x: hidden;
+      overflow-y: auto;
+      max-height: min(62vh, 440px);
+      -webkit-overflow-scrolling: touch;
+    }
+    .booking-guided-project-fields .booking-guided-field-label {
+      margin-top: 14px;
+    }
+    .booking-guided-project-fields .booking-guided-field-label:first-child {
+      margin-top: 0;
+    }
+    .booking-guided-project-fields .booking-guided-pill-row,
+    .booking-guided-project-fields .booking-guided-upload,
+    .booking-guided-project-fields .field-input,
+    .booking-guided-project-fields textarea.field-input {
+      margin-bottom: 4px;
+    }
+    .booking-guided-step-panel textarea.field-input {
+      min-height: 72px;
+      max-height: 120px;
+    }
+    .booking-guided-phase-labels span.is-done {
+      color: var(--bk-muted, rgba(0,0,0,0.45));
+    }
+    .booking-guided-summary {
+      margin-bottom: 8px;
+    }
+    .booking-guided-summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 0.5px solid var(--bk-border, rgba(0,0,0,0.1));
+      font-size: 13px;
+    }
+    .booking-guided-summary-row:last-child {
+      border-bottom: none;
+    }
+    .booking-guided-summary-label {
+      color: var(--bk-muted, rgba(0,0,0,0.5));
+      flex-shrink: 0;
+    }
+    .booking-guided-summary-value {
+      color: var(--bk-fg, inherit);
+      text-align: right;
+      font-weight: 500;
+    }
+    .booking-guided-wizard-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .booking-guided-link-back {
+      display: block;
+      background: none;
+      border: none;
+      padding: 0 0 12px;
+      margin: 0;
+      font-size: 13px;
+      color: var(--bk-muted, rgba(0,0,0,0.5));
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+    }
+    .booking-guided-link-back:hover {
+      color: var(--bk-fg, inherit);
+    }
+    .booking-guided-link-back[hidden] {
+      display: none !important;
+    }
+    .booking-guided-wizard-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      align-items: stretch;
+    }
+    .booking-guided-wizard-actions .booking-guided-btn-next {
+      width: 100%;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--bk-accent, #111) !important;
+      color: var(--bk-accent-fg, #fff) !important;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .booking-guided-wizard-actions .booking-guided-btn-next:hover {
+      filter: brightness(1.05);
+    }
+    .booking-guided-wizard-actions .booking-guided-btn-next[hidden] {
+      display: none !important;
+    }
+    .booking-guided-wizard-actions .booking-submit {
+      width: 100%;
+    }
+    .booking-guided--wizard .booking-guided-progress {
+      display: none;
+    }
+    .booking-guided-deposit-note[hidden] {
+      display: none !important;
     }
     .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
     .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
@@ -6008,11 +6144,12 @@
         return '<label class="booking-guided-field-label" for="' + name + '">' + label + '</label>' +
           '<input class="field-input" type="' + typ + '" id="' + name + '" name="' + name + '" data-key="' + esc(key) + '" placeholder="' + esc(f.placeholder || f.label || key) + '"' + req + '>';
       }
-      function formGuidedFieldsHtml(fields, services, presel) {
+      function formGuidedFieldsHtml(fields, services, presel, skipService) {
         var html = '';
         var lastSection = '';
         for (var i = 0; i < fields.length; i++) {
           var f = fields[i];
+          if (skipService && f.key === 'service') continue;
           var sec = guidedSectionKeyForField(f);
           if (sec !== lastSection) {
             if (html) html += '<div class="booking-guided-divider"></div>';
@@ -6027,13 +6164,283 @@
         }
         return html;
       }
+      function guidedWizardBucketForField(f) {
+        var key = (f && f.key) || '';
+        if (key === 'service') return 'service';
+        if (key === 'name' || key === 'email' || key === 'phone') return 'contact';
+        return 'project';
+      }
+      function guidedWizardOrderedFields(fields) {
+        var service = [];
+        var project = [];
+        var contact = [];
+        var contactOrder = { name: 0, email: 1, phone: 2 };
+        for (var i = 0; i < fields.length; i++) {
+          var f = fields[i];
+          var bucket = guidedWizardBucketForField(f);
+          if (bucket === 'service') service.push(f);
+          else if (bucket === 'contact') contact.push(f);
+          else project.push(f);
+        }
+        contact.sort(function(a, b) {
+          var ao = contactOrder[a.key] != null ? contactOrder[a.key] : 99;
+          var bo = contactOrder[b.key] != null ? contactOrder[b.key] : 99;
+          return ao - bo;
+        });
+        return { service: service, project: project, contact: contact };
+      }
+      function formGuidedProjectFieldsHtml(projectFields, services, presel) {
+        if (!projectFields || !projectFields.length) return '';
+        var inner = projectFields.map(function(f) {
+          return guidedFieldHtml(f, services, presel);
+        }).join('');
+        return '<p class="booking-guided-section-label">' + esc(guidedSectionLabel('details')) + '</p>' +
+          '<div class="booking-guided-project-fields">' + inner + '</div>';
+      }
+      function formGuidedWizardPanelsHtml(fields, services, presel) {
+        var ordered = guidedWizardOrderedFields(fields);
+        var panels = [];
+        var stepNum = 0;
+        function addPanel(phase, innerHtml, extraClass) {
+          stepNum += 1;
+          panels.push(
+            '<div class="booking-guided-step-panel' + (extraClass ? ' ' + extraClass : '') + (stepNum === 1 ? ' is-active' : '') + '"' +
+            ' data-guided-step="' + stepNum + '" data-guided-phase="' + phase + '"' +
+            (stepNum > 1 ? ' hidden' : '') + '>' + innerHtml + '</div>'
+          );
+        }
+        addPanel('service',
+          '<p class="booking-guided-section-label">' + esc(guidedSectionLabel('service')) + '</p>' +
+          guidedFieldHtml({ key: 'service', label: 'Service', type: 'select', required: true }, services, presel)
+        );
+        if (ordered.project.length) {
+          addPanel('project', formGuidedProjectFieldsHtml(ordered.project, services, presel), 'booking-guided-step-panel--project');
+        }
+        if (ordered.contact.length) {
+          var contactInner = '<p class="booking-guided-section-label">' + esc(guidedSectionLabel('contact')) + '</p>' +
+            '<div class="booking-guided-contact-fields">' +
+            ordered.contact.map(function(cf) { return guidedFieldHtml(cf, services, presel); }).join('') +
+            '</div>';
+          addPanel('contact', contactInner, 'booking-guided-step-panel--contact');
+        }
+        addPanel('confirm',
+          '<p class="booking-guided-section-label">Review your request</p>' +
+          '<div class="booking-guided-summary" data-guided-summary></div>'
+        );
+        return {
+          html: panels.join(''),
+          totalSteps: stepNum,
+          confirmStep: stepNum
+        };
+      }
+      function guidedWizardProgressHtml(totalSteps) {
+        var segs = [];
+        for (var s = 0; s < totalSteps; s++) {
+          segs.push('<span class="booking-guided-prog-seg' + (s === 0 ? ' is-active' : '') + '"></span>');
+        }
+        return segs.join('');
+      }
+      function guidedWizardPhaseChromeHtml() {
+        return '' +
+          '<div class="booking-guided-steps" data-guided-wizard-steps role="navigation" aria-label="Booking steps">' +
+            '<div class="booking-guided-step-labels booking-guided-phase-labels">' +
+              '<span data-guided-phase-label="service" class="is-active">Service</span>' +
+              '<span data-guided-phase-label="project">Project</span>' +
+              '<span data-guided-phase-label="contact">You</span>' +
+              '<span data-guided-phase-label="confirm">Confirm</span>' +
+            '</div>' +
+            '<div class="booking-guided-step-row booking-guided-phase-dots">' +
+              '<span class="booking-guided-step-dot" data-guided-phase-dot="service">1</span>' +
+              '<span class="booking-guided-step-line"></span>' +
+              '<span class="booking-guided-step-dot is-inactive" data-guided-phase-dot="project">2</span>' +
+              '<span class="booking-guided-step-line"></span>' +
+              '<span class="booking-guided-step-dot is-inactive" data-guided-phase-dot="contact">3</span>' +
+              '<span class="booking-guided-step-line"></span>' +
+              '<span class="booking-guided-step-dot is-inactive" data-guided-phase-dot="confirm">4</span>' +
+            '</div>' +
+          '</div>';
+      }
+      function guidedWizardFieldLabel(fm, key) {
+        var el = fm.querySelector('[data-key="' + key.replace(/"/g, '') + '"]');
+        if (!el) return key;
+        var id = el.id;
+        if (id) {
+          var lab = fm.querySelector('label[for="' + id + '"]');
+          if (lab) return (lab.textContent || key).trim();
+        }
+        return key;
+      }
+      function guidedWizardRenderSummary(fm) {
+        var summaryEl = fm.querySelector('[data-guided-summary]');
+        if (!summaryEl) return;
+        var rows = [];
+        var activeCard = fm.querySelector('.booking-guided-service-card.is-active');
+        if (activeCard) {
+          var nameEl = activeCard.querySelector('.name');
+          if (nameEl) rows.push({ label: 'Service', value: (nameEl.textContent || '').trim() });
+        }
+        var fileKeys = {};
+        fm.querySelectorAll('input[data-type="file"]').forEach(function(inp) {
+          var k = inp.getAttribute('data-key');
+          if (k && inp.files && inp.files.length) fileKeys[k] = inp.files.length;
+        });
+        fm.querySelectorAll('[data-key]').forEach(function(el) {
+          if (el.getAttribute('data-type') === 'file') return;
+          var k = el.getAttribute('data-key');
+          if (!k || k === 'service') return;
+          var v = (el.value || '').trim();
+          if (!v && !fileKeys[k]) return;
+          if (fileKeys[k]) {
+            rows.push({ label: guidedWizardFieldLabel(fm, k), value: fileKeys[k] + ' file(s)' });
+            return;
+          }
+          rows.push({ label: guidedWizardFieldLabel(fm, k), value: v });
+        });
+        if (!rows.length) {
+          summaryEl.innerHTML = '<p class="booking-guided-summary-value" style="text-align:left;font-weight:400;color:var(--bk-muted,rgba(0,0,0,0.5))">No details entered yet.</p>';
+          return;
+        }
+        summaryEl.innerHTML = rows.map(function(r) {
+          return '<div class="booking-guided-summary-row">' +
+            '<span class="booking-guided-summary-label">' + esc(r.label) + '</span>' +
+            '<span class="booking-guided-summary-value">' + esc(r.value) + '</span>' +
+          '</div>';
+        }).join('');
+      }
+      function guidedWizardValidateStep(fm, step, errEl) {
+        function showErr(msg) {
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+          }
+        }
+        if (errEl) errEl.style.display = 'none';
+        var panel = fm.querySelector('[data-guided-step="' + step + '"]');
+        if (!panel) return true;
+        var phase = panel.getAttribute('data-guided-phase') || '';
+        if (phase === 'service') {
+          var svc = fm.querySelector('[data-key="service"]');
+          if (!svc || !(svc.value || '').trim()) {
+            showErr('Please select a service to continue.');
+            return false;
+          }
+          return true;
+        }
+        if (phase === 'confirm') return true;
+        var inputs = panel.querySelectorAll('input, select, textarea');
+        for (var i = 0; i < inputs.length; i++) {
+          var inp = inputs[i];
+          if (inp.type === 'hidden' || inp.type === 'file') continue;
+          if (!inp.checkValidity()) {
+            inp.reportValidity();
+            return false;
+          }
+        }
+        return true;
+      }
+      function guidedPanelNeedsContinueBtn(panel) {
+        if (!panel) return true;
+        var phase = panel.getAttribute('data-guided-phase') || '';
+        if (phase === 'confirm') return false;
+        if (phase === 'service') return false;
+        return true;
+      }
       function setupGuidedBookingForm(fm) {
         if (!fm || !fm.classList.contains('booking-form--guided')) return;
+        var wizardActive = fm.hasAttribute('data-guided-wizard-form');
+        var wrap = wizardActive ? fm.closest('.booking-guided--wizard') : null;
+        var stepsRoot = wrap ? wrap.querySelector('[data-guided-wizard-steps]') : null;
+        var panels = wizardActive ? fm.querySelectorAll('[data-guided-step]') : [];
+        var backBtn = fm.querySelector('[data-guided-back]');
+        var nextBtn = fm.querySelector('[data-guided-next]');
+        var submitBtn = fm.querySelector('[data-guided-submit]');
+        var depositNote = fm.querySelector('[data-guided-deposit-note]');
+        var errEl = document.getElementById('form-error');
+        var confirmStep = wizardActive ? parseInt(fm.getAttribute('data-guided-confirm-step') || '1', 10) : 1;
+        var phaseOrder = ['service', 'project', 'contact', 'confirm'];
+        var currentStep = 1;
+        var tryAdvanceAfterSelection = null;
+        function phaseIndex(phase) {
+          var idx = phaseOrder.indexOf(phase);
+          return idx >= 0 ? idx : 0;
+        }
+        function updateStepChrome(step) {
+          if (!wizardActive) return;
+          var panel = fm.querySelector('[data-guided-step="' + step + '"]');
+          var phase = panel ? (panel.getAttribute('data-guided-phase') || 'service') : 'service';
+          var pIdx = phaseIndex(phase);
+          var phaseLabels = stepsRoot ? stepsRoot.querySelectorAll('[data-guided-phase-label]') : [];
+          var phaseDots = stepsRoot ? stepsRoot.querySelectorAll('[data-guided-phase-dot]') : [];
+          for (var li = 0; li < phaseLabels.length; li++) {
+            var pl = phaseLabels[li].getAttribute('data-guided-phase-label');
+            var plIdx = phaseIndex(pl);
+            phaseLabels[li].classList.toggle('is-active', plIdx === pIdx);
+            phaseLabels[li].classList.toggle('is-done', plIdx < pIdx);
+          }
+          for (var di = 0; di < phaseDots.length; di++) {
+            var pd = phaseDots[di].getAttribute('data-guided-phase-dot');
+            var pdIdx = phaseIndex(pd);
+            phaseDots[di].classList.toggle('is-inactive', pdIdx > pIdx);
+          }
+        }
+        function showStep(step) {
+          if (!wizardActive) return;
+          currentStep = step;
+          fm.dataset.guidedStep = String(step);
+          for (var i = 0; i < panels.length; i++) {
+            var p = panels[i];
+            var pn = parseInt(p.getAttribute('data-guided-step'), 10);
+            var on = pn === step;
+            p.hidden = !on;
+            p.classList.toggle('is-active', on);
+          }
+          updateStepChrome(step);
+          var activePanel = fm.querySelector('[data-guided-step="' + step + '"]');
+          var needsContinue = guidedPanelNeedsContinueBtn(activePanel);
+          if (backBtn) backBtn.hidden = step <= 1;
+          if (nextBtn) {
+            nextBtn.hidden = step >= confirmStep || !needsContinue;
+            nextBtn.textContent = (activePanel && activePanel.getAttribute('data-guided-phase') === 'contact') ? 'Review' : 'Continue';
+          }
+          if (submitBtn) submitBtn.hidden = step !== confirmStep;
+          if (depositNote) depositNote.hidden = step !== confirmStep;
+          if (step === confirmStep) guidedWizardRenderSummary(fm);
+          if (errEl) errEl.style.display = 'none';
+        }
+        tryAdvanceAfterSelection = function() {
+          if (!wizardActive) return;
+          window.setTimeout(function() {
+            if (!guidedWizardValidateStep(fm, currentStep, errEl)) return;
+            if (currentStep < confirmStep) showStep(currentStep + 1);
+          }, 320);
+        };
+        if (wizardActive) {
+          showStep(1);
+          if (backBtn) {
+            backBtn.addEventListener('click', function(e) {
+              e.preventDefault();
+              if (currentStep > 1) showStep(currentStep - 1);
+            });
+          }
+          if (nextBtn) {
+            nextBtn.addEventListener('click', function(e) {
+              e.preventDefault();
+              if (!guidedWizardValidateStep(fm, currentStep, errEl)) return;
+              if (currentStep < confirmStep) showStep(currentStep + 1);
+            });
+          }
+          fm.addEventListener('submit', function(e) {
+            if (currentStep !== confirmStep) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }, true);
+        }
         var serviceHidden = fm.querySelector('[data-key="service"]');
         var grid = fm.querySelector('[data-guided-service-grid]');
         if (grid && serviceHidden) {
           var cards = grid.querySelectorAll('[data-guided-service-id]');
-          function activateCard(card) {
+          function activateCard(card, autoAdvance) {
             for (var ci = 0; ci < cards.length; ci++) cards[ci].classList.remove('is-active');
             card.classList.add('is-active');
             serviceHidden.value = card.getAttribute('data-guided-service-id') || '';
@@ -6041,16 +6448,17 @@
             for (var cj = 0; cj < cards.length; cj++) {
               if (cards[cj] !== card) cards[cj].setAttribute('aria-pressed', 'false');
             }
+            if (autoAdvance && tryAdvanceAfterSelection) tryAdvanceAfterSelection();
           }
           for (var si = 0; si < cards.length; si++) {
             (function(card) {
               card.addEventListener('click', function(e) {
                 e.preventDefault();
-                activateCard(card);
+                activateCard(card, wizardActive);
               });
             })(cards[si]);
           }
-          if (!serviceHidden.value && cards.length === 1) activateCard(cards[0]);
+          if (!serviceHidden.value && cards.length === 1) activateCard(cards[0], false);
         }
         var pillGroups = fm.querySelectorAll('[data-guided-pills]');
         for (var gi = 0; gi < pillGroups.length; gi++) {
@@ -6181,41 +6589,22 @@
         else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
         else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
         if (usesGuidedBookingForm(tenant)) {
-          var guidedFieldsHtml = formGuidedFieldsHtml(fields, services, presel);
+          var guidedWizard = formGuidedWizardPanelsHtml(fields, services, presel);
+          var guidedPanelsHtml = guidedWizard.html;
           var guidedVars = guidedBookingInlineStyle(tenant);
-          var guidedBookSub = tenant.tagline
-            ? esc(tenant.tagline)
-            : 'Tell us what you need — we\u2019ll follow up to confirm your appointment.';
           var guidedInner =
-            '<div class="booking-guided">' +
-              '<header class="booking-guided-header">' +
-                '<p class="booking-guided-eyebrow">Book an appointment</p>' +
-                '<h1 class="booking-guided-title">' + esc(tenant.displayName || 'Request') + '</h1>' +
-                '<p class="booking-guided-sub">' + guidedBookSub + '</p>' +
-              '</header>' +
-              '<div class="booking-guided-steps" aria-hidden="true">' +
-                '<div class="booking-guided-step-labels">' +
-                  '<span class="is-active">Service</span><span>Details</span><span>Confirm</span>' +
-                '</div>' +
-                '<div class="booking-guided-step-row">' +
-                  '<span class="booking-guided-step-dot">1</span>' +
-                  '<span class="booking-guided-step-line"></span>' +
-                  '<span class="booking-guided-step-dot is-inactive">2</span>' +
-                  '<span class="booking-guided-step-line"></span>' +
-                  '<span class="booking-guided-step-dot is-inactive">3</span>' +
-                '</div>' +
-              '</div>' +
-              '<form id="book-form" class="booking-form booking-form--guided">' +
-                guidedFieldsHtml +
-                '<div class="booking-guided-bottom">' +
-                  '<div class="booking-guided-progress">' +
-                    '<span class="booking-guided-prog-seg is-active"></span>' +
-                    '<span class="booking-guided-prog-seg is-active"></span>' +
-                    '<span class="booking-guided-prog-seg"></span>' +
-                  '</div>' +
+            '<div class="booking-guided booking-guided--wizard booking-guided--steps-first">' +
+              guidedWizardPhaseChromeHtml() +
+              '<form id="book-form" class="booking-form booking-form--guided" data-guided-wizard-form data-guided-confirm-step="' + guidedWizard.confirmStep + '">' +
+                guidedPanelsHtml +
+                '<div class="booking-guided-bottom booking-guided-wizard-footer">' +
                   '<p id="form-error" class="error" style="display:none"></p>' +
-                  '<button type="submit" class="booking-submit" data-accent>Request booking</button>' +
-                  '<p class="booking-guided-deposit-note">No payment required — we\u2019ll confirm by message.</p>' +
+                  '<button type="button" class="booking-guided-link-back" data-guided-back hidden>← Back</button>' +
+                  '<div class="booking-guided-wizard-actions">' +
+                    '<button type="button" class="booking-guided-btn-next" data-guided-next>Continue</button>' +
+                    '<button type="submit" class="booking-submit" data-accent data-guided-submit hidden>Request booking</button>' +
+                  '</div>' +
+                  '<p class="booking-guided-deposit-note" data-guided-deposit-note hidden>No payment required — we\u2019ll confirm by message.</p>' +
                 '</div>' +
               '</form>' +
             '</div>';
@@ -8684,6 +9073,10 @@
               setupGuidedBookingForm(fm);
               fm.addEventListener('submit', function(ev){
                 ev.preventDefault();
+                if (fm.dataset.guidedStep) {
+                  var confirmAt = fm.getAttribute('data-guided-confirm-step') || '3';
+                  if (fm.dataset.guidedStep !== confirmAt) return;
+                }
                 var errEl = document.getElementById('form-error');
                 errEl.style.display = 'none';
                 var btn = fm.querySelector('button[type="submit"]');

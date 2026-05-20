@@ -64,9 +64,20 @@ struct TeamNotificationToggle: View {
 
 struct TeamApproveRejectRow: View {
     @ObservedObject var viewModel: ManagerSettingsViewModel
+    var managersApproveAppointments: Bool
 
     var body: some View {
-        if viewModel.tenantBookingRequiresApproval {
+        if !managersApproveAppointments {
+            HStack {
+                Text("Approve & reject requests")
+                Spacer()
+                Text("Off")
+                    .foregroundStyle(.secondary)
+            }
+            Text("Turn on Managers approve appointments above, or set booking per team member on Team.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        } else if viewModel.tenantBookingRequiresApproval {
             TeamPermissionToggle(
                 viewModel: viewModel,
                 title: "Approve & reject requests",
@@ -79,7 +90,7 @@ struct TeamApproveRejectRow: View {
                 Text("Off")
                     .foregroundStyle(.secondary)
             }
-            Text("Use Request + approve (or similar) under Client booking flow above to enable approvals.")
+            Text("Choose Request + approve (or similar) under Booking confirmation to enable approvals.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

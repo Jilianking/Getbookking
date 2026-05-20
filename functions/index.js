@@ -974,6 +974,9 @@ exports.onTenantBookingRequestCreated = functions.firestore
     const tenantId = context.params.tenantId;
     const requestId = context.params.requestId;
     const data = snap.data() || {};
+    const source = (data.source || "").toString().trim().toLowerCase();
+    if (source === "seed") return null;
+
     const customerName = data.customerName || "Someone";
     const serviceName = (data.serviceName || "").toString().trim();
     const body = serviceName
@@ -1251,6 +1254,11 @@ function bookingRequiresApproval(confirmationType) {
   );
 }
 
+function managersApproveAppointments(workflow) {
+  if (!workflow || typeof workflow !== "object") return true;
+  return workflow.managersApproveAppointments !== false;
+}
+
 function resolveTenantWorkflow(tenant, ownerUserData) {
   if (tenant && tenant.workflow && tenant.workflow.confirmationType) {
     return {
@@ -1260,6 +1268,7 @@ function resolveTenantWorkflow(tenant, ownerUserData) {
           ? tenant.workflow.responseTimeHours
           : 24,
       depositAmount: tenant.workflow.depositAmount,
+      managersApproveAppointments: managersApproveAppointments(tenant.workflow),
     };
   }
   if (ownerUserData && ownerUserData.workflow && ownerUserData.workflow.confirmationType) {
@@ -1267,9 +1276,10 @@ function resolveTenantWorkflow(tenant, ownerUserData) {
       confirmationType: ownerUserData.workflow.confirmationType,
       responseTimeHours: ownerUserData.workflow.responseTimeHours || 24,
       depositAmount: ownerUserData.workflow.depositAmount,
+      managersApproveAppointments: managersApproveAppointments(ownerUserData.workflow),
     };
   }
-  return { ...DEFAULT_TENANT_WORKFLOW };
+  return { ...DEFAULT_TENANT_WORKFLOW, managersApproveAppointments: true };
 }
 
 async function getMemberAccessContext(uid) {
@@ -1308,6 +1318,7 @@ async function getMemberAccessContext(uid) {
     workflow,
     managerPermissions,
     bookingRequiresApproval: bookingRequiresApproval(workflow.confirmationType),
+    managersApproveAppointments: managersApproveAppointments(workflow),
   };
 }
 
@@ -1464,7 +1475,10 @@ exports.getTenantInvitePreview = functions.https.onCall(async (data) => {
     );
   }
   const businessName = t.displayName || t.businessName || "Business";
-  return { businessName };
+  const jobTitle = normalizeJobTitle(
+    inv.jobTitle || defaultJobTitleForIndustry(t.industry || "custom")
+  );
+  return { businessName, jobTitle };
 });
 
 /** Owner-only: single-use invite; pass baseUrl for full join link. */
@@ -1711,6 +1725,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     confirmationType: ctx.workflow.confirmationType,
     responseTimeHours: ctx.workflow.responseTimeHours,
     bookingRequiresApproval: ctx.bookingRequiresApproval,
+    managersApproveAppointments: ctx.managersApproveAppointments,
   };
 });
 
@@ -1727,40 +1742,51 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
       "Only the business owner can change booking confirmation settings."
     );
   }
-  const confirmationType = ((data && data.confirmationType) || "")
-    .toString()
-    .trim()
-    .toLowerCase();
-  const allowed = [
-    "instant_book",
-    "request_approve",
-    "deposit_to_confirm",
-    "approve_and_deposit",
-    "consultation_first",
-  ];
-  if (!allowed.includes(confirmationType)) {
-    throw new functions.https.HttpsError("invalid-argument", "Invalid confirmation type.");
-  }
-  const responseTimeHours = Math.min(
-    168,
-    Math.max(1, parseInt((data && data.responseTimeHours) || 24, 10) || 24)
-  );
+  const existingWf =
+    ctx.tenant && ctx.tenant.workflow && typeof ctx.tenant.workflow === "object"
+      ? { ...ctx.tenant.workflow }
+      : {};
+  const managersApprove =
+    data && data.managersApproveAppointments != null
+      ? Boolean(data.managersApproveAppointments)
+      : managersApproveAppointments(existingWf);
+
   const workflow = {
-    confirmationType,
-    responseTimeHours,
+    ...existingWf,
+    managersApproveAppointments: managersApprove,
   };
-  if (data && data.depositAmount != null && !Number.isNaN(Number(data.depositAmount))) {
-    const dep = Number(data.depositAmount);
-    if (dep > 0) workflow.depositAmount = dep;
+
+  if (managersApprove && data && data.confirmationType != null) {
+    const confirmationType = (data.confirmationType || "").toString().trim().toLowerCase();
+    const allowed = [
+      "instant_book",
+      "request_approve",
+      "deposit_to_confirm",
+      "approve_and_deposit",
+      "consultation_first",
+    ];
+    if (!allowed.includes(confirmationType)) {
+      throw new functions.https.HttpsError("invalid-argument", "Invalid confirmation type.");
+    }
+    workflow.confirmationType = confirmationType;
+    if (data.depositAmount != null && !Number.isNaN(Number(data.depositAmount))) {
+      const dep = Number(data.depositAmount);
+      if (dep > 0) workflow.depositAmount = dep;
+      else delete workflow.depositAmount;
+    }
   }
+
   await db.collection("tenants").doc(ctx.tenantId).update({
     workflow,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   await db.collection("users").doc(uid).set({ workflow }, { merge: true });
+  const effectiveType =
+    workflow.confirmationType || DEFAULT_TENANT_WORKFLOW.confirmationType;
   return {
     ok: true,
-    bookingRequiresApproval: bookingRequiresApproval(confirmationType),
+    bookingRequiresApproval: bookingRequiresApproval(effectiveType),
+    managersApproveAppointments: managersApprove,
   };
 });
 
@@ -1790,7 +1816,9 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
     }
     const canApprove =
       ctx.isOwner ||
-      (ctx.accessRole === "manager" && ctx.managerPermissions.approveRejectRequests);
+      (ctx.managersApproveAppointments &&
+        ctx.accessRole === "manager" &&
+        ctx.managerPermissions.approveRejectRequests);
     if (!canApprove) {
       throw new functions.https.HttpsError(
         "permission-denied",
@@ -1837,6 +1865,45 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
   return { ok: true, status: normalized };
 });
 
+const {
+  SEED_CONFIRM,
+  MAX_SEED_COUNT,
+  writeSeedBookingRequests,
+} = require("./seedBookingRequestsLib");
+
+/**
+ * Owner-only: bulk-insert test booking requests (source "seed", no FCM spam).
+ * Callable from DEBUG UI or: confirm must be SEED_BOOKING_REQUESTS.
+ */
+exports.seedTenantBookingRequests = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const confirm = (data && data.confirm ? data.confirm : "").toString();
+  if (confirm !== SEED_CONFIRM) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      `confirm must be "${SEED_CONFIRM}".`
+    );
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can seed test booking requests."
+    );
+  }
+  const rawCount = data && data.count != null ? Number(data.count) : 100;
+  const count = Number.isFinite(rawCount) ? rawCount : 100;
+  const { written, tenantId } = await writeSeedBookingRequests(
+    db,
+    ctx.tenantId,
+    count,
+    admin
+  );
+  return { ok: true, written, tenantId };
+});
+
 /** Tenant members: roster (+ owner-only policy fields for Team screen). */
 exports.listTenantMembers = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -1876,6 +1943,7 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
     managerNotifications: notifs,
     confirmationType,
     bookingRequiresApproval: bookingRequiresApproval(confirmationType),
+    managersApproveAppointments: managersApproveAppointments(workflow),
     members,
   };
 });

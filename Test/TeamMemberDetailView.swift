@@ -24,8 +24,7 @@ struct TeamMemberDetailView: View {
         _memberSettings = State(initialValue: member.memberSettings)
         let title = member.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let industry = viewModel.tenantIndustry
-        let options = TeamJobTitleCatalog.primaryOptions(for: industry)
-            + TeamJobTitleCatalog.allPresetOptions
+        let options = TeamJobTitleCatalog.options(for: industry)
         if let match = options.first(where: { $0.label.caseInsensitiveCompare(title) == .orderedSame }) {
             _jobTitlePresetId = State(initialValue: match.id)
             _customJobTitle = State(initialValue: "")
@@ -49,9 +48,7 @@ struct TeamMemberDetailView: View {
             let c = customJobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             return c.isEmpty ? TeamJobTitleCatalog.defaultTitle(for: viewModel.tenantIndustry) : String(c.prefix(60))
         }
-        let all = TeamJobTitleCatalog.primaryOptions(for: viewModel.tenantIndustry)
-            + TeamJobTitleCatalog.allPresetOptions
-        return all.first(where: { $0.id == jobTitlePresetId })?.label
+        return TeamJobTitleCatalog.options(for: viewModel.tenantIndustry).first(where: { $0.id == jobTitlePresetId })?.label
             ?? TeamJobTitleCatalog.defaultTitle(for: viewModel.tenantIndustry)
     }
 
@@ -257,13 +254,7 @@ struct TeamMemberDetailView: View {
     }
 
     private var jobTitleOptions: [TeamJobTitleOption] {
-        var seen = Set<String>()
-        var out: [TeamJobTitleOption] = []
-        for opt in TeamJobTitleCatalog.primaryOptions(for: viewModel.tenantIndustry)
-            + TeamJobTitleCatalog.allPresetOptions {
-            if seen.insert(opt.label.lowercased()).inserted { out.append(opt) }
-        }
-        return out
+        TeamJobTitleCatalog.options(for: viewModel.tenantIndustry)
     }
 
     private func save() async {

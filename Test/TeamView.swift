@@ -115,10 +115,6 @@ private struct TeamMemberOverviewContent: View {
                     enabled: authViewModel.teamAccess.canApproveRejectRequests
                 )
                 TeamPermissionSummaryRow(
-                    title: "Manage booking form style",
-                    enabled: authViewModel.teamAccess.canManageBookingFormStyle
-                )
-                TeamPermissionSummaryRow(
                     title: "Edit services & pricing",
                     enabled: authViewModel.teamAccess.canEditServicesPricing
                 )

@@ -299,7 +299,10 @@ class FirebaseService: ObservableObject {
                 notes: d["notes"] as? String,
                 formResponses: d["formResponses"] as? [String: Any],
                 createdAt: (d["createdAt"] as? Timestamp)?.dateValue(),
-                readAt: (d["readAt"] as? Timestamp)?.dateValue()
+                readAt: (d["readAt"] as? Timestamp)?.dateValue(),
+                assignedMemberUid: d["assignedMemberUid"] as? String,
+                assignedMemberName: d["assignedMemberName"] as? String,
+                assignedMemberEmail: d["assignedMemberEmail"] as? String
             )
         }
     }

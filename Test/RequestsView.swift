@@ -47,9 +47,11 @@ struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = RequestsViewModel()
     @State private var requestFilter: BookingRequestFilter = .all
+    @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
     @State private var searchText = ""
+    @State private var showSeedConfirm = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -75,33 +77,39 @@ struct RequestsView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
 
-                // Filter dropdown + refresh
+                // Team filter (tenant) or status filter (legacy) + refresh
                 HStack(alignment: .center, spacing: 8) {
-                    Menu {
-                        Picker("Filter", selection: $requestFilter) {
-                            ForEach(BookingRequestFilter.allCases) { filter in
-                                Text("\(filter.title) (\(filterCount(for: filter)))")
-                                    .tag(filter)
+                    if showsTeamFilter {
+                        filterMenuLabel(
+                            title: "\(teamFilterTitle) (\(teamFilterCount(for: teamFilterKey)))"
+                        ) {
+                            Picker("Filter", selection: $teamFilterKey) {
+                                Text("All (\(teamFilterCount(for: BookingAssigneeFilter.allKey)))")
+                                    .tag(BookingAssigneeFilter.allKey)
+                                Text("Unassigned (\(teamFilterCount(for: BookingAssigneeFilter.unassignedKey)))")
+                                    .tag(BookingAssigneeFilter.unassignedKey)
+                                if let owner = viewModel.teamFilterOwner {
+                                    Text("\(teamFilterLabel(for: owner)) (\(teamFilterCount(for: owner.uid)))")
+                                        .tag(owner.uid)
+                                }
+                                ForEach(viewModel.teamFilterRoster.filter { $0.accessRole != .owner }) { member in
+                                    Text("\(teamFilterLabel(for: member)) (\(teamFilterCount(for: member.uid)))")
+                                        .tag(member.uid)
+                                }
                             }
                         }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("\(requestFilter.title) (\(filterCount(for: requestFilter)))")
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
-                            Image(systemName: "chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(.secondary)
+                    } else if !viewModel.useTenantData {
+                        filterMenuLabel(
+                            title: "\(requestFilter.title) (\(legacyFilterCount(for: requestFilter)))"
+                        ) {
+                            Picker("Status", selection: $requestFilter) {
+                                ForEach(BookingRequestFilter.allCases) { filter in
+                                    Text("\(filter.title) (\(legacyFilterCount(for: filter)))")
+                                        .tag(filter)
+                                }
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.gray.opacity(0.12))
-                        .foregroundColor(.primary)
-                        .cornerRadius(8)
                     }
-                    .buttonStyle(.plain)
 
                     Button(action: { Task { await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode) } }) {
                         Image(systemName: "arrow.clockwise")
@@ -151,6 +159,21 @@ struct RequestsView: View {
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
+
+                    if let seedMessage = viewModel.seedMessage {
+                        Text(seedMessage)
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    if let err = viewModel.actionError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                 }
             }
             .navigationTitle(sectionTitle)
@@ -160,6 +183,36 @@ struct RequestsView: View {
                         Image(systemName: "line.3.horizontal")
                     }
                 }
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if authViewModel.teamAccess.isOwner,
+                       viewModel.useTenantData,
+                       !authViewModel.isDemoMode {
+                        Button {
+                            showSeedConfirm = true
+                        } label: {
+                            if viewModel.isSeeding {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "tray.and.arrow.down.fill")
+                            }
+                        }
+                        .disabled(viewModel.isSeeding)
+                    }
+                }
+                #endif
+            }
+            .confirmationDialog(
+                "Load test booking requests?",
+                isPresented: $showSeedConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Add 100 test requests") {
+                    Task { await viewModel.seedTestBookingRequests(count: 100) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Inserts sample rows into your business (source: seed). Owner only. Use on test tenants like test100.")
             }
             .sheet(item: $selectedRequest) { request in
                 RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
@@ -180,11 +233,64 @@ struct RequestsView: View {
         .navigationViewStyle(.stack)
     }
 
-    private func filterCount(for filter: BookingRequestFilter) -> Int {
-        if viewModel.useTenantData {
-            return viewModel.bookingRequests.filter { filter.matches($0) }.count
+    private var showsTeamFilter: Bool {
+        viewModel.useTenantData && authViewModel.teamAccess.canViewAllBookings
+    }
+
+    @ViewBuilder
+    private func filterMenuLabel<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.gray.opacity(0.12))
+            .foregroundColor(.primary)
+            .cornerRadius(8)
         }
-        return viewModel.requests.filter { filter.matches($0) }.count
+        .buttonStyle(.plain)
+    }
+
+    private var teamFilterTitle: String {
+        switch teamFilterKey {
+        case BookingAssigneeFilter.allKey:
+            return "All"
+        case BookingAssigneeFilter.unassignedKey:
+            return "Unassigned"
+        default:
+            if let member = viewModel.teamFilterRoster.first(where: { $0.uid == teamFilterKey }) {
+                return teamFilterLabel(for: member)
+            }
+            return "Team"
+        }
+    }
+
+    private func teamFilterLabel(for member: TenantTeamMember) -> String {
+        if member.accessRole == .owner { return "Owner" }
+        return member.displayName
+    }
+
+    private func teamFilterCount(for key: String) -> Int {
+        viewModel.bookingRequests.filter {
+            $0.matchesAssigneeFilter(key: key, roster: viewModel.teamFilterRoster)
+        }.count
+    }
+
+    private func legacyFilterCount(for filter: BookingRequestFilter) -> Int {
+        viewModel.requests.filter { filter.matches($0) }.count
     }
 
     private var filteredRequests: [Request] {
@@ -199,7 +305,9 @@ struct RequestsView: View {
     }
 
     private var filteredBookingRequests: [BookingRequest] {
-        var list = viewModel.bookingRequests.filter { requestFilter.matches($0) }
+        var list = viewModel.bookingRequests.filter {
+            $0.matchesAssigneeFilter(key: teamFilterKey, roster: viewModel.teamFilterRoster)
+        }
         if !searchText.isEmpty {
             list = list.filter {
                 ($0.customerName ?? "").localizedCaseInsensitiveContains(searchText) ||
@@ -249,9 +357,12 @@ struct BookingRequestListRow: View {
         let dateStr = when.map {
             $0.formatted(.dateTime.month(.abbreviated).day().year())
         } ?? ""
-        if !service.isEmpty, !dateStr.isEmpty { return "\(service) · \(dateStr)" }
-        if !service.isEmpty { return service }
-        return dateStr.isEmpty ? "—" : dateStr
+        let staff = request.assignedMemberDisplayLabel
+        var parts: [String] = []
+        if !service.isEmpty { parts.append(service) }
+        if !dateStr.isEmpty { parts.append(dateStr) }
+        if let staff, !staff.isEmpty { parts.append(staff) }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -343,6 +454,9 @@ struct BookingRequestDetailView: View {
                             label: "Appointment type",
                             value: request.serviceName ?? request.serviceSlug ?? "—"
                         )
+                        if let staff = request.assignedMemberDisplayLabel {
+                            BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
+                        }
                         if let mode = request.bookingModeUsed, !mode.isEmpty {
                             BookingRequestDetailRow(label: "Booking mode", value: mode)
                         }

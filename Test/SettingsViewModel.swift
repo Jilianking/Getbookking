@@ -11,7 +11,7 @@ import FirebaseFunctions
 
 class SettingsViewModel: ObservableObject {
     @Published var confirmationType: BookingConfirmationType = .requestApprove
-    @Published var responseTimeHours: Int = 24
+    @Published var managersApproveAppointments: Bool = true
     @Published var depositAmount: Double?
     @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
@@ -93,7 +93,7 @@ class SettingsViewModel: ObservableObject {
         if isDemoMode {
             await MainActor.run {
                 confirmationType = .requestApprove
-                responseTimeHours = 24
+                managersApproveAppointments = true
                 depositAmount = nil
                 timeSlots = [TimeSlot(open: 9, close: 18)]
                 daysOpen = [1, 2, 3, 4, 5]
@@ -127,8 +127,8 @@ class SettingsViewModel: ObservableObject {
             var ownerMatch = false
             var resolvedTenantType = BookingConfirmationType.requestApprove
             var resolvedTenantRequiresApproval = true
-            var tenantResponseHours = 24
             var tenantDeposit: Double?
+            var tenantManagersApprove = true
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
@@ -142,8 +142,10 @@ class SettingsViewModel: ObservableObject {
                        let type = BookingConfirmationType(rawValue: typeRaw) {
                         resolvedTenantType = type
                         resolvedTenantRequiresApproval = type.requiresApproval
-                        tenantResponseHours = wf["responseTimeHours"] as? Int ?? 24
                         tenantDeposit = wf["depositAmount"] as? Double
+                        if let ma = wf["managersApproveAppointments"] as? Bool {
+                            tenantManagersApprove = ma
+                        }
                     }
                 }
             }
@@ -162,11 +164,11 @@ class SettingsViewModel: ObservableObject {
                     accountFullNameDraft = shown
                     if ownerMatch {
                         confirmationType = resolvedTenantType
-                        responseTimeHours = tenantResponseHours
+                        managersApproveAppointments = tenantManagersApprove
                         depositAmount = tenantDeposit ?? p.workflow.depositAmount
                     } else {
                         confirmationType = resolvedTenantType
-                        responseTimeHours = p.workflow.responseTimeHours
+                        managersApproveAppointments = tenantManagersApprove
                         depositAmount = p.workflow.depositAmount
                     }
                     timeSlots = p.availability.timeSlots.isEmpty
@@ -272,21 +274,29 @@ class SettingsViewModel: ObservableObject {
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             var workflowData: [String: Any] = [
-                "confirmationType": confirmationType.rawValue,
-                "responseTimeHours": responseTimeHours
+                "managersApproveAppointments": managersApproveAppointments,
             ]
-            if let amount = depositAmount { workflowData["depositAmount"] = amount }
+            if managersApproveAppointments {
+                workflowData["confirmationType"] = confirmationType.rawValue
+                if let amount = depositAmount { workflowData["depositAmount"] = amount }
+            }
             if isOwner, tenantId != nil {
                 var callable: [String: Any] = [
-                    "confirmationType": confirmationType.rawValue,
-                    "responseTimeHours": responseTimeHours,
+                    "managersApproveAppointments": managersApproveAppointments,
                 ]
-                if let amount = depositAmount { callable["depositAmount"] = amount }
+                if managersApproveAppointments {
+                    callable["confirmationType"] = confirmationType.rawValue
+                    if let amount = depositAmount { callable["depositAmount"] = amount }
+                }
                 let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
-                if let data = result.data as? [String: Any],
-                   let requires = data["bookingRequiresApproval"] as? Bool {
+                if let data = result.data as? [String: Any] {
                     await MainActor.run {
-                        tenantBookingRequiresApproval = requires
+                        if let requires = data["bookingRequiresApproval"] as? Bool {
+                            tenantBookingRequiresApproval = requires
+                        }
+                        if let ma = data["managersApproveAppointments"] as? Bool {
+                            managersApproveAppointments = ma
+                        }
                         tenantConfirmationType = confirmationType
                     }
                 }

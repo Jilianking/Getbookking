@@ -15,6 +15,7 @@ struct EffectiveTeamAccess: Equatable {
     var permissions: ManagerPermissions = .defaults
     var confirmationType: BookingConfirmationType = .requestApprove
     var bookingRequiresApproval: Bool = true
+    var managersApproveAppointments: Bool = true
 
     static let ownerFullAccess = EffectiveTeamAccess(
         isOwner: true,
@@ -30,7 +31,8 @@ struct EffectiveTeamAccess: Equatable {
             sendClientNotifications: true
         ),
         confirmationType: .requestApprove,
-        bookingRequiresApproval: true
+        bookingRequiresApproval: true,
+        managersApproveAppointments: true
     )
 
     var canManageBookingPolicy: Bool { isOwner }
@@ -38,6 +40,7 @@ struct EffectiveTeamAccess: Equatable {
     var canApproveRejectRequests: Bool {
         guard bookingRequiresApproval else { return false }
         if isOwner { return true }
+        guard managersApproveAppointments else { return false }
         if accessRole == .manager { return permissions.approveRejectRequests }
         return false
     }
@@ -122,7 +125,8 @@ enum TenantTeamAccessService {
                     sendClientNotifications: true
                 ),
                 confirmationType: current.confirmationType,
-                bookingRequiresApproval: current.bookingRequiresApproval
+                bookingRequiresApproval: current.bookingRequiresApproval,
+                managersApproveAppointments: current.managersApproveAppointments
             )
         } catch {
             return current
@@ -136,12 +140,14 @@ enum TenantTeamAccessService {
         let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.requestApprove.rawValue
         let confirmation = BookingConfirmationType(rawValue: rawType) ?? .requestApprove
         let requiresApproval = data["bookingRequiresApproval"] as? Bool ?? confirmation.requiresApproval
+        let managersApprove = data["managersApproveAppointments"] as? Bool ?? true
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
             permissions: perms,
             confirmationType: confirmation,
-            bookingRequiresApproval: requiresApproval
+            bookingRequiresApproval: requiresApproval,
+            managersApproveAppointments: managersApprove
         )
     }
 }

@@ -34,6 +34,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// From tenant booking policy (`request_approve`, etc.).
     @Published var tenantBookingRequiresApproval: Bool = true
     @Published var tenantDefaultConfirmationType: String = BookingConfirmationType.requestApprove.rawValue
+    @Published var managersApproveAppointments: Bool = true
     /// Set by parent toolbar or in-list invite button.
     @Published var presentInviteSheet = false
 
@@ -44,9 +45,7 @@ final class ManagerSettingsViewModel: ObservableObject {
             let c = inviteCustomJobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             return c.isEmpty ? TeamJobTitleCatalog.defaultTitle(for: tenantIndustry) : String(c.prefix(60))
         }
-        let all = TeamJobTitleCatalog.primaryOptions(for: tenantIndustry)
-            + TeamJobTitleCatalog.allPresetOptions
-        if let match = all.first(where: { $0.id == inviteJobTitlePresetId }) {
+        if let match = TeamJobTitleCatalog.options(for: tenantIndustry).first(where: { $0.id == inviteJobTitlePresetId }) {
             return match.label
         }
         return TeamJobTitleCatalog.defaultTitle(for: tenantIndustry)
@@ -82,7 +81,8 @@ final class ManagerSettingsViewModel: ObservableObject {
             tenantBookingRequiresApproval = data["bookingRequiresApproval"] as? Bool ?? true
             tenantDefaultConfirmationType = (data["confirmationType"] as? String)
                 ?? BookingConfirmationType.requestApprove.rawValue
-            if !tenantBookingRequiresApproval {
+            managersApproveAppointments = data["managersApproveAppointments"] as? Bool ?? true
+            if !managersApproveAppointments || !tenantBookingRequiresApproval {
                 permissions.approveRejectRequests = false
             }
             members = Self.parseMembers(data["members"] as? [[String: Any]], ownerUid: data["ownerUid"] as? String)

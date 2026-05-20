@@ -141,6 +141,19 @@
         errEl.textContent = "";
       }
 
+      /** Human-readable message from Firebase callable errors. */
+      function callableErrorMessage(e, fallback) {
+        if (!e) return fallback || "Something went wrong.";
+        if (typeof e.details === "string" && e.details.trim()) return e.details.trim();
+        if (e.message) {
+          var msg = String(e.message);
+          var colon = msg.lastIndexOf(": ");
+          if (colon >= 0 && colon < msg.length - 2) return msg.slice(colon + 2).trim();
+          return msg.trim();
+        }
+        return fallback || "Something went wrong.";
+      }
+
       /** Title-case each word (e.g. van der berg → Van Der Berg). */
       function titleCaseWords(s) {
         return s
@@ -186,7 +199,10 @@
       }
 
       if (!/^[a-f0-9]{64}$/.test(token)) {
-        document.getElementById("subtitle").textContent = "This invite link is missing or invalid.";
+        var rawT = (params.get("t") || "").trim();
+        document.getElementById("subtitle").textContent = rawT
+          ? "This invite link looks incomplete or was cut off. In the app, tap Copy link and open the full URL."
+          : "This invite link is missing the token. Ask your manager to send the link again using Copy link.";
         formBlock.style.display = "none";
         return;
       }
@@ -206,13 +222,19 @@
       preview({ token: token })
         .then(function (res) {
           var name = (res.data && res.data.businessName) || "this business";
+          var jobTitle = (res.data && res.data.jobTitle) || "";
           document.getElementById("title").textContent = "Join " + name;
+          var roleLine = jobTitle
+            ? "You’ll join as " + jobTitle + ". "
+            : "";
           document.getElementById("subtitle").textContent =
-            "All fields are required. Create your account to join " + name + " on Get Bookking.";
+            roleLine + "All fields are required. Create your account to join " + name + " on Get Bookking.";
         })
-        .catch(function () {
-          document.getElementById("subtitle").textContent =
-            "This invite is invalid, expired, or was already used.";
+        .catch(function (e) {
+          document.getElementById("subtitle").textContent = callableErrorMessage(
+            e,
+            "This invite is invalid, expired, or was already used."
+          );
           formBlock.style.display = "none";
         });
 
@@ -244,11 +266,7 @@
             }, 1200);
           })
           .catch(function (e) {
-            var msg =
-              (e.message && e.message.replace(/^.*?: /, "")) ||
-              (e.details && e.details) ||
-              "Could not accept invite.";
-            showErr(msg);
+            showErr(callableErrorMessage(e, "Could not accept invite."));
           });
       }
 

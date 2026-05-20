@@ -13,34 +13,34 @@ struct TeamBookingSettingsView: View {
         List {
             Section(
                 header: Text("Client booking flow"),
-                footer: Text("How customers book on your website. Per-artist overrides are on Team → member profile.")
-                    .font(.caption2)
+                footer: clientBookingFooter
             ) {
-                Picker("Booking confirmation", selection: $settingsViewModel.confirmationType) {
-                    ForEach(BookingConfirmationType.allCases, id: \.self) { type in
-                        Text(type.displayName).tag(type)
+                Toggle("Managers approve appointments", isOn: $settingsViewModel.managersApproveAppointments)
+                    .onChange(of: settingsViewModel.managersApproveAppointments) { _, enabled in
+                        if !enabled {
+                            teamPolicyViewModel.permissions.approveRejectRequests = false
+                        }
                     }
-                }
-                if settingsViewModel.confirmationType.requiresApproval {
-                    Stepper(
-                        "Response time: \(settingsViewModel.responseTimeHours) hours",
-                        value: $settingsViewModel.responseTimeHours,
-                        in: 1...168,
-                        step: 1
-                    )
-                }
-                if settingsViewModel.confirmationType.requiresDeposit {
-                    HStack {
-                        Text("Deposit amount")
-                        TextField("0", value: Binding(
-                            get: { settingsViewModel.depositAmount ?? 0 },
-                            set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
-                        ), format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("USD")
-                            .foregroundStyle(.secondary)
+
+                if settingsViewModel.managersApproveAppointments {
+                    Picker("Booking confirmation", selection: $settingsViewModel.confirmationType) {
+                        ForEach(BookingConfirmationType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    if settingsViewModel.confirmationType.requiresDeposit {
+                        HStack {
+                            Text("Deposit amount")
+                            TextField("0", value: Binding(
+                                get: { settingsViewModel.depositAmount ?? 0 },
+                                set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
+                            ), format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                            Text("USD")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -55,11 +55,9 @@ struct TeamBookingSettingsView: View {
                     title: "View all bookings",
                     keyPath: \.viewAllBookings
                 )
-                TeamApproveRejectRow(viewModel: teamPolicyViewModel)
-                TeamPermissionToggle(
+                TeamApproveRejectRow(
                     viewModel: teamPolicyViewModel,
-                    title: "Manage booking form style",
-                    keyPath: \.manageBookingFormStyle
+                    managersApproveAppointments: settingsViewModel.managersApproveAppointments
                 )
                 TeamPermissionToggle(
                     viewModel: teamPolicyViewModel,
@@ -116,6 +114,17 @@ struct TeamBookingSettingsView: View {
         }
         .navigationTitle("Booking settings")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var clientBookingFooter: some View {
+        Group {
+            if settingsViewModel.managersApproveAppointments {
+                Text("Default flow for the studio when managers approve requests. Per-artist overrides are on Team → member profile.")
+            } else {
+                Text("Booking confirmation is set per team member on Team → member profile.")
+            }
+        }
+        .font(.caption2)
     }
 
     private func saveAll() async {

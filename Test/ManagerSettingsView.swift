@@ -170,6 +170,7 @@ struct TeamMemberRow: View {
 private struct TeamInviteSheet: View {
     @ObservedObject var viewModel: ManagerSettingsViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var inviteLinkCopied = false
 
   var body: some View {
         NavigationStack {
@@ -210,21 +211,32 @@ private struct TeamInviteSheet: View {
                     }
 
                     if let url = viewModel.teamInviteShareURL {
+                        let linkString = url.absoluteString
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Invite link ready")
                                 .font(.subheadline.weight(.semibold))
-                            Text(url.absoluteString)
-                                .font(.caption2)
+                            Text(linkString)
+                                .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.secondary)
-                                .lineLimit(3)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("Tap Copy link — don’t select the preview above, or the invite token may be cut off.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                             Button {
-                                UIPasteboard.general.string = url.absoluteString
+                                copyInviteLink(linkString)
                             } label: {
-                                Label("Copy link", systemImage: "doc.on.doc")
+                                Label(
+                                    inviteLinkCopied ? "Copied" : "Copy link",
+                                    systemImage: inviteLinkCopied ? "checkmark.circle.fill" : "doc.on.doc"
+                                )
                             }
-                            ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on Get Bookking.")) {
+                            ShareLink(item: Self.inviteShareMessage(linkString: linkString)) {
                                 Label("Share link", systemImage: "square.and.arrow.up")
                             }
+                        }
+                        .onChange(of: viewModel.teamInviteShareURL) { _, _ in
+                            inviteLinkCopied = false
                         }
                     }
                 }
@@ -246,12 +258,22 @@ private struct TeamInviteSheet: View {
     }
 
     private func inviteTitleOptions(for industry: String) -> [TeamJobTitleOption] {
-        var seen = Set<String>()
-        var out: [TeamJobTitleOption] = []
-        for opt in TeamJobTitleCatalog.primaryOptions(for: industry) + TeamJobTitleCatalog.allPresetOptions {
-            let key = opt.label.lowercased()
-            if seen.insert(key).inserted { out.append(opt) }
+        TeamJobTitleCatalog.options(for: industry)
+    }
+
+    /// Plain URL only — no message. Avoid `UIPasteboard.url` (breaks iMessage with bplist paste).
+    private func copyInviteLink(_ linkString: String) {
+        let pb = UIPasteboard.general
+        pb.items = []
+        pb.string = linkString
+        inviteLinkCopied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run { inviteLinkCopied = false }
         }
-        return out
+    }
+
+    private static func inviteShareMessage(linkString: String) -> String {
+        "Join our team on Get Bookking:\n\(linkString)"
     }
 }

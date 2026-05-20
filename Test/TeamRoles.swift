@@ -50,7 +50,12 @@ enum TeamJobTitleCatalog {
         primaryOptions(for: industry).first?.label ?? "Team member"
     }
 
-    /// Suggestions shown first for the business type.
+    /// Job title presets for the tenant’s industry (invite + member detail pickers).
+    static func options(for industry: String?) -> [TeamJobTitleOption] {
+        primaryOptions(for: industry)
+    }
+
+    /// Suggestions for the business type.
     static func primaryOptions(for industry: String?) -> [TeamJobTitleOption] {
         let t = BookingTemplate(rawValue: (industry ?? "").lowercased()) ?? .custom
         switch t {
@@ -81,20 +86,6 @@ enum TeamJobTitleCatalog {
                 TeamJobTitleOption(id: "team_member", label: "Team member"),
             ]
         }
-    }
-
-    /// All preset titles across industries (for “More titles…”).
-    static var allPresetOptions: [TeamJobTitleOption] {
-        var seen = Set<String>()
-        var out: [TeamJobTitleOption] = []
-        for industry in BookingTemplate.allCases.map(\.rawValue) {
-            for opt in primaryOptions(for: industry) {
-                if seen.insert(opt.label.lowercased()).inserted {
-                    out.append(opt)
-                }
-            }
-        }
-        return out.sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
     }
 
     static let customOptionId = "__custom__"

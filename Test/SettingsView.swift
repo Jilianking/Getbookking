@@ -12,6 +12,7 @@ import FirebaseAuth
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
+    @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
     @State private var showingLogoutAlert = false
     @State private var showEnterModeAlert = false
     @State private var previousIndustryForCancel: String = ""
@@ -68,73 +69,6 @@ struct SettingsView: View {
                     }
                 }
 
-                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner
-                    && viewModel.tenantSubscriptionPlan.allowsTeamInvites
-                {
-                    Section(
-                        header: Text("Team invites"),
-                        footer: Text("Creates a single-use link (expires in 7 days). Anyone with the link can sign up or sign in once to join as staff.")
-                            .font(.caption2)
-                    ) {
-                        Button(action: {
-                            Task { await viewModel.createTeamInviteLink() }
-                        }) {
-                            HStack {
-                                Text("Create team invite link")
-                                if viewModel.isCreatingTeamInvite {
-                                    Spacer()
-                                    ProgressView()
-                                        .scaleEffect(0.9)
-                                }
-                            }
-                        }
-                        .disabled(viewModel.isCreatingTeamInvite)
-                        if let err = viewModel.teamInviteError {
-                            Text(err)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        if let url = viewModel.teamInviteShareURL {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Invite link ready")
-                                    .font(.subheadline.weight(.semibold))
-                                Link(destination: url) {
-                                    Text(url.absoluteString)
-                                        .font(.caption)
-                                        .foregroundColor(.accentColor)
-                                        .multilineTextAlignment(.leading)
-                                        .lineLimit(4)
-                                        .truncationMode(.middle)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
-                                Button(action: {
-                                    UIPasteboard.general.string = url.absoluteString
-                                }) {
-                                    Label("Copy link", systemImage: "doc.on.doc")
-                                        .font(.subheadline.weight(.medium))
-                                }
-                                ShareLink(item: url, subject: Text("Join our team"), message: Text("Open this link to join on Get Bookking.")) {
-                                    Label("Share link", systemImage: "square.and.arrow.up")
-                                        .font(.body.weight(.medium))
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
-
-                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner
-                    && !viewModel.tenantSubscriptionPlan.allowsTeamInvites
-                {
-                    Section(header: Text("Team invites")) {
-                        Text("Solo is owner only. Upgrade to Studio or Shop to invite team members.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
                 if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
                     Section(
                         header: Text("Owner settings"),
@@ -180,36 +114,57 @@ struct SettingsView: View {
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile {
-                    Section(header: Text("Scheduling & Availability")) {
-                        Picker("Booking confirmation", selection: $viewModel.confirmationType) {
-                            ForEach(BookingConfirmationType.allCases, id: \.self) { type in
-                                Text(type.displayName).tag(type)
-                            }
-                        }
-                        if viewModel.confirmationType.requiresApproval {
-                            Stepper("Response time: \(viewModel.responseTimeHours) hours", value: $viewModel.responseTimeHours, in: 1...168, step: 1)
-                        }
-                        if viewModel.confirmationType.requiresDeposit {
+                    if !viewModel.isTenantOwner {
+                        Section(
+                            header: Text("Booking policy"),
+                            footer: Text("Studio booking is configured by the owner under Team settings → Booking settings.")
+                                .font(.caption2)
+                        ) {
                             HStack {
-                                Text("Deposit amount")
-                                TextField("0", value: Binding(
-                                    get: { viewModel.depositAmount ?? 0 },
-                                    set: { viewModel.depositAmount = $0 > 0 ? $0 : nil }
-                                ), format: .number)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 80)
-                                Text("USD")
-                                    .foregroundColor(.secondary)
+                                Text("Booking confirmation")
+                                Spacer()
+                                Text(viewModel.tenantConfirmationType.displayName)
+                                    .foregroundStyle(.secondary)
                             }
                         }
+                    }
+
+                    if viewModel.isTenantOwner {
+                        Section(
+                            footer: Text("Studio rules for managers and booking. People and per-person options are on the Team screen.")
+                                .font(.caption2)
+                        ) {
+                            NavigationLink {
+                                TeamSettingsDetailView(
+                                    teamPolicyViewModel: teamPolicyViewModel,
+                                    settingsViewModel: viewModel,
+                                    isDemoMode: authViewModel.isDemoMode
+                                )
+                                .environmentObject(authViewModel)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Team settings")
+                                        .font(.subheadline.weight(.medium))
+                                    Text("Booking, design, clients, notifications")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    Section(
+                        header: Text("Scheduling & Availability"),
+                        footer: Text("Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings.")
+                            .font(.caption2)
+                    ) {
                         TextField("Time zone", text: $viewModel.timeZoneId)
                             .textFieldStyle(.roundedBorder)
                             .autocapitalization(.none)
                         Button("Save") {
                             Task {
-                                await viewModel.saveWorkflow()
                                 await viewModel.saveAvailability()
+                                await authViewModel.refreshTeamAccess()
                             }
                         }
                         .disabled(viewModel.isLoading)
@@ -270,10 +225,17 @@ struct SettingsView: View {
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                if viewModel.isTenantOwner {
+                    await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
+                }
                 hasLoadedServiceOnce = true
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                if viewModel.isTenantOwner {
+                    await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
+                }
+                await authViewModel.refreshTeamAccess()
             }
         }
         .navigationViewStyle(.stack)

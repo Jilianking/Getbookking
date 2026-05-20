@@ -70,6 +70,8 @@ class AuthViewModel: ObservableObject {
     @Published var tenantLogoUrl: String?
     /// Firebase Auth profile photo (fallback when tenant logo is unset).
     @Published var accountPhotoUrl: String?
+    /// Team role + manager toggles + tenant booking policy (from `getMyTeamAccess`).
+    @Published var teamAccess: EffectiveTeamAccess = .ownerFullAccess
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     private let firebaseService = FirebaseService()
@@ -84,13 +86,15 @@ class AuthViewModel: ObservableObject {
                     self.currentUserEmail = user?.email
                     self.currentUserDisplayName = user?.displayName
                     self.accountPhotoUrl = user?.photoURL?.absoluteString
-                    Task { await self.refreshTenantLogoFromServer() }
+                    await self.refreshTenantLogoFromServer()
+                    await self.refreshTeamAccess()
                 } else if !self.isDemoMode {
                     self.isAuthenticated = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
                     self.tenantLogoUrl = nil
                     self.accountPhotoUrl = nil
+                    self.teamAccess = EffectiveTeamAccess()
                 }
             }
         }
@@ -158,6 +162,7 @@ class AuthViewModel: ObservableObject {
         currentUserDisplayName = nil
         tenantLogoUrl = nil
         accountPhotoUrl = nil
+        teamAccess = EffectiveTeamAccess()
     }
 
     /// Demo mode: full app experience without Firebase sign-in.
@@ -168,6 +173,27 @@ class AuthViewModel: ObservableObject {
         currentUserDisplayName = "Demo Provider"
         tenantLogoUrl = nil
         accountPhotoUrl = nil
+        teamAccess = .ownerFullAccess
+    }
+
+    func refreshTeamAccess() async {
+        if isDemoMode {
+            teamAccess = .ownerFullAccess
+            return
+        }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            teamAccess = EffectiveTeamAccess()
+            return
+        }
+        var access = await TenantTeamAccessService.fetchCurrentAccess(isDemoMode: false)
+        if !access.isOwner {
+            access = await TenantTeamAccessService.reconcileOwnerAccess(
+                uid: uid,
+                current: access,
+                firebaseService: firebaseService
+            )
+        }
+        teamAccess = access
     }
 
     /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.

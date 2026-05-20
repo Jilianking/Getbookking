@@ -81,6 +81,7 @@ struct DesignView: View {
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await authViewModel.refreshTeamAccess()
             }
             .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
                 if let url = note.userInfo?["logoUrl"] as? String {
@@ -939,18 +940,32 @@ struct DesignView: View {
             Text("Layout for your /book page. Colors follow your site theme (Template tab).")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Picker("Booking form style", selection: $viewModel.bookingFormStyleId) {
-                ForEach(BookingFormStyle.allCases) { style in
-                    Text(style.displayName).tag(style.rawValue)
+            if authViewModel.teamAccess.canManageBookingFormStyle {
+                Picker("Booking form style", selection: $viewModel.bookingFormStyleId) {
+                    ForEach(BookingFormStyle.allCases) { style in
+                        Text(style.displayName).tag(style.rawValue)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!viewModel.hasTenant || viewModel.isLoading)
-            .onChange(of: viewModel.bookingFormStyleId) { _, _ in
-                Task { await viewModel.saveBookingFormStyle() }
-            }
-            if let style = BookingFormStyle(rawValue: viewModel.bookingFormStyleId) {
-                Text(style.subtitle)
+                .pickerStyle(.segmented)
+                .disabled(!viewModel.hasTenant || viewModel.isLoading)
+                .onChange(of: viewModel.bookingFormStyleId) { _, _ in
+                    Task { await viewModel.saveBookingFormStyle() }
+                }
+                if let style = BookingFormStyle(rawValue: viewModel.bookingFormStyleId) {
+                    Text(style.subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                HStack {
+                    Text(BookingFormStyle.resolved(stored: viewModel.bookingFormStyleId).displayName)
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(8)
+                Text("Only the owner or a manager with “Manage booking form style” can change Standard vs Guided.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -959,24 +974,38 @@ struct DesignView: View {
 
             Text("Services")
                 .font(.headline)
-            ForEach(viewModel.services) { service in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(service.name)
-                            .font(.subheadline.weight(.medium))
+            if authViewModel.teamAccess.canEditServicesPricing {
+                ForEach(viewModel.services) { service in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(service.name)
+                                .font(.subheadline.weight(.medium))
+                        }
+                        Spacer()
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteService(service) }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
                     }
-                    Spacer()
-                    Button(role: .destructive) {
-                        Task { await viewModel.deleteService(service) }
-                    } label: {
-                        Image(systemName: "trash")
-                    }
+                    .padding()
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(8)
                 }
-                .padding()
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(8)
+                AddServiceSheet(viewModel: viewModel)
+            } else {
+                ForEach(viewModel.services) { service in
+                    Text(service.name)
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(8)
+                }
+                Text("You don’t have permission to edit services. Ask the owner or enable “Edit services & pricing” for managers.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            AddServiceSheet(viewModel: viewModel)
             if viewModel.services.isEmpty {
                 Text("Add your first service so clients can book.")
                     .font(.caption)

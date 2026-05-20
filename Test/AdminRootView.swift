@@ -7,18 +7,29 @@
 import SwiftUI
 import Observation
 
-enum AdminSection: String, CaseIterable {
+enum AdminSection: String, CaseIterable, Identifiable {
     case dashboard
     case requests
     case calendar
     case messages
     case clients
+    case team
     case design
     case shop
     case aiTools
     case insights
     case payments
     case settings
+
+    var id: String { rawValue }
+
+    /// Drawer order (Team before Settings).
+    static var drawerOrder: [AdminSection] {
+        [
+            .dashboard, .requests, .calendar, .messages, .clients,
+            .team, .design, .shop, .aiTools, .insights, .payments, .settings,
+        ]
+    }
 
     var title: String {
         switch self {
@@ -27,6 +38,7 @@ enum AdminSection: String, CaseIterable {
         case .calendar: return "Calendar"
         case .messages: return "Messages"
         case .clients: return "Customers"
+        case .team: return "Team"
         case .design: return "Web Page Design"
         case .shop: return "Shop"
         case .aiTools: return "AI Tools"
@@ -43,6 +55,7 @@ enum AdminSection: String, CaseIterable {
         case .calendar: return "calendar"
         case .messages: return "message"
         case .clients: return "person.2.fill"
+        case .team: return "person.3.fill"
         case .design: return "paintbrush.fill"
         case .shop: return "bag.fill"
         case .aiTools: return "sparkles"
@@ -175,6 +188,8 @@ struct AdminRootView: View {
             MessagesView(drawerState: drawerState, sectionTitle: AdminSection.messages.title)
         case .clients:
             ClientsView(drawerState: drawerState, sectionTitle: AdminSection.clients.title)
+        case .team:
+            TeamView(drawerState: drawerState, sectionTitle: AdminSection.team.title)
         case .design:
             DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
         case .shop:
@@ -208,7 +223,7 @@ struct AdminRootView: View {
 
             // Menu
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(AdminSection.allCases, id: \.self) { section in
+                ForEach(AdminSection.drawerOrder) { section in
                     Button(action: {
                         drawerState.selectedSection = section
                         drawerState.isOpen = false

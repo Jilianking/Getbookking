@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFunctions
 
 class RequestsViewModel: ObservableObject {
     @Published var requests: [Request] = []
@@ -9,8 +10,11 @@ class RequestsViewModel: ObservableObject {
     /// Firestore `tenants/{id}.industry` (BookingTemplate raw value); drives booking detail section titles.
     @Published var tenantIndustry: String?
     @Published var isLoading = false
+    @Published var actionError: String?
+    @Published var isUpdatingStatus = false
     
     private let firebaseService = FirebaseService()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     
     var useTenantData: Bool { tenantId != nil }
 
@@ -89,17 +93,30 @@ class RequestsViewModel: ObservableObject {
     }
     
     func updateBookingRequest(_ requestId: String, status: String, notes: String?) async {
-        var updates: [String: Any] = ["status": status]
-        if let notes = notes { updates["notes"] = notes }
-        updates["reviewedAt"] = Date()
-        
-        guard let tid = tenantId else { return }
+        await setBookingRequestStatus(requestId: requestId, status: status, notes: notes)
+    }
+
+    /// Uses Cloud Function so manager `approveRejectRequests` is enforced server-side.
+    func setBookingRequestStatus(requestId: String, status: String, notes: String?) async {
+        guard tenantId != nil else { return }
+        await MainActor.run {
+            isUpdatingStatus = true
+            actionError = nil
+        }
+        var payload: [String: Any] = [
+            "requestId": requestId,
+            "status": status,
+        ]
+        if let notes { payload["notes"] = notes }
         do {
-            try await firebaseService.updateTenantBookingRequest(tenantId: tid, requestId: requestId, updates: updates)
+            _ = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
             await loadRequests()
         } catch {
-            print("Error updating request: \(error)")
+            await MainActor.run {
+                actionError = error.localizedDescription
+            }
         }
+        await MainActor.run { isUpdatingStatus = false }
     }
 
     /// Marks the request as opened in-app (`readAt`). Does not change `status` (e.g. stays NEW).

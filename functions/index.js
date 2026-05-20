@@ -260,6 +260,9 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     contactAddress: "",
     heroTagline: "",
     heroSubtitle: "",
+    managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
+    managerNotifications: DEFAULT_MANAGER_NOTIFICATIONS,
+    workflow: DEFAULT_TENANT_WORKFLOW,
   };
 
   if (billing.stripeCustomerId) {
@@ -1223,6 +1226,191 @@ exports.stripeSubscriptionWebhook = functions
 
 const TENANT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+const DEFAULT_MANAGER_PERMISSIONS = {
+  viewAllBookings: true,
+  approveRejectRequests: true,
+  editServicesPricing: false,
+  manageBookingFormStyle: false,
+  manageArtistSchedules: true,
+  accessClientList: true,
+  viewEarningsReports: false,
+  sendClientNotifications: true,
+};
+
+const DEFAULT_TENANT_WORKFLOW = {
+  confirmationType: "request_approve",
+  responseTimeHours: 24,
+};
+
+function bookingRequiresApproval(confirmationType) {
+  const t = (confirmationType || "").toString().trim().toLowerCase();
+  return (
+    t === "request_approve" ||
+    t === "approve_and_deposit" ||
+    t === "consultation_first"
+  );
+}
+
+function resolveTenantWorkflow(tenant, ownerUserData) {
+  if (tenant && tenant.workflow && tenant.workflow.confirmationType) {
+    return {
+      confirmationType: tenant.workflow.confirmationType,
+      responseTimeHours:
+        tenant.workflow.responseTimeHours != null
+          ? tenant.workflow.responseTimeHours
+          : 24,
+      depositAmount: tenant.workflow.depositAmount,
+    };
+  }
+  if (ownerUserData && ownerUserData.workflow && ownerUserData.workflow.confirmationType) {
+    return {
+      confirmationType: ownerUserData.workflow.confirmationType,
+      responseTimeHours: ownerUserData.workflow.responseTimeHours || 24,
+      depositAmount: ownerUserData.workflow.depositAmount,
+    };
+  }
+  return { ...DEFAULT_TENANT_WORKFLOW };
+}
+
+async function getMemberAccessContext(uid) {
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User profile not found.");
+  }
+  const userData = userDoc.data();
+  const tenantId = userData.tenantId;
+  if (!tenantId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No tenant linked to this account."
+    );
+  }
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = tenantSnap.data();
+  const isOwner = tenant.ownerUid === uid;
+  let ownerUserData = userData;
+  if (!isOwner && tenant.ownerUid) {
+    const ownerSnap = await db.collection("users").doc(tenant.ownerUid).get();
+    if (ownerSnap.exists) ownerUserData = ownerSnap.data();
+  }
+  const workflow = resolveTenantWorkflow(tenant, isOwner ? userData : ownerUserData);
+  const accessRole = isOwner ? "owner" : parseAccessRole(userData.role || userData.accessRole);
+  const managerPermissions = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
+  return {
+    tenantId,
+    tenant,
+    userData,
+    isOwner,
+    accessRole,
+    workflow,
+    managerPermissions,
+    bookingRequiresApproval: bookingRequiresApproval(workflow.confirmationType),
+  };
+}
+
+const DEFAULT_MANAGER_NOTIFICATIONS = {
+  onNewBooking: true,
+  onCancellation: true,
+  dailySummaryEmail: false,
+};
+
+function parseAccessRole(raw) {
+  const r = (raw || "").toString().trim().toLowerCase();
+  if (r === "owner") return "owner";
+  if (r === "manager") return "manager";
+  return "member";
+}
+
+/** Invites always create team members; manager is set later by the owner in Team. */
+function parseInviteAccessRole(_data) {
+  return "member";
+}
+
+function normalizeJobTitle(title) {
+  return (title || "").toString().trim().slice(0, 60);
+}
+
+const PAYMENT_SPLIT_APPLIES = new Set(["service", "deposit", "both"]);
+
+function normalizeMemberSettings(raw) {
+  const d = raw && typeof raw === "object" ? raw : {};
+  const useStudio = d.useStudioBookingPolicy !== false;
+  let bookingConfirmationOverride = (d.bookingConfirmationOverride || "")
+    .toString()
+    .trim();
+  if (useStudio) bookingConfirmationOverride = "";
+  let paymentSplitPercent = parseInt(d.paymentSplitPercent, 10);
+  if (Number.isNaN(paymentSplitPercent)) paymentSplitPercent = 0;
+  paymentSplitPercent = Math.min(100, Math.max(0, paymentSplitPercent));
+  let paymentSplitAppliesTo = (d.paymentSplitAppliesTo || "service")
+    .toString()
+    .trim()
+    .toLowerCase();
+  if (!PAYMENT_SPLIT_APPLIES.has(paymentSplitAppliesTo)) {
+    paymentSplitAppliesTo = "service";
+  }
+  const out = {
+    useStudioBookingPolicy: useStudio,
+    paymentSplitPercent,
+    paymentSplitAppliesTo,
+  };
+  if (!useStudio && bookingConfirmationOverride) {
+    out.bookingConfirmationOverride = bookingConfirmationOverride;
+  }
+  return out;
+}
+
+function defaultJobTitleForIndustry(industry) {
+  const map = {
+    tattoos: "Artist",
+    hair: "Stylist",
+    barber: "Barber",
+    nails: "Nail technician",
+    custom: "Team member",
+  };
+  const key = (industry || "custom").toString().trim().toLowerCase();
+  return map[key] || "Team member";
+}
+
+async function assertTenantOwnerUid(uid, tenantId) {
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = tenantSnap.data();
+  if (tenant.ownerUid !== uid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can perform this action."
+    );
+  }
+  return tenant;
+}
+
+function serializeTeamMember(doc, ownerUid) {
+  const d = doc.data();
+  const uid = doc.id;
+  const fn = (d.firstName || "").toString().trim();
+  const ln = (d.lastName || "").toString().trim();
+  let accessRole = parseAccessRole(d.role || d.accessRole);
+  if (uid === ownerUid) accessRole = "owner";
+  return {
+    uid,
+    firstName: fn,
+    lastName: ln,
+    displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Member").toString(),
+    email: (d.email || "").toString(),
+    profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
+    accessRole,
+    role: accessRole,
+    jobTitle: (d.jobTitle || "").toString(),
+    memberSettings: normalizeMemberSettings(d.memberSettings),
+  };
+}
+
 /** Seat caps: Solo 1 employee, Studio 2–5 employees, Shop 6+ (large cap). */
 function maxSeatsForPlanNormalized(plan) {
   const p = normalizeSubscriptionPlan(plan);
@@ -1325,6 +1513,11 @@ exports.createTenantInvite = functions.https.onCall(async (data, context) => {
         : "Team member limit reached for this plan."
     );
   }
+  const inviteAccessRole = parseInviteAccessRole(data);
+  const industry = (tenant.industry || "custom").toString();
+  const jobTitleRaw = normalizeJobTitle((data && data.jobTitle) || "");
+  const jobTitle = jobTitleRaw || defaultJobTitleForIndustry(industry);
+
   const token = crypto.randomBytes(32).toString("hex");
   const now = admin.firestore.Timestamp.now();
   const expiresAt = admin.firestore.Timestamp.fromMillis(
@@ -1335,7 +1528,9 @@ exports.createTenantInvite = functions.https.onCall(async (data, context) => {
     createdByUid: uid,
     createdAt: now,
     expiresAt,
-    role: "staff",
+    role: inviteAccessRole,
+    accessRole: inviteAccessRole,
+    jobTitle,
   });
   const baseUrl = ((data && data.baseUrl) || "")
     .toString()
@@ -1391,7 +1586,8 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
       "This account already belongs to another business. Use a different account to accept this invite."
     );
   }
-  if (userData.tenantId === tenantId && userData.role === "staff") {
+  const existingRole = parseAccessRole(userData.role || userData.accessRole);
+  if (userData.tenantId === tenantId && existingRole !== "owner") {
     return { ok: true, tenantId, alreadyMember: true };
   }
 
@@ -1452,6 +1648,11 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
     responseTimeHours: 24,
   };
 
+  const inviteAccessRole = parseAccessRole(inv.accessRole || inv.role);
+  const inviteJobTitle = normalizeJobTitle(
+    inv.jobTitle || defaultJobTitleForIndustry(industry)
+  );
+
   await db.runTransaction(async (tx) => {
     const invFresh = await tx.get(inviteRef);
     if (!invFresh.exists) {
@@ -1471,7 +1672,9 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
     const userPatch = {
       tenantId,
       tenantSlug: slug,
-      role: "staff",
+      role: inviteAccessRole,
+      accessRole: inviteAccessRole,
+      jobTitle: inviteAccessRole === "manager" ? "Manager" : inviteJobTitle,
       business: tenantBusinessLabel,
       industry,
       subscriptionPlan,
@@ -1491,6 +1694,321 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
   });
 
   return { ok: true, tenantId };
+});
+
+/** Signed-in member: role, effective manager toggles, tenant booking workflow. */
+exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  const isOwner = ctx.isOwner || ctx.tenant.ownerUid === context.auth.uid;
+  return {
+    tenantId: ctx.tenantId,
+    isOwner,
+    accessRole: isOwner ? "owner" : ctx.accessRole,
+    managerPermissions: ctx.managerPermissions,
+    confirmationType: ctx.workflow.confirmationType,
+    responseTimeHours: ctx.workflow.responseTimeHours,
+    bookingRequiresApproval: ctx.bookingRequiresApproval,
+  };
+});
+
+/** Owner-only: business-wide booking confirmation policy (Settings). */
+exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can change booking confirmation settings."
+    );
+  }
+  const confirmationType = ((data && data.confirmationType) || "")
+    .toString()
+    .trim()
+    .toLowerCase();
+  const allowed = [
+    "instant_book",
+    "request_approve",
+    "deposit_to_confirm",
+    "approve_and_deposit",
+    "consultation_first",
+  ];
+  if (!allowed.includes(confirmationType)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid confirmation type.");
+  }
+  const responseTimeHours = Math.min(
+    168,
+    Math.max(1, parseInt((data && data.responseTimeHours) || 24, 10) || 24)
+  );
+  const workflow = {
+    confirmationType,
+    responseTimeHours,
+  };
+  if (data && data.depositAmount != null && !Number.isNaN(Number(data.depositAmount))) {
+    const dep = Number(data.depositAmount);
+    if (dep > 0) workflow.depositAmount = dep;
+  }
+  await db.collection("tenants").doc(ctx.tenantId).update({
+    workflow,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await db.collection("users").doc(uid).set({ workflow }, { merge: true });
+  return {
+    ok: true,
+    bookingRequiresApproval: bookingRequiresApproval(confirmationType),
+  };
+});
+
+/** Approve / decline / update booking request status with permission checks. */
+exports.updateBookingRequestStatus = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const requestId = ((data && data.requestId) || "").toString().trim();
+  const status = ((data && data.status) || "").toString().trim().toLowerCase();
+  if (!requestId || !status) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "requestId and status are required."
+    );
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  const approvalStatuses = new Set(["confirmed", "declined", "approved", "rejected"]);
+  const isApprovalAction = approvalStatuses.has(status);
+
+  if (isApprovalAction) {
+    if (!ctx.bookingRequiresApproval) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This business does not use request approval for bookings."
+      );
+    }
+    const canApprove =
+      ctx.isOwner ||
+      (ctx.accessRole === "manager" && ctx.managerPermissions.approveRejectRequests);
+    if (!canApprove) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "You do not have permission to approve or reject booking requests."
+      );
+    }
+  } else if (!ctx.isOwner && ctx.accessRole !== "manager") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to update booking requests."
+    );
+  } else if (
+    !ctx.isOwner &&
+    ctx.accessRole === "manager" &&
+    !ctx.managerPermissions.viewAllBookings
+  ) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to update booking requests."
+    );
+  }
+
+  const reqRef = db
+    .collection("tenants")
+    .doc(ctx.tenantId)
+    .collection("bookingRequests")
+    .doc(requestId);
+  const reqSnap = await reqRef.get();
+  if (!reqSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Booking request not found.");
+  }
+
+  let normalized = status.toLowerCase();
+  if (normalized === "approved") normalized = "confirmed";
+  if (normalized === "rejected") normalized = "declined";
+  const patch = {
+    status: normalized,
+    reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (data && data.notes != null) {
+    patch.notes = (data.notes || "").toString().trim().slice(0, 4000);
+  }
+  await reqRef.set(patch, { merge: true });
+  return { ok: true, status: normalized };
+});
+
+/** Tenant members: roster (+ owner-only policy fields for Team screen). */
+exports.listTenantMembers = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const ctx = await getMemberAccessContext(uid);
+  const tenantId = ctx.tenantId;
+  const tenant = ctx.tenant;
+  const isOwner = ctx.isOwner;
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const members = snap.docs.map((doc) => serializeTeamMember(doc, tenant.ownerUid));
+  members.sort((a, b) => {
+    const rank = { owner: 0, manager: 1, member: 2 };
+    const ra = rank[a.accessRole] ?? 3;
+    const rb = rank[b.accessRole] ?? 3;
+    if (ra !== rb) return ra - rb;
+    return (a.displayName || "").localeCompare(b.displayName || "");
+  });
+  const perms = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
+  const notifs = tenant.managerNotifications || DEFAULT_MANAGER_NOTIFICATIONS;
+  const ownerSnap = tenant.ownerUid
+    ? await db.collection("users").doc(tenant.ownerUid).get()
+    : null;
+  const workflow = resolveTenantWorkflow(
+    tenant,
+    ownerSnap && ownerSnap.exists ? ownerSnap.data() : null
+  );
+  const confirmationType = workflow.confirmationType;
+  return {
+    tenantId,
+    industry: tenant.industry || "custom",
+    subscriptionPlan: normalizeSubscriptionPlan(tenant.subscriptionPlan),
+    ownerUid: tenant.ownerUid,
+    isOwner,
+    managerPermissions: perms,
+    managerNotifications: notifs,
+    confirmationType,
+    bookingRequiresApproval: bookingRequiresApproval(confirmationType),
+    members,
+  };
+});
+
+/** Owner-only: save manager permission toggles and notification prefs on tenant. */
+exports.updateTenantManagerPolicy = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User profile not found.");
+  }
+  const tenantId = userDoc.data().tenantId;
+  if (!tenantId) {
+    throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+  }
+  await assertTenantOwnerUid(uid, tenantId);
+  const incomingPerms = (data && data.managerPermissions) || {};
+  const incomingNotifs = (data && data.managerNotifications) || {};
+  const managerPermissions = { ...DEFAULT_MANAGER_PERMISSIONS };
+  const managerNotifications = { ...DEFAULT_MANAGER_NOTIFICATIONS };
+  for (const key of Object.keys(DEFAULT_MANAGER_PERMISSIONS)) {
+    if (typeof incomingPerms[key] === "boolean") managerPermissions[key] = incomingPerms[key];
+  }
+  for (const key of Object.keys(DEFAULT_MANAGER_NOTIFICATIONS)) {
+    if (typeof incomingNotifs[key] === "boolean") managerNotifications[key] = incomingNotifs[key];
+  }
+  await db.collection("tenants").doc(tenantId).update({
+    managerPermissions,
+    managerNotifications,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+/** Owner-only: change member access role and/or job title. */
+exports.updateTenantMember = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const memberUid = ((data && data.memberUid) || "").toString().trim();
+  if (!memberUid) {
+    throw new functions.https.HttpsError("invalid-argument", "memberUid is required.");
+  }
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User profile not found.");
+  }
+  const tenantId = userDoc.data().tenantId;
+  if (!tenantId) {
+    throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+  }
+  const tenant = await assertTenantOwnerUid(uid, tenantId);
+  if (memberUid === tenant.ownerUid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Cannot change the owner's role."
+    );
+  }
+  const memberRef = db.collection("users").doc(memberUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  const patch = {};
+  if (data && data.accessRole != null) {
+    const next = parseAccessRole(data.accessRole);
+    if (next === "owner") {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Cannot assign owner role."
+      );
+    }
+    patch.role = next;
+    patch.accessRole = next;
+  }
+  if (data && data.jobTitle != null) {
+    patch.jobTitle = normalizeJobTitle(data.jobTitle);
+  }
+  if (data && data.memberSettings != null) {
+    patch.memberSettings = normalizeMemberSettings(data.memberSettings);
+  }
+  if (!Object.keys(patch).length) {
+    throw new functions.https.HttpsError("invalid-argument", "Nothing to update.");
+  }
+  await memberRef.set(patch, { merge: true });
+  return { ok: true };
+});
+
+/** Owner-only: remove a team member from the business. */
+exports.removeTenantMember = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const memberUid = ((data && data.memberUid) || "").toString().trim();
+  if (!memberUid) {
+    throw new functions.https.HttpsError("invalid-argument", "memberUid is required.");
+  }
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User profile not found.");
+  }
+  const tenantId = userDoc.data().tenantId;
+  if (!tenantId) {
+    throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+  }
+  const tenant = await assertTenantOwnerUid(uid, tenantId);
+  if (memberUid === tenant.ownerUid || memberUid === uid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Cannot remove the owner."
+    );
+  }
+  const memberRef = db.collection("users").doc(memberUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  await memberRef.set(
+    {
+      tenantId: admin.firestore.FieldValue.delete(),
+      tenantSlug: admin.firestore.FieldValue.delete(),
+      role: admin.firestore.FieldValue.delete(),
+      accessRole: admin.firestore.FieldValue.delete(),
+      jobTitle: admin.firestore.FieldValue.delete(),
+    },
+    { merge: true }
+  );
+  return { ok: true };
 });
 
 /** Allowed origins for Stripe Billing Portal `return_url` (marketing + staging). */

@@ -44,6 +44,10 @@ class SettingsViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
+    /// Tenant-wide policy from `tenants.workflow` (shown read-only to non-owners).
+    @Published var tenantConfirmationType: BookingConfirmationType = .requestApprove
+    @Published var tenantBookingRequiresApproval: Bool = true
+
     let dayLabels: [(Int, String)] = [
         (0, "Sun"), (1, "Mon"), (2, "Tue"), (3, "Wed"),
         (4, "Thu"), (5, "Fri"), (6, "Sat")
@@ -121,6 +125,10 @@ class SettingsViewModel: ObservableObject {
             var tid: String?
             var planResolved = SubscriptionPlan.solo
             var ownerMatch = false
+            var resolvedTenantType = BookingConfirmationType.requestApprove
+            var resolvedTenantRequiresApproval = true
+            var tenantResponseHours = 24
+            var tenantDeposit: Double?
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
@@ -128,6 +136,14 @@ class SettingsViewModel: ObservableObject {
                     planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
                     if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                         ownerMatch = (ownerUid == uid)
+                    }
+                    if let wf = tenant["workflow"] as? [String: Any],
+                       let typeRaw = wf["confirmationType"] as? String,
+                       let type = BookingConfirmationType(rawValue: typeRaw) {
+                        resolvedTenantType = type
+                        resolvedTenantRequiresApproval = type.requiresApproval
+                        tenantResponseHours = wf["responseTimeHours"] as? Int ?? 24
+                        tenantDeposit = wf["depositAmount"] as? Double
                     }
                 }
             }
@@ -137,14 +153,22 @@ class SettingsViewModel: ObservableObject {
                     tenantId = tid
                     tenantSubscriptionPlan = planResolved
                     isTenantOwner = ownerMatch
+                    tenantConfirmationType = resolvedTenantType
+                    tenantBookingRequiresApproval = resolvedTenantRequiresApproval
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
                     profilePhotoUrl = p.profilePhotoUrl
                     let shown = Self.accountDisplayString(from: p)
                     accountDisplayName = shown
                     accountFullNameDraft = shown
-                    confirmationType = p.workflow.confirmationType
-                    responseTimeHours = p.workflow.responseTimeHours
-                    depositAmount = p.workflow.depositAmount
+                    if ownerMatch {
+                        confirmationType = resolvedTenantType
+                        responseTimeHours = tenantResponseHours
+                        depositAmount = tenantDeposit ?? p.workflow.depositAmount
+                    } else {
+                        confirmationType = resolvedTenantType
+                        responseTimeHours = p.workflow.responseTimeHours
+                        depositAmount = p.workflow.depositAmount
+                    }
                     timeSlots = p.availability.timeSlots.isEmpty
                         ? [TimeSlot(open: 9, close: 18)]
                         : p.availability.timeSlots
@@ -243,7 +267,7 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func saveWorkflow() async {
+    func saveWorkflow(isOwner: Bool) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
@@ -252,6 +276,21 @@ class SettingsViewModel: ObservableObject {
                 "responseTimeHours": responseTimeHours
             ]
             if let amount = depositAmount { workflowData["depositAmount"] = amount }
+            if isOwner, tenantId != nil {
+                var callable: [String: Any] = [
+                    "confirmationType": confirmationType.rawValue,
+                    "responseTimeHours": responseTimeHours,
+                ]
+                if let amount = depositAmount { callable["depositAmount"] = amount }
+                let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
+                if let data = result.data as? [String: Any],
+                   let requires = data["bookingRequiresApproval"] as? Bool {
+                    await MainActor.run {
+                        tenantBookingRequiresApproval = requires
+                        tenantConfirmationType = confirmationType
+                    }
+                }
+            }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "workflow": workflowData
             ])

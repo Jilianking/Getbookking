@@ -118,6 +118,13 @@ struct RequestsView: View {
                 if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.useTenantData && !authViewModel.teamAccess.canViewAllBookings {
+                    ContentUnavailableView(
+                        "Bookings restricted",
+                        systemImage: "lock.fill",
+                        description: Text("You don’t have permission to view all booking requests. Ask the owner to enable “View all bookings” for managers.")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
                         if viewModel.useTenantData {
@@ -158,10 +165,16 @@ struct RequestsView: View {
                 RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
             }
             .sheet(item: $selectedBookingRequest) { br in
-                BookingRequestDetailView(request: br, viewModel: viewModel, drawerState: drawerState)
+                BookingRequestDetailView(
+                    request: br,
+                    viewModel: viewModel,
+                    drawerState: drawerState,
+                    teamAccess: authViewModel.teamAccess
+                )
             }
             .task {
                 await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode)
+                await authViewModel.refreshTeamAccess()
             }
         }
         .navigationViewStyle(.stack)
@@ -287,7 +300,17 @@ struct BookingRequestDetailView: View {
     let request: BookingRequest
     @ObservedObject var viewModel: RequestsViewModel
     var drawerState: DrawerState
+    let teamAccess: EffectiveTeamAccess
     @Environment(\.dismiss) var dismiss
+
+    private var statusLower: String {
+        request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var canShowApprovalActions: Bool {
+        teamAccess.canApproveRejectRequests &&
+            (statusLower == "new" || statusLower == "pending")
+    }
 
     var body: some View {
         NavigationView {
@@ -440,6 +463,62 @@ struct BookingRequestDetailView: View {
                         responses: request.formResponses,
                         bookingTemplate: viewModel.tenantBookingTemplate
                     )
+
+                    if canShowApprovalActions {
+                        VStack(spacing: 12) {
+                            if let err = viewModel.actionError {
+                                Text(err)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            HStack(spacing: 12) {
+                                Button {
+                                    Task {
+                                        await viewModel.setBookingRequestStatus(
+                                            requestId: request.documentId ?? "",
+                                            status: "declined",
+                                            notes: request.notes
+                                        )
+                                    }
+                                } label: {
+                                    Text("Decline")
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
+
+                                Button {
+                                    Task {
+                                        await viewModel.setBookingRequestStatus(
+                                            requestId: request.documentId ?? "",
+                                            status: "confirmed",
+                                            notes: request.notes
+                                        )
+                                    }
+                                } label: {
+                                    Text("Confirm")
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
+                            }
+                        }
+                        .padding(16)
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    } else if teamAccess.bookingRequiresApproval && !teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending") {
+                        Text("You can view this request but cannot approve or decline it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color(.systemBackground))
+                            .cornerRadius(12)
+                    }
                 }
                 .padding(16)
             }

@@ -315,6 +315,9 @@ class FirebaseService: ObservableObject {
         if let readAt = firestoreUpdates["readAt"] as? Date {
             firestoreUpdates["readAt"] = Timestamp(date: readAt)
         }
+        if let requestedStart = firestoreUpdates["requestedStartTime"] as? Date {
+            firestoreUpdates["requestedStartTime"] = Timestamp(date: requestedStart)
+        }
         try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests").document(requestId)
             .setData(firestoreUpdates, merge: true)
@@ -329,14 +332,21 @@ class FirebaseService: ObservableObject {
             "customerEmail": customerEmail,
             "createdAt": Timestamp(date: Date())
         ]
-        if let phone = customerPhone, !phone.isEmpty { data["customerPhone"] = phone }
+        if let phone = PhoneFormatting.normalizedForStorage(customerPhone) {
+            data["customerPhone"] = phone
+        }
         if let sid = serviceId { data["serviceId"] = sid }
         if let slug = serviceSlug { data["serviceSlug"] = slug }
         if let name = serviceName { data["serviceName"] = name }
         if let pt = preferredTime, !pt.isEmpty { data["preferredTime"] = pt }
         if let start = requestedStartTime { data["requestedStartTime"] = Timestamp(date: start) }
         if let n = notes, !n.isEmpty { data["notes"] = n }
-        if let fr = formResponses { data["formResponses"] = fr }
+        if var fr = formResponses {
+            if let p = fr["phone"] as? String, let norm = PhoneFormatting.normalizedForStorage(p) {
+                fr["phone"] = norm
+            }
+            data["formResponses"] = fr
+        }
         let ref = try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests")
             .addDocument(data: data)

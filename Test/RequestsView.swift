@@ -413,9 +413,24 @@ struct BookingRequestDetailView: View {
     var drawerState: DrawerState
     let teamAccess: EffectiveTeamAccess
     @Environment(\.dismiss) var dismiss
+    @State private var assigneePickerKey: String = BookingAssigneeFilter.unassignedKey
+    @State private var assigneePickerReady = false
+    @State private var showAssignScheduleSheet = false
+
+    private var currentRequest: BookingRequest {
+        guard let id = request.documentId,
+              let fresh = viewModel.bookingRequests.first(where: { $0.documentId == id }) else {
+            return request
+        }
+        return fresh
+    }
 
     private var statusLower: String {
-        request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        currentRequest.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var canManageAssignment: Bool {
+        teamAccess.isOwner || teamAccess.canViewAllBookings
     }
 
     private var canShowApprovalActions: Bool {
@@ -452,12 +467,14 @@ struct BookingRequestDetailView: View {
                         BookingRequestSectionHeader(title: "Service")
                         BookingRequestDetailRow(
                             label: "Appointment type",
-                            value: request.serviceName ?? request.serviceSlug ?? "—"
+                            value: currentRequest.serviceName ?? currentRequest.serviceSlug ?? "—"
                         )
-                        if let staff = request.assignedMemberDisplayLabel {
+                        if canManageAssignment {
+                            assignFromScheduleSection
+                        } else if let staff = currentRequest.assignedMemberDisplayLabel {
                             BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
                         }
-                        if let mode = request.bookingModeUsed, !mode.isEmpty {
+                        if let mode = currentRequest.bookingModeUsed, !mode.isEmpty {
                             BookingRequestDetailRow(label: "Booking mode", value: mode)
                         }
                     }
@@ -516,7 +533,7 @@ struct BookingRequestDetailView: View {
                                         .font(.body)
                                         .foregroundColor(.green)
                                         .frame(width: 24, alignment: .center)
-                                    Text(phone)
+                                    Text(PhoneFormatting.displayUS(phone))
                                         .font(.subheadline.weight(.medium))
                                         .foregroundColor(.primary)
                                     Spacer()
@@ -653,15 +670,120 @@ struct BookingRequestDetailView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .sheet(isPresented: $showAssignScheduleSheet) {
+            AssignBookingScheduleSheet(request: currentRequest, viewModel: viewModel)
+        }
         .task(id: request.documentId) {
             await markReadIfNeeded()
         }
+        .onAppear {
+            assigneePickerKey = Self.assigneePickerKey(
+                for: currentRequest,
+                roster: viewModel.teamFilterRoster
+            )
+            assigneePickerReady = true
+        }
+        .onChange(of: assigneePickerKey) { _, newKey in
+            guard assigneePickerReady else { return }
+            Task { await applyAssigneePickerKey(newKey) }
+        }
+    }
+
+    private var assignFromScheduleSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let staff = currentRequest.assignedMemberDisplayLabel,
+               let start = currentRequest.requestedStartTime {
+                BookingRequestDetailRow(
+                    label: "Assigned to",
+                    value: "\(staff) · \(start.formatted(date: .omitted, time: .shortened))",
+                    systemImage: "person.fill"
+                )
+            } else if let staff = currentRequest.assignedMemberDisplayLabel {
+                BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
+            }
+            Button {
+                showAssignScheduleSheet = true
+            } label: {
+                Label(
+                    currentRequest.hasAssignedMember ? "Change time & assignee" : "Pick time & assign",
+                    systemImage: "calendar.badge.clock"
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            DisclosureGroup("Quick assign") {
+                quickAssignPicker
+            }
+            .font(.caption)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var quickAssignPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Assign to", selection: $assigneePickerKey) {
+                Text("Unassigned").tag(BookingAssigneeFilter.unassignedKey)
+                ForEach(viewModel.teamFilterRoster) { member in
+                    Text(assigneeOptionLabel(for: member)).tag(member.uid)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(viewModel.isUpdatingAssignment || (currentRequest.documentId ?? "").isEmpty)
+            if viewModel.isUpdatingAssignment {
+                ProgressView()
+                    .scaleEffect(0.85)
+            }
+        }
+    }
+
+    private func assigneeOptionLabel(for member: TenantTeamMember) -> String {
+        if member.accessRole == .owner { return "Owner" }
+        let title = member.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty { return member.displayName }
+        return "\(member.displayName) · \(title)"
+    }
+
+    private func applyAssigneePickerKey(_ key: String) async {
+        guard let rid = currentRequest.documentId, !rid.isEmpty else { return }
+        let savedKey = Self.assigneePickerKey(for: currentRequest, roster: viewModel.teamFilterRoster)
+        guard key != savedKey else { return }
+        if key == BookingAssigneeFilter.unassignedKey {
+            await viewModel.assignBookingRequest(requestId: rid, member: nil)
+        } else if let member = viewModel.teamFilterRoster.first(where: { $0.uid == key }) {
+            await viewModel.assignBookingRequest(requestId: rid, member: member)
+        }
+        await MainActor.run {
+            let fresh = viewModel.bookingRequests.first(where: { $0.documentId == rid }) ?? currentRequest
+            assigneePickerReady = false
+            if viewModel.actionError != nil {
+                assigneePickerKey = savedKey
+            } else {
+                assigneePickerKey = Self.assigneePickerKey(for: fresh, roster: viewModel.teamFilterRoster)
+            }
+            assigneePickerReady = true
+        }
+    }
+
+    private static func assigneePickerKey(for request: BookingRequest, roster: [TenantTeamMember]) -> String {
+        let uid = (request.assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !uid.isEmpty, roster.contains(where: { $0.uid == uid }) { return uid }
+        let reqEmail = (request.assignedMemberEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !reqEmail.isEmpty,
+           let match = roster.first(where: { $0.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == reqEmail }) {
+            return match.uid
+        }
+        let reqName = (request.assignedMemberName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !reqName.isEmpty,
+           let match = roster.first(where: { $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == reqName }) {
+            return match.uid
+        }
+        return BookingAssigneeFilter.unassignedKey
     }
 
     /// First open sets `readAt` in Firestore (status stays NEW). List hides the green dot after reload.
     private func markReadIfNeeded() async {
-        guard request.readAt == nil else { return }
-        guard let rid = request.documentId else { return }
+        guard currentRequest.readAt == nil else { return }
+        guard let rid = currentRequest.documentId else { return }
         _ = await viewModel.markBookingRequestAsRead(requestId: rid)
     }
 }
@@ -690,7 +812,7 @@ struct RequestListRow: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 if let phone = request.customerPhone {
-                    Text(phone)
+                    Text(PhoneFormatting.displayUS(phone))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -730,7 +852,7 @@ struct RequestDetailView: View {
                     Text(request.customerName)
                     Text(request.customerEmail)
                     if let phone = request.customerPhone {
-                        Text(phone)
+                        Text(PhoneFormatting.displayUS(phone))
                     }
                 }
 

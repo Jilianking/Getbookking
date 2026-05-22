@@ -1067,7 +1067,7 @@ struct DesignView: View {
         VStack(spacing: 12) {
             IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
                 get: { viewModel.contactPhone },
-                set: { viewModel.contactPhone = Self.formatPhone($0) }
+                set: { viewModel.contactPhone = PhoneFormatting.formatAsYouType($0) }
             ))
             .keyboardType(.phonePad)
 
@@ -1323,19 +1323,6 @@ struct DesignView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-    }
-
-    private static func formatPhone(_ input: String) -> String {
-        let digits = input.filter { $0.isNumber }
-        let limited = String(digits.prefix(10))
-        var result = ""
-        for (i, d) in limited.enumerated() {
-            if i == 0 { result += "(" }
-            if i == 3 { result += ") " }
-            if i == 6 { result += "-" }
-            result.append(d)
-        }
-        return result
     }
 
     private var formContent: some View {

@@ -42,6 +42,22 @@ const marketingOriginParam = defineString("MARKETING_ORIGIN", { default: "https:
 admin.initializeApp();
 const db = admin.firestore();
 
+/** US display (xxx) xxx-xxxx; matches iOS `PhoneFormatting` / web booking submit. */
+function normalizeCustomerPhone(raw) {
+  const s = (raw || "").toString().trim();
+  if (!s) return null;
+  const hasPlus = s.charAt(0) === "+";
+  const digits = s.replace(/\D/g, "");
+  if (!digits) return null;
+  const formatUS10 = (d10) =>
+    `(${d10.slice(0, 3)}) ${d10.slice(3, 6)}-${d10.slice(6, 10)}`;
+  if (digits.length === 10) return formatUS10(digits);
+  if (digits.length === 11 && digits.charAt(0) === "1") return formatUS10(digits.slice(1));
+  if (hasPlus) return `+${digits}`;
+  if (digits.length >= 7) return `+${digits}`;
+  return digits;
+}
+
 /** Canonical plan slug: `solo` | `studio` | `shop` (accepts legacy `basic` and older aliases). */
 function normalizeSubscriptionPlan(plan) {
   const p = (plan || "").toString().trim().toLowerCase();
@@ -866,7 +882,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     );
   }
 
-  const customerPhone = data?.customerPhone ? data.customerPhone.toString().trim() : null;
+  const customerPhone = normalizeCustomerPhone(data?.customerPhone);
   const serviceId = data?.serviceId ? data.serviceId.toString() : null;
   const serviceSlug = data?.serviceSlug ? data.serviceSlug.toString() : null;
   const serviceName = data?.serviceName ? data.serviceName.toString() : null;
@@ -905,7 +921,12 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   if (preferredDays) bookingData.preferredDays = preferredDays;
   if (notes) bookingData.notes = notes;
   if (data?.formResponses && typeof data.formResponses === "object") {
-    bookingData.formResponses = data.formResponses;
+    const fr = { ...data.formResponses };
+    if (fr.phone != null) {
+      const normalized = normalizeCustomerPhone(fr.phone);
+      if (normalized) fr.phone = normalized;
+    }
+    bookingData.formResponses = fr;
   }
 
   const ref = await db

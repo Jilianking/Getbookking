@@ -33,7 +33,11 @@ struct BookingFormView: View {
                 Section("Customer Information") {
                     TextField("Full Name", text: $name)
                     TextField("Email", text: $email)
-                    TextField("Phone Number", text: $phone)
+                    TextField("(555) 123-4567", text: Binding(
+                        get: { phone },
+                        set: { phone = PhoneFormatting.formatAsYouType($0) }
+                    ))
+                    .keyboardType(.phonePad)
                 }
                 
                 Section("Service Details") {
@@ -184,7 +188,7 @@ struct BookingFormView: View {
                     _ = try await viewModel.submitTenantBooking(
                         customerName: name,
                         customerEmail: email,
-                        customerPhone: phone.isEmpty ? nil : phone,
+                        customerPhone: PhoneFormatting.normalizedForStorage(phone),
                         serviceId: svc.id,
                         serviceSlug: svc.slug,
                         serviceName: svc.name,

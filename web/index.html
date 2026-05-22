@@ -5009,6 +5009,8 @@
     }
 
     .studio12-page .s12-phone {
+      display: block;
+      margin-top: 20px;
       font-family: "Cormorant Garamond", serif;
       font-size: 28px;
       font-style: italic;
@@ -5494,6 +5496,23 @@
         var text = webCopyOverrideText(tenant, fullKey, fallback);
         return '<span data-edit-key="' + esc(fullKey) + '">' + esc(text) + '</span>';
       }
+      var s12ClayEmStyle = 'font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif';
+      /** Studio 12 info headings: editable lead + clay italic word (two `wc.*` keys). */
+      function s12InfoTitleHtml(tenant, leadKey, leadDefault, emKey, emDefault) {
+        return '<h3 class="s12-info-title">' + wcSpan(tenant, leadKey, leadDefault) + ' <em style="' + s12ClayEmStyle + '">' +
+          wcSpan(tenant, emKey, emDefault) + '</em></h3>';
+      }
+      function studio12NavLogoSubHtml(tenant) {
+        var tagline = (tenant.tagline || '').trim();
+        var area = (tenant.serviceArea || '').trim();
+        if (tagline) {
+          return '<span class="s12-nav-logo-sub" data-edit-key="tagline">' + esc(tagline) + '</span>';
+        }
+        if (area) {
+          return '<span class="s12-nav-logo-sub" data-edit-key="serviceArea">' + esc(area) + '</span>';
+        }
+        return '<span class="s12-nav-logo-sub" data-edit-key="tagline">' + esc('Hair studio') + '</span>';
+      }
       /** Touch-edit tenant service field → `tenants/{id}/services/{serviceId}` (name | description). */
       function svcSpan(serviceId, field, displayText) {
         var sid = serviceId ? String(serviceId) : '';
@@ -5571,8 +5590,36 @@
       function telHrefFromPhone(phone) {
         if (!phone) return '';
         var digits = String(phone).replace(/\D/g, '');
-        if (!digits) return '';
-        return digits.length === 10 ? ('tel:+1' + digits) : ('tel:+' + digits);
+        if (digits.length < 10) return '';
+        if (digits.length === 10) return 'tel:+1' + digits;
+        if (digits.length === 11 && digits.charAt(0) === '1') return 'tel:+' + digits;
+        return 'tel:+' + digits;
+      }
+      /** US display (xxx) xxx-xxxx; matches iOS `PhoneFormatting` / booking submit. */
+      function displayPhoneUS(raw) {
+        var s = (raw || '').toString().trim();
+        if (!s) return '';
+        var hasPlus = s.charAt(0) === '+';
+        var digits = s.replace(/\D/g, '');
+        if (!digits) return s;
+        function formatUS10(d10) {
+          return '(' + d10.slice(0, 3) + ') ' + d10.slice(3, 6) + '-' + d10.slice(6, 10);
+        }
+        if (digits.length === 10) return formatUS10(digits);
+        if (digits.length === 11 && digits.charAt(0) === '1') return formatUS10(digits.slice(1));
+        if (hasPlus) return '+' + digits;
+        if (digits.length >= 7) return '+' + digits;
+        return s;
+      }
+      function contactPhoneDisplayEscaped(tenant) {
+        return tenant.contactPhone ? esc(displayPhoneUS(tenant.contactPhone)) : '';
+      }
+      /** One quick-edit region for © line (avoids split boxes on year / name / rights). */
+      function footerLegalLineHtml(tenant) {
+        var y = new Date().getFullYear();
+        var name = tenant.displayName || 'Studio';
+        var fallback = '© ' + y + ' ' + name + '. All rights reserved.';
+        return wcSpan(tenant, 'wc.footer.legalLine', fallback);
       }
       function publicSitePageUnavailableHtml(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -5911,7 +5958,7 @@
             : '<p class="blade-about-body" style="margin-top:16px"><span data-edit-key="businessHours">Add business hours in the app.</span></p>';
         }
         var phoneHref = telHrefFromPhone(tenant.contactPhone);
-        var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
+        var phoneDisplay = contactPhoneDisplayEscaped(tenant);
         var saWhere = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
         var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
         var addrLines = addrRaw ? addrRaw.split(/\n/).map(function(l){ return String(l).trim(); }).filter(function(x){ return x.length; }) : [];
@@ -6032,7 +6079,7 @@
         var addrBodyInnerSc = addrRaw ? esc(addrRaw).replace(/\n/g, '<br>') : (sa ? esc(sa) : esc('Add your address in the app.'));
         var addrBodyWrappedSc = '<span data-edit-key="' + addrBodyKeySc + '">' + addrBodyInnerSc + '</span>';
         var phoneHref = telHrefFromPhone(tenant.contactPhone);
-        var phoneDisplay = tenant.contactPhone ? esc(tenant.contactPhone) : '';
+        var phoneDisplay = contactPhoneDisplayEscaped(tenant);
         var industryLine = stonecutIndustryDisplayName(tenant.industry);
         var cityTagHtml = sa ? ('<div class="stonecut-tag"><span data-edit-key="serviceArea">' + esc(sa) + '</span></div>') : '';
         var heroCtaInner = (tenantShowBookPage(tenant) ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">' + wcSpan(tenant, 'wc.stonecut.heroBook', 'Book a session') + '</a>' : '') +
@@ -7126,7 +7173,7 @@
           if ((tenant.showContactOnPage !== false) && (tenant.contactPhone || tenant.contactEmail)) {
             var formPh = telHrefFromPhone(tenant.contactPhone);
             var formPhonePart = tenant.contactPhone
-              ? ('📞 ' + (formPh ? '<a href="' + esc(formPh) + '">' + esc(tenant.contactPhone) + '</a>' : esc(tenant.contactPhone)))
+              ? ('📞 ' + (formPh ? '<a href="' + esc(formPh) + '">' + contactPhoneDisplayEscaped(tenant) + '</a>' : contactPhoneDisplayEscaped(tenant)))
               : '';
             var formEm = tenant.contactEmail ? String(tenant.contactEmail).trim() : '';
             var formMailPart = formEm ? ('✉️ <a href="mailto:' + esc(formEm) + '">' + esc(tenant.contactEmail) + '</a>') : '';
@@ -7568,7 +7615,7 @@
         return '<footer class="classic-footer">' +
           '<div class="classic-footer-brand"><span data-edit-key="displayName">' + esc(displayName) + '</span></div>' +
           '<div class="classic-footer-links">' + footerLinks + '</div>' +
-          '<p class="classic-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '<p class="classic-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
           '</footer>';
       }
       /** Blade `blade-footer`: wordmark, Instagram / Book / Gallery, then © line. */
@@ -7589,14 +7636,14 @@
           (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">Instagram</a></li>' : '') +
           footerExtra +
           '</ul>' +
-          '<p class="blade-footer-copy">© ' + y + ' ' + esc(displayName) + '. All rights reserved.</p>' +
+          '<p class="blade-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
           '</footer>';
       }
       /** Stonecut home-style © line. */
       function stonecutSiteFooterHtml(tenant) {
         var y = new Date().getFullYear();
         var displayName = tenant.displayName || 'Studio';
-        return '<footer>© ' + y + ' <span data-edit-key="displayName">' + esc(displayName) + '</span>. All rights reserved.</footer>';
+        return '<footer>' + footerLegalLineHtml(tenant) + '</footer>';
       }
       /** Studio 12: brand then © line (matches other templates). */
       function studio12SiteFooterHtml(tenant) {
@@ -7604,14 +7651,14 @@
         var displayName = tenant.displayName || 'Studio';
         return '<footer class="s12-footer">' +
           '<div class="s12-footer-brand"><span data-edit-key="displayName">' + esc(displayName) + '</span></div>' +
-          '<p class="s12-footer-copy">© ' + y + ' <span data-edit-key="displayName">' + esc(displayName) + '</span>. All rights reserved.</p>' +
+          '<p class="s12-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
           '</footer>';
       }
       /** Luxe: contact strip + © legal line below (legal only when contact hidden). */
       function luxeContactSectionHtml(tenant) {
         var y = new Date().getFullYear();
         var displayName = tenant.displayName || 'Studio';
-        var legal = '<footer class="luxe-footer-legal"><p class="luxe-footer-copy">© ' + y + ' <span data-edit-key="displayName">' + esc(displayName) + '</span>. All rights reserved.</p></footer>';
+        var legal = '<footer class="luxe-footer-legal"><p class="luxe-footer-copy">' + footerLegalLineHtml(tenant) + '</p></footer>';
         if (tenant.showContactOnPage === false) return legal;
         var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
         var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';
@@ -7625,7 +7672,7 @@
         }
         if (tenant.contactPhone) {
           var luxePhHref = telHrefFromPhone(tenant.contactPhone);
-          var phDisp = esc(tenant.contactPhone);
+          var phDisp = contactPhoneDisplayEscaped(tenant);
           connectPieces.push(luxePhHref
             ? ('<a href="' + esc(luxePhHref) + '"><span data-edit-key="contactPhone">' + phDisp + '</span></a>')
             : ('<span data-edit-key="contactPhone">' + phDisp + '</span>'));
@@ -7634,7 +7681,7 @@
         var luxeHoursTrim = tenantBusinessHoursTrimmed(tenant);
         var luxeHoursBlock = '';
         if (tenantShowBusinessHours(tenant)) {
-          luxeHoursBlock = '<div class="luxe-contact-item"><h3>Hours</h3><p style="white-space:pre-line">' +
+          luxeHoursBlock = '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactHours', 'Hours') + '</h3><p style="white-space:pre-line">' +
             (luxeHoursTrim ? '<span data-edit-key="businessHours">' + esc(luxeHoursTrim).replace(/\n/g, '<br>') + '</span>' : '<span data-edit-key="businessHours">Add in app</span>') + '</p></div>';
         }
         var addrTrim = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
@@ -7654,9 +7701,9 @@
         }
         return '<section class="luxe-contact">' +
           '<div class="luxe-contact-inner">' +
-            '<div class="luxe-contact-item"><h3>Location</h3><p>' + luxeLocationInner + '</p></div>' +
+            '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactLocation', 'Location') + '</h3><p>' + luxeLocationInner + '</p></div>' +
             luxeHoursBlock +
-            '<div class="luxe-contact-item"><h3>Connect</h3><p>' + connectHtml + '</p></div>' +
+            '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactConnect', 'Connect') + '</h3><p>' + connectHtml + '</p></div>' +
           '</div>' +
         '</section>' + legal;
       }
@@ -7964,9 +8011,9 @@
           }
           var clTel = telHrefFromPhone(tenant.contactPhone);
           if (tenant.contactPhone && clTel) {
-            clLines.push('<a href="' + esc(clTel) + '"><span data-edit-key="contactPhone">' + esc(tenant.contactPhone) + '</span></a>');
+            clLines.push('<a href="' + esc(clTel) + '"><span data-edit-key="contactPhone">' + contactPhoneDisplayEscaped(tenant) + '</span></a>');
           } else if (tenant.contactPhone) {
-            clLines.push('<span data-edit-key="contactPhone">' + esc(tenant.contactPhone) + '</span>');
+            clLines.push('<span data-edit-key="contactPhone">' + contactPhoneDisplayEscaped(tenant) + '</span>');
           }
           if (tenant.contactEmail) {
             var em = String(tenant.contactEmail).trim();
@@ -8047,18 +8094,18 @@
         var galleryUrl = base + '/gallery';
         var homeUrl = base + '/home';
         var displayName = tenant.displayName || 'Studio';
-        var sub = tenant.tagline || tenant.serviceArea || tenant.city || 'Hair studio';
-        var navLis = '<li><a href="' + homeUrl + '">Home</a></li>';
-        if (tenantShowGalleryPage(tenant)) navLis += '<li><a href="' + galleryUrl + '">Gallery</a></li>';
-        if (tenantShowBookPage(tenant)) navLis += '<li><a href="' + bookUrl + '">Book</a></li>';
-        if (tenantShowShopPage(tenant)) navLis += '<li><a href="' + base + '/shop">Shop</a></li>';
+        var navLis = '<li><a href="' + homeUrl + '">' + wcSpan(tenant, 'wc.s12.navHome', 'Home') + '</a></li>';
+        if (tenantShowGalleryPage(tenant)) navLis += '<li><a href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.s12.navGallery', 'Gallery') + '</a></li>';
+        if (tenantShowBookPage(tenant)) navLis += '<li><a href="' + bookUrl + '">' + wcSpan(tenant, 'wc.s12.navBookLink', 'Book') + '</a></li>';
+        if (tenantShowShopPage(tenant)) navLis += '<li><a href="' + base + '/shop">' + wcSpan(tenant, 'wc.s12.navShop', 'Shop') + '</a></li>';
+        var navBookLbl = webCopyOverrideText(tenant, 'wc.s12.navBook', 'Book now');
         var bookCorner = tenantShowBookPage(tenant)
-          ? '<a class="s12-nav-book" href="' + bookUrl + '">' + wcSpan(tenant, 'wc.s12.navBook', 'Book now') + '</a>'
+          ? '<a class="s12-nav-book" href="' + bookUrl + '" data-edit-key="wc.s12.navBook">' + esc(navBookLbl) + '</a>'
           : '';
         return '<nav class="s12-topnav" id="s12-nav">' +
           '<a href="' + homeUrl + '" class="s12-nav-logo">' +
           '<span class="s12-nav-logo-main" data-edit-key="displayName">' + esc(displayName) + '</span>' +
-          '<span class="s12-nav-logo-sub" data-edit-key="tagline">' + esc(sub) + '</span></a>' +
+          studio12NavLogoSubHtml(tenant) + '</a>' +
           '<ul class="s12-nav-links">' + navLis + '</ul>' +
           bookCorner +
           '<div class="s12-nav-trailing">' +
@@ -8267,8 +8314,8 @@
               '<div class="s12-svc-price">' + esc(String(price)) + '</div></div>';
           }
           if (!svcCells) {
-            svcCells = '<div class="s12-svc-cell s12-fade"><div><h3 class="s12-svc-name">Services</h3>' +
-              '<p class="s12-svc-meta">Add services in the Get Bookking app.</p></div><div class="s12-svc-price">—</div></div>';
+            svcCells = '<div class="s12-svc-cell s12-fade"><div><h3 class="s12-svc-name">' + wcSpan(tenant, 'wc.s12.servicesEmptyTitle', 'Services') + '</h3>' +
+              '<p class="s12-svc-meta">' + wcSpan(tenant, 'wc.s12.servicesEmptyHint', 'Add services in the Get Bookking app.') + '</p></div><div class="s12-svc-price">—</div></div>';
           }
         }
         var gUrls = galleryPageImageUrls(tenant);
@@ -8288,8 +8335,8 @@
             (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
         }
         var testSection = testCards
-          ? '<section class="s12-testimonials"><div class="s12-phil-label s12-fade">Client love</div>' +
-            '<h2 class="s12-test-title s12-fade">Words from <em>our clients</em></h2>' +
+          ? '<section class="s12-testimonials"><div class="s12-phil-label s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsLabel', 'Client love') + '</div>' +
+            '<h2 class="s12-test-title s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsTitleLead', 'Words from') + ' <em>' + wcSpan(tenant, 'wc.s12.testimonialsTitleEm', 'our clients') + '</em></h2>' +
             '<div class="s12-test-grid">' + testCards + '</div></section>'
           : '';
         var hoursTrimS12 = tenantBusinessHoursTrimmed(tenant);
@@ -8301,8 +8348,8 @@
         }
         var s12InfoClass = 's12-info' + (!tenantShowBusinessHours(tenant) ? ' s12-info--when-hidden' : '');
         var s12HoursHalf = tenantShowBusinessHours(tenant)
-          ? ('<div class="s12-info-half s12-fade"><div class="s12-phil-label">Studio hours</div>' +
-            '<h3 class="s12-info-title">When to <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">visit</em></h3>' + hoursHtml + '</div>')
+          ? ('<div class="s12-info-half s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.hoursLabel', 'Studio hours') + '</div>' +
+            s12InfoTitleHtml(tenant, 'wc.s12.hoursTitleLead', 'When to', 'wc.s12.hoursTitleEm', 'visit') + hoursHtml + '</div>')
           : '';
         var addr = tenant.address || tenant.contactAddress || tenant.serviceArea || '';
         var addrTrim = addr ? String(addr).trim() : '';
@@ -8314,10 +8361,16 @@
             ? '<a class="s12-address s12-address-link" href="' + esc(addrMapsS12) + '" target="_blank" rel="noopener noreferrer"><span data-edit-key="' + s12AddrKey + '">' + addrInnerS12 + '</span></a>'
             : '<div class="s12-address"><span data-edit-key="' + s12AddrKey + '">' + addrInnerS12 + '</span></div>')
           : '';
-        var phoneHref = telHrefFromPhone(tenant.contactPhone);
-        var phoneEl = tenant.contactPhone && phoneHref
-          ? '<a class="s12-phone" href="' + esc(phoneHref) + '"><span data-edit-key="contactPhone">' + esc(tenant.contactPhone) + '</span></a>'
-          : '';
+        var phoneDispS12 = contactPhoneDisplayEscaped(tenant);
+        var phoneHrefS12 = telHrefFromPhone(tenant.contactPhone);
+        var phoneEl = '';
+        if (phoneDispS12) {
+          if (phoneHrefS12) {
+            phoneEl = '<a class="s12-phone" href="' + esc(phoneHrefS12) + '"><span data-edit-key="contactPhone">' + phoneDispS12 + '</span></a>';
+          } else {
+            phoneEl = '<div class="s12-phone"><span data-edit-key="contactPhone">' + phoneDispS12 + '</span></div>';
+          }
+        }
         var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
         var igLink = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
         var phMerged = (tenant.studio12PhilosophyHeadline || '').trim();
@@ -8367,8 +8420,8 @@
           : '';
         var processSectionHtml = showProcessSection
           ? '<section class="s12-process">' +
-            '<div class="s12-section-label s12-fade">How it works</div>' +
-            '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">Your <em>experience</em></h2>' +
+            '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.processLabel', 'How it works') + '</div>' +
+            '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">' + wcSpan(tenant, 'wc.s12.processTitleLead', 'Your') + ' <em>' + wcSpan(tenant, 'wc.s12.processTitleEm', 'experience') + '</em></h2>' +
             '<div class="s12-process-grid">' + procCells + '</div></section>'
           : '';
         var bcHeadMerged = (tenant.studio12BookCtaHeadline || '').trim();
@@ -8405,8 +8458,8 @@
         var gallerySectionHtml = tenantShowGalleryPage(tenant)
           ? '<section class="s12-gallery-light">' +
           '<div class="s12-gallery-head">' +
-          '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">Our work</div>' +
-          '<h2 class="s12-gallery-title">The <em>gallery</em></h2></div>' +
+          '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">' + wcSpan(tenant, 'wc.s12.galleryLabel', 'Our work') + '</div>' +
+          '<h2 class="s12-gallery-title">' + wcSpan(tenant, 'wc.s12.galleryTitleLead', 'The') + ' <em>' + wcSpan(tenant, 'wc.s12.galleryTitleEm', 'gallery') + '</em></h2></div>' +
           (igLink ? '<a class="s12-gallery-link s12-fade" href="' + igLink + '" target="_blank" rel="noopener"><span data-edit-key="instagramHandle">@' + esc(ig) + '</span></a>' : '<a class="s12-gallery-link s12-fade" href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.s12.galleryViewLink', 'View gallery') + '</a>') +
           '</div>' + studio12GalleryMarqueeHtml(gItems, Math.max(1, gUrls.length)) + '</section>'
           : '';
@@ -8430,10 +8483,10 @@
           '</div></section>' +
           '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
           '<section class="s12-philosophy">' +
-          '<div class="s12-fade"><div class="s12-phil-label">Our approach</div>' +
+          '<div class="s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
           philTitleHtml +
-          '<p class="s12-phil-body">' + esc(philBody1) + '</p>' +
-          '<p class="s12-phil-body">' + esc(philBody2) + '</p></div>' +
+          '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
+          '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>' +
           '<div class="s12-fade">' + philImgCol + '</div></section>' +
           servicesSectionHtml +
           gallerySectionHtml +
@@ -8442,8 +8495,8 @@
           testSection +
           '<div class="' + s12InfoClass + '">' +
           s12HoursHalf +
-          '<div class="s12-info-half s12-fade"><div class="s12-phil-label">Find us</div>' +
-          '<h3 class="s12-info-title">The <em style="font-style:italic;color:var(--s12-clay);font-family:\'Cormorant Garamond\',serif">studio</em></h3>' +
+          '<div class="s12-info-half s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.findUsLabel', 'Find us') + '</div>' +
+          s12InfoTitleHtml(tenant, 'wc.s12.studioTitleLead', 'The', 'wc.s12.studioTitleEm', 'studio') +
           addrHtml + phoneEl + '</div></div>' +
           studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
@@ -9711,7 +9764,7 @@
                     if (!digits) return null;
 
                     function formatUS10(d10) {
-                      return '(' + d10.slice(0,3) + ') ' + d10.slice(3,6) + ' - ' + d10.slice(6,10);
+                      return '(' + d10.slice(0,3) + ') ' + d10.slice(3,6) + '-' + d10.slice(6,10);
                     }
 
                     // US +1 or 10-digit formats

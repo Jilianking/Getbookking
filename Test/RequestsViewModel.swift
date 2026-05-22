@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFirestore
 import FirebaseFunctions
 
 class RequestsViewModel: ObservableObject {
@@ -9,11 +10,12 @@ class RequestsViewModel: ObservableObject {
     @Published var tenantId: String?
     /// Firestore `tenants/{id}.industry` (BookingTemplate raw value); drives booking detail section titles.
     @Published var tenantIndustry: String?
-    /// Non-owner roster for Booking Requests assignee filter.
     @Published var teamMembers: [TenantTeamMember] = []
+    @Published var studioAvailability: ProviderAvailability = .default
     @Published var isLoading = false
     @Published var actionError: String?
     @Published var isUpdatingStatus = false
+    @Published var isUpdatingAssignment = false
     @Published var isSeeding = false
     @Published var seedMessage: String?
     
@@ -51,6 +53,7 @@ class RequestsViewModel: ObservableObject {
                 tenantId = nil
                 tenantIndustry = nil
                 teamMembers = []
+                studioAvailability = .default
                 isLoading = false
             }
             return
@@ -63,6 +66,7 @@ class RequestsViewModel: ObservableObject {
             }
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             let tid = profile?.tenantId
+            let availability = profile?.availability ?? .default
             
             if let tid = tid {
                 async let fetched = firebaseService.fetchTenantBookingRequests(tenantId: tid)
@@ -81,6 +85,7 @@ class RequestsViewModel: ObservableObject {
                     tenantIndustry = industryRaw?.isEmpty == false ? industryRaw : nil
                     bookingRequests = bookingList
                     teamMembers = roster
+                    studioAvailability = availability
                     requests = []
                     isLoading = false
                 }
@@ -90,6 +95,7 @@ class RequestsViewModel: ObservableObject {
                     tenantId = nil
                     tenantIndustry = nil
                     teamMembers = []
+                    studioAvailability = availability
                     requests = fetched
                     bookingRequests = []
                     isLoading = false
@@ -143,6 +149,53 @@ class RequestsViewModel: ObservableObject {
             }
         }
         await MainActor.run { isUpdatingStatus = false }
+    }
+
+    /// Owner / managers with view-all: set or clear staff on a booking request.
+    func assignBookingRequest(
+        requestId: String,
+        member: TenantTeamMember?,
+        scheduledStart: Date? = nil,
+        preferredTimeLabel: String? = nil
+    ) async {
+        guard let tid = tenantId, !requestId.isEmpty else { return }
+        await MainActor.run {
+            isUpdatingAssignment = true
+            actionError = nil
+        }
+        var updates: [String: Any]
+        if let member {
+            updates = [
+                "assignedMemberUid": member.uid,
+                "assignedMemberName": member.displayName,
+                "assignedMemberEmail": member.email,
+            ]
+            if let scheduledStart {
+                updates["requestedStartTime"] = scheduledStart
+            }
+            if let preferredTimeLabel, !preferredTimeLabel.isEmpty {
+                updates["preferredTime"] = preferredTimeLabel
+            }
+        } else {
+            updates = [
+                "assignedMemberUid": FieldValue.delete(),
+                "assignedMemberName": FieldValue.delete(),
+                "assignedMemberEmail": FieldValue.delete(),
+            ]
+        }
+        do {
+            try await firebaseService.updateTenantBookingRequest(
+                tenantId: tid,
+                requestId: requestId,
+                updates: updates
+            )
+            await loadRequests()
+        } catch {
+            await MainActor.run {
+                actionError = error.localizedDescription
+            }
+        }
+        await MainActor.run { isUpdatingAssignment = false }
     }
 
     /// Marks the request as opened in-app (`readAt`). Does not change `status` (e.g. stays NEW).

@@ -63,7 +63,7 @@ final class ManagerSettingsViewModel: ObservableObject {
             isLoading = false
             return
         }
-        guard let uid = Auth.auth().currentUser?.uid else {
+        guard Auth.auth().currentUser != nil else {
             isLoading = false
             return
         }
@@ -185,7 +185,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         isUpdatingMember = true
         errorMessage = nil
         saveSuccess = false
-        var payload: [String: Any] = [
+        let payload: [String: Any] = [
             "memberUid": memberUid,
             "accessRole": accessRole == .manager ? "manager" : "member",
             "jobTitle": jobTitle,

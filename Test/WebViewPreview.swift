@@ -214,6 +214,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '.classic-hero-tag [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="svc:"][role="button"]{display:block!important;cursor:pointer!important;}' +
                 'a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key]{cursor:pointer!important;}' +
+                'a.s12-nav-book[data-edit-key],a.s12-btn-dark [data-edit-key],a.s12-btn-outline [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
+                '.s12-phil-label [data-edit-key],.s12-info-title [data-edit-key],.s12-section-title [data-edit-key],.luxe-contact-item h3 [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 'button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}';
               document.head.appendChild(sheet);
               function resolveEditTarget(ev) {

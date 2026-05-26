@@ -33,6 +33,19 @@
       /* UI: sidebar, body, forms, section titles (Inter). Hero headline uses --font-hero; template picks the stack. */
       --font-display: 'Inter', system-ui, sans-serif;
       --font-hero: 'Kanit', system-ui, sans-serif;
+      /* Tenant palette (set in JS via applyTenantColorVars); defaults match Original presets. */
+      --bk-bg: #ffffff;
+      --bk-fg: #1a1a1a;
+      --bk-card: #f5f5f5;
+      --bk-accent: #111111;
+      --bk-accent-hover: #333333;
+      --bk-accent-fg: #f7f5f0;
+      --bk-featured-bg: #ffffff;
+      --bk-featured-fg: #1a1a1a;
+      --bk-gallery-bg: #ffffff;
+      --bk-gallery-fg: #1a1a1a;
+      --bk-about-bg: #1a1a1a;
+      --bk-about-fg: #f7f5f0;
     }
     * { box-sizing: border-box; }
     body {
@@ -1186,8 +1199,8 @@
       aspect-ratio: 4 / 5;
       min-height: 120px;
       border-radius: 12px;
-      border: 2px dashed rgba(10, 132, 255, 0.35);
-      background: rgba(10, 132, 255, 0.06);
+      border: 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35));
+      background: color-mix(in srgb, var(--bk-card, #f5f5f5) 88%, transparent);
       box-sizing: border-box;
     }
     .classic-home .tattoo-featured-slot-add { border-radius: 8px; }
@@ -1196,13 +1209,14 @@
       aspect-ratio: 4 / 5;
       min-height: 120px;
       border-radius: 12px;
-      background: rgba(0, 0, 0, 0.04);
+      background: color-mix(in srgb, var(--bk-card, #f5f5f5) 55%, transparent);
       opacity: 0.42;
       box-sizing: border-box;
     }
     .tattoo-featured-placeholder {
       grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: inherit; opacity: 0.55;
-      font-size: 14px; background: rgba(0,0,0,0.04); border-radius: 12px; border: 1px dashed rgba(0,0,0,0.12);
+      font-size: 14px; background: color-mix(in srgb, var(--bk-card, #f5f5f5) 70%, transparent);
+      border-radius: 12px; border: 1px dashed var(--bk-accent-35, rgba(0,0,0,0.12));
     }
     .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: inherit; opacity: 0.85; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
@@ -1229,8 +1243,8 @@
     @media (max-width: 640px) { .tattoo-contact-strip { grid-template-columns: 1fr; gap: 24px; } .tattoo-about h2 { font-size: 1.8rem; } }
     /* ─── Classic redesign (warm cream, split hero, services, stats) ─── */
     .classic-home {
-      background: #ffffff;
-      color: #1a1a1a;
+      background: var(--bk-bg, #ffffff);
+      color: var(--bk-fg, #1a1a1a);
       font-family: var(--font-display);
       min-height: 100vh;
     }
@@ -1240,7 +1254,7 @@
     }
     .classic-home .tattoo-nav {
       position: relative;
-      background: #ffffff;
+      background: var(--bk-bg, #ffffff);
       border-bottom: 1px solid rgba(26, 26, 26, 0.08);
     }
     /* Match drawer wordmark: Unbounded, uppercase, wide tracking (see `.tattoo-sidebar-wordmark`) */
@@ -1251,16 +1265,16 @@
       letter-spacing: 0.12em;
       line-height: 1.2;
       text-transform: uppercase;
-      color: #1a1a1a;
+      color: var(--bk-fg, #1a1a1a);
       text-decoration: none;
     }
-    .classic-home .tattoo-nav-links a { color: rgba(26,26,26,0.6); text-transform: none; letter-spacing: 0.02em; font-size: 14px; font-weight: 400; }
-    .classic-home .tattoo-nav-links a:hover { color: #1a1a1a; }
-    .classic-home .tattoo-nav .tattoo-nav-menu { color: #1a1a1a; }
-    .classic-home .classic-hero-nav-menu { color: #1a1a1a; }
+    .classic-home .tattoo-nav-links a { color: color-mix(in srgb, var(--bk-fg, #1a1a1a) 60%, transparent); text-transform: none; letter-spacing: 0.02em; font-size: 14px; font-weight: 400; }
+    .classic-home .tattoo-nav-links a:hover { color: var(--bk-fg, #1a1a1a); }
+    .classic-home .tattoo-nav .tattoo-nav-menu { color: var(--bk-fg, #1a1a1a); }
+    .classic-home .classic-hero-nav-menu { color: var(--bk-fg, #1a1a1a); }
     .classic-home .tattoo-nav-links .classic-nav-book {
-      background: #1a1a1a;
-      color: #F7F5F0;
+      background: var(--bk-accent, #1a1a1a);
+      color: var(--bk-accent-fg, #F7F5F0);
       padding: 8px 20px;
       border-radius: 6px;
       font-weight: 600;
@@ -1349,8 +1363,8 @@
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      background: #1a1a1a;
-      color: #F7F5F0;
+      background: var(--bk-accent, #1a1a1a);
+      color: var(--bk-accent-fg, #F7F5F0);
       text-decoration: none;
       border-radius: 4px;
     }
@@ -1385,16 +1399,18 @@
       width: 100%;
       height: 100%;
       min-height: 320px;
-      background: linear-gradient(160deg, #d6d3ce 0%, #e8e5e0 50%, #c8c5bf 100%);
+      background: color-mix(in srgb, var(--bk-card, #f5f5f5) 88%, transparent);
+      border: 2px dashed var(--bk-accent-55, rgba(26, 26, 26, 0.35));
+      box-sizing: border-box;
     }
     .classic-section-eyebrow {
       font-size: 10px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: rgba(26,26,26,0.4);
+      color: var(--bk-fg-muted, rgba(26,26,26,0.4));
       margin: 0 0 8px;
     }
-    .classic-home .tattoo-featured-outer { background: #ffffff !important; color: #1a1a1a !important; }
+    .classic-home .tattoo-featured-outer { background: var(--bk-featured-bg, #ffffff) !important; color: var(--bk-featured-fg, #1a1a1a) !important; }
     .classic-home .tattoo-featured-inner {
       padding-top: 40px;
       padding-left: clamp(20px, 4vw, 48px);
@@ -1403,7 +1419,7 @@
     .classic-home .tattoo-featured-inner h2 { font-size: 1.6rem; }
     .classic-home .tattoo-featured-grid img { border-radius: 8px; }
     .classic-services-section {
-      background: #ffffff;
+      background: var(--bk-featured-bg, #ffffff);
     }
     .classic-services {
       max-width: 1400px;
@@ -1417,9 +1433,9 @@
       margin: 0 0 24px;
     }
     .classic-services-section--expandable .classic-services-details {
-      border: 1px solid rgba(26,26,26,0.12);
+      border: 1px solid var(--bk-fg-10, rgba(26,26,26,0.12));
       border-radius: 12px;
-      background: #fafafa;
+      background: var(--bk-card, #fafafa);
       overflow: hidden;
     }
     .classic-services-summary {
@@ -1517,8 +1533,8 @@
       margin: 0;
     }
     .classic-about-section {
-      background: #1a1a1a;
-      color: #F7F5F0;
+      background: var(--bk-about-bg, #1a1a1a);
+      color: var(--bk-about-fg, #F7F5F0);
       padding: 80px 32px;
     }
     .classic-about-section .classic-section-eyebrow { color: rgba(247,245,240,0.35); }
@@ -1533,7 +1549,7 @@
       font-weight: 700;
       margin: 0 0 16px;
       line-height: 1.25;
-      color: #F7F5F0;
+      color: var(--bk-about-fg, #F7F5F0);
     }
     .classic-about-section h2 em { font-style: italic; font-family: var(--font-hero); }
     .classic-about-bio-v2 {
@@ -2211,8 +2227,8 @@
     /* ─── Luxe template ─── */
     .luxe-page {
       min-height: 100vh;
-      background: #FFFDF9;
-      color: #1a1a1a;
+      background: var(--bk-bg, #FFFDF9);
+      color: var(--bk-fg, #1a1a1a);
       font-family: var(--font-display);
     }
     .luxe-nav {
@@ -2275,7 +2291,7 @@
     .luxe-nav.luxe-nav--topbar {
       position: relative;
       z-index: 20;
-      background: #FFFDF9;
+      background: var(--bk-bg, #FFFDF9);
       border-bottom: 1px solid rgba(26, 26, 26, 0.1);
       box-shadow: 0 1px 0 rgba(42, 31, 24, 0.06), 0 6px 20px rgba(0, 0, 0, 0.04);
     }
@@ -2355,8 +2371,8 @@
     .luxe-hero-cta {
       display: inline-block;
       padding: 14px 32px;
-      background: #C9A96E;
-      color: #fff;
+      background: var(--bk-accent, #C9A96E);
+      color: var(--bk-accent-fg, #fff);
       font-weight: 600;
       font-size: 13px;
       text-transform: uppercase;
@@ -2365,12 +2381,12 @@
       border-radius: 4px;
       transition: background 0.2s;
     }
-    .luxe-hero-cta:hover { background: #b8944f; }
+    .luxe-hero-cta:hover { background: var(--bk-accent-hover, #b8944f); }
     .luxe-section-label {
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      color: #C9A96E;
+      color: var(--bk-accent, #C9A96E);
       margin: 0 0 8px;
       font-weight: 600;
     }
@@ -2379,12 +2395,13 @@
       font-size: 2rem;
       font-weight: 700;
       margin: 0 0 40px;
-      color: #1a1a1a;
+      color: var(--bk-fg, #1a1a1a);
     }
     .luxe-services-section {
       padding: 80px 40px;
       max-width: 1380px;
       margin: 0 auto;
+      background: var(--bk-featured-bg, var(--bk-bg, #FFFDF9));
     }
     .luxe-services-grid {
       display: grid;
@@ -2427,17 +2444,17 @@
       height: auto;
       min-height: 0;
       border-radius: 10px;
-      background: #f0ebe3;
+      background: var(--bk-card, #f0ebe3);
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 0;
       font-size: 2rem;
-      color: #C9A96E;
+      color: var(--bk-accent, #C9A96E);
     }
     .luxe-service-placeholder--add {
-      border: 2px dashed rgba(201, 169, 110, 0.55);
-      background: rgba(240, 235, 227, 0.85);
+      border: 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55));
+      background: color-mix(in srgb, var(--bk-card, #f0ebe3) 85%, transparent);
     }
     .luxe-service-placeholder--locked {
       opacity: 0.38;
@@ -2445,10 +2462,10 @@
     }
     /** Full-bleed stripe behind the “What we offer” card (distinct from page #FFFDF9 + featured strip). */
     .luxe-home-services-band {
-      background: linear-gradient(180deg, #faf6f0 0%, #f0e9e0 55%, #ebe4d9 100%);
+      background: linear-gradient(180deg, var(--bk-bg, #faf6f0) 0%, var(--bk-card, #f0e9e0) 55%, var(--bk-card, #ebe4d9) 100%);
       padding: 28px 0 36px;
-      border-top: 1px solid rgba(26, 26, 26, 0.07);
-      border-bottom: 1px solid rgba(26, 26, 26, 0.05);
+      border-top: 1px solid var(--bk-fg-07, rgba(26, 26, 26, 0.07));
+      border-bottom: 1px solid var(--bk-fg-07, rgba(26, 26, 26, 0.05));
     }
     .luxe-home-services-section {
       padding: 32px 40px 40px;
@@ -2456,7 +2473,7 @@
       margin: 0 auto;
       background: #fff;
       border-radius: 16px;
-      border: 1px solid rgba(201, 169, 110, 0.35);
+      border: 1px solid var(--bk-accent-35, rgba(201, 169, 110, 0.35));
       box-shadow: 0 18px 48px rgba(26, 26, 26, 0.14);
       position: relative;
       z-index: 1;
@@ -2498,11 +2515,11 @@
       flex-shrink: 0;
       font-size: 14px;
       font-weight: 600;
-      color: #C9A96E;
+      color: var(--bk-accent, #C9A96E);
       padding-top: 2px;
     }
     .luxe-home-services-section--expandable .luxe-home-services-details {
-      border: 1px solid rgba(201, 169, 110, 0.35);
+      border: 1px solid var(--bk-accent-35, rgba(201, 169, 110, 0.35));
       border-radius: 16px;
       background: #fafafa;
       overflow: hidden;
@@ -2540,7 +2557,7 @@
       border-top: 1px solid rgba(26,26,26,0.1);
     }
     .luxe-promo {
-      background: #E8E0D0;
+      background: var(--bk-card, #E8E0D0);
       padding: 64px 40px;
       text-align: center;
     }
@@ -2553,19 +2570,19 @@
       font-size: 2rem;
       font-weight: 700;
       margin: 0 0 12px;
-      color: #1a1a1a;
+      color: var(--bk-fg, #1a1a1a);
     }
     .luxe-promo p {
       font-size: 1rem;
-      color: #555;
+      color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
       margin: 0 0 24px;
       line-height: 1.6;
     }
     .luxe-promo-cta {
       display: inline-block;
       padding: 12px 28px;
-      background: #1a1a1a;
-      color: #fff;
+      background: var(--bk-accent, #1a1a1a);
+      color: var(--bk-accent-fg, #fff);
       font-weight: 600;
       font-size: 13px;
       text-decoration: none;
@@ -2574,15 +2591,15 @@
       letter-spacing: 0.08em;
       transition: background 0.2s;
     }
-    .luxe-promo-cta:hover { background: #333; }
-    .luxe-shop-section { padding: 80px 40px; background: #FFFDF9; }
-    .luxe-shop-page-shell { padding: 96px 40px 80px; background: #FFFDF9; min-height: 55vh; }
+    .luxe-promo-cta:hover { background: var(--bk-accent-hover, #333); }
+    .luxe-shop-section { padding: 80px 40px; background: var(--bk-bg, #FFFDF9); }
+    .luxe-shop-page-shell { padding: 96px 40px 80px; background: var(--bk-bg, #FFFDF9); min-height: 55vh; }
     .luxe-shop-inner { max-width: 1200px; margin: 0 auto; text-align: center; }
     .luxe-shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; text-align: left; }
     .luxe-product-card { text-decoration: none; color: inherit; display: block; transition: transform 0.2s; }
     .luxe-product-card:hover { transform: translateY(-4px); }
     .luxe-product-card img { width: 100%; height: 260px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 14px; background: #1a1a1a; }
-    .luxe-product-placeholder { width: 100%; height: 260px; border-radius: 10px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; font-size: 2rem; color: #C9A96E; }
+    .luxe-product-placeholder { width: 100%; height: 260px; border-radius: 10px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; font-size: 2rem; color: var(--bk-accent, #C9A96E); }
     .luxe-product-category { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin: 0 0 4px; }
     .luxe-product-card h3 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; color: #1a1a1a; }
     .luxe-product-prices { display: flex; align-items: center; gap: 8px; }
@@ -2606,7 +2623,7 @@
       box-shadow: none;
     }
     button.luxe-product-card.luxe-product-card--btn:focus-visible {
-      outline: 2px solid #C9A96E;
+      outline: 2px solid var(--bk-accent, #C9A96E);
       outline-offset: 3px;
     }
     #bk-shop-chrome { position: relative; z-index: 1; }
@@ -2830,7 +2847,7 @@
       color: #f5f0e8;
     }
     .blade-page .bk-shop-modal-add,
-    .blade-page .bk-shop-cart-checkout { background: #c9a96e; color: #0a0a08; }
+    .blade-page .bk-shop-cart-checkout { background: var(--bk-accent, #c9a96e); color: var(--bk-accent-fg, #0a0a08); }
     .blade-page .bk-shop-modal-add:hover,
     .blade-page .bk-shop-cart-checkout:hover { background: #d4b77d; }
     .blade-page .bk-shop-cart-drawer-head { border-bottom-color: rgba(245,240,232,0.12); }
@@ -2847,12 +2864,12 @@
       border-top-color: rgba(245,240,232,0.12);
     }
     .blade-page .bk-shop-cart-empty { color: rgba(245,240,232,0.45); }
-    .blade-page .bk-shop-cart-fab { background: #c9a96e; color: #0a0a08; }
+    .blade-page .bk-shop-cart-fab { background: var(--bk-accent, #c9a96e); color: var(--bk-accent-fg, #0a0a08); }
     .blade-page .bk-shop-cart-fab:hover { background: #d4b77d; }
     .blade-page .bk-shop-price-was { color: rgba(245,240,232,0.4); }
     .luxe-team-section {
       padding: 80px 40px;
-      background: #F5F0E8;
+      background: var(--bk-featured-bg, var(--bk-bg, #F5F0E8));
     }
     .luxe-team-inner {
       max-width: 1200px;
@@ -2862,7 +2879,7 @@
     .luxe-team-bio {
       font-size: 1.05rem;
       line-height: 1.75;
-      color: #555;
+      color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
       max-width: 600px;
       margin: -20px auto 40px;
     }
@@ -2890,8 +2907,8 @@
     }
     .luxe-contact {
       padding: 56px 40px;
-      background: #1a1a1a;
-      color: #fff;
+      background: var(--bk-about-bg, #1a1a1a);
+      color: var(--bk-about-fg, #fff);
     }
     .luxe-contact-inner {
       max-width: 1200px;
@@ -2907,34 +2924,34 @@
       text-transform: uppercase;
       letter-spacing: 0.1em;
       margin: 0 0 8px;
-      color: #C9A96E;
+      color: var(--bk-accent, #C9A96E);
     }
     .luxe-contact-item p {
       font-size: 14px;
-      color: rgba(255,255,255,0.7);
+      color: color-mix(in srgb, var(--bk-about-fg, #fff) 72%, transparent);
       margin: 0;
       line-height: 1.6;
     }
     .luxe-contact-item a {
-      color: rgba(255,255,255,0.7);
+      color: color-mix(in srgb, var(--bk-about-fg, #fff) 72%, transparent);
       text-decoration: none;
     }
-    .luxe-contact-item a:hover { color: #fff; text-decoration: underline; }
+    .luxe-contact-item a:hover { color: var(--bk-about-fg, #fff); text-decoration: underline; }
     .luxe-footer-legal {
-      background: #141414;
+      background: var(--bk-about-bg, #141414);
       padding: 28px 40px 36px;
       text-align: center;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-top: 1px solid color-mix(in srgb, var(--bk-about-fg, #fff) 8%, transparent);
     }
     .luxe-footer-copy {
       margin: 0;
       font-size: 11px;
       letter-spacing: 0.12em;
-      color: rgba(255, 255, 255, 0.42);
+      color: color-mix(in srgb, var(--bk-about-fg, #fff) 42%, transparent);
     }
     .luxe-page .booking-shell {
-      background: #FFFDF9;
-      color: #1a1a1a;
+      background: var(--bk-bg, #FFFDF9);
+      color: var(--bk-fg, #1a1a1a);
     }
     .luxe-page--sub .booking-shell {
       padding-top: 96px;
@@ -2955,7 +2972,7 @@
       box-shadow: 0 12px 40px rgba(0,0,0,0.08);
     }
     .luxe-page .booking-submit {
-      background: #C9A96E !important;
+      background: var(--bk-accent, #C9A96E) !important;
       color: #fff !important;
     }
     .luxe-page .booking-submit:hover {
@@ -2964,7 +2981,7 @@
     .luxe-page .booking-form input:focus,
     .luxe-page .booking-form textarea:focus,
     .luxe-page .booking-form select:focus {
-      border-color: #C9A96E;
+      border-color: var(--bk-accent, #C9A96E);
       box-shadow: 0 0 0 2px rgba(201,169,110,0.2);
     }
     .luxe-page .booking-success-flat .booking-success-lead {
@@ -2995,16 +3012,16 @@
       .luxe-team-grid { grid-template-columns: 1fr; }
       .luxe-contact-inner { grid-template-columns: 1fr; }
     }
-    /* ─── Blade (blade-v1) universal dark theme — scoped under .blade-page ─── */
+    /* ─── Blade (blade-v1) — token-driven (dark or light palettes) ─── */
     .blade-page {
-      --bh-black: #0a0a08;
-      --bh-charcoal: #141410;
-      --bh-muted: #1e1e18;
-      --bh-gold: #c9a84c;
-      --bh-gold-light: #e5c97a;
-      --bh-cream: #f5f0e8;
-      --bh-grey: #888880;
-      --bh-line: rgba(201, 168, 76, 0.2);
+      --bh-black: var(--bk-bg, #0a0a08);
+      --bh-charcoal: var(--bk-card, #141410);
+      --bh-muted: color-mix(in srgb, var(--bk-card, #141410) 72%, var(--bk-bg, #0a0a08));
+      --bh-gold: var(--bk-accent, #c9a84c);
+      --bh-gold-light: var(--bk-accent-hover, #e5c97a);
+      --bh-cream: var(--bk-fg, #f5f0e8);
+      --bh-grey: var(--bk-fg-muted, rgba(245, 240, 232, 0.58));
+      --bh-line: var(--bk-accent-22, rgba(201, 168, 76, 0.22));
       min-height: 100vh;
       background: var(--bh-black);
       color: var(--bh-cream);
@@ -3036,6 +3053,10 @@
       padding: 22px 40px;
       background: transparent;
       transition: background 0.25s ease, backdrop-filter 0.25s ease;
+    }
+    .blade-page .blade-topnav.scrolled {
+      background: color-mix(in srgb, var(--bk-bg, #0a0a08) 95%, transparent);
+      backdrop-filter: blur(10px);
     }
     .blade-page .blade-topnav::after {
       content: '';
@@ -3081,7 +3102,7 @@
       font-weight: 500;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: var(--bh-black);
+      color: var(--bk-accent-fg, var(--bh-black));
       background: var(--bh-gold);
       border: none;
       padding: 10px 22px;
@@ -3089,7 +3110,7 @@
       transition: background 0.3s;
       white-space: nowrap;
     }
-    .blade-page .blade-nav-book:hover { background: var(--bh-gold-light); color: var(--bh-black); }
+    .blade-page .blade-nav-book:hover { background: var(--bh-gold-light); color: var(--bk-accent-fg, var(--bh-black)); }
     .blade-page .blade-nav-menu-btn {
       display: none !important;
       -webkit-appearance: none;
@@ -3181,7 +3202,7 @@
       font-weight: 500;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: var(--bh-black);
+      color: var(--bk-accent-fg, var(--bh-black));
       background: var(--bh-gold);
       border: none;
       padding: 16px 36px;
@@ -3232,7 +3253,9 @@
       width: 100%;
       height: 100%;
       min-height: 400px;
-      background: linear-gradient(160deg, #1c1a14 0%, #0f0f0b 40%, #141410 100%);
+      background: color-mix(in srgb, var(--bk-card, #141410) 88%, transparent);
+      border: 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55));
+      box-sizing: border-box;
     }
     .blade-page .blade-hero-overlay {
       position: absolute;
@@ -3351,7 +3374,7 @@
     .blade-page .blade-service-num {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 56px;
-      color: rgba(201, 168, 76, 0.1);
+      color: var(--bk-accent-10, rgba(201, 168, 76, 0.1));
       line-height: 1;
       position: absolute;
       top: 20px; right: 24px;
@@ -3554,7 +3577,8 @@
     .blade-page footer.blade-footer {
       position: relative;
       z-index: 101;
-      background: var(--bh-black);
+      background: var(--bk-about-bg, var(--bh-black));
+      color: var(--bk-about-fg, var(--bh-cream));
       border-top: 1px solid var(--bh-line);
       padding: 44px 40px;
       display: flex;
@@ -3573,7 +3597,7 @@
     .blade-page .blade-footer-copy {
       font-size: 11px;
       letter-spacing: 0.12em;
-      color: var(--bh-grey);
+      color: color-mix(in srgb, var(--bk-about-fg, var(--bh-cream)) 58%, transparent);
       margin: 0;
       width: 100%;
       max-width: 560px;
@@ -3673,7 +3697,7 @@
     }
     .blade-page .booking-submit {
       background: var(--bh-gold) !important;
-      color: var(--bh-black) !important;
+      color: var(--bk-accent-fg, var(--bh-black)) !important;
       border: none;
     }
     .blade-page .booking-submit:hover { background: var(--bh-gold-light) !important; }
@@ -3682,20 +3706,20 @@
     /* Blade dark-theme booking form: reference-images dropzone + preferred-days dropdown.
        Base form CSS is light-themed; override here so text is readable and borders match the gold accent. */
     .blade-page .upload-drop {
-      background: rgba(201, 168, 76, 0.04);
-      border: 2px dashed rgba(201, 168, 76, 0.45);
+      background: var(--bk-accent-10, rgba(201, 168, 76, 0.04));
+      border: 2px dashed var(--bk-accent-35, rgba(201, 168, 76, 0.45));
     }
     .blade-page .upload-drop:hover {
-      border-color: rgba(201, 168, 76, 0.8);
+      border-color: var(--bk-accent-55, rgba(201, 168, 76, 0.8));
     }
     .blade-page .upload-drop.dragover {
       border-color: var(--bh-gold);
-      box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.2);
-      background: rgba(201, 168, 76, 0.08);
+      box-shadow: 0 0 0 3px var(--bk-accent-22, rgba(201, 168, 76, 0.2));
+      background: var(--bk-accent-12, rgba(201, 168, 76, 0.08));
     }
-    .blade-page .upload-drop-title { color: #ffffff; }
-    .blade-page .upload-drop-sub { color: rgba(255, 255, 255, 0.75); }
-    .blade-page .upload-drop-filelist { color: rgba(255, 255, 255, 0.65); }
+    .blade-page .upload-drop-title { color: var(--bh-cream); }
+    .blade-page .upload-drop-sub { color: var(--bk-fg-muted, rgba(255, 255, 255, 0.75)); }
+    .blade-page .upload-drop-filelist { color: var(--bk-fg-muted-light, rgba(255, 255, 255, 0.65)); }
     .blade-page .pref-days-button {
       background: transparent;
       border: 2px solid var(--bh-line);
@@ -3703,16 +3727,16 @@
     }
     .blade-page .pref-days-button:focus {
       border-color: var(--bh-gold);
-      box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25);
+      box-shadow: 0 0 0 2px var(--bk-accent-22, rgba(201, 168, 76, 0.25));
     }
     .blade-page .pref-days-caret { color: var(--bh-gold); }
     .blade-page .pref-days-menu {
-      background: #111111;
+      background: var(--bh-charcoal);
       border: 2px solid var(--bh-line);
     }
     .blade-page .pref-days-option { color: var(--bh-cream); }
-    .blade-page .pref-days-option:hover { background: rgba(201, 168, 76, 0.12); }
-    .blade-page .pref-days-option.active { background: rgba(201, 168, 76, 0.18); }
+    .blade-page .pref-days-option:hover { background: var(--bk-accent-12, rgba(201, 168, 76, 0.12)); }
+    .blade-page .pref-days-option.active { background: var(--bk-accent-18, rgba(201, 168, 76, 0.18)); }
     .blade-page .pref-days-option.active .pref-days-check { color: var(--bh-gold); }
     @media (max-width: 900px) {
       /* Mobile: hamburger opens `#tattoo-sidebar` (logo + Book in bar; page links in drawer). */
@@ -3745,11 +3769,16 @@
       flex-direction: column;
       min-height: 100vh;
       min-height: 100dvh;
-      background: #060604;
-      color: #e8e0d0;
+      background: var(--bk-bg, #060604);
+      color: var(--bk-fg, #e8e0d0);
       font-family: 'Syne', sans-serif;
       overflow-x: hidden;
-      padding-top: 92px;
+      padding-top: var(--stonecut-nav-h, 92px);
+      /* Shared Unbounded display (nav name, SERVICES, HOURS, hero title) */
+      --sc-display-font: 'Unbounded', sans-serif;
+      --sc-display-weight: 400;
+      --sc-display-tracking: -0.03em;
+      --sc-display-lh: 0.95;
     }
     .stonecut-page > footer {
       margin-top: auto;
@@ -3768,18 +3797,68 @@
       justify-content: space-between;
       gap: 20px;
       padding: 24px 40px;
-      transition: background .25s ease;
+      transition: background .25s ease, padding .2s ease;
     }
-    .stonecut-page .stonecut-nav.scrolled { background: rgba(6, 6, 4, 0.95); backdrop-filter: blur(10px); }
+    .stonecut-page .stonecut-nav.scrolled {
+      background: color-mix(in srgb, var(--bk-bg, #060604) 95%, transparent);
+      backdrop-filter: blur(10px);
+    }
     .stonecut-page .stonecut-logo {
-      font-family: 'Unbounded', sans-serif;
-      font-size: 18px;
-      letter-spacing: 0.12em;
       text-decoration: none;
-      color: #e8e0d0;
-      text-transform: uppercase;
+      color: var(--bk-fg, #e8e0d0);
+      min-width: 0;
+      flex: 1;
     }
-    /* Drawer wordmark: matches Stonecut nav `.stonecut-logo` (Unbounded uppercase); all themes */
+    .stonecut-page .stonecut-logo-wordmark,
+    .stonecut-page .stonecut-nav-name {
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
+      letter-spacing: var(--sc-display-tracking);
+      line-height: var(--sc-display-lh);
+      text-transform: uppercase;
+      color: var(--bk-fg, #e8e0d0);
+    }
+    .stonecut-page .stonecut-logo-wordmark {
+      display: inline;
+      font-size: clamp(20px, 5vw, 28px);
+    }
+    /* Mobile home: industry + name + city in nav; compact wordmark when scrolled. Hidden on desktop. */
+    .stonecut-page .stonecut-logo-stack {
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      line-height: 1.15;
+      text-transform: none;
+      max-width: calc(100vw - 120px);
+    }
+    .stonecut-page .stonecut-nav-industry {
+      font-family: 'DM Serif Display', serif;
+      font-style: italic;
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--bk-fg-muted, #a09888);
+    }
+    .stonecut-page .stonecut-nav-name {
+      font-size: clamp(28px, 7vw, 40px);
+    }
+    .stonecut-page .stonecut-nav-location {
+      font-size: 9px;
+      letter-spacing: .34em;
+      text-transform: uppercase;
+      color: var(--bk-accent, #c0221a);
+      margin-top: 2px;
+    }
+    /* Drawer wordmark on Stonecut: same display type as nav + section headings */
+    .stonecut-page .tattoo-sidebar-panel .tattoo-sidebar-brand a.tattoo-sidebar-wordmark {
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
+      letter-spacing: var(--sc-display-tracking);
+      line-height: var(--sc-display-lh);
+      font-size: clamp(20px, 5vw, 28px);
+    }
     .tattoo-sidebar-panel .tattoo-sidebar-brand a.tattoo-sidebar-wordmark {
       display: inline-block;
       padding: 0;
@@ -3799,10 +3878,10 @@
       opacity: 0.88;
     }
     .stonecut-page .stonecut-links { display: flex; list-style: none; gap: 28px; margin: 0; padding: 0; }
-    .stonecut-page .stonecut-links a { text-decoration: none; color: #a09888; font-size: 10px; letter-spacing: .28em; text-transform: uppercase; }
-    .stonecut-page .stonecut-links a:hover { color: #e8e0d0; }
+    .stonecut-page .stonecut-links a { text-decoration: none; color: var(--bk-fg-muted, #a09888); font-size: 10px; letter-spacing: .28em; text-transform: uppercase; }
+    .stonecut-page .stonecut-links a:hover { color: var(--bk-fg, #e8e0d0); }
     .stonecut-page .stonecut-nav-trailing { display: flex; align-items: center; gap: 20px; margin-left: auto; flex-shrink: 0; }
-    .stonecut-page .stonecut-nav .tattoo-nav-menu { display: none; color: #e8e0d0; font-size: 1.7rem; padding: 8px; background: none; border: none; cursor: pointer; flex-shrink: 0; }
+    .stonecut-page .stonecut-nav .tattoo-nav-menu { display: none; color: var(--bk-fg, #e8e0d0); font-size: 1.7rem; padding: 8px; background: none; border: none; cursor: pointer; flex-shrink: 0; }
     .stonecut-page .stonecut-hero {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -3812,17 +3891,17 @@
       padding-right: clamp(20px, 4vw, 48px);
     }
     .stonecut-page .stonecut-hero-left { padding: 28px 40px 72px; align-self: start; }
-    .stonecut-page .stonecut-tag { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin: 0 0 22px; }
+    .stonecut-page .stonecut-tag { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: var(--bk-accent, #c0221a); margin: 0 0 22px; }
     .stonecut-page .stonecut-title {
-      font-family: 'Unbounded', sans-serif;
-      font-weight: 900;
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
       font-size: clamp(40px, 6.5vw, 92px);
-      line-height: .9;
-      letter-spacing: -.03em;
+      line-height: var(--sc-display-lh);
+      letter-spacing: var(--sc-display-tracking);
       margin: 0 0 8px;
       text-transform: uppercase;
     }
-    .stonecut-page .stonecut-title em { font-family: 'DM Serif Display', serif; font-style: italic; font-size: .45em; color: #a09888; display: block; text-transform: none; }
+    .stonecut-page .stonecut-title em { font-family: 'DM Serif Display', serif; font-style: italic; font-size: .45em; color: var(--bk-fg-muted, #a09888); display: block; text-transform: none; }
     .stonecut-page .stonecut-hero-cta {
       display: flex;
       flex-wrap: wrap;
@@ -3833,9 +3912,9 @@
     .stonecut-page .stonecut-title + .stonecut-hero-cta { margin-top: 14px; }
     .stonecut-page .stonecut-tag + .stonecut-hero-cta { margin-top: 0; }
     .stonecut-page .stonecut-btn { display: inline-block; text-decoration: none; text-transform: uppercase; letter-spacing: .22em; font-size: 10px; padding: 14px 28px; }
-    .stonecut-page .stonecut-btn-primary { background: #c0221a; color: #e8e0d0; }
-    .stonecut-page .stonecut-btn-ghost { color: #a09888; }
-    .stonecut-page .stonecut-hero-right { min-height: 360px; position: relative; background: linear-gradient(160deg, #1e1a16 0%, #0e0c0a 100%); }
+    .stonecut-page .stonecut-btn-primary { background: var(--bk-accent, #c0221a); color: var(--bk-accent-fg, #e8e0d0); }
+    .stonecut-page .stonecut-btn-ghost { color: var(--bk-fg-muted, #a09888); }
+    .stonecut-page .stonecut-hero-right { min-height: 360px; position: relative; background: linear-gradient(160deg, color-mix(in srgb, var(--bk-card, #1e1a16) 70%, var(--bk-bg, #0e0c0a)) 0%, var(--bk-bg, #0e0c0a) 100%); }
     /* Stonecut hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
        from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
     .stonecut-page .stonecut-hero-right:has(> img) {
@@ -3853,26 +3932,42 @@
       background: rgba(255, 255, 255, 0.06);
     }
     .stonecut-page .stonecut-section { padding: 96px 40px; border-bottom: 1px solid rgba(232,224,208,.08); }
-    .stonecut-page .stonecut-eyebrow { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: #c0221a; margin-bottom: 18px; }
-    .stonecut-page .stonecut-heading { font-family: 'Unbounded', sans-serif; font-size: clamp(30px, 4.2vw, 58px); line-height: .95; margin: 0 0 28px; text-transform: uppercase; }
+    .stonecut-page .stonecut-eyebrow { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: var(--bk-accent, #c0221a); margin-bottom: 18px; }
+    .stonecut-page .stonecut-heading {
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
+      letter-spacing: var(--sc-display-tracking);
+      line-height: var(--sc-display-lh);
+      font-size: clamp(30px, 4.2vw, 58px);
+      margin: 0 0 28px;
+      text-transform: uppercase;
+    }
     .stonecut-page .stonecut-services { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(232,224,208,.08); }
-    .stonecut-page .stonecut-service-card { display: block; text-decoration: none; color: inherit; background: #0e0d0a; padding: 34px 26px; }
+    .stonecut-page .stonecut-service-card { display: block; text-decoration: none; color: inherit; background: var(--bk-card, #0e0d0a); padding: 34px 26px; }
     .stonecut-page .stonecut-service-card h3 { font-family: 'Unbounded', sans-serif; font-size: 18px; margin: 0 0 10px; }
-    .stonecut-page .stonecut-service-card p { margin: 0 0 16px; color: #a09888; line-height: 1.7; font-size: 13px; }
-    .stonecut-page .stonecut-price { color: #c0221a; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
+    .stonecut-page .stonecut-service-card p { margin: 0 0 16px; color: var(--bk-fg-muted, #a09888); line-height: 1.7; font-size: 13px; }
+    .stonecut-page .stonecut-price { color: var(--bk-accent, #c0221a); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
     .stonecut-page .stonecut-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .stonecut-page .stonecut-info.stonecut-info--no-hours { grid-template-columns: 1fr; }
-    .stonecut-page .stonecut-info-card { background: #0e0d0a; border: 1px solid rgba(232,224,208,.08); padding: 30px 24px; }
-    .stonecut-page .stonecut-info-card h3 { font-family: 'Unbounded', sans-serif; font-size: 24px; margin: 8px 0 0; text-transform: uppercase; }
+    .stonecut-page .stonecut-info-card { background: var(--bk-card, #0e0d0a); border: 1px solid rgba(232,224,208,.08); padding: 30px 24px; }
+    .stonecut-page .stonecut-info-card h3 {
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
+      letter-spacing: var(--sc-display-tracking);
+      line-height: var(--sc-display-lh);
+      font-size: 24px;
+      margin: 8px 0 0;
+      text-transform: uppercase;
+    }
     .stonecut-page .stonecut-address-link { color: inherit; text-decoration: none; display: block; margin-top: 14px; line-height: 1.8; }
-    .stonecut-page .stonecut-phone { display: inline-block; margin-top: 16px; color: #c0221a; text-decoration: none; letter-spacing: .08em; }
-    .stonecut-page footer { border-top: 1px solid rgba(232,224,208,.08); padding: 36px 40px; color: #a09888; background: #060604; }
+    .stonecut-page .stonecut-phone { display: inline-block; margin-top: 16px; color: var(--bk-accent, #c0221a); text-decoration: none; letter-spacing: .08em; }
+    .stonecut-page footer { border-top: 1px solid color-mix(in srgb, var(--bk-fg, #e8e0d0) 8%, transparent); padding: 36px 40px; color: var(--bk-fg-muted, #a09888); background: var(--bk-about-bg, var(--bk-bg, #060604)); }
     .gallery-page.gallery-page--stonecut footer {
       margin-top: auto;
       flex-shrink: 0;
       border-top: 1px solid rgba(232,224,208,.08);
       padding: 36px 40px;
-      color: #a09888;
+      color: var(--bk-fg-muted, #a09888);
       background: #060604;
     }
     .stonecut-page .tattoo-sidebar-panel {
@@ -3906,7 +4001,7 @@
       color: #e8e0d0;
     }
     .stonecut-page .booking-page-subtitle {
-      color: #a09888;
+      color: var(--bk-fg-muted, #a09888);
       opacity: 1;
     }
     .stonecut-page .booking-card {
@@ -3914,7 +4009,7 @@
       border: 1px solid rgba(232, 224, 208, 0.08);
       box-shadow: none !important;
     }
-    .stonecut-page .booking-form label { color: #a09888; font-weight: 500; }
+    .stonecut-page .booking-form label { color: var(--bk-fg-muted, #a09888); font-weight: 500; }
     .stonecut-page .booking-form input,
     .stonecut-page .booking-form textarea,
     .stonecut-page .booking-form select {
@@ -3925,11 +4020,11 @@
     .stonecut-page .booking-form input:focus,
     .stonecut-page .booking-form textarea:focus,
     .stonecut-page .booking-form select:focus {
-      border-color: #c0221a;
+      border-color: var(--bk-accent, #c0221a);
       box-shadow: 0 0 0 2px rgba(192, 34, 26, 0.25);
     }
     .stonecut-page .booking-submit {
-      background: #c0221a !important;
+      background: var(--bk-accent, #c0221a) !important;
       color: #e8e0d0 !important;
       border: none;
       font-size: 10px;
@@ -3939,30 +4034,30 @@
       border-radius: 0;
     }
     .stonecut-page .booking-submit:hover { filter: brightness(1.08); }
-    .stonecut-page .tagline { color: #a09888; }
+    .stonecut-page .tagline { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .upload-drop {
       border-color: rgba(192, 34, 26, 0.45);
       background: rgba(6, 6, 4, 0.5);
     }
     .stonecut-page .upload-drop:hover { border-color: rgba(192, 34, 26, 0.75); }
     .stonecut-page .upload-drop.dragover {
-      border-color: #c0221a;
+      border-color: var(--bk-accent, #c0221a);
       box-shadow: 0 0 0 3px rgba(192, 34, 26, 0.2);
       background: rgba(192, 34, 26, 0.08);
     }
     .stonecut-page .upload-drop-title { color: #e8e0d0; }
-    .stonecut-page .upload-drop-sub { color: #a09888; }
-    .stonecut-page .upload-drop-filelist { color: #a09888; }
+    .stonecut-page .upload-drop-sub { color: var(--bk-fg-muted, #a09888); }
+    .stonecut-page .upload-drop-filelist { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .pref-days-button {
       background: #060604;
       border-color: rgba(232, 224, 208, 0.15);
       color: #e8e0d0;
     }
     .stonecut-page .pref-days-button:focus {
-      border-color: #c0221a;
+      border-color: var(--bk-accent, #c0221a);
       box-shadow: 0 0 0 2px rgba(192, 34, 26, 0.25);
     }
-    .stonecut-page .pref-days-caret { color: #a09888; }
+    .stonecut-page .pref-days-caret { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .pref-days-menu {
       background: #0e0d0a;
       border-color: rgba(232, 224, 208, 0.12);
@@ -3970,16 +4065,38 @@
     .stonecut-page .pref-days-option { color: #e8e0d0; }
     .stonecut-page .pref-days-option:hover { background: rgba(192, 34, 26, 0.12); }
     .stonecut-page .pref-days-option.active { background: rgba(192, 34, 26, 0.18); }
-    .stonecut-page .pref-days-option.active .pref-days-check { color: #c0221a; }
-    .stonecut-page .booking-success-flat .booking-success-lead { color: #c0221a !important; }
-    .stonecut-page .booking-success-flat .booking-success-detail { color: #a09888 !important; }
+    .stonecut-page .pref-days-option.active .pref-days-check { color: var(--bk-accent, #c0221a); }
+    .stonecut-page .booking-success-flat .booking-success-lead { color: var(--bk-accent, #c0221a) !important; }
+    .stonecut-page .booking-success-flat .booking-success-detail { color: var(--bk-fg-muted, #a09888) !important; }
     @media (max-width: 900px) {
       .stonecut-page .stonecut-links { display: none; }
-      .stonecut-page .stonecut-nav { padding: 16px 20px; }
+      .stonecut-page .stonecut-nav { padding: 16px 20px; align-items: flex-start; }
+      .stonecut-page .stonecut-nav.scrolled {
+        align-items: center;
+        padding-top: 16px;
+        padding-bottom: 16px;
+      }
       .stonecut-page .stonecut-nav .tattoo-nav-menu { display: block !important; }
+      .stonecut-page .stonecut-nav-trailing { align-self: flex-start; }
+      .stonecut-page .stonecut-nav.scrolled .stonecut-nav-trailing { align-self: center; }
+      /* Identity lives in nav; hero keeps CTAs + image only (no duplicate name/city). */
+      .stonecut-page .stonecut-logo-wordmark { display: none; }
+      .stonecut-page .stonecut-logo-stack { display: flex; }
+      .stonecut-page .stonecut-nav.scrolled .stonecut-logo-stack { display: none; }
+      .stonecut-page .stonecut-nav.scrolled .stonecut-logo-wordmark { display: inline; }
+      .stonecut-page .stonecut-hero-left .stonecut-title,
+      .stonecut-page .stonecut-hero-left > .stonecut-tag { display: none; }
+      .stonecut-page .stonecut-hero-left:not(:has(.stonecut-hero-cta)) {
+        display: none;
+      }
+      .stonecut-page .stonecut-hero-left:has(.stonecut-hero-cta) {
+        padding-top: 16px;
+        padding-bottom: 24px;
+        padding-left: 20px;
+        padding-right: 20px;
+      }
       .stonecut-page .stonecut-hero { grid-template-columns: 1fr; }
       .stonecut-page .stonecut-hero-right { min-height: 0; }
-      .stonecut-page .stonecut-hero-left { padding: 28px 20px 40px; }
       .stonecut-page .stonecut-section { padding: 72px 20px; }
       .stonecut-page .stonecut-services { grid-template-columns: 1fr; }
       .stonecut-page .stonecut-info { grid-template-columns: 1fr; }
@@ -4013,12 +4130,12 @@
       max-width: 520px;
       font-size: 14px;
       line-height: 1.7;
-      color: #a09888;
+      color: var(--bk-fg-muted, #a09888);
     }
     .stonecut-page .stonecut-shop-empty {
       margin: 28px auto 0;
       max-width: 420px;
-      color: #a09888;
+      color: var(--bk-fg-muted, #a09888);
       font-size: 15px;
       line-height: 1.6;
     }
@@ -4030,15 +4147,15 @@
     }
     .stonecut-page .luxe-product-placeholder {
       background: #1a1814;
-      color: #c0221a;
+      color: var(--bk-accent, #c0221a);
     }
-    .stonecut-page .luxe-product-category { color: #a09888; }
+    .stonecut-page .luxe-product-category { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .luxe-product-card h3 { color: #e8e0d0; }
     .stonecut-page .luxe-product-price { color: #e8e0d0; }
-    .stonecut-page .luxe-product-price-sale { color: #c0221a; }
+    .stonecut-page .luxe-product-price-sale { color: var(--bk-accent, #c0221a); }
     .stonecut-page .luxe-product-price-original { color: #6a6358; }
     .stonecut-page button.luxe-product-card.luxe-product-card--btn:focus-visible {
-      outline-color: #c0221a;
+      outline-color: var(--bk-accent, #c0221a);
     }
     @media (max-width: 900px) {
       .stonecut-page .stonecut-shop-shell { padding: 88px 20px 72px; }
@@ -4048,18 +4165,18 @@
     /* ─── Studio 12 (studio-12-v1) — scoped under .studio12-page; keep in sync with css/studio12-theme.css ─── */
 
     .studio12-page {
-      --s12-ivory: #faf7f2;
-      --s12-warm-white: #f5f0e8;
-      --s12-blush: #e8d5c4;
-      --s12-blush-dark: #d4b8a0;
-      --s12-clay: #b08060;
-      --s12-clay-dark: #8a6040;
-      --s12-espresso: #2a1f18;
-      --s12-espresso-mid: #3d2e24;
-      --s12-taupe: #8a7a6e;
-      --s12-taupe-light: #b0a090;
-      --s12-line: rgba(176, 128, 96, 0.18);
-      --s12-line-soft: rgba(176, 128, 96, 0.1);
+      --s12-ivory: var(--bk-bg, #faf7f2);
+      --s12-warm-white: var(--bk-card, #f5f0e8);
+      --s12-blush: var(--bk-card, #e8d5c4);
+      --s12-blush-dark: var(--bk-accent-hover, #d4b8a0);
+      --s12-clay: var(--bk-accent, #b08060);
+      --s12-clay-dark: var(--bk-accent-hover, #8a6040);
+      --s12-espresso: var(--bk-fg, #2a1f18);
+      --s12-espresso-mid: var(--bk-about-bg, #3d2e24);
+      --s12-taupe: var(--bk-fg-muted, #8a7a6e);
+      --s12-taupe-light: var(--bk-fg-muted-light, #b0a090);
+      --s12-line: var(--bk-accent-18, rgba(176, 128, 96, 0.18));
+      --s12-line-soft: var(--bk-accent-10, rgba(176, 128, 96, 0.1));
       background: var(--s12-ivory);
       color: var(--s12-espresso);
       font-family: "Jost", system-ui, sans-serif;
@@ -4104,11 +4221,11 @@
     }
 
     .studio12-page .s12-topnav.scrolled {
-      background: rgba(250, 247, 242, 0.98);
+      background: color-mix(in srgb, var(--bk-bg, #faf7f2) 98%, transparent);
       backdrop-filter: blur(12px);
       padding: calc(16px + env(safe-area-inset-top, 0px)) 40px 16px 40px;
       border-bottom: 1px solid var(--s12-line);
-      box-shadow: 0 10px 36px rgba(42, 31, 24, 0.07);
+      box-shadow: 0 10px 36px color-mix(in srgb, var(--bk-fg, #2a1f18) 7%, transparent);
     }
 
     .studio12-page .s12-nav-logo {
@@ -4164,8 +4281,8 @@
       font-weight: 500;
       letter-spacing: 0.26em;
       text-transform: uppercase;
-      color: var(--s12-ivory);
-      background: var(--s12-espresso);
+      color: var(--bk-accent-fg, var(--s12-ivory));
+      background: var(--bk-accent, var(--s12-espresso));
       border: none;
       padding: 14px 26px;
       text-decoration: none;
@@ -4176,7 +4293,7 @@
     }
 
     .studio12-page .s12-nav-book:hover {
-      background: var(--s12-espresso-mid);
+      background: var(--bk-accent-hover, var(--s12-espresso-mid));
     }
 
     .studio12-page .s12-nav-trailing {
@@ -4670,7 +4787,7 @@
       transform: translateY(-4px);
       box-shadow:
         0 22px 48px rgba(0, 0, 0, 0.48),
-        0 0 40px rgba(176, 128, 96, 0.16);
+        0 0 40px var(--bk-accent-16, rgba(176, 128, 96, 0.16));
     }
 
     .studio12-page .s12-gallery-marquee .s12-g-item .s12-gallery-full-link {
@@ -4742,7 +4859,7 @@
       transform: translateY(-4px);
       box-shadow:
         0 22px 48px rgba(0, 0, 0, 0.48),
-        0 0 40px rgba(176, 128, 96, 0.16);
+        0 0 40px var(--bk-accent-16, rgba(176, 128, 96, 0.16));
     }
 
     .studio12-page .s12-gallery-page-grid[data-gallery-count="1"] {
@@ -4809,7 +4926,7 @@
         transform: none;
         box-shadow:
           0 18px 40px rgba(0, 0, 0, 0.44),
-          0 0 36px rgba(176, 128, 96, 0.14);
+          0 0 36px var(--bk-accent-16, rgba(176, 128, 96, 0.14));
       }
 
       .studio12-page .s12-gallery-page-grid .s12-g-item:hover img,
@@ -4858,7 +4975,7 @@
       font-family: "Cormorant Garamond", serif;
       font-size: 64px;
       font-weight: 300;
-      color: rgba(176, 128, 96, 0.12);
+      color: var(--bk-accent-12, rgba(176, 128, 96, 0.12));
       line-height: 1;
       margin-bottom: 12px;
     }
@@ -4908,7 +5025,8 @@
 
     .studio12-page .s12-testimonials {
       padding: 100px 40px;
-      background: var(--s12-espresso);
+      background: var(--bk-about-bg, var(--s12-espresso));
+      color: var(--bk-about-fg, var(--s12-ivory));
       position: relative;
     }
 
@@ -4916,14 +5034,14 @@
       font-family: "Cormorant Garamond", serif;
       font-size: clamp(32px, 3.5vw, 48px);
       font-weight: 300;
-      color: var(--s12-ivory);
+      color: var(--bk-about-fg, var(--s12-ivory));
       margin: 0 0 48px;
       line-height: 1.05;
     }
 
     .studio12-page .s12-test-title em {
       font-style: italic;
-      color: var(--s12-blush-dark);
+      color: var(--bk-accent, var(--s12-blush-dark));
     }
 
     .studio12-page .s12-test-grid {
@@ -4942,16 +5060,24 @@
       font-size: 17px;
       font-style: italic;
       font-weight: 300;
-      color: rgba(245, 240, 232, 0.82);
+      color: var(--bk-fg-muted-light, rgba(245, 240, 232, 0.82));
       line-height: 1.65;
       margin: 0 0 20px;
+    }
+
+    .studio12-page .s12-testimonials .s12-test-text {
+      color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 82%, transparent);
     }
 
     .studio12-page .s12-test-author {
       font-size: 9px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: var(--s12-taupe-light);
+      color: var(--bk-fg-muted-light, var(--s12-taupe-light));
+    }
+
+    .studio12-page .s12-testimonials .s12-test-author {
+      color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 55%, transparent);
     }
 
     .studio12-page .s12-info {
@@ -5107,7 +5233,7 @@
     .studio12-page.studio12-sub .booking-form select,
     .studio12-page.studio12-sub .booking-form textarea {
       background: var(--s12-ivory) !important;
-      border: 1px solid rgba(176, 128, 96, 0.22) !important;
+      border: 1px solid var(--bk-accent-22, rgba(176, 128, 96, 0.22)) !important;
       border-radius: 0 !important;
       font-family: "Jost", system-ui, sans-serif !important;
       font-weight: 300 !important;
@@ -5345,72 +5471,241 @@
         document.documentElement.style.setProperty('--font-hero', heroStack);
       }
 
-      function applyBranding(t) {
-        if (isStudio12Theme(t)) {
-          document.body.style.background = '#faf7f2';
-          document.body.style.color = '#2a1f18';
-          document.body.style.backgroundImage = '';
-          applyTenantTypography(t);
-          return;
+      function pickTenantHex(stored, fallback) {
+        var s = (stored == null ? '' : String(stored)).trim();
+        return s || fallback;
+      }
+
+      /** Original-preset defaults per layout family (when Firestore field is empty). */
+      function themeColorDefaults(tenant) {
+        if (isBladeTheme(tenant)) {
+          return { bg: '#0a0a08', fg: '#f5f0e8', card: '#141410', accent: '#c9a84c', accentHover: '#e5c97a', accentFg: '#0a0a08',
+            featuredBg: '#0a0a08', featuredFg: '#f5f0e8', galleryBg: '#0a0a08', galleryFg: '#f5f0e8', aboutBg: '#141410', aboutFg: '#f5f0e8' };
         }
-        if (isStonecutTheme(t)) {
-          document.body.style.background = '#060604';
-          document.body.style.color = '#e8e0d0';
-          document.body.style.backgroundImage = '';
-          applyTenantTypography(t);
-          return;
+        if (isStonecutTheme(tenant)) {
+          return { bg: '#060604', fg: '#e8e0d0', card: '#0e0d0a', accent: '#c0221a', accentHover: '#d42a20', accentFg: '#e8e0d0',
+            featuredBg: '#060604', featuredFg: '#e8e0d0', galleryBg: '#060604', galleryFg: '#e8e0d0', aboutBg: '#0e0d0a', aboutFg: '#e8e0d0' };
         }
-        /* Classic portfolio shell: fixed white (tenant featured-work colors no longer drive the page). */
-        if (isClassicTheme(t) && !isStudio12Theme(t)) {
-          document.body.style.background = '#ffffff';
-          document.body.style.color = '#1a1a1a';
-          document.body.style.backgroundImage = '';
-          applyTenantTypography(t);
-          return;
+        if (isStudio12Theme(tenant)) {
+          return { bg: '#faf7f2', fg: '#2a1f18', card: '#e8d5c4', accent: '#b08060', accentHover: '#8a6040', accentFg: '#faf7f2',
+            featuredBg: '#faf7f2', featuredFg: '#2a1f18', galleryBg: '#faf7f2', galleryFg: '#2a1f18', aboutBg: '#2a1f18', aboutFg: '#faf7f2' };
         }
-        var bg = t.backgroundColor || '#FFFFFF';
-        var card = t.cardSurfaceColor || '#F5F5F5';
-        var txt = t.textColor || '#333333';
-        var accent = t.primaryColor || '#000000';
-        document.body.style.background = bg;
-        document.body.style.color = txt;
+        if (isLuxeTheme(tenant)) {
+          return { bg: '#FFFDF9', fg: '#1a1a1a', card: '#f5f0e8', accent: '#C9A96E', accentHover: '#8B6914', accentFg: '#ffffff',
+            featuredBg: '#FFFDF9', featuredFg: '#1a1a1a', galleryBg: '#FFFDF9', galleryFg: '#1a1a1a', aboutBg: '#1a1a1a', aboutFg: '#FFFDF9' };
+        }
+        return { bg: '#ffffff', fg: '#1a1a1a', card: '#f5f5f5', accent: '#111111', accentHover: '#333333', accentFg: '#f7f5f0',
+          featuredBg: '#ffffff', featuredFg: '#1a1a1a', galleryBg: '#ffffff', galleryFg: '#1a1a1a', aboutBg: '#1a1a1a', aboutFg: '#f7f5f0' };
+      }
+
+      function accentFgForHex(accentHex, fallback) {
+        var rgb = hexToRgb(accentHex);
+        var lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+        return lum > 0.58 ? '#1a1a1a' : (fallback || '#f5f0e8');
+      }
+
+      function tenantColors(tenant) {
+        var d = themeColorDefaults(tenant);
+        var bg = pickTenantHex(tenant.backgroundColor, d.bg);
+        var fg = pickTenantHex(tenant.textColor, d.fg);
+        var card = pickTenantHex(tenant.cardSurfaceColor, d.card);
+        var accent = pickTenantHex(tenant.primaryColor, d.accent);
+        var accentHover = pickTenantHex(tenant.primaryColorHover, d.accentHover);
+        var featuredBg = pickTenantHex(tenant.featuredWorkBackgroundColor, d.featuredBg);
+        var featuredFg = pickTenantHex(tenant.featuredWorkTextColor, d.featuredFg);
+        var galleryBg = pickTenantHex(tenant.galleryPageBackgroundColor, featuredBg);
+        var galleryFg = pickTenantHex(tenant.galleryPageTextColor, featuredFg);
+        var aboutBg = pickTenantHex(tenant.aboutSectionBackgroundColor, d.aboutBg);
+        var aboutFg = pickTenantHex(tenant.aboutSectionTextColor, d.aboutFg);
+        var accentFg = accentFgForHex(accent, d.accentFg);
+        return {
+          bg: bg, fg: fg, card: card, accent: accent, accentHover: accentHover, accentFg: accentFg,
+          featuredBg: featuredBg, featuredFg: featuredFg, galleryBg: galleryBg, galleryFg: galleryFg,
+          aboutBg: aboutBg, aboutFg: aboutFg
+        };
+      }
+
+      function tenantSurfaceColors(tenant, surface) {
+        var c = tenantColors(tenant);
+        if (surface === 'gallery') return { bg: c.galleryBg, fg: c.galleryFg };
+        if (surface === 'featured') return { bg: c.featuredBg, fg: c.featuredFg };
+        return { bg: c.bg, fg: c.fg };
+      }
+
+      function tenantPageStyle(tenant, surface) {
+        var s = tenantSurfaceColors(tenant, surface || 'page');
+        return 'background:' + s.bg + ';color:' + s.fg;
+      }
+
+      function hexToRgb(hex) {
+        var h = String(hex || '').trim().replace(/^#/, '');
+        if (h.length === 3) {
+          h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+        }
+        if (h.length !== 6 || !/^[0-9a-fA-F]+$/.test(h)) {
+          return { r: 42, g: 31, b: 24 };
+        }
+        return {
+          r: parseInt(h.slice(0, 2), 16),
+          g: parseInt(h.slice(2, 4), 16),
+          b: parseInt(h.slice(4, 6), 16)
+        };
+      }
+
+      function rgbaFromHex(hex, alpha) {
+        var rgb = hexToRgb(hex);
+        return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
+      }
+
+      function applyTenantColorVars(tenant) {
+        var c = tenantColors(tenant);
+        var root = document.documentElement;
+        root.style.setProperty('--bk-bg', c.bg);
+        root.style.setProperty('--bk-fg', c.fg);
+        root.style.setProperty('--bk-card', c.card);
+        root.style.setProperty('--bk-accent', c.accent);
+        root.style.setProperty('--bk-accent-hover', c.accentHover);
+        root.style.setProperty('--bk-accent-fg', c.accentFg);
+        root.style.setProperty('--bk-featured-bg', c.featuredBg);
+        root.style.setProperty('--bk-featured-fg', c.featuredFg);
+        root.style.setProperty('--bk-gallery-bg', c.galleryBg);
+        root.style.setProperty('--bk-gallery-fg', c.galleryFg);
+        root.style.setProperty('--bk-about-bg', c.aboutBg);
+        root.style.setProperty('--bk-about-fg', c.aboutFg);
+        root.style.setProperty('--bk-band-bg', c.card);
+        root.style.setProperty('--bk-accent-10', rgbaFromHex(c.accent, 0.10));
+        root.style.setProperty('--bk-accent-12', rgbaFromHex(c.accent, 0.12));
+        root.style.setProperty('--bk-accent-16', rgbaFromHex(c.accent, 0.16));
+        root.style.setProperty('--bk-accent-18', rgbaFromHex(c.accent, 0.18));
+        root.style.setProperty('--bk-accent-22', rgbaFromHex(c.accent, 0.22));
+        root.style.setProperty('--bk-accent-35', rgbaFromHex(c.accent, 0.35));
+        root.style.setProperty('--bk-accent-55', rgbaFromHex(c.accent, 0.55));
+        root.style.setProperty('--bk-fg-muted', rgbaFromHex(c.fg, 0.58));
+        root.style.setProperty('--bk-fg-muted-light', rgbaFromHex(c.fg, 0.40));
+        root.style.setProperty('--bk-fg-07', rgbaFromHex(c.fg, 0.07));
+        root.style.setProperty('--bk-fg-10', rgbaFromHex(c.fg, 0.10));
+      }
+
+      function applyBodyPageColors(tenant, surface) {
+        var s = tenantSurfaceColors(tenant, surface || 'page');
+        document.body.style.background = s.bg;
+        document.body.style.color = s.fg;
         document.body.style.backgroundImage = '';
-        [].forEach.call(document.querySelectorAll('.card'), function(el){ el.style.background = card; });
-        [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el){ el.style.background = accent; el.style.color = '#fff'; });
-        // Hair uses tattoo-style home; featured-band colors on body (same idea as tattoos)
-        if (t.industry === 'hair' && !isLuxeTheme(t) && !isBladeTheme(t) && !isStudio12Theme(t)) {
-          var hw = t.featuredWorkBackgroundColor || '#FAF8F5';
-          var hx = t.featuredWorkTextColor || '#1C1917';
-          document.body.style.background = hw;
-          document.body.style.color = hx;
+      }
+
+      /** Luxe home: promo = card, about band = page bg, contact/footer = about (3 palette surfaces). */
+      function applyLuxeHomeBandColors(tenant) {
+        if (!isLuxeTheme(tenant)) return;
+        var c = tenantColors(tenant);
+        [].forEach.call(document.querySelectorAll('.luxe-promo'), function(el) {
+          el.style.background = c.card;
+        });
+        [].forEach.call(document.querySelectorAll('.luxe-team-section'), function(el) {
+          el.style.background = c.featuredBg || c.bg;
+        });
+        [].forEach.call(document.querySelectorAll('.luxe-contact'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+        });
+        [].forEach.call(document.querySelectorAll('.luxe-footer-legal'), function(el) {
+          el.style.background = c.aboutBg;
+        });
+      }
+
+      /** Classic home: empty featured slots + hero placeholder follow card/accent tokens. */
+      function applyClassicHomePlaceholderColors(tenant) {
+        if (!isClassicTheme(tenant) || isStudio12Theme(tenant)) return;
+        var c = tenantColors(tenant);
+        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
+        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
+        [].forEach.call(document.querySelectorAll('.classic-home .tattoo-featured-slot-add'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+        [].forEach.call(document.querySelectorAll('.classic-hero-placeholder'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+      }
+
+      /** Blade: hero placeholder + key bands follow palette tokens. */
+      function applyBladeHomeBandColors(tenant) {
+        if (!isBladeTheme(tenant)) return;
+        var c = tenantColors(tenant);
+        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
+        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
+        [].forEach.call(document.querySelectorAll('.blade-page .blade-hero-placeholder'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+        [].forEach.call(document.querySelectorAll('.blade-page .blade-book-panel'), function(el) {
+          el.style.background = c.card;
+        });
+        [].forEach.call(document.querySelectorAll('.blade-page footer.blade-footer'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+        });
+      }
+
+      /** Stonecut: empty hero slots + footer follow palette tokens. */
+      function applyStonecutHomeBandColors(tenant) {
+        if (!isStonecutTheme(tenant)) return;
+        var c = tenantColors(tenant);
+        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
+        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
+        var lineColor = rgbaFromHex(c.fg, 0.08);
+        [].forEach.call(document.querySelectorAll('.stonecut-page .stonecut-hero-photo--empty'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+        [].forEach.call(document.querySelectorAll('.stonecut-page footer'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+          el.style.borderTopColor = lineColor;
+        });
+      }
+
+      /** Studio 12: empty image placeholders follow card/accent tokens. */
+      function applyStudio12HomeBandColors(tenant) {
+        if (!isStudio12Theme(tenant)) return;
+        var c = tenantColors(tenant);
+        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
+        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.45);
+        [].forEach.call(document.querySelectorAll('.studio12-page .s12-aux-img-wrap:not(:has(img))'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+        [].forEach.call(document.querySelectorAll('.studio12-page .s12-hero-img-col:not(:has(img))'), function(el) {
+          el.style.background = slotBg;
+          el.style.border = slotBorder;
+        });
+      }
+
+      function applyBranding(t) {
+        if (!t) return;
+        applyTenantColorVars(t);
+        var c = tenantColors(t);
+        var bodySurface = 'page';
+        if (isLuxeTheme(t) || isBladeTheme(t) || isStonecutTheme(t) || isStudio12Theme(t) ||
+            (isClassicTheme(t) && !isStudio12Theme(t))) {
+          bodySurface = 'page';
+        } else if (t.industry === 'hair' || t.industry === 'barber' || t.industry === 'nails' ||
+            t.industry === 'custom' || t.industry === 'tattoos') {
+          bodySurface = 'featured';
         }
-        if (t.industry === 'barber' && !isLuxeTheme(t) && !isBladeTheme(t)) {
-          var bb = t.featuredWorkBackgroundColor || '#FAFAF9';
-          var bf = t.featuredWorkTextColor || '#1C1917';
-          document.body.style.background = bb;
-          document.body.style.color = bf;
-        }
-        if (isLuxeTheme(t)) {
-          document.body.style.background = '#FFFDF9';
-          document.body.style.color = '#1a1a1a';
-        }
-        if (isBladeTheme(t)) {
-          document.body.style.background = '#0a0a08';
-          document.body.style.color = '#f5f0e8';
-        }
-        if ((t.industry === 'nails' || t.industry === 'custom') && !isLuxeTheme(t) && !isBladeTheme(t)) {
-          var cb = t.featuredWorkBackgroundColor || '#FAF8F5';
-          var cf = t.featuredWorkTextColor || '#1C1917';
-          document.body.style.background = cb;
-          document.body.style.color = cf;
-        }
-        // Override for Tattoo template: same surface as Featured work / Gallery / Book
-        if (t.industry === 'tattoos' && !isBladeTheme(t)) {
-          var tw = t.featuredWorkBackgroundColor || '#FAF8F5';
-          var tx = t.featuredWorkTextColor || '#1C1917';
-          document.body.style.background = tw;
-          document.body.style.color = tx;
-        }
+        applyBodyPageColors(t, bodySurface);
+        applyLuxeHomeBandColors(t);
+        applyClassicHomePlaceholderColors(t);
+        applyBladeHomeBandColors(t);
+        applyStonecutHomeBandColors(t);
+        applyStudio12HomeBandColors(t);
+        [].forEach.call(document.querySelectorAll('.card'), function(el) {
+          el.style.background = c.card;
+        });
+        [].forEach.call(document.querySelectorAll('button[data-accent]'), function(el) {
+          el.style.background = c.accent;
+          el.style.color = c.accentFg;
+        });
         applyTenantTypography(t);
       }
 
@@ -5424,20 +5719,19 @@
         }
 
         if (!iconColor) {
+          var tc = tenantColors(tenant);
           if (isGalleryPath) {
             iconColor = (usesThemedChrome(tenant) || isClassicTheme(tenant))
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : ((isClassicTheme(tenant) && !isStudio12Theme(tenant)) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))))
+              ? (isBladeTheme(tenant) ? tc.accent : tc.fg)
               : '#FFFFFF';
           } else if (isBookPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isBladeTheme(tenant) ? '#c9a84c' : (isLuxeTheme(tenant) ? '#1a1a1a' : (isStonecutTheme(tenant) ? '#e8e0d0' : ((isClassicTheme(tenant) && !isStudio12Theme(tenant)) ? '#1a1a1a' : (tenant.featuredWorkTextColor || '#1C1917')))))
+              ? (isBladeTheme(tenant) ? tc.accent : tc.fg)
               : '#000000';
           } else if (usesThemedChrome(tenant)) {
-            iconColor = isBladeTheme(tenant)
-              ? '#c9a84c'
-              : ((isClassicTheme(tenant) || isLuxeTheme(tenant)) ? '#1a1a1a' : '#FFFFFF');
+            iconColor = isBladeTheme(tenant) ? tc.accent : tc.fg;
           } else {
-            var bg = (tenant.backgroundColor || '#FFFFFF').toUpperCase().replace(/\s/g, '');
+            var bg = tc.bg.toUpperCase().replace(/\s/g, '');
             iconColor = (bg === '#FFFFFF' || bg === '#FFF') ? '#000000' : '#FFFFFF';
           }
         }
@@ -5445,12 +5739,10 @@
         var btns = document.querySelectorAll('.tattoo-nav-menu');
         for (var i = 0; i < btns.length; i++) {
           var b = btns[i];
-          /* Blade hamburger on dark bar: always theme gold so tenant sidebar icon overrides / iOS button styling can't hide it. */
-          if (isBladeTheme(tenant) && b.classList && b.classList.contains('blade-nav-menu-btn')) {
-            b.style.setProperty('color', '#c9a84c', 'important');
-            b.style.setProperty('-webkit-text-fill-color', '#c9a84c', 'important');
-          } else {
-            b.style.color = iconColor;
+          b.style.color = iconColor;
+          if (b.classList && b.classList.contains('blade-nav-menu-btn')) {
+            b.style.setProperty('color', iconColor, 'important');
+            b.style.setProperty('-webkit-text-fill-color', iconColor, 'important');
           }
         }
       }
@@ -5743,7 +6035,7 @@
           '<button class="tattoo-nav-menu blade-nav-menu-btn" type="button" aria-label="Menu">' +
           '<span class="blade-nav-menu-icon" aria-hidden="true">' +
           '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 22 16" fill="none">' +
-          '<path d="M1 1.5h20M1 8h20M1 14.5h20" stroke="#c9a84c" stroke-width="2" stroke-linecap="round"/>' +
+          '<path d="M1 1.5h20M1 8h20M1 14.5h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
           '</svg></span></button>' +
           '</div></nav>';
       }
@@ -5755,16 +6047,15 @@
         var nav = page.querySelector('.blade-topnav');
         if (nav) {
           function onNavScroll() {
-            if (window.scrollY > 48) {
-              nav.style.background = 'rgba(10,10,8,0.95)';
-              nav.style.backdropFilter = 'blur(10px)';
-            } else {
-              nav.style.background = 'transparent';
-              nav.style.backdropFilter = 'none';
-            }
+            var activeNav = document.querySelector('.blade-page .blade-topnav');
+            if (!activeNav) return;
+            activeNav.classList.toggle('scrolled', window.scrollY > 48);
           }
           onNavScroll();
-          window.addEventListener('scroll', onNavScroll, { passive: true });
+          if (!window.__bladeNavScrollBound) {
+            window.__bladeNavScrollBound = true;
+            window.addEventListener('scroll', onNavScroll, { passive: true });
+          }
         }
         function bladeScrollToServices() {
           var sec = document.getElementById('services');
@@ -5790,6 +6081,27 @@
           });
         }, { threshold: 0.06, rootMargin: '0px 0px -32px 0px' });
         for (var bi = 0; bi < fadeEls.length; bi++) obs.observe(fadeEls[bi]);
+      }
+
+      /** Stonecut fixed nav: scroll collapse + sync page padding to nav height. */
+      function bindStonecutNavChrome() {
+        var nav = document.getElementById('stonecut-nav');
+        if (!nav) return;
+        var page = nav.closest('.stonecut-page');
+        function syncNavOffset() {
+          if (page) page.style.setProperty('--stonecut-nav-h', nav.offsetHeight + 'px');
+        }
+        function onScScroll() {
+          nav.classList.toggle('scrolled', window.scrollY > 60);
+          syncNavOffset();
+        }
+        onScScroll();
+        window.addEventListener('scroll', onScScroll, { passive: true });
+        window.addEventListener('resize', syncNavOffset, { passive: true });
+        if (typeof ResizeObserver !== 'undefined') {
+          var ro = new ResizeObserver(syncNavOffset);
+          ro.observe(nav);
+        }
       }
 
       /** Blade hero `<em>` line when `bladeHeroTagline` empty (after legacy `tagline` split). */
@@ -6029,8 +6341,19 @@
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
         var displayName = tenant.displayName || 'Studio';
+        var industryLine = stonecutIndustryDisplayName(tenant.industry);
+        var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
+        var locationHtml = sa
+          ? ('<span class="stonecut-nav-location"><span data-edit-key="serviceArea">' + esc(sa) + '</span></span>')
+          : '';
         return '<nav class="stonecut-nav" id="stonecut-nav">' +
-          '<a href="' + base + '/home" class="stonecut-logo"><span data-edit-key="displayName">' + esc(displayName) + '</span></a>' +
+          '<a href="' + base + '/home" class="stonecut-logo">' +
+          '<span class="stonecut-logo-wordmark"><span data-edit-key="displayName">' + esc(displayName) + '</span></span>' +
+          '<span class="stonecut-logo-stack">' +
+          '<em class="stonecut-nav-industry">' + esc(industryLine) + '</em>' +
+          '<span class="stonecut-nav-name"><span data-edit-key="displayName">' + esc(displayName) + '</span></span>' +
+          locationHtml +
+          '</span></a>' +
           '<div class="stonecut-nav-trailing">' +
           '<ul class="stonecut-links">' +
           '<li><a href="' + base + '/home#services">Services</a></li>' +
@@ -6044,7 +6367,6 @@
       function stonecutHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
-        var galleryUrl = base + '/gallery';
         var displayName = tenant.displayName || 'Studio';
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
@@ -6082,8 +6404,9 @@
         var phoneDisplay = contactPhoneDisplayEscaped(tenant);
         var industryLine = stonecutIndustryDisplayName(tenant.industry);
         var cityTagHtml = sa ? ('<div class="stonecut-tag"><span data-edit-key="serviceArea">' + esc(sa) + '</span></div>') : '';
-        var heroCtaInner = (tenantShowBookPage(tenant) ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">' + wcSpan(tenant, 'wc.stonecut.heroBook', 'Book a session') + '</a>' : '') +
-          (tenantShowGalleryPage(tenant) ? '<a href="' + galleryUrl + '" class="stonecut-btn stonecut-btn-ghost">' + wcSpan(tenant, 'wc.stonecut.heroPortfolio', 'View portfolio') + '</a>' : '');
+        var heroCtaInner = tenantShowBookPage(tenant)
+          ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">' + wcSpan(tenant, 'wc.stonecut.heroBook', 'Book a session') + '</a>'
+          : '';
         var heroCta = heroCtaInner ? ('<div class="stonecut-hero-cta">' + heroCtaInner + '</div>') : '';
         var shopPreviewSection = (function(){
           if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
@@ -6248,11 +6571,9 @@
       /** Tattoo template: one editable theme for Featured, Gallery, Book, sidebar. */
       function tattooSiteThemeInlineStyle(tenant) {
         if (isClassicTheme(tenant) && !isStudio12Theme(tenant)) {
-          return 'background:#ffffff;color:#1a1a1a';
+          return tenantPageStyle(tenant, 'page');
         }
-        var bg = tenant.featuredWorkBackgroundColor || '#FAF8F5';
-        var fg = tenant.featuredWorkTextColor || '#1C1917';
-        return 'background:'+bg+';color:'+fg;
+        return tenantPageStyle(tenant, 'featured');
       }
       /** Matches `BookingFormStyle` in the app. */
       function bookingFormStyleResolved(tenant) {
@@ -6264,45 +6585,28 @@
       }
       function guidedBookingInlineStyle(tenant) {
         var parts = [];
-        var fg = tenant.textColor || '';
-        var accent = tenant.primaryColor || '';
-        var surface = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || '';
+        var tc = tenantColors(tenant);
+        var fg = tc.fg;
+        var accent = tc.accent;
+        var surface = pickTenantHex(tenant.bookingFormCardBackgroundColor, tc.card);
         if (isBladeTheme(tenant)) {
-          if (!fg) fg = '#f5f0e8';
-          if (!surface) surface = '#141410';
-          if (!accent) accent = '#c9a227';
           parts.push('--bk-border:rgba(245,240,232,0.15)');
           parts.push('--bk-muted:rgba(245,240,232,0.55)');
           parts.push('--bk-input-bg:rgba(245,240,232,0.06)');
           parts.push('--bk-surface-2:rgba(245,240,232,0.04)');
           parts.push('--bk-shadow:rgba(0,0,0,0.35)');
-        } else if (isLuxeTheme(tenant)) {
-          if (!fg) fg = '#1a1a1a';
-          if (!surface) surface = '#FFFDF9';
-          if (!accent) accent = '#8B6914';
         } else if (isStonecutTheme(tenant)) {
-          if (!fg) fg = '#e8e0d0';
-          if (!surface) surface = '#0e0d0a';
-          if (!accent) accent = '#c4a574';
           parts.push('--bk-border:rgba(232,224,208,0.15)');
           parts.push('--bk-muted:rgba(232,224,208,0.55)');
           parts.push('--bk-input-bg:rgba(232,224,208,0.06)');
           parts.push('--bk-surface-2:rgba(232,224,208,0.04)');
           parts.push('--bk-shadow:rgba(0,0,0,0.4)');
-        } else if (isStudio12Theme(tenant)) {
-          if (!fg) fg = '#2a1f18';
-          if (!surface) surface = '#fffdf9';
-          if (!accent) accent = '#6b4c38';
-        } else {
-          if (!fg) fg = '#1a1a1a';
-          if (!surface) surface = '#ffffff';
-          if (!accent) accent = '#111111';
         }
         if (fg) parts.push('--bk-fg:' + fg);
         if (accent) {
           parts.push('--bk-accent:' + accent);
-          parts.push('--bk-accent-hover:' + accent);
-          parts.push('--bk-accent-fg:#ffffff');
+          parts.push('--bk-accent-hover:' + tc.accentHover);
+          parts.push('--bk-accent-fg:' + tc.accentFg);
         }
         if (surface) {
           parts.push('--bk-surface:' + surface);
@@ -7210,15 +7514,13 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>');
 
-        var bookPageStyle = isStudio12Theme(tenant)
-          ? 'background:#faf7f2;color:#2a1f18'
-          : (isBladeTheme(tenant)
-          ? 'background:#0a0a08;color:#f5f0e8'
-          : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isStonecutTheme(tenant) ? 'background:#060604;color:#e8e0d0' : (isPortfolioIndustry(tenant.industry) ? tattooSiteThemeInlineStyle(tenant) : ''))));
+        var bookPageStyle = (isStudio12Theme(tenant) || isBladeTheme(tenant) || isLuxeTheme(tenant) || isStonecutTheme(tenant) || isPortfolioIndustry(tenant.industry))
+          ? tenantPageStyle(tenant, 'page')
+          : tattooSiteThemeInlineStyle(tenant);
         var wrapClass = isStonecutTheme(tenant)
           ? 'stonecut-page'
           : ('tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : ''));
-        var bookCardBg = tenant.bookingFormCardBackgroundColor || tenant.cardSurfaceColor || (isStonecutTheme(tenant) ? '#0e0d0a' : '#ffffff');
+        var bookCardBg = pickTenantHex(tenant.bookingFormCardBackgroundColor, tenantColors(tenant).card);
         var bookSiteFooter = '';
         if (isStudio12Theme(tenant)) bookSiteFooter = studio12SiteFooterHtml(tenant);
         else if (isStonecutTheme(tenant)) bookSiteFooter = stonecutSiteFooterHtml(tenant);
@@ -7289,7 +7591,7 @@
         var detail = 'Thanks for reaching out. We\'ll review your details and get back to you soon.';
         if (isStudio12Theme(tenant)) {
           return '' +
-            '<div class="tattoo-page studio12-page studio12-sub" style="background:#faf7f2;color:#2a1f18">' +
+            '<div class="tattoo-page studio12-page studio12-sub" style="' + tenantPageStyle(tenant, 'page') + '">' +
             studio12NavHtml(tenant) +
             '<div class="booking-shell">' +
               '<div class="booking-page-header">' +
@@ -7315,9 +7617,7 @@
             '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
             tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
             '</div></div>';
-          var bookPageStyle = isBladeTheme(tenant)
-            ? 'background:#0a0a08;color:#f5f0e8'
-            : (isLuxeTheme(tenant) ? 'background:#FFFDF9;color:#1a1a1a' : (isStonecutTheme(tenant) ? 'background:#060604;color:#e8e0d0' : tattooSiteThemeInlineStyle(tenant)));
+          var bookPageStyle = tenantPageStyle(tenant, 'page');
           var successWrapClass = isStonecutTheme(tenant)
             ? 'stonecut-page'
             : ('tattoo-page' +
@@ -7385,7 +7685,8 @@
             var data = d.data();
             var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, logoUrl: data.logoUrl, tagline: data.tagline,
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
-              primaryColor: data.primaryColor, formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
+              primaryColor: data.primaryColor, primaryColorHover: data.primaryColorHover || '',
+              formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
               industry: data.industry || '', heroImageUrl: data.heroImageUrl || '',
               heroImagePixelWidth: tenantHeroPixelDim(data.heroImagePixelWidth, 16),
@@ -7476,10 +7777,11 @@
           });
       }
       function tattooSidebarPanelInlineStyle(tenant) {
-        if (isLuxeTheme(tenant)) return 'background:#FFFDF9;color:#1a1a1a';
-        if (isBladeTheme(tenant)) return 'background:#141410;color:#f5f0e8';
-        if (isStonecutTheme(tenant)) return 'background:#0e0d0a;color:#e8e0d0';
-        if (isStudio12Theme(tenant)) return 'background:#faf7f2;color:#2a1f18';
+        var tc = tenantColors(tenant);
+        if (isLuxeTheme(tenant) || isStudio12Theme(tenant)) return tenantPageStyle(tenant, 'page');
+        if (isBladeTheme(tenant) || isStonecutTheme(tenant)) {
+          return 'background:' + tc.card + ';color:' + tc.fg;
+        }
         return tattooSiteThemeInlineStyle(tenant);
       }
       function studio12SidebarHtml(tenant) {
@@ -7762,21 +8064,7 @@
         } else {
           content = galleryAltLayoutInnerHtml(gUrlsAll, gLayStd);
         }
-        var gPageBg, gPageFg, galleryPageStyle;
-        if (isBladeTheme(tenant)) {
-          gPageBg = '#0a0a08';
-          gPageFg = '#f5f0e8';
-        } else if (isLuxeTheme(tenant)) {
-          gPageBg = '#FFFDF9';
-          gPageFg = '#1a1a1a';
-        } else if (isClassicTheme(tenant)) {
-          gPageBg = '#ffffff';
-          gPageFg = '#1a1a1a';
-        } else {
-          gPageBg = tenant.galleryPageBackgroundColor || '#000000';
-          gPageFg = tenant.galleryPageTextColor || '#ffffff';
-        }
-        galleryPageStyle = 'background:'+gPageBg+';color:'+gPageFg;
+        var galleryPageStyle = tenantPageStyle(tenant, 'gallery');
 
         var galleryWrapClass = 'gallery-page' +
           (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
@@ -8565,7 +8853,7 @@
         var nav = luxeChromeNavHtml(tenant, 'light');
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
+          '<div class="tattoo-sidebar-panel" style="' + tattooSidebarPanelInlineStyle(tenant) + '">' +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -8606,7 +8894,7 @@
           ? '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
           : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
         var shopWrapClass = 'tattoo-page classic-home' + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
-        return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="background:#F7F5F0;padding-top:32px">' + inner + '</div>' + classicSiteFooterHtml(tenant, tenant.displayName || 'Studio') + sidebar + '</div>';
+        return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="padding-top:32px">' + inner + '</div>' + classicSiteFooterHtml(tenant, tenant.displayName || 'Studio') + sidebar + '</div>';
       }
       function stonecutShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -8666,7 +8954,7 @@
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="background:#FFFDF9;color:#1a1a1a">' +
+          '<div class="tattoo-sidebar-panel" style="' + tattooSidebarPanelInlineStyle(tenant) + '">' +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -9358,39 +9646,24 @@
                 bindTattooSidebar();
                 bindBladeChrome();
                 bindShopPage(tenant);
-                document.body.style.background = '#0a0a08';
-                document.body.style.color = '#f5f0e8';
               } else if (isLuxeTheme(tenant)) {
                 document.getElementById('root').innerHTML = luxeShopPage(tenant);
                 bindTattooSidebar();
                 bindShopPage(tenant);
-                document.body.style.background = '#FFFDF9';
-                document.body.style.color = '#1a1a1a';
               } else if (isStudio12Theme(tenant)) {
                 document.getElementById('root').innerHTML = studio12ShopPage(tenant);
                 bindStudio12Page();
                 bindTattooSidebar();
                 bindShopPage(tenant);
-                document.body.style.background = '#faf7f2';
-                document.body.style.color = '#2a1f18';
               } else if (isStonecutTheme(tenant)) {
                 document.getElementById('root').innerHTML = stonecutShopPage(tenant);
                 bindTattooSidebar();
                 bindShopPage(tenant);
-                var scNavShop = document.getElementById('stonecut-nav');
-                if (scNavShop) {
-                  var onScScrollShop = function() { scNavShop.classList.toggle('scrolled', window.scrollY > 60); };
-                  onScScrollShop();
-                  window.addEventListener('scroll', onScScrollShop, { passive: true });
-                }
-                document.body.style.background = '#060604';
-                document.body.style.color = '#e8e0d0';
+                bindStonecutNavChrome();
               } else {
                 document.getElementById('root').innerHTML = classicShopPage(tenant);
                 bindTattooSidebar();
                 bindShopPage(tenant);
-                document.body.style.background = '#ffffff';
-                document.body.style.color = '#1a1a1a';
               }
               applyBranding(tenant);
               if (isStudio12Theme(tenant)) applySidebarIconColor(tenant, false, false);
@@ -9439,29 +9712,10 @@
               } else {
                 bindTattooSidebar();
               }
-              if (isBladeTheme(tenant)) {
-                document.body.style.background = '#0a0a08';
-                document.body.style.color = '#f5f0e8';
-                bindBladeChrome();
-              } else if (isStonecutTheme(tenant)) {
-                document.body.style.background = '#060604';
-                document.body.style.color = '#e8e0d0';
-              } else if (isLuxeTheme(tenant)) {
-                document.body.style.background = '#FFFDF9';
-                document.body.style.color = '#1a1a1a';
-              } else if (isStudio12Theme(tenant)) {
-                document.body.style.background = '#faf7f2';
-                document.body.style.color = '#2a1f18';
-              } else if (isClassicTheme(tenant) && !isStudio12Theme(tenant)) {
-                document.body.style.background = '#ffffff';
-                document.body.style.color = '#1a1a1a';
-              } else if (isPortfolioIndustry(tenant.industry)) {
-                document.body.style.background = tenant.featuredWorkBackgroundColor || '#FAF8F5';
-                document.body.style.color = tenant.featuredWorkTextColor || '#1C1917';
-              } else {
-                document.body.style.background = '#000';
-                document.body.style.color = '#fff';
-              }
+              applyTenantColorVars(tenant);
+              applyBodyPageColors(tenant, 'gallery');
+              applyTenantTypography(tenant);
+              if (isBladeTheme(tenant)) bindBladeChrome();
               applySidebarIconColor(tenant, false, true);
               return;
             }
@@ -9488,12 +9742,7 @@
               if (isStudio12Theme(tenant)) bindStudio12Page();
               if (isBladeTheme(tenant)) bindBladeChrome();
               if (isStonecutTheme(tenant)) {
-                var scNavBook = document.getElementById('stonecut-nav');
-                if (scNavBook) {
-                  var onScScrollBook = function() { scNavBook.classList.toggle('scrolled', window.scrollY > 60); };
-                  onScScrollBook();
-                  window.addEventListener('scroll', onScScrollBook, { passive: true });
-                }
+                bindStonecutNavChrome();
               }
               try {
                 var shopNotes = sessionStorage.getItem('bk_shop_cart_notes');
@@ -9515,12 +9764,7 @@
               }
               if (isBladeHome) bindBladeChrome();
               if (isStonecutHome) {
-                var scNav = document.getElementById('stonecut-nav');
-                if (scNav) {
-                  var onScScroll = function() { scNav.classList.toggle('scrolled', window.scrollY > 60); };
-                  onScScroll();
-                  window.addEventListener('scroll', onScScroll, { passive: true });
-                }
+                bindStonecutNavChrome();
                 if (tenantShowShopPage(tenant) && tenant._products && tenant._products.length) {
                   bindShopPage(tenant);
                 }
@@ -9830,12 +10074,7 @@
                   if (isStudio12Theme(tenant)) bindStudio12Page();
                   if (isBladeTheme(tenant)) bindBladeChrome();
                   if (isStonecutTheme(tenant)) {
-                    var scNavDone = document.getElementById('stonecut-nav');
-                    if (scNavDone) {
-                      var onScScrollDone = function() { scNavDone.classList.toggle('scrolled', window.scrollY > 60); };
-                      onScScrollDone();
-                      window.addEventListener('scroll', onScScrollDone, { passive: true });
-                    }
+                    bindStonecutNavChrome();
                   }
                   applySidebarIconColor(tenant, true, false);
                 }).catch(function(e){

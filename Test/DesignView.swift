@@ -559,6 +559,46 @@ struct DesignView: View {
         }
     }
 
+    private var colorPaletteSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Color palette")
+                    .font(.headline)
+                if WebColorPalettes.usesAccentPicker(family: activeTemplateFamily) {
+                    Text("Choose a base theme, then pick an accent color. Switching layout above resets to Original.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Colors for your \(activeTemplateFamily.displayName) template. Switching layout above resets to Original.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(WebColorPalettes.palettes(for: activeTemplateFamily)) { palette in
+                    WebColorPalettePresetCard(
+                        palette: palette,
+                        isActive: viewModel.webColorPaletteId == palette.id,
+                        isBusy: viewModel.isLoading
+                    ) {
+                        Task { await viewModel.applyWebColorPalette(palette) }
+                    }
+                }
+            }
+            if WebColorPalettes.usesAccentPicker(family: activeTemplateFamily) {
+                WebColorAccentChipSection(
+                    accents: WebColorPalettes.accentOptions(for: activeTemplateFamily),
+                    activePrimaryHex: viewModel.primaryColorHex,
+                    isBusy: viewModel.isLoading
+                ) { accent in
+                    Task { await viewModel.applyWebColorAccent(accent) }
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+
     private var templateContent: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
@@ -578,6 +618,8 @@ struct DesignView: View {
                     Task { await viewModel.applyWebTheme(theme) }
                 }
             }
+
+            colorPaletteSection
 
             Text("Pages on your site")
                 .font(.headline)
@@ -937,7 +979,7 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Booking form style")
                 .font(.headline)
-            Text("Layout for your /book page. Colors follow your site theme (Template tab).")
+            Text("Layout for your /book page. Accent and form colors follow the palette on the Template tab.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if authViewModel.teamAccess.canManageBookingFormStyle {
@@ -2369,6 +2411,129 @@ private struct EditTenantServiceSheet: View {
     }
 }
 
+
+// MARK: - Color palette presets (Template tab)
+
+private struct WebColorAccentChipSection: View {
+    let accents: [WebColorAccentOption]
+    let activePrimaryHex: String
+    let isBusy: Bool
+    let select: (WebColorAccentOption) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Accent color")
+                .font(.subheadline.weight(.semibold))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(accents) { accent in
+                        WebColorAccentChip(
+                            accent: accent,
+                            isActive: WebColorPalettes.matchesAccent(storedPrimary: activePrimaryHex, option: accent),
+                            isBusy: isBusy,
+                            select: { select(accent) }
+                        )
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+}
+
+private struct WebColorAccentChip: View {
+    let accent: WebColorAccentOption
+    let isActive: Bool
+    let isBusy: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: accent.primaryColor))
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        Circle()
+                            .stroke(Color(.separator).opacity(0.45), lineWidth: 0.5)
+                    )
+                Text(accent.name)
+                    .font(.caption.weight(isActive ? .semibold : .regular))
+                    .foregroundColor(isActive ? .primary : .secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(isActive ? Color.accentColor.opacity(0.14) : Color(.secondarySystemGroupedBackground))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(isActive ? Color.accentColor : Color(.separator).opacity(0.35), lineWidth: isActive ? 1.5 : 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+    }
+}
+
+private struct WebColorPalettePresetCard: View {
+    let palette: WebColorPalette
+    let isActive: Bool
+    let isBusy: Bool
+    let select: () -> Void
+
+    private var previewStripColors: [String] {
+        if WebColorPalettes.usesAccentPicker(family: palette.family) {
+            let t = palette.tokens
+            return [t.backgroundColor, t.cardSurfaceColor, t.primaryColor]
+        }
+        return palette.tokens.stripColors
+    }
+
+    var body: some View {
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(palette.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 0)
+                    if isActive {
+                        Text("Active")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                            .foregroundColor(.accentColor)
+                    }
+                }
+                HStack(spacing: 0) {
+                    ForEach(Array(previewStripColors.enumerated()), id: \.offset) { _, hex in
+                        Color(hex: hex)
+                            .frame(height: 22)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+                )
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isActive ? Color.accentColor : Color(.separator).opacity(0.35), lineWidth: isActive ? 2 : 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+    }
+}
 
 // MARK: - Template gallery (mini SwiftUI previews)
 

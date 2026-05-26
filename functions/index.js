@@ -14,6 +14,9 @@
  * Optional: MARKETING_ORIGIN (https://getbookking.com or your marketing host) for Stripe Billing
  * Portal return_url → …/account.html. Enable the portal in Stripe Dashboard → Billing → Customer portal.
  * Callable getBillingSummary: read-only Stripe subscription + invoices for account.html.
+ *
+ * Customer payments (Connect): 1% platform application fee on createDepositLink and
+ * createPaymentIntentForTapToPay — not on subscription checkout.
  */
 
 const functions = require("firebase-functions");
@@ -434,49 +437,68 @@ exports.createConnectAccountLink = functions
       apiVersion: "2024-11-20.acacia",
     });
 
-    const userDoc = await db.collection("users").doc(uid).get();
-    if (!userDoc.exists) {
-      throw new functions.https.HttpsError("not-found", "Provider profile not found");
-    }
-    const userData = userDoc.data();
-    const tenantId = userData.tenantId;
-    const email = userData.email || context.auth.token?.email;
-    if (!tenantId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "No tenant linked to this provider"
-      );
-    }
+    try {
+      const userDoc = await db.collection("users").doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "Provider profile not found");
+      }
+      const userData = userDoc.data();
+      const tenantId = userData.tenantId;
+      const email = userData.email || context.auth.token?.email;
+      if (!tenantId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "No tenant linked to this provider. Finish signup first."
+        );
+      }
 
-    const tenantRef = db.collection("tenants").doc(tenantId);
-    const tenantDoc = await tenantRef.get();
-    const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
-    let stripeAccountId = tenantData.stripeAccountId;
+      const tenantRef = db.collection("tenants").doc(tenantId);
+      const tenantDoc = await tenantRef.get();
+      const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
+      let stripeAccountId = tenantData.stripeAccountId;
 
-    if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        email: email || undefined,
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true },
-        },
+      if (!stripeAccountId) {
+        const account = await stripe.accounts.create({
+          type: "express",
+          email: email || undefined,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+        });
+        stripeAccountId = account.id;
+        await tenantRef.set({ stripeAccountId }, { merge: true });
+      }
+
+      const baseUrl = (data?.returnBaseUrl ?? "https://getbookking.com").toString().replace(/\/$/, "");
+      const returnUrl = data?.returnUrl ?? `${baseUrl}/account.html?stripe=success`;
+      const refreshUrl = data?.refreshUrl ?? `${baseUrl}/account.html?stripe=refresh`;
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: refreshUrl,
+        return_url: returnUrl,
+        type: "account_onboarding",
       });
-      stripeAccountId = account.id;
-      await tenantRef.set({ stripeAccountId }, { merge: true });
+
+      if (!accountLink?.url) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe did not return an onboarding link."
+        );
+      }
+
+      return { url: accountLink.url };
+    } catch (err) {
+      if (err instanceof functions.https.HttpsError) {
+        throw err;
+      }
+      console.error("createConnectAccountLink", err);
+      const msg =
+        err && err.message
+          ? String(err.message)
+          : "Stripe Connect failed. Enable Connect in the Stripe Dashboard and verify STRIPE_SECRET_KEY.";
+      throw new functions.https.HttpsError("failed-precondition", msg);
     }
-
-    const baseUrl = data?.returnBaseUrl ?? "https://getbookking.com";
-    const returnUrl = data?.returnUrl ?? `${baseUrl}/payments?success=1`;
-    const refreshUrl = data?.refreshUrl ?? `${baseUrl}/payments?refresh=1`;
-    const accountLink = await stripe.accountLinks.create({
-      account: stripeAccountId,
-      refresh_url: refreshUrl,
-      return_url: returnUrl,
-      type: "account_onboarding",
-    });
-
-    return { url: accountLink.url };
   });
 
 /**
@@ -526,6 +548,19 @@ exports.getConnectAccountStatus = functions
       payoutsEnabled: account.payouts_enabled ?? false,
     };
   });
+
+/**
+ * Platform fee on customer payments (Tap to Pay, deposit links, future checkout).
+ * Not applied to provider subscriptions. 100 bps = 1%.
+ */
+const PLATFORM_FEE_BPS = 100;
+
+/** Application fee in USD cents (min 1¢). Deducted from provider Connect balance, not grossed up to customer. */
+function platformFeeCents(amountCents) {
+  const n = Math.round(Number(amountCents));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
+}
 
 /** Helper: get stripeAccountId for authenticated user's tenant */
 async function getStripeAccountIdForUser(uid) {
@@ -708,6 +743,8 @@ exports.createDepositLink = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const roundedAmount = Math.round(amountCents);
+    const feeCents = platformFeeCents(roundedAmount);
     const productData = { name: productName };
     if (productDescription) productData.description = productDescription;
     const link = await stripe.paymentLinks.create(
@@ -717,15 +754,16 @@ exports.createDepositLink = functions
             price_data: {
               currency: "usd",
               product_data: productData,
-              unit_amount: Math.round(amountCents),
+              unit_amount: roundedAmount,
             },
             quantity: 1,
           },
         ],
+        application_fee_amount: feeCents,
       },
       { stripeAccount: stripeAccountId }
     );
-    return { url: link.url };
+    return { url: link.url, platformFeeCents: feeCents };
   });
 
 /**
@@ -839,7 +877,11 @@ exports.createRefund = functions
     const amountCents = data?.amountCents;
     const reason = (data?.reason || "requested_by_customer").toString().trim();
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const params = { charge: chargeId, reason: reason };
+    const params = {
+      charge: chargeId,
+      reason: reason,
+      refund_application_fee: true,
+    };
     if (typeof amountCents === "number" && amountCents > 0) {
       params.amount = Math.round(amountCents);
     }
@@ -971,10 +1013,13 @@ exports.createPaymentIntentForTapToPay = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const roundedAmount = Math.round(amountCents);
+    const feeCents = platformFeeCents(roundedAmount);
     const pi = await stripe.paymentIntents.create(
       {
-        amount: Math.round(amountCents),
+        amount: roundedAmount,
         currency: "usd",
+        application_fee_amount: feeCents,
         capture_method: "automatic",
       },
       { stripeAccount: stripeAccountId }
@@ -982,6 +1027,7 @@ exports.createPaymentIntentForTapToPay = functions
     return {
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
+      platformFeeCents: feeCents,
     };
   });
 

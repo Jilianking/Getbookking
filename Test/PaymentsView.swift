@@ -18,52 +18,17 @@ struct PaymentsView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Accept payments and manage your earnings")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-
-                    // Connect Stripe banner
-                    if !viewModel.stripeConnected {
-                        Button(action: { Task { await viewModel.createConnectAccountLink() } }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "link.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.purple)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Connect Stripe to accept payments")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(.primary)
-                                    Text("Deposits, tips, and service payments")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                if viewModel.isConnectingStripe {
-                                    ProgressView()
-                                        .scaleEffect(0.9)
-                                } else {
-                                    Image(systemName: "chevron.right")
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding()
-                            .background(Color.purple.opacity(0.08))
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.purple.opacity(0.3), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.isConnectingStripe)
-                        .padding(.horizontal)
-                        if let err = viewModel.errorMessage {
-                            Text(err)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .padding(.horizontal)
-                        }
+                    paymentsIntro
+                    if viewModel.needsStripeConnect {
+                        StripeConnectBanner(
+                            viewModel: viewModel,
+                            isDemoMode: authViewModel.isDemoMode
+                        )
+                    } else if let err = viewModel.errorMessage {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
                     }
 
                     // 1. Tap to Pay
@@ -71,7 +36,7 @@ struct PaymentsView: View {
                         icon: "wave.3.right",
                         iconColor: .blue,
                         title: "Tap to Pay",
-                        subtitle: "Hold your iPhone for the customer to tap",
+                        subtitle: "In-person payments (1% platform fee applies)",
                         action: { /* TODO: Stripe Terminal Tap to Pay */ },
                         disabled: !viewModel.stripeConnected
                     )
@@ -117,49 +82,7 @@ struct PaymentsView: View {
                     .opacity((viewModel.stripeConnected && viewModel.availableBalance > 0) ? 1 : 0.6)
                     .padding(.horizontal)
 
-                    // 4. Recent Activity
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent activity")
-                            .font(.title3.weight(.bold))
-                            .padding(.horizontal)
-
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding(24)
-                                .background(Color(.systemBackground))
-                                .cornerRadius(12)
-                                .padding(.horizontal)
-                        } else if viewModel.transactions.isEmpty {
-                            VStack(spacing: 12) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.secondary)
-                                Text("No transactions yet")
-                                    .font(.subheadline.weight(.medium))
-                                Text("When customers pay deposits or for services, they'll appear here")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(32)
-                            .background(Color(.systemBackground))
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
-                            .padding(.horizontal)
-                        } else {
-                            VStack(spacing: 0) {
-                                ForEach(viewModel.transactions) { txn in
-                                    PaymentTransactionRow(transaction: txn, viewModel: viewModel)
-                                }
-                            }
-                            .background(Color(.systemBackground))
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
-                            .padding(.horizontal)
-                        }
-                    }
+                    paymentsRecentActivity
                 }
                 .padding(.vertical, 20)
             }
@@ -192,11 +115,116 @@ struct PaymentsView: View {
         .navigationViewStyle(.stack)
     }
 
+    private var paymentsIntro: some View {
+        Text("Accept payments and manage your earnings")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .padding(.horizontal)
+    }
+
+    private var paymentsRecentActivity: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent activity")
+                .font(.title3.weight(.bold))
+                .padding(.horizontal)
+
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+            } else if viewModel.transactions.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text("No transactions yet")
+                        .font(.subheadline.weight(.medium))
+                    Text("When customers pay deposits or for services, they'll appear here")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(32)
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                .padding(.horizontal)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.transactions) { txn in
+                        PaymentTransactionRow(transaction: txn, viewModel: viewModel)
+                    }
+                }
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                .padding(.horizontal)
+            }
+        }
+    }
+
     private func formatCurrency(_ value: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
+    }
+}
+
+private struct StripeConnectBanner: View {
+    @ObservedObject var viewModel: PaymentsViewModel
+    let isDemoMode: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: {
+                Task { await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.purple)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.stripeStatusHint == nil
+                            ? "Connect Stripe to accept payments"
+                            : "Complete Stripe setup")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.primary)
+                        Text(viewModel.stripeStatusHint ?? "Deposits, tips, and service payments")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    if viewModel.isConnectingStripe {
+                        ProgressView()
+                            .scaleEffect(0.9)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(Color.purple.opacity(0.08))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isConnectingStripe)
+
+            if let err = viewModel.errorMessage {
+                Text(err)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(.horizontal)
     }
 }
 
@@ -340,6 +368,11 @@ struct DepositLinkSheet: View {
                 Text("Enter deposit amount")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                Text("Customer pays this amount. Bookking retains a 1% platform fee on customer payments (not on your subscription).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
 
                 TextField("0.00", text: $amountText)
                     .keyboardType(.numberPad)

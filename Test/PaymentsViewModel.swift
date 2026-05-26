@@ -21,10 +21,15 @@ struct PaymentTransaction: Identifiable {
     let chargeId: String?
 }
 
+@MainActor
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
     @Published var pendingBalance: Double = 0
+    /// True when Stripe Connect can accept charges (not just when an account id exists).
     @Published var stripeConnected: Bool = false
+    /// Show Connect / complete-setup banner when onboarding isn't finished.
+    @Published var needsStripeConnect: Bool = true
+    @Published var stripeStatusHint: String?
     @Published var tenantId: String?
     @Published var isLoading = false
     @Published var isConnectingStripe = false
@@ -39,37 +44,75 @@ class PaymentsViewModel: ObservableObject {
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     func loadData(isDemoMode: Bool = false) async {
-        await MainActor.run { isLoading = true; errorMessage = nil }
+        isLoading = true
+        errorMessage = nil
         if isDemoMode {
-            await MainActor.run { isLoading = false }
+            stripeConnected = false
+            needsStripeConnect = true
+            stripeStatusHint = "Sign in with a real account to connect Stripe."
+            isLoading = false
             return
         }
         guard let uid = Auth.auth().currentUser?.uid else {
-            await MainActor.run { isLoading = false }
+            stripeConnected = false
+            needsStripeConnect = true
+            isLoading = false
             return
         }
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             guard let tid = profile?.tenantId else {
-                await MainActor.run {
-                    tenantId = nil
-                    stripeConnected = false
-                    isLoading = false
-                }
+                tenantId = nil
+                stripeConnected = false
+                needsStripeConnect = true
+                stripeStatusHint = "Complete business setup before connecting payments."
+                isLoading = false
                 return
             }
-            let stripeAccountId = try await firebaseService.fetchTenantStripeAccountId(tenantId: tid)
-            await MainActor.run {
-                tenantId = tid
-                stripeConnected = stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty
-            }
-            if stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty {
+            tenantId = tid
+            await refreshStripeStatus()
+            if stripeConnected {
                 await loadBalance()
                 await loadTransactions()
+            } else {
+                availableBalance = 0
+                pendingBalance = 0
+                transactions = []
             }
-            await MainActor.run { isLoading = false }
+            isLoading = false
         } catch {
-            await MainActor.run { isLoading = false }
+            isLoading = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+    }
+
+    private func refreshStripeStatus() async {
+        do {
+            let result = try await functions.httpsCallable("getConnectAccountStatus").call()
+            let data = result.data as? [String: Any]
+            let hasAccount = data?["hasAccount"] as? Bool ?? false
+            let chargesEnabled = data?["chargesEnabled"] as? Bool ?? false
+            let detailsSubmitted = data?["detailsSubmitted"] as? Bool ?? false
+            let payoutsEnabled = data?["payoutsEnabled"] as? Bool ?? false
+
+            stripeConnected = chargesEnabled
+            needsStripeConnect = !chargesEnabled
+            if chargesEnabled {
+                stripeStatusHint = nil
+            } else if hasAccount && detailsSubmitted {
+                stripeStatusHint = "Stripe is reviewing your account. Pull to refresh."
+            } else if hasAccount {
+                stripeStatusHint = "Finish Stripe setup to accept payments."
+            } else {
+                stripeStatusHint = nil
+            }
+            _ = payoutsEnabled
+        } catch {
+            let stripeAccountId = try? await firebaseService.fetchTenantStripeAccountId(tenantId: tenantId ?? "")
+            let hasId = !(stripeAccountId ?? "").isEmpty
+            stripeConnected = false
+            needsStripeConnect = true
+            stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
         }
     }
 
@@ -79,12 +122,11 @@ class PaymentsViewModel: ObservableObject {
             let data = result.data as? [String: Any]
             let availableCents = (data?["availableCents"] as? NSNumber)?.intValue ?? 0
             let pendingCents = (data?["pendingCents"] as? NSNumber)?.intValue ?? 0
-            await MainActor.run {
-                availableBalance = Double(availableCents) / 100
-                pendingBalance = Double(pendingCents) / 100
-            }
+            availableBalance = Double(availableCents) / 100
+            pendingBalance = Double(pendingCents) / 100
         } catch {
-            await MainActor.run { availableBalance = 0; pendingBalance = 0 }
+            availableBalance = 0
+            pendingBalance = 0
         }
     }
 
@@ -113,9 +155,9 @@ class PaymentsViewModel: ObservableObject {
                     chargeId: chargeId
                 )
             }
-            await MainActor.run { transactions = txns }
+            transactions = txns
         } catch {
-            await MainActor.run { transactions = [] }
+            transactions = []
         }
     }
 
@@ -123,92 +165,108 @@ class PaymentsViewModel: ObservableObject {
         await loadData(isDemoMode: isDemoMode)
     }
 
-    func createConnectAccountLink() async {
-        await MainActor.run { isConnectingStripe = true; errorMessage = nil }
+    func createConnectAccountLink(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
+            return
+        }
+        guard Auth.auth().currentUser != nil else {
+            errorMessage = "You must be signed in to connect Stripe."
+            return
+        }
+        isConnectingStripe = true
+        errorMessage = nil
         do {
-            let result = try await functions.httpsCallable("createConnectAccountLink").call()
+            let base = Constants.Hosting.marketingWebOrigin
+            let result = try await functions.httpsCallable("createConnectAccountLink").call([
+                "returnBaseUrl": base,
+                "returnUrl": "\(base)/account.html?stripe=success",
+                "refreshUrl": "\(base)/account.html?stripe=refresh",
+            ])
             let data = result.data as? [String: Any]
             let urlString = data?["url"] as? String
             guard let url = urlString.flatMap({ URL(string: $0) }) else {
-                throw NSError(domain: "Payments", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"])
+                throw NSError(
+                    domain: "Payments",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
+                )
             }
-            await MainActor.run { isConnectingStripe = false }
-            await UIApplication.shared.open(url)
-            await loadData()
+            isConnectingStripe = false
+            let opened = await UIApplication.shared.open(url)
+            if !opened {
+                errorMessage = "Could not open Stripe. Check that Safari is available."
+                return
+            }
+            await loadData(isDemoMode: false)
         } catch {
-            await MainActor.run {
-                isConnectingStripe = false
-                errorMessage = error.localizedDescription
-            }
+            isConnectingStripe = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 
     /// Creates a Stripe Payment Link for the given amount. amountCents in USD cents (e.g. 2500 = $25).
     func createDepositLink(amountCents: Int) async {
         guard amountCents >= 50 else { return }
-        await MainActor.run { isCreatingDepositLink = true; errorMessage = nil; depositLinkUrl = nil }
+        isCreatingDepositLink = true
+        errorMessage = nil
+        depositLinkUrl = nil
         do {
             let result = try await functions.httpsCallable("createDepositLink").call(["amountCents": amountCents])
             let data = result.data as? [String: Any]
             let urlString = data?["url"] as? String
-            await MainActor.run {
-                isCreatingDepositLink = false
-                depositLinkUrl = urlString
-                if urlString == nil { errorMessage = "Invalid response from server" }
-            }
+            isCreatingDepositLink = false
+            depositLinkUrl = urlString
+            if urlString == nil { errorMessage = "Invalid response from server" }
         } catch {
-            await MainActor.run {
-                isCreatingDepositLink = false
-                errorMessage = error.localizedDescription
-            }
+            isCreatingDepositLink = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 
     /// Withdraw to bank. amountCents in USD cents.
     func createPayout(amountCents: Int) async {
         guard amountCents >= 50 else { return }
-        await MainActor.run { isCreatingPayout = true; errorMessage = nil }
+        isCreatingPayout = true
+        errorMessage = nil
         do {
             _ = try await functions.httpsCallable("createPayout").call(["amountCents": amountCents])
-            await MainActor.run { isCreatingPayout = false }
+            isCreatingPayout = false
             await loadBalance()
             await loadTransactions()
         } catch {
-            await MainActor.run {
-                isCreatingPayout = false
-                errorMessage = error.localizedDescription
-            }
+            isCreatingPayout = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 
     /// Opens Stripe receipt for a charge in Safari.
     func openReceipt(chargeId: String) async {
-        await MainActor.run { errorMessage = nil }
+        errorMessage = nil
         do {
             let result = try await functions.httpsCallable("getReceiptUrl").call(["chargeId": chargeId])
             let data = result.data as? [String: Any]
             guard let urlString = data?["url"] as? String, let url = URL(string: urlString) else { return }
             await UIApplication.shared.open(url)
         } catch {
-            await MainActor.run { errorMessage = error.localizedDescription }
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 
     /// Refund a charge. Pass nil amountCents for full refund.
     func createRefund(chargeId: String, amountCents: Int? = nil, reason: String = "requested_by_customer") async {
-        await MainActor.run { isRefunding = true; errorMessage = nil }
+        isRefunding = true
+        errorMessage = nil
         do {
             var params: [String: Any] = ["chargeId": chargeId, "reason": reason]
             if let amount = amountCents, amount > 0 { params["amountCents"] = amount }
             _ = try await functions.httpsCallable("createRefund").call(params)
-            await MainActor.run { isRefunding = false }
+            isRefunding = false
             await loadBalance()
             await loadTransactions()
         } catch {
-            await MainActor.run {
-                isRefunding = false
-                errorMessage = error.localizedDescription
-            }
+            isRefunding = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 }

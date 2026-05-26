@@ -169,6 +169,8 @@ class DesignViewModel: ObservableObject {
     @Published var industry: String?
     /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
     @Published var webThemeId: String = ""
+    /// Curated color preset for the active template family (`webColorPaletteId` on tenant).
+    @Published var webColorPaletteId: String = "original"
 
     /// Portfolio-style web templates (featured strip, gallery, booking chrome, sidebar).
     var usesPortfolioStyleWebChrome: Bool {
@@ -942,7 +944,6 @@ class DesignViewModel: ObservableObject {
                 classicAboutHeading = tenant?["classicAboutHeading"] as? String ?? ""
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
-                snapFeaturedWorkColorsToNearestPreset()
                 bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
                 galleryPageBackgroundColorHex = tenant?["galleryPageBackgroundColor"] as? String ?? "#FAF8F5"
                 galleryPageTextColorHex = tenant?["galleryPageTextColor"] as? String ?? "#1C1917"
@@ -995,6 +996,12 @@ class DesignViewModel: ObservableObject {
                     industry: tenant?["industry"] as? String
                 )
                 webThemeId = resolvedTheme
+                let paletteFamily = WebTheme(rawValue: resolvedTheme)?.family ?? .classic
+                let storedPaletteId = tenant?["webColorPaletteId"] as? String
+                webColorPaletteId = WebColorPalettes.resolvedPaletteId(stored: storedPaletteId, family: paletteFamily)
+                if (storedPaletteId as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    snapFeaturedWorkColorsToNearestPreset()
+                }
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""
                 sidebarIconColorBooking = tenant?["sidebarIconColorBooking"] as? String ?? ""
                 normalizeFeaturedGridLayoutPresets()
@@ -1743,6 +1750,86 @@ class DesignViewModel: ObservableObject {
     }
 
 
+
+    var activeTemplateFamily: TemplateFamily {
+        WebTheme(rawValue: webThemeId)?.family ?? .classic
+    }
+
+    func applyColorTokensLocally(_ tokens: WebColorPaletteTokens) {
+        backgroundColorHex = tokens.backgroundColor
+        cardSurfaceColorHex = tokens.cardSurfaceColor
+        textColorHex = tokens.textColor
+        primaryColorHex = tokens.primaryColor
+        primaryColorHoverHex = tokens.primaryColorHover
+        featuredWorkBackgroundColorHex = tokens.featuredWorkBackgroundColor
+        featuredWorkTextColorHex = tokens.featuredWorkTextColor
+        bookingFormCardBackgroundColorHex = tokens.bookingFormCardBackgroundColor
+        galleryPageBackgroundColorHex = tokens.galleryPageBackgroundColor
+        galleryPageTextColorHex = tokens.galleryPageTextColor
+        aboutSectionBackgroundColorHex = tokens.aboutSectionBackgroundColor
+        aboutSectionTextColorHex = tokens.aboutSectionTextColor
+        syncTattooSectionThemeFromFeaturedIfNeeded()
+    }
+
+    func currentColorTokens() -> WebColorPaletteTokens {
+        let basePalette = WebColorPalettes.palette(family: activeTemplateFamily, id: webColorPaletteId)
+        var strip = basePalette?.tokens.stripColors ?? [
+            backgroundColorHex, cardSurfaceColorHex, primaryColorHex,
+        ]
+        if strip.count >= 3 { strip[2] = primaryColorHex }
+        return WebColorPaletteTokens(
+            backgroundColor: backgroundColorHex,
+            cardSurfaceColor: cardSurfaceColorHex,
+            textColor: textColorHex,
+            primaryColor: primaryColorHex,
+            primaryColorHover: primaryColorHoverHex,
+            featuredWorkBackgroundColor: featuredWorkBackgroundColorHex,
+            featuredWorkTextColor: featuredWorkTextColorHex,
+            bookingFormCardBackgroundColor: bookingFormCardBackgroundColorHex,
+            galleryPageBackgroundColor: galleryPageBackgroundColorHex,
+            galleryPageTextColor: galleryPageTextColorHex,
+            aboutSectionBackgroundColor: aboutSectionBackgroundColorHex,
+            aboutSectionTextColor: aboutSectionTextColorHex,
+            stripColors: strip
+        )
+    }
+
+    /// Swaps accent on dark templates; applies full v3 palette on Classic / Luxe / Studio 12 when applicable.
+    func applyWebColorAccent(_ accent: WebColorAccentOption) async {
+        guard let tid = tenantId else { return }
+        guard WebColorPalettes.usesAccentPicker(family: activeTemplateFamily) else { return }
+        let baseId = webColorPaletteId
+        let tokens: WebColorPaletteTokens
+        if WebColorPalettes.appliesFullPaletteForAccent(family: activeTemplateFamily, accentId: accent.id),
+           let full = WebColorPalettes.palette(family: activeTemplateFamily, id: accent.id) {
+            tokens = full.tokens
+        } else {
+            tokens = WebColorPalettes.tokensReplacingAccent(currentColorTokens(), accent: accent)
+        }
+        await MainActor.run {
+            errorMessage = nil
+            applyColorTokensLocally(tokens)
+        }
+        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: baseId, tokens: tokens))
+    }
+
+    /// Applies a curated palette for the current template family and persists tenant colors.
+    func applyWebColorPalette(_ palette: WebColorPalette) async {
+        guard let tid = tenantId else { return }
+        guard palette.family == activeTemplateFamily else {
+            await MainActor.run {
+                errorMessage = "This palette doesn’t match your active template."
+            }
+            return
+        }
+        await MainActor.run {
+            errorMessage = nil
+            webColorPaletteId = palette.id
+            applyColorTokensLocally(palette.tokens)
+        }
+        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens))
+    }
+
     /// Applies a **web layout** only. Business type stays in Settings (`industry` unchanged).
     func applyWebTheme(_ theme: WebTheme) async {
         guard let tid = tenantId else { return }
@@ -1751,12 +1838,18 @@ class DesignViewModel: ObservableObject {
             return
         }
         await MainActor.run { errorMessage = nil }
+        let family = theme.family
+        let originalPalette = WebColorPalettes.original(for: family)
+        var updates: [String: Any] = ["webThemeId": theme.rawValue]
+        for (key, value) in WebColorPalettes.firestoreUpdates(paletteId: originalPalette.id, tokens: originalPalette.tokens) {
+            updates[key] = value
+        }
         do {
-            try await firebaseService.updateTenant(tenantId: tid, updates: [
-                "webThemeId": theme.rawValue
-            ])
-            await MainActor.run { webThemeId = theme.rawValue }
+            try await firebaseService.updateTenant(tenantId: tid, updates: updates)
             await MainActor.run {
+                webThemeId = theme.rawValue
+                webColorPaletteId = originalPalette.id
+                applyColorTokensLocally(originalPalette.tokens)
                 invalidateWebPreview()
                 saveSuccess = true
             }

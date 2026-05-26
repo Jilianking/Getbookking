@@ -57,3 +57,6 @@ functions/.env.*
 firebase-debug.log
 **/firebase-debug.log
 
+# Firebase CLI local state (deploy cache, emulator data, etc.)
+.firebase/
+

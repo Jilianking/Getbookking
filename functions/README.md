@@ -23,3 +23,12 @@
 ## Functions
 
 - **createConnectAccountLink** (callable): Creates a Stripe Connect account (if needed) and returns an Account Link URL for onboarding. The iOS app opens this URL in Safari.
+
+### Platform fee (customer payments)
+
+A **1%** Connect application fee (`PLATFORM_FEE_BPS = 100` in `index.js`) is collected on:
+
+- **createDepositLink** — customer deposit payment links
+- **createPaymentIntentForTapToPay** — in-person Tap to Pay
+
+It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). The customer pays the listed amount; the fee is deducted from the provider’s side (minimum 1¢ per charge). Refunds use `refund_application_fee: true`.

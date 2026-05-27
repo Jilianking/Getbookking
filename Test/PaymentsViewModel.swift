@@ -240,6 +240,32 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Creates a Stripe PaymentIntent for Tap to Pay (Stripe Terminal).
+    /// - Returns: `client_secret` for the created PaymentIntent.
+    #if TAP_TO_PAY_ENABLED
+    func createPaymentIntentForTapToPay(amountCents: Int) async throws -> String {
+        guard amountCents >= 50 else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Amount must be at least $0.50"]
+            )
+        }
+        let result = try await functions.httpsCallable("createPaymentIntentForTapToPay").call([
+            "amountCents": amountCents,
+        ])
+        let data = result.data as? [String: Any]
+        guard let clientSecret = data?["clientSecret"] as? String, !clientSecret.isEmpty else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid response from server (missing clientSecret)"]
+            )
+        }
+        return clientSecret
+    }
+    #endif
+
     /// Opens Stripe receipt for a charge in Safari.
     func openReceipt(chargeId: String) async {
         errorMessage = nil

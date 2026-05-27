@@ -4,52 +4,121 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Terms of Service — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/logo-dark-32.png" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/logo-dark-128.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/logo-dark-256.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --text-primary: #1A1410;
-      --text-secondary: #6B5E4A;
-      --border: #E8E0D4;
-      --brand-warm: #8B6F47;
-    }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      color: var(--text-primary);
-      background: #FDFAF6;
-      font-size: 16px;
-      line-height: 1.65;
-      padding: 48px 24px 64px;
-      max-width: 640px;
-      margin: 0 auto;
-    }
-    h1 {
-      font-family: 'Instrument Serif', serif;
-      font-weight: 400;
-      font-size: 32px;
-      margin-bottom: 8px;
-    }
-    .meta { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; }
-    p { margin-bottom: 16px; color: var(--text-secondary); }
-    a { color: var(--brand-warm); }
-    nav { margin-top: 32px; font-size: 14px; }
-  </style>
+  <link rel="stylesheet" href="assets/legal.css" />
 </head>
 <body>
-  <h1>Terms of Service</h1>
-  <p class="meta">Placeholder summary — replace with your final legal terms before launch.</p>
-  <p>
-    These Terms of Service govern your use of Get Bookking’s websites, applications, and related services.
-    By creating an account or using our services, you agree to these terms. This page is a placeholder;
-    your counsel should publish the full agreement covering subscriptions, acceptable use, liability,
-    and dispute resolution.
-  </p>
-  <p>
-    For billing and trials: subscription terms, renewal, cancellation, and refunds should be described
-    in detail in your production terms and linked from checkout.
-  </p>
-  <nav><a href="index.html">&larr; Back to Get Bookking</a> · <a href="privacy.html">Privacy Policy</a></nav>
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-64.png" alt="" class="nav-logo-mark" width="24" height="24" />
+      <span>Get Bookking</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="privacy.html">Privacy</a></li>
+      <li><a href="terms.html" class="is-active">Terms</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-login">Log in</a>
+      <a href="signup.html" class="nav-cta">Start free &rarr;</a>
+    </div>
+  </nav>
+
+  <section class="legal-hero">
+    <div class="sec-inner">
+      <div class="sec-label">Legal</div>
+      <h1>Terms of Service</h1>
+      <p class="legal-meta">Last updated: May 26, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
+    </div>
+  </section>
+
+  <section class="legal-body">
+    <div class="sec-inner legal-content">
+
+      <p>These Terms of Service ("Terms") govern your access to and use of the Get Bookking websites, mobile applications, and related services (collectively, the "Services"). By creating an account or otherwise using the Services, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree, you may not use the Services.</p>
+
+      <h2>1. Description of Services</h2>
+      <p>Get Bookking provides online scheduling, booking management, point-of-sale, and client communication tools for independent service providers and small businesses. Features may include appointment scheduling, booking requests, payment processing facilitated by Stripe, Inc., and an optional client SMS messaging program as described below.</p>
+
+      <h2>2. Client Texting Program (SMS)</h2>
+      <p>Businesses that subscribe to an eligible plan may enable a dedicated SMS phone number to communicate directly with their own customers. The following disclosures apply to that program:</p>
+
+      <div class="sms-box">
+        <p><strong>Program Name:</strong> Get Bookking Client Texting</p>
+        <p><strong>Program Description:</strong> Participating businesses use a dedicated, business-specific phone number to send and receive text messages with customers who have explicitly opted in through that business's online booking form. Messages are used exclusively for appointment confirmations, scheduling reminders, booking follow-up, and customer care communications directly related to an active service request or booking. This program is not used for mass marketing, unsolicited promotional campaigns, or bulk messaging.</p>
+        <p><strong>Who Sends Messages:</strong> Messages are sent by the individual business (the "subscriber"), not by Get Bookking. Each business operates its own dedicated number. Get Bookking provides the technical infrastructure; the business is the identified sender responsible for all message content.</p>
+        <p><strong>Customer Consent (Opt-In):</strong> End customers provide express written consent by submitting their mobile phone number on a business's public booking page and affirmatively agreeing to receive text messages from that business. Consent is collected at the point of booking and is specific to the business whose booking form the customer used. Businesses may not message customers who have not provided this consent.</p>
+        <p><strong>Message Frequency:</strong> Varies. Message frequency is typically low and directly tied to booking activity and customer-initiated conversations. No recurring automated marketing messages are sent.</p>
+        <p><strong>Message and Data Rates:</strong> Message and data rates may apply. Carriers are not liable for delayed or undelivered messages.</p>
+        <p><strong>Usage Limits:</strong> Each business account is allocated up to 1,000 total outbound client SMS messages unless otherwise specified in your plan or a separate written agreement. Additional messaging capacity may require a plan upgrade.</p>
+        <p><strong>Opt-Out:</strong> End customers may opt out of receiving messages from a business at any time by replying <strong>STOP</strong> to any message. Upon receipt of a STOP reply, no further messages will be sent to that number, except for a single opt-out confirmation message as permitted under applicable law and carrier guidelines. Opt-out requests are processed promptly and logged.</p>
+        <p><strong>Help:</strong> End customers may reply <strong>HELP</strong> to any message for assistance, or contact us directly at <a href="mailto:support@getbookking.com">support@getbookking.com</a>.</p>
+        <p><strong>Business Responsibilities:</strong> Businesses are solely responsible for the content of all messages sent through their account and for compliance with all applicable laws and regulations, including but not limited to the Telephone Consumer Protection Act (TCPA), the CAN-SPAM Act, and applicable carrier guidelines. Get Bookking reserves the right to suspend or terminate messaging access for any account that violates these Terms or applicable messaging policies.</p>
+      </div>
+
+      <h2>3. Accounts and Acceptable Use</h2>
+      <p>You must provide accurate, current, and complete information when creating an account and keep your account credentials secure. You are responsible for all activity that occurs under your account.</p>
+      <p>You agree not to use the Services for any unlawful purpose or in any manner that violates these Terms. Prohibited uses include, without limitation:</p>
+      <ul>
+        <li>Sending unsolicited commercial messages or spam through the client texting program;</li>
+        <li>Harassing, threatening, or abusing any person through the Services;</li>
+        <li>Impersonating any individual, business, or entity;</li>
+        <li>Attempting to gain unauthorized access to any part of the Services or another user's account;</li>
+        <li>Using the Services in violation of any applicable law or regulation.</li>
+      </ul>
+
+      <h2>4. Subscriptions, Billing, and Payments</h2>
+      <p>Access to certain features requires a paid subscription. Subscription plans, pricing, billing cycles, free trial terms, and cancellation procedures are described at the time of signup and within your account settings. All payments are processed securely by Stripe, Inc. Fees are non-refundable except as required by applicable law or as expressly stated in a separate written agreement.</p>
+      <p>We reserve the right to modify pricing with reasonable advance notice. Continued use of the Services after a pricing change takes effect constitutes acceptance of the new pricing.</p>
+
+      <h2>5. Intellectual Property</h2>
+      <p>The Services and all content, features, and functionality thereof — including but not limited to software, text, graphics, logos, and user interface designs — are owned by Software by King or its licensors and are protected by applicable intellectual property laws. Nothing in these Terms grants you any right, title, or interest in the Services beyond the limited license to use them as described herein.</p>
+
+      <h2>6. Disclaimers</h2>
+      <p class="caps">THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS. YOUR USE OF THE SERVICES IS AT YOUR SOLE RISK.</p>
+
+      <h2>7. Limitation of Liability</h2>
+      <p class="caps">TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SOFTWARE BY KING AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AND LICENSORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS OPPORTUNITIES, ARISING OUT OF OR RELATING TO THESE TERMS OR YOUR USE OF THE SERVICES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+      <p class="caps">OUR TOTAL CUMULATIVE LIABILITY TO YOU FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICES SHALL NOT EXCEED THE TOTAL FEES YOU PAID TO US IN THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE CLAIM.</p>
+
+      <h2>8. Indemnification</h2>
+      <p>You agree to indemnify, defend, and hold harmless Software by King and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising out of or in any way connected with your access to or use of the Services, your violation of these Terms, or your violation of any applicable law or the rights of any third party.</p>
+
+      <h2>9. Modifications to These Terms</h2>
+      <p>We reserve the right to modify these Terms at any time. We will post the revised Terms on this page with an updated "Last updated" date. For material changes, we may also provide notice through the Services or via email. Your continued use of the Services after any modification constitutes your acceptance of the updated Terms.</p>
+
+      <h2>10. Governing Law</h2>
+      <p>These Terms shall be governed by and construed in accordance with the laws of the State of Florida, without regard to its conflict of law principles. Any disputes arising under these Terms shall be subject to the exclusive jurisdiction of the courts located in Florida.</p>
+
+      <h2>11. Contact Us</h2>
+      <p>If you have any questions about these Terms, please contact us at:</p>
+      <p>
+        <strong>Software by King / Get Bookking</strong><br>
+        Email: <a href="mailto:support@getbookking.com">support@getbookking.com</a><br>
+        Website: <a href="https://getbookking.com">getbookking.com</a>
+      </p>
+
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">
+      <img src="assets/brand/logo-light-56.png" alt="" class="footer-logo-mark" width="18" height="18" />
+      <span>Get Bookking</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="mailto:support@getbookking.com">Contact</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
+  </footer>
+
 </body>
 </html>

@@ -47,19 +47,6 @@ class SecretsManager {
         return secrets["API_LOCAL_URL"] as? String ?? "http://localhost:3000/api"
     }
     
-    // MARK: - Twilio Configuration (if needed for messaging)
-    var twilioAccountSID: String {
-        return secrets["TWILIO_ACCOUNT_SID"] as? String ?? ""
-    }
-    
-    var twilioAuthToken: String {
-        return secrets["TWILIO_AUTH_TOKEN"] as? String ?? ""
-    }
-    
-    var twilioPhoneNumber: String {
-        return secrets["TWILIO_PHONE_NUMBER"] as? String ?? ""
-    }
-    
     // MARK: - Admin Configuration
     var adminPasswordHash: String {
         return secrets["ADMIN_PASSWORD_HASH"] as? String ?? ""
@@ -68,6 +55,14 @@ class SecretsManager {
     // MARK: - Stripe Configuration (if needed)
     var stripePublishableKey: String {
         return secrets["STRIPE_PUBLISHABLE_KEY"] as? String ?? ""
+    }
+
+    // MARK: - Stripe Terminal (Tap to Pay on iPhone)
+    // Required by Stripe Terminal `TapToPayConnectionConfigurationBuilder(locationId:)`.
+    // Add to `Secrets.plist`:
+    //   TAP_TO_PAY_LOCATION_ID = tml_<id>
+    var tapToPayLocationId: String {
+        return secrets["TAP_TO_PAY_LOCATION_ID"] as? String ?? ""
     }
     
     // MARK: - Validation

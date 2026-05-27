@@ -88,6 +88,31 @@
       margin-top: 8px;
     }
     .btn-primary:hover { opacity: 0.92; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      display: inline-block;
+      padding: 12px 20px;
+      background: transparent;
+      color: var(--brand-dark);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+      margin-right: 8px;
+    }
+    .billing-box {
+      margin: 20px 0;
+      padding: 16px;
+      border-radius: 12px;
+      background: var(--brand-offwhite);
+      border: 1px solid var(--border);
+    }
+    .billing-box h2 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+  .billing-status { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; }
+    .acct-error { color: #b42318; font-size: 14px; margin-top: 8px; }
     .footer-links { margin-top: 28px; font-size: 14px; }
     .footer-links a { color: var(--brand-warm); text-decoration: none; font-weight: 500; }
     .footer-links a:hover { text-decoration: underline; }
@@ -117,6 +142,14 @@
         <h1>Your account</h1>
         <p id="accountSubtitle">Manage your subscription and business settings.</p>
         <p id="signedInEmail" class="hidden"></p>
+        <div id="billingBox" class="billing-box hidden">
+          <h2>Subscription</h2>
+          <p id="billingStatus" class="billing-status">Loading…</p>
+          <button type="button" id="startSubBtn" class="btn-primary hidden">Start subscription today</button>
+          <button type="button" id="billingPortalBtn" class="btn-secondary hidden">Manage billing</button>
+          <p id="billingNote" class="hidden" style="font-size:13px;margin-top:12px;">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
+          <p id="billingError" class="acct-error hidden"></p>
+        </div>
         <a href="index.html" class="btn-primary">Back to home</a>
         <div class="footer-links">
           <a href="#" id="signOutLink">Sign out</a>
@@ -129,10 +162,12 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script>
     firebase.initializeApp(firebaseConfig);
     var auth = firebase.auth();
+    var fns = firebase.app().functions('us-central1');
 
     function showPanel(id) {
       ['stripeSuccessPanel', 'stripeRefreshPanel', 'accountDefaultPanel'].forEach(function(pid) {
@@ -157,6 +192,76 @@
       });
     });
 
+    function loadBilling() {
+      var box = document.getElementById('billingBox');
+      var statusEl = document.getElementById('billingStatus');
+      var startBtn = document.getElementById('startSubBtn');
+      var portalBtn = document.getElementById('billingPortalBtn');
+      var noteEl = document.getElementById('billingNote');
+      var errEl = document.getElementById('billingError');
+      if (!box) return;
+      box.classList.remove('hidden');
+      fns.httpsCallable('getBillingSummary')({}).then(function(res) {
+        var d = res.data || {};
+        errEl.classList.add('hidden');
+        if (!d.hasStripeCustomer) {
+          statusEl.textContent = d.message || 'Billing not set up yet.';
+          startBtn.classList.add('hidden');
+          portalBtn.classList.add('hidden');
+          noteEl.classList.add('hidden');
+          return;
+        }
+        var sub = d.subscription;
+        var plan = (d.firestorePlan || 'solo').toString();
+        if (sub && sub.status === 'trialing') {
+          statusEl.textContent = 'Free trial (' + plan + ' plan). Your card will be charged when the trial ends unless you cancel.';
+          startBtn.classList.remove('hidden');
+          noteEl.classList.remove('hidden');
+          portalBtn.classList.remove('hidden');
+        } else if (sub && sub.status === 'active') {
+          statusEl.textContent = 'Active — ' + (sub.planName || plan) + ' plan.';
+          startBtn.classList.add('hidden');
+          noteEl.classList.add('hidden');
+          portalBtn.classList.remove('hidden');
+        } else {
+          statusEl.textContent = sub ? ('Status: ' + sub.status) : ('Plan: ' + plan);
+          portalBtn.classList.remove('hidden');
+        }
+      }).catch(function(err) {
+        statusEl.textContent = 'Could not load billing.';
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      });
+    }
+
+    document.getElementById('startSubBtn').addEventListener('click', function() {
+      var btn = document.getElementById('startSubBtn');
+      var errEl = document.getElementById('billingError');
+      btn.disabled = true;
+      errEl.classList.add('hidden');
+      fns.httpsCallable('startSubscriptionToday')({}).then(function() {
+        loadBilling();
+        btn.disabled = false;
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+      });
+    });
+
+    document.getElementById('billingPortalBtn').addEventListener('click', function() {
+      var errEl = document.getElementById('billingError');
+      errEl.classList.add('hidden');
+      fns.httpsCallable('createBillingPortalSession')({
+        marketingOrigin: window.location.origin
+      }).then(function(res) {
+        if (res.data && res.data.url) window.location.href = res.data.url;
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      });
+    });
+
     auth.onAuthStateChanged(function(user) {
       if (!user) {
         if (stripeParam === 'success' || stripeParam === 'refresh') return;
@@ -167,6 +272,9 @@
       if (emailEl && user.email) {
         emailEl.textContent = 'Signed in as ' + user.email;
         emailEl.classList.remove('hidden');
+      }
+      if (stripeParam !== 'success' && stripeParam !== 'refresh') {
+        loadBilling();
       }
     });
   </script>

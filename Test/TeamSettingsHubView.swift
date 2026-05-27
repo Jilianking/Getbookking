@@ -70,7 +70,7 @@ struct TeamSettingsHubView: View {
                 } label: {
                     settingsRow(
                         title: "Notifications",
-                        subtitle: "Client messages and summary email"
+                        subtitle: "Client texting, SMS toggles, summary email"
                     )
                 }
             }

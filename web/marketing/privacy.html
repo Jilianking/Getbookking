@@ -4,51 +4,153 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/logo-dark-32.png" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/logo-dark-128.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/logo-dark-256.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --text-primary: #1A1410;
-      --text-secondary: #6B5E4A;
-      --brand-warm: #8B6F47;
-    }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      color: var(--text-primary);
-      background: #FDFAF6;
-      font-size: 16px;
-      line-height: 1.65;
-      padding: 48px 24px 64px;
-      max-width: 640px;
-      margin: 0 auto;
-    }
-    h1 {
-      font-family: 'Instrument Serif', serif;
-      font-weight: 400;
-      font-size: 32px;
-      margin-bottom: 8px;
-    }
-    .meta { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; }
-    p { margin-bottom: 16px; color: var(--text-secondary); }
-    a { color: var(--brand-warm); }
-    nav { margin-top: 32px; font-size: 14px; }
-  </style>
+  <link rel="stylesheet" href="assets/legal.css" />
 </head>
 <body>
-  <h1>Privacy Policy</h1>
-  <p class="meta">Placeholder summary — replace with your final privacy policy before launch.</p>
-  <p>
-    This policy describes how Get Bookking collects, uses, and shares information when you use our
-    websites and apps. This page is a placeholder. Your production policy should cover categories of
-    data (account, booking, payments processed by Stripe, analytics, cookies), retention, security,
-    international transfers, and user rights.
-  </p>
-  <p>
-    Payment card details are handled by Stripe according to their terms; Get Bookking does not store
-    your full card number on our servers.
-  </p>
-  <nav><a href="index.html">&larr; Back to Get Bookking</a> · <a href="terms.html">Terms of Service</a></nav>
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-64.png" alt="" class="nav-logo-mark" width="24" height="24" />
+      <span>Get Bookking</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="privacy.html" class="is-active">Privacy</a></li>
+      <li><a href="terms.html">Terms</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-login">Log in</a>
+      <a href="signup.html" class="nav-cta">Start free &rarr;</a>
+    </div>
+  </nav>
+
+  <section class="legal-hero">
+    <div class="sec-inner">
+      <div class="sec-label">Legal</div>
+      <h1>Privacy Policy</h1>
+      <p class="legal-meta">Last updated: May 26, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
+    </div>
+  </section>
+
+  <section class="legal-body">
+    <div class="sec-inner legal-content">
+
+      <p>This Privacy Policy describes how Software by King / Get Bookking collects, uses, discloses, and protects information in connection with your use of our websites, applications, and related services (collectively, the "Services"), including the optional client SMS texting features available to businesses using our platform.</p>
+      <p>By using the Services, you agree to the collection and use of information as described in this policy.</p>
+
+      <h2>1. Information We Collect</h2>
+      <p>We collect information in the following categories:</p>
+
+      <p><strong>Account and Business Data:</strong> When you register for an account, we collect your name, email address, business name, login credentials, and account settings. Billing information is collected and processed directly by Stripe, Inc.; we do not store full payment card numbers on our servers.</p>
+
+      <p><strong>Booking and Customer Data:</strong> Information submitted through booking forms, including customer names, email addresses, phone numbers, service details, appointment notes, and any other fields enabled by the business. This data is provided by customers of the businesses using our platform.</p>
+
+      <p><strong>SMS and Messaging Data:</strong> When a business enables the client texting feature, we collect and process the following in connection with that program:</p>
+      <ul>
+        <li>Mobile phone numbers provided by end customers on a business's booking form;</li>
+        <li>Records of SMS consent, including the date, time, and method of opt-in;</li>
+        <li>Message content and delivery metadata;</li>
+        <li>Opt-out status, including records of STOP and HELP replies;</li>
+        <li>Logs required to operate messaging services and comply with carrier requirements.</li>
+      </ul>
+
+      <p><strong>Technical and Usage Data:</strong> Device identifiers, IP addresses, browser type, operating system, pages visited, and other usage data collected via cookies and similar technologies to secure and improve the Services.</p>
+
+      <h2>2. How We Use Information</h2>
+      <p>We use the information we collect to:</p>
+      <ul>
+        <li>Provide, operate, maintain, and improve the Services;</li>
+        <li>Process subscription payments and manage billing;</li>
+        <li>Enable online booking and appointment scheduling;</li>
+        <li>Provision and operate business-specific SMS phone numbers;</li>
+        <li>Deliver, route, and log text messages on behalf of businesses;</li>
+        <li>Enforce usage limits and prevent fraud or abuse;</li>
+        <li>Respond to support requests and communicate with users;</li>
+        <li>Comply with legal obligations and carrier requirements.</li>
+      </ul>
+
+      <h2>3. SMS Consent, Messaging, and Opt-Out</h2>
+
+      <div class="highlight-box">
+        <p><strong>How Consent Is Obtained:</strong> End customers provide express written consent to receive SMS messages by entering their mobile phone number on a business's public booking form and affirmatively agreeing to receive appointment and booking-related text messages from that business. Consent is specific to the individual business whose booking page the customer used and is recorded at the time of submission.</p>
+        <p><strong>Purpose of Messages:</strong> Messages sent through the Get Bookking platform are limited to appointment confirmations, scheduling reminders, booking follow-up, and customer care communications directly related to an active booking or service request. The platform is not used for mass marketing, unsolicited promotional content, or bulk messaging campaigns.</p>
+        <p><strong>Message Frequency:</strong> Message frequency varies and is typically low, tied directly to booking activity and customer-initiated conversations.</p>
+        <p><strong>Message and Data Rates:</strong> Standard message and data rates may apply.</p>
+        <p><strong>Opt-Out:</strong> End customers may opt out of receiving messages from a business at any time by replying <strong>STOP</strong>. Opt-out requests are honored immediately, and no further messages will be sent to that number, except for a single opt-out confirmation as permitted by applicable law and carrier rules. Opt-out records are logged and retained.</p>
+        <p><strong>Help:</strong> End customers may reply <strong>HELP</strong> for assistance, or contact us at <a href="mailto:support@getbookking.com">support@getbookking.com</a>.</p>
+      </div>
+
+      <h2>4. How We Share Information</h2>
+      <p>We do not sell personal information. We share information only in the following circumstances:</p>
+
+      <p><strong>Service Providers:</strong> We share information with third-party service providers that assist us in operating the Services, including:</p>
+      <ul>
+        <li><strong>Stripe, Inc.</strong> — payment processing;</li>
+        <li><strong>Twilio, Inc.</strong> — SMS infrastructure and telecommunications services for message delivery;</li>
+        <li>Cloud hosting, analytics, and security providers.</li>
+      </ul>
+      <p>These providers are authorized to use information only as necessary to perform services on our behalf and are prohibited from using it for their own independent purposes.</p>
+
+      <div class="no-share-box">
+        <p>We do not sell, rent, or share end-customer phone numbers or SMS consent data with any third party for their own marketing or commercial purposes.</p>
+      </div>
+
+      <p><strong>Business Users:</strong> Businesses using Get Bookking may communicate via SMS with their own customers who have explicitly opted in through that business's booking form. Businesses may not use the platform to contact individuals who have not consented or for unsolicited promotional messaging.</p>
+
+      <p><strong>Legal Requirements:</strong> We may disclose information if required to do so by applicable law, regulation, legal process, or governmental request, or to protect the rights, property, or safety of Software by King, our users, or the public.</p>
+
+      <p><strong>Business Transfers:</strong> In connection with a merger, acquisition, reorganization, or sale of all or substantially all of our assets, information may be transferred as part of that transaction. We will provide reasonable notice where required by applicable law.</p>
+
+      <h2>5. Data Retention</h2>
+      <p>We retain personal information for as long as necessary to provide the Services, fulfill the purposes described in this policy, meet our legal and contractual obligations, resolve disputes, and enforce our agreements. SMS consent records and opt-out logs are retained for the period required by applicable carrier rules and regulations.</p>
+      <p>When information is no longer required, we delete or de-identify it in accordance with our internal data retention procedures.</p>
+
+      <h2>6. Security</h2>
+      <p>We implement reasonable administrative, technical, and physical safeguards designed to protect the information we collect and maintain against unauthorized access, disclosure, alteration, or destruction. However, no method of electronic transmission or storage is completely secure, and we cannot guarantee absolute security.</p>
+      <p>Payment card details are processed and stored by Stripe in accordance with Stripe's security standards. Get Bookking does not store full payment card numbers on its own servers.</p>
+
+      <h2>7. Your Choices and Rights</h2>
+      <p>Depending on your jurisdiction, you may have rights to access, correct, delete, or restrict certain processing of your personal information. Account holders may update many settings directly within the application. To exercise other rights or submit a privacy-related request, please contact us at <a href="mailto:support@getbookking.com">support@getbookking.com</a>.</p>
+      <p>End customers who receive SMS messages may opt out at any time by replying STOP, and may contact the relevant business or us directly for further assistance.</p>
+
+      <h2>8. Cookies and Tracking Technologies</h2>
+      <p>We use cookies and similar tracking technologies to operate and improve the Services, analyze usage patterns, and support security measures. You may configure your browser to refuse cookies, though doing so may affect the functionality of certain features.</p>
+
+      <h2>9. Children's Privacy</h2>
+      <p>The Services are not directed to individuals under the age of 13, and we do not knowingly collect personal information from children under 13. If we become aware that we have collected personal information from a child under 13 without verifiable parental consent, we will take steps to delete that information promptly.</p>
+
+      <h2>10. Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time to reflect changes in our practices, technologies, or legal requirements. When we make changes, we will post the revised policy on this page with an updated "Last updated" date. For material changes, we may provide additional notice through the Services or via email. Your continued use of the Services after any update constitutes your acceptance of the revised policy.</p>
+
+      <h2>11. Contact Us</h2>
+      <p>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:</p>
+      <p>
+        <strong>Software by King / Get Bookking</strong><br>
+        Email: <a href="mailto:support@getbookking.com">support@getbookking.com</a><br>
+        Website: <a href="https://getbookking.com">getbookking.com</a>
+      </p>
+
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">
+      <img src="assets/brand/logo-light-56.png" alt="" class="footer-logo-mark" width="18" height="18" />
+      <span>Get Bookking</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="mailto:support@getbookking.com">Contact</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
+  </footer>
+
 </body>
 </html>

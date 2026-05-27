@@ -10,6 +10,8 @@ import Combine
 import UIKit
 import FirebaseFirestore
 import FirebaseStorage
+import FirebaseAuth
+import FirebaseFunctions
 
 class FirebaseService: ObservableObject {
     @Published var bookings: [Booking] = []
@@ -18,6 +20,7 @@ class FirebaseService: ObservableObject {
     @Published var errorMessage: String?
 
     private let db = Firestore.firestore()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     private var bookingsListener: ListenerRegistration?
 
     // MARK: - Fetch Services (legacy)
@@ -215,39 +218,72 @@ class FirebaseService: ObservableObject {
     }
 
     // MARK: - Messages
+    private func currentTenantId() async throws -> String {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
+        }
+        let profile = try await fetchProviderProfile(uid: uid)
+        guard let tenantId = profile?.tenantId, !tenantId.isEmpty else {
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No tenant linked to account"])
+        }
+        return tenantId
+    }
+
     func fetchAllThreads() async throws -> [String] {
-        let snapshot = try await db.collection("messages").getDocuments()
-        let threadIds = Set(snapshot.documents.compactMap { doc -> String? in
-            doc.data()["threadId"] as? String
-        })
-        return Array(threadIds)
+        let tenantId = try await currentTenantId()
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("smsThreads")
+            .order(by: "lastMessageAt", descending: true)
+            .getDocuments()
+        return snapshot.documents.compactMap { doc -> String? in
+            let data = doc.data()
+            let threadId = (data["threadId"] as? String) ?? doc.documentID
+            return threadId.isEmpty ? nil : threadId
+        }
     }
 
     func fetchMessages(threadId: String) async throws -> [Message] {
-        let snapshot = try await db.collection("messages")
+        let tenantId = try await currentTenantId()
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("smsLog")
             .whereField("threadId", isEqualTo: threadId)
             .order(by: "createdAt", descending: false)
             .getDocuments()
         return snapshot.documents.compactMap { doc -> Message? in
-            var data = firestoreDictToJSONCompatible(doc.data())
-            data["id"] = doc.documentID
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: data) else { return nil }
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .secondsSince1970
-            guard var message = try? decoder.decode(Message.self, from: jsonData) else { return nil }
-            message.id = doc.documentID
-            return message
+            let data = doc.data()
+            let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+            let body = data["body"] as? String ?? ""
+            let direction = (data["direction"] as? String ?? "").lowercased()
+            let from = data["from"] as? String ?? ""
+            let to = data["to"] as? String ?? ""
+            let counterpartyPhone = direction == "outbound" ? to : from
+            let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return Message(
+                id: doc.documentID,
+                clientId: counterpartyPhone,
+                clientName: displayName.isEmpty ? PhoneFormatting.displayUS(counterpartyPhone) : displayName,
+                content: body,
+                sender: direction == "outbound" ? .admin : .client,
+                createdAt: createdAt,
+                read: true,
+                threadId: threadId
+            )
         }
     }
 
     func sendMessage(_ message: Message) async throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .secondsSince1970
-        let data = try encoder.encode(message)
-        guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode message"])
+        let toPhone = PhoneFormatting.normalizedForStorage(message.clientId) ?? message.clientId
+        let payload: [String: Any] = [
+            "to": toPhone,
+            "body": message.content,
+            "clientName": message.clientName
+        ]
+        do {
+            _ = try await functions.httpsCallable("sendClientSms").call(payload)
+        } catch {
+            let msg = FirebaseFunctionsErrorHelper.message(from: error)
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])
         }
-        _ = try await db.collection("messages").addDocument(data: dict)
     }
 
     // MARK: - Tenant / Multi-tenant

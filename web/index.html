@@ -131,6 +131,70 @@
     }
     .back-link:hover { text-decoration: underline; }
     .error { color: #c00; font-size: 14px; margin-bottom: 16px; }
+    .booking-sms-consent {
+      margin: 12px 0 4px;
+      padding: 12px 14px;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.02);
+    }
+    .booking-sms-consent-phone {
+      margin-bottom: 12px;
+    }
+    .booking-sms-consent-phone-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #444;
+    }
+    .booking-sms-consent-phone-input {
+      width: 100%;
+      font-size: 16px;
+      padding: 10px 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 8px;
+      background: #fff;
+      color: inherit;
+    }
+    .booking-form--guided .booking-sms-consent-phone-input {
+      background: var(--bk-input-bg, #fff);
+      border-color: var(--bk-border, rgba(0,0,0,0.12));
+      color: var(--bk-fg, inherit);
+    }
+    .booking-sms-consent-label {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #444;
+      cursor: pointer;
+    }
+    .booking-sms-consent-label input {
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+    .booking-sms-consent-label a { color: inherit; text-decoration: underline; }
+    .book-legal-privacy {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .book-legal-privacy:hover { opacity: 0.85; }
+    .book-legal-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border, #E8E0D4);
+    }
+    .book-legal-footer .classic-footer-copy { text-align: center; }
+    .classic-footer-copy .book-legal-privacy,
+    .blade-footer-copy .book-legal-privacy,
+    .s12-footer-copy .book-legal-privacy,
+    .luxe-footer-copy .book-legal-privacy,
+    .stonecut-page > footer .book-legal-privacy {
+      color: inherit;
+      opacity: 0.85;
+    }
     .success { color: #22c55e; font-size: 16px; font-weight: 500; text-align: center; padding: 24px; }
     .loading { text-align: center; padding: 40px; color: #666; }
     .hero-page { min-height: 100vh; display: flex; flex-direction: column; }
@@ -5906,12 +5970,23 @@
       function contactPhoneDisplayEscaped(tenant) {
         return tenant.contactPhone ? esc(displayPhoneUS(tenant.contactPhone)) : '';
       }
+      var BOOK_PRIVACY_URL = 'https://getbookking.com/privacy.html';
+      var BOOK_TERMS_URL = 'https://getbookking.com/terms.html';
+      function footerPrivacyLinkHtml() {
+        return ' · <a href="' + BOOK_PRIVACY_URL + '" class="book-legal-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>';
+      }
       /** One quick-edit region for © line (avoids split boxes on year / name / rights). */
       function footerLegalLineHtml(tenant) {
         var y = new Date().getFullYear();
         var name = tenant.displayName || 'Studio';
         var fallback = '© ' + y + ' ' + name + '. All rights reserved.';
-        return wcSpan(tenant, 'wc.footer.legalLine', fallback);
+        return wcSpan(tenant, 'wc.footer.legalLine', fallback) + footerPrivacyLinkHtml();
+      }
+      /** Minimal footer for /book when theme has no site footer (e.g. default tattoo). */
+      function minimalBookLegalFooterHtml(tenant) {
+        return '<footer class="classic-footer book-legal-footer">' +
+          '<p class="classic-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
+          '</footer>';
       }
       function publicSitePageUnavailableHtml(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -6940,9 +7015,10 @@
           }
         }
         if (ordered.contact.length) {
+          var contactFields = ordered.contact.filter(function(cf) { return cf.key !== 'phone'; });
           var contactInner = '<p class="booking-guided-section-label">' + esc(guidedSectionLabel('contact')) + '</p>' +
             '<div class="booking-guided-contact-fields">' +
-            ordered.contact.map(function(cf) { return guidedFieldHtml(cf, services, presel); }).join('') +
+            contactFields.map(function(cf) { return guidedFieldHtml(cf, services, presel); }).join('') +
             '</div>';
           addPanel('contact', contactInner, 'booking-guided-step-panel--contact');
         }
@@ -7141,6 +7217,120 @@
         if (phase === 'service') return false;
         return true;
       }
+      function tenantClientSmsActive(tenant) {
+        return !!(tenant && tenant.smsEnabled === true &&
+          String(tenant.smsStatus || '').toLowerCase() === 'active');
+      }
+      function formSchemaPhoneMeta(fm) {
+        var label = 'Mobile phone';
+        var placeholder = '(555) 123-4567';
+        var required = true;
+        try {
+          var enc = fm.getAttribute('data-guided-form-schema-encoded');
+          if (enc) {
+            var fields = JSON.parse(decodeURIComponent(enc));
+            for (var i = 0; i < fields.length; i++) {
+              if (fields[i].key === 'phone') {
+                if (fields[i].label) label = String(fields[i].label);
+                if (fields[i].placeholder) placeholder = String(fields[i].placeholder);
+                required = fields[i].required !== false;
+                break;
+              }
+            }
+          }
+        } catch (e) { /* ignore */ }
+        return { label: label, placeholder: placeholder, required: required };
+      }
+      function bookingSmsConsentAnchor(fm) {
+        var wizardFooter = fm.querySelector('.booking-guided-wizard-footer');
+        if (wizardFooter) {
+          return wizardFooter.querySelector('#form-error') || wizardFooter;
+        }
+        return fm.querySelector('#form-error') ||
+          fm.querySelector('button[type="submit"]') ||
+          fm;
+      }
+      function ensurePhoneInSmsConsentBox(fm, block) {
+        var phoneWrap = block.querySelector('.booking-sms-consent-phone');
+        if (!phoneWrap) {
+          phoneWrap = document.createElement('div');
+          phoneWrap.className = 'booking-sms-consent-phone';
+          block.insertBefore(phoneWrap, block.firstChild);
+        }
+        var phoneField = fm.querySelector('[data-key="phone"]');
+        if (phoneField && !phoneWrap.contains(phoneField)) {
+          var labelEl = null;
+          if (phoneField.id) {
+            labelEl = fm.querySelector('label[for="' + phoneField.id + '"]');
+          }
+          if (labelEl && labelEl.parentNode) {
+            labelEl.className = 'booking-sms-consent-phone-label';
+            phoneWrap.appendChild(labelEl);
+          } else {
+            var meta = formSchemaPhoneMeta(fm);
+            phoneWrap.innerHTML = '<label class="booking-sms-consent-phone-label" for="' +
+              esc(phoneField.id || 'f_phone') + '">' + esc(meta.label) + '</label>';
+          }
+          phoneField.classList.add('booking-sms-consent-phone-input');
+          if (!phoneField.classList.contains('field-input')) phoneField.classList.add('field-input');
+          phoneWrap.appendChild(phoneField);
+          return phoneField;
+        }
+        if (!phoneField) {
+          var metaNew = formSchemaPhoneMeta(fm);
+          var inputId = 'f_phone';
+          phoneWrap.innerHTML =
+            '<label class="booking-sms-consent-phone-label" for="' + esc(inputId) + '">' + esc(metaNew.label) + '</label>' +
+            '<input class="field-input booking-sms-consent-phone-input" type="tel" id="' + esc(inputId) +
+            '" name="' + esc(inputId) + '" data-key="phone" data-field-label="' + esc(metaNew.label) +
+            '" placeholder="' + esc(metaNew.placeholder) + '" autocomplete="tel"' +
+            (metaNew.required ? ' required' : '') + '>';
+          return phoneWrap.querySelector('[data-key="phone"]');
+        }
+        return phoneField;
+      }
+      function injectBookingSmsConsent(fm, tenant) {
+        if (!fm || !tenant) return;
+        if (fm.querySelector('[data-sms-consent]')) return;
+        var hasPhoneInSchema = !!fm.querySelector('[data-key="phone"]') ||
+          (function() {
+            try {
+              var enc = fm.getAttribute('data-guided-form-schema-encoded');
+              if (!enc) return true;
+              var fields = JSON.parse(decodeURIComponent(enc));
+              return fields.some(function(f) { return f.key === 'phone'; });
+            } catch (e) { return true; }
+          })();
+        if (!hasPhoneInSchema) return;
+        var biz = esc((tenant.businessName || tenant.displayName || 'this business').toString());
+        var block = document.createElement('div');
+        block.className = 'booking-sms-consent';
+        block.setAttribute('data-sms-consent', '');
+        block.innerHTML =
+          '<label class="booking-sms-consent-label">' +
+            '<input type="checkbox" data-sms-consent-checkbox />' +
+            '<span>I agree to receive appointment-related text messages from ' + biz +
+            ' at this mobile number. Message and data rates may apply. Reply STOP to opt out. ' +
+            '<a href="' + BOOK_PRIVACY_URL + '" target="_blank" rel="noopener noreferrer">Privacy</a> · ' +
+            '<a href="' + BOOK_TERMS_URL + '" target="_blank" rel="noopener noreferrer">Terms</a>.' +
+            '</span>' +
+          '</label>';
+        ensurePhoneInSmsConsentBox(fm, block);
+        var anchor = bookingSmsConsentAnchor(fm);
+        if (anchor && anchor.parentNode) {
+          anchor.parentNode.insertBefore(block, anchor);
+        } else {
+          fm.appendChild(block);
+        }
+        if (fm.hasAttribute('data-guided-wizard-form')) {
+          block.setAttribute('data-sms-consent-wizard', '1');
+          block.hidden = true;
+        }
+        if (tenantClientSmsActive(tenant)) {
+          var depositNote = fm.querySelector('[data-guided-deposit-note]');
+          if (depositNote) depositNote.setAttribute('data-sms-gated', 'on');
+        }
+      }
       function setupGuidedBookingForm(fm) {
         if (!fm || !fm.classList.contains('booking-form--guided')) return;
         var wizardActive = fm.hasAttribute('data-guided-wizard-form');
@@ -7202,7 +7392,12 @@
             nextBtn.textContent = activePhase === 'contact' ? 'Review' : 'Continue';
           }
           if (submitBtn) submitBtn.hidden = step !== confirmStep;
-          if (depositNote) depositNote.hidden = step !== confirmStep;
+          if (depositNote) {
+            var smsGated = depositNote.getAttribute('data-sms-gated') === 'on';
+            depositNote.hidden = step !== confirmStep || !smsGated;
+          }
+          var smsConsentBlock = fm.querySelector('[data-sms-consent][data-sms-consent-wizard]');
+          if (smsConsentBlock) smsConsentBlock.hidden = step !== confirmStep;
           if (step === confirmStep) guidedWizardRenderSummary(fm);
           if (errEl) errEl.style.display = 'none';
         }
@@ -7527,6 +7722,7 @@
         else if (isBladeTheme(tenant)) bookSiteFooter = bladeSiteFooterHtml(tenant);
         else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
         else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
+        if (!bookSiteFooter) bookSiteFooter = minimalBookLegalFooterHtml(tenant);
         if (usesGuidedBookingForm(tenant)) {
           var guidedWizard = formGuidedWizardPanelsHtml(fields, services, presel);
           var guidedPanelsHtml = guidedWizard.html;
@@ -7637,6 +7833,7 @@
           else if (isLuxeTheme(tenant)) successFooter = luxeContactSectionHtml(tenant);
           else if (isStonecutTheme(tenant)) successFooter = stonecutSiteFooterHtml(tenant);
           else if (isClassicTheme(tenant)) successFooter = classicSiteFooterHtml(tenant, tenant.displayName || 'Studio');
+          if (!successFooter) successFooter = minimalBookLegalFooterHtml(tenant);
           return '' +
             '<div class="' + successWrapClass + '" style="'+bookPageStyle+'">' +
               nav +
@@ -7683,7 +7880,9 @@
             if (snap.empty) return null;
             var d = snap.docs[0];
             var data = d.data();
-            var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, logoUrl: data.logoUrl, tagline: data.tagline,
+            var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
+              smsEnabled: data.smsEnabled === true,
+              smsStatus: (data.smsStatus || '').toString(),
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, primaryColorHover: data.primaryColorHover || '',
               formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
@@ -9968,6 +10167,7 @@
               setupDropzones(fm);
               setupPreferredDaysDropdown(fm);
               setupGuidedBookingForm(fm);
+              injectBookingSmsConsent(fm, tenant);
               attachTitleCaseNameInputs(fm);
               fm.addEventListener('submit', function(ev){
                 ev.preventDefault();
@@ -10053,11 +10253,29 @@
                     btn.textContent = origText;
                     return;
                   }
+                  var smsConsentAccepted = false;
+                  var smsConsentEl = fm.querySelector('[data-sms-consent-checkbox]');
+                  if (smsConsentEl) smsConsentAccepted = smsConsentEl.checked === true;
+                  if (customerPhone && smsConsentEl && !smsConsentAccepted) {
+                    errEl.textContent = 'Please agree to receive appointment-related text messages to continue.';
+                    errEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                    return;
+                  }
+                  if (smsConsentAccepted && !customerPhone) {
+                    errEl.textContent = 'Please enter your mobile number to receive text messages.';
+                    errEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                    return;
+                  }
                   return functions.httpsCallable('createBookingRequestFromWeb')({
                     tenantSlug: tenant.slug,
                     customerName: customerName,
                     customerEmail: customerEmail,
                     customerPhone: customerPhone,
+                    smsConsentAccepted: smsConsentAccepted,
                     serviceId: serviceId,
                     serviceSlug: serviceSlugVal,
                     serviceName: serviceName,

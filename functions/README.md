@@ -20,9 +20,20 @@
 
 5. **Deploy**: `firebase deploy --only functions`
 
+6. **Twilio client texting** (optional):
+   ```bash
+   firebase functions:secrets:set TWILIO_ACCOUNT_SID
+   firebase functions:secrets:set TWILIO_AUTH_TOKEN
+   ```
+   Configure inbound webhook in Twilio Console (or per-number SMS URL) to:
+   `https://us-central1-<PROJECT_ID>.cloudfunctions.net/twilioInboundSms`
+
+   Rules: **30-day free trial has no SMS**. Owner must **start paid subscription** (`active`), then **opt in** under Team settings → Notifications → Enable client texting.
+
 ## Functions
 
 - **createConnectAccountLink** (callable): Creates a Stripe Connect account (if needed) and returns an Account Link URL for onboarding. The iOS app opens this URL in Safari.
+- **createTerminalConnectionTokenForTapToPay** (callable): Returns a Stripe Terminal ConnectionToken secret used by the iOS Tap to Pay flow.
 
 ### Platform fee (customer payments)
 

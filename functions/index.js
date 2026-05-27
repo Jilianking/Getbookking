@@ -17,6 +17,9 @@
  *
  * Customer payments (Connect): 1% platform application fee on createDepositLink and
  * createPaymentIntentForTapToPay — not on subscription checkout.
+ *
+ * Client texting (Twilio): set secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
+ * Paid subscription (active) required; free trial (trialing) cannot enable SMS.
  */
 
 const functions = require("firebase-functions");
@@ -31,6 +34,7 @@ const {
   slugFromBusiness,
   normalizeIndustry,
 } = require("./signupPayloads");
+const sms = require("./sms");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -290,6 +294,9 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   if (billing.stripeSubscriptionId) {
     tenantData.stripeSubscriptionId = billing.stripeSubscriptionId;
   }
+  if (billing.subscriptionStatus) {
+    tenantData.subscriptionStatus = billing.subscriptionStatus;
+  }
 
   if (industry === "custom" && industryCustomLabel) {
     tenantData.industryCustomLabel = industryCustomLabel;
@@ -411,6 +418,21 @@ async function finalizeFromCheckoutSession(stripe, session) {
 
   await pendingRef.delete().catch(() => {});
   return result;
+}
+
+/** Find tenant by Stripe customer id and sync subscription status to Firestore. */
+async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status) {
+  const cid = (stripeCustomerId || "").toString().trim();
+  if (!cid) return;
+  const snap = await db
+    .collection("tenants")
+    .where("stripeCustomerId", "==", cid)
+    .limit(1)
+    .get();
+  if (snap.empty) return;
+  const tenantId = snap.docs[0].id;
+  const normalized = (status || "").toString().trim().toLowerCase();
+  await sms.syncSubscriptionStatusForTenant(tenantId, normalized);
 }
 
 /**
@@ -925,6 +947,13 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   }
 
   const customerPhone = normalizeCustomerPhone(data?.customerPhone);
+  const smsConsentAccepted = data?.smsConsentAccepted === true;
+  if (customerPhone && !smsConsentAccepted) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "SMS consent is required when providing a phone number."
+    );
+  }
   const serviceId = data?.serviceId ? data.serviceId.toString() : null;
   const serviceSlug = data?.serviceSlug ? data.serviceSlug.toString() : null;
   const serviceName = data?.serviceName ? data.serviceName.toString() : null;
@@ -956,6 +985,10 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
   if (customerPhone) bookingData.customerPhone = customerPhone;
+  if (customerPhone && smsConsentAccepted) {
+    bookingData.smsConsentAccepted = true;
+    bookingData.smsConsentAt = admin.firestore.FieldValue.serverTimestamp();
+  }
   if (serviceId) bookingData.serviceId = serviceId;
   if (serviceSlug) bookingData.serviceSlug = serviceSlug;
   if (serviceName) bookingData.serviceName = serviceName;
@@ -1019,6 +1052,8 @@ exports.createPaymentIntentForTapToPay = functions
       {
         amount: roundedAmount,
         currency: "usd",
+        // Stripe Terminal (Tap to Pay on iPhone) expects `card_present`.
+        payment_method_types: ["card_present"],
         application_fee_amount: feeCents,
         capture_method: "automatic",
       },
@@ -1029,6 +1064,45 @@ exports.createPaymentIntentForTapToPay = functions
       paymentIntentId: pi.id,
       platformFeeCents: feeCents,
     };
+  });
+
+/**
+ * Creates a Stripe Terminal connection token for Tap to Pay on iPhone.
+ * iOS app uses this token (via Stripe Terminal iOS SDK) to connect to the phone-as-reader.
+ */
+exports.createTerminalConnectionTokenForTapToPay = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+
+    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    // Connection tokens can optionally be scoped to a location. For Tap to Pay on iPhone,
+    // location scoping is provided at connect-time via `locationId` in the connection config.
+    const token = await stripe.terminal.connectionTokens.create(
+      {},
+      { stripeAccount: stripeAccountId }
+    );
+
+    return { secret: token.secret };
   });
 
 /**
@@ -1286,6 +1360,38 @@ exports.stripeSubscriptionWebhook = functions
         await finalizeFromCheckoutSession(stripe, full);
       } catch (e) {
         console.error("stripeSubscriptionWebhook finalize", e);
+      }
+    }
+
+    if (
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
+    ) {
+      try {
+        const sub = event.data.object;
+        const customerId =
+          typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
+        if (customerId) {
+          await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status);
+        }
+      } catch (e) {
+        console.error("stripeSubscriptionWebhook subscription sync", e);
+      }
+    }
+
+    if (event.type === "invoice.paid") {
+      try {
+        const inv = event.data.object;
+        const customerId =
+          typeof inv.customer === "string" ? inv.customer : inv.customer && inv.customer.id;
+        if (customerId && inv.subscription) {
+          const subId =
+            typeof inv.subscription === "string" ? inv.subscription : inv.subscription.id;
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status);
+        }
+      } catch (e) {
+        console.error("stripeSubscriptionWebhook invoice.paid sync", e);
       }
     }
 
@@ -2000,6 +2106,9 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
     ownerSnap && ownerSnap.exists ? ownerSnap.data() : null
   );
   const confirmationType = workflow.confirmationType;
+  const ownerData =
+    ownerSnap && ownerSnap.exists ? ownerSnap.data() : null;
+  const messaging = serializeMessagingFields(tenant, ownerData);
   return {
     tenantId,
     industry: tenant.industry || "custom",
@@ -2012,6 +2121,7 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
     bookingRequiresApproval: bookingRequiresApproval(confirmationType),
     managersApproveAppointments: managersApproveAppointments(workflow),
     members,
+    ...messaging,
   };
 });
 
@@ -2450,4 +2560,374 @@ exports.getBillingSummary = functions
         `Could not load billing summary. ${stripeErrorMessage(e)}`
       );
     }
+  });
+
+// ── Client texting (Twilio) ───────────────────────────────────────────────────
+
+function serializeMessagingFields(tenant, ownerUserData) {
+  const subscriptionStatus = sms.resolveSubscriptionStatus(tenant, ownerUserData);
+  const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
+  const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
+  const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
+  return {
+    subscriptionStatus,
+    subscriptionPaid: paid,
+    subscriptionTrialing: trialing,
+    smsEnabled: tenant.smsEnabled === true,
+    smsStatus: (tenant.smsStatus || "off").toString(),
+    smsPhoneNumber: (tenant.smsPhoneNumber || "").toString(),
+    smsCanEnable: paid && (tenant.smsStatus || "off") !== "active",
+    smsCanUse: canUse,
+    smsProvisionError: (tenant.smsProvisionError || "").toString(),
+  };
+}
+
+/** Owner: end free trial now and charge subscription (unlocks client texting setup). */
+exports.startSubscriptionToday = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can start the subscription."
+      );
+    }
+    const tenant = ctx.tenant;
+    const subId = (tenant.stripeSubscriptionId || "").toString().trim();
+    if (!subId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No subscription found. Complete sign-up billing first."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const sub = await stripe.subscriptions.retrieve(subId);
+    if (sub.status === "active") {
+      await sms.syncSubscriptionStatusForTenant(ctx.tenantId, "active");
+      return { ok: true, subscriptionStatus: "active", alreadyActive: true };
+    }
+    if (sub.status !== "trialing") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Subscription is ${sub.status}. Update billing in the customer portal.`
+      );
+    }
+    const updated = await stripe.subscriptions.update(subId, { trial_end: "now" });
+    await sms.syncSubscriptionStatusForTenant(ctx.tenantId, updated.status);
+    return { ok: true, subscriptionStatus: updated.status };
+  });
+
+/** Owner: opt in to client texting (provisions Twilio after paid subscription). */
+exports.requestTenantSmsProvisioning = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can enable client texting."
+      );
+    }
+    const ownerData = ctx.userData;
+    const tenant = ctx.tenant;
+    if (!sms.tenantHasPaidSubscription(tenant, ownerData)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Client texting requires a paid subscription. Start your subscription today to unlock messaging."
+      );
+    }
+    if (tenant.smsStatus === "active" && tenant.smsPhoneNumber) {
+      return {
+        ok: true,
+        smsStatus: "active",
+        smsPhoneNumber: tenant.smsPhoneNumber,
+        alreadyActive: true,
+      };
+    }
+    if (tenant.smsStatus === "pending") {
+      return { ok: true, smsStatus: "pending" };
+    }
+    const consent = data && data.smsConsentAccepted === true;
+    if (!consent) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Accept the client texting terms to continue."
+      );
+    }
+    await db.collection("tenants").doc(ctx.tenantId).set(
+      {
+        smsEnabled: true,
+        smsStatus: "pending",
+        smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
+        smsProvisionError: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return { ok: true, smsStatus: "pending" };
+  });
+
+/** Team: send an appointment-related SMS from the tenant number. */
+exports.sendClientSms = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    const tenantId = ctx.tenantId;
+    const tenant = ctx.tenant;
+    const roleCanSend =
+      ctx.isOwner || (ctx.accessRole === "manager" && ctx.managerPermissions.sendClientNotifications);
+    if (!roleCanSend) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "You do not have permission to send client texts."
+      );
+    }
+
+    const to = sms.toE164US(data && data.to);
+    const body = ((data && data.body) || "").toString().trim();
+    const clientName = ((data && data.clientName) || "").toString().trim().slice(0, 120);
+    if (!to) {
+      throw new functions.https.HttpsError("invalid-argument", "A valid client phone is required.");
+    }
+    if (!body) {
+      throw new functions.https.HttpsError("invalid-argument", "Message body is required.");
+    }
+    if (body.length > 1600) {
+      throw new functions.https.HttpsError("invalid-argument", "Message body is too long.");
+    }
+
+    try {
+      const sent = await sms.sendTenantSms(tenantId, tenant, to, body, {
+        threadId: sms.threadIdFromPhone(to),
+        clientName,
+      });
+      return { ok: true, sid: sent.sid, status: sent.status || "" };
+    } catch (e) {
+      const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
+      if (msg.includes("Outbound SMS limit reached")) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          `This business has reached its ${sms.MAX_TENANT_OUTBOUND_SMS} total outbound text limit.`
+        );
+      }
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+  });
+
+/** Firestore: provision Twilio when smsStatus becomes pending. */
+exports.onTenantSmsProvisionRequested = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .firestore.document("tenants/{tenantId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    if (before.smsStatus === after.smsStatus) return null;
+    if ((after.smsStatus || "").toString() !== "pending") return null;
+    if (after.smsEnabled !== true) return null;
+
+    const tenantId = context.params.tenantId;
+    const ownerUid = after.ownerUid;
+    let ownerData = null;
+    if (ownerUid) {
+      const o = await db.collection("users").doc(ownerUid).get();
+      if (o.exists) ownerData = o.data();
+    }
+    if (!sms.tenantHasPaidSubscription(after, ownerData)) {
+      await db.collection("tenants").doc(tenantId).set(
+        {
+          smsStatus: "off",
+          smsProvisionError: "Paid subscription required.",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
+
+    try {
+      await provisionTenantSms(tenantId, after);
+    } catch (e) {
+      console.error("onTenantSmsProvisionRequested", tenantId, e);
+      await db.collection("tenants").doc(tenantId).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: (e.message || String(e)).slice(0, 400),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    return null;
+  });
+
+async function provisionTenantSms(tenantId, tenant) {
+  return sms.provisionTenantSms(tenantId, tenant);
+}
+
+/** Booking status → client SMS (confirmed / declined). */
+exports.onTenantBookingRequestSms = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .firestore.document("tenants/{tenantId}/bookingRequests/{requestId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    const prev = (before.status || "").toString().toLowerCase();
+    const next = (after.status || "").toString().toLowerCase();
+    if (prev === next) return null;
+    if ((after.source || "").toString().toLowerCase() === "seed") return null;
+
+    const tenantId = context.params.tenantId;
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) return null;
+    const tenant = tenantSnap.data();
+    const ownerUid = tenant.ownerUid;
+    let ownerData = null;
+    if (ownerUid) {
+      const o = await db.collection("users").doc(ownerUid).get();
+      if (o.exists) ownerData = o.data();
+    }
+    if (!sms.tenantCanUseSms(tenant, ownerData, tenant.managerPermissions)) {
+      return null;
+    }
+
+    const to = sms.extractCustomerPhone(after);
+    if (!to) return null;
+
+    const business = (tenant.businessName || tenant.displayName || "Your provider").toString();
+    let body = null;
+    if (next === "confirmed") {
+      const svc = (after.serviceName || "").toString().trim();
+      body = svc
+        ? `${business}: Your appointment request for ${svc} is confirmed. Reply STOP to opt out.`
+        : `${business}: Your appointment request is confirmed. Reply STOP to opt out.`;
+    } else if (next === "declined") {
+      body = `${business}: We're unable to take this request at this time. Reply STOP to opt out.`;
+    }
+    if (!body) return null;
+
+    const optId = to.replace(/\W/g, "_");
+    const optSnap = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("smsOptOuts")
+      .doc(optId)
+      .get();
+    if (optSnap.exists) return null;
+
+    try {
+      await sms.sendTenantSms(tenantId, tenant, to, body, {
+        bookingRequestId: context.params.requestId,
+        threadId: sms.threadIdFromPhone(to),
+        clientName: (after.customerName || "").toString(),
+      });
+    } catch (e) {
+      console.error("onTenantBookingRequestSms", context.params.requestId, e);
+    }
+    return null;
+  });
+
+/** Twilio inbound SMS (STOP/HELP). */
+exports.twilioInboundSms = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    const authToken = sms.twilioAuthToken.value();
+    const sig = req.headers["x-twilio-signature"];
+    const url = sms.inboundWebhookUrl();
+    const params = req.body || {};
+    if (authToken && sig && url) {
+      // eslint-disable-next-line global-require
+      const twilio = require("twilio");
+      const valid = twilio.validateRequest(authToken, sig, url, params);
+      if (!valid) {
+        console.warn("twilioInboundSms: invalid signature");
+        res.status(403).send("Forbidden");
+        return;
+      }
+    }
+
+    const from = (params.From || "").toString();
+    const to = (params.To || "").toString();
+    const body = (params.Body || "").toString().trim().toUpperCase();
+
+    const tenantSnap = await db
+      .collection("tenants")
+      .where("smsPhoneNumber", "==", to)
+      .limit(1)
+      .get();
+    if (tenantSnap.empty) {
+      res.type("text/xml").send("<Response></Response>");
+      return;
+    }
+    const tenantDoc = tenantSnap.docs[0];
+    const tenantId = tenantDoc.id;
+
+    if (body === "STOP" || body === "UNSUBSCRIBE" || body === "CANCEL") {
+      await db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsOptOuts")
+        .doc(from.replace(/\W/g, "_"))
+        .set({
+          phone: from,
+          optedOutAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      res
+        .type("text/xml")
+        .send(
+          "<Response><Message>You have been unsubscribed. Reply START to resubscribe.</Message></Response>"
+        );
+      return;
+    }
+
+    if (body === "START") {
+      await db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsOptOuts")
+        .doc(from.replace(/\W/g, "_"))
+        .delete()
+        .catch(() => {});
+      res
+        .type("text/xml")
+        .send(
+          "<Response><Message>You are resubscribed to appointment-related texts. Reply STOP to opt out.</Message></Response>"
+        );
+      return;
+    }
+
+    if (body === "HELP") {
+      res
+        .type("text/xml")
+        .send(
+          "<Response><Message>Bookking client texting: appointment updates only. Reply STOP to opt out.</Message></Response>"
+        );
+      return;
+    }
+
+    await sms.recordInboundTenantSms(tenantId, {
+      from,
+      to,
+      body: (params.Body || "").toString(),
+      threadId: sms.threadIdFromPhone(from),
+    });
+
+    res.type("text/xml").send("<Response></Response>");
   });

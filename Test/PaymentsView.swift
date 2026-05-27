@@ -10,6 +10,9 @@ struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
+    #if TAP_TO_PAY_ENABLED
+    @State private var showTapToPaySheet = false
+    #endif
     @State private var showWithdrawSheet = false
     var drawerState: DrawerState
     let sectionTitle: String
@@ -31,17 +34,18 @@ struct PaymentsView: View {
                             .padding(.horizontal)
                     }
 
-                    // 1. Tap to Pay
+                    #if TAP_TO_PAY_ENABLED
                     PaymentActionCard(
                         icon: "wave.3.right",
                         iconColor: .blue,
                         title: "Tap to Pay",
                         subtitle: "In-person payments (1% platform fee applies)",
-                        action: { /* TODO: Stripe Terminal Tap to Pay */ },
+                        action: { showTapToPaySheet = true },
                         disabled: !viewModel.stripeConnected
                     )
+                    #endif
 
-                    // 2. Deposit Link
+                    // Deposit Link
                     PaymentActionCard(
                         icon: "link",
                         iconColor: .green,
@@ -51,7 +55,7 @@ struct PaymentsView: View {
                         disabled: !viewModel.stripeConnected
                     )
 
-                    // 3. Withdraw to Bank
+                    // Withdraw to Bank
                     Button(action: { showWithdrawSheet = true }) {
                         HStack(spacing: 16) {
                             RoundedRectangle(cornerRadius: 8)
@@ -106,6 +110,13 @@ struct PaymentsView: View {
                     showDepositLinkSheet = false
                 }
             }
+            #if TAP_TO_PAY_ENABLED
+            .sheet(isPresented: $showTapToPaySheet) {
+                TapToPaySheet(viewModel: viewModel) {
+                    showTapToPaySheet = false
+                }
+            }
+            #endif
             .sheet(isPresented: $showWithdrawSheet) {
                 WithdrawSheet(viewModel: viewModel) {
                     showWithdrawSheet = false

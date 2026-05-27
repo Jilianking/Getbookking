@@ -38,6 +38,22 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// Set by parent toolbar or in-list invite button.
     @Published var presentInviteSheet = false
 
+    // Client texting (Twilio) — from listTenantMembers / Cloud Functions
+    @Published var subscriptionStatus: String = ""
+    @Published var subscriptionPaid: Bool = false
+    @Published var subscriptionTrialing: Bool = false
+    @Published var smsEnabled: Bool = false
+    @Published var smsStatus: String = "off"
+    @Published var smsPhoneNumber: String = ""
+    @Published var smsCanUse: Bool = false
+    @Published var smsProvisionError: String = ""
+    @Published var isStartingSubscription = false
+    @Published var isProvisioningSms = false
+
+    var smsPhoneDisplay: String {
+        PhoneFormatting.displayUS(smsPhoneNumber)
+    }
+
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     var resolvedInviteJobTitle: String {
@@ -89,10 +105,56 @@ final class ManagerSettingsViewModel: ObservableObject {
             if inviteJobTitlePresetId.isEmpty {
                 inviteJobTitlePresetId = TeamJobTitleCatalog.primaryOptions(for: tenantIndustry).first?.id ?? "team_member"
             }
+            subscriptionStatus = (data["subscriptionStatus"] as? String) ?? ""
+            subscriptionPaid = data["subscriptionPaid"] as? Bool ?? false
+            subscriptionTrialing = data["subscriptionTrialing"] as? Bool ?? false
+            smsEnabled = data["smsEnabled"] as? Bool ?? false
+            smsStatus = (data["smsStatus"] as? String) ?? "off"
+            smsPhoneNumber = (data["smsPhoneNumber"] as? String) ?? ""
+            smsCanUse = data["smsCanUse"] as? Bool ?? false
+            smsProvisionError = (data["smsProvisionError"] as? String) ?? ""
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func startSubscriptionToday() async {
+        guard isTenantOwner else { return }
+        isStartingSubscription = true
+        errorMessage = nil
+        do {
+            _ = try await functions.httpsCallable("startSubscriptionToday").call([:])
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await load(isDemoMode: false)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isStartingSubscription = false
+    }
+
+    func requestSmsProvisioning(consentAccepted: Bool) async {
+        guard isTenantOwner else { return }
+        guard consentAccepted else {
+            errorMessage = "Accept the client texting terms to continue."
+            return
+        }
+        isProvisioningSms = true
+        errorMessage = nil
+        do {
+            _ = try await functions.httpsCallable("requestTenantSmsProvisioning").call([
+                "smsConsentAccepted": true,
+            ])
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await load(isDemoMode: false)
+                if smsStatus == "active" { break }
+                if smsStatus == "failed" { break }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isProvisioningSms = false
     }
 
     func saveManagerPolicy() async {

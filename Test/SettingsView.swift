@@ -280,6 +280,7 @@ struct SettingsView: View {
 private struct AccountSettingsDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
+    @StateObject private var billingViewModel = ManagerSettingsViewModel()
     @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var profilePhotoCropItem: SingleImageCropSheetItem?
 
@@ -425,12 +426,39 @@ private struct AccountSettingsDetailView: View {
                     }
                 }
                 if viewModel.hasProfile, viewModel.tenantId != nil {
-                    Section(header: Text("Plan")) {
+                    Section(
+                        header: Text("Plan"),
+                        footer: billingViewModel.subscriptionTrialing
+                            ? Text("Client texting and your dedicated number are available after you start your paid subscription. Free trial includes your site and booking tools only.")
+                                .font(.caption2)
+                            : nil
+                    ) {
                         HStack {
                             Text("Current plan")
                             Spacer()
                             Text(viewModel.tenantSubscriptionPlan.displayName)
                                 .foregroundStyle(.secondary)
+                        }
+                        if billingViewModel.subscriptionTrialing, viewModel.isTenantOwner {
+                            Button {
+                                Task { await billingViewModel.startSubscriptionToday() }
+                            } label: {
+                                HStack {
+                                    if billingViewModel.isStartingSubscription {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    }
+                                    Text("Start subscription today")
+                                }
+                            }
+                            .disabled(billingViewModel.isStartingSubscription)
+                        } else if billingViewModel.subscriptionPaid {
+                            HStack {
+                                Text("Subscription")
+                                Spacer()
+                                Text("Active")
+                                    .foregroundStyle(.green)
+                            }
                         }
                     }
                 } else if authViewModel.currentUserEmail != nil && !viewModel.hasProfile {
@@ -444,6 +472,11 @@ private struct AccountSettingsDetailView: View {
         }
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if !authViewModel.isDemoMode {
+                await billingViewModel.load(isDemoMode: false)
+            }
+        }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {
                 guard let newItem else { return }

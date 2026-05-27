@@ -210,6 +210,7 @@ struct MessageThreadView: View {
         messages = await viewModel.loadMessages(for: threadId)
         if let first = messages.first {
             clientName = first.clientName
+            clientPhone = PhoneFormatting.displayUS(first.clientId)
         }
     }
 

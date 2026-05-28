@@ -342,6 +342,43 @@ class DesignViewModel: ObservableObject {
         }
     }
 
+    private func studio12ProcessStepsFirestorePayload() -> [[String: String]] {
+        studio12ProcessSteps
+            .sorted { $0.id < $1.id }
+            .map { ["title": $0.title, "body": $0.body] }
+    }
+
+    /// Updates one Studio 12 “How it works” step from preview `data-edit-key` (`s12Process:<index>:title|body`).
+    private func persistQuickEditStudio12ProcessField(fieldKey: String, trimmed: String) async throws {
+        guard let tid = tenantId else { return }
+        guard (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .studio12 else { return }
+        let parts = fieldKey.split(separator: ":").map(String.init)
+        guard parts.count == 3, parts[0] == "s12Process", let index = Int(parts[1]) else { return }
+        let field = parts[2]
+        guard field == "title" || field == "body" else { return }
+
+        var steps = await MainActor.run { studio12ProcessSteps }
+        guard steps.indices.contains(index) else {
+            await MainActor.run { errorMessage = "That step was not found. Refresh and try again." }
+            return
+        }
+        if field == "title", trimmed.isEmpty {
+            await MainActor.run { errorMessage = "Step title can't be empty." }
+            return
+        }
+        if field == "title" {
+            steps[index].title = trimmed
+        } else {
+            steps[index].body = trimmed
+        }
+        await MainActor.run { studio12ProcessSteps = steps }
+        try await firebaseService.updateTenant(
+            tenantId: tid,
+            updates: ["studio12ProcessSteps": await MainActor.run { studio12ProcessStepsFirestorePayload() }]
+        )
+        await MainActor.run { errorMessage = nil }
+    }
+
     /// Persists one `wc.*` quick-edit slot into `webCopyOverrides` (empty value removes override).
     private func persistWebCopyOverride(tenantId: String, key: String, value: String) async throws {
         guard key.hasPrefix("wc.") else { return }
@@ -699,6 +736,9 @@ class DesignViewModel: ObservableObject {
             default:
                 if fieldKey.hasPrefix("svc:") {
                     try await persistQuickEditServiceField(fieldKey: fieldKey, trimmed: trimmed)
+                    await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
+                } else if fieldKey.hasPrefix("s12Process:") {
+                    try await persistQuickEditStudio12ProcessField(fieldKey: fieldKey, trimmed: trimmed)
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
                 } else if fieldKey.hasPrefix("wc.") {
                     let rest = String(fieldKey.dropFirst(3))
@@ -1408,6 +1448,48 @@ class DesignViewModel: ObservableObject {
         await addGalleryImages(imageDataList: [imageData])
     }
 
+    /// Replaces the image at `index`, or appends when uploading beyond the end. Used by Quick edit taps on `galleryImage:<n>`.
+    func replaceOrAppendGalleryImage(at index: Int, imageData: Data) async {
+        guard let tid = tenantId else { return }
+        guard index >= 0, index < 256 else {
+            await MainActor.run {
+                errorMessage = "That gallery slot is not available."
+            }
+            return
+        }
+        await MainActor.run { isUploadingGallery = true; errorMessage = nil }
+        do {
+            let urls = try await uploadGalleryBatch(tenantId: tid, items: [imageData])
+            guard let newURL = urls.first else {
+                await MainActor.run { isUploadingGallery = false }
+                return
+            }
+            var updated = await MainActor.run { galleryImages }
+            while updated.count < index {
+                updated.append("")
+            }
+            if index < updated.count {
+                updated[index] = newURL
+            } else {
+                updated.append(newURL)
+            }
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "galleryImages": updated,
+                "featuredWorkImages": featuredWorkImages,
+            ])
+            await MainActor.run {
+                galleryImages = updated
+                isUploadingGallery = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingGallery = false
+            }
+        }
+    }
+
     func removeGalleryImage(at index: Int) async {
         guard let tid = tenantId else { return }
         guard index >= 0, index < galleryImages.count else { return }
@@ -1968,6 +2050,23 @@ class DesignViewModel: ObservableObject {
         steps[index].title = title
         steps[index].body = body
         studio12ProcessSteps = steps
+    }
+
+    /// Writes current `studio12ProcessSteps` to Firestore (preview step sheet and inline quick edit).
+    func persistStudio12ProcessSteps(invalidatePreview: Bool = true) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        do {
+            try await firebaseService.updateTenant(
+                tenantId: tid,
+                updates: ["studio12ProcessSteps": studio12ProcessStepsFirestorePayload()]
+            )
+            await MainActor.run {
+                if invalidatePreview { invalidateWebPreview() }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
     }
 
     private func normalizeStudio12ProcessStepIds() {

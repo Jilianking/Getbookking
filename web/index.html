@@ -1451,6 +1451,7 @@
       min-height: 320px;
       overflow: hidden;
     }
+    .classic-hero-right .bk-hero-image-hit { z-index: 4; }
     .classic-hero-right img { width: 100%; height: 100%; object-fit: cover; }
     /* Classic hero image slot is a fixed 16:9 frame; centering avoids top-heavy desktop spacing
        while preserving the in-app crop pixel-for-pixel. */
@@ -2398,13 +2399,14 @@
       gap: 24px;
       align-items: center;
     }
-    /** Full-bleed invisible tap target for Luxe CSS hero background (native hero picker). Sits under copy/CTA so text stays editable. */
+    /** Full-bleed invisible tap target for hero photo (native picker in app Quick edit). */
+    .bk-hero-image-hit,
     .luxe-hero-image-hit {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
-      z-index: 1;
+      z-index: 3;
       border: 0;
       padding: 0;
       margin: 0;
@@ -2412,7 +2414,10 @@
       background: transparent;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
+      appearance: none;
+      -webkit-appearance: none;
     }
+    .luxe-hero-image-hit { z-index: 1; }
     .luxe-hero-text {
       position: relative;
       z-index: 2;
@@ -3294,6 +3299,7 @@
       overflow: hidden;
       min-height: 320px;
     }
+    .blade-page .blade-hero-right .bk-hero-image-hit { z-index: 4; }
     /* Blade hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
        from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
     .blade-page .blade-hero-right:has(> .blade-hero-image) {
@@ -3979,6 +3985,7 @@
     .stonecut-page .stonecut-btn-primary { background: var(--bk-accent, #c0221a); color: var(--bk-accent-fg, #e8e0d0); }
     .stonecut-page .stonecut-btn-ghost { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .stonecut-hero-right { min-height: 360px; position: relative; background: linear-gradient(160deg, color-mix(in srgb, var(--bk-card, #1e1a16) 70%, var(--bk-bg, #0e0c0a)) 0%, var(--bk-bg, #0e0c0a) 100%); }
+    .stonecut-page .stonecut-hero-right .bk-hero-image-hit { z-index: 4; }
     /* Stonecut hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
        from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
     .stonecut-page .stonecut-hero-right:has(> img) {
@@ -4397,6 +4404,7 @@
       overflow: hidden;
       min-height: 50vh;
     }
+    .studio12-page .s12-hero-img-col .bk-hero-image-hit { z-index: 4; }
     /* Studio 12 hero image slot is a fixed 4:5 portrait frame; upload is cropped to 4:5 in-app. */
     /* Studio 12 hero image slot is a fixed 4:5 frame. `align-self:start` prevents CSS Grid
        from stretching the cell past 4:5 so the in-app crop renders pixel-for-pixel. */
@@ -5181,18 +5189,21 @@
       line-height: 1.8;
     }
 
-    .studio12-page .s12-address {
+    .studio12-page .s12-address,
+    .studio12-page a.s12-address-link {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
       font-family: "Cormorant Garamond", serif;
       font-size: 17px;
       line-height: 1.9;
       margin-bottom: 16px;
     }
     .studio12-page a.s12-address-link {
-      display: inline-block;
       color: inherit;
       text-decoration: none;
       border-bottom: 1px solid rgba(74, 60, 52, 0.25);
-      margin-bottom: 16px;
     }
     .studio12-page a.s12-address-link:hover {
       border-bottom-color: rgba(74, 60, 52, 0.45);
@@ -5200,15 +5211,17 @@
 
     .studio12-page .s12-phone {
       display: block;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
       margin-top: 20px;
+      margin-bottom: 20px;
       font-family: "Cormorant Garamond", serif;
       font-size: 28px;
       font-style: italic;
       font-weight: 300;
       color: var(--s12-clay);
       text-decoration: none;
-      display: inline-block;
-      margin-bottom: 20px;
     }
 
     .studio12-page .s12-footer {
@@ -5890,6 +5903,14 @@
         if (!sid) return '';
         return ' data-edit-key="svc:' + esc(sid) + ':edit" role="button" aria-label="Edit service"';
       }
+      function s12ProcessSpan(stepIndex, field, displayText) {
+        var inner = field === 'body' ? esc(displayText).replace(/\n/g, '<br>') : esc(displayText);
+        return '<span data-edit-key="s12Process:' + stepIndex + ':' + field + '">' + inner + '</span>';
+      }
+      /** Whole process cell tap → native Edit step sheet (`s12Process:<n>:edit`). */
+      function s12ProcessEditAttr(stepIndex) {
+        return ' data-edit-key="s12Process:' + stepIndex + ':edit" role="button" aria-label="Edit step"';
+      }
       /** Integer pixel dimension from Firestore for hero JPEG; fallback when missing (legacy tenants). */
       function tenantHeroPixelDim(v, fallback) {
         var n = Number(v);
@@ -6290,7 +6311,7 @@
         if (tenantShowGalleryPage(tenant) && gUrls.length) {
           function bladeMarqueeChunk(urls, includeEditKeys) {
             return urls.map(function(u, gi) {
-              var editKey = includeEditKeys ? (' data-edit-key="featuredWork:' + gi + '"') : '';
+              var editKey = includeEditKeys ? galleryImageEditKeyAttr(gi) : '';
               return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img' + editKey + ' src="' + esc(u) + '" alt=""></div></div>';
             }).join('');
           }
@@ -6406,7 +6427,7 @@
           heroPrimary +
           '<a href="' + anchorHome + '#services" class="blade-btn-ghost">' + wcSpan(tenant, 'wc.blade.heroViewServices', 'View services') + '</a>' +
           '</div></div>' +
-          '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div></div>' +
+          '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
           '<div class="blade-hero-vertical"><span data-edit-key="bladeHeroTagline">' + esc(vertical) + '</span></div></section>';
         return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
@@ -6504,7 +6525,8 @@
           heroCta +
           '</div><div class="stonecut-hero-right">' + (tenant.heroImageUrl
             ? '<img class="stonecut-hero-photo" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
-            : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') + '</div></section>' +
+            : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') +
+            bkHeroImageHitButtonHtml() + '</div></section>' +
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
           shopPreviewSection +
@@ -6568,6 +6590,14 @@
       /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
       function galleryPageImageUrls(tenant) {
         return tenant.galleryImages || [];
+      }
+      /** Quick edit: tap opens native gallery upload for slot `index`. */
+      function galleryImageEditKeyAttr(index) {
+        return ' data-edit-key="galleryImage:' + index + '" role="button" aria-label="Change gallery photo"';
+      }
+      /** Invisible full-bleed button so hero image slots stay tappable in app Quick edit (above overlays, under nothing). */
+      function bkHeroImageHitButtonHtml() {
+        return '<button type="button" class="bk-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>';
       }
       function field(f, services, presel) {
         var key = (f.key||'').replace(/[^a-zA-Z0-9_]/g,'');
@@ -8060,21 +8090,22 @@
         return 'classic_grid';
       }
 
-      function galleryLightboxCell(url, linkClass) {
+      function galleryLightboxCell(url, linkClass, gi) {
         linkClass = linkClass || '';
-        return '<div class="gallery-grid-link ' + linkClass + '"><img src="' + esc(url) + '" alt="" loading="lazy"></div>';
+        var editAttr = (typeof gi === 'number' && gi >= 0) ? galleryImageEditKeyAttr(gi) : '';
+        return '<div class="gallery-grid-link ' + linkClass + '"><img' + editAttr + ' src="' + esc(url) + '" alt="" loading="lazy"></div>';
       }
 
       /** HTML for optional layouts (not used when style is `default`). */
       function galleryAltLayoutInnerHtml(urls, mode) {
         if (mode === 'masonry') {
-          return '<div class="gallery-alt gallery-alt--masonry">' + urls.map(function(u) {
-            return '<div class="gallery-alt-masonry-cell">' + galleryLightboxCell(u) + '</div>';
+          return '<div class="gallery-alt gallery-alt--masonry">' + urls.map(function(u, gi) {
+            return '<div class="gallery-alt-masonry-cell">' + galleryLightboxCell(u, '', gi) + '</div>';
           }).join('') + '</div>';
         }
         if (mode === 'horizontal_strip') {
-          return '<div class="gallery-alt gallery-alt--strip">' + urls.map(function(u) {
-            return '<div class="gallery-alt-strip-item">' + galleryLightboxCell(u) + '</div>';
+          return '<div class="gallery-alt gallery-alt--strip">' + urls.map(function(u, gi) {
+            return '<div class="gallery-alt-strip-item">' + galleryLightboxCell(u, '', gi) + '</div>';
           }).join('') + '</div>';
         }
         return '';
@@ -8220,8 +8251,8 @@
           if (!u12.length) {
             galleryBody = '<div class="s12-gallery-empty-state"><p class="s12-phil-body">No gallery images yet. Add them in the app.</p></div>';
           } else if (gLay === 'classic_grid') {
-            var imgs12 = u12.map(function(u) {
-              return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
+            var imgs12 = u12.map(function(u, gi) {
+              return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
             }).join('');
             galleryBody = '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(u12.length, 24) + '">' + imgs12 + '</div>';
           } else {
@@ -8256,8 +8287,8 @@
         if (!gUrlsAll.length) {
           content = '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
         } else if (gLayStd === 'classic_grid') {
-          var imgsHtml = gUrlsAll.map(function(url) {
-            return '<div class="gallery-grid-link"><img src="' + esc(url) + '" alt="" loading="lazy"></div>';
+          var imgsHtml = gUrlsAll.map(function(url, gi) {
+            return '<div class="gallery-grid-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(url) + '" alt="" loading="lazy"></div>';
           }).join('');
           content = '<div class="gallery-grid">' + imgsHtml + '</div>';
         } else {
@@ -8366,7 +8397,7 @@
           heroTitleRow +
           heroIndustry +
           '<div class="classic-hero-actions">' + heroActions + '</div></div>' +
-          '<div class="classic-hero-right"' + heroRightStyle + '>' + heroImgHtml + '</div>' +
+          '<div class="classic-hero-right"' + heroRightStyle + '>' + heroImgHtml + bkHeroImageHitButtonHtml() + '</div>' +
           '</section>';
 
         var classicFeaturedEyebrow = classicTenantTrim('classicFeaturedWorkEyebrow') || 'Featured work';
@@ -8625,7 +8656,7 @@
       function studio12ShopPage(tenant) {
         var cards = luxeTenantProductCardsHtml(tenant);
         var inner = cards
-          ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">Our <em>products</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
+          ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', 'products') + '</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
           : '<div class="s12-services" style="padding-top:120px"><p class="s12-phil-body" style="text-align:center">No products yet. Add them in the app.</p></div>';
         return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
@@ -8806,11 +8837,11 @@
           }
         }
         var gUrls = galleryPageImageUrls(tenant);
-        var gItems = gUrls.map(function(u) {
-          return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
+        var gItems = gUrls.map(function(u, gi) {
+          return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
         }).join('');
         if (!gItems) {
-          gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback" style="min-height:280px"></div></div>';
+          gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback"' + galleryImageEditKeyAttr(0) + ' style="min-height:280px"></div></div>';
         }
         var revs = tenant.reviews || [];
         var testCards = '';
@@ -8876,8 +8907,8 @@
           '<span data-edit-key="studio12PhilosophyHeadLine2">' + esc(phL2) + '</span><br><em><span data-edit-key="studio12PhilosophyHeadItalic">' + esc(phEm) + '</span></em></h2>';
         var philImgCol = tenant.studio12PhilosophyImageUrl
           ? ('<div class="s12-aux-img-wrap">' +
-            '<img class="s12-hero-img" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt=""></div>')
-          : '<div class="s12-hero-img-fallback" style="min-height:360px;border-radius:2px"></div>';
+            '<img class="s12-hero-img" data-edit-key="studio12PhilosophyImage" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt=""></div>')
+          : '<div class="s12-hero-img-fallback" data-edit-key="studio12PhilosophyImage" role="button" aria-label="Add philosophy image" style="min-height:360px;border-radius:2px"></div>';
         var defaultProc = s12.process;
         var procSrc = (Array.isArray(tenant.studio12ProcessSteps) && tenant.studio12ProcessSteps.length)
           ? tenant.studio12ProcessSteps : defaultProc;
@@ -8894,15 +8925,15 @@
             var st = (step && step.title) ? String(step.title) : fallback.title;
             var sb = (step && (step.body != null || step.description != null))
               ? String(step.body != null ? step.body : step.description) : fallback.body;
-            procCells += '<div class="s12-process-cell s12-fade"><div class="s12-step-num">' + esc(num) + '</div>' +
-              '<h3 class="s12-step-title">' + esc(st) + '</h3>' +
-              '<p class="s12-step-desc">' + esc(sb) + '</p></div>';
+            procCells += '<div class="s12-process-cell s12-fade"' + s12ProcessEditAttr(pi) + '><div class="s12-step-num">' + esc(num) + '</div>' +
+              '<h3 class="s12-step-title">' + s12ProcessSpan(pi, 'title', st) + '</h3>' +
+              '<p class="s12-step-desc">' + s12ProcessSpan(pi, 'body', sb) + '</p></div>';
           }
         }
         var servicesSectionHtml = showServicesSection
           ? '<section class="s12-services" id="s12-services">' +
             '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.servicesEyebrow', 'What we offer') + '</div>' +
-            '<h2 class="s12-section-title s12-fade">Our <em>' + wcSpan(tenant, 'wc.s12.servicesEm', 'services') + '</em></h2>' +
+            '<h2 class="s12-section-title s12-fade">' + wcSpan(tenant, 'wc.s12.servicesTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.servicesEm', 'services') + '</em></h2>' +
             '<div class="s12-svc-grid">' + svcCells + '</div></section>'
           : '';
         var processSectionHtml = showProcessSection
@@ -8935,8 +8966,8 @@
         }
         var bcImgCol = tenant.studio12BookCtaImageUrl
           ? ('<div class="s12-aux-img-wrap">' +
-            '<img class="s12-hero-img" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt=""></div>')
-          : '<div class="s12-hero-img-fallback" style="min-height:280px"></div>';
+            '<img class="s12-hero-img" data-edit-key="studio12BookCtaImage" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt=""></div>')
+          : '<div class="s12-hero-img-fallback" data-edit-key="studio12BookCtaImage" role="button" aria-label="Add booking section image" style="min-height:280px"></div>';
         var s12HeroActions = '<div class="s12-hero-actions s12-fade">';
         if (tenantShowBookPage(tenant)) {
           s12HeroActions += '<a class="s12-btn-dark" href="' + bookUrl + '">' + wcSpan(tenant, 'wc.s12.heroReserve', 'Reserve your visit') + '</a>';
@@ -8961,7 +8992,7 @@
           : '';
         return '<div class="studio12-page">' + studio12NavHtml(tenant) +
           '<section class="s12-hero">' +
-          '<div class="s12-hero-img-col"' + s12HeroColStyle + '>' + heroImg + '<div class="s12-hero-img-overlay"></div></div>' +
+          '<div class="s12-hero-img-col"' + s12HeroColStyle + '>' + heroImg + '<div class="s12-hero-img-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
           '<div class="s12-hero-content">' +
           '<div class="s12-hero-tag s12-fade"><span data-edit-key="studio12HeroEyebrow">' + esc(heroEyebrow) + '</span></div>' +
           '<h1 class="s12-hero-title s12-fade">' + '<span data-edit-key="studio12HeroLine1">' + esc(heroL1) + '</span><br><span data-edit-key="studio12HeroLine2">' + esc(heroL2) + '</span><br><em><span data-edit-key="heroTagline">' + esc(heroItalic) + '</span></em></h1>' +
@@ -9169,7 +9200,7 @@
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
         var hero = '<section class="luxe-hero" style="' + heroStyle + '">' +
-          '<button type="button" class="luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
+          '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +
               '<h1><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +

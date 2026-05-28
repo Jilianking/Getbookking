@@ -24,6 +24,9 @@ struct DesignView: View {
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
     @State private var quickEditFeaturedSlot: QuickEditFeaturedSlotPayload?
+    @State private var quickEditGallerySlot: QuickEditGallerySlotPayload?
+    @State private var quickEditStudio12PhilosophySheet = false
+    @State private var quickEditStudio12BookCtaSheet = false
     @State private var formFieldToEdit: FormField?
     var drawerState: DrawerState
     let sectionTitle: String
@@ -119,9 +122,71 @@ struct DesignView: View {
                     onDone: { quickEditFeaturedSlot = nil }
                 )
             }
+            .sheet(item: $quickEditGallerySlot) { payload in
+                QuickEditGallerySlotSheet(
+                    slotIndex: payload.slotIndex,
+                    viewModel: viewModel,
+                    onDone: { quickEditGallerySlot = nil }
+                )
+            }
+            .sheet(isPresented: $quickEditStudio12PhilosophySheet) {
+                NavigationStack {
+                    Form {
+                        Studio12AuxImageUploadSection(
+                            label: "Philosophy image",
+                            advice: "",
+                            allowedCropChoices: [.landscape16_9, .portrait4_5, .square],
+                            defaultCropChoice: .landscape16_9,
+                            imageUrl: $viewModel.studio12PhilosophyImageUrl,
+                            isUploading: viewModel.isUploadingStudio12Philosophy,
+                            upload: { data in await viewModel.uploadStudio12PhilosophyImage(imageData: data) }
+                        )
+                    }
+                    .navigationTitle("Philosophy image")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { quickEditStudio12PhilosophySheet = false }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $quickEditStudio12BookCtaSheet) {
+                NavigationStack {
+                    Form {
+                        Studio12AuxImageUploadSection(
+                            label: "Booking section image",
+                            advice: "",
+                            allowedCropChoices: [.landscape16_9, .portrait4_5, .square],
+                            defaultCropChoice: .landscape16_9,
+                            imageUrl: $viewModel.studio12BookCtaImageUrl,
+                            isUploading: viewModel.isUploadingStudio12BookCta,
+                            upload: { data in await viewModel.uploadStudio12BookCtaImage(imageData: data) }
+                        )
+                    }
+                    .navigationTitle("Booking image")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { quickEditStudio12BookCtaSheet = false }
+                        }
+                    }
+                }
+            }
             .sheet(item: $bladeServiceToEdit) { service in
                 EditTenantServiceSheet(service: service, viewModel: viewModel) {
                     bladeServiceToEdit = nil
+                }
+            }
+            .sheet(isPresented: $isEditingStudio12ProcessStep) {
+                Group {
+                    if viewModel.studio12ProcessSteps.indices.contains(studio12ProcessStepEditIndex) {
+                        EditStudio12ProcessStepSheet(
+                            stepIndex: studio12ProcessStepEditIndex,
+                            viewModel: viewModel,
+                            onDismiss: { isEditingStudio12ProcessStep = false }
+                        )
+                    }
                 }
             }
             .sheet(item: $formFieldToEdit) { field in
@@ -150,6 +215,123 @@ struct DesignView: View {
     private struct QuickEditFeaturedSlotPayload: Identifiable {
         let slotIndex: Int
         var id: Int { slotIndex }
+    }
+
+    private struct QuickEditGallerySlotPayload: Identifiable {
+        let slotIndex: Int
+        var id: Int { slotIndex }
+    }
+
+    private struct QuickEditGallerySlotSheet: View {
+        let slotIndex: Int
+        @ObservedObject var viewModel: DesignViewModel
+        var onDone: () -> Void
+        @State private var selectedItem: PhotosPickerItem?
+        @State private var cropSheetItem: SingleImageCropSheetItem?
+
+        private var hasImageAtSlot: Bool {
+            guard viewModel.galleryImages.indices.contains(slotIndex) else { return false }
+            return !viewModel.galleryImages[slotIndex].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        private var slotImageURL: URL? {
+            guard viewModel.galleryImages.indices.contains(slotIndex) else { return nil }
+            let s = viewModel.galleryImages[slotIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !s.isEmpty, let url = URL(string: s) else { return nil }
+            return url
+        }
+
+        private let previewThumbSize = CGSize(width: 72, height: 72)
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section {
+                        Text("Gallery photo")
+                            .font(.subheadline.weight(.medium))
+                        HStack(alignment: .center, spacing: 16) {
+                            Group {
+                                if let url = slotImageURL {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Color.gray.opacity(0.2)
+                                    }
+                                    .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+                                }
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                PhotosPicker(
+                                    selection: $selectedItem,
+                                    matching: .images,
+                                    photoLibrary: .shared()
+                                ) {
+                                    HStack {
+                                        Image(systemName: "photo.badge.plus")
+                                        Text(hasImageAtSlot ? "Replace photo" : "Add photo")
+                                    }
+                                    .font(.subheadline)
+                                }
+                                .onChange(of: selectedItem) { _, newItem in
+                                    Task {
+                                        guard let newItem else { return }
+                                        if let data = try? await newItem.loadTransferable(type: Data.self),
+                                           !data.isEmpty,
+                                           let uiImage = UIImage(data: data) {
+                                            await MainActor.run {
+                                                cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                                                selectedItem = nil
+                                            }
+                                        } else {
+                                            await MainActor.run { selectedItem = nil }
+                                        }
+                                    }
+                                }
+                                if viewModel.isUploadingGallery {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                            .scaleEffect(0.85)
+                                        Text("Uploading…")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .navigationTitle("Photo")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: onDone)
+                    }
+                }
+                .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
+                    UploadImagePreparationSheet(
+                        images: [item.image],
+                        advice: "",
+                        navigationTitle: "Photo",
+                        allowedChoices: [.portrait4_5, .square, .landscape16_9],
+                        defaultChoice: .portrait4_5,
+                        showsInstructionalCopy: false,
+                        onUseJPEGData: { dataList in
+                            guard let data = dataList.first else { return }
+                            cropSheetItem = nil
+                            Task { await viewModel.replaceOrAppendGalleryImage(at: slotIndex, imageData: data) }
+                        }
+                    )
+                }
+            }
+        }
     }
 
     private struct QuickEditFeaturedWorkSlotSheet: View {
@@ -308,9 +490,21 @@ struct DesignView: View {
         case "studio12PhilosophyHeadLine2": return "Philosophy headline (line 2)"
         case "studio12PhilosophyHeadItalic": return "Philosophy headline (accent)"
         case "heroImage": return "Hero image"
+        case "studio12PhilosophyImage": return "Philosophy image"
+        case "studio12BookCtaImage": return "Booking section image"
         default:
+            if key.hasPrefix("galleryImage:") {
+                return "Gallery photo"
+            }
             if key.hasPrefix("featuredWork:") {
                 return "Featured work"
+            }
+            if key.hasPrefix("s12Process:") {
+                let parts = key.split(separator: ":").map(String.init)
+                if parts.count == 3, parts[2] == "edit" { return "Edit step" }
+                if parts.count == 3, parts[2] == "title" { return "Step title" }
+                if parts.count == 3, parts[2] == "body" { return "Step description" }
+                return "Process step"
             }
             if key.hasPrefix("svc:") {
                 let parts = key.split(separator: ":").map(String.init)
@@ -359,6 +553,33 @@ struct DesignView: View {
                         let tail = String(key.dropFirst("featuredWork:".count))
                         if let idx = Int(tail), idx >= 0, idx < viewModel.featuredWorkImageSlotCount {
                             quickEditFeaturedSlot = QuickEditFeaturedSlotPayload(slotIndex: idx)
+                            return
+                        }
+                    }
+                    if key == "studio12PhilosophyImage" {
+                        quickEditStudio12PhilosophySheet = true
+                        return
+                    }
+                    if key == "studio12BookCtaImage" {
+                        quickEditStudio12BookCtaSheet = true
+                        return
+                    }
+                    if key.hasPrefix("galleryImage:") {
+                        let tail = String(key.dropFirst("galleryImage:".count))
+                        if let idx = Int(tail), idx >= 0 {
+                            quickEditGallerySlot = QuickEditGallerySlotPayload(slotIndex: idx)
+                            return
+                        }
+                    }
+                    if key.hasPrefix("s12Process:") {
+                        let parts = key.split(separator: ":").map(String.init)
+                        if parts.count == 3,
+                           parts[0] == "s12Process",
+                           ["edit", "title", "body"].contains(parts[2]),
+                           let idx = Int(parts[1]),
+                           viewModel.studio12ProcessSteps.indices.contains(idx) {
+                            studio12ProcessStepEditIndex = idx
+                            isEditingStudio12ProcessStep = true
                             return
                         }
                     }
@@ -470,17 +691,6 @@ struct DesignView: View {
             }
         } message: {
             Text("Your current steps will be replaced with the default “How it works” steps for your business type. Tap Save Home to publish.")
-        }
-        .sheet(isPresented: $isEditingStudio12ProcessStep) {
-            Group {
-                if viewModel.studio12ProcessSteps.indices.contains(studio12ProcessStepEditIndex) {
-                    EditStudio12ProcessStepSheet(
-                        stepIndex: studio12ProcessStepEditIndex,
-                        viewModel: viewModel,
-                        onDismiss: { isEditingStudio12ProcessStep = false }
-                    )
-                }
-            }
         }
     }
 
@@ -2448,6 +2658,7 @@ private struct EditStudio12ProcessStepSheet: View {
                         let t = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
                         let b = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
                         viewModel.updateStudio12ProcessStep(at: stepIndex, title: t, body: b)
+                        Task { await viewModel.persistStudio12ProcessSteps() }
                         onDismiss()
                     }
                 }

@@ -208,15 +208,24 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               var sheet = document.createElement('style');
               sheet.id = 'bk-quick-edit-style';
-              sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
-                '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
+              sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
+                '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
+                '.s12-section-title,.s12-info-title,.s12-test-title,.s12-gallery-title,.s12-book-cta-title,.s12-phil-title,.luxe-section-heading{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
+                '.s12-section-title [data-edit-key],.s12-info-title [data-edit-key],.s12-test-title [data-edit-key],.s12-gallery-title [data-edit-key],.s12-book-cta-title [data-edit-key],.s12-phil-title [data-edit-key],.luxe-section-heading [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
+                '.s12-address [data-edit-key],.s12-phone [data-edit-key],.s12-hours-block [data-edit-key],.s12-phil-body [data-edit-key]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:8px 0!important;}' +
                 '.classic-hero-tag [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
-                '[data-edit-key^="svc:"][role="button"]{display:block!important;cursor:pointer!important;}' +
-                'a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key]{cursor:pointer!important;}' +
-                'a.s12-nav-book[data-edit-key],a.s12-btn-dark [data-edit-key],a.s12-btn-outline [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
-                '.s12-phil-label [data-edit-key],.s12-info-title [data-edit-key],.s12-section-title [data-edit-key],.luxe-contact-item h3 [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
-                'button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}';
+                '[data-edit-key^="svc:"][role="button"],[data-edit-key^="svc:"][data-edit-key$=":edit"],[data-edit-key^="s12Process:"][data-edit-key$=":edit"]{display:block!important;cursor:pointer!important;box-sizing:border-box!important;border-radius:4px!important;}' +
+                'a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key],div.s12-svc-cell[data-edit-key]{cursor:pointer!important;}' +
+                'a.s12-nav-book [data-edit-key],a.s12-btn-dark [data-edit-key],a.s12-btn-outline [data-edit-key],.luxe-contact-item h3 [data-edit-key],.s12-phil-label [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
+                '[data-edit-key^="s12Process:"][data-edit-key$=":body"]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin-top:4px!important;}' +
+                '.s12-footer-brand [data-edit-key]{display:inline-block!important;margin:0 3px!important;}' +
+                'button.bk-hero-image-hit[data-edit-key="heroImage"],button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}' +
+                '.luxe-hero:has(.bk-hero-image-hit),.classic-hero-right:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
+                '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;cursor:pointer!important;}' +
+                'img[data-edit-key^="galleryImage"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],' +
+                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback{cursor:pointer!important;}';
               document.head.appendChild(sheet);
               function resolveEditTarget(ev) {
                 var el = ev.target;
@@ -225,7 +234,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 return el.closest('[data-edit-key]');
               }
               function isSheetOnlyKey(key) {
-                return key === 'heroImage' || key.indexOf('svc:') === 0 || key.indexOf('featuredWork:') === 0;
+                return key === 'heroImage' || key === 'studio12PhilosophyImage' || key === 'studio12BookCtaImage' ||
+                  key.indexOf('svc:') === 0 || key.indexOf('s12Process:') === 0 || key.indexOf('featuredWork:') === 0 ||
+                  key.indexOf('galleryImage:') === 0;
               }
               function postToNative(payload) {
                 try {
@@ -351,7 +362,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var t = resolveEditTarget(ev);
                 if (!t) return;
                 var tapKey = t.getAttribute('data-edit-key');
-                if (tapKey && (tapKey === 'heroImage' || tapKey.indexOf('featuredWork:') === 0 || tapKey.indexOf('svc:') === 0)) {
+                if (tapKey && (tapKey === 'heroImage' || tapKey === 'studio12PhilosophyImage' || tapKey === 'studio12BookCtaImage' ||
+                  tapKey.indexOf('featuredWork:') === 0 || tapKey.indexOf('galleryImage:') === 0 || tapKey.indexOf('svc:') === 0 ||
+                  tapKey.indexOf('s12Process:') === 0)) {
                   ev.preventDefault();
                   ev.stopPropagation();
                   if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();

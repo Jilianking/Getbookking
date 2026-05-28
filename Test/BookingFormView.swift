@@ -12,6 +12,9 @@ struct BookingFormView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = BookingFormViewModel()
     var drawerState: DrawerState?
+    var prefillName: String? = nil
+    var prefillEmail: String? = nil
+    var prefillPhone: String? = nil
     
     @State private var name = ""
     @State private var email = ""
@@ -137,6 +140,11 @@ struct BookingFormView: View {
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                if name.isEmpty, let prefillName, !prefillName.isEmpty { name = prefillName }
+                if email.isEmpty, let prefillEmail, !prefillEmail.isEmpty { email = prefillEmail }
+                if phone.isEmpty, let prefillPhone, !prefillPhone.isEmpty {
+                    phone = PhoneFormatting.displayUS(prefillPhone)
+                }
                 if !selectedDate.isToday && !selectedDate.isPast {
                     await viewModel.loadAvailableTimeSlots(for: selectedDate)
                 }

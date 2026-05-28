@@ -10,11 +10,75 @@ struct Client: Codable, Identifiable {
     var totalAppointments: Int
     var notes: String?
     var preferences: ClientPreferences?
-    
+    var vip: Bool
+    var smsOptedIn: Bool?
+    var smsConsentAt: Date?
+    var smsConsentSource: String?
+    var birthday: String?
+    var referralSource: String?
+    var profileExtras: [ClientProfileExtra]?
+
+    init(
+        id: String? = nil,
+        name: String,
+        email: String,
+        phone: String? = nil,
+        createdAt: Date = Date(),
+        lastContact: Date? = nil,
+        totalAppointments: Int = 0,
+        notes: String? = nil,
+        preferences: ClientPreferences? = nil,
+        vip: Bool = false,
+        smsOptedIn: Bool? = nil,
+        smsConsentAt: Date? = nil,
+        smsConsentSource: String? = nil,
+        birthday: String? = nil,
+        referralSource: String? = nil,
+        profileExtras: [ClientProfileExtra]? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.phone = phone
+        self.createdAt = createdAt
+        self.lastContact = lastContact
+        self.totalAppointments = totalAppointments
+        self.notes = notes
+        self.preferences = preferences
+        self.vip = vip
+        self.smsOptedIn = smsOptedIn
+        self.smsConsentAt = smsConsentAt
+        self.smsConsentSource = smsConsentSource
+        self.birthday = birthday
+        self.referralSource = referralSource
+        self.profileExtras = profileExtras
+    }
+
+    struct ClientProfileExtra: Codable, Identifiable, Equatable {
+        var id: String
+        var label: String
+        var value: String
+
+        init(id: String = UUID().uuidString, label: String = "", value: String = "") {
+            self.id = id
+            self.label = label
+            self.value = value
+        }
+    }
+
     struct ClientPreferences: Codable {
         var preferredTime: String?
         var tattooStyle: String?
+        var tattooStyles: [String]?
         var allergies: [String]?
+
+        var resolvedTattooStyles: [String] {
+            if let tattooStyles, !tattooStyles.isEmpty { return tattooStyles }
+            if let tattooStyle = tattooStyle?.trimmingCharacters(in: .whitespacesAndNewlines), !tattooStyle.isEmpty {
+                return [tattooStyle]
+            }
+            return []
+        }
     }
 }
 

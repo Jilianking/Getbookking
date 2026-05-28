@@ -31,6 +31,8 @@ struct BookingRequest: Identifiable {
     var assignedMemberUid: String?
     var assignedMemberName: String?
     var assignedMemberEmail: String?
+    var smsConsentAccepted: Bool?
+    var smsConsentAt: Date?
 
     var hasAssignedMember: Bool {
         let uid = (assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

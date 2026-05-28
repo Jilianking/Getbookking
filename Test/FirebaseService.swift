@@ -22,6 +22,17 @@ class FirebaseService: ObservableObject {
     private let db = Firestore.firestore()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     private var bookingsListener: ListenerRegistration?
+    private var smsThreadsListener: ListenerRegistration?
+    private var smsMessageListeners: [String: ListenerRegistration] = [:]
+
+    private func sanitizedFirestoreId(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.contains("/") else { return nil }
+        guard trimmed != "." && trimmed != ".." else { return nil }
+        return trimmed
+    }
 
     // MARK: - Fetch Services (legacy)
     func fetchServices() async {
@@ -219,7 +230,7 @@ class FirebaseService: ObservableObject {
 
     // MARK: - Messages
     private func currentTenantId() async throws -> String {
-        guard let uid = Auth.auth().currentUser?.uid else {
+        guard let uid = sanitizedFirestoreId(Auth.auth().currentUser?.uid) else {
             throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
         }
         let profile = try await fetchProviderProfile(uid: uid)
@@ -242,6 +253,108 @@ class FirebaseService: ObservableObject {
         }
     }
 
+    private func mapSmsLogDocument(_ doc: QueryDocumentSnapshot, threadId: String) -> Message {
+        let data = doc.data()
+        let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+        let body = data["body"] as? String ?? ""
+        let direction = (data["direction"] as? String ?? "").lowercased()
+        let from = data["from"] as? String ?? ""
+        let to = data["to"] as? String ?? ""
+        let counterpartyPhone = direction == "outbound" ? to : from
+        let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Message(
+            id: doc.documentID,
+            clientId: counterpartyPhone,
+            clientName: displayName.isEmpty ? PhoneFormatting.displayUS(counterpartyPhone) : displayName,
+            content: body,
+            sender: direction == "outbound" ? .admin : .client,
+            createdAt: createdAt,
+            read: true,
+            threadId: threadId
+        )
+    }
+
+    func startThreadsListener(
+        onUpdate: @escaping ([String]) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        Task {
+            do {
+                let tenantId = try await currentTenantId()
+                stopThreadsListener()
+                smsThreadsListener = db.collection("tenants").document(tenantId)
+                    .collection("smsThreads")
+                    .order(by: "lastMessageAt", descending: true)
+                    .addSnapshotListener { snapshot, error in
+                        if let error {
+                            onError(error.localizedDescription)
+                            return
+                        }
+                        guard let snapshot else {
+                            onUpdate([])
+                            return
+                        }
+                        let threadIds = snapshot.documents.compactMap { doc -> String? in
+                            let data = doc.data()
+                            let threadId = (data["threadId"] as? String) ?? doc.documentID
+                            return threadId.isEmpty ? nil : threadId
+                        }
+                        onUpdate(threadIds)
+                    }
+            } catch {
+                onError(error.localizedDescription)
+            }
+        }
+    }
+
+    func stopThreadsListener() {
+        smsThreadsListener?.remove()
+        smsThreadsListener = nil
+    }
+
+    func startMessagesListener(
+        threadId: String,
+        onUpdate: @escaping ([Message]) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        Task {
+            do {
+                let tenantId = try await currentTenantId()
+                stopMessagesListener(threadId: threadId)
+                smsMessageListeners[threadId] = db.collection("tenants").document(tenantId)
+                    .collection("smsLog")
+                    .whereField("threadId", isEqualTo: threadId)
+                    .order(by: "createdAt", descending: false)
+                    .addSnapshotListener { snapshot, error in
+                        if let error {
+                            onError(error.localizedDescription)
+                            return
+                        }
+                        guard let snapshot else {
+                            onUpdate([])
+                            return
+                        }
+                        onUpdate(snapshot.documents.map { self.mapSmsLogDocument($0, threadId: threadId) })
+                    }
+            } catch {
+                onError(error.localizedDescription)
+            }
+        }
+    }
+
+    func stopMessagesListener(threadId: String) {
+        smsMessageListeners[threadId]?.remove()
+        smsMessageListeners[threadId] = nil
+    }
+
+    func stopAllSmsListeners() {
+        stopThreadsListener()
+        for key in smsMessageListeners.keys {
+            smsMessageListeners[key]?.remove()
+        }
+        smsMessageListeners.removeAll()
+    }
+
     func fetchMessages(threadId: String) async throws -> [Message] {
         let tenantId = try await currentTenantId()
         let snapshot = try await db.collection("tenants").document(tenantId)
@@ -249,26 +362,7 @@ class FirebaseService: ObservableObject {
             .whereField("threadId", isEqualTo: threadId)
             .order(by: "createdAt", descending: false)
             .getDocuments()
-        return snapshot.documents.compactMap { doc -> Message? in
-            let data = doc.data()
-            let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
-            let body = data["body"] as? String ?? ""
-            let direction = (data["direction"] as? String ?? "").lowercased()
-            let from = data["from"] as? String ?? ""
-            let to = data["to"] as? String ?? ""
-            let counterpartyPhone = direction == "outbound" ? to : from
-            let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return Message(
-                id: doc.documentID,
-                clientId: counterpartyPhone,
-                clientName: displayName.isEmpty ? PhoneFormatting.displayUS(counterpartyPhone) : displayName,
-                content: body,
-                sender: direction == "outbound" ? .admin : .client,
-                createdAt: createdAt,
-                read: true,
-                threadId: threadId
-            )
-        }
+        return snapshot.documents.map { mapSmsLogDocument($0, threadId: threadId) }
     }
 
     func sendMessage(_ message: Message) async throws {
@@ -338,7 +432,9 @@ class FirebaseService: ObservableObject {
                 readAt: (d["readAt"] as? Timestamp)?.dateValue(),
                 assignedMemberUid: d["assignedMemberUid"] as? String,
                 assignedMemberName: d["assignedMemberName"] as? String,
-                assignedMemberEmail: d["assignedMemberEmail"] as? String
+                assignedMemberEmail: d["assignedMemberEmail"] as? String,
+                smsConsentAccepted: d["smsConsentAccepted"] as? Bool,
+                smsConsentAt: (d["smsConsentAt"] as? Timestamp)?.dateValue()
             )
         }
     }
@@ -386,30 +482,90 @@ class FirebaseService: ObservableObject {
         let ref = try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests")
             .addDocument(data: data)
+        let normalizedPhone = PhoneFormatting.normalizedForStorage(customerPhone)
+        let customerId: String = {
+            let digits = PhoneFormatting.digits(from: normalizedPhone ?? "")
+            if digits.count >= 10 { return String(digits.suffix(10)) }
+            let normalizedEmail = customerEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !normalizedEmail.isEmpty {
+                let safe = normalizedEmail.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+                return String(safe.prefix(120))
+            }
+            return UUID().uuidString
+        }()
+        try await upsertTenantCustomer(
+            tenantId: tenantId,
+            customerId: customerId,
+            name: customerName,
+            email: customerEmail,
+            phone: normalizedPhone
+        )
         return ref.documentID
+    }
+
+    private func clientFromFirestoreData(documentId: String, data: [String: Any]) -> Client? {
+        guard let name = data["name"] as? String else { return nil }
+        let email = data["email"] as? String ?? ""
+        let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
+        let updatedAt = (data["updatedAt"] as? Timestamp)?.dateValue()
+        let prefsData = data["preferences"] as? [String: Any]
+        let preferences: Client.ClientPreferences? = {
+            guard let prefsData else { return nil }
+            return Client.ClientPreferences(
+                preferredTime: prefsData["preferredTime"] as? String,
+                tattooStyle: prefsData["tattooStyle"] as? String,
+                tattooStyles: prefsData["tattooStyles"] as? [String],
+                allergies: prefsData["allergies"] as? [String]
+            )
+        }()
+        let profileExtras: [Client.ClientProfileExtra]? = {
+            guard let raw = data["profileExtras"] as? [[String: Any]] else { return nil }
+            let parsed = raw.compactMap { item -> Client.ClientProfileExtra? in
+                let label = (item["label"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = (item["value"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !label.isEmpty || !value.isEmpty else { return nil }
+                let id = (item["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
+                return Client.ClientProfileExtra(id: id, label: label, value: value)
+            }
+            return parsed.isEmpty ? nil : parsed
+        }()
+        return Client(
+            id: documentId,
+            name: name,
+            email: email,
+            phone: data["phone"] as? String,
+            createdAt: createdAt ?? updatedAt ?? Date(),
+            lastContact: updatedAt,
+            totalAppointments: data["totalAppointments"] as? Int ?? 0,
+            notes: data["notes"] as? String ?? data["internalNotes"] as? String,
+            preferences: preferences,
+            vip: data["vip"] as? Bool ?? false,
+            smsOptedIn: data["smsOptedIn"] as? Bool,
+            smsConsentAt: (data["smsConsentAt"] as? Timestamp)?.dateValue(),
+            smsConsentSource: data["smsConsentSource"] as? String,
+            birthday: data["birthday"] as? String,
+            referralSource: data["referralSource"] as? String,
+            profileExtras: profileExtras
+        )
     }
 
     func fetchTenantCustomers(tenantId: String) async throws -> [Client] {
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("customers")
             .getDocuments()
-        return snapshot.documents.compactMap { doc -> Client? in
-            let d = doc.data()
-            guard let name = d["name"] as? String else { return nil }
-            let email = d["email"] as? String ?? ""
-            let updatedAt = (d["updatedAt"] as? Timestamp)?.dateValue()
-            return Client(
-                id: doc.documentID,
-                name: name,
-                email: email,
-                phone: d["phone"] as? String,
-                createdAt: updatedAt ?? Date(),
-                lastContact: updatedAt,
-                totalAppointments: 0,
-                notes: nil,
-                preferences: nil
-            )
-        }
+        return snapshot.documents.compactMap { clientFromFirestoreData(documentId: $0.documentID, data: $0.data()) }
+    }
+
+    func fetchTenantCustomer(tenantId: String, customerId: String) async throws -> Client? {
+        let doc = try await db.collection("tenants").document(tenantId)
+            .collection("customers").document(customerId).getDocument()
+        guard doc.exists, let data = doc.data() else { return nil }
+        return clientFromFirestoreData(documentId: doc.documentID, data: data)
+    }
+
+    func fetchCurrentTenantCustomers() async throws -> [Client] {
+        let tenantId = try await currentTenantId()
+        return try await fetchTenantCustomers(tenantId: tenantId)
     }
 
     func upsertTenantCustomer(tenantId: String, customerId: String, name: String, email: String, phone: String?) async throws {
@@ -497,13 +653,17 @@ class FirebaseService: ObservableObject {
     }
 
     func fetchProviderProfile(uid: String) async throws -> ProviderProfile? {
-        let doc = try await db.collection("users").document(uid).getDocument()
+        guard let safeUid = sanitizedFirestoreId(uid) else { return nil }
+        let doc = try await db.collection("users").document(safeUid).getDocument()
         guard doc.exists, let data = doc.data() else { return nil }
         return parseProviderProfile(data: data)
     }
 
     func updateProviderProfile(uid: String, updates: [String: Any]) async throws {
-        try await db.collection("users").document(uid).setData(updates, merge: true)
+        guard let safeUid = sanitizedFirestoreId(uid) else {
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid user id"])
+        }
+        try await db.collection("users").document(safeUid).setData(updates, merge: true)
     }
 
     // MARK: - Tenant design (branding, services)

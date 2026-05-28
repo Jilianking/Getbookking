@@ -293,5 +293,75 @@ class RequestsViewModel: ObservableObject {
             print("Error deleting request: \(error)")
         }
     }
+
+    /// Stable `tenants/{id}/customers/{docId}` key (phone digits, then email slug).
+    static func customerDocumentId(for booking: BookingRequest) -> String? {
+        let email = (booking.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(booking.customerPhone)
+        let digits = PhoneFormatting.digits(from: phone ?? "")
+        if digits.count >= 10 { return String(digits.suffix(10)) }
+        if !email.isEmpty {
+            let safe = email.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            return String(safe.prefix(120))
+        }
+        return nil
+    }
+
+    func addBookingRequestCustomerToContacts(_ booking: BookingRequest) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let name = (booking.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = (booking.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(booking.customerPhone)
+        guard !name.isEmpty else {
+            await MainActor.run { actionError = "Customer name is required to save contact." }
+            return false
+        }
+        guard !email.isEmpty || (phone != nil && !(phone ?? "").isEmpty) else {
+            await MainActor.run { actionError = "Add an email or phone number to save contact." }
+            return false
+        }
+        do {
+            let customerId = Self.customerDocumentId(for: booking) ?? UUID().uuidString
+            try await firebaseService.upsertTenantCustomer(
+                tenantId: tid,
+                customerId: customerId,
+                name: name,
+                email: email,
+                phone: phone
+            )
+            await MainActor.run { actionError = nil }
+            return true
+        } catch {
+            await MainActor.run { actionError = error.localizedDescription }
+            return false
+        }
+    }
+
+    func isBookingRequestCustomerInContacts(_ booking: BookingRequest) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let email = (booking.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(booking.customerPhone) ?? ""
+        let digits = PhoneFormatting.digits(from: phone)
+        let targetPhoneId = digits.count >= 10 ? String(digits.suffix(10)) : ""
+        let targetEmailId = email.isEmpty
+            ? ""
+            : String(email.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression).prefix(120))
+        do {
+            let customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
+            return customers.contains { customer in
+                let existingPhoneDigits = PhoneFormatting.digits(from: customer.phone ?? "")
+                let existingPhoneId = existingPhoneDigits.count >= 10 ? String(existingPhoneDigits.suffix(10)) : ""
+                let existingEmailId = customer.email
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+                if !targetPhoneId.isEmpty && existingPhoneId == targetPhoneId { return true }
+                if !targetEmailId.isEmpty && String(existingEmailId.prefix(120)) == targetEmailId { return true }
+                return false
+            }
+        } catch {
+            return false
+        }
+    }
 }
 

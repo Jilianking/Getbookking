@@ -1749,6 +1749,11 @@ class DesignViewModel: ObservableObject {
         formFields.removeAll { $0.id == field.id }
     }
 
+    func updateFormField(_ updatedField: FormField) {
+        guard let index = formFields.firstIndex(where: { $0.id == updatedField.id }) else { return }
+        formFields[index] = updatedField
+    }
+
 
 
     var activeTemplateFamily: TemplateFamily {

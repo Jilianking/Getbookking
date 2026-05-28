@@ -70,6 +70,12 @@ enum AdminSection: String, CaseIterable, Identifiable {
 final class DrawerState {
     var isOpen = false
     var selectedSection: AdminSection = .dashboard
+    /// Opens a specific customer profile in Customers (Firestore doc id).
+    var customersDetailClientId: String?
+    /// Prefill Messages compose from customer profile.
+    var messagesComposePhone: String?
+    var messagesComposeClientName: String?
+    var messagesShouldOpenCompose = false
 }
 
 /// Initials always visible; profile photo preferred, then tenant logo; fades in when loaded.

@@ -24,6 +24,7 @@ struct DesignView: View {
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
     @State private var quickEditFeaturedSlot: QuickEditFeaturedSlotPayload?
+    @State private var formFieldToEdit: FormField?
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -122,6 +123,19 @@ struct DesignView: View {
                 EditTenantServiceSheet(service: service, viewModel: viewModel) {
                     bladeServiceToEdit = nil
                 }
+            }
+            .sheet(item: $formFieldToEdit) { field in
+                EditFormFieldSheet(
+                    field: field,
+                    existingKeys: viewModel.formFields
+                        .filter { $0.id != field.id }
+                        .map { $0.key.lowercased() },
+                    onCancel: { formFieldToEdit = nil },
+                    onSave: { updatedField in
+                        viewModel.updateFormField(updatedField)
+                        formFieldToEdit = nil
+                    }
+                )
             }
         }
         .navigationViewStyle(.stack)
@@ -1074,6 +1088,8 @@ struct DesignView: View {
                         Image(systemName: "trash")
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { formFieldToEdit = field }
                 .padding()
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(8)
@@ -1998,6 +2014,132 @@ struct HexColorRow: View {
             ColorPicker("", selection: colorBinding)
                 .labelsHidden()
         }
+    }
+}
+
+private struct EditFormFieldSheet: View {
+    let field: FormField
+    let existingKeys: [String]
+    let onCancel: () -> Void
+    let onSave: (FormField) -> Void
+
+    @State private var label: String
+    @State private var key: String
+    @State private var type: FormFieldType
+    @State private var required: Bool
+    @State private var optionsText: String
+    @State private var placeholder: String
+    @State private var validationError: String?
+
+    init(
+        field: FormField,
+        existingKeys: [String],
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (FormField) -> Void
+    ) {
+        self.field = field
+        self.existingKeys = existingKeys
+        self.onCancel = onCancel
+        self.onSave = onSave
+        _label = State(initialValue: field.label)
+        _key = State(initialValue: field.key)
+        _type = State(initialValue: field.type)
+        _required = State(initialValue: field.required)
+        _optionsText = State(initialValue: (field.options ?? []).joined(separator: ", "))
+        _placeholder = State(initialValue: field.placeholder ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Field") {
+                    TextField("Label", text: $label)
+                    TextField("Key", text: $key)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Picker("Type", selection: $type) {
+                        ForEach(FormFieldType.allCases, id: \.self) { item in
+                            Text(item.displayName).tag(item)
+                        }
+                    }
+                    Toggle("Required", isOn: $required)
+                }
+                Section("Display") {
+                    TextField("Placeholder (optional)", text: $placeholder)
+                }
+                if type == .select {
+                    Section("Dropdown options") {
+                        TextField("Comma-separated options", text: $optionsText, axis: .vertical)
+                            .lineLimit(2...6)
+                        Text("Example: Morning, Afternoon, Evening")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                if let validationError {
+                    Section {
+                        Text(validationError)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit field")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveField() }
+                }
+            }
+        }
+    }
+
+    private func saveField() {
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedKey = sanitizeKey(key)
+        guard !trimmedLabel.isEmpty else {
+            validationError = "Label is required."
+            return
+        }
+        guard !normalizedKey.isEmpty else {
+            validationError = "Key is required."
+            return
+        }
+        guard !existingKeys.contains(normalizedKey.lowercased()) else {
+            validationError = "That key is already used by another field."
+            return
+        }
+        let parsedOptions = optionsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if type == .select && parsedOptions.isEmpty {
+            validationError = "Add at least one option for a dropdown field."
+            return
+        }
+        validationError = nil
+        onSave(
+            FormField(
+                id: field.id,
+                key: normalizedKey,
+                label: trimmedLabel,
+                type: type,
+                required: required,
+                options: type == .select ? parsedOptions : nil,
+                placeholder: placeholder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil
+                    : placeholder.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        )
+    }
+
+    private func sanitizeKey(_ raw: String) -> String {
+        let lowered = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let collapsed = lowered.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+        return collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
     }
 }
 

@@ -65,6 +65,21 @@ function normalizeCustomerPhone(raw) {
   return digits;
 }
 
+function customerDocIdForTenant(name, email, phone) {
+  const digits = (phone || "").toString().replace(/\D/g, "");
+  if (digits.length >= 10) return digits.slice(-10);
+  const normalizedEmail = (email || "").toString().trim().toLowerCase();
+  if (normalizedEmail) {
+    return normalizedEmail
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 120);
+  }
+  const fallback = (name || "").toString().trim().toLowerCase() || "customer";
+  const safe = fallback.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return `${safe || "customer"}_${Date.now()}`;
+}
+
 /** Canonical plan slug: `solo` | `studio` | `shop` (accepts legacy `basic` and older aliases). */
 function normalizeSubscriptionPlan(plan) {
   const p = (plan || "").toString().trim().toLowerCase();
@@ -1009,6 +1024,30 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     .doc(tenantId)
     .collection("bookingRequests")
     .add(bookingData);
+
+  const customerRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(customerDocIdForTenant(customerName, customerEmail, customerPhone));
+  await customerRef.set(
+    {
+      name: customerName,
+      email: customerEmail,
+      ...(customerPhone ? { phone: customerPhone } : {}),
+      ...(customerPhone && smsConsentAccepted
+        ? {
+            smsOptedIn: true,
+            smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
+            smsConsentSource: "web_booking",
+          }
+        : {}),
+      source: "booking_request_web",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   return { requestId: ref.id };
 });

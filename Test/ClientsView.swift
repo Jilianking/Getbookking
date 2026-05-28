@@ -4,11 +4,12 @@ struct ClientsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = ClientsViewModel()
     @State private var searchText = ""
+    @State private var navPath: [String] = []
     var drawerState: DrawerState
     let sectionTitle: String
 
     var body: some View {
-        NavigationView {
+        NavigationStack(path: $navPath) {
             VStack(spacing: 0) {
                 // Add Customer button
                 Button(action: {}) {
@@ -45,7 +46,11 @@ struct ClientsView: View {
                         ForEach(alphabeticalSections, id: \.letter) { section in
                             Section(header: sectionHeader(section.letter)) {
                                 ForEach(section.clients) { client in
-                                    NavigationLink(destination: ClientDetailView(client: client)) {
+                                    if let clientId = client.id {
+                                        NavigationLink(value: clientId) {
+                                            ClientRow(client: client)
+                                        }
+                                    } else {
                                         ClientRow(client: client)
                                     }
                                 }
@@ -55,6 +60,7 @@ struct ClientsView: View {
                     .listStyle(.plain)
                     .refreshable {
                         await viewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
+                        openPendingCustomerProfileIfNeeded()
                     }
                 }
             }
@@ -66,11 +72,31 @@ struct ClientsView: View {
                     }
                 }
             }
+            .navigationDestination(for: String.self) { clientId in
+                if let client = viewModel.clients.first(where: { $0.id == clientId }) {
+                    ClientProfileView(client: client, clientsViewModel: viewModel, drawerState: drawerState)
+                } else {
+                    ContentUnavailableView("Customer not found", systemImage: "person.crop.circle.badge.questionmark")
+                }
+            }
             .task {
                 await viewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
+                openPendingCustomerProfileIfNeeded()
+            }
+            .onChange(of: drawerState.customersDetailClientId) { _, _ in
+                openPendingCustomerProfileIfNeeded()
             }
         }
-        .navigationViewStyle(.stack)
+    }
+
+    private func openPendingCustomerProfileIfNeeded() {
+        guard !viewModel.isLoading else { return }
+        guard let clientId = drawerState.customersDetailClientId?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !clientId.isEmpty else { return }
+        drawerState.customersDetailClientId = nil
+        guard viewModel.clients.contains(where: { $0.id == clientId }) else { return }
+        navPath = [clientId]
     }
 
     private var filteredClients: [Client] {
@@ -79,7 +105,8 @@ struct ClientsView: View {
         }
         return viewModel.clients.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.email.localizedCaseInsensitiveContains(searchText)
+            $0.email.localizedCaseInsensitiveContains(searchText) ||
+            (PhoneFormatting.digits(from: $0.phone ?? "").contains(PhoneFormatting.digits(from: searchText)))
         }
     }
 
@@ -127,35 +154,5 @@ struct ClientRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
-    }
-}
-
-struct ClientDetailView: View {
-    let client: Client
-
-    var body: some View {
-        Form {
-            Section(header: Text("Contact Information")) {
-                Text(client.name)
-                Text(client.email)
-                if let phone = client.phone {
-                    Text(phone)
-                }
-            }
-
-            Section(header: Text("Statistics")) {
-                Text("Total Appointments: \(client.totalAppointments)")
-                if let lastContact = client.lastContact {
-                    Text("Last Contact: \(lastContact, style: .date)")
-                }
-            }
-
-            if let notes = client.notes {
-                Section(header: Text("Notes")) {
-                    Text(notes)
-                }
-            }
-        }
-        .navigationTitle(client.name)
     }
 }

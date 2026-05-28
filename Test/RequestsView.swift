@@ -416,6 +416,7 @@ struct BookingRequestDetailView: View {
     @State private var assigneePickerKey: String = BookingAssigneeFilter.unassignedKey
     @State private var assigneePickerReady = false
     @State private var showAssignScheduleSheet = false
+    @State private var contactAlreadyExists = false
 
     private var currentRequest: BookingRequest {
         guard let id = request.documentId,
@@ -567,6 +568,47 @@ struct BookingRequestDetailView: View {
                                 .contentShape(Rectangle())
                             }
                         }
+                        Divider()
+                            .padding(.vertical, 8)
+                        if contactAlreadyExists {
+                            Button(action: openCustomerInCustomersList) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "person.2.fill")
+                                        .font(.body)
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24, alignment: .center)
+                                    Text("View in Customers")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        } else {
+                            Button {
+                                Task {
+                                    let saved = await viewModel.addBookingRequestCustomerToContacts(currentRequest)
+                                    if saved {
+                                        await MainActor.run { contactAlreadyExists = true }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "person.crop.circle.badge.plus")
+                                        .font(.body)
+                                        .foregroundColor(.green)
+                                        .frame(width: 24, alignment: .center)
+                                    Text("Add to contacts")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
@@ -675,6 +717,8 @@ struct BookingRequestDetailView: View {
         }
         .task(id: request.documentId) {
             await markReadIfNeeded()
+            let exists = await viewModel.isBookingRequestCustomerInContacts(currentRequest)
+            await MainActor.run { contactAlreadyExists = exists }
         }
         .onAppear {
             assigneePickerKey = Self.assigneePickerKey(
@@ -785,6 +829,14 @@ struct BookingRequestDetailView: View {
         guard currentRequest.readAt == nil else { return }
         guard let rid = currentRequest.documentId else { return }
         _ = await viewModel.markBookingRequestAsRead(requestId: rid)
+    }
+
+    private func openCustomerInCustomersList() {
+        guard let customerId = RequestsViewModel.customerDocumentId(for: currentRequest) else { return }
+        drawerState.customersDetailClientId = customerId
+        drawerState.selectedSection = .clients
+        drawerState.isOpen = false
+        dismiss()
     }
 }
 

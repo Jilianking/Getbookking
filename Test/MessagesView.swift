@@ -5,6 +5,8 @@ struct MessagesView: View {
     @StateObject private var viewModel = MessagesViewModel()
     @State private var selectedThreadId: String?
     @State private var showingCompose = false
+    @State private var composePrefillPhone = ""
+    @State private var composePrefillName = ""
     @State private var searchText = ""
     var drawerState: DrawerState
     let sectionTitle: String
@@ -57,10 +59,37 @@ struct MessagesView: View {
                 }
             }
             .sheet(isPresented: $showingCompose) {
-                ComposeMessageView(viewModel: viewModel, drawerState: drawerState)
+                ComposeMessageView(
+                    viewModel: viewModel,
+                    drawerState: drawerState,
+                    prefillPhone: composePrefillPhone,
+                    prefillClientName: composePrefillName
+                )
+            }
+            .onChange(of: drawerState.messagesShouldOpenCompose) { _, shouldOpen in
+                guard shouldOpen else { return }
+                composePrefillPhone = drawerState.messagesComposePhone ?? ""
+                composePrefillName = drawerState.messagesComposeClientName ?? ""
+                drawerState.messagesComposePhone = nil
+                drawerState.messagesComposeClientName = nil
+                drawerState.messagesShouldOpenCompose = false
+                selectedThreadId = nil
+                showingCompose = true
             }
             .task {
+                viewModel.startThreadsListening(isDemoMode: authViewModel.isDemoMode)
                 await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
+                if drawerState.messagesShouldOpenCompose {
+                    composePrefillPhone = drawerState.messagesComposePhone ?? ""
+                    composePrefillName = drawerState.messagesComposeClientName ?? ""
+                    drawerState.messagesComposePhone = nil
+                    drawerState.messagesComposeClientName = nil
+                    drawerState.messagesShouldOpenCompose = false
+                    showingCompose = true
+                }
+            }
+            .onDisappear {
+                viewModel.stopThreadsListening()
             }
         }
         .navigationViewStyle(.stack)
@@ -204,6 +233,9 @@ struct MessageThreadView: View {
         .onAppear {
             startListening()
         }
+        .onDisappear {
+            viewModel.stopListeningToMessages(threadId: threadId)
+        }
     }
 
     private func loadMessages() async {
@@ -261,51 +293,282 @@ struct MessageBubble: View {
 struct ComposeMessageView: View {
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
+    var prefillPhone: String = ""
+    var prefillClientName: String = ""
     @Environment(\.dismiss) var dismiss
-    @State private var clientId = ""
-    @State private var clientName = ""
+    @State private var clientPhone = ""
     @State private var message = ""
+    @State private var selectedClientName = ""
+    @State private var showingClientPicker = false
+    @State private var pickerSearchText = ""
+    @FocusState private var toFieldFocused: Bool
+    @FocusState private var messageFieldFocused: Bool
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ZStack {
+                    Text("New Message")
+                        .font(.system(size: 33, weight: .bold))
+                        .foregroundColor(.white)
+                    HStack {
+                        Spacer()
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.white.opacity(0.85))
+                                .frame(width: 46, height: 46)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
+                        }
+                    }
+                }
+                .padding(.top, 12)
+                .padding(.horizontal, 18)
+
+                HStack(spacing: 10) {
+                    Text("To:")
+                        .foregroundColor(.white.opacity(0.6))
+                    TextField(
+                        "",
+                        text: Binding(
+                            get: { clientPhone },
+                            set: { newValue in
+                                selectedClientName = ""
+                                let hasLetters = newValue.rangeOfCharacter(from: .letters) != nil
+                                if hasLetters {
+                                    clientPhone = newValue
+                                } else {
+                                    clientPhone = PhoneFormatting.formatAsYouType(newValue)
+                                }
+                            }
+                        )
+                    )
+                        .focused($toFieldFocused)
+                        .keyboardType(.default)
+                        .textInputAutocapitalization(.never)
+                        .foregroundColor(.white)
+                    Button(action: {
+                        showingClientPicker = true
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 46)
+                .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                .padding(.horizontal, 18)
+
+                if !suggestionClients.isEmpty && toFieldFocused {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(suggestionClients.enumerated()), id: \.offset) { index, client in
+                                Button(action: {
+                                    clientPhone = PhoneFormatting.displayUS(client.phone ?? "")
+                                    selectedClientName = client.name
+                                    toFieldFocused = false
+                                    messageFieldFocused = true
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(client.name)
+                                                .foregroundColor(.white)
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text(PhoneFormatting.displayUS(client.phone ?? ""))
+                                                .foregroundColor(.white.opacity(0.65))
+                                                .font(.system(size: 13))
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                }
+                                .buttonStyle(.plain)
+                                if index < suggestionClients.count - 1 {
+                                    Divider().background(Color.white.opacity(0.08))
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 210)
+                    .background(Color.white.opacity(0.03))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 18)
+                }
+
+                Spacer()
+
+                HStack(spacing: 10) {
+                    Button(action: {}) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(width: 40, height: 40)
+                            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField("iMessage", text: $message, axis: .vertical)
+                            .focused($messageFieldFocused)
+                            .foregroundColor(.white)
+                            .lineLimit(1...4)
+                        Button(action: {
+                            if canSend { sendMessage() }
+                        }) {
+                            Image(systemName: canSend ? "arrow.up.circle.fill" : "mic")
+                                .font(.system(size: 21, weight: .regular))
+                                .foregroundColor(canSend ? .blue : .white.opacity(0.55))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 42)
+                    .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 12)
+            }
+        }.onAppear {
+            if clientPhone.isEmpty, !prefillPhone.isEmpty {
+                clientPhone = PhoneFormatting.displayUS(prefillPhone)
+            }
+            if selectedClientName.isEmpty, !prefillClientName.isEmpty {
+                selectedClientName = prefillClientName
+            }
+            if clientPhone.isEmpty {
+                toFieldFocused = true
+            } else {
+                messageFieldFocused = true
+            }
+            Task {
+                await viewModel.loadComposeClients()
+            }
+        }
+        .sheet(isPresented: $showingClientPicker) {
+            ComposeClientPickerSheet(
+                clients: viewModel.composeClients,
+                searchText: $pickerSearchText,
+                onPick: { client in
+                    clientPhone = PhoneFormatting.displayUS(client.phone ?? "")
+                    selectedClientName = client.name
+                    toFieldFocused = false
+                    messageFieldFocused = true
+                    showingClientPicker = false
+                }
+            )
+        }
+    }
+
+    private var filteredClients: [Client] {
+        let query = clientPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return viewModel.composeClients }
+        let qLower = query.lowercased()
+        let qDigits = PhoneFormatting.digits(from: query)
+        return viewModel.composeClients.filter { client in
+            let nameMatch = client.name.lowercased().contains(qLower)
+            let phoneDigits = PhoneFormatting.digits(from: client.phone ?? "")
+            let phoneMatch = !qDigits.isEmpty && phoneDigits.contains(qDigits)
+            return nameMatch || phoneMatch
+        }
+    }
+
+    private var suggestionClients: [Client] {
+        Array(filteredClients.prefix(6))
+    }
+
+    private var recipientPhoneForSend: String? {
+        let normalized = PhoneFormatting.normalizedForStorage(clientPhone)
+        guard let normalized else { return nil }
+        let digitCount = PhoneFormatting.digits(from: normalized).count
+        return digitCount >= 10 ? normalized : nil
+    }
+
+    private var canSend: Bool {
+        recipientPhoneForSend != nil &&
+        !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func sendMessage() {
+        guard let trimmedPhone = recipientPhoneForSend else { return }
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMessage.isEmpty else { return }
+        if selectedClientName.isEmpty {
+            if let match = viewModel.composeClients.first(where: {
+                PhoneFormatting.digits(from: $0.phone ?? "") == PhoneFormatting.digits(from: trimmedPhone)
+            }) {
+                selectedClientName = match.name
+            }
+        }
+        Task {
+            await viewModel.sendMessage(
+                threadId: trimmedPhone,
+                content: trimmedMessage,
+                clientName: selectedClientName,
+                clientId: trimmedPhone
+            )
+            dismiss()
+        }
+    }
+}
+
+private struct ComposeClientPickerSheet: View {
+    let clients: [Client]
+    @Binding var searchText: String
+    let onPick: (Client) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var filtered: [Client] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return clients }
+        let qLower = query.lowercased()
+        let qDigits = PhoneFormatting.digits(from: query)
+        return clients.filter { client in
+            let nameMatch = client.name.lowercased().contains(qLower)
+            let phoneDigits = PhoneFormatting.digits(from: client.phone ?? "")
+            let phoneMatch = !qDigits.isEmpty && phoneDigits.contains(qDigits)
+            return nameMatch || phoneMatch
+        }
+    }
 
     var body: some View {
         NavigationView {
-            Form {
-                TextField("Client ID", text: $clientId)
-                TextField("Client Name", text: $clientName)
-                TextField("Message", text: $message)
-            }
-            .navigationTitle("New Message")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+            List {
+                ForEach(Array(filtered.enumerated()), id: \.offset) { _, client in
                     Button(action: {
+                        onPick(client)
                         dismiss()
-                        drawerState.isOpen = true
                     }) {
-                        Image(systemName: "line.3.horizontal")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(client.name)
+                                    .foregroundColor(.primary)
+                                Text(PhoneFormatting.displayUS(client.phone ?? ""))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
+            }
+            .searchable(text: $searchText, prompt: "Search name or number")
+            .navigationTitle("Choose Recipient")
+            .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Send") {
-                        sendMessage()
-                    }
-                    .disabled(clientId.isEmpty || clientName.isEmpty || message.isEmpty)
                 }
             }
         }
         .navigationViewStyle(.stack)
-    }
-
-    private func sendMessage() {
-        Task {
-            await viewModel.sendMessage(
-                threadId: clientId,
-                content: message,
-                clientName: clientName,
-                clientId: clientId
-            )
-            dismiss()
-        }
     }
 }

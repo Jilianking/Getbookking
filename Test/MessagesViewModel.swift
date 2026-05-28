@@ -4,8 +4,10 @@ import Combine
 class MessagesViewModel: ObservableObject {
     @Published var threads: [String] = []
     @Published var messages: [String: [Message]] = [:]
+    @Published var composeClients: [Client] = []
     
     private let firebaseService = FirebaseService()
+    private var activeMessageThreadId: String?
     
     func loadThreads(isDemoMode: Bool = false) async {
         if isDemoMode {
@@ -21,6 +23,47 @@ class MessagesViewModel: ObservableObject {
             }
         } catch {
             print("Error loading threads: \(error)")
+        }
+    }
+
+    func startThreadsListening(isDemoMode: Bool = false) {
+        if isDemoMode {
+            threads = []
+            return
+        }
+        firebaseService.startThreadsListener(
+            onUpdate: { [weak self] threadIds in
+                Task { @MainActor in
+                    self?.threads = threadIds
+                }
+            },
+            onError: { errorMessage in
+                print("Threads listener error: \(errorMessage)")
+            }
+        )
+    }
+
+    func stopThreadsListening() {
+        firebaseService.stopThreadsListener()
+    }
+
+    func loadComposeClients(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            await MainActor.run {
+                composeClients = []
+            }
+            return
+        }
+        do {
+            let clients = try await firebaseService.fetchCurrentTenantCustomers()
+            let sorted = clients.sorted { a, b in
+                a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            }
+            await MainActor.run {
+                composeClients = sorted
+            }
+        } catch {
+            print("Error loading compose clients: \(error)")
         }
     }
     
@@ -81,10 +124,30 @@ class MessagesViewModel: ObservableObject {
     }
     
     func listenToMessages(threadId: String, onUpdate: @escaping ([Message]) -> Void) {
-        Task {
-            let messages = await loadMessages(for: threadId)
-            onUpdate(messages)
+        activeMessageThreadId = threadId
+        firebaseService.startMessagesListener(
+            threadId: threadId,
+            onUpdate: { [weak self] newMessages in
+                Task { @MainActor in
+                    self?.messages[threadId] = newMessages
+                    onUpdate(newMessages)
+                }
+            },
+            onError: { errorMessage in
+                print("Messages listener error: \(errorMessage)")
+            }
+        )
+    }
+
+    func stopListeningToMessages(threadId: String) {
+        firebaseService.stopMessagesListener(threadId: threadId)
+        if activeMessageThreadId == threadId {
+            activeMessageThreadId = nil
         }
+    }
+
+    deinit {
+        firebaseService.stopAllSmsListeners()
     }
 }
 

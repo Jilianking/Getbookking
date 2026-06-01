@@ -7,25 +7,19 @@
 import SwiftUI
 import PhotosUI
 import UIKit
-import FirebaseAuth
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
     @State private var showingLogoutAlert = false
-    @State private var showEnterModeAlert = false
-    @State private var previousIndustryForCancel: String = ""
-    /// When true, ignores `onChange` so reverting the picker after Cancel doesn’t reopen the alert.
-    @State private var isRestoringIndustry = false
-    @State private var hasLoadedServiceOnce = false
     var drawerState: DrawerState
     let sectionTitle: String
 
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("Account")) {
+                Section {
                     if authViewModel.isDemoMode {
                         HStack {
                             Image(systemName: "person.crop.circle")
@@ -51,6 +45,12 @@ struct SettingsView: View {
                                     Text(email)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                    if viewModel.isTenantOwner,
+                                       let industryName = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName {
+                                        Text(industryName)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                             }
                         }
@@ -60,6 +60,7 @@ struct SettingsView: View {
                             Text("Account")
                         }
                     }
+
                     Button(action: { showingLogoutAlert = true }) {
                         HStack {
                             Image(systemName: "arrow.right.square")
@@ -67,50 +68,8 @@ struct SettingsView: View {
                                 .foregroundColor(.red)
                         }
                     }
-                }
-
-                if !authViewModel.isDemoMode && viewModel.hasProfile && viewModel.isTenantOwner {
-                    Section(
-                        header: Text("Owner settings"),
-                        footer: Text("Business type controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
-                            .font(.caption2)
-                    ) {
-                        Picker("Business type", selection: $viewModel.selectedIndustry) {
-                            ForEach(BookingTemplate.allCases) { template in
-                                Text(template.displayName).tag(template.rawValue)
-                            }
-                        }
-                        .onChange(of: viewModel.selectedIndustry) { oldValue, newValue in
-                            guard hasLoadedServiceOnce else { return }
-                            if isRestoringIndustry {
-                                isRestoringIndustry = false
-                                return
-                            }
-                            previousIndustryForCancel = oldValue
-                            showEnterModeAlert = true
-                        }
-                        Button(action: {
-                            Task { await viewModel.applyTemplateAndSave() }
-                        }) {
-                            HStack {
-                                Text("Save and apply to website")
-                                if viewModel.isSavingService {
-                                    Spacer()
-                                    ProgressView()
-                                        .scaleEffect(0.9)
-                                }
-                            }
-                        }
-                        .disabled(viewModel.isSavingService)
-                        if viewModel.saveSuccess {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("Saved — booking form and services applied")
-                                    .foregroundColor(.green)
-                            }
-                        }
-                    }
+                } header: {
+                    Text("Account")
                 }
 
                 if !authViewModel.isDemoMode && viewModel.hasProfile {
@@ -212,23 +171,11 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to logout?")
             }
-            .alert(businessTypeChangeAlertTitle, isPresented: $showEnterModeAlert) {
-                Button("Cancel", role: .cancel) {
-                    isRestoringIndustry = true
-                    viewModel.selectedIndustry = previousIndustryForCancel
-                }
-                Button("Continue") {
-                    Task { await viewModel.applyTemplateAndSave() }
-                }
-            } message: {
-                Text(businessTypeChangeAlertMessage)
-            }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
-                hasLoadedServiceOnce = true
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
@@ -240,40 +187,6 @@ struct SettingsView: View {
         }
         .navigationViewStyle(.stack)
     }
-
-    private var businessTypeChangeAlertTitle: String {
-        let name = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this type"
-        return "Switch to \(name)?"
-    }
-
-    private var businessTypeChangeAlertMessage: String {
-        guard let template = BookingTemplate(rawValue: viewModel.selectedIndustry) else {
-            return "Your booking form and services will update to match this business type. Website templates in Website Design follow the business type you set here."
-        }
-        switch template {
-        case .custom:
-            return """
-            You're entering Custom mode.
-
-            • Booking form switches to a generic field set (editable in Website Design).
-            • Your current services are removed. Custom starts with no default services—add them under Book in Website Design.
-            • In Website Design, only templates for Custom are available under Website templates.
-
-            You can customize everything after saving.
-            """
-        default:
-            let label = template.displayName
-            return """
-            You're entering \(label) mode.
-
-            • Booking form switches to fields for this industry (editable afterward).
-            • Your current services are removed and replaced with starter services for \(label).
-            • Website Design → Website templates only shows options that match this business type.
-
-            Tap Continue to apply, or Cancel to keep your previous type.
-            """
-        }
-    }
 }
 
 // MARK: - Account detail (name, plan, profile photo)
@@ -283,6 +196,10 @@ private struct AccountSettingsDetailView: View {
     @StateObject private var billingViewModel = ManagerSettingsViewModel()
     @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var profilePhotoCropItem: SingleImageCropSheetItem?
+    @State private var showIndustryChangeAlert = false
+    @State private var previousIndustryForCancel: String = ""
+    @State private var isRestoringIndustry = false
+    @State private var hasLoadedIndustryOnce = false
 
     var body: some View {
         List {
@@ -396,31 +313,59 @@ private struct AccountSettingsDetailView: View {
                     }
                 }
                 if viewModel.hasProfile {
-                    Section(header: Text("Name")) {
-                        TextField("Full name", text: $viewModel.accountFullNameDraft)
-                            .textContentType(.name)
-                            .submitLabel(.done)
-                            .disabled(viewModel.isSavingAccountName)
-                            .onSubmit {
-                                let trimmed = viewModel.accountFullNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                                let current = viewModel.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard !trimmed.isEmpty, trimmed != current else { return }
-                                Task {
-                                    await viewModel.saveAccountFullName()
-                                    if let name = Auth.auth().currentUser?.displayName {
-                                        await MainActor.run {
-                                            authViewModel.currentUserDisplayName = name
-                                        }
-                                    }
+                    Section(
+                        header: Text("Your name"),
+                        footer: Text("Your personal name is set when you sign up and can’t be changed here. To update your business name on your website, use Website Design → Business name.")
+                            .font(.caption2)
+                    ) {
+                        HStack {
+                            Text("Full name")
+                            Spacer(minLength: 12)
+                            Text(accountNameReadOnlyLabel)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                if viewModel.hasProfile, viewModel.isTenantOwner {
+                    Section(
+                        header: Text("Industry"),
+                        footer: Text("Industry controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
+                            .font(.caption2)
+                    ) {
+                        Picker("Industry", selection: $viewModel.selectedIndustry) {
+                            ForEach(BookingTemplate.allCases) { template in
+                                Text(template.displayName).tag(template.rawValue)
+                            }
+                        }
+                        .onChange(of: viewModel.selectedIndustry) { oldValue, newValue in
+                            guard hasLoadedIndustryOnce else { return }
+                            if isRestoringIndustry {
+                                isRestoringIndustry = false
+                                return
+                            }
+                            previousIndustryForCancel = oldValue
+                            showIndustryChangeAlert = true
+                        }
+                        Button(action: {
+                            Task { await viewModel.applyTemplateAndSave() }
+                        }) {
+                            HStack {
+                                Text("Save and apply to website")
+                                if viewModel.isSavingService {
+                                    Spacer()
+                                    ProgressView()
+                                        .scaleEffect(0.9)
                                 }
                             }
-                        if viewModel.isSavingAccountName {
+                        }
+                        .disabled(viewModel.isSavingService)
+                        if viewModel.saveSuccess {
                             HStack {
-                                ProgressView()
-                                    .scaleEffect(0.85)
-                                Text("Saving…")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Saved — booking form and services applied")
+                                    .foregroundColor(.green)
                             }
                         }
                     }
@@ -472,10 +417,22 @@ private struct AccountSettingsDetailView: View {
         }
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(industryChangeAlertTitle, isPresented: $showIndustryChangeAlert) {
+            Button("Cancel", role: .cancel) {
+                isRestoringIndustry = true
+                viewModel.selectedIndustry = previousIndustryForCancel
+            }
+            Button("Continue") {
+                Task { await viewModel.applyTemplateAndSave() }
+            }
+        } message: {
+            Text(industryChangeAlertMessage)
+        }
         .task {
             if !authViewModel.isDemoMode {
                 await billingViewModel.load(isDemoMode: false)
             }
+            hasLoadedIndustryOnce = true
         }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {
@@ -510,6 +467,50 @@ private struct AccountSettingsDetailView: View {
                     }
                 }
             )
+        }
+    }
+
+    private var accountNameReadOnlyLabel: String {
+        let trimmed = viewModel.accountDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        if let authName = authViewModel.currentUserDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !authName.isEmpty {
+            return authName
+        }
+        return "—"
+    }
+
+    private var industryChangeAlertTitle: String {
+        let name = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this type"
+        return "Switch to \(name)?"
+    }
+
+    private var industryChangeAlertMessage: String {
+        guard let template = BookingTemplate(rawValue: viewModel.selectedIndustry) else {
+            return "Your booking form and services will update to match this industry. Website templates in Website Design follow the industry you set here."
+        }
+        switch template {
+        case .custom:
+            return """
+            You're entering Custom mode.
+
+            • Booking form switches to a generic field set (editable in Website Design).
+            • Your current services are removed. Custom starts with no default services—add them under Book in Website Design.
+            • In Website Design, only templates for Custom are available under Website templates.
+
+            You can customize everything after saving.
+            """
+        default:
+            let label = template.displayName
+            return """
+            You're entering \(label) mode.
+
+            • Booking form switches to fields for this industry (editable afterward).
+            • Your current services are removed and replaced with starter services for \(label).
+            • Website Design → Website templates only shows options that match this industry.
+
+            Tap Continue to apply, or Cancel to keep your previous type.
+            """
         }
     }
 }

@@ -9,8 +9,9 @@
    - On sign-out, deletes the device doc (when possible) and calls `Messaging.messaging().deleteToken()`.
 
 2. **Xcode**  
-   - **FirebaseMessaging** Swift package product linked.  
-   - **`Test/Test.entitlements`** — `aps-environment` = `development` (use **Release/Archive** with App Store provisioning for production push).  
+   - **FirebaseMessaging** Swift package product linked on the Test target.  
+   - **`Test/Test-Debug.entitlements`** — `aps-environment` = `development` (Debug builds).  
+   - **`Test/Test-Release.entitlements`** — `aps-environment` = `production` (Release / Archive).  
    - **`INFOPLIST_KEY_UIBackgroundModes`** = `remote-notification`.
 
 3. **Cloud Function `onTenantBookingRequestCreated`** (`functions/index.js`)  

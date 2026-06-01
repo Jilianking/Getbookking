@@ -3,8 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>aps-environment</key>
-	<string>production</string>
-	<key>com.apple.developer.proximity-reader.payment.acceptance</key>
-	<true/>
+	<string>development</string>
 </dict>
 </plist>

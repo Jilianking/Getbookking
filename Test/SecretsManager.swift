@@ -60,7 +60,7 @@ class SecretsManager {
     // MARK: - Stripe Terminal (Tap to Pay on iPhone)
     // Required by Stripe Terminal `TapToPayConnectionConfigurationBuilder(locationId:)`.
     // Add to `Secrets.plist`:
-    //   TAP_TO_PAY_LOCATION_ID = tml_<id>
+    //   TAP_TO_PAY_LOCATION_ID = tml_<id>  (optional; tenant stripeTerminalLocationId is preferred)
     var tapToPayLocationId: String {
         return secrets["TAP_TO_PAY_LOCATION_ID"] as? String ?? ""
     }

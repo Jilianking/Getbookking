@@ -578,11 +578,15 @@ exports.getConnectAccountStatus = functions
     });
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
+    const terminalLocationId =
+      (tenantDoc.data()?.stripeTerminalLocationId || "").toString().trim() || null;
+
     return {
       hasAccount: true,
       detailsSubmitted: account.details_submitted ?? false,
       chargesEnabled: account.charges_enabled ?? false,
       payoutsEnabled: account.payouts_enabled ?? false,
+      terminalLocationId,
     };
   });
 
@@ -607,6 +611,74 @@ async function getStripeAccountIdForUser(uid) {
   if (!tenantId) return null;
   const tenantDoc = await db.collection("tenants").doc(tenantId).get();
   return tenantDoc.data()?.stripeAccountId ?? null;
+}
+
+async function getTenantIdForUser(uid) {
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) return null;
+  return userDoc.data().tenantId || null;
+}
+
+async function assertTenantOwner(uid, tenantId) {
+  const tenantDoc = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+  const ownerUid = (tenantDoc.data().ownerUid || "").toString();
+  if (!ownerUid || ownerUid !== uid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the studio owner can manage Tap to Pay."
+    );
+  }
+  return tenantDoc;
+}
+
+/** Build Stripe Terminal address from tenant profile fields. */
+function terminalAddressFromTenant(tenant) {
+  const line1 =
+    (tenant.contactAddress || tenant.address || "").toString().trim() || "1 Main Street";
+  const serviceArea = (tenant.serviceArea || "").toString().trim();
+  let city = "Tampa";
+  let state = "FL";
+  let postal_code = "33602";
+  if (serviceArea) {
+    const parts = serviceArea.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts[0]) city = parts[0];
+    if (parts[1]) {
+      const tail = parts[1].split(/\s+/).filter(Boolean);
+      if (tail[0] && tail[0].length <= 3) state = tail[0].toUpperCase();
+      if (tail[1] && /^\d{5}/.test(tail[1])) postal_code = tail[1];
+    }
+  }
+  return { line1, city, state, postal_code, country: "US" };
+}
+
+/**
+ * Ensures tenants/{tenantId}.stripeTerminalLocationId exists (Stripe Terminal Location on Connect account).
+ */
+async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAccountId, tenantData) {
+  const existing = (tenantData.stripeTerminalLocationId || "").toString().trim();
+  if (existing) {
+    return existing;
+  }
+  const displayName =
+    (tenantData.displayName || tenantData.businessName || "Studio").toString().trim() ||
+    "Studio";
+  const address = terminalAddressFromTenant(tenantData);
+  const location = await stripe.terminal.locations.create(
+    {
+      display_name: displayName.slice(0, 100),
+      address,
+    },
+    { stripeAccount: stripeAccountId }
+  );
+  const locationId = location.id;
+  await db.collection("tenants").doc(tenantId).set(
+    { stripeTerminalLocationId: locationId },
+    { merge: true }
+  );
+  return locationId;
 }
 
 /**
@@ -1142,6 +1214,66 @@ exports.createTerminalConnectionTokenForTapToPay = functions
     );
 
     return { secret: token.secret };
+  });
+
+/**
+ * Creates (if needed) a Stripe Terminal Location for the tenant and returns its id (tml_…).
+ * Owner-only. Stored on tenants.stripeTerminalLocationId.
+ */
+exports.ensureTapToPayTerminalLocation = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    if (!tenantId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No business linked to this account."
+      );
+    }
+    const tenantDoc = await assertTenantOwner(uid, tenantId);
+    const tenantData = tenantDoc.data() || {};
+    const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Connect Stripe before enabling Tap to Pay."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account.charges_enabled) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Finish Stripe setup before using Tap to Pay."
+      );
+    }
+    try {
+      const locationId = await ensureStripeTerminalLocationForTenant(
+        tenantId,
+        stripe,
+        stripeAccountId,
+        tenantData
+      );
+      return { locationId };
+    } catch (err) {
+      console.error("ensureTapToPayTerminalLocation", err);
+      const msg =
+        err && err.message
+          ? String(err.message)
+          : "Could not create a Terminal location. Check your business address in Website Design.";
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
   });
 
 /**

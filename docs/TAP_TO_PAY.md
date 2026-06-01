@@ -1,16 +1,41 @@
-# Tap to Pay on iPhone (disabled)
+# Tap to Pay on iPhone
 
-Tap to Pay is **turned off** until Apple approves the proximity-reader entitlement.
+Tap to Pay entitlement is in **`Test/Test-Release.entitlements`** (Release builds only). Debug uses **`Test-Debug.entitlements`** (push only) so daily builds sign without the proximity-reader key until profiles are ready.
 
-## Re-enable when approved
+## Xcode setup
 
-1. Restore `Test/Test.entitlements`:
-   ```xml
-   <key>com.apple.developer.proximity-reader.payment.acceptance</key>
-   <true/>
-   ```
-2. In Xcode: **File → Add Package Dependencies** → `https://github.com/stripe/stripe-terminal-ios` → add **StripeTerminal** to the Test target.
-3. Target **Test** → **Build Settings** → **Active Compilation Conditions** → add `TAP_TO_PAY_ENABLED` for Debug and Release.
-4. Clean build folder and build on a physical device.
+1. **Stripe Terminal SPM:** `https://github.com/stripe/stripe-terminal-ios` **4.7.3** (product **StripeTerminal** on the Test target).
+2. **Compile flag:** `TAP_TO_PAY_ENABLED` in **Release** only. **Debug** omits it so Tap to Pay code is excluded while developing.
+3. **Physical device:** iPhone XS or later, not iOS beta. Simulator cannot complete a real tap.
+4. **Terminal location:** Created automatically per tenant when the owner opens Tap to Pay (stored as `tenants.stripeTerminalLocationId`). Requires Stripe Connect with `charges_enabled` and a business address in **Website Design** (`contactAddress` / `serviceArea`). Optional dev override: `TAP_TO_PAY_LOCATION_ID` in `Secrets.plist`.
 
-Cloud Functions (`createPaymentIntentForTapToPay`, `createTerminalConnectionTokenForTapToPay`) are unchanged and ready when the app side is re-enabled.
+### “Missing package product StripeTerminal”
+
+The dependency is already in `Test.xcodeproj`. Xcode sometimes needs a fresh resolve:
+
+```bash
+./scripts/resolve-xcode-packages.sh
+```
+
+Or in Xcode: **File → Packages → Reset Package Caches**, then **Resolve Package Versions**, then **Clean Build Folder** (⇧⌘K) and build.
+
+Keep **~5 GB+ free** on your boot drive so SPM can download.
+
+## Backend
+
+Cloud Functions (deploy from `functions/`):
+
+- `createPaymentIntentForTapToPay`
+- `createTerminalConnectionTokenForTapToPay`
+- `ensureTapToPayTerminalLocation` — owner-only; creates `tml_…` on the Connect account if missing
+- `getConnectAccountStatus` — includes `terminalLocationId` when set
+
+## App flow
+
+- **Payments** → **Tap to Pay** (always tappable; routes to Stripe Connect or checkout).
+- Reader warms up when the app becomes active (signed in, Stripe connected, location configured).
+- Checkout shows processing → approved / declined / timeout and optional share receipt.
+
+## Apple review (still required)
+
+See Apple’s [App Requirements and Review PDF](https://apple.ent.box.com/v/ttpoiappreviewpdf) for education screens, marketing launch assets, admin-only T&C, and submission videos. Phase 2+ items are tracked in product backlog.

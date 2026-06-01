@@ -20,27 +20,33 @@ final class TapToPayConnectionTokenProvider: ConnectionTokenProvider {
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
-    func fetchConnectionToken() async throws -> String {
+    func fetchConnectionToken(_ completion: @escaping ConnectionTokenCompletionBlock) {
         guard Auth.auth().currentUser != nil else {
-            throw NSError(
+            completion(nil, NSError(
                 domain: "TapToPayConnectionTokenProvider",
                 code: 401,
                 userInfo: [NSLocalizedDescriptionKey: "You must be signed in to accept Tap to Pay payments."]
-            )
+            ))
+            return
         }
 
-        let result = try await functions.httpsCallable("createTerminalConnectionTokenForTapToPay").call()
-        let data = result.data as? [String: Any]
-        let secret = data?["secret"] as? String
-        if let secret, !secret.isEmpty {
-            return secret
+        functions.httpsCallable("createTerminalConnectionTokenForTapToPay").call { result, error in
+            if let error {
+                completion(nil, error)
+                return
+            }
+            let data = result?.data as? [String: Any]
+            let secret = data?["secret"] as? String
+            if let secret, !secret.isEmpty {
+                completion(secret, nil)
+                return
+            }
+            completion(nil, NSError(
+                domain: "TapToPayConnectionTokenProvider",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid response from server (missing connection token secret)."]
+            ))
         }
-
-        throw NSError(
-            domain: "TapToPayConnectionTokenProvider",
-            code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Invalid response from server (missing connection token secret)."]
-        )
     }
 }
 

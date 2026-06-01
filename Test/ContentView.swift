@@ -24,6 +24,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
                 Task { await authViewModel.refreshTenantLogoFromServer() }
+                TapToPayAppLifecycle.warmUpReaderIfConfigured()
             }
         }
     }

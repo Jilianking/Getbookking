@@ -12,6 +12,7 @@ struct PaymentsView: View {
     @State private var showDepositLinkSheet = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
+    @State private var tapToPayAlertMessage: String?
     #endif
     @State private var showWithdrawSheet = false
     var drawerState: DrawerState
@@ -36,13 +37,20 @@ struct PaymentsView: View {
 
                     #if TAP_TO_PAY_ENABLED
                     PaymentActionCard(
-                        icon: "wave.3.right",
+                        icon: "wave.3.right.circle.fill",
                         iconColor: .blue,
-                        title: "Tap to Pay",
-                        subtitle: "In-person payments (1% platform fee applies)",
-                        action: { showTapToPaySheet = true },
-                        disabled: !viewModel.stripeConnected
+                        title: "Tap to Pay on iPhone",
+                        subtitle: tapToPayCardSubtitle,
+                        action: { handleTapToPayTapped() }
                     )
+                    .overlay {
+                        if viewModel.isEnsuringTapToPayLocation {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.systemBackground).opacity(0.85))
+                            ProgressView()
+                        }
+                    }
+                    .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
                     #endif
 
                     // Deposit Link
@@ -116,6 +124,14 @@ struct PaymentsView: View {
                     showTapToPaySheet = false
                 }
             }
+            .alert("Tap to Pay", isPresented: Binding(
+                get: { tapToPayAlertMessage != nil },
+                set: { if !$0 { tapToPayAlertMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { tapToPayAlertMessage = nil }
+            } message: {
+                Text(tapToPayAlertMessage ?? "")
+            }
             #endif
             .sheet(isPresented: $showWithdrawSheet) {
                 WithdrawSheet(viewModel: viewModel) {
@@ -125,6 +141,52 @@ struct PaymentsView: View {
         }
         .navigationViewStyle(.stack)
     }
+
+    #if TAP_TO_PAY_ENABLED
+    private var tapToPayCardSubtitle: String {
+        if !viewModel.stripeConnected {
+            return "Set up Stripe to enable in-person payments"
+        }
+        if !viewModel.isTenantOwner {
+            return "Ask your studio admin to enable Tap to Pay"
+        }
+        return "Accept contactless cards and wallets (1% platform fee)"
+    }
+
+    private func handleTapToPayTapped() {
+        if authViewModel.isDemoMode {
+            tapToPayAlertMessage = "Tap to Pay isn't available in demo mode."
+            return
+        }
+        if let block = TapToPayEligibility.blockingMessage() {
+            tapToPayAlertMessage = block
+            return
+        }
+        if !viewModel.isTenantOwner {
+            tapToPayAlertMessage = "Only the studio owner can enable Tap to Pay. Contact your admin."
+            return
+        }
+        if !viewModel.stripeConnected {
+            Task { await viewModel.createConnectAccountLink(isDemoMode: false) }
+            return
+        }
+        Task {
+            if viewModel.resolvedTapToPayLocationId.isEmpty {
+                do {
+                    try await viewModel.ensureTapToPayLocation()
+                } catch {
+                    tapToPayAlertMessage = FirebaseFunctionsErrorHelper.message(from: error)
+                    return
+                }
+            }
+            if viewModel.resolvedTapToPayLocationId.isEmpty {
+                tapToPayAlertMessage = "Tap to Pay could not be set up. Add your business address under Website Design, then try again."
+                return
+            }
+            showTapToPaySheet = true
+        }
+    }
+    #endif
 
     private var paymentsIntro: some View {
         Text("Accept payments and manage your earnings")

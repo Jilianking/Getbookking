@@ -86,6 +86,7 @@ class AuthViewModel: ObservableObject {
                     self.currentUserEmail = user?.email
                     self.currentUserDisplayName = user?.displayName
                     self.accountPhotoUrl = user?.photoURL?.absoluteString
+                    PushNotificationManager.shared.syncTokenAfterSignIn()
                     await self.refreshTenantLogoFromServer()
                     await self.refreshTeamAccess()
                 } else if !self.isDemoMode {
@@ -108,6 +109,7 @@ class AuthViewModel: ObservableObject {
     
     func signIn(email: String, password: String) async throws {
         _ = try await Auth.auth().signIn(withEmail: email, password: password)
+        PushNotificationManager.shared.syncTokenAfterSignIn()
     }
     
     func signUp(

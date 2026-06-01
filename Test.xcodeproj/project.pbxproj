@@ -12,6 +12,8 @@
 		35C0ED1E2F1ACC7000BB5E8B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED1D2F1ACC7000BB5E8B /* FirebaseFirestore */; };
 		35C0ED202F1ACC7000BB5E8B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED1F2F1ACC7000BB5E8B /* FirebaseStorage */; };
 		35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */; };
+		35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED262F1B100000BB5E8B /* StripeTerminal */; };
+		35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED282F1B200000BB5E8B /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +67,8 @@
 				35C0ED1A2F1ACC7000BB5E8B /* FirebaseAuth in Frameworks */,
 				35C0ED1E2F1ACC7000BB5E8B /* FirebaseFirestore in Frameworks */,
 				35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */,
+				35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */,
+				35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,6 +134,8 @@
 				35C0ED1D2F1ACC7000BB5E8B /* FirebaseFirestore */,
 				35C0ED1F2F1ACC7000BB5E8B /* FirebaseStorage */,
 				35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */,
+				35C0ED262F1B100000BB5E8B /* StripeTerminal */,
+				35C0ED282F1B200000BB5E8B /* FirebaseMessaging */,
 			);
 			productName = Test;
 			productReference = 35C0ECA62F16A57500BB5E8B /* Test.app */;
@@ -215,6 +221,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				35C0ED252F1B100000BB5E8B /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 35C0ECA72F16A57500BB5E8B /* Products */;
@@ -409,27 +416,30 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Test/Test.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "Test/Test-Debug.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 239UTXZ964;
+				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -442,12 +452,13 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 1.0;
 			};
 			name = Debug;
@@ -457,27 +468,30 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Test/Test.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "Test/Test-Release.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 239UTXZ964;
+				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -490,12 +504,13 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "TAP_TO_PAY_ENABLED $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 1.0;
 			};
 			name = Release;
@@ -652,6 +667,14 @@
 				minimumVersion = 12.8.0;
 			};
 		};
+		35C0ED252F1B100000BB5E8B /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-terminal-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 4.7.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -679,6 +702,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFunctions;
+		};
+		35C0ED262F1B100000BB5E8B /* StripeTerminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 35C0ED252F1B100000BB5E8B /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */;
+			productName = StripeTerminal;
+		};
+		35C0ED282F1B200000BB5E8B /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

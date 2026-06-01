@@ -31,6 +31,8 @@ class PaymentsViewModel: ObservableObject {
     @Published var needsStripeConnect: Bool = true
     @Published var stripeStatusHint: String?
     @Published var tenantId: String?
+    @Published var isTenantOwner = false
+    @Published var isEnsuringTapToPayLocation = false
     @Published var isLoading = false
     @Published var isConnectingStripe = false
     @Published var errorMessage: String?
@@ -70,7 +72,14 @@ class PaymentsViewModel: ObservableObject {
                 return
             }
             tenantId = tid
+            if let tenant = try? await firebaseService.fetchTenant(tenantId: tid),
+               let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
+                isTenantOwner = (ownerUid == uid)
+            } else {
+                isTenantOwner = false
+            }
             await refreshStripeStatus()
+            await reloadTapToPayLocationFromTenant()
             if stripeConnected {
                 await loadBalance()
                 await loadTransactions()
@@ -97,6 +106,9 @@ class PaymentsViewModel: ObservableObject {
 
             stripeConnected = chargesEnabled
             needsStripeConnect = !chargesEnabled
+            if let loc = data?["terminalLocationId"] as? String, !loc.isEmpty {
+                TapToPayLocationStore.shared.updateTenantLocationId(loc)
+            }
             if chargesEnabled {
                 stripeStatusHint = nil
             } else if hasAccount && detailsSubmitted {
@@ -240,9 +252,47 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    var resolvedTapToPayLocationId: String {
+        TapToPayLocationStore.shared.resolvedLocationId
+    }
+
+    func reloadTapToPayLocationFromTenant() async {
+        guard let tid = tenantId else {
+            TapToPayLocationStore.shared.updateTenantLocationId("")
+            return
+        }
+        guard let tenant = try? await firebaseService.fetchTenant(tenantId: tid) else { return }
+        let loc = (tenant["stripeTerminalLocationId"] as? String) ?? ""
+        TapToPayLocationStore.shared.updateTenantLocationId(loc)
+    }
+
+    #if TAP_TO_PAY_ENABLED
+    /// Creates Stripe Terminal Location on the connected account if missing; returns `tml_…` id.
+    @discardableResult
+    func ensureTapToPayLocation() async throws -> String {
+        isEnsuringTapToPayLocation = true
+        defer { isEnsuringTapToPayLocation = false }
+        if !resolvedTapToPayLocationId.isEmpty {
+            return resolvedTapToPayLocationId
+        }
+        let result = try await functions.httpsCallable("ensureTapToPayTerminalLocation").call([:])
+        let data = result.data as? [String: Any]
+        let locationId = (data?["locationId"] as? String) ?? ""
+        if !locationId.isEmpty {
+            TapToPayLocationStore.shared.updateTenantLocationId(locationId)
+        }
+        guard !resolvedTapToPayLocationId.isEmpty else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: "Could not set up Tap to Pay. Add your business address in Website Design, then try again."]
+            )
+        }
+        return resolvedTapToPayLocationId
+    }
+
     /// Creates a Stripe PaymentIntent for Tap to Pay (Stripe Terminal).
     /// - Returns: `client_secret` for the created PaymentIntent.
-    #if TAP_TO_PAY_ENABLED
     func createPaymentIntentForTapToPay(amountCents: Int) async throws -> String {
         guard amountCents >= 50 else {
             throw NSError(

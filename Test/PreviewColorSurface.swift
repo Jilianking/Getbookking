@@ -25,12 +25,20 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
         }
     }
 
+    /// Blade / Stonecut / Classic: hero band uses page background. Luxe / Studio 12: hero image slot tint.
+    static func heroUsesPageBackground(family: TemplateFamily) -> Bool {
+        switch family {
+        case .blade, .stonecut, .classic: return true
+        case .luxe, .studio12: return false
+        }
+    }
+
     var hint: String {
         switch self {
         case .page: return "Top bar and page base"
-        case .hero: return "Hero area (long-press if photo slot is on top)"
+        case .hero: return "Tap grey area in the hero (not blue text boxes); long-press photo"
         case .featured: return "Featured work section"
-        case .card: return "Promo and services band"
+        case .card: return "Card bands (services, When/Where, booking)"
         case .about: return "About and contact"
         }
     }
@@ -42,7 +50,11 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
     func hex(from viewModel: DesignViewModel) -> String {
         switch self {
         case .page: return viewModel.backgroundColorHex
-        case .hero: return viewModel.previewHeroSlotColorHex
+        case .hero:
+            if Self.heroUsesPageBackground(family: viewModel.activeTemplateFamily) {
+                return viewModel.backgroundColorHex
+            }
+            return viewModel.previewHeroSlotColorHex
         case .featured: return viewModel.featuredWorkBackgroundColorHex
         case .card: return viewModel.cardSurfaceColorHex
         case .about: return viewModel.aboutSectionBackgroundColorHex
@@ -55,7 +67,12 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
         case .page:
             viewModel.backgroundColorHex = normalized
         case .hero:
-            viewModel.previewHeroSlotColorHex = normalized
+            if Self.heroUsesPageBackground(family: viewModel.activeTemplateFamily) {
+                viewModel.backgroundColorHex = normalized
+                viewModel.syncPreviewHeroSlotColorFromTokens()
+            } else {
+                viewModel.previewHeroSlotColorHex = normalized
+            }
         case .featured:
             viewModel.featuredWorkBackgroundColorHex = normalized
         case .card:

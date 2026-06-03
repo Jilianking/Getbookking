@@ -2475,6 +2475,46 @@
       -webkit-appearance: none;
     }
     .luxe-hero-image-hit { z-index: 1; }
+    /** Full-bleed tap target for section background color in app Quick edit. */
+    [data-bk-color-surface] {
+      position: relative;
+    }
+    .bk-color-band-hit,
+    .bk-hero-band-hit {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .blade-page .blade-info-half[data-bk-band-tappable],
+    .blade-page .blade-section[data-bk-color-surface="card"] {
+      position: relative;
+    }
+    .blade-page .blade-band-content {
+      position: relative;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .blade-page .blade-band-content [data-edit-key],
+    .blade-page .blade-band-content a,
+    .blade-page .blade-band-content button,
+    .blade-page .blade-band-content [role="button"] {
+      pointer-events: auto;
+    }
+    .blade-page .blade-section-header,
+    .blade-page .blade-services-grid {
+      position: relative;
+      z-index: 1;
+    }
     .luxe-hero-text {
       position: relative;
       z-index: 2;
@@ -5834,8 +5874,9 @@
         if (!isBladeTheme(tenant)) return;
         var c = tenantColors(tenant);
         applyEmptyImageSlotColors(tenant);
-        [].forEach.call(document.querySelectorAll('.blade-page .blade-book-panel'), function(el) {
+        [].forEach.call(document.querySelectorAll('.blade-page .blade-book-panel, .blade-page #services, .blade-page .blade-testimonials, .blade-page .blade-info-half[data-bk-color-surface="card"]'), function(el) {
           el.style.background = c.card;
+          el.style.color = c.fg;
         });
         [].forEach.call(document.querySelectorAll('.blade-page footer.blade-footer'), function(el) {
           el.style.background = c.aboutBg;
@@ -5859,17 +5900,43 @@
       /** Studio 12: empty image placeholders follow card/accent tokens. */
       function applyStudio12HomeBandColors(tenant) {
         if (!isStudio12Theme(tenant)) return;
+        var c = tenantColors(tenant);
         applyEmptyImageSlotColors(tenant);
+        [].forEach.call(document.querySelectorAll('.studio12-page .s12-services, .studio12-page .s12-philosophy, .studio12-page .s12-process, .studio12-page .s12-book-cta, .studio12-page .s12-testimonials'), function(el) {
+          el.style.background = c.card;
+          el.style.color = c.fg;
+        });
+        [].forEach.call(document.querySelectorAll('.studio12-page .s12-gallery-light'), function(el) {
+          el.style.background = c.featuredBg || c.bg;
+          el.style.color = c.featuredFg || c.fg;
+        });
+        [].forEach.call(document.querySelectorAll('.studio12-page .s12-info'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+        });
+        [].forEach.call(document.querySelectorAll('.studio12-page footer.s12-footer'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+        });
       }
 
-      /** Live preview color updates from app Quick edit (tap band or chrome). */
-      function applyPreviewColorPatch(patch) {
+      /** Fast path: CSS vars + page bg only (color wheel drag). */
+      function applyPreviewColorPatchFast(patch) {
         if (!patch) return;
         patch.resolvedWebThemeId = patch.resolvedWebThemeId || resolvedWebThemeId(patch);
         applyTenantColorVars(patch);
         if (patch.heroSlotBg) {
           document.documentElement.style.setProperty('--bk-hero-slot-bg', patch.heroSlotBg);
         }
+        applyBodyPageColors(patch, 'page');
+      }
+
+      /** Live preview color updates from app Quick edit (tap band or chrome). */
+      function applyPreviewColorPatch(patch, opts) {
+        if (!patch) return;
+        var full = !opts || opts.full !== false;
+        applyPreviewColorPatchFast(patch);
+        if (!full) return;
         if (isLuxeTheme(patch)) {
           applyLuxeHomeBandColors(patch);
           applyEmptyImageSlotColors(patch);
@@ -5885,7 +5952,6 @@
           applyClassicHomePlaceholderColors(patch);
           applyEmptyImageSlotColors(patch);
         }
-        applyBodyPageColors(patch, 'page');
       }
       window.__bkApplyPreviewColorPatch = applyPreviewColorPatch;
 
@@ -6233,7 +6299,7 @@
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
         if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '">Booking</a>';
-        return '<nav class="' + navClass + '"' + (variant === 'hero' ? ' data-bk-color-surface="page"' : '') + '>' +
+        return '<nav class="' + navClass + '" data-bk-color-surface="page">' +
           '<a href="' + base + '/home" class="luxe-nav-brand"><span data-edit-key="displayName">' + esc(displayName) + '</span></a>' +
           '<div class="luxe-nav-trailing">' +
             '<div class="luxe-nav-links">' + inner + '</div>' +
@@ -6434,11 +6500,13 @@
         }
         var servicesBody = serviceCards
           ? '<div class="blade-services-grid">' + serviceCards + '</div>'
-          : '<p class="blade-section-desc blade-fade-up" style="max-width:none">Add active services in the app to list them here.</p>';
-        var servicesSection = '<section class="blade-section" id="services">' +
+          : '<p class="blade-section-desc blade-fade-up" style="max-width:none">' + wcSpan(tenant, 'wc.blade.servicesEmpty', 'Add active services in the app to list them here.') + '</p>';
+        var servicesSection = '<section class="blade-section" id="services" data-bk-color-surface="card">' +
+          bkColorBandHitButtonHtml() +
+          '<div class="blade-band-content">' +
           '<div class="blade-section-header blade-fade-up">' +
           '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.servicesEyebrow', 'What we offer') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.servicesTitle', 'OUR SERVICES') + '</h2></div>' +
-          '</div>' + servicesBody + '</section>';
+          '</div>' + servicesBody + '</div></section>';
         // Hero already shows the story; skip duplicate "WHO WE ARE" block. `#about` is on the hero for nav / /about.
         var gUrls = galleryPageImageUrls(tenant);
         var gallerySection = '';
@@ -6472,7 +6540,7 @@
         var bookPanel = '<section class="blade-book-panel" id="blade-booking" data-bk-color-surface="card">' +
           '<div class="blade-fade-up">' +
           '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.bookPanelSectionLabel', 'Reserve') + '</div>' +
-          '<h2 class="blade-book-title">BOOK YOUR<br><span>APPOINTMENT</span></h2>' +
+          '<h2 class="blade-book-title">' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine1', 'BOOK YOUR') + '<br><span>' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine2', 'APPOINTMENT') + '</span></h2>' +
           hoursSnippet +
           bookPanelCtas +
           '</div></section>';
@@ -6488,10 +6556,12 @@
               '<div class="blade-testimonial-author">— ' + esc(rv.name || 'Client') +
               (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
           }
-          testimonialSection = '<section class="blade-testimonials">' +
+          testimonialSection = '<section class="blade-testimonials" data-bk-color-surface="card">' +
+            bkColorBandHitButtonHtml() +
+            '<div class="blade-band-content">' +
             '<div class="blade-section-header blade-fade-up">' +
-            '<div><div class="blade-section-label">Reviews</div><h2 class="blade-section-title">WHAT THEY SAY</h2></div></div>' +
-            '<div class="blade-testimonials-grid">' + tCards + '</div></section>';
+            '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.reviewsEyebrow', 'Reviews') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.reviewsTitle', 'WHAT THEY SAY') + '</h2></div></div>' +
+            '<div class="blade-testimonials-grid">' + tCards + '</div></div></section>';
         }
         var hoursInfo = '';
         if (tenantShowBusinessHours(tenant)) {
@@ -6519,41 +6589,46 @@
           var bodyUnderHead = innerAddrHtml
             ? '<div class="blade-address-block blade-where-address-body">' + innerAddrHtml + '</div>'
             : '';
-          whereBlock = '<a href="' + esc(mapsQuery) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open address in maps">' +
-            whereHeadHtml + bodyUnderHead + '</a>';
+          whereBlock = whereHeadHtml +
+            (bodyUnderHead ? '<a href="' + esc(mapsQuery) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open address in maps">' + bodyUnderHead + '</a>' : '');
         } else if (tenant.contactEmail && String(tenant.contactEmail).trim()) {
           var em = String(tenant.contactEmail).trim();
-          whereBlock = '<a href="' + esc('mailto:' + em) + '" class="blade-where-maps blade-address-link" aria-label="Email">' +
-            whereHeadHtml +
+          whereBlock = whereHeadHtml +
+            '<a href="' + esc('mailto:' + em) + '" class="blade-where-maps blade-address-link" aria-label="Email">' +
             '<div class="blade-address-block blade-where-address-body"><span data-edit-key="contactEmail">' + esc(em) + '</span></div></a>';
         } else if (saWhere) {
           var saMaps = googleMapsSearchUrl(saWhere);
-          whereBlock = '<a href="' + esc(saMaps) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open in maps">' +
-            whereHeadHtml + '</a>' +
-            '<div class="blade-address-block" style="margin-top:12px;opacity:0.88;font-size:15px">Add your street address in the app for full directions.</div>';
+          whereBlock = whereHeadHtml +
+            '<a href="' + esc(saMaps) + '" class="blade-where-maps blade-address-link" target="_blank" rel="noopener noreferrer" aria-label="Open in maps">' + wcSpan(tenant, 'wc.blade.openMaps', 'Open in maps') + '</a>' +
+            '<div class="blade-address-block" style="margin-top:12px;opacity:0.88;font-size:15px"><span data-edit-key="wc.blade.addressHint">' + esc('Add your street address in the app for full directions.') + '</span></div>';
         } else {
-          whereBlock = whereHeadHtml + '<div class="blade-address-block">Add your address in the app.</div>';
+          whereBlock = whereHeadHtml + '<div class="blade-address-block"><span data-edit-key="wc.blade.addressHint">' + esc('Add your address in the app.') + '</span></div>';
         }
         var bladeInfoSectionClass = 'blade-info-section' + (!tenantShowBusinessHours(tenant) ? ' blade-info-section--single' : '');
         var whenHalfBlade = tenantShowBusinessHours(tenant)
-          ? ('<div class="blade-info-half blade-fade-up">' +
-            '<div class="blade-section-label">When</div>' +
-            '<h3 class="blade-section-title" style="font-size:38px">HOURS</h3>' + hoursInfo +
-            '</div>')
+          ? ('<div class="blade-info-half blade-fade-up" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandHitButtonHtml() +
+            '<div class="blade-band-content">' +
+            '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.whenLabel', 'When') + '</div>' +
+            '<h3 class="blade-section-title" style="font-size:38px">' + wcSpan(tenant, 'wc.blade.hoursTitle', 'HOURS') + '</h3>' + hoursInfo +
+            '</div></div>')
           : '';
-        var infoSection = '<div class="' + bladeInfoSectionClass + '" id="location" data-bk-color-surface="about">' +
+        var infoSection = '<div class="' + bladeInfoSectionClass + '" id="location">' +
           whenHalfBlade +
-          '<div class="blade-info-half blade-fade-up">' +
-          '<div class="blade-section-label">Where</div>' +
+          '<div class="blade-info-half blade-fade-up" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandHitButtonHtml() +
+          '<div class="blade-band-content">' +
+          '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.whereLabel', 'Where') + '</div>' +
           whereBlock +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="blade-address-phone"><span data-edit-key="contactPhone">' + phoneDisplay + '</span></a>' : '') +
-          '</div></div>';
+          '</div></div></div>';
         var footer = bladeSiteFooterHtml(tenant);
         var heroPrimary = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="blade-btn-primary">' + wcSpan(tenant, 'wc.blade.heroBook', 'Book appointment') + '</a>'
           : '';
         var hero = '<section class="blade-hero" id="about" data-bk-color-surface="hero">' +
-          '<div class="blade-hero-left">' +
+          bkColorBandHitButtonHtml() +
+          '<div class="blade-hero-left" data-bk-hero-band-tappable>' +
           '<div class="blade-hero-eyebrow"><span data-edit-key="' + heroEyebrowEditKey + '">' + esc(eyebrow) + '</span></div>' +
           '<h1 class="blade-hero-title"><em><span data-edit-key="bladeHeroTagline">' + esc(emLine) + '</span></em><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +
           '<p class="blade-hero-desc"><span data-edit-key="bladeHeroDescription">' + esc(heroDesc) + '</span></p>' +
@@ -6653,7 +6728,8 @@
         return '<div class="stonecut-page">' +
           stonecutNavHtml(tenant) +
           '<section class="stonecut-hero" data-bk-color-surface="hero">' +
-          '<div class="stonecut-hero-left">' +
+          bkHeroBandHitButtonHtml() +
+          '<div class="stonecut-hero-left" data-bk-hero-band-tappable>' +
           '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +
           cityTagHtml +
           heroCta +
@@ -6732,6 +6808,13 @@
       /** Invisible full-bleed button so hero image slots stay tappable in app Quick edit (above overlays, under nothing). */
       function bkHeroImageHitButtonHtml() {
         return '<button type="button" class="bk-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>';
+      }
+      /** Invisible full-bleed button for section background color in app Quick edit. */
+      function bkColorBandHitButtonHtml() {
+        return '<button type="button" class="bk-color-band-hit" aria-label="Edit section background"></button>';
+      }
+      function bkHeroBandHitButtonHtml() {
+        return bkColorBandHitButtonHtml();
       }
       function field(f, services, presel) {
         var key = (f.key||'').replace(/[^a-zA-Z0-9_]/g,'');
@@ -8308,12 +8391,12 @@
         var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
         var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
         var footerExtra = '';
-        if (tenantShowBookPage(tenant)) footerExtra += '<li><a href="' + bookUrl + '">Book</a></li>';
-        if (tenantShowGalleryPage(tenant)) footerExtra += '<li><a href="' + galleryUrl + '">Gallery</a></li>';
-        return '<footer class="blade-footer">' +
+        if (tenantShowBookPage(tenant)) footerExtra += '<li><a href="' + bookUrl + '">' + wcSpan(tenant, 'wc.blade.footerBook', 'Book') + '</a></li>';
+        if (tenantShowGalleryPage(tenant)) footerExtra += '<li><a href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.blade.footerGallery', 'Gallery') + '</a></li>';
+        return '<footer class="blade-footer" data-bk-color-surface="about">' +
           '<div class="blade-footer-logo"><span data-edit-key="displayName">' + esc(displayName) + '</span></div>' +
           '<ul class="blade-footer-links">' +
-          (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">Instagram</a></li>' : '') +
+          (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">' + wcSpan(tenant, 'wc.blade.footerInstagram', 'Instagram') + '</a></li>' : '') +
           footerExtra +
           '</ul>' +
           '<p class="blade-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
@@ -8541,7 +8624,8 @@
         }
         var heroIndustry = '<p class="classic-hero-tag">' + heroTagInner + '</p>';
         var heroHtml = '<section class="classic-hero" data-bk-color-surface="hero">' +
-          '<div class="classic-hero-left">' +
+          bkHeroBandHitButtonHtml() +
+          '<div class="classic-hero-left" data-bk-hero-band-tappable>' +
           heroTitleRow +
           heroIndustry +
           '<div class="classic-hero-actions">' + heroActions + '</div></div>' +
@@ -8574,7 +8658,7 @@
                 cells.push('<div class="tattoo-featured-cell tattoo-featured-slot-add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div>');
               }
             }
-            return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>');
+            return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder" data-edit-key="classicFeaturedWorkEmpty" role="button" aria-label="Edit featured work empty message">' + esc(opts.galleryPlaceholder) + '</div>');
           })();
           featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured">' +
             '<div class="tattoo-featured-inner">' +
@@ -8582,7 +8666,7 @@
             '<h2><span data-edit-key="classicFeaturedWorkHeading">' + esc(classicFeaturedHeading) + '</span></h2>' +
             '<p class="tattoo-featured-sub"><span data-edit-key="' + (gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty') + '">' + esc(gallery.length ? classicFeaturedSub : classicFeaturedEmpty) + '</span></p>' +
             '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
-            '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">View full gallery \u2192</a>' +
+            '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">' + wcSpan(tenant, 'wc.classic.galleryLink', 'View full gallery \u2192') + '</a>' +
             '</div></section>';
         }
 
@@ -8768,7 +8852,7 @@
         var bookCorner = tenantShowBookPage(tenant)
           ? '<a class="s12-nav-book" href="' + bookUrl + '" data-edit-key="wc.s12.navBook">' + esc(navBookLbl) + '</a>'
           : '';
-        return '<nav class="s12-topnav" id="s12-nav">' +
+        return '<nav class="s12-topnav" id="s12-nav" data-bk-color-surface="page">' +
           '<a href="' + homeUrl + '" class="s12-nav-logo">' +
           '<span class="s12-nav-logo-main" data-edit-key="displayName">' + esc(displayName) + '</span>' +
           studio12NavLogoSubHtml(tenant) + '</a>' +
@@ -9001,7 +9085,7 @@
             (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
         }
         var testSection = testCards
-          ? '<section class="s12-testimonials"><div class="s12-phil-label s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsLabel', 'Client love') + '</div>' +
+          ? '<section class="s12-testimonials" data-bk-color-surface="card"><div class="s12-phil-label s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsLabel', 'Client love') + '</div>' +
             '<h2 class="s12-test-title s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsTitleLead', 'Words from') + ' <em>' + wcSpan(tenant, 'wc.s12.testimonialsTitleEm', 'our clients') + '</em></h2>' +
             '<div class="s12-test-grid">' + testCards + '</div></section>'
           : '';
@@ -9079,13 +9163,13 @@
           }
         }
         var servicesSectionHtml = showServicesSection
-          ? '<section class="s12-services" id="s12-services">' +
+          ? '<section class="s12-services" id="s12-services" data-bk-color-surface="card">' +
             '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.servicesEyebrow', 'What we offer') + '</div>' +
             '<h2 class="s12-section-title s12-fade">' + wcSpan(tenant, 'wc.s12.servicesTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.servicesEm', 'services') + '</em></h2>' +
             '<div class="s12-svc-grid">' + svcCells + '</div></section>'
           : '';
         var processSectionHtml = showProcessSection
-          ? '<section class="s12-process">' +
+          ? '<section class="s12-process" data-bk-color-surface="card">' +
             '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.processLabel', 'How it works') + '</div>' +
             '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">' + wcSpan(tenant, 'wc.s12.processTitleLead', 'Your') + ' <em>' + wcSpan(tenant, 'wc.s12.processTitleEm', 'experience') + '</em></h2>' +
             '<div class="s12-process-grid">' + procCells + '</div></section>'
@@ -9122,7 +9206,7 @@
         }
         s12HeroActions += '<a class="s12-btn-outline" href="' + exploreHref + '">' + wcSpan(tenant, 'wc.s12.exploreCta', exploreLabel) + '</a></div>';
         var gallerySectionHtml = tenantShowGalleryPage(tenant)
-          ? '<section class="s12-gallery-light">' +
+          ? '<section class="s12-gallery-light" data-bk-color-surface="featured">' +
           '<div class="s12-gallery-head">' +
           '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">' + wcSpan(tenant, 'wc.s12.galleryLabel', 'Our work') + '</div>' +
           '<h2 class="s12-gallery-title">' + wcSpan(tenant, 'wc.s12.galleryTitleLead', 'The') + ' <em>' + wcSpan(tenant, 'wc.s12.galleryTitleEm', 'gallery') + '</em></h2></div>' +
@@ -9130,7 +9214,7 @@
           '</div>' + studio12GalleryMarqueeHtml(gItems, Math.max(1, gUrls.length)) + '</section>'
           : '';
         var bookCtaSectionHtml = tenantShowBookPage(tenant)
-          ? '<section class="s12-book-cta" id="s12-booking">' +
+          ? '<section class="s12-book-cta" id="s12-booking" data-bk-color-surface="card">' +
           '<div class="s12-fade">' +
           '<div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.bookSectionLabel', 'Reserve') + '</div>' +
           '<h2 class="s12-book-cta-title">' + '<span data-edit-key="studio12BookCtaLine1">' + esc(bcL1) + '</span><br><em><span data-edit-key="studio12BookCtaItalic">' + esc(bcEm) + '</span></em></h2>' +
@@ -9139,16 +9223,17 @@
           '<div class="s12-fade">' + bcImgCol + '</div></section>'
           : '';
         return '<div class="studio12-page">' + studio12NavHtml(tenant) +
-          '<section class="s12-hero">' +
+          '<section class="s12-hero" data-bk-color-surface="hero">' +
+          bkHeroBandHitButtonHtml() +
           '<div class="s12-hero-img-col"' + s12HeroColStyle + '>' + heroImg + '<div class="s12-hero-img-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
-          '<div class="s12-hero-content">' +
+          '<div class="s12-hero-content" data-bk-hero-band-tappable>' +
           '<div class="s12-hero-tag s12-fade"><span data-edit-key="studio12HeroEyebrow">' + esc(heroEyebrow) + '</span></div>' +
           '<h1 class="s12-hero-title s12-fade">' + '<span data-edit-key="studio12HeroLine1">' + esc(heroL1) + '</span><br><span data-edit-key="studio12HeroLine2">' + esc(heroL2) + '</span><br><em><span data-edit-key="heroTagline">' + esc(heroItalic) + '</span></em></h1>' +
           '<p class="s12-hero-sub s12-fade"><span data-edit-key="tagline">' + esc(heroLead) + '</span></p>' +
           s12HeroActions +
           '</div></section>' +
           '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
-          '<section class="s12-philosophy">' +
+          '<section class="s12-philosophy" data-bk-color-surface="card">' +
           '<div class="s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
           philTitleHtml +
           '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
@@ -9159,7 +9244,7 @@
           processSectionHtml +
           bookCtaSectionHtml +
           testSection +
-          '<div class="' + s12InfoClass + '">' +
+          '<div class="' + s12InfoClass + '" data-bk-color-surface="about">' +
           s12HoursHalf +
           '<div class="s12-info-half s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.findUsLabel', 'Find us') + '</div>' +
           s12InfoTitleHtml(tenant, 'wc.s12.studioTitleLead', 'The', 'wc.s12.studioTitleEm', 'studio') +
@@ -9349,6 +9434,7 @@
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
         var hero = '<section class="' + heroClass + '" data-bk-color-surface="hero"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
+          bkHeroBandHitButtonHtml() +
           '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +

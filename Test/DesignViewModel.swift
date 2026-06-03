@@ -1628,7 +1628,11 @@ class DesignViewModel: ObservableObject {
         await saveTenantUpdates(tid, updates)
     }
 
-    private func saveTenantUpdates(_ tid: String, _ updates: [String: Any]) async {
+    private func saveTenantUpdates(
+        _ tid: String,
+        _ updates: [String: Any],
+        invalidatePreview: Bool = true
+    ) async {
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
@@ -1640,7 +1644,9 @@ class DesignViewModel: ObservableObject {
                 )
             }
             await MainActor.run {
-                invalidateWebPreview()
+                if invalidatePreview {
+                    invalidateWebPreview()
+                }
                 saveSuccess = true
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -1846,12 +1852,14 @@ class DesignViewModel: ObservableObject {
         WebTheme(rawValue: webThemeId)?.family ?? .classic
     }
 
-    /// Persists color fields touched from preview quick-edit chrome (no full page reload).
-    func savePreviewQuickEditColors() async {
-        guard let tid = tenantId else { return }
-        let tokens = currentColorTokens()
+    /// Persists color fields touched from preview quick-edit chrome.
+    /// Skips WKWebView reload by default — preview already has live CSS patches.
+    func savePreviewQuickEditColors(invalidatePreview: Bool = false) async -> Bool {
+        guard let tid = tenantId else { return false }
         await MainActor.run { errorMessage = nil }
-        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: webColorPaletteId, tokens: tokens))
+        let updates = WebColorPalettes.firestoreUpdates(paletteId: webColorPaletteId, tokens: currentColorTokens())
+        await saveTenantUpdates(tid, updates, invalidatePreview: invalidatePreview)
+        return await MainActor.run { errorMessage == nil }
     }
 
     func applyColorTokensLocally(_ tokens: WebColorPaletteTokens) {

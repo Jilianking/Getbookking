@@ -35,12 +35,20 @@ final class WebViewQuickEditBridge {
         coordinator?.evaluateQuickEdit("window.__bkQuickEditSetFontSize&&window.__bkQuickEditSetFontSize(\(px))")
     }
 
+    func setInlineColor(_ hex: String) {
+        coordinator?.scheduleInlineColor(hex)
+    }
+
     func commitDirtyEdits() {
         coordinator?.evaluateQuickEdit("window.__bkQuickEditCommitDirty&&window.__bkQuickEditCommitDirty()")
     }
 
-    func applyPreviewColorPatch(_ payload: [String: String]) {
-        coordinator?.applyPreviewColorPatch(payload)
+    func schedulePreviewColorPatch(_ payload: [String: String], full: Bool = false) {
+        coordinator?.schedulePreviewColorPatch(payload, full: full)
+    }
+
+    func flushPreviewColorPatch() {
+        coordinator?.flushPreviewColorPatch()
     }
 }
 
@@ -131,6 +139,11 @@ struct WebViewRepresentable: UIViewRepresentable {
         /// Avoid re-running `installQuickEdit` on every `updateUIView` — reinstall calls JS cleanup, which commits inline edits and triggers a full preview reload.
         private var quickEditInstalledForDocument = false
         private var quickEditInstallInFlight = false
+        private var pendingColorPatch: [String: String]?
+        private var pendingColorPatchNeedsFull = false
+        private var colorPatchWorkItem: DispatchWorkItem?
+        private var pendingInlineColorHex: String?
+        private var inlineColorWorkItem: DispatchWorkItem?
 
         init(messageHandlerName: String) {
             self.messageHandlerName = messageHandlerName
@@ -145,10 +158,54 @@ struct WebViewRepresentable: UIViewRepresentable {
             webView?.evaluateJavaScript(javascript, completionHandler: nil)
         }
 
-        func applyPreviewColorPatch(_ payload: [String: String]) {
-            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+        func schedulePreviewColorPatch(_ payload: [String: String], full: Bool) {
+            pendingColorPatch = payload
+            if full { pendingColorPatchNeedsFull = true }
+            colorPatchWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.emitPendingColorPatch()
+            }
+            colorPatchWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.07, execute: work)
+        }
+
+        func flushPreviewColorPatch() {
+            colorPatchWorkItem?.cancel()
+            pendingColorPatchNeedsFull = true
+            emitPendingColorPatch()
+        }
+
+        private func emitPendingColorPatch() {
+            guard let payload = pendingColorPatch,
+                  let data = try? JSONSerialization.data(withJSONObject: payload),
                   let json = String(data: data, encoding: .utf8) else { return }
-            evaluateQuickEdit("window.__bkApplyPreviewColorPatch&&window.__bkApplyPreviewColorPatch(\(json))")
+            let full = pendingColorPatchNeedsFull
+            pendingColorPatch = nil
+            pendingColorPatchNeedsFull = false
+            let opts = full ? "{full:true}" : "{full:false}"
+            evaluateQuickEdit(
+                "window.__bkApplyPreviewColorPatch&&window.__bkApplyPreviewColorPatch(\(json),\(opts))"
+            )
+        }
+
+        func scheduleInlineColor(_ hex: String) {
+            pendingInlineColorHex = hex
+            inlineColorWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.emitPendingInlineColor()
+            }
+            inlineColorWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+        }
+
+        private func emitPendingInlineColor() {
+            guard let hex = pendingInlineColorHex else { return }
+            pendingInlineColorHex = nil
+            let escaped = hex.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+            evaluateQuickEdit(
+                "window.__bkQuickEditSetInlineColor&&window.__bkQuickEditSetInlineColor('\(escaped)')"
+            )
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -168,7 +225,15 @@ struct WebViewRepresentable: UIViewRepresentable {
                       let key = body["key"] as? String {
                 let fontSize = (body["fontSize"] as? NSNumber)?.intValue ?? 16
                 let fontAdjustable = body["fontAdjustable"] as? Bool ?? false
-                event = .inlineFocus(QuickEditInlineFocus(key: key, fontSize: fontSize, fontAdjustable: fontAdjustable))
+                let colorHex = body["colorHex"] as? String ?? "#333333"
+                let colorRole = body["colorRole"] as? String ?? "text"
+                event = .inlineFocus(QuickEditInlineFocus(
+                    key: key,
+                    fontSize: fontSize,
+                    fontAdjustable: fontAdjustable,
+                    colorHex: colorHex,
+                    colorRole: colorRole
+                ))
             } else if action == "inlineBlur" {
                 event = .inlineBlur
             } else if action == "openColorSurface",
@@ -263,33 +328,110 @@ struct WebViewRepresentable: UIViewRepresentable {
               sheet.id = 'bk-quick-edit-style';
               sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
-                '.s12-section-title,.s12-info-title,.s12-test-title,.s12-gallery-title,.s12-book-cta-title,.s12-phil-title,.luxe-section-heading{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
-                '.s12-section-title [data-edit-key],.s12-info-title [data-edit-key],.s12-test-title [data-edit-key],.s12-gallery-title [data-edit-key],.s12-book-cta-title [data-edit-key],.s12-phil-title [data-edit-key],.luxe-section-heading [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                '.s12-section-title,.s12-info-title,.s12-test-title,.s12-gallery-title,.s12-book-cta-title,.s12-phil-title,.luxe-section-heading,.luxe-section-label,.classic-section-eyebrow,.classic-hero-tag,.classic-hero-name,.classic-home .tattoo-featured-inner h2,.classic-services h2,.tattoo-featured-sub,.blade-section-label,.blade-section-title,.blade-book-title,.blade-where-city{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
+                '.s12-section-title [data-edit-key],.s12-info-title [data-edit-key],.s12-test-title [data-edit-key],.s12-gallery-title [data-edit-key],.s12-book-cta-title [data-edit-key],.s12-phil-title [data-edit-key],.luxe-section-heading [data-edit-key],.luxe-section-label [data-edit-key],.classic-section-eyebrow [data-edit-key],.classic-hero-tag [data-edit-key],.classic-hero-name [data-edit-key],.classic-home .tattoo-featured-inner h2 [data-edit-key],.classic-services h2 [data-edit-key],.tattoo-featured-sub [data-edit-key],.blade-section-label [data-edit-key],.blade-section-title [data-edit-key],.blade-book-title [data-edit-key],.blade-where-city [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
                 '.s12-address [data-edit-key],.s12-phone [data-edit-key],.s12-hours-block [data-edit-key],.s12-phil-body [data-edit-key]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:8px 0!important;}' +
-                '.classic-hero-tag [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
+                '.classic-hero-tag [data-edit-key],.tattoo-brand [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="svc:"][role="button"],[data-edit-key^="svc:"][data-edit-key$=":edit"],[data-edit-key^="s12Process:"][data-edit-key$=":edit"]{display:block!important;cursor:pointer!important;box-sizing:border-box!important;border-radius:4px!important;}' +
                 'a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key],div.s12-svc-cell[data-edit-key]{cursor:pointer!important;}' +
                 'a.s12-nav-book [data-edit-key],a.s12-btn-dark [data-edit-key],a.s12-btn-outline [data-edit-key],.luxe-contact-item h3 [data-edit-key],.s12-phil-label [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="s12Process:"][data-edit-key$=":body"]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin-top:4px!important;}' +
                 '.s12-footer-brand [data-edit-key]{display:inline-block!important;margin:0 3px!important;}' +
                 'button.bk-hero-image-hit[data-edit-key="heroImage"],button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}' +
-                '.luxe-hero:has(.bk-hero-image-hit),.classic-hero-right:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
-                '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;cursor:pointer!important;}' +
-                'img[data-edit-key^="galleryImage"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],' +
-                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback{cursor:pointer!important;}' +
-                '[data-bk-color-surface]{cursor:pointer!important;box-shadow:inset 0 0 0 2px rgba(175,82,222,0.72)!important;}' +
-                '[data-bk-color-surface][data-bk-color-active]{box-shadow:inset 0 0 0 3px rgba(175,82,222,1)!important;}' +
-                '[data-bk-color-surface] [data-edit-key]{outline:none!important;box-shadow:none!important;}';
+                '.luxe-hero:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
+                '.classic-hero-right:has(.bk-hero-image-hit),.classic-hero-right:has([data-edit-key="heroImage"]){outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;overflow:visible!important;}' +
+                '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;cursor:pointer!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
+                'img[data-edit-key="heroImage"],img[data-edit-key^="galleryImage"],img[data-edit-key^="featuredWork"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],' +
+                '[data-edit-key^="featuredWork"].luxe-service-placeholder,[data-edit-key^="featuredWork"].tattoo-featured-slot-add,[data-edit-key^="featuredWork"].tattoo-featured-cell,.tattoo-featured-placeholder[data-edit-key],' +
+                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback' +
+                '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
+                '[data-bk-color-surface] [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
+                '[data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;box-shadow:none!important;}' +
+                '[data-bk-color-surface][data-bk-color-active]{outline:3px dashed rgba(0,122,255,0.88)!important;}' +
+                '[data-edit-key][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                '[data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                '[data-edit-key][data-bk-inline-editing][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
+                'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;}' +
+                'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected],img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
+                'button.bk-color-band-hit,button.bk-hero-band-hit{outline:none!important;box-shadow:none!important;cursor:pointer!important;}' +
+                '.blade-page .blade-info-half[data-bk-band-tappable],.blade-page .blade-section#services[data-bk-color-surface="card"],.blade-page .blade-testimonials[data-bk-color-surface="card"]{position:relative!important;}' +
+                '.blade-page .blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
+                '.blade-page .blade-band-content [data-edit-key],.blade-page .blade-band-content a,.blade-page .blade-band-content button,.blade-page .blade-band-content [role="button"]{pointer-events:auto!important;}';
               document.head.appendChild(sheet);
+              var touchMoveSlopPx = 20;
+              function isHeroImageQuickEditTarget(el) {
+                if (!el || !el.closest) return false;
+                return !!el.closest('.bk-hero-image-hit, .luxe-hero-image-hit, img[data-edit-key="heroImage"], [data-edit-key="heroImage"].classic-hero-placeholder, [data-edit-key="heroImage"].blade-hero-placeholder, [data-edit-key="heroImage"].stonecut-hero-photo--empty, [data-edit-key="heroImage"].s12-hero-img-fallback');
+              }
+              function isEditableQuickEditTarget(el) {
+                if (!el || !el.closest) return false;
+                if (el.closest('.bk-color-band-hit, .bk-hero-band-hit')) return false;
+                if (isHeroImageQuickEditTarget(el)) return true;
+                if (el.closest('a[href], button, input, textarea, select, [contenteditable="true"], [role="button"]')) return true;
+                var dk = el.closest('[data-edit-key]');
+                if (!dk) return false;
+                var tk = dk.getAttribute('data-edit-key');
+                if (!tk || tk.indexOf('color:') === 0) return false;
+                return true;
+              }
+              function isHeroImageColumnTarget(el) {
+                if (!el || !el.closest) return false;
+                return !!el.closest('.blade-hero-right,.classic-hero-right,.stonecut-hero-right,.s12-hero-img-col,.bk-hero-image-hit,.luxe-hero-image-hit');
+              }
+              /** True when tap is on editable copy inside a color band (not wrapper padding). */
+              function isInsideSurfaceTextKey(el, surf) {
+                if (!el || !surf || !el.closest) return false;
+                if (!surf.contains(el)) return false;
+                var keyed = el.closest('[data-edit-key]');
+                if (el.closest('a[href], button, [role="button"]')) {
+                  return !!(keyed && surf.contains(keyed));
+                }
+                var selfKey = el.getAttribute && el.getAttribute('data-edit-key');
+                if (selfKey && selfKey.indexOf('color:') !== 0) {
+                  if (isSheetOnlyKey(selfKey)) return true;
+                  return true;
+                }
+                if (!keyed || !surf.contains(keyed)) return false;
+                var tk = keyed.getAttribute('data-edit-key');
+                if (!tk || tk.indexOf('color:') === 0 || isSheetOnlyKey(tk)) return false;
+                return keyed === el;
+              }
+              /** Open padding in a color band → section color; blue copy → text. */
+              function isBandOpenSpaceTap(el) {
+                if (!el || !el.closest) return false;
+                if (el.closest('.bk-color-band-hit, .bk-hero-band-hit')) return true;
+                var surf = el.closest('[data-bk-color-surface]');
+                if (!surf) return false;
+                var sid = surf.getAttribute('data-bk-color-surface');
+                if (!sid) return false;
+                if (sid === 'hero' && isHeroImageColumnTarget(el)) return false;
+                if (surf === el) return true;
+                var openCol = el.closest('[data-bk-band-tappable]');
+                if (openCol && openCol === el && !isInsideSurfaceTextKey(el, surf)) return true;
+                return !isInsideSurfaceTextKey(el, surf);
+              }
               function resolveQuickEditTap(ev) {
                 var el = ev.target;
                 while (el && el.nodeType !== 1) el = el.parentNode;
                 if (!el || !el.closest) return { type: 'none' };
-                if (el.closest('.bk-hero-image-hit, .luxe-hero-image-hit')) {
+                if (isBandOpenSpaceTap(el)) {
+                  var colorBand = el.closest('[data-bk-color-surface]');
+                  if (colorBand) {
+                    var sidBand = colorBand.getAttribute('data-bk-color-surface');
+                    if (sidBand) return { type: 'color', surface: sidBand, el: colorBand };
+                  }
+                }
+                if (isHeroImageQuickEditTarget(el)) {
                   var heroBtn = el.closest('[data-edit-key="heroImage"]');
                   if (heroBtn) return { type: 'sheet', el: heroBtn };
+                }
+                var surf = el.closest('[data-bk-color-surface]');
+                if (surf && !isEditableQuickEditTarget(el)) {
+                  var sidBand = surf.getAttribute('data-bk-color-surface');
+                  if (sidBand) return { type: 'color', surface: sidBand, el: surf };
                 }
                 var textEl = el.closest('[data-edit-key]');
                 if (textEl) {
@@ -297,13 +439,26 @@ struct WebViewRepresentable: UIViewRepresentable {
                   if (tk && isSheetOnlyKey(tk)) return { type: 'sheet', el: textEl };
                   if (tk && tk.indexOf('color:') !== 0) return { type: 'text', el: textEl };
                 }
-                var surf = el.closest('[data-bk-color-surface]');
                 if (surf) {
                   var sid = surf.getAttribute('data-bk-color-surface');
                   if (sid) return { type: 'color', surface: sid, el: surf };
                 }
                 if (textEl) return { type: 'sheet', el: textEl };
                 return { type: 'none' };
+              }
+              function resolveHighlightTarget(el) {
+                if (!el || !el.closest) return el;
+                var btn = el.closest('a.classic-btn-primary,a.classic-btn-ghost,a.luxe-hero-cta,a.luxe-promo-cta,a.tattoo-gallery-link,a.blade-btn-primary,a.blade-btn-ghost,a.blade-nav-book,a.stonecut-btn,a.s12-btn-dark,a.s12-btn-outline,a.s12-nav-book,a.s12-gallery-link');
+                if (btn && btn.querySelector('[data-edit-key]')) return btn;
+                return el;
+              }
+              function setQuickEditSelected(el) {
+                [].forEach.call(document.querySelectorAll('[data-bk-quick-edit-selected]'), function(node) {
+                  node.removeAttribute('data-bk-quick-edit-selected');
+                });
+                if (!el) return;
+                var target = resolveHighlightTarget(el);
+                if (target) target.setAttribute('data-bk-quick-edit-selected', '1');
               }
               function setActiveColorSurface(el) {
                 [].forEach.call(document.querySelectorAll('[data-bk-color-surface]'), function(node) {
@@ -313,6 +468,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function openColorSurface(sid, surfEl) {
                 setActiveColorSurface(surfEl);
+                setQuickEditSelected(surfEl);
                 postToNative({ action: 'openColorSurface', surface: sid });
               }
               function isSheetOnlyKey(key) {
@@ -326,6 +482,32 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (key.indexOf('featuredWork:') === 0 || key.indexOf('galleryImage:') === 0) return false;
                 return true;
               }
+              function computedColorToHex(el) {
+                if (!el) return '#333333';
+                var cs = window.getComputedStyle(el);
+                var raw = (cs && cs.color) ? String(cs.color) : '';
+                if (!raw) return '#333333';
+                var m = raw.match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)/i);
+                if (m) {
+                  function pad2(n) {
+                    var h = Math.max(0, Math.min(255, n)).toString(16);
+                    return h.length === 1 ? '0' + h : h;
+                  }
+                  return '#' + pad2(parseInt(m[1], 10)) + pad2(parseInt(m[2], 10)) + pad2(parseInt(m[3], 10));
+                }
+                if (raw.charAt(0) === '#') return raw;
+                return '#333333';
+              }
+              function resolveInlineColorRole(el) {
+                if (!el || !el.closest) return 'text';
+                if (el.closest('a.blade-btn-primary,a.classic-btn-primary,a.luxe-hero-cta,a.luxe-promo-cta,a.s12-btn-dark,a.s12-nav-book,a.stonecut-btn-primary,a.blade-nav-book')) {
+                  return 'button';
+                }
+                if (el.closest('a.blade-btn-ghost,a.classic-btn-ghost,a.s12-btn-outline,a.stonecut-btn')) {
+                  return 'button';
+                }
+                return 'text';
+              }
               function postInlineFocus(el) {
                 if (!el || !el.isConnected) return;
                 var key = el.getAttribute('data-edit-key');
@@ -336,7 +518,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                   action: 'inlineFocus',
                   key: key,
                   fontSize: fs,
-                  fontAdjustable: isFontAdjustableKey(key)
+                  fontAdjustable: isFontAdjustableKey(key),
+                  colorHex: computedColorToHex(el),
+                  colorRole: resolveInlineColorRole(el)
                 });
               }
               function postInlineBlur() {
@@ -402,6 +586,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               function startInline(t) {
                 if (inlineEl && inlineEl !== t) finishActiveInlineNoSave();
                 inlineEl = t;
+                setQuickEditSelected(t);
                 t.setAttribute('contenteditable', 'true');
                 t.setAttribute('spellcheck', 'true');
                 t.setAttribute('data-bk-inline-editing', '1');
@@ -416,7 +601,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                     var sel = window.getSelection();
                     if (sel) { sel.removeAllRanges(); sel.addRange(r); }
                   } catch (e) {}
-                  try { t.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) {}
+                  try { t.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e2) {}
                   postInlineFocus(t);
                 }, 0);
               }
@@ -431,6 +616,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!t || !t.isConnected) return;
                 if (hit.type === 'sheet') {
                   if (inlineEl) finishActiveInlineNoSave();
+                  setQuickEditSelected(t);
                   deliverOpenSheet(t);
                   return;
                 }
@@ -457,12 +643,23 @@ struct WebViewRepresentable: UIViewRepresentable {
                 }
                 touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
                 touchEditHit = hit;
-                if (hit.type === 'color' && hit.surface === 'hero') {
+                var touchTarget = ev.target;
+                while (touchTarget && touchTarget.nodeType !== 1) touchTarget = touchTarget.parentNode;
+                if (hit.type === 'color' && hit.surface === 'hero' && isHeroImageQuickEditTarget(touchTarget)) {
                   colorLongPressTimer = setTimeout(function() {
                     colorLongPressFired = true;
                     if (inlineEl) finishActiveInlineNoSave();
                     openColorSurface('hero', hit.el);
-                  }, 520);
+                  }, 380);
+                } else {
+                  var cardBandEl = touchTarget && touchTarget.closest('[data-bk-color-surface="card"]');
+                  if (cardBandEl && touchTarget.closest('[data-bk-band-tappable],#services,.blade-testimonials')) {
+                    colorLongPressTimer = setTimeout(function() {
+                      colorLongPressFired = true;
+                      if (inlineEl) finishActiveInlineNoSave();
+                      openColorSurface('card', cardBandEl);
+                    }, 420);
+                  }
                 }
               }
               function onTouchEnd(ev) {
@@ -488,7 +685,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                   return;
                 }
                 var x = ev.changedTouches[0].clientX, y = ev.changedTouches[0].clientY;
-                if (Math.abs(x - touchStart.x) > 14 || Math.abs(y - touchStart.y) > 14) {
+                if (Math.abs(x - touchStart.x) > touchMoveSlopPx || Math.abs(y - touchStart.y) > touchMoveSlopPx) {
                   touchStart = null;
                   touchEditHit = null;
                   return;
@@ -496,14 +693,11 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var hit = touchEditHit;
                 touchStart = null;
                 touchEditHit = null;
-                if (hit.type === 'color' && hit.surface === 'hero') {
-                  return;
-                }
                 ev.preventDefault();
                 ev.stopPropagation();
                 if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
                 activateQuickEditHit(hit);
-                window.__bkQuickEditSuppressClickUntil = Date.now() + 800;
+                window.__bkQuickEditSuppressClickUntil = Date.now() + 450;
               }
               function onTap(ev) {
                 if (window.__bkQuickEditSuppressClickUntil && Date.now() < window.__bkQuickEditSuppressClickUntil) return;
@@ -515,7 +709,6 @@ struct WebViewRepresentable: UIViewRepresentable {
                   ev.stopPropagation();
                   if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
                 }
-                if (hit.type === 'color' && hit.surface === 'hero') return;
                 ev.preventDefault();
                 ev.stopPropagation();
                 activateQuickEditHit(hit);
@@ -545,6 +738,12 @@ struct WebViewRepresentable: UIViewRepresentable {
                 noteDirtyFrom(inlineEl);
                 postInlineFocus(inlineEl);
               };
+              window.__bkQuickEditSetInlineColor = function(hex) {
+                if (!inlineEl || !inlineEl.isConnected) return;
+                var h = (hex && String(hex).trim()) ? String(hex).trim() : '';
+                if (h && h.charAt(0) !== '#') h = '#' + h;
+                if (h) inlineEl.style.color = h;
+              };
               window.__bkQuickEditCommitDirty = function() {
                 finishActiveInlineNoSave();
                 var keys = Object.keys(dirty);
@@ -553,9 +752,88 @@ struct WebViewRepresentable: UIViewRepresentable {
                   dirty = {};
                 }
               };
+              function upgradeBladeBandTaps() {
+                if (!document.querySelector || !document.querySelector('.blade-page')) return;
+                [].forEach.call(document.querySelectorAll('.blade-page .blade-info-section'), function(sec) {
+                  sec.removeAttribute('data-bk-color-surface');
+                  var secHit = sec.querySelector('.bk-color-band-hit');
+                  if (secHit && secHit.parentNode === sec) secHit.parentNode.removeChild(secHit);
+                });
+                [].forEach.call(document.querySelectorAll('.blade-page .blade-info-half'), function(half) {
+                  if (!half.getAttribute('data-bk-color-surface')) half.setAttribute('data-bk-color-surface', 'card');
+                  if (!half.getAttribute('data-bk-band-tappable')) half.setAttribute('data-bk-band-tappable', '');
+                  var hasHit = false;
+                  for (var i = 0; i < half.children.length; i++) {
+                    if (half.children[i].classList && half.children[i].classList.contains('bk-color-band-hit')) { hasHit = true; break; }
+                  }
+                  if (!hasHit) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'bk-color-band-hit';
+                    btn.setAttribute('aria-label', 'Edit section background');
+                    half.insertBefore(btn, half.firstChild);
+                  }
+                  if (!half.querySelector('.blade-band-content')) {
+                    var wrap = document.createElement('div');
+                    wrap.className = 'blade-band-content';
+                    var move = [];
+                    for (var j = 0; j < half.children.length; j++) {
+                      var ch = half.children[j];
+                      if (ch.classList && ch.classList.contains('bk-color-band-hit')) continue;
+                      move.push(ch);
+                    }
+                    for (var k = 0; k < move.length; k++) wrap.appendChild(move[k]);
+                    half.appendChild(wrap);
+                  }
+                });
+                var services = document.querySelector('.blade-page #services[data-bk-color-surface="card"]');
+                if (services && !services.querySelector('.bk-color-band-hit')) {
+                  var sbtn = document.createElement('button');
+                  sbtn.type = 'button';
+                  sbtn.className = 'bk-color-band-hit';
+                  sbtn.setAttribute('aria-label', 'Edit section background');
+                  services.insertBefore(sbtn, services.firstChild);
+                }
+                if (services && !services.querySelector('.blade-band-content')) {
+                  var swrap = document.createElement('div');
+                  swrap.className = 'blade-band-content';
+                  var smove = [];
+                  for (var si = 0; si < services.children.length; si++) {
+                    var sch = services.children[si];
+                    if (sch.classList && sch.classList.contains('bk-color-band-hit')) continue;
+                    smove.push(sch);
+                  }
+                  for (var sj = 0; sj < smove.length; sj++) swrap.appendChild(smove[sj]);
+                  services.appendChild(swrap);
+                }
+                var reviews = document.querySelector('.blade-page .blade-testimonials[data-bk-color-surface="card"]');
+                if (reviews && !reviews.querySelector('.bk-color-band-hit')) {
+                  var rbtn = document.createElement('button');
+                  rbtn.type = 'button';
+                  rbtn.className = 'bk-color-band-hit';
+                  rbtn.setAttribute('aria-label', 'Edit section background');
+                  reviews.insertBefore(rbtn, reviews.firstChild);
+                }
+                if (reviews && !reviews.querySelector('.blade-band-content')) {
+                  var rwrap = document.createElement('div');
+                  rwrap.className = 'blade-band-content';
+                  var rmove = [];
+                  for (var ri = 0; ri < reviews.children.length; ri++) {
+                    var rch = reviews.children[ri];
+                    if (rch.classList && rch.classList.contains('bk-color-band-hit')) continue;
+                    rmove.push(rch);
+                  }
+                  for (var rk = 0; rk < rmove.length; rk++) rwrap.appendChild(rmove[rk]);
+                  reviews.appendChild(rwrap);
+                }
+              }
+              upgradeBladeBandTaps();
               window.__bkQuickEditInstalled = true;
               window.__bkQuickEditCleanup = function() {
                 finishActiveInlineNoSave();
+                [].forEach.call(document.querySelectorAll('[data-bk-quick-edit-selected]'), function(node) {
+                  node.removeAttribute('data-bk-quick-edit-selected');
+                });
                 var keys = Object.keys(dirty);
                 if (keys.length) {
                   postToNative({ action: 'inlineSaveBatch', changes: dirty });
@@ -570,6 +848,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 window.__bkQuickEditInstalled = false;
                 delete window.__bkQuickEditSuppressClickUntil;
                 delete window.__bkQuickEditNavigateEditable;
+                delete window.__bkQuickEditSetInlineColor;
                 delete window.__bkQuickEditSetFontSize;
                 delete window.__bkQuickEditCommitDirty;
                 delete window.__bkApplyPreviewColorPatch;

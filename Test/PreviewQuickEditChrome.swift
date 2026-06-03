@@ -7,10 +7,16 @@
 import SwiftUI
 import UIKit
 
-struct QuickEditInlineFocus: Equatable {
+struct QuickEditInlineFocus: Equatable, Identifiable {
+    var id: String { key }
+
     var key: String
     var fontSize: Int
     var fontAdjustable: Bool
+    /// Computed `color` of the focused element in the preview (RGB → hex).
+    var colorHex: String
+    /// `text` = site text token; `button` = accent/CTA label on a filled or outline button.
+    var colorRole: String
 }
 
 enum PreviewQuickEditColorTarget: String, Identifiable {
@@ -37,32 +43,36 @@ struct PreviewQuickEditChrome: View {
     @Binding var inlineFocus: QuickEditInlineFocus?
     @Binding var colorsDirty: Bool
     @Binding var selectedColorSurface: PreviewColorSurface?
+    @Binding var isChromeCollapsed: Bool
+    @AppStorage("quickEditFabPosX") private var storedFabPosX: Double = -1
+    @AppStorage("quickEditFabPosY") private var storedFabPosY: Double = -1
     @State private var activeColorTarget: PreviewQuickEditColorTarget?
     @State private var activeColorSurface: PreviewColorSurface?
+    @State private var focusedColorEdit: QuickEditInlineFocus?
+    @State private var draggingFabPosition: CGPoint?
+    @State private var fabDragStartPosition: CGPoint?
+    @State private var isSavingColors = false
+    @State private var showSaveAck = false
+
+    private let collapsedFabSize: CGFloat = 52
+    private let collapsedFabMargin: CGFloat = 16
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-                .allowsHitTesting(false)
+        GeometryReader { geo in
+            ZStack {
+                Color.clear
+                    .allowsHitTesting(false)
 
-            VStack(spacing: 14) {
-                if selectedColorSurface != nil || supportsTappableColorBands {
-                    Text(selectedColorSurface.map { "Editing: \($0.label)" } ?? "Tap a section in the preview to change its color")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 4)
+                if isChromeCollapsed {
+                    collapsedFloatingFAB(in: geo.size)
+                } else {
+                    VStack(spacing: 0) {
+                        Spacer()
+                            .allowsHitTesting(false)
+                        expandedChrome
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 }
-                colorRow
-                controlPill
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            .background {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .ignoresSafeArea(edges: .bottom)
             }
         }
         .allowsHitTesting(true)
@@ -71,7 +81,10 @@ struct PreviewQuickEditChrome: View {
                 title: target.label,
                 initialHex: hex(for: target),
                 onChange: { applyChromeColor(target: target, hex: $0) },
-                onDismiss: { activeColorTarget = nil }
+                onDismiss: {
+                    activeColorTarget = nil
+                    finishColorSheetDismiss()
+                }
             )
         }
         .sheet(item: $activeColorSurface) { surface in
@@ -79,159 +92,328 @@ struct PreviewQuickEditChrome: View {
                 title: surface.label,
                 initialHex: surface.hex(from: viewModel),
                 onChange: { applySurfaceColor(surface: surface, hex: $0) },
-                onDismiss: { activeColorSurface = nil }
+                onDismiss: {
+                    activeColorSurface = nil
+                    selectedColorSurface = nil
+                    finishColorSheetDismiss()
+                }
+            )
+        }
+        .sheet(item: $focusedColorEdit) { focus in
+            PreviewQuickEditColorSheet(
+                title: PreviewQuickEditColorTarget.text.label,
+                initialHex: focus.colorHex,
+                onChange: { applyFocusedElementColor(hex: $0, focus: focus) },
+                onDismiss: {
+                    focusedColorEdit = nil
+                    finishColorSheetDismiss()
+                }
             )
         }
         .onChange(of: selectedColorSurface) { _, surface in
-            if let surface {
-                activeColorSurface = surface
+            guard let surface else { return }
+            presentColorSurface(surface)
+        }
+        .onChange(of: isChromeCollapsed) { _, collapsed in
+            if collapsed {
+                draggingFabPosition = nil
+                fabDragStartPosition = nil
             }
         }
     }
 
-    private var activeTemplateFamily: TemplateFamily {
-        viewModel.activeTemplateFamily
-    }
-
-    private var supportsTappableColorBands: Bool {
-        switch activeTemplateFamily {
-        case .luxe, .blade, .stonecut, .classic:
-            return true
-        case .studio12:
-            return false
+    private var expandedChrome: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Spacer(minLength: 0)
+                chromeCollapseButton
+            }
+            controlPill
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 
-    private var colorRow: some View {
-        HStack(spacing: 0) {
-            PreviewTouchColorWell(
-                title: selectedColorSurface?.label ?? "Section",
-                hex: selectedColorSurface?.hex(from: viewModel) ?? viewModel.backgroundColorHex
-            ) {
-                if let selectedColorSurface {
-                    activeColorSurface = selectedColorSurface
-                } else {
-                    activeColorSurface = .page
-                }
-            }
-            .frame(maxWidth: .infinity)
-
-            PreviewTouchColorWell(
-                title: PreviewQuickEditColorTarget.text.label,
-                hex: viewModel.textColorHex
-            ) {
-                activeColorTarget = .text
-            }
-            .frame(maxWidth: .infinity)
-
-            PreviewTouchColorWell(
-                title: PreviewQuickEditColorTarget.button.label,
-                hex: viewModel.primaryColorHex
-            ) {
-                activeColorTarget = .button
-            }
-            .frame(maxWidth: .infinity)
+    private var chromeCollapseButton: some View {
+        Button {
+            dismissColorSheets()
+            isChromeCollapsed = true
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(Color(.systemGray5))
+                .clipShape(Circle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Hide edit tools")
     }
 
-    private var controlPill: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 0) {
-                Button {
-                    bridge.navigateEditable(delta: -1)
-                } label: {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-
-                Divider()
-                    .frame(height: 22)
-
-                Button {
-                    bridge.navigateEditable(delta: 1)
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-            }
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            Group {
-                if let focus = inlineFocus, focus.fontAdjustable {
-                    fontSizeStepper(focus: focus)
-                } else {
-                    Circle()
-                        .fill(Color(hex: viewModel.primaryColorHex))
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+    private func collapsedFloatingFAB(in containerSize: CGSize) -> some View {
+        let position = resolvedFabPosition(in: containerSize)
+        return collapsedFabButton
+            .position(position)
+            .gesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        if fabDragStartPosition == nil {
+                            fabDragStartPosition = resolvedFabPosition(in: containerSize)
+                        }
+                        guard let origin = fabDragStartPosition else { return }
+                        let next = CGPoint(
+                            x: origin.x + value.translation.width,
+                            y: origin.y + value.translation.height
                         )
-                }
-            }
-            .frame(maxWidth: .infinity)
-
-            Button {
-                bridge.commitDirtyEdits()
-                inlineFocus = nil
-                if colorsDirty {
-                    Task {
-                        await viewModel.savePreviewQuickEditColors()
-                        await MainActor.run { colorsDirty = false }
+                        draggingFabPosition = clampFabPosition(next, in: containerSize)
                     }
-                }
-            } label: {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(Circle().fill(Color.black))
+                    .onEnded { _ in
+                        if let draggingFabPosition {
+                            persistFabPosition(draggingFabPosition)
+                        }
+                        draggingFabPosition = nil
+                        fabDragStartPosition = nil
+                    }
+            )
+            .onTapGesture {
+                isChromeCollapsed = false
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Done editing")
+            .accessibilityLabel(colorsDirty ? "Show edit tools, unsaved colors" : "Show edit tools")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private var collapsedFabButton: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "chevron.up")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: collapsedFabSize, height: collapsedFabSize)
+                .background(Color(.systemBackground))
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+
+            if colorsDirty {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 1.5))
+                    .offset(x: 4, y: -4)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+    }
+
+    private func defaultFabPosition(in size: CGSize) -> CGPoint {
+        let half = collapsedFabSize / 2
+        let margin = collapsedFabMargin
+        return CGPoint(
+            x: size.width - margin - half,
+            y: size.height - margin - half
         )
     }
 
+    private func clampFabPosition(_ point: CGPoint, in size: CGSize) -> CGPoint {
+        let half = collapsedFabSize / 2
+        let margin = collapsedFabMargin
+        return CGPoint(
+            x: min(size.width - margin - half, max(margin + half, point.x)),
+            y: min(size.height - margin - half, max(margin + half, point.y))
+        )
+    }
+
+    private func resolvedFabPosition(in size: CGSize) -> CGPoint {
+        if let draggingFabPosition {
+            return clampFabPosition(draggingFabPosition, in: size)
+        }
+        if storedFabPosX >= 0, storedFabPosY >= 0 {
+            return clampFabPosition(CGPoint(x: storedFabPosX, y: storedFabPosY), in: size)
+        }
+        return defaultFabPosition(in: size)
+    }
+
+    private func persistFabPosition(_ point: CGPoint) {
+        storedFabPosX = Double(point.x)
+        storedFabPosY = Double(point.y)
+    }
+
+    private var swatchColorHex: String {
+        inlineFocus?.colorHex ?? viewModel.textColorHex
+    }
+
+    private var compactTextColorWell: some View {
+        Button {
+            if let focus = inlineFocus {
+                focusedColorEdit = focus
+            } else {
+                activeColorTarget = .text
+            }
+        } label: {
+            VStack(spacing: 4) {
+                PreviewColorWellCircle(hex: swatchColorHex, diameter: 40)
+                Text(PreviewQuickEditColorTarget.text.label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit text color")
+    }
+
+    private var controlPill: some View {
+        HStack(alignment: .center, spacing: 10) {
+            compactTextColorWell
+
+            if let focus = inlineFocus {
+                activeFieldEditor(focus: focus)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 0)
+            }
+
+            quickEditSaveButton
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, inlineFocus == nil ? 8 : 10)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
+        )
+    }
+
+    @ViewBuilder
+    private func activeFieldEditor(focus: QuickEditInlineFocus) -> some View {
+        if focus.fontAdjustable {
+            fontSizeStepper(focus: focus)
+        }
+    }
+
+    private var quickEditSaveButton: some View {
+        Button {
+            commitQuickEditSaves()
+        } label: {
+            Group {
+                if showSaveAck {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else if isSavingColors {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(showSaveAck ? Color.green : Color.black))
+        }
+        .buttonStyle(.plain)
+        .disabled(isSavingColors)
+        .accessibilityLabel(showSaveAck ? "Saved" : "Save edits")
+    }
+
+    private func commitQuickEditSaves() {
+        bridge.flushPreviewColorPatch()
+        bridge.commitDirtyEdits()
+        inlineFocus = nil
+        Task {
+            await persistDirtyColorsIfNeeded()
+            await MainActor.run {
+                if !colorsDirty && !showSaveAck {
+                    flashSaveAck()
+                }
+            }
+        }
+    }
+
+    /// Flush preview paint, then upload colors when the color sheet closes or the user taps save.
+    private func finishColorSheetDismiss() {
+        bridge.flushPreviewColorPatch()
+        guard colorsDirty, !isSavingColors else { return }
+        Task { await persistDirtyColorsIfNeeded() }
+    }
+
+    private func persistDirtyColorsIfNeeded() async {
+        guard colorsDirty else { return }
+        await MainActor.run { isSavingColors = true }
+        let ok = await viewModel.savePreviewQuickEditColors(invalidatePreview: false)
+        await MainActor.run {
+            isSavingColors = false
+            if ok {
+                colorsDirty = false
+                pushPreviewColors()
+                flashSaveAck()
+            }
+        }
+    }
+
+    private func flashSaveAck() {
+        showSaveAck = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            await MainActor.run { showSaveAck = false }
+        }
+    }
+
+    private func dismissColorSheets() {
+        activeColorTarget = nil
+        activeColorSurface = nil
+        selectedColorSurface = nil
+        focusedColorEdit = nil
+    }
+
+    /// Opens a band color sheet; clears `selectedColorSurface` so the same band can be tapped again after Done.
+    private func presentColorSurface(_ surface: PreviewColorSurface) {
+        activeColorSurface = surface
+        selectedColorSurface = nil
+    }
+
     private func fontSizeStepper(focus: QuickEditInlineFocus) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button {
                 let next = max(10, focus.fontSize - 2)
                 bridge.setInlineFontSize(next)
-                inlineFocus = QuickEditInlineFocus(key: focus.key, fontSize: next, fontAdjustable: true)
+                inlineFocus = QuickEditInlineFocus(
+                    key: focus.key,
+                    fontSize: next,
+                    fontAdjustable: true,
+                    colorHex: focus.colorHex,
+                    colorRole: focus.colorRole
+                )
             } label: {
                 Image(systemName: "minus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 40, height: 40)
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 34, height: 34)
                     .background(Color(.systemGray6))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
 
             Text("\(focus.fontSize)")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .frame(minWidth: 36)
+                .frame(minWidth: 32)
 
             Button {
                 let next = min(96, focus.fontSize + 2)
                 bridge.setInlineFontSize(next)
-                inlineFocus = QuickEditInlineFocus(key: focus.key, fontSize: next, fontAdjustable: true)
+                inlineFocus = QuickEditInlineFocus(
+                    key: focus.key,
+                    fontSize: next,
+                    fontAdjustable: true,
+                    colorHex: focus.colorHex,
+                    colorRole: focus.colorRole
+                )
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 40, height: 40)
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 34, height: 34)
                     .background(Color(.systemGray6))
                     .clipShape(Circle())
             }
@@ -244,6 +426,24 @@ struct PreviewQuickEditChrome: View {
         case .background: return viewModel.backgroundColorHex
         case .text: return viewModel.textColorHex
         case .button: return viewModel.primaryColorHex
+        }
+    }
+
+    private func applyFocusedElementColor(hex: String, focus: QuickEditInlineFocus) {
+        let normalized = WebColorPalettes.normalizeHex(hex)
+        bridge.setInlineColor(normalized)
+        if focus.colorRole == "button" {
+            viewModel.primaryColorHex = normalized
+            viewModel.primaryColorHoverHex = PreviewQuickEditChrome.derivedHoverHex(for: normalized)
+            viewModel.syncPreviewHeroSlotColorFromTokens()
+        } else {
+            viewModel.textColorHex = normalized
+        }
+        colorsDirty = true
+        pushPreviewColors()
+        if var current = inlineFocus, current.key == focus.key {
+            current.colorHex = normalized
+            inlineFocus = current
         }
     }
 
@@ -271,17 +471,31 @@ struct PreviewQuickEditChrome: View {
             viewModel.syncPreviewHeroSlotColorFromTokens()
         }
         colorsDirty = true
-        let heroOverride = surface == .hero ? normalized : nil
-        pushPreviewColors(heroSlotOverride: heroOverride)
+        let heroOverride: String? = {
+            guard surface == .hero,
+                  !PreviewColorSurface.heroUsesPageBackground(family: viewModel.activeTemplateFamily)
+            else { return nil }
+            return normalized
+        }()
+        pushPreviewColors(heroSlotOverride: heroOverride, fullBandPass: needsFullBandPass(surface))
     }
 
-    private func pushPreviewColors(heroSlotOverride: String? = nil) {
-        bridge.applyPreviewColorPatch(viewModel.previewColorPatchPayload(heroSlotOverride: heroSlotOverride))
+    private func needsFullBandPass(_ surface: PreviewColorSurface) -> Bool {
+        switch surface {
+        case .card, .featured, .about: return true
+        case .page, .hero: return false
+        }
+    }
+
+    private func pushPreviewColors(heroSlotOverride: String? = nil, fullBandPass: Bool = false) {
+        bridge.schedulePreviewColorPatch(
+            viewModel.previewColorPatchPayload(heroSlotOverride: heroSlotOverride),
+            full: fullBandPass
+        )
     }
 
     func openColorSurface(_ surface: PreviewColorSurface) {
-        selectedColorSurface = surface
-        activeColorSurface = surface
+        presentColorSurface(surface)
     }
 
     /// Simple hover for live button color tweaks (full palette save still uses stored hover on commit).
@@ -326,6 +540,7 @@ private struct PreviewTouchColorWell: View {
 
 private struct PreviewColorWellCircle: View {
     let hex: String
+    var diameter: CGFloat = 56
 
     var body: some View {
         Circle()
@@ -334,7 +549,7 @@ private struct PreviewColorWellCircle: View {
                 Circle()
                     .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
             )
-            .frame(width: 56, height: 56)
+            .frame(width: diameter, height: diameter)
             .contentShape(Circle())
     }
 }
@@ -375,7 +590,12 @@ private struct SystemColorWheelPicker: UIViewControllerRepresentable {
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIColorPickerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIColorPickerViewController, context: Context) {
+        let color = UIColor(Color(hex: initialHex))
+        if !uiViewController.selectedColor.isEqual(color) {
+            uiViewController.selectedColor = color
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onChange: onChange)
@@ -386,10 +606,6 @@ private struct SystemColorWheelPicker: UIViewControllerRepresentable {
 
         init(onChange: @escaping (String) -> Void) {
             self.onChange = onChange
-        }
-
-        func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
-            onChange(viewController.selectedColor.toPreviewHex())
         }
 
         func colorPickerViewController(

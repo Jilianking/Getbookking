@@ -38,34 +38,423 @@ struct WebColorAccentOption: Identifiable, Hashable {
     let primaryColorHover: String
 }
 
+/// How the design picker filters catalog colors (both tones, light only, or dark only).
+enum WebColorPalettePickerTone: String, CaseIterable, Identifiable {
+    case all
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var segmentedTitle: String {
+        switch self {
+        case .all: return "All"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+}
+
+/// Row in the color grid (`pickerId` is unique in `.all` when the same catalog id appears twice).
+struct WebColorPalettePickerItem: Identifiable, Hashable {
+    let pickerId: String
+    let palette: WebColorPalette
+    /// e.g. "Light" / "Dark" when `.all` shows both variants of one catalog name.
+    let toneSubtitle: String?
+
+    var id: String { pickerId }
+}
+
 enum WebColorPalettes {
     static let customPaletteId = "custom"
 
-    /// Base theme cards in the picker (not accent-only clones).
-    private static let classicBaseIds: [String] = [
-        "original", "sandstone", "soft-neutral", "vintage-warm",
-    ]
-    private static let luxeBaseIds: [String] = [
-        "original", "sandstone", "blush-mauve", "soft-neutral",
-    ]
-    private static let bladeBaseIds: [String] = [
-        "original", "sandstone", "ocean-slate", "slate-rust",
+    /// Same catalog order for every template family (Original stays per-family in `all`).
+    private static let universalCatalogCoreIds: [String] = [
+        "sandstone", "soft-neutral", "ocean-slate", "slate-rust",
+        "vintage-warm", "blush-mauve",
         "pearl-light", "soft-grey", "warm-linen", "cloud-mist",
+        "burnt-accent", "ink-parchment", "charcoal-greige",
     ]
-    private static let stonecutBaseIds: [String] = [
-        "original", "burnt-accent", "ink-parchment", "charcoal-greige",
-    ]
-    private static let studio12BaseIds: [String] = [
-        "original", "sandstone", "soft-neutral", "ocean-slate",
-    ]
-    /// v3 full-palette clones shown as accent chips — map stored ID to base `original` in picker UI.
-    private static let v3AccentOnlyIds: Set<String> = [
+    private static let v3PaletteIdsOrdered: [String] = [
         "forest-sage", "midnight-plum", "coral-bloom", "arctic-mist", "copper-ledger",
         "lavender-haze", "olive-grove", "rose-quartz", "graphite-mint", "honey-linen",
         "baltic-blue", "terracotta-clay", "pearl-ash", "berry-noir", "sage-steam",
     ]
+    private static let v3AccentOnlyIds: Set<String> = Set(v3PaletteIdsOrdered)
+
+    private static var universalPickerCatalogIds: [String] {
+        ["original"] + universalCatalogCoreIds + v3PaletteIdsOrdered
+    }
+
+    private static let catalogDisplayNames: [String: String] = [
+        "slate-rust": "Slate & Rust",
+        "burnt-accent": "Burnt Accent",
+        "ink-parchment": "Ink & Parchment",
+        "charcoal-greige": "Charcoal Greige",
+        "blush-mauve": "Blush Mauve",
+        "vintage-warm": "Vintage Warm",
+        "pearl-light": "Pearl Light",
+        "soft-grey": "Soft Grey",
+        "warm-linen": "Warm Linen",
+        "cloud-mist": "Cloud Mist",
+        "ocean-slate": "Ocean Slate",
+    ]
+
+    /// Picker labels for dark-surface variants (avoids “Warm” / “Light” on near-black themes).
+    private static let catalogDarkDisplayNames: [String: String] = [
+        "sandstone": "Sandstone Night",
+        "soft-neutral": "Neutral Charcoal",
+        "ocean-slate": "Ocean Slate",
+        "slate-rust": "Slate & Rust",
+        "vintage-warm": "Rust Night",
+        "blush-mauve": "Mauve Noir",
+        "pearl-light": "Cool Slate",
+        "soft-grey": "Charcoal Grey",
+        "warm-linen": "Espresso Linen",
+        "cloud-mist": "Storm Blue",
+        "burnt-accent": "Burnt Accent",
+        "ink-parchment": "Ink & Parchment",
+        "charcoal-greige": "Charcoal Greige",
+        "forest-sage": "Forest Night",
+        "midnight-plum": "Midnight Plum",
+        "coral-bloom": "Coral Noir",
+        "arctic-mist": "Arctic Night",
+        "copper-ledger": "Copper Ledger",
+        "lavender-haze": "Lavender Haze",
+        "olive-grove": "Olive Grove",
+        "rose-quartz": "Rose Noir",
+        "graphite-mint": "Graphite Mint",
+        "honey-linen": "Amber Night",
+        "baltic-blue": "Baltic Blue",
+        "terracotta-clay": "Terracotta Clay",
+        "pearl-ash": "Pearl Ash",
+        "berry-noir": "Berry Noir",
+        "sage-steam": "Sage Steam",
+    ]
+
+    private static func isLightFamily(_ family: TemplateFamily) -> Bool {
+        switch family {
+        case .classic, .luxe, .studio12: return true
+        case .blade, .stonecut: return false
+        }
+    }
+
+    private static func lightReferenceFamilies(excluding family: TemplateFamily) -> [TemplateFamily] {
+        [.studio12, .classic, .luxe].filter { $0 != family }
+    }
+
+    private static func darkReferenceFamilies(excluding family: TemplateFamily) -> [TemplateFamily] {
+        [.blade, .stonecut].filter { $0 != family }
+    }
+
+    private static func rawPalette(family: TemplateFamily, id: String) -> WebColorPalette? {
+        all.first { $0.family == family && $0.id == id }
+    }
+
+    private static func catalogDisplayName(for id: String, fallback: String) -> String {
+        catalogDisplayNames[id] ?? fallback
+    }
+
+    private static func pickerDisplayName(
+        catalogId: String,
+        forceLight: Bool,
+        referenceName: String,
+        toneAdapted: Bool
+    ) -> String {
+        if forceLight {
+            return catalogDisplayName(for: catalogId, fallback: referenceName)
+        }
+        if toneAdapted {
+            return catalogDarkDisplayNames[catalogId] ?? referenceName
+        }
+        return referenceName
+    }
+
+    private static let lightSourceFamilies: [TemplateFamily] = [.studio12, .classic, .luxe]
+    private static let darkSourceFamilies: [TemplateFamily] = [.blade, .stonecut]
+
+    /// Default picker tab: light templates → Light, dark templates → Dark.
+    static func defaultPickerTone(for family: TemplateFamily) -> WebColorPalettePickerTone {
+        isLightFamily(family) ? .light : .dark
+    }
+
+    /// Resolves a catalog id for `family` using the picker tone filter.
+    private static func synthesizedPalette(
+        family: TemplateFamily,
+        id: String,
+        tone: WebColorPalettePickerTone
+    ) -> WebColorPalette? {
+        switch tone {
+        case .light:
+            return synthesizedPaletteForced(family: family, id: id, forceLight: true)
+        case .dark:
+            return synthesizedPaletteForced(family: family, id: id, forceLight: false)
+        case .all:
+            return synthesizedPaletteForced(family: family, id: id, forceLight: isLightFamily(family))
+        }
+    }
+
+    private static func synthesizedPaletteRecommended(family: TemplateFamily, id: String) -> WebColorPalette? {
+        if id == "original" { return rawPalette(family: family, id: "original") }
+
+        if let own = rawPalette(family: family, id: id) {
+            return own
+        }
+
+        let refs = isLightFamily(family)
+            ? lightReferenceFamilies(excluding: family)
+            : darkReferenceFamilies(excluding: family)
+
+        for ref in refs {
+            if let refPalette = rawPalette(family: ref, id: id) {
+                return WebColorPalette(
+                    id: id,
+                    name: catalogDisplayName(for: id, fallback: refPalette.name),
+                    family: family,
+                    tokens: refPalette.tokens
+                )
+            }
+        }
+
+        if isLightFamily(family), let darkRef = rawPalette(family: .blade, id: id) ?? rawPalette(family: .stonecut, id: id) {
+            return WebColorPalette(
+                id: id,
+                name: catalogDisplayName(for: id, fallback: darkRef.name),
+                family: family,
+                tokens: lightTokensAdapted(from: darkRef.tokens, catalogId: id)
+            )
+        }
+
+        if !isLightFamily(family), let lightRef = rawPalette(family: .studio12, id: id)
+            ?? rawPalette(family: .classic, id: id)
+            ?? rawPalette(family: .luxe, id: id) {
+            return WebColorPalette(
+                id: id,
+                name: pickerDisplayName(
+                    catalogId: id,
+                    forceLight: false,
+                    referenceName: lightRef.name,
+                    toneAdapted: true
+                ),
+                family: family,
+                tokens: darkTokensAdapted(from: lightRef.tokens, catalogId: id)
+            )
+        }
+
+        return nil
+    }
+
+    /// Always light or always dark tokens for the catalog id (Original stays per-family).
+    private static func synthesizedPaletteForced(family: TemplateFamily, id: String, forceLight: Bool) -> WebColorPalette? {
+        if id == "original" { return rawPalette(family: family, id: "original") }
+
+        let sources = forceLight ? lightSourceFamilies : darkSourceFamilies
+        for source in sources {
+            if let ref = rawPalette(family: source, id: id) {
+                let refIsLight = isPaletteLight(tokens: ref.tokens)
+                guard refIsLight == forceLight else { continue }
+                return WebColorPalette(
+                    id: id,
+                    name: pickerDisplayName(
+                        catalogId: id,
+                        forceLight: forceLight,
+                        referenceName: ref.name,
+                        toneAdapted: false
+                    ),
+                    family: family,
+                    tokens: ref.tokens
+                )
+            }
+        }
+
+        if forceLight {
+            if let darkRef = rawPalette(family: .blade, id: id) ?? rawPalette(family: .stonecut, id: id) {
+                return WebColorPalette(
+                    id: id,
+                    name: pickerDisplayName(
+                        catalogId: id,
+                        forceLight: true,
+                        referenceName: darkRef.name,
+                        toneAdapted: true
+                    ),
+                    family: family,
+                    tokens: lightTokensAdapted(from: darkRef.tokens, catalogId: id)
+                )
+            }
+        } else if let lightRef = rawPalette(family: .studio12, id: id)
+            ?? rawPalette(family: .classic, id: id)
+            ?? rawPalette(family: .luxe, id: id) {
+            return WebColorPalette(
+                id: id,
+                name: pickerDisplayName(
+                    catalogId: id,
+                    forceLight: false,
+                    referenceName: lightRef.name,
+                    toneAdapted: true
+                ),
+                family: family,
+                tokens: darkTokensAdapted(from: lightRef.tokens, catalogId: id)
+            )
+        }
+
+        return nil
+    }
+
+    static func isPaletteLight(tokens: WebColorPaletteTokens) -> Bool {
+        isPaletteLight(backgroundHex: tokens.backgroundColor)
+    }
+
+    static func isPaletteLight(backgroundHex: String) -> Bool {
+        relativeLuminance(of: backgroundHex) > 0.55
+    }
+
+    private static func relativeLuminance(of hex: String) -> Double {
+        guard let (r, g, b) = rgbComponents(fromHex: hex) else { return 1 }
+        let sr = Double(r) / 255
+        let sg = Double(g) / 255
+        let sb = Double(b) / 255
+        return 0.2126 * sr + 0.7152 * sg + 0.0722 * sb
+    }
+
+    private static func rgbComponents(fromHex hex: String) -> (Int, Int, Int)? {
+        var s = normalizeHex(hex)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let value = Int(s, radix: 16) else { return nil }
+        return ((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
+    }
+
+    /// Light surfaces for a dark reference palette (same accent hue, readable on light pages).
+    private static func lightTokensAdapted(from dark: WebColorPaletteTokens, catalogId: String) -> WebColorPaletteTokens {
+        var next = dark
+        switch catalogId {
+        case "pearl-light", "cloud-mist":
+            next.backgroundColor = "#FFFFFF"
+            next.cardSurfaceColor = "#EEF1F4"
+            next.textColor = "#1A1F28"
+            next.featuredWorkBackgroundColor = "#F6F7F8"
+            next.featuredWorkTextColor = "#1A1F28"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#2A3238"
+            next.aboutSectionTextColor = "#F6F7F8"
+        case "warm-linen":
+            next.backgroundColor = "#FAF8F4"
+            next.cardSurfaceColor = "#EDE6DC"
+            next.textColor = "#3A3228"
+            next.featuredWorkBackgroundColor = "#F5F2EC"
+            next.featuredWorkTextColor = "#3A3228"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#3A3228"
+            next.aboutSectionTextColor = "#FAF8F4"
+        case "soft-grey":
+            next.backgroundColor = "#F5F5F5"
+            next.cardSurfaceColor = "#E5E5E5"
+            next.textColor = "#2A2A2A"
+            next.featuredWorkBackgroundColor = "#FAFAFA"
+            next.featuredWorkTextColor = "#2A2A2A"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#2F3438"
+            next.aboutSectionTextColor = "#F5F5F5"
+        case "slate-rust":
+            next.backgroundColor = "#E8EEF3"
+            next.cardSurfaceColor = "#B8C9D6"
+            next.textColor = "#1E2A33"
+            next.featuredWorkBackgroundColor = "#E8EEF3"
+            next.featuredWorkTextColor = "#1E2A33"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#1E2A33"
+            next.aboutSectionTextColor = "#F4F8FB"
+        case "vintage-warm":
+            next.backgroundColor = "#F2EBE0"
+            next.cardSurfaceColor = "#EDE0D4"
+            next.textColor = "#1E2A33"
+            next.featuredWorkBackgroundColor = "#F2EBE0"
+            next.featuredWorkTextColor = "#1E2A33"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#1E2A33"
+            next.aboutSectionTextColor = "#F2EBE0"
+        case "ocean-slate":
+            next.backgroundColor = "#F4F8FB"
+            next.cardSurfaceColor = "#D4E4EF"
+            next.textColor = "#2C3E50"
+            next.featuredWorkBackgroundColor = "#F4F8FB"
+            next.featuredWorkTextColor = "#2C3E50"
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#2C3E50"
+            next.aboutSectionTextColor = "#F4F8FB"
+        default:
+            next.backgroundColor = "#F5F3EF"
+            next.cardSurfaceColor = "#E5DFD6"
+            next.textColor = "#2A2838"
+            next.featuredWorkBackgroundColor = next.backgroundColor
+            next.featuredWorkTextColor = next.textColor
+            next.bookingFormCardBackgroundColor = "#FFFFFF"
+            next.aboutSectionBackgroundColor = "#1E2A36"
+            next.aboutSectionTextColor = "#F4F8FB"
+        }
+        if next.stripColors.count >= 5 {
+            next.stripColors[0] = next.backgroundColor
+            next.stripColors[1] = next.featuredWorkBackgroundColor
+            next.stripColors[2] = next.primaryColor
+            next.stripColors[3] = next.cardSurfaceColor
+            next.stripColors[4] = next.aboutSectionBackgroundColor
+        }
+        return next
+    }
+
+    /// Dark surfaces for a light reference palette.
+    private static func darkTokensAdapted(from light: WebColorPaletteTokens, catalogId: String) -> WebColorPaletteTokens {
+        var next = light
+        switch catalogId {
+        case "vintage-warm", "burnt-accent":
+            next.backgroundColor = "#1E1810"
+            next.cardSurfaceColor = "#2A2018"
+            next.textColor = "#FAF6F0"
+            next.aboutSectionBackgroundColor = "#2A2018"
+            next.aboutSectionTextColor = "#FAF6F0"
+        case "blush-mauve":
+            next.backgroundColor = "#1A1418"
+            next.cardSurfaceColor = "#2A2228"
+            next.textColor = "#F8F2EE"
+            next.aboutSectionBackgroundColor = "#2A2228"
+            next.aboutSectionTextColor = "#F8F2EE"
+        case "soft-neutral", "charcoal-greige", "ink-parchment":
+            next.backgroundColor = "#141410"
+            next.cardSurfaceColor = "#222018"
+            next.textColor = "#F5F0E8"
+            next.aboutSectionBackgroundColor = "#222018"
+            next.aboutSectionTextColor = "#F5F0E8"
+        case "slate-rust":
+            next.backgroundColor = "#1E2A33"
+            next.cardSurfaceColor = "#2A3842"
+            next.textColor = "#F2EBE0"
+            next.aboutSectionBackgroundColor = "#2A3842"
+            next.aboutSectionTextColor = "#F2EBE0"
+        default:
+            next.backgroundColor = "#0E1418"
+            next.cardSurfaceColor = "#1A242C"
+            next.textColor = "#E8F2F8"
+            next.aboutSectionBackgroundColor = "#1A242C"
+            next.aboutSectionTextColor = "#E8F2F8"
+        }
+        next.featuredWorkBackgroundColor = next.backgroundColor
+        next.featuredWorkTextColor = next.textColor
+        next.bookingFormCardBackgroundColor = next.cardSurfaceColor
+        if next.stripColors.count >= 5 {
+            next.stripColors[0] = next.backgroundColor
+            next.stripColors[1] = next.featuredWorkBackgroundColor
+            next.stripColors[2] = next.primaryColor
+            next.stripColors[3] = next.cardSurfaceColor
+            next.stripColors[4] = next.aboutSectionBackgroundColor
+        }
+        return next
+    }
 
     static func usesAccentPicker(family: TemplateFamily) -> Bool { true }
+
+    /// Dark templates: accent chips tweak highlight on top of a base palette. Light templates use the grid only.
+    static func showsAccentChipRowInPicker(for family: TemplateFamily) -> Bool {
+        family == .blade || family == .stonecut
+    }
 
     static func isV3AccentPaletteId(_ id: String) -> Bool {
         v3AccentOnlyIds.contains(id)
@@ -77,23 +466,74 @@ enum WebColorPalettes {
     }
 
     private static func baseIds(for family: TemplateFamily) -> [String] {
-        switch family {
-        case .classic: return classicBaseIds
-        case .luxe: return luxeBaseIds
-        case .blade: return bladeBaseIds
-        case .stonecut: return stonecutBaseIds
-        case .studio12: return studio12BaseIds
+        universalPickerCatalogIds.filter { synthesizedPaletteRecommended(family: family, id: $0) != nil }
+    }
+
+    static func palettes(for family: TemplateFamily, tone: WebColorPalettePickerTone? = nil) -> [WebColorPalette] {
+        let resolvedTone = tone ?? defaultPickerTone(for: family)
+        return pickerItems(for: family, tone: resolvedTone).map(\.palette)
+    }
+
+    static func pickerItems(for family: TemplateFamily, tone: WebColorPalettePickerTone) -> [WebColorPalettePickerItem] {
+        let ids = baseIds(for: family)
+        switch tone {
+        case .light, .dark:
+            return ids.compactMap { id in
+                synthesizedPalette(family: family, id: id, tone: tone).map {
+                    WebColorPalettePickerItem(pickerId: id, palette: $0, toneSubtitle: nil)
+                }
+            }
+        case .all:
+            var items: [WebColorPalettePickerItem] = []
+            for id in ids {
+                if id == "original" {
+                    if let palette = rawPalette(family: family, id: "original") {
+                        items.append(WebColorPalettePickerItem(pickerId: id, palette: palette, toneSubtitle: nil))
+                    }
+                    continue
+                }
+                if let light = synthesizedPalette(family: family, id: id, tone: .light) {
+                    items.append(WebColorPalettePickerItem(
+                        pickerId: "\(id)|light",
+                        palette: light,
+                        toneSubtitle: "Light"
+                    ))
+                }
+                if let dark = synthesizedPalette(family: family, id: id, tone: .dark) {
+                    items.append(WebColorPalettePickerItem(
+                        pickerId: "\(id)|dark",
+                        palette: dark,
+                        toneSubtitle: "Dark"
+                    ))
+                }
+            }
+            return items
         }
     }
 
-    static func palettes(for family: TemplateFamily) -> [WebColorPalette] {
-        let familyPalettes = all.filter { $0.family == family }
-        let ids = baseIds(for: family)
-        return ids.compactMap { id in familyPalettes.first { $0.id == id } }
+    /// Picker selection: match stored palette id, or primary hex when a v3 full theme was applied via accent.
+    static func pickerPaletteIsActive(
+        storedPaletteId: String,
+        storedPrimaryHex: String,
+        storedBackgroundHex: String,
+        palette: WebColorPalette
+    ) -> Bool {
+        let resolved = resolvedPaletteId(stored: storedPaletteId, family: palette.family)
+        if resolved == palette.id {
+            if resolved == "original" || resolved == customPaletteId { return true }
+            return isPaletteLight(backgroundHex: storedBackgroundHex) == isPaletteLight(tokens: palette.tokens)
+        }
+        if isV3AccentPaletteId(palette.id) {
+            return normalizeHex(storedPrimaryHex) == normalizeHex(palette.tokens.primaryColor)
+        }
+        return false
     }
 
-    static func palette(family: TemplateFamily, id: String) -> WebColorPalette? {
-        all.first { $0.family == family && $0.id == id }
+    static func palette(family: TemplateFamily, id: String, pickerTone: WebColorPalettePickerTone? = nil) -> WebColorPalette? {
+        if let pickerTone {
+            return synthesizedPalette(family: family, id: id, tone: pickerTone)
+        }
+        return synthesizedPaletteRecommended(family: family, id: id)
     }
 
     static func accentOptions(for family: TemplateFamily) -> [WebColorAccentOption] {
@@ -104,14 +544,13 @@ enum WebColorPalettes {
         }
     }
 
-    /// Builds accent chips from base defaults + v3 presets (deduped by accent hex).
+    /// Builds accent chips from catalog palettes (deduped by accent hex).
     private static func accentsFromPalettes(family: TemplateFamily) -> [WebColorAccentOption] {
-        let familyPalettes = all.filter { $0.family == family }
-        let orderedIds = baseIds(for: family) + v3AccentOnlyIds.sorted()
+        let orderedIds = baseIds(for: family)
         var seen = Set<String>()
         var result: [WebColorAccentOption] = []
         for id in orderedIds {
-            guard let palette = familyPalettes.first(where: { $0.id == id }) else { continue }
+            guard let palette = synthesizedPaletteRecommended(family: family, id: id) else { continue }
             let key = normalizeHex(palette.tokens.primaryColor)
             guard !seen.contains(key) else { continue }
             seen.insert(key)
@@ -271,6 +710,7 @@ enum WebColorPalettes {
         WebColorPalette(id: "original", name: "Original", family: .classic, tokens: t(bg: "#FFFFFF", card: "#F5F5F5", text: "#1A1A1A", accent: "#111111", accentHover: "#333333", featuredBg: "#FFFFFF", featuredText: "#1A1A1A", bookCard: "#FFFFFF", aboutBg: "#1A1A1A", aboutText: "#F7F5F0", strip: ["#FFFFFF", "#FFFFFF", "#111111", "#F5F5F5", "#1A1A1A"])),
         WebColorPalette(id: "sandstone", name: "Sandstone", family: .classic, tokens: t(bg: "#FAF6F0", card: "#E8D5C4", text: "#3D2A1F", accent: "#B8895A", accentHover: "#8B5A3C", featuredBg: "#FAF6F0", featuredText: "#3D2A1F", bookCard: "#FFFFFF", aboutBg: "#2A1810", aboutText: "#FAF6F0", strip: ["#FAF6F0", "#FAF6F0", "#B8895A", "#E8D5C4", "#2A1810"])),
         WebColorPalette(id: "soft-neutral", name: "Soft Neutral", family: .classic, tokens: t(bg: "#F5F3EF", card: "#E5DFD6", text: "#3D3832", accent: "#9A8B7A", accentHover: "#7A6B5E", featuredBg: "#F5F3EF", featuredText: "#3D3832", bookCard: "#FFFFFF", aboutBg: "#2F3438", aboutText: "#F5F3EF", strip: ["#F5F3EF", "#F5F3EF", "#9A8B7A", "#E5DFD6", "#2F3438"])),
+        WebColorPalette(id: "slate-rust", name: "Slate & Rust", family: .classic, tokens: t(bg: "#E8EEF3", card: "#B8C9D6", text: "#1E2A33", accent: "#C45C3E", accentHover: "#D97A5C", featuredBg: "#E8EEF3", featuredText: "#1E2A33", bookCard: "#FFFFFF", aboutBg: "#1E2A33", aboutText: "#F4F8FB", strip: ["#E8EEF3", "#E8EEF3", "#C45C3E", "#B8C9D6", "#1E2A33"])),
         WebColorPalette(id: "vintage-warm", name: "Vintage Warm", family: .classic, tokens: t(bg: "#F2EBE0", card: "#EDE6DC", text: "#1E2A33", accent: "#C45C3E", accentHover: "#A34A32", featuredBg: "#F2EBE0", featuredText: "#1E2A33", bookCard: "#FFFFFF", aboutBg: "#1E2A33", aboutText: "#F2EBE0", strip: ["#F2EBE0", "#F2EBE0", "#C45C3E", "#EDE6DC", "#1E2A33"])),
         WebColorPalette(id: "forest-sage", name: "Forest Sage", family: .classic, tokens: t(bg: "#F4F7F4", card: "#D8E4D6", text: "#1E2E24", accent: "#4A7C59", accentHover: "#356347", featuredBg: "#F4F7F4", featuredText: "#1E2E24", bookCard: "#FFFFFF", aboutBg: "#1E2E24", aboutText: "#F4F7F4", strip: ["#F4F7F4", "#F4F7F4", "#4A7C59", "#D8E4D6", "#1E2E24"])),
         WebColorPalette(id: "midnight-plum", name: "Midnight Plum", family: .classic, tokens: t(bg: "#FAF8FC", card: "#E8E0F0", text: "#2A1F38", accent: "#6B4F8C", accentHover: "#523A6E", featuredBg: "#FAF8FC", featuredText: "#2A1F38", bookCard: "#FFFFFF", aboutBg: "#2A1F38", aboutText: "#FAF8FC", strip: ["#FAF8FC", "#FAF8FC", "#6B4F8C", "#E8E0F0", "#2A1F38"])),
@@ -294,6 +734,8 @@ enum WebColorPalettes {
         WebColorPalette(id: "sandstone", name: "Sandstone", family: .luxe, tokens: t(bg: "#FAF6F0", card: "#E8D5C4", text: "#3D2A1F", accent: "#B8895A", accentHover: "#8B5A3C", featuredBg: "#FAF6F0", featuredText: "#3D2A1F", bookCard: "#FAF6F0", aboutBg: "#3D2A1F", aboutText: "#FAF6F0", strip: ["#FAF6F0", "#FAF6F0", "#B8895A", "#E8D5C4", "#3D2A1F"])),
         WebColorPalette(id: "blush-mauve", name: "Blush Mauve", family: .luxe, tokens: t(bg: "#F8F2EE", card: "#E8C4C0", text: "#4A322E", accent: "#B07A72", accentHover: "#8B635C", featuredBg: "#F8F2EE", featuredText: "#4A322E", bookCard: "#F8F2EE", aboutBg: "#4A322E", aboutText: "#F8F2EE", strip: ["#F8F2EE", "#F8F2EE", "#B07A72", "#E8C4C0", "#4A322E"])),
         WebColorPalette(id: "soft-neutral", name: "Soft Neutral", family: .luxe, tokens: t(bg: "#F5F3EF", card: "#E5DFD6", text: "#3D3832", accent: "#9A8B7A", accentHover: "#7A6B5E", featuredBg: "#F5F3EF", featuredText: "#3D3832", bookCard: "#F5F3EF", aboutBg: "#3D3832", aboutText: "#F5F3EF", strip: ["#F5F3EF", "#F5F3EF", "#9A8B7A", "#E5DFD6", "#3D3832"])),
+        WebColorPalette(id: "slate-rust", name: "Slate & Rust", family: .luxe, tokens: t(bg: "#E8EEF3", card: "#B8C9D6", text: "#1E2A33", accent: "#C45C3E", accentHover: "#D97A5C", featuredBg: "#E8EEF3", featuredText: "#1E2A33", bookCard: "#FFFDF9", aboutBg: "#1E2A33", aboutText: "#F4F8FB", strip: ["#E8EEF3", "#E8EEF3", "#C45C3E", "#B8C9D6", "#1E2A33"])),
+        WebColorPalette(id: "vintage-warm", name: "Vintage Warm", family: .luxe, tokens: t(bg: "#F2EBE0", card: "#EDE6DC", text: "#1E2A33", accent: "#C45C3E", accentHover: "#A34A32", featuredBg: "#F2EBE0", featuredText: "#1E2A33", bookCard: "#FFFDF9", aboutBg: "#1E2A33", aboutText: "#F2EBE0", strip: ["#F2EBE0", "#F2EBE0", "#C45C3E", "#EDE6DC", "#1E2A33"])),
         WebColorPalette(id: "forest-sage", name: "Forest Sage", family: .luxe, tokens: t(bg: "#F2F6F1", card: "#D5E2D2", text: "#243528", accent: "#5B8268", accentHover: "#456A52", featuredBg: "#F2F6F1", featuredText: "#243528", bookCard: "#F2F6F1", aboutBg: "#243528", aboutText: "#F2F6F1", strip: ["#F2F6F1", "#F2F6F1", "#5B8268", "#D5E2D2", "#243528"])),
         WebColorPalette(id: "midnight-plum", name: "Midnight Plum", family: .luxe, tokens: t(bg: "#F9F6FB", card: "#E5DBF0", text: "#322448", accent: "#7A5C9E", accentHover: "#5E4578", featuredBg: "#F9F6FB", featuredText: "#322448", bookCard: "#F9F6FB", aboutBg: "#322448", aboutText: "#F9F6FB", strip: ["#F9F6FB", "#F9F6FB", "#7A5C9E", "#E5DBF0", "#322448"])),
         WebColorPalette(id: "coral-bloom", name: "Coral Bloom", family: .luxe, tokens: t(bg: "#FFF8F5", card: "#F2DDD4", text: "#402E28", accent: "#D8866E", accentHover: "#B86E58", featuredBg: "#FFF8F5", featuredText: "#402E28", bookCard: "#FFF8F5", aboutBg: "#402E28", aboutText: "#FFF8F5", strip: ["#FFF8F5", "#FFF8F5", "#D8866E", "#F2DDD4", "#402E28"])),
@@ -364,6 +806,8 @@ enum WebColorPalettes {
         WebColorPalette(id: "sandstone", name: "Sandstone", family: .studio12, tokens: t(bg: "#FAF6F0", card: "#E8D5C4", text: "#2A1810", accent: "#B8895A", accentHover: "#8B5A3C", featuredBg: "#FAF6F0", featuredText: "#2A1810", bookCard: "#FFFDF9", aboutBg: "#2A1810", aboutText: "#FAF6F0", strip: ["#FAF6F0", "#FAF6F0", "#B8895A", "#E8D5C4", "#2A1810"])),
         WebColorPalette(id: "soft-neutral", name: "Soft Neutral", family: .studio12, tokens: t(bg: "#F5F3EF", card: "#E5DFD6", text: "#3D3832", accent: "#9A8B7A", accentHover: "#7A6B5E", featuredBg: "#F5F3EF", featuredText: "#3D3832", bookCard: "#FFFDF9", aboutBg: "#3D3832", aboutText: "#F5F3EF", strip: ["#F5F3EF", "#F5F3EF", "#9A8B7A", "#E5DFD6", "#3D3832"])),
         WebColorPalette(id: "ocean-slate", name: "Ocean Slate", family: .studio12, tokens: t(bg: "#F4F8FB", card: "#D4E4EF", text: "#2C3E50", accent: "#6B8FA3", accentHover: "#4A6578", featuredBg: "#F4F8FB", featuredText: "#2C3E50", bookCard: "#FFFDF9", aboutBg: "#2C3E50", aboutText: "#F4F8FB", strip: ["#F4F8FB", "#F4F8FB", "#6B8FA3", "#D4E4EF", "#2C3E50"])),
+        WebColorPalette(id: "slate-rust", name: "Slate & Rust", family: .studio12, tokens: t(bg: "#E8EEF3", card: "#B8C9D6", text: "#1E2A33", accent: "#C45C3E", accentHover: "#D97A5C", featuredBg: "#E8EEF3", featuredText: "#1E2A33", bookCard: "#FFFDF9", aboutBg: "#1E2A33", aboutText: "#F4F8FB", strip: ["#E8EEF3", "#E8EEF3", "#C45C3E", "#B8C9D6", "#1E2A33"])),
+        WebColorPalette(id: "vintage-warm", name: "Vintage Warm", family: .studio12, tokens: t(bg: "#F2EBE0", card: "#EDE6DC", text: "#1E2A33", accent: "#C45C3E", accentHover: "#A34A32", featuredBg: "#F2EBE0", featuredText: "#1E2A33", bookCard: "#FFFDF9", aboutBg: "#1E2A33", aboutText: "#F2EBE0", strip: ["#F2EBE0", "#F2EBE0", "#C45C3E", "#EDE6DC", "#1E2A33"])),
         WebColorPalette(id: "forest-sage", name: "Forest Sage", family: .studio12, tokens: t(bg: "#F3F7F2", card: "#D6E3D4", text: "#243628", accent: "#5A8266", accentHover: "#446A50", featuredBg: "#F3F7F2", featuredText: "#243628", bookCard: "#FFFDF9", aboutBg: "#243628", aboutText: "#F3F7F2", strip: ["#F3F7F2", "#F3F7F2", "#5A8266", "#D6E3D4", "#243628"])),
         WebColorPalette(id: "midnight-plum", name: "Midnight Plum", family: .studio12, tokens: t(bg: "#F8F5FA", card: "#E6DCF0", text: "#2E2240", accent: "#7258A0", accentHover: "#5A4480", featuredBg: "#F8F5FA", featuredText: "#2E2240", bookCard: "#FFFDF9", aboutBg: "#2E2240", aboutText: "#F8F5FA", strip: ["#F8F5FA", "#F8F5FA", "#7258A0", "#E6DCF0", "#2E2240"])),
         WebColorPalette(id: "coral-bloom", name: "Coral Bloom", family: .studio12, tokens: t(bg: "#FFF7F4", card: "#F0D8D0", text: "#3C2A24", accent: "#D47A64", accentHover: "#B86450", featuredBg: "#FFF7F4", featuredText: "#3C2A24", bookCard: "#FFFDF9", aboutBg: "#3C2A24", aboutText: "#FFF7F4", strip: ["#FFF7F4", "#FFF7F4", "#D47A64", "#F0D8D0", "#3C2A24"])),

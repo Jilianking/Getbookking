@@ -15,6 +15,33 @@ enum WebViewQuickEditEvent {
     case openSheet(key: String, initialText: String)
     /// Persist multiple edited fields after Quick edit is turned off (single preview reload).
     case inlineSaveBatch(changes: [String: String])
+    /// Inline text field is active (font stepper + navigation in `PreviewQuickEditChrome`).
+    case inlineFocus(QuickEditInlineFocus)
+    /// Inline text field closed without turning off quick edit.
+    case inlineBlur
+    /// User tapped a `data-bk-color-surface` band in the preview.
+    case openColorSurface(surfaceId: String)
+}
+
+/// Native → WebView commands while quick edit is active.
+final class WebViewQuickEditBridge {
+    weak var coordinator: WebViewRepresentable.Coordinator?
+
+    func navigateEditable(delta: Int) {
+        coordinator?.evaluateQuickEdit("window.__bkQuickEditNavigateEditable&&window.__bkQuickEditNavigateEditable(\(delta))")
+    }
+
+    func setInlineFontSize(_ px: Int) {
+        coordinator?.evaluateQuickEdit("window.__bkQuickEditSetFontSize&&window.__bkQuickEditSetFontSize(\(px))")
+    }
+
+    func commitDirtyEdits() {
+        coordinator?.evaluateQuickEdit("window.__bkQuickEditCommitDirty&&window.__bkQuickEditCommitDirty()")
+    }
+
+    func applyPreviewColorPatch(_ payload: [String: String]) {
+        coordinator?.applyPreviewColorPatch(payload)
+    }
 }
 
 struct WebViewPreview: View {
@@ -23,6 +50,7 @@ struct WebViewPreview: View {
     let height: CGFloat?
     /// When true, taps on elements with `data-edit-key` drive quick edit (inline text or native sheet).
     var quickEditEnabled: Bool = false
+    var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
     var body: some View {
@@ -33,6 +61,7 @@ struct WebViewPreview: View {
                         url: url,
                         containerWidth: geo.size.width,
                         quickEditEnabled: quickEditEnabled,
+                        bridge: bridge,
                         onQuickEdit: onQuickEdit
                     )
                     .frame(minHeight: 200, maxHeight: height ?? .infinity)
@@ -57,6 +86,7 @@ struct WebViewRepresentable: UIViewRepresentable {
     let url: URL
     var containerWidth: CGFloat = 0
     var quickEditEnabled: Bool = false
+    var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
     private static let messageHandlerName = "bkPreviewEdit"
@@ -72,10 +102,12 @@ struct WebViewRepresentable: UIViewRepresentable {
         webView.scrollView.bounces = false
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
+        bridge?.coordinator = context.coordinator
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        bridge?.coordinator = context.coordinator
         context.coordinator.onQuickEdit = onQuickEdit
         context.coordinator.quickEditEnabled = quickEditEnabled
 
@@ -109,11 +141,21 @@ struct WebViewRepresentable: UIViewRepresentable {
             quickEditInstallInFlight = false
         }
 
+        func evaluateQuickEdit(_ javascript: String) {
+            webView?.evaluateJavaScript(javascript, completionHandler: nil)
+        }
+
+        func applyPreviewColorPatch(_ payload: [String: String]) {
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            evaluateQuickEdit("window.__bkApplyPreviewColorPatch&&window.__bkApplyPreviewColorPatch(\(json))")
+        }
+
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == messageHandlerName,
                   let body = message.body as? [String: Any] else { return }
             let action = body["action"] as? String ?? "openSheet"
-            let event: WebViewQuickEditEvent
+            let event: WebViewQuickEditEvent?
             if action == "inlineSaveBatch",
                let raw = body["changes"] as? [String: Any] {
                 var changes: [String: String] = [:]
@@ -122,11 +164,22 @@ struct WebViewRepresentable: UIViewRepresentable {
                     else if let n = v as? NSNumber { changes[k] = n.stringValue }
                 }
                 event = .inlineSaveBatch(changes: changes)
+            } else if action == "inlineFocus",
+                      let key = body["key"] as? String {
+                let fontSize = (body["fontSize"] as? NSNumber)?.intValue ?? 16
+                let fontAdjustable = body["fontAdjustable"] as? Bool ?? false
+                event = .inlineFocus(QuickEditInlineFocus(key: key, fontSize: fontSize, fontAdjustable: fontAdjustable))
+            } else if action == "inlineBlur" {
+                event = .inlineBlur
+            } else if action == "openColorSurface",
+                      let surfaceId = body["surface"] as? String {
+                event = .openColorSurface(surfaceId: surfaceId)
             } else {
                 guard let key = body["key"] as? String else { return }
                 let text = body["text"] as? String ?? ""
                 event = .openSheet(key: key, initialText: text)
             }
+            guard let event else { return }
             DispatchQueue.main.async { [weak self] in
                 self?.onQuickEdit?(event)
             }
@@ -225,18 +278,83 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '.luxe-hero:has(.bk-hero-image-hit),.classic-hero-right:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
                 '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;cursor:pointer!important;}' +
                 'img[data-edit-key^="galleryImage"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],' +
-                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback{cursor:pointer!important;}';
+                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback{cursor:pointer!important;}' +
+                '[data-bk-color-surface]{cursor:pointer!important;box-shadow:inset 0 0 0 2px rgba(175,82,222,0.72)!important;}' +
+                '[data-bk-color-surface][data-bk-color-active]{box-shadow:inset 0 0 0 3px rgba(175,82,222,1)!important;}' +
+                '[data-bk-color-surface] [data-edit-key]{outline:none!important;box-shadow:none!important;}';
               document.head.appendChild(sheet);
-              function resolveEditTarget(ev) {
+              function resolveQuickEditTap(ev) {
                 var el = ev.target;
                 while (el && el.nodeType !== 1) el = el.parentNode;
-                if (!el || !el.closest) return null;
-                return el.closest('[data-edit-key]');
+                if (!el || !el.closest) return { type: 'none' };
+                if (el.closest('.bk-hero-image-hit, .luxe-hero-image-hit')) {
+                  var heroBtn = el.closest('[data-edit-key="heroImage"]');
+                  if (heroBtn) return { type: 'sheet', el: heroBtn };
+                }
+                var textEl = el.closest('[data-edit-key]');
+                if (textEl) {
+                  var tk = textEl.getAttribute('data-edit-key');
+                  if (tk && isSheetOnlyKey(tk)) return { type: 'sheet', el: textEl };
+                  if (tk && tk.indexOf('color:') !== 0) return { type: 'text', el: textEl };
+                }
+                var surf = el.closest('[data-bk-color-surface]');
+                if (surf) {
+                  var sid = surf.getAttribute('data-bk-color-surface');
+                  if (sid) return { type: 'color', surface: sid, el: surf };
+                }
+                if (textEl) return { type: 'sheet', el: textEl };
+                return { type: 'none' };
+              }
+              function setActiveColorSurface(el) {
+                [].forEach.call(document.querySelectorAll('[data-bk-color-surface]'), function(node) {
+                  node.removeAttribute('data-bk-color-active');
+                });
+                if (el) el.setAttribute('data-bk-color-active', '1');
+              }
+              function openColorSurface(sid, surfEl) {
+                setActiveColorSurface(surfEl);
+                postToNative({ action: 'openColorSurface', surface: sid });
               }
               function isSheetOnlyKey(key) {
                 return key === 'heroImage' || key === 'studio12PhilosophyImage' || key === 'studio12BookCtaImage' ||
                   key.indexOf('svc:') === 0 || key.indexOf('s12Process:') === 0 || key.indexOf('featuredWork:') === 0 ||
                   key.indexOf('galleryImage:') === 0;
+              }
+              function isFontAdjustableKey(key) {
+                if (!key || isSheetOnlyKey(key)) return false;
+                if (key.indexOf('svc:') === 0 || key.indexOf('s12Process:') === 0) return false;
+                if (key.indexOf('featuredWork:') === 0 || key.indexOf('galleryImage:') === 0) return false;
+                return true;
+              }
+              function postInlineFocus(el) {
+                if (!el || !el.isConnected) return;
+                var key = el.getAttribute('data-edit-key');
+                if (!key) return;
+                var cs = window.getComputedStyle(el);
+                var fs = Math.round(parseFloat(cs.fontSize) || 16);
+                postToNative({
+                  action: 'inlineFocus',
+                  key: key,
+                  fontSize: fs,
+                  fontAdjustable: isFontAdjustableKey(key)
+                });
+              }
+              function postInlineBlur() {
+                postToNative({ action: 'inlineBlur' });
+              }
+              function editableNavTargets() {
+                var seen = {};
+                var out = [];
+                var nodes = document.querySelectorAll('[data-edit-key]');
+                for (var i = 0; i < nodes.length; i++) {
+                  var el = nodes[i];
+                  if (!el || !el.isConnected) continue;
+                  var key = el.getAttribute('data-edit-key');
+                  if (!key || seen[key]) continue;
+                  seen[key] = true;
+                  out.push(el);
+                }
+                return out;
               }
               function postToNative(payload) {
                 try {
@@ -262,6 +380,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 noteDirtyFrom(inlineEl);
                 stripEditableShell(inlineEl);
                 inlineEl = null;
+                postInlineBlur();
               }
               function onInlineBlur() {
                 setTimeout(function() {
@@ -298,85 +417,142 @@ struct WebViewRepresentable: UIViewRepresentable {
                     if (sel) { sel.removeAllRanges(); sel.addRange(r); }
                   } catch (e) {}
                   try { t.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) {}
+                  postInlineFocus(t);
                 }, 0);
               }
-              function activateQuickEditTarget(t) {
+              function activateQuickEditHit(hit) {
+                if (!hit || hit.type === 'none') return;
+                if (hit.type === 'color') {
+                  if (inlineEl) finishActiveInlineNoSave();
+                  openColorSurface(hit.surface, hit.el);
+                  return;
+                }
+                var t = hit.el;
                 if (!t || !t.isConnected) return;
-                var key = t.getAttribute('data-edit-key');
-                if (!key) return;
-                if (isSheetOnlyKey(key)) {
+                if (hit.type === 'sheet') {
                   if (inlineEl) finishActiveInlineNoSave();
                   deliverOpenSheet(t);
                   return;
                 }
-                if (inlineEl === t) return;
-                startInline(t);
+                if (hit.type === 'text') {
+                  if (inlineEl === t) return;
+                  startInline(t);
+                }
               }
               var touchStart = null;
-              var touchEditTarget = null;
+              var touchEditHit = null;
+              var colorLongPressTimer = null;
+              var colorLongPressFired = false;
+              function clearColorLongPress() {
+                if (colorLongPressTimer) { clearTimeout(colorLongPressTimer); colorLongPressTimer = null; }
+              }
               function onTouchStart(ev) {
-                var t = resolveEditTarget(ev);
-                if (!t || !ev.touches || !ev.touches.length) {
+                clearColorLongPress();
+                colorLongPressFired = false;
+                var hit = resolveQuickEditTap(ev);
+                if (hit.type === 'none' || !ev.touches || !ev.touches.length) {
                   touchStart = null;
-                  touchEditTarget = null;
+                  touchEditHit = null;
                   return;
                 }
                 touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
-                touchEditTarget = t;
+                touchEditHit = hit;
+                if (hit.type === 'color' && hit.surface === 'hero') {
+                  colorLongPressTimer = setTimeout(function() {
+                    colorLongPressFired = true;
+                    if (inlineEl) finishActiveInlineNoSave();
+                    openColorSurface('hero', hit.el);
+                  }, 520);
+                }
               }
               function onTouchEnd(ev) {
-                if (inlineEl && touchEditTarget && inlineEl.contains(touchEditTarget)) {
+                clearColorLongPress();
+                if (colorLongPressFired) {
                   touchStart = null;
-                  touchEditTarget = null;
+                  touchEditHit = null;
                   return;
                 }
-                if (!touchStart || !touchEditTarget) {
+                if (inlineEl && touchEditHit && touchEditHit.el && inlineEl.contains(touchEditHit.el)) {
                   touchStart = null;
-                  touchEditTarget = null;
+                  touchEditHit = null;
+                  return;
+                }
+                if (!touchStart || !touchEditHit) {
+                  touchStart = null;
+                  touchEditHit = null;
                   return;
                 }
                 if (!ev.changedTouches || !ev.changedTouches.length) {
                   touchStart = null;
-                  touchEditTarget = null;
+                  touchEditHit = null;
                   return;
                 }
                 var x = ev.changedTouches[0].clientX, y = ev.changedTouches[0].clientY;
                 if (Math.abs(x - touchStart.x) > 14 || Math.abs(y - touchStart.y) > 14) {
                   touchStart = null;
-                  touchEditTarget = null;
+                  touchEditHit = null;
                   return;
                 }
-                var t = touchEditTarget;
+                var hit = touchEditHit;
                 touchStart = null;
-                touchEditTarget = null;
-                if (!t || !t.isConnected) return;
+                touchEditHit = null;
+                if (hit.type === 'color' && hit.surface === 'hero') {
+                  return;
+                }
                 ev.preventDefault();
                 ev.stopPropagation();
                 if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-                activateQuickEditTarget(t);
+                activateQuickEditHit(hit);
                 window.__bkQuickEditSuppressClickUntil = Date.now() + 800;
               }
               function onTap(ev) {
                 if (window.__bkQuickEditSuppressClickUntil && Date.now() < window.__bkQuickEditSuppressClickUntil) return;
                 if (inlineEl && ev.target && inlineEl.contains(ev.target)) return;
-                var t = resolveEditTarget(ev);
-                if (!t) return;
-                var tapKey = t.getAttribute('data-edit-key');
-                if (tapKey && (tapKey === 'heroImage' || tapKey === 'studio12PhilosophyImage' || tapKey === 'studio12BookCtaImage' ||
-                  tapKey.indexOf('featuredWork:') === 0 || tapKey.indexOf('galleryImage:') === 0 || tapKey.indexOf('svc:') === 0 ||
-                  tapKey.indexOf('s12Process:') === 0)) {
+                var hit = resolveQuickEditTap(ev);
+                if (hit.type === 'none') return;
+                if (hit.type === 'sheet') {
                   ev.preventDefault();
                   ev.stopPropagation();
                   if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
                 }
+                if (hit.type === 'color' && hit.surface === 'hero') return;
                 ev.preventDefault();
                 ev.stopPropagation();
-                activateQuickEditTarget(t);
+                activateQuickEditHit(hit);
               }
               document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
               document.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
               document.addEventListener('click', onTap, true);
               document.addEventListener('input', onDocInput, true);
+              window.__bkQuickEditNavigateEditable = function(delta) {
+                var list = editableNavTargets();
+                if (!list.length) return;
+                var idx = -1;
+                if (inlineEl) {
+                  var activeKey = inlineEl.getAttribute('data-edit-key');
+                  for (var i = 0; i < list.length; i++) {
+                    if (list[i].getAttribute('data-edit-key') === activeKey) { idx = i; break; }
+                  }
+                }
+                if (idx < 0) idx = delta > 0 ? -1 : 0;
+                var next = (idx + delta + list.length) % list.length;
+                activateQuickEditHit({ type: 'text', el: list[next] });
+              };
+              window.__bkQuickEditSetFontSize = function(px) {
+                if (!inlineEl || !inlineEl.isConnected) return;
+                var size = Math.max(10, Math.min(96, parseInt(px, 10) || 16));
+                inlineEl.style.fontSize = size + 'px';
+                noteDirtyFrom(inlineEl);
+                postInlineFocus(inlineEl);
+              };
+              window.__bkQuickEditCommitDirty = function() {
+                finishActiveInlineNoSave();
+                var keys = Object.keys(dirty);
+                if (keys.length) {
+                  postToNative({ action: 'inlineSaveBatch', changes: dirty });
+                  dirty = {};
+                }
+              };
               window.__bkQuickEditInstalled = true;
               window.__bkQuickEditCleanup = function() {
                 finishActiveInlineNoSave();
@@ -393,6 +569,10 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (s) s.remove();
                 window.__bkQuickEditInstalled = false;
                 delete window.__bkQuickEditSuppressClickUntil;
+                delete window.__bkQuickEditNavigateEditable;
+                delete window.__bkQuickEditSetFontSize;
+                delete window.__bkQuickEditCommitDirty;
+                delete window.__bkApplyPreviewColorPatch;
                 delete window.__bkQuickEditCleanup;
               };
             })();

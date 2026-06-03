@@ -21,6 +21,10 @@ struct DesignView: View {
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
     @State private var isQuickEditEnabled = false
+    @State private var quickEditBridge = WebViewQuickEditBridge()
+    @State private var quickEditInlineFocus: QuickEditInlineFocus?
+    @State private var previewColorsDirty = false
+    @State private var selectedColorSurface: PreviewColorSurface?
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
     @State private var quickEditFeaturedSlot: QuickEditFeaturedSlotPayload?
@@ -28,6 +32,7 @@ struct DesignView: View {
     @State private var quickEditStudio12PhilosophySheet = false
     @State private var quickEditStudio12BookCtaSheet = false
     @State private var formFieldToEdit: FormField?
+    @State private var isDesignPickerPresented = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -41,7 +46,8 @@ struct DesignView: View {
                 }
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle(sectionTitle)
+            .navigationTitle(isShowingBuilder ? sectionTitle : "Design")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Group {
@@ -531,11 +537,46 @@ struct DesignView: View {
         return components.url
     }
 
+    private var activePaletteDisplayName: String {
+        let family = activeTemplateFamily
+        let resolvedId = WebColorPalettes.resolvedPaletteId(stored: viewModel.webColorPaletteId, family: family)
+        let hintTone: WebColorPalettePickerTone = WebColorPalettes.isPaletteLight(
+            backgroundHex: viewModel.backgroundColorHex
+        ) ? .light : .dark
+        if let palette = WebColorPalettes.palette(family: family, id: resolvedId, pickerTone: hintTone) {
+            return palette.name
+        }
+        if let match = WebColorPalettes.palettes(for: family, tone: hintTone).first(where: {
+            WebColorPalettes.pickerPaletteIsActive(
+                storedPaletteId: viewModel.webColorPaletteId,
+                storedPrimaryHex: viewModel.primaryColorHex,
+                storedBackgroundHex: viewModel.backgroundColorHex,
+                palette: $0
+            )
+        }) {
+            return match.name
+        }
+        return WebColorPalettes.original(for: family).name
+    }
+
     private var previewContent: some View {
-        WebViewPreview(
+        VStack(spacing: 0) {
+            if viewModel.hasTenant, !authViewModel.isDemoMode {
+                DesignThemePickerBar(
+                    viewModel: viewModel,
+                    paletteName: activePaletteDisplayName,
+                    templateName: activeTemplateFamily.displayName,
+                    accentHex: viewModel.primaryColorHex,
+                    industry: viewModel.industry,
+                    isPresented: $isDesignPickerPresented
+                )
+            }
+            ZStack(alignment: .bottom) {
+            WebViewPreview(
             url: sitePreviewURL,
             height: nil,
             quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
+            bridge: quickEditBridge,
             onQuickEdit: { event in
                 switch event {
                 case let .inlineSaveBatch(changes):
@@ -543,6 +584,14 @@ struct DesignView: View {
                     Task {
                         let pairs = changes.map { (fieldKey: $0.key, value: $0.value) }
                         await viewModel.saveQuickEditBatch(pairs)
+                    }
+                case let .inlineFocus(focus):
+                    quickEditInlineFocus = focus
+                case .inlineBlur:
+                    quickEditInlineFocus = nil
+                case let .openColorSurface(surfaceId):
+                    if let surface = PreviewColorSurface(surfaceId: surfaceId) {
+                        selectedColorSurface = surface
                     }
                 case let .openSheet(key, text):
                     if key == "heroImage" {
@@ -612,8 +661,27 @@ struct DesignView: View {
                 }
             }
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode {
+                    PreviewQuickEditChrome(
+                        viewModel: viewModel,
+                        bridge: quickEditBridge,
+                        inlineFocus: $quickEditInlineFocus,
+                        colorsDirty: $previewColorsDirty,
+                        selectedColorSurface: $selectedColorSurface
+                    )
+                }
+            }
+        }
         .background(Color(.systemBackground))
+        .onChange(of: isQuickEditEnabled) { _, enabled in
+            if !enabled {
+                quickEditInlineFocus = nil
+                previewColorsDirty = false
+                selectedColorSurface = nil
+            }
+        }
     }
 
     private var builderContent: some View {
@@ -798,27 +866,12 @@ struct DesignView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(WebColorPalettes.palettes(for: activeTemplateFamily)) { palette in
-                    WebColorPalettePresetCard(
-                        palette: palette,
-                        isActive: viewModel.webColorPaletteId == palette.id,
-                        isBusy: viewModel.isLoading
-                    ) {
-                        Task { await viewModel.applyWebColorPalette(palette) }
-                    }
-                }
-            }
-            if WebColorPalettes.usesAccentPicker(family: activeTemplateFamily) {
-                WebColorAccentChipSection(
-                    accents: WebColorPalettes.accentOptions(for: activeTemplateFamily),
-                    activePrimaryHex: viewModel.primaryColorHex,
-                    isBusy: viewModel.isLoading
-                ) { accent in
-                    Task { await viewModel.applyWebColorAccent(accent) }
-                }
-            }
+            DesignColorPalettePickerSection(
+                viewModel: viewModel,
+                family: activeTemplateFamily,
+                gridSpacing: 12,
+                usePresetCards: true
+            )
         }
         .padding(.top, 8)
     }
@@ -2765,6 +2818,312 @@ private struct EditTenantServiceSheet: View {
 }
 
 
+// MARK: - Preview design picker (template + palette popover)
+
+private struct DesignThemePickerBar: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let paletteName: String
+    let templateName: String
+    let accentHex: String
+    let industry: String?
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button {
+                isPresented = true
+            } label: {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Color(hex: accentHex))
+                        .frame(width: 10, height: 10)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(.separator).opacity(0.4), lineWidth: 0.5)
+                        )
+                    Text("\(paletteName) · \(templateName)")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isLoading)
+            .popover(isPresented: $isPresented, arrowEdge: .top) {
+                DesignThemePickerPopover(
+                    viewModel: viewModel,
+                    industry: industry,
+                    onDismiss: { isPresented = false }
+                )
+                .frame(width: 340)
+                .presentationCompactAdaptation(.popover)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+}
+
+private struct DesignThemePickerPopover: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let industry: String?
+    let onDismiss: () -> Void
+
+    private var activeFamily: TemplateFamily {
+        WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COLOR PALETTE")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.6)
+                    DesignColorPalettePickerSection(
+                        viewModel: viewModel,
+                        family: activeFamily,
+                        onSelected: onDismiss
+                    )
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("TEMPLATE")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.6)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(TemplateFamily.allCases) { family in
+                                DesignThemeTemplatePickerCell(
+                                    family: family,
+                                    isActive: activeFamily == family,
+                                    isBusy: viewModel.isLoading
+                                ) {
+                                    let theme = WebTheme.theme(for: family, industry: industry)
+                                    Task {
+                                        await viewModel.applyWebTheme(theme)
+                                        onDismiss()
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                Text("Switching template resets colors to that layout’s Original preset.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(18)
+        }
+        .frame(maxHeight: 640)
+    }
+}
+
+// MARK: - Color palette grid (tone filter + presets)
+
+private struct DesignColorPalettePickerSection: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let family: TemplateFamily
+    var gridSpacing: CGFloat = 10
+    var usePresetCards: Bool = false
+    var onSelected: (() -> Void)? = nil
+
+    @State private var toneFilter: WebColorPalettePickerTone
+
+    init(
+        viewModel: DesignViewModel,
+        family: TemplateFamily,
+        gridSpacing: CGFloat = 10,
+        usePresetCards: Bool = false,
+        onSelected: (() -> Void)? = nil
+    ) {
+        self.viewModel = viewModel
+        self.family = family
+        self.gridSpacing = gridSpacing
+        self.usePresetCards = usePresetCards
+        self.onSelected = onSelected
+        _toneFilter = State(initialValue: WebColorPalettes.defaultPickerTone(for: family))
+    }
+
+    private var columns: [GridItem] {
+        [GridItem(.flexible(), spacing: gridSpacing), GridItem(.flexible(), spacing: gridSpacing)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Palette tone", selection: $toneFilter) {
+                ForEach(WebColorPalettePickerTone.allCases) { tone in
+                    Text(tone.segmentedTitle).tag(tone)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: family) { _, newFamily in
+                toneFilter = WebColorPalettes.defaultPickerTone(for: newFamily)
+            }
+
+            LazyVGrid(columns: columns, spacing: gridSpacing) {
+                ForEach(WebColorPalettes.pickerItems(for: family, tone: toneFilter)) { item in
+                    if usePresetCards {
+                        WebColorPalettePresetCard(
+                            palette: item.palette,
+                            toneSubtitle: item.toneSubtitle,
+                            isActive: isActive(item.palette),
+                            isBusy: viewModel.isLoading
+                        ) {
+                            Task {
+                                await viewModel.applyWebColorPalette(item.palette)
+                                onSelected?()
+                            }
+                        }
+                    } else {
+                        DesignThemePalettePickerCell(
+                            palette: item.palette,
+                            toneSubtitle: item.toneSubtitle,
+                            isActive: isActive(item.palette),
+                            isBusy: viewModel.isLoading
+                        ) {
+                            Task {
+                                await viewModel.applyWebColorPalette(item.palette)
+                                onSelected?()
+                            }
+                        }
+                    }
+                }
+            }
+
+            if WebColorPalettes.showsAccentChipRowInPicker(for: family) {
+                WebColorAccentChipSection(
+                    accents: WebColorPalettes.accentOptions(for: family),
+                    activePrimaryHex: viewModel.primaryColorHex,
+                    isBusy: viewModel.isLoading
+                ) { accent in
+                    Task {
+                        await viewModel.applyWebColorAccent(accent)
+                        onSelected?()
+                    }
+                }
+            }
+        }
+    }
+
+    private func isActive(_ palette: WebColorPalette) -> Bool {
+        WebColorPalettes.pickerPaletteIsActive(
+            storedPaletteId: viewModel.webColorPaletteId,
+            storedPrimaryHex: viewModel.primaryColorHex,
+            storedBackgroundHex: viewModel.backgroundColorHex,
+            palette: palette
+        )
+    }
+}
+
+private struct DesignThemePalettePickerCell: View {
+    let palette: WebColorPalette
+    var toneSubtitle: String? = nil
+    let isActive: Bool
+    let isBusy: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 10) {
+                HStack(spacing: 0) {
+                    Color(hex: palette.tokens.backgroundColor)
+                    Color(hex: palette.tokens.cardSurfaceColor)
+                    Color(hex: palette.tokens.primaryColor)
+                }
+                .frame(width: 36, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(palette.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.leading)
+                    if let toneSubtitle {
+                        Text(toneSubtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isActive ? Color.accentColor : Color(.separator).opacity(0.35), lineWidth: isActive ? 2 : 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+    }
+}
+
+private struct DesignThemeTemplatePickerCell: View {
+    let family: TemplateFamily
+    let isActive: Bool
+    let isBusy: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            VStack(spacing: 0) {
+                TemplateMiniPreview(family: family)
+                    .frame(width: 88, height: 56)
+                    .clipped()
+                Text(family.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .padding(.vertical, 8)
+                    .frame(width: 88)
+            }
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isActive ? Color.accentColor : Color(.separator).opacity(0.35), lineWidth: isActive ? 2 : 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+    }
+}
+
 // MARK: - Color palette presets (Template tab)
 
 private struct WebColorAccentChipSection: View {
@@ -2833,6 +3192,7 @@ private struct WebColorAccentChip: View {
 
 private struct WebColorPalettePresetCard: View {
     let palette: WebColorPalette
+    var toneSubtitle: String? = nil
     let isActive: Bool
     let isBusy: Bool
     let select: () -> Void
@@ -2849,9 +3209,16 @@ private struct WebColorPalettePresetCard: View {
         Button(action: select) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(palette.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(palette.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.primary)
+                        if let toneSubtitle {
+                            Text(toneSubtitle)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     Spacer(minLength: 0)
                     if isActive {
                         Text("Active")

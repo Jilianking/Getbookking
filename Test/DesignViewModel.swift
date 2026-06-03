@@ -6,6 +6,7 @@
 
 import Foundation
 import Combine
+import SwiftUI
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
@@ -145,6 +146,8 @@ class DesignViewModel: ObservableObject {
     @Published var galleryPageTextColorHex: String = "#1C1917"
     @Published var aboutSectionBackgroundColorHex: String = "#111111"
     @Published var aboutSectionTextColorHex: String = "#FFFFFF"
+    /// Live quick-edit hero slot color (may differ from page bg when user paints the hero band).
+    @Published var previewHeroSlotColorHex: String = "#FFFDF9"
 
     // Form fields
     @Published var formFields: [FormField] = []
@@ -897,6 +900,7 @@ class DesignViewModel: ObservableObject {
                 textColorHex = tenant?["textColor"] as? String ?? "#333333"
                 primaryColorHex = tenant?["primaryColor"] as? String ?? "#000000"
                 primaryColorHoverHex = tenant?["primaryColorHover"] as? String ?? "#333333"
+                syncPreviewHeroSlotColorFromTokens()
                 successColorHex = tenant?["successColor"] as? String ?? "#22C55E"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
@@ -1842,6 +1846,14 @@ class DesignViewModel: ObservableObject {
         WebTheme(rawValue: webThemeId)?.family ?? .classic
     }
 
+    /// Persists color fields touched from preview quick-edit chrome (no full page reload).
+    func savePreviewQuickEditColors() async {
+        guard let tid = tenantId else { return }
+        let tokens = currentColorTokens()
+        await MainActor.run { errorMessage = nil }
+        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: webColorPaletteId, tokens: tokens))
+    }
+
     func applyColorTokensLocally(_ tokens: WebColorPaletteTokens) {
         backgroundColorHex = tokens.backgroundColor
         cardSurfaceColorHex = tokens.cardSurfaceColor
@@ -1855,7 +1867,65 @@ class DesignViewModel: ObservableObject {
         galleryPageTextColorHex = tokens.galleryPageTextColor
         aboutSectionBackgroundColorHex = tokens.aboutSectionBackgroundColor
         aboutSectionTextColorHex = tokens.aboutSectionTextColor
+        syncPreviewHeroSlotColorFromTokens()
         syncTattooSectionThemeFromFeaturedIfNeeded()
+    }
+
+    func syncPreviewHeroSlotColorFromTokens() {
+        previewHeroSlotColorHex = DesignViewModel.mixedHeroSlotHex(
+            background: backgroundColorHex,
+            accent: primaryColorHex
+        )
+    }
+
+    /// Approximates web `tenantHeroPlaceholderSlotStyle` mix for the hero empty slot.
+    static func mixedHeroSlotHex(background: String, accent: String) -> String {
+        let bg = Color(hex: background)
+        let ac = Color(hex: accent)
+        guard let bgC = UIColor(bg).cgColor.components,
+              let acC = UIColor(ac).cgColor.components else { return background }
+        let br = bgC.count >= 3 ? bgC[0] : 0
+        let bgG = bgC.count >= 3 ? bgC[1] : 0
+        let bb = bgC.count >= 3 ? bgC[2] : 0
+        let ar = acC.count >= 3 ? acC[0] : 0
+        let ag = acC.count >= 3 ? acC[1] : 0
+        let ab = acC.count >= 3 ? acC[2] : 0
+        let lum = (0.299 * ar + 0.587 * ag + 0.114 * ab)
+        let baseR = lum > 0.62 ? br : (bgC.count >= 3 ? bgC[0] : br)
+        let baseG = lum > 0.62 ? bgG : (bgC.count >= 3 ? bgC[1] : bgG)
+        let baseB = lum > 0.62 ? bb : (bgC.count >= 3 ? bgC[2] : bb)
+        let mixA: CGFloat = 0.48
+        let mixB: CGFloat = 0.52
+        func clamp(_ v: CGFloat) -> CGFloat { min(1, max(0, v)) }
+        return String(
+            format: "#%02X%02X%02X",
+            Int(clamp(ar * mixA + baseR * mixB) * 255),
+            Int(clamp(ag * mixA + baseG * mixB) * 255),
+            Int(clamp(ab * mixA + baseB * mixB) * 255)
+        )
+    }
+
+    func previewColorPatchPayload(heroSlotOverride: String? = nil) -> [String: String] {
+        let tokens = currentColorTokens()
+        var payload: [String: String] = [
+            "webThemeId": webThemeId,
+            "backgroundColor": tokens.backgroundColor,
+            "textColor": tokens.textColor,
+            "cardSurfaceColor": tokens.cardSurfaceColor,
+            "primaryColor": tokens.primaryColor,
+            "primaryColorHover": tokens.primaryColorHover,
+            "featuredWorkBackgroundColor": tokens.featuredWorkBackgroundColor,
+            "featuredWorkTextColor": tokens.featuredWorkTextColor,
+            "galleryPageBackgroundColor": tokens.galleryPageBackgroundColor,
+            "galleryPageTextColor": tokens.galleryPageTextColor,
+            "aboutSectionBackgroundColor": tokens.aboutSectionBackgroundColor,
+            "aboutSectionTextColor": tokens.aboutSectionTextColor,
+        ]
+        let heroSlot = heroSlotOverride ?? previewHeroSlotColorHex
+        if !heroSlot.isEmpty {
+            payload["heroSlotBg"] = heroSlot
+        }
+        return payload
     }
 
     func currentColorTokens() -> WebColorPaletteTokens {

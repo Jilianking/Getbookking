@@ -46,6 +46,12 @@
       --bk-gallery-fg: #1a1a1a;
       --bk-about-bg: #1a1a1a;
       --bk-about-fg: #f7f5f0;
+      /* Empty image slots (set in applyTenantColorVars). Hero uses stronger accent match. */
+      --bk-hero-slot-bg: color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%);
+      --bk-hero-slot-border: 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35));
+      --bk-slot-bg: color-mix(in srgb, var(--bk-accent) 32%, var(--bk-card) 68%);
+      --bk-slot-border: 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35));
+      --bk-slot-border-light: 1px dashed var(--bk-accent-35, rgba(17, 17, 17, 0.12));
     }
     * { box-sizing: border-box; }
     body {
@@ -1210,11 +1216,23 @@
     .tattoo-sidebar-brand {
       margin: 0 0 20px;
       padding-bottom: 20px;
-      border-bottom: 1px solid rgba(127,127,127,0.35);
+      border-bottom: 1px solid var(--bk-sidebar-divider, rgba(127,127,127,0.35));
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+    }
+    /* Classic / Studio 12 / Luxe: drawer matches BOOK NOW (accent fill + light type). */
+    .tattoo-sidebar-panel--accent .tattoo-sidebar-brand {
+      border-bottom-color: var(--bk-sidebar-divider, rgba(255, 255, 255, 0.28));
+    }
+    .tattoo-sidebar-panel--accent a:not(.tattoo-sidebar-wordmark) {
+      border-bottom-color: var(--bk-sidebar-divider, rgba(255, 255, 255, 0.28));
+    }
+    .tattoo-sidebar-panel--accent a.tattoo-sidebar-link--book {
+      font-weight: 600;
+      opacity: 1;
+      letter-spacing: 0.04em;
     }
     .tattoo-sidebar-close {
       width: auto;
@@ -1231,7 +1249,7 @@
       border-radius: 0;
     }
     .tattoo-sidebar-close:hover { opacity: 0.85; }
-    .tattoo-sidebar-panel a { display: block; padding: 16px 0; font-size: 20px; color: inherit; opacity: 0.92; text-decoration: none; border-bottom: 1px solid rgba(127,127,127,0.35); }
+    .tattoo-sidebar-panel a { display: block; padding: 16px 0; font-size: 20px; color: inherit; opacity: 0.92; text-decoration: none; border-bottom: 1px solid var(--bk-sidebar-divider, rgba(127,127,127,0.35)); }
     .tattoo-sidebar-panel a:last-child { border-bottom: none; }
     @media (max-width: 768px) {
       .tattoo-nav { padding: 14px 20px; }
@@ -1263,8 +1281,8 @@
       aspect-ratio: 4 / 5;
       min-height: 120px;
       border-radius: 12px;
-      border: 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35));
-      background: color-mix(in srgb, var(--bk-card, #f5f5f5) 88%, transparent);
+      border: var(--bk-slot-border, 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35)));
+      background: var(--bk-slot-bg, color-mix(in srgb, var(--bk-accent) 22%, var(--bk-card) 78%));
       box-sizing: border-box;
     }
     .classic-home .tattoo-featured-slot-add { border-radius: 8px; }
@@ -1279,8 +1297,10 @@
     }
     .tattoo-featured-placeholder {
       grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: inherit; opacity: 0.55;
-      font-size: 14px; background: color-mix(in srgb, var(--bk-card, #f5f5f5) 70%, transparent);
-      border-radius: 12px; border: 1px dashed var(--bk-accent-35, rgba(0,0,0,0.12));
+      font-size: 14px;
+      background: var(--bk-slot-bg, color-mix(in srgb, var(--bk-accent) 16%, var(--bk-card) 84%));
+      border-radius: 12px;
+      border: var(--bk-slot-border-light, 1px dashed var(--bk-accent-35, rgba(0,0,0,0.12)));
     }
     .tattoo-gallery-link { display: inline-block; margin-top: 20px; font-size: 14px; color: inherit; opacity: 0.85; font-weight: 500; text-decoration: none; }
     .tattoo-gallery-link:hover { text-decoration: underline; }
@@ -1464,8 +1484,8 @@
       width: 100%;
       height: 100%;
       min-height: 320px;
-      background: color-mix(in srgb, var(--bk-card, #f5f5f5) 88%, transparent);
-      border: 2px dashed var(--bk-accent-55, rgba(26, 26, 26, 0.35));
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(26, 26, 26, 0.35)));
       box-sizing: border-box;
     }
     .classic-section-eyebrow {
@@ -2352,13 +2372,25 @@
     .luxe-nav--light .tattoo-nav-menu {
       color: #1a1a1a;
     }
-    /* Luxe home: opaque cream strip above hero (links use .luxe-nav--light). */
+    /* Luxe home top bar: palette bg + fg (readable on cream Original or dark palettes like Ocean Slate). */
     .luxe-nav.luxe-nav--topbar {
       position: relative;
       z-index: 20;
       background: var(--bk-bg, #FFFDF9);
-      border-bottom: 1px solid rgba(26, 26, 26, 0.1);
-      box-shadow: 0 1px 0 rgba(42, 31, 24, 0.06), 0 6px 20px rgba(0, 0, 0, 0.04);
+      border-bottom: 1px solid var(--bk-fg-10, rgba(26, 26, 26, 0.1));
+      box-shadow: 0 1px 0 var(--bk-fg-07, rgba(26, 26, 26, 0.07)), 0 6px 20px rgba(0, 0, 0, 0.04);
+    }
+    .luxe-nav.luxe-nav--topbar .luxe-nav-brand {
+      color: var(--bk-fg, #1a1a1a);
+    }
+    .luxe-nav.luxe-nav--topbar .luxe-nav-links a {
+      color: var(--bk-fg-muted, rgba(26, 26, 26, 0.72));
+    }
+    .luxe-nav.luxe-nav--topbar .luxe-nav-links a:hover {
+      color: var(--bk-fg, #1a1a1a);
+    }
+    .luxe-nav.luxe-nav--topbar .tattoo-nav-menu {
+      color: var(--bk-fg, #1a1a1a);
     }
     .luxe-page--sub .gallery-header {
       padding-top: 108px;
@@ -2377,9 +2409,34 @@
       align-items: center;
       background-size: cover;
       background-position: center;
-      background-color: #2c2c2c;
+      background-color: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
     }
-    .luxe-hero::after {
+    /* Empty hero: accent-tinted slot (same as Classic / Blade / Studio 12 placeholders). */
+    .luxe-hero--empty {
+      background-image: none;
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border-bottom: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35)));
+    }
+    .luxe-hero--empty::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bk-fg) 12%, transparent) 0%,
+        transparent 55%,
+        transparent 100%
+      );
+    }
+    .luxe-hero--empty .luxe-hero-text h1 {
+      color: var(--bk-fg, #1a1a1a);
+    }
+    .luxe-hero--empty .luxe-hero-text p {
+      color: var(--bk-fg-muted, rgba(26, 26, 26, 0.72));
+    }
+    .luxe-hero:not(.luxe-hero--empty)::after {
       content: '';
       position: absolute;
       inset: 0;
@@ -2522,8 +2579,8 @@
       color: var(--bk-accent, #C9A96E);
     }
     .luxe-service-placeholder--add {
-      border: 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55));
-      background: color-mix(in srgb, var(--bk-card, #f0ebe3) 85%, transparent);
+      border: var(--bk-slot-border, 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55)));
+      background: var(--bk-slot-bg, color-mix(in srgb, var(--bk-accent) 22%, var(--bk-card) 78%));
     }
     .luxe-service-placeholder--locked {
       opacity: 0.38;
@@ -3323,8 +3380,8 @@
       width: 100%;
       height: 100%;
       min-height: 400px;
-      background: color-mix(in srgb, var(--bk-card, #141410) 88%, transparent);
-      border: 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55));
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55)));
       box-sizing: border-box;
     }
     .blade-page .blade-hero-overlay {
@@ -4000,7 +4057,9 @@
       min-height: 200px;
       height: 100%;
       filter: none;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(192, 34, 26, 0.55)));
+      box-sizing: border-box;
     }
     .stonecut-page .stonecut-section { padding: 96px 40px; border-bottom: 1px solid rgba(232,224,208,.08); }
     .stonecut-page .stonecut-eyebrow { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: var(--bk-accent, #c0221a); margin-bottom: 18px; }
@@ -4453,7 +4512,9 @@
       width: 100%;
       height: 100%;
       min-height: 50vh;
-      background: linear-gradient(170deg, #e8d5c4 0%, #d4b8a0 30%, #c4a888 60%, #b09070 100%);
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(26, 26, 26, 0.35)));
+      box-sizing: border-box;
       position: relative;
     }
 
@@ -5634,6 +5695,32 @@
         return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
       }
 
+      /** Gallery / featured empty slots: accent + card. */
+      function tenantPlaceholderSlotStyle(c, options) {
+        var opts = options || {};
+        var accentMix = opts.accentMix != null ? opts.accentMix : 32;
+        var cardMix = 100 - accentMix;
+        var borderAlpha = opts.borderAlpha != null ? opts.borderAlpha : 0.55;
+        var borderWidth = opts.borderWidth || '2px';
+        return {
+          bg: 'color-mix(in srgb, ' + c.accent + ' ' + accentMix + '%, ' + c.card + ' ' + cardMix + '%)',
+          border: borderWidth + ' dashed ' + rgbaFromHex(c.accent, borderAlpha)
+        };
+      }
+
+      /** Hero empty slot: strong accent tint so it matches BOOK NOW / primary buttons. */
+      function tenantHeroPlaceholderSlotStyle(c) {
+        var accentMix = 48;
+        var baseMix = 52;
+        var rgb = hexToRgb(c.accent);
+        var lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+        var base = lum > 0.62 ? c.bg : c.card;
+        return {
+          bg: 'color-mix(in srgb, ' + c.accent + ' ' + accentMix + '%, ' + base + ' ' + baseMix + '%)',
+          border: '2px dashed ' + rgbaFromHex(c.accent, 0.68)
+        };
+      }
+
       function applyTenantColorVars(tenant) {
         var c = tenantColors(tenant);
         var root = document.documentElement;
@@ -5661,6 +5748,53 @@
         root.style.setProperty('--bk-fg-muted-light', rgbaFromHex(c.fg, 0.40));
         root.style.setProperty('--bk-fg-07', rgbaFromHex(c.fg, 0.07));
         root.style.setProperty('--bk-fg-10', rgbaFromHex(c.fg, 0.10));
+        var heroSlot = tenantHeroPlaceholderSlotStyle(c);
+        var slot = tenantPlaceholderSlotStyle(c, { accentMix: 32, borderAlpha: 0.55 });
+        var slotLight = tenantPlaceholderSlotStyle(c, { accentMix: 22, borderAlpha: 0.35, borderWidth: '1px' });
+        root.style.setProperty('--bk-hero-slot-bg', heroSlot.bg);
+        root.style.setProperty('--bk-hero-slot-border', heroSlot.border);
+        root.style.setProperty('--bk-slot-bg', slot.bg);
+        root.style.setProperty('--bk-slot-border', slot.border);
+        root.style.setProperty('--bk-slot-border-light', slotLight.border);
+      }
+
+      /** Applies accent-tinted fills to all empty hero / featured image slots (builder preview + live site). */
+      function applyEmptyImageSlotColors(tenant) {
+        if (!tenant) return;
+        var c = tenantColors(tenant);
+        var heroSlot = tenantHeroPlaceholderSlotStyle(c);
+        var slot = tenantPlaceholderSlotStyle(c, { accentMix: 32, borderAlpha: 0.55 });
+        var slotLight = tenantPlaceholderSlotStyle(c, { accentMix: 22, borderAlpha: 0.35, borderWidth: '1px' });
+        var heroSelectors = [
+          '.classic-hero-placeholder',
+          '.blade-page .blade-hero-placeholder',
+          '.stonecut-page .stonecut-hero-photo--empty',
+          '.studio12-page .s12-hero-img-fallback',
+          '.studio12-page .s12-hero-img-col:not(:has(img))',
+          '.luxe-hero--empty'
+        ];
+        heroSelectors.forEach(function(sel) {
+          [].forEach.call(document.querySelectorAll(sel), function(el) {
+            el.style.background = heroSlot.bg;
+            el.style.border = heroSlot.border;
+          });
+        });
+        var slotSelectors = [
+          '.studio12-page .s12-aux-img-wrap:not(:has(img))',
+          '.tattoo-featured-slot-add',
+          '.classic-home .tattoo-featured-slot-add',
+          '.luxe-service-placeholder--add'
+        ];
+        slotSelectors.forEach(function(sel) {
+          [].forEach.call(document.querySelectorAll(sel), function(el) {
+            el.style.background = slot.bg;
+            el.style.border = slot.border;
+          });
+        });
+        [].forEach.call(document.querySelectorAll('.tattoo-featured-placeholder'), function(el) {
+          el.style.background = slotLight.bg;
+          el.style.border = slotLight.border;
+        });
       }
 
       function applyBodyPageColors(tenant, surface) {
@@ -5692,29 +5826,14 @@
       /** Classic home: empty featured slots + hero placeholder follow card/accent tokens. */
       function applyClassicHomePlaceholderColors(tenant) {
         if (!isClassicTheme(tenant) || isStudio12Theme(tenant)) return;
-        var c = tenantColors(tenant);
-        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
-        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
-        [].forEach.call(document.querySelectorAll('.classic-home .tattoo-featured-slot-add'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
-        [].forEach.call(document.querySelectorAll('.classic-hero-placeholder'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
+        applyEmptyImageSlotColors(tenant);
       }
 
       /** Blade: hero placeholder + key bands follow palette tokens. */
       function applyBladeHomeBandColors(tenant) {
         if (!isBladeTheme(tenant)) return;
         var c = tenantColors(tenant);
-        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
-        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
-        [].forEach.call(document.querySelectorAll('.blade-page .blade-hero-placeholder'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
+        applyEmptyImageSlotColors(tenant);
         [].forEach.call(document.querySelectorAll('.blade-page .blade-book-panel'), function(el) {
           el.style.background = c.card;
         });
@@ -5728,13 +5847,8 @@
       function applyStonecutHomeBandColors(tenant) {
         if (!isStonecutTheme(tenant)) return;
         var c = tenantColors(tenant);
-        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
-        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.55);
+        applyEmptyImageSlotColors(tenant);
         var lineColor = rgbaFromHex(c.fg, 0.08);
-        [].forEach.call(document.querySelectorAll('.stonecut-page .stonecut-hero-photo--empty'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
         [].forEach.call(document.querySelectorAll('.stonecut-page footer'), function(el) {
           el.style.background = c.aboutBg;
           el.style.color = c.aboutFg;
@@ -5745,18 +5859,35 @@
       /** Studio 12: empty image placeholders follow card/accent tokens. */
       function applyStudio12HomeBandColors(tenant) {
         if (!isStudio12Theme(tenant)) return;
-        var c = tenantColors(tenant);
-        var slotBg = 'color-mix(in srgb, ' + c.card + ' 88%, transparent)';
-        var slotBorder = '2px dashed ' + rgbaFromHex(c.accent, 0.45);
-        [].forEach.call(document.querySelectorAll('.studio12-page .s12-aux-img-wrap:not(:has(img))'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
-        [].forEach.call(document.querySelectorAll('.studio12-page .s12-hero-img-col:not(:has(img))'), function(el) {
-          el.style.background = slotBg;
-          el.style.border = slotBorder;
-        });
+        applyEmptyImageSlotColors(tenant);
       }
+
+      /** Live preview color updates from app Quick edit (tap band or chrome). */
+      function applyPreviewColorPatch(patch) {
+        if (!patch) return;
+        patch.resolvedWebThemeId = patch.resolvedWebThemeId || resolvedWebThemeId(patch);
+        applyTenantColorVars(patch);
+        if (patch.heroSlotBg) {
+          document.documentElement.style.setProperty('--bk-hero-slot-bg', patch.heroSlotBg);
+        }
+        if (isLuxeTheme(patch)) {
+          applyLuxeHomeBandColors(patch);
+          applyEmptyImageSlotColors(patch);
+        } else if (isBladeTheme(patch)) {
+          applyBladeHomeBandColors(patch);
+          applyEmptyImageSlotColors(patch);
+        } else if (isStonecutTheme(patch)) {
+          applyStonecutHomeBandColors(patch);
+          applyEmptyImageSlotColors(patch);
+        } else if (isStudio12Theme(patch)) {
+          applyStudio12HomeBandColors(patch);
+        } else if (isClassicTheme(patch) && !isStudio12Theme(patch)) {
+          applyClassicHomePlaceholderColors(patch);
+          applyEmptyImageSlotColors(patch);
+        }
+        applyBodyPageColors(patch, 'page');
+      }
+      window.__bkApplyPreviewColorPatch = applyPreviewColorPatch;
 
       function applyBranding(t) {
         if (!t) return;
@@ -5772,6 +5903,7 @@
         }
         applyBodyPageColors(t, bodySurface);
         applyLuxeHomeBandColors(t);
+        applyEmptyImageSlotColors(t);
         applyClassicHomePlaceholderColors(t);
         applyBladeHomeBandColors(t);
         applyStonecutHomeBandColors(t);
@@ -5799,12 +5931,14 @@
           var tc = tenantColors(tenant);
           if (isGalleryPath) {
             iconColor = (usesThemedChrome(tenant) || isClassicTheme(tenant))
-              ? (isBladeTheme(tenant) ? tc.accent : tc.fg)
+              ? (isBladeTheme(tenant) ? tc.accent : (usesAccentSidebarDrawer(tenant) ? tc.accent : tc.fg))
               : '#FFFFFF';
           } else if (isBookPath) {
             iconColor = usesThemedChrome(tenant)
-              ? (isBladeTheme(tenant) ? tc.accent : tc.fg)
+              ? (isBladeTheme(tenant) ? tc.accent : (usesAccentSidebarDrawer(tenant) ? tc.accent : tc.fg))
               : '#000000';
+          } else if (usesAccentSidebarDrawer(tenant)) {
+            iconColor = tc.accent;
           } else if (usesThemedChrome(tenant)) {
             iconColor = isBladeTheme(tenant) ? tc.accent : tc.fg;
           } else {
@@ -6099,7 +6233,7 @@
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
         if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '">Booking</a>';
-        return '<nav class="' + navClass + '">' +
+        return '<nav class="' + navClass + '"' + (variant === 'hero' ? ' data-bk-color-surface="page"' : '') + '>' +
           '<a href="' + base + '/home" class="luxe-nav-brand"><span data-edit-key="displayName">' + esc(displayName) + '</span></a>' +
           '<div class="luxe-nav-trailing">' +
             '<div class="luxe-nav-links">' + inner + '</div>' +
@@ -6123,7 +6257,7 @@
         var bookBtn = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="blade-nav-book">' + wcSpan(tenant, 'wc.blade.navBook', 'Book now') + '</a>'
           : '';
-        return '<nav class="blade-topnav">' +
+        return '<nav class="blade-topnav" data-bk-color-surface="page">' +
           '<a href="' + base + '/home" class="blade-nav-logo"><span data-edit-key="displayName">' + name + '</span></a>' +
           '<div class="blade-nav-trailing">' +
           '<ul class="blade-nav-links">' + lis + '</ul>' +
@@ -6248,7 +6382,7 @@
         var nav = bladeNavHtml(tenant, anchorHome);
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -6315,7 +6449,7 @@
               return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img' + editKey + ' src="' + esc(u) + '" alt=""></div></div>';
             }).join('');
           }
-          gallerySection = '<section class="blade-gallery-strip" id="blade-gallery">' +
+          gallerySection = '<section class="blade-gallery-strip" id="blade-gallery" data-bk-color-surface="featured">' +
             '<div class="blade-section-header blade-fade-up" style="padding-right:40px">' +
             '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.galleryEyebrow', 'Portfolio') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.galleryTitle', 'THE GALLERY') + '</h2></div>' +
             '</div>' +
@@ -6335,7 +6469,7 @@
           : '<div class="blade-hero-cta" style="margin-top:28px">' +
             '<a href="' + anchorHome + '#services" class="blade-btn-ghost">' + wcSpan(tenant, 'wc.blade.viewServices', 'View services') + '</a>' +
             '</div>';
-        var bookPanel = '<section class="blade-book-panel" id="blade-booking">' +
+        var bookPanel = '<section class="blade-book-panel" id="blade-booking" data-bk-color-surface="card">' +
           '<div class="blade-fade-up">' +
           '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.bookPanelSectionLabel', 'Reserve') + '</div>' +
           '<h2 class="blade-book-title">BOOK YOUR<br><span>APPOINTMENT</span></h2>' +
@@ -6407,7 +6541,7 @@
             '<h3 class="blade-section-title" style="font-size:38px">HOURS</h3>' + hoursInfo +
             '</div>')
           : '';
-        var infoSection = '<div class="' + bladeInfoSectionClass + '" id="location">' +
+        var infoSection = '<div class="' + bladeInfoSectionClass + '" id="location" data-bk-color-surface="about">' +
           whenHalfBlade +
           '<div class="blade-info-half blade-fade-up">' +
           '<div class="blade-section-label">Where</div>' +
@@ -6418,7 +6552,7 @@
         var heroPrimary = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="blade-btn-primary">' + wcSpan(tenant, 'wc.blade.heroBook', 'Book appointment') + '</a>'
           : '';
-        var hero = '<section class="blade-hero" id="about">' +
+        var hero = '<section class="blade-hero" id="about" data-bk-color-surface="hero">' +
           '<div class="blade-hero-left">' +
           '<div class="blade-hero-eyebrow"><span data-edit-key="' + heroEyebrowEditKey + '">' + esc(eyebrow) + '</span></div>' +
           '<h1 class="blade-hero-title"><em><span data-edit-key="bladeHeroTagline">' + esc(emLine) + '</span></em><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +
@@ -6442,7 +6576,7 @@
         var locationHtml = sa
           ? ('<span class="stonecut-nav-location"><span data-edit-key="serviceArea">' + esc(sa) + '</span></span>')
           : '';
-        return '<nav class="stonecut-nav" id="stonecut-nav">' +
+        return '<nav class="stonecut-nav" id="stonecut-nav" data-bk-color-surface="page">' +
           '<a href="' + base + '/home" class="stonecut-logo">' +
           '<span class="stonecut-logo-wordmark"><span data-edit-key="displayName">' + esc(displayName) + '</span></span>' +
           '<span class="stonecut-logo-stack">' +
@@ -6466,7 +6600,7 @@
         var displayName = tenant.displayName || 'Studio';
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -6508,7 +6642,7 @@
           if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
           var cards = luxeTenantProductCardsHtml(tenant);
           if (!cards) return '';
-          return '<section class="stonecut-section stonecut-shop-preview" id="shop">' +
+          return '<section class="stonecut-section stonecut-shop-preview" id="shop" data-bk-color-surface="card">' +
             '<div class="stonecut-eyebrow">Retail</div>' +
             '<h2 class="stonecut-heading">Shop</h2>' +
             '<p class="stonecut-shop-lead">Studio retail, curated for clients—see everything on the full shop.</p>' +
@@ -6518,7 +6652,7 @@
         })();
         return '<div class="stonecut-page">' +
           stonecutNavHtml(tenant) +
-          '<section class="stonecut-hero">' +
+          '<section class="stonecut-hero" data-bk-color-surface="hero">' +
           '<div class="stonecut-hero-left">' +
           '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em><span data-edit-key="displayName">' + esc(displayName) + '</span></h1>' +
           cityTagHtml +
@@ -6530,7 +6664,7 @@
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
           shopPreviewSection +
-          '<section class="stonecut-section" id="location"><div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
+          '<section class="stonecut-section" id="location" data-bk-color-surface="about"><div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
           (tenantShowBusinessHours(tenant)
             ? ('<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
               (tenantBusinessHoursTrimmed(tenant)
@@ -7735,7 +7869,7 @@
           ? studio12SidebarHtml(tenant)
           : ('<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>');
 
@@ -7840,7 +7974,7 @@
             : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant)));
           var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
             '<div class="tattoo-sidebar-backdrop"></div>' +
-            '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+            tattooSidebarPanelOpenTag(tenant) +
             tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
             '</div></div>';
           var bookPageStyle = tenantPageStyle(tenant, 'page');
@@ -8005,20 +8139,33 @@
             return row;
           });
       }
+      /** Light portfolio themes: accent drawer matches primary CTA (BOOK NOW). */
+      function usesAccentSidebarDrawer(tenant) {
+        return (isClassicTheme(tenant) && !isStudio12Theme(tenant)) ||
+          isStudio12Theme(tenant) || isLuxeTheme(tenant);
+      }
       function tattooSidebarPanelInlineStyle(tenant) {
         var tc = tenantColors(tenant);
-        if (isLuxeTheme(tenant) || isStudio12Theme(tenant)) return tenantPageStyle(tenant, 'page');
         if (isBladeTheme(tenant) || isStonecutTheme(tenant)) {
           return 'background:' + tc.card + ';color:' + tc.fg;
         }
+        if (usesAccentSidebarDrawer(tenant)) {
+          return 'background:' + tc.accent + ';color:' + tc.accentFg +
+            ';--bk-sidebar-divider:' + rgbaFromHex(tc.accentFg, 0.28);
+        }
         return tattooSiteThemeInlineStyle(tenant);
+      }
+      function tattooSidebarPanelOpenTag(tenant) {
+        var cls = 'tattoo-sidebar-panel';
+        if (usesAccentSidebarDrawer(tenant)) cls += ' tattoo-sidebar-panel--accent';
+        return '<div class="' + cls + '" style="' + tattooSidebarPanelInlineStyle(tenant) + '">';
       }
       function studio12SidebarHtml(tenant) {
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         return '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
       }
@@ -8058,7 +8205,8 @@
           } else {
             href = base + '/home';
           }
-          return '<a href="'+esc(href)+'">'+esc(l.label || '')+'</a>';
+          var linkCls = (l.target === 'book') ? ' class="tattoo-sidebar-link--book"' : '';
+          return '<a href="'+esc(href)+'"'+linkCls+'>'+esc(l.label || '')+'</a>';
         }).join('');
       }
       /** Drawer wordmark: same Unbounded uppercase treatment as Stonecut home nav (all themes). */
@@ -8231,7 +8379,7 @@
         } else {
           luxeLocationInner = '<span data-edit-key="serviceArea">Add in app</span>';
         }
-        return '<section class="luxe-contact">' +
+        return '<section class="luxe-contact" data-bk-color-surface="about">' +
           '<div class="luxe-contact-inner">' +
             '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactLocation', 'Location') + '</h3><p>' + luxeLocationInner + '</p></div>' +
             luxeHoursBlock +
@@ -8276,7 +8424,7 @@
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
@@ -8349,7 +8497,7 @@
         if (tenantShowAboutPage(tenant)) navInner += '<a href="#about">About</a>';
         if (tenantShowShopPage(tenant)) navInner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book">Book</a>';
-        var nav = '<nav class="tattoo-nav">' +
+        var nav = '<nav class="tattoo-nav" data-bk-color-surface="page">' +
           '<a href="' + base + '/home" class="tattoo-brand"><span data-edit-key="displayName">' + esc(displayName) + '</span></a>' +
           '<div class="tattoo-nav-trailing">' +
             '<div class="tattoo-nav-links">' + navInner + '</div>' +
@@ -8359,7 +8507,7 @@
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
@@ -8392,7 +8540,7 @@
           heroTagInner = wcSpan(tenant, 'wc.classic.heroTagline', 'Book with confidence');
         }
         var heroIndustry = '<p class="classic-hero-tag">' + heroTagInner + '</p>';
-        var heroHtml = '<section class="classic-hero">' +
+        var heroHtml = '<section class="classic-hero" data-bk-color-surface="hero">' +
           '<div class="classic-hero-left">' +
           heroTitleRow +
           heroIndustry +
@@ -8428,7 +8576,7 @@
             }
             return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder">' + opts.galleryPlaceholder + '</div>');
           })();
-          featuredHtml = '<section id="featured" class="tattoo-featured-outer">' +
+          featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured">' +
             '<div class="tattoo-featured-inner">' +
             '<p class="classic-section-eyebrow"><span data-edit-key="classicFeaturedWorkEyebrow">' + esc(classicFeaturedEyebrow) + '</span></p>' +
             '<h2><span data-edit-key="classicFeaturedWorkHeading">' + esc(classicFeaturedHeading) + '</span></h2>' +
@@ -8479,7 +8627,7 @@
           }
           var listBlock = '<div class="classic-service-list">' + rows + '</div>';
           if (classicSvcExpand) {
-            servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable">' +
+            servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable" data-bk-color-surface="card">' +
               '<div class="classic-services">' +
               '<details class="classic-services-details">' +
               '<summary class="classic-services-summary">' +
@@ -8492,7 +8640,7 @@
               listBlock +
               '</details></div></section>';
           } else {
-            servicesHtml = '<section id="services" class="classic-services-section">' +
+            servicesHtml = '<section id="services" class="classic-services-section" data-bk-color-surface="card">' +
               '<div class="classic-services">' +
               '<p class="classic-section-eyebrow"><span data-edit-key="classicServicesEyebrow">' + esc(classicSvcEyebrow) + '</span></p>' +
               '<h2><span data-edit-key="classicServicesHeading">' + esc(classicSvcHeading) + '</span></h2>' +
@@ -8562,7 +8710,7 @@
           ? ('<h2><span data-edit-key="classicAboutHeading">' + esc(aboutHeadingCustom) + '</span></h2>')
           : ('<h2><span data-edit-key="classicAboutHeading">' + opts.aboutHeading + '</span></h2>');
         var aboutHtml = tenantShowAboutPage(tenant)
-          ? '<section id="about" class="classic-about-section">' +
+          ? '<section id="about" class="classic-about-section" data-bk-color-surface="about">' +
           '<div class="classic-about-inner-v2">' +
           '<p class="classic-section-eyebrow"><span data-edit-key="classicAboutEyebrow">' + esc(aboutEyebrow) + '</span></p>' +
           aboutHeadingHtml +
@@ -9083,7 +9231,7 @@
         var nav = luxeChromeNavHtml(tenant, 'light');
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="' + tattooSidebarPanelInlineStyle(tenant) + '">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -9099,7 +9247,7 @@
         var nav = bladeNavHtml(tenant, base + '/home');
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -9115,7 +9263,7 @@
         var nav = tattooNavHtml(tenant);
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -9131,7 +9279,7 @@
         var bookUrl = base + '/book';
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="'+tattooSidebarPanelInlineStyle(tenant)+'">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
@@ -9184,14 +9332,15 @@
 
         var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
           '<div class="tattoo-sidebar-backdrop"></div>' +
-          '<div class="tattoo-sidebar-panel" style="' + tattooSidebarPanelInlineStyle(tenant) + '">' +
+          tattooSidebarPanelOpenTag(tenant) +
           tattooSidebarBrandHtml(tenant, base) +
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
 
+        var heroClass = 'luxe-hero' + (tenant.heroImageUrl ? '' : ' luxe-hero--empty');
         var heroStyle = tenant.heroImageUrl
           ? 'background-image:url(' + esc(tenant.heroImageUrl) + ');'
-          : 'background:linear-gradient(135deg,#3c3429 0%,#5c4f3d 50%,#2c2419 100%);';
+          : '';
         var luxeHeroLine = tenant.luxeHeroTagline
           ? String(tenant.luxeHeroTagline)
           : defaultLuxeHeroTaglineForIndustry(tenant.industry);
@@ -9199,7 +9348,7 @@
         var luxeHeroCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
-        var hero = '<section class="luxe-hero" style="' + heroStyle + '">' +
+        var hero = '<section class="' + heroClass + '" data-bk-color-surface="hero"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
           '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +
@@ -9230,7 +9379,7 @@
               imgTag +
             '</div>';
           }
-          servicesSection = '<section id="gallery" class="luxe-services-section">' +
+          servicesSection = '<section id="gallery" class="luxe-services-section" data-bk-color-surface="featured">' +
             '<p class="luxe-section-label"><span data-edit-key="luxeFeaturedWorkEyebrow">' + esc(stripEyebrow) + '</span></p>' +
             '<h2 class="luxe-section-heading"><span data-edit-key="luxeFeaturedWorkHeading">' + esc(stripHeading) + '</span></h2>' +
             '<div class="luxe-services-grid">' + serviceCards + '</div>' +
@@ -9292,7 +9441,7 @@
               listInner +
               '</section>';
           }
-          homeServicesSection = '<div class="luxe-home-services-band">' + homeServicesSection + '</div>';
+          homeServicesSection = '<div class="luxe-home-services-band" data-bk-color-surface="card">' + homeServicesSection + '</div>';
         }
 
         var promoTag = tenant.tagline || 'Book with confidence.';
@@ -9302,7 +9451,7 @@
         var promoCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-promo-cta">' + wcSpan(tenant, 'wc.luxe.promoCta', 'Book Now') + '</a>'
           : '';
-        var promo = '<section class="luxe-promo">' +
+        var promo = '<section class="luxe-promo" data-bk-color-surface="card">' +
           '<div class="luxe-promo-inner">' +
             '<h2><span data-edit-key="luxePromoHeadline">' + esc(promoHeadline) + '</span></h2>' +
             '<p><span data-edit-key="tagline">' + esc(promoTag) + '</span></p>' +
@@ -9316,7 +9465,7 @@
         var teamCards = '';
 
         var teamSection = tenantShowAboutPage(tenant)
-          ? '<section id="about" class="luxe-team-section">' +
+          ? '<section id="about" class="luxe-team-section" data-bk-color-surface="about">' +
           '<div class="luxe-team-inner">' +
             '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.aboutEyebrow', 'About Us') + '</p>' +
             '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.teamMeetPrefix', 'Meet') + ' <span data-edit-key="displayName">' + esc(displayName) + '</span></h2>' +

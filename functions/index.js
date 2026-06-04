@@ -435,8 +435,37 @@ async function finalizeFromCheckoutSession(stripe, session) {
   return result;
 }
 
-/** Find tenant by Stripe customer id and sync subscription status to Firestore. */
-async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status) {
+function planNormFromPriceId(priceId) {
+  const pid = (priceId || "").toString().trim();
+  if (!pid) return null;
+  try {
+    const map = parseStripeSubscriptionPriceIds();
+    for (const [plan, id] of Object.entries(map)) {
+      if ((id || "").toString().trim() === pid) {
+        return normalizeSubscriptionPlan(plan);
+      }
+    }
+  } catch (_) {
+    /* secrets unavailable in some contexts */
+  }
+  return null;
+}
+
+function planNormFromStripeSubscription(sub) {
+  if (!sub || typeof sub !== "object") return null;
+  const metaPlan = sub.metadata && sub.metadata.plan;
+  if (metaPlan) return normalizeSubscriptionPlan(metaPlan);
+  const item0 = sub.items && sub.items.data && sub.items.data[0];
+  if (!item0) return null;
+  const price = item0.price;
+  const priceId =
+    (price && typeof price === "object" && price.id) ||
+    (typeof price === "string" ? price : null);
+  return planNormFromPriceId(priceId);
+}
+
+/** Find tenant by Stripe customer id and sync subscription + plan to Firestore. */
+async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status, sub) {
   const cid = (stripeCustomerId || "").toString().trim();
   if (!cid) return;
   const snap = await db
@@ -447,7 +476,12 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   if (snap.empty) return;
   const tenantId = snap.docs[0].id;
   const normalized = (status || "").toString().trim().toLowerCase();
-  await sms.syncSubscriptionStatusForTenant(tenantId, normalized);
+  const patch = {};
+  if (sub && sub.id) patch.stripeSubscriptionId = sub.id;
+  patch.stripeCustomerId = cid;
+  const planNorm = planNormFromStripeSubscription(sub);
+  if (planNorm) patch.subscriptionPlan = planNorm;
+  await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
 }
 
 /**
@@ -1535,6 +1569,7 @@ exports.stripeSubscriptionWebhook = functions
     }
 
     if (
+      event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
@@ -1543,14 +1578,29 @@ exports.stripeSubscriptionWebhook = functions
         const customerId =
           typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
         if (customerId) {
-          await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status);
+          let fullSub = sub;
+          if (sub.id && (!sub.items || !sub.items.data)) {
+            try {
+              fullSub = await stripe.subscriptions.retrieve(sub.id, {
+                expand: ["items.data.price"],
+              });
+            } catch (retrieveErr) {
+              console.warn("stripeSubscriptionWebhook retrieve sub", retrieveErr.message);
+            }
+          }
+          await syncStripeSubscriptionStatusToTenant(
+            stripe,
+            customerId,
+            fullSub.status,
+            fullSub
+          );
         }
       } catch (e) {
         console.error("stripeSubscriptionWebhook subscription sync", e);
       }
     }
 
-    if (event.type === "invoice.paid") {
+    if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
       try {
         const inv = event.data.object;
         const customerId =
@@ -1558,11 +1608,13 @@ exports.stripeSubscriptionWebhook = functions
         if (customerId && inv.subscription) {
           const subId =
             typeof inv.subscription === "string" ? inv.subscription : inv.subscription.id;
-          const sub = await stripe.subscriptions.retrieve(subId);
-          await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status);
+          const sub = await stripe.subscriptions.retrieve(subId, {
+            expand: ["items.data.price"],
+          });
+          await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status, sub);
         }
       } catch (e) {
-        console.error("stripeSubscriptionWebhook invoice.paid sync", e);
+        console.error("stripeSubscriptionWebhook invoice sync", e);
       }
     }
 
@@ -1657,6 +1709,7 @@ async function getMemberAccessContext(uid) {
     tenantId,
     tenant,
     userData,
+    ownerUserData,
     isOwner,
     accessRole,
     workflow,
@@ -2532,7 +2585,7 @@ exports.createBillingPortalSession = functions
       }
       const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
       const base = billingPortalReturnBase(data);
-      const returnUrl = `${base}/account.html`;
+      const returnUrl = `${base}/account.html?billing=portal`;
 
       const session = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
@@ -2735,6 +2788,84 @@ exports.getBillingSummary = functions
 
 // ── Client texting (Twilio) ───────────────────────────────────────────────────
 
+/**
+ * Link tenant to Stripe customer/subscription (by stored ids or owner email) and sync Firestore status.
+ */
+async function linkAndSyncTenantStripeBilling(stripe, tenantId, tenant, ownerEmail) {
+  let customerId = (tenant.stripeCustomerId || "").toString().trim();
+  let subscriptionId = (tenant.stripeSubscriptionId || "").toString().trim();
+  const email = (ownerEmail || "").toString().trim().toLowerCase();
+
+  if (!customerId && email) {
+    const listed = await stripe.customers.list({ email, limit: 10 });
+    const match =
+      listed.data.find(
+        (c) => (c.email || "").toString().trim().toLowerCase() === email
+      ) || listed.data[0];
+    if (match) customerId = match.id;
+  }
+
+  if (!customerId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No Stripe customer found. Complete checkout at getbookking.com/signup.html."
+    );
+  }
+
+  let status = "trialing";
+  let planNorm = null;
+  let sub = null;
+  if (subscriptionId) {
+    try {
+      sub = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ["items.data.price"],
+      });
+      status = sub.status;
+      planNorm = planNormFromStripeSubscription(sub);
+    } catch (e) {
+      console.warn("linkAndSyncTenantStripeBilling retrieve", e.message || e);
+    }
+  }
+  if (!sub) {
+    const subs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 20,
+    });
+    const preferred =
+      subs.data.find((s) => s.status === "active") ||
+      subs.data.find((s) => s.status === "trialing") ||
+      subs.data[0];
+    if (preferred) {
+      subscriptionId = preferred.id;
+      status = preferred.status;
+      try {
+        sub = await stripe.subscriptions.retrieve(subscriptionId, {
+          expand: ["items.data.price"],
+        });
+        planNorm = planNormFromStripeSubscription(sub);
+      } catch (e) {
+        console.warn("linkAndSyncTenantStripeBilling plan", e.message || e);
+      }
+    }
+  }
+
+  const syncPatch = {
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId || undefined,
+  };
+  if (planNorm) syncPatch.subscriptionPlan = planNorm;
+  await sms.syncSubscriptionStatusForTenant(tenantId, status, syncPatch);
+
+  const refreshed = await db.collection("tenants").doc(tenantId).get();
+  return {
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId || "",
+    subscriptionStatus: status,
+    tenant: refreshed.exists ? refreshed.data() : tenant,
+  };
+}
+
 function serializeMessagingFields(tenant, ownerUserData) {
   const subscriptionStatus = sms.resolveSubscriptionStatus(tenant, ownerUserData);
   const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
@@ -2753,6 +2884,46 @@ function serializeMessagingFields(tenant, ownerUserData) {
   };
 }
 
+/** Owner: pull Stripe customer/subscription into Firestore (fixes dashboard vs app mismatch). */
+exports.syncTenantBillingFromStripe = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can sync billing."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const ownerEmail =
+      (ctx.ownerUserData && ctx.ownerUserData.email) ||
+      (ctx.userData && ctx.userData.email) ||
+      context.auth.token.email ||
+      "";
+    const linked = await linkAndSyncTenantStripeBilling(
+      stripe,
+      ctx.tenantId,
+      ctx.tenant,
+      ownerEmail
+    );
+    const messaging = serializeMessagingFields(linked.tenant, ctx.ownerUserData);
+    return {
+      ok: true,
+      stripeCustomerId: linked.stripeCustomerId,
+      stripeSubscriptionId: linked.stripeSubscriptionId,
+      subscriptionStatus: linked.subscriptionStatus,
+      ...messaging,
+    };
+  });
+
 /** Owner: end free trial now and charge subscription (unlocks client texting setup). */
 exports.startSubscriptionToday = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -2767,19 +2938,33 @@ exports.startSubscriptionToday = functions
         "Only the business owner can start the subscription."
       );
     }
-    const tenant = ctx.tenant;
-    const subId = (tenant.stripeSubscriptionId || "").toString().trim();
-    if (!subId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "No subscription found. Complete sign-up billing first."
-      );
-    }
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    let tenant = ctx.tenant;
+    let subId = (tenant.stripeSubscriptionId || "").toString().trim();
+    if (!subId) {
+      const ownerEmail =
+        (ctx.ownerUserData && ctx.ownerUserData.email) ||
+        context.auth.token.email ||
+        "";
+      const linked = await linkAndSyncTenantStripeBilling(
+        stripe,
+        ctx.tenantId,
+        tenant,
+        ownerEmail
+      );
+      tenant = linked.tenant;
+      subId = linked.stripeSubscriptionId;
+    }
+    if (!subId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No subscription found. Complete sign-up billing at getbookking.com/signup.html."
+      );
+    }
     const sub = await stripe.subscriptions.retrieve(subId);
     if (sub.status === "active") {
       await sms.syncSubscriptionStatusForTenant(ctx.tenantId, "active");
@@ -2810,15 +2995,14 @@ exports.requestTenantSmsProvisioning = functions
         "Only the business owner can enable client texting."
       );
     }
-    const ownerData = ctx.userData;
+    const ownerData = ctx.ownerUserData || ctx.userData;
     const tenant = ctx.tenant;
-    if (!sms.tenantHasPaidSubscription(tenant, ownerData)) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Client texting requires a paid subscription. Start your subscription today to unlock messaging."
-      );
+    const paidBlock = sms.paidSubscriptionBlockReason(tenant, ownerData);
+    if (paidBlock) {
+      throw new functions.https.HttpsError("failed-precondition", paidBlock);
     }
-    if (tenant.smsStatus === "active" && tenant.smsPhoneNumber) {
+    const forceReprovision = !!(data && data.forceReprovision);
+    if (tenant.smsStatus === "active" && tenant.smsPhoneNumber && !forceReprovision) {
       return {
         ok: true,
         smsStatus: "active",
@@ -2826,26 +3010,52 @@ exports.requestTenantSmsProvisioning = functions
         alreadyActive: true,
       };
     }
-    if (tenant.smsStatus === "pending") {
-      return { ok: true, smsStatus: "pending" };
-    }
     const consent = data && data.smsConsentAccepted === true;
-    if (!consent) {
+    const hadPriorConsent = !!tenant.smsConsentAt;
+    if (!consent && !(forceReprovision && hadPriorConsent)) {
       throw new functions.https.HttpsError(
         "invalid-argument",
         "Accept the client texting terms to continue."
       );
     }
-    await db.collection("tenants").doc(ctx.tenantId).set(
+    const tenantId = ctx.tenantId;
+    const wasPending = (tenant.smsStatus || "").toString() === "pending";
+    await db.collection("tenants").doc(tenantId).set(
       {
         smsEnabled: true,
         smsStatus: "pending",
-        smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
+        smsConsentAt: tenant.smsConsentAt || admin.firestore.FieldValue.serverTimestamp(),
         smsProvisionError: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
+    if (forceReprovision && wasPending) {
+      try {
+        const fresh = (await db.collection("tenants").doc(tenantId).get()).data() || tenant;
+        const result = await provisionTenantSms(tenantId, fresh);
+        return {
+          ok: true,
+          smsStatus: "active",
+          smsPhoneNumber: result.phoneNumber,
+          reprovisioned: true,
+        };
+      } catch (e) {
+        console.error("requestTenantSmsProvisioning forceReprovision", tenantId, e);
+        await db.collection("tenants").doc(tenantId).set(
+          {
+            smsStatus: "failed",
+            smsProvisionError: (e.message || String(e)).slice(0, 400),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          (e.message || String(e)).slice(0, 400)
+        );
+      }
+    }
     return { ok: true, smsStatus: "pending" };
   });
 
@@ -2881,11 +3091,19 @@ exports.sendClientSms = functions
       throw new functions.https.HttpsError("invalid-argument", "Message body is too long.");
     }
 
+    const ownerData = ctx.ownerUserData || ctx.userData;
     try {
-      const sent = await sms.sendTenantSms(tenantId, tenant, to, body, {
-        threadId: sms.threadIdFromPhone(to),
-        clientName,
-      });
+      const sent = await sms.sendTenantSms(
+        tenantId,
+        tenant,
+        to,
+        body,
+        {
+          threadId: sms.threadIdFromPhone(to),
+          clientName,
+        },
+        ownerData
+      );
       return { ok: true, sid: sent.sid, status: sent.status || "" };
     } catch (e) {
       const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
@@ -3000,11 +3218,18 @@ exports.onTenantBookingRequestSms = functions
     if (optSnap.exists) return null;
 
     try {
-      await sms.sendTenantSms(tenantId, tenant, to, body, {
-        bookingRequestId: context.params.requestId,
-        threadId: sms.threadIdFromPhone(to),
-        clientName: (after.customerName || "").toString(),
-      });
+      await sms.sendTenantSms(
+        tenantId,
+        tenant,
+        to,
+        body,
+        {
+          bookingRequestId: context.params.requestId,
+          threadId: sms.threadIdFromPhone(to),
+          clientName: (after.customerName || "").toString(),
+        },
+        ownerData
+      );
     } catch (e) {
       console.error("onTenantBookingRequestSms", context.params.requestId, e);
     }

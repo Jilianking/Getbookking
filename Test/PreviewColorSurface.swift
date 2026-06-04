@@ -10,6 +10,7 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
     case page
     case hero
     case featured
+    case gallery
     case card
     case about
 
@@ -20,6 +21,7 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
         case .page: return "Page & nav"
         case .hero: return "Hero"
         case .featured: return "Gallery strip"
+        case .gallery: return "Gallery page"
         case .card: return "Card band"
         case .about: return "About & footer"
         }
@@ -38,6 +40,7 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
         case .page: return "Top bar and page base"
         case .hero: return "Tap grey area in the hero (not blue text boxes); long-press photo"
         case .featured: return "Featured work section"
+        case .gallery: return "Full gallery page background"
         case .card: return "Card bands (services, When/Where, booking)"
         case .about: return "About and contact"
         }
@@ -56,6 +59,7 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
             }
             return viewModel.previewHeroSlotColorHex
         case .featured: return viewModel.featuredWorkBackgroundColorHex
+        case .gallery: return viewModel.galleryPageBackgroundColorHex
         case .card: return viewModel.cardSurfaceColorHex
         case .about: return viewModel.aboutSectionBackgroundColorHex
         }
@@ -75,6 +79,8 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
             }
         case .featured:
             viewModel.featuredWorkBackgroundColorHex = normalized
+        case .gallery:
+            viewModel.galleryPageBackgroundColorHex = normalized
         case .card:
             viewModel.cardSurfaceColorHex = normalized
         case .about:

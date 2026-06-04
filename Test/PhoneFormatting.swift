@@ -44,6 +44,26 @@ enum PhoneFormatting {
         return displayUS(trimmed)
     }
 
+    /// US E.164 for Twilio SMS thread ids (`+1…`); matches Cloud Functions `toE164US`.
+    static func e164US(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let hasPlus = trimmed.hasPrefix("+")
+        let d = digits(from: trimmed)
+        guard !d.isEmpty else { return nil }
+        if d.count == 10 { return "+1\(d)" }
+        if d.count == 11, d.first == "1" { return "+\(d)" }
+        if hasPlus, d.count >= 7 { return "+\(d)" }
+        if d.count >= 7 { return "+\(d)" }
+        return nil
+    }
+
+    /// Thread id for SMS collections; prefers E.164, falls back to trimmed input.
+    static func smsThreadId(_ raw: String) -> String {
+        e164US(raw) ?? raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Incremental US mask while typing (max 10 digits): (555) 123-4567
     static func formatAsYouType(_ input: String) -> String {
         let limited = String(digits(from: input).prefix(10))

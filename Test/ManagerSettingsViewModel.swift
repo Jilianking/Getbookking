@@ -6,6 +6,7 @@
 
 import Foundation
 import Combine
+import UIKit
 import FirebaseAuth
 import FirebaseFunctions
 
@@ -48,6 +49,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsCanUse: Bool = false
     @Published var smsProvisionError: String = ""
     @Published var isStartingSubscription = false
+    @Published var isSyncingBilling = false
+    @Published var isOpeningBillingPortal = false
+    /// Set before opening Stripe Customer Portal; triggers sync when app becomes active again.
+    @Published var shouldSyncBillingAfterPortal = false
     @Published var isProvisioningSms = false
 
     var smsPhoneDisplay: String {
@@ -119,6 +124,51 @@ final class ManagerSettingsViewModel: ObservableObject {
         isLoading = false
     }
 
+    func syncBillingFromStripe() async {
+        guard isTenantOwner else { return }
+        isSyncingBilling = true
+        errorMessage = nil
+        do {
+            _ = try await functions.httpsCallable("syncTenantBillingFromStripe").call([:])
+            await load(isDemoMode: false)
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isSyncingBilling = false
+    }
+
+    func openStripeBillingPortal() async {
+        guard isTenantOwner else { return }
+        isOpeningBillingPortal = true
+        errorMessage = nil
+        do {
+            let result = try await functions.httpsCallable("createBillingPortalSession").call([
+                "marketingOrigin": Constants.Hosting.marketingWebOrigin,
+            ])
+            guard let data = result.data as? [String: Any],
+                  let urlString = (data["url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !urlString.isEmpty,
+                  let url = URL(string: urlString) else {
+                throw NSError(
+                    domain: "ManagerSettings",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Stripe did not return a billing portal URL."]
+                )
+            }
+            shouldSyncBillingAfterPortal = true
+            await UIApplication.shared.open(url)
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isOpeningBillingPortal = false
+    }
+
+    func syncBillingAfterPortalIfNeeded() async {
+        guard shouldSyncBillingAfterPortal else { return }
+        shouldSyncBillingAfterPortal = false
+        await syncBillingFromStripe()
+    }
+
     func startSubscriptionToday() async {
         guard isTenantOwner else { return }
         isStartingSubscription = true
@@ -128,23 +178,27 @@ final class ManagerSettingsViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await load(isDemoMode: false)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isStartingSubscription = false
     }
 
-    func requestSmsProvisioning(consentAccepted: Bool) async {
+    func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
         guard isTenantOwner else { return }
-        guard consentAccepted else {
-            errorMessage = "Accept the client texting terms to continue."
-            return
+        if !forceReprovision {
+            guard consentAccepted else {
+                errorMessage = "Accept the client texting terms to continue."
+                return
+            }
         }
         isProvisioningSms = true
         errorMessage = nil
         do {
-            _ = try await functions.httpsCallable("requestTenantSmsProvisioning").call([
-                "smsConsentAccepted": true,
-            ])
+            var payload: [String: Any] = ["smsConsentAccepted": true]
+            if forceReprovision {
+                payload["forceReprovision"] = true
+            }
+            _ = try await functions.httpsCallable("requestTenantSmsProvisioning").call(payload)
             for _ in 0..<12 {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 await load(isDemoMode: false)
@@ -152,7 +206,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 if smsStatus == "failed" { break }
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isProvisioningSms = false
     }

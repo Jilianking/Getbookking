@@ -62,6 +62,22 @@ service cloud.firestore {
       match /bookingRequests/{requestId} {
         allow read, write: if canManageTenant(tenantId);
       }
+
+      // Client texting (written by Cloud Functions; team app reads threads + log)
+      match /smsThreads/{threadId} {
+        allow read: if canManageTenant(tenantId);
+        allow write: if false;
+      }
+
+      match /smsLog/{logId} {
+        allow read: if canManageTenant(tenantId);
+        allow write: if false;
+      }
+
+      match /smsOptOuts/{optId} {
+        allow read: if canManageTenant(tenantId);
+        allow write: if false;
+      }
     }
   }
 }

@@ -482,7 +482,7 @@ struct PreviewQuickEditChrome: View {
 
     private func needsFullBandPass(_ surface: PreviewColorSurface) -> Bool {
         switch surface {
-        case .card, .featured, .about: return true
+        case .card, .featured, .gallery, .about: return true
         case .page, .hero: return false
         }
     }

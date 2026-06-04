@@ -240,17 +240,13 @@ class FirebaseService: ObservableObject {
         return tenantId
     }
 
-    func fetchAllThreads() async throws -> [String] {
+    func fetchAllThreads() async throws -> [SmsThreadSummary] {
         let tenantId = try await currentTenantId()
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("smsThreads")
             .order(by: "lastMessageAt", descending: true)
             .getDocuments()
-        return snapshot.documents.compactMap { doc -> String? in
-            let data = doc.data()
-            let threadId = (data["threadId"] as? String) ?? doc.documentID
-            return threadId.isEmpty ? nil : threadId
-        }
+        return snapshot.documents.compactMap { SmsThreadSummary.fromFirestore(document: $0) }
     }
 
     private func mapSmsLogDocument(_ doc: QueryDocumentSnapshot, threadId: String) -> Message {
@@ -275,7 +271,7 @@ class FirebaseService: ObservableObject {
     }
 
     func startThreadsListener(
-        onUpdate: @escaping ([String]) -> Void,
+        onUpdate: @escaping ([SmsThreadSummary]) -> Void,
         onError: @escaping (String) -> Void
     ) {
         Task {
@@ -294,12 +290,10 @@ class FirebaseService: ObservableObject {
                             onUpdate([])
                             return
                         }
-                        let threadIds = snapshot.documents.compactMap { doc -> String? in
-                            let data = doc.data()
-                            let threadId = (data["threadId"] as? String) ?? doc.documentID
-                            return threadId.isEmpty ? nil : threadId
+                        let summaries = snapshot.documents.compactMap {
+                            SmsThreadSummary.fromFirestore(document: $0)
                         }
-                        onUpdate(threadIds)
+                        onUpdate(summaries)
                     }
             } catch {
                 onError(error.localizedDescription)
@@ -320,10 +314,11 @@ class FirebaseService: ObservableObject {
         Task {
             do {
                 let tenantId = try await currentTenantId()
+                let queryThreadId = PhoneFormatting.smsThreadId(threadId)
                 stopMessagesListener(threadId: threadId)
                 smsMessageListeners[threadId] = db.collection("tenants").document(tenantId)
                     .collection("smsLog")
-                    .whereField("threadId", isEqualTo: threadId)
+                    .whereField("threadId", isEqualTo: queryThreadId)
                     .order(by: "createdAt", descending: false)
                     .addSnapshotListener { snapshot, error in
                         if let error {
@@ -357,16 +352,17 @@ class FirebaseService: ObservableObject {
 
     func fetchMessages(threadId: String) async throws -> [Message] {
         let tenantId = try await currentTenantId()
+        let queryThreadId = PhoneFormatting.smsThreadId(threadId)
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("smsLog")
-            .whereField("threadId", isEqualTo: threadId)
+            .whereField("threadId", isEqualTo: queryThreadId)
             .order(by: "createdAt", descending: false)
             .getDocuments()
-        return snapshot.documents.map { mapSmsLogDocument($0, threadId: threadId) }
+        return snapshot.documents.map { mapSmsLogDocument($0, threadId: queryThreadId) }
     }
 
     func sendMessage(_ message: Message) async throws {
-        let toPhone = PhoneFormatting.normalizedForStorage(message.clientId) ?? message.clientId
+        let toPhone = PhoneFormatting.e164US(message.clientId) ?? message.clientId
         let payload: [String: Any] = [
             "to": toPhone,
             "body": message.content,
@@ -637,7 +633,7 @@ class FirebaseService: ObservableObject {
             "business": business,
             "industry": template.rawValue,
             "subscriptionPlan": subscriptionPlan,
-            "subscriptionStatus": "active",
+            "subscriptionStatus": "trialing",
             "availability": [
                 "timeSlots": [["open": 9, "close": 18, "type": "open_booking"]],
                 "daysOpen": ProviderAvailability.default.daysOpen,
@@ -904,6 +900,7 @@ class FirebaseService: ObservableObject {
             "industry": industry,
             "ownerUid": ownerUid,
             "subscriptionPlan": subscriptionPlan,
+            "subscriptionStatus": "trialing",
             "isActive": true,
             "bookingModeDefault": "request",
             "requireApprovalForSlotBookings": true,

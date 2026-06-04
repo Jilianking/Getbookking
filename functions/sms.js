@@ -1,13 +1,18 @@
 /**
- * Twilio client texting (ISV subaccount per tenant, opt-in, paid subscription only).
+ * Twilio client texting (master account + shared 10DLC messaging service, opt-in, paid subscription only).
  */
 
 const admin = require("firebase-admin");
 const functions = require("firebase-functions");
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 
 const twilioAccountSid = defineSecret("TWILIO_ACCOUNT_SID");
 const twilioAuthToken = defineSecret("TWILIO_AUTH_TOKEN");
+/** Approved 10DLC messaging service (MG…). Set in functions/.env.<projectId> or Firebase params. */
+const masterTwilioMessagingServiceSid = defineString("MASTER_TWILIO_MESSAGING_SERVICE_SID", {
+  default: "",
+  description: "Twilio Messaging Service SID for the approved US A2P 10DLC campaign",
+});
 const MAX_TENANT_OUTBOUND_SMS = 1000;
 
 function getDb() {
@@ -36,9 +41,29 @@ function resolveSubscriptionStatus(tenant, userData) {
 
 /** Paid subscription: charged (active). Free trial (trialing) does not qualify. */
 function tenantHasPaidSubscription(tenant, userData) {
+  return !paidSubscriptionBlockReason(tenant, userData);
+}
+
+/** Billing-only block reason (provisioning / enable texting). */
+function paidSubscriptionBlockReason(tenant, userData) {
   const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) return false;
-  return resolveSubscriptionStatus(tenant, userData) === "active";
+  if (!hasStripe) {
+    return (
+      "Billing is not linked to Stripe. Finish sign-up at getbookking.com/signup.html " +
+      "(complete checkout), or sync billing from Team → Notifications."
+    );
+  }
+  const status = resolveSubscriptionStatus(tenant, userData);
+  if (status === "trialing") {
+    return (
+      "Client texting starts after your paid subscription begins (not during the free trial). " +
+      "Use Start subscription today in Team → Notifications."
+    );
+  }
+  if (status !== "active") {
+    return `Subscription status is "${status || "unknown"}". Update billing in account settings.`;
+  }
+  return null;
 }
 
 function tenantIsTrialing(tenant, userData) {
@@ -48,15 +73,35 @@ function tenantIsTrialing(tenant, userData) {
 }
 
 function tenantCanUseSms(tenant, userData, managerPermissions) {
-  const billingUser =
-    userData || { subscriptionStatus: (tenant && tenant.subscriptionStatus) || "" };
-  if (!tenantHasPaidSubscription(tenant, billingUser)) return false;
-  if (tenant.smsEnabled !== true) return false;
-  if ((tenant.smsStatus || "").toString() !== "active") return false;
-  if (!(tenant.smsPhoneNumber || "").toString().trim()) return false;
+  return !smsEligibilityBlockReason(tenant, userData, managerPermissions);
+}
+
+/** Human-readable reason when SMS is blocked; null when sending is allowed. */
+function smsEligibilityBlockReason(tenant, userData, managerPermissions) {
+  const billingBlock = paidSubscriptionBlockReason(tenant, userData);
+  if (billingBlock) return billingBlock;
+  if (tenant.smsEnabled !== true) {
+    return "Enable client texting under Team → Notifications.";
+  }
+  const smsStatus = (tenant.smsStatus || "off").toString();
+  if (smsStatus === "pending") {
+    return "Your texting number is still being set up. Try again in a minute.";
+  }
+  if (smsStatus === "failed") {
+    const err = (tenant.smsProvisionError || "").toString().trim();
+    return err || "Texting setup failed. Try again under Team → Notifications.";
+  }
+  if (smsStatus !== "active") {
+    return "Enable client texting under Team → Notifications.";
+  }
+  if (!(tenant.smsPhoneNumber || "").toString().trim()) {
+    return "No client texting number on file. Enable client texting under Team → Notifications.";
+  }
   const perms = managerPermissions || {};
-  if (perms.sendClientNotifications === false) return false;
-  return true;
+  if (perms.sendClientNotifications === false) {
+    return "Manager policy has client texting notifications turned off.";
+  }
+  return null;
 }
 
 function getMasterTwilioClient() {
@@ -70,6 +115,18 @@ function getMasterTwilioClient() {
   }
   // eslint-disable-next-line global-require
   return require("twilio")(sid, token);
+}
+
+function getMasterMessagingServiceSid() {
+  const sid = (masterTwilioMessagingServiceSid.value() || "").toString().trim();
+  if (!sid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Twilio messaging service is not configured. Set MASTER_TWILIO_MESSAGING_SERVICE_SID " +
+        "(MG… for your approved 10DLC campaign) in Secret Manager or functions/.env.<projectId>."
+    );
+  }
+  return sid;
 }
 
 function inboundWebhookUrl() {
@@ -122,36 +179,49 @@ function pickAreaCode(tenant) {
   return "415";
 }
 
-async function getSubaccountClient(master, subaccountSid) {
-  if (!subaccountSid) return master;
-  const sub = await master.api.accounts(subaccountSid).fetch();
-  // eslint-disable-next-line global-require
-  return require("twilio")(sub.sid, sub.authToken);
+async function attachNumberToMasterMessagingService(master, messagingServiceSid, phoneNumberSid) {
+  try {
+    await master.messaging.v1
+      .services(messagingServiceSid)
+      .phoneNumbers.create({ phoneNumberSid });
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (!msg.includes("already")) {
+      console.warn("messaging service phone attach", msg);
+      throw e;
+    }
+  }
 }
 
-/**
- * Provision Twilio subaccount + local SMS number + messaging service for a tenant.
- */
-async function provisionTenantSms(tenantId, tenant) {
-  const master = getMasterTwilioClient();
-  const businessName = ((tenant.businessName || tenant.displayName || "Bookking") + "")
-    .toString()
-    .slice(0, 64);
-  const areaCode = pickAreaCode(tenant);
-  const webhook = inboundWebhookUrl();
-
-  let subaccountSid = (tenant.twilioSubaccountSid || "").toString().trim();
-  let subClient = master;
-
-  if (!subaccountSid) {
-    const created = await master.api.accounts.create({ friendlyName: businessName });
-    subaccountSid = created.sid;
-    subClient = require("twilio")(created.sid, created.authToken);
-  } else {
-    subClient = await getSubaccountClient(master, subaccountSid);
+async function ensureMasterIncomingNumber(master, tenant, webhook) {
+  const hadSubaccount = !!(tenant.twilioSubaccountSid || "").toString().trim();
+  if (hadSubaccount) {
+    return null;
   }
+  const existingSid = (tenant.smsPhoneNumberSid || "").toString().trim();
+  if (existingSid) {
+    try {
+      const resource = await master.incomingPhoneNumbers(existingSid).fetch();
+      if (webhook) {
+        await master.incomingPhoneNumbers(existingSid).update({
+          smsUrl: webhook,
+          smsMethod: "POST",
+        });
+      }
+      return resource;
+    } catch (e) {
+      console.warn(
+        "ensureMasterIncomingNumber: existing sid not on master, buying new",
+        existingSid,
+        e.message || e
+      );
+    }
+  }
+  return null;
+}
 
-  const available = await master.availablePhoneNumbers("US").local.list({
+async function buyMasterLocalNumber(master, areaCode) {
+  let available = await master.availablePhoneNumbers("US").local.list({
     areaCode,
     smsEnabled: true,
     limit: 5,
@@ -164,39 +234,45 @@ async function provisionTenantSms(tenantId, tenant) {
     if (!fallback || fallback.length === 0) {
       throw new Error("No SMS-capable phone numbers available from Twilio.");
     }
-    available.push(...fallback);
+    available = fallback;
   }
-
   const picked = available[0].phoneNumber;
-  const numberResource = await subClient.incomingPhoneNumbers.create({
-    phoneNumber: picked,
-    smsUrl: webhook || undefined,
-    smsMethod: "POST",
-  });
-
-  let messagingServiceSid = (tenant.twilioMessagingServiceSid || "").toString().trim();
-  if (!messagingServiceSid) {
-    const svc = await subClient.messaging.v1.services.create({
-      friendlyName: `${businessName} SMS`.slice(0, 64),
-    });
-    messagingServiceSid = svc.sid;
+  const createOpts = { phoneNumber: picked };
+  const webhook = inboundWebhookUrl();
+  if (webhook) {
+    createOpts.smsUrl = webhook;
+    createOpts.smsMethod = "POST";
   }
+  return master.incomingPhoneNumbers.create(createOpts);
+}
 
-  try {
-    await subClient.messaging.v1
-      .services(messagingServiceSid)
-      .phoneNumbers.create({ phoneNumberSid: numberResource.sid });
-  } catch (e) {
-    if (!String(e.message || e).includes("already")) {
-      console.warn("messaging service phone attach", e.message || e);
+/**
+ * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
+ */
+async function provisionTenantSms(tenantId, tenant) {
+  const master = getMasterTwilioClient();
+  const messagingServiceSid = getMasterMessagingServiceSid();
+  const areaCode = pickAreaCode(tenant);
+  const webhook = inboundWebhookUrl();
+
+  let numberResource = await ensureMasterIncomingNumber(master, tenant, webhook);
+  if (!numberResource) {
+    numberResource = await buyMasterLocalNumber(master, areaCode);
+    if (webhook) {
+      await master.incomingPhoneNumbers(numberResource.sid).update({
+        smsUrl: webhook,
+        smsMethod: "POST",
+      });
     }
   }
+
+  await attachNumberToMasterMessagingService(master, messagingServiceSid, numberResource.sid);
 
   const e164 = numberResource.phoneNumber;
   await getDb().collection("tenants").doc(tenantId).set(
     {
-      twilioSubaccountSid: subaccountSid,
       twilioMessagingServiceSid: messagingServiceSid,
+      twilioSubaccountSid: admin.firestore.FieldValue.delete(),
       smsPhoneNumber: e164,
       smsPhoneNumberSid: numberResource.sid,
       smsAreaCode: areaCode,
@@ -209,13 +285,17 @@ async function provisionTenantSms(tenantId, tenant) {
     { merge: true }
   );
 
-  return { phoneNumber: e164, subaccountSid, messagingServiceSid };
+  return { phoneNumber: e164, messagingServiceSid };
 }
 
-async function sendTenantSms(tenantId, tenant, toE164, body, meta) {
-  const billingUser = { subscriptionStatus: (tenant && tenant.subscriptionStatus) || "" };
-  if (!tenantCanUseSms(tenant, billingUser, tenant.managerPermissions)) {
-    throw new Error("Tenant cannot send SMS (billing, opt-in, or permissions).");
+async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData) {
+  const blockReason = smsEligibilityBlockReason(
+    tenant,
+    ownerUserData,
+    tenant.managerPermissions
+  );
+  if (blockReason) {
+    throw new Error(blockReason);
   }
   const optId = toE164.replace(/\W/g, "_");
   const optSnap = await getDb()
@@ -228,19 +308,35 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta) {
     throw new Error("Recipient opted out of SMS.");
   }
   const master = getMasterTwilioClient();
-  const subSid = (tenant.twilioSubaccountSid || "").toString().trim();
-  const client = subSid ? await getSubaccountClient(master, subSid) : master;
   const from = (tenant.smsPhoneNumber || "").toString().trim();
   if (!from) throw new Error("No SMS phone number on tenant.");
+  const phoneSid = (tenant.smsPhoneNumberSid || "").toString().trim();
+  if (phoneSid) {
+    try {
+      await master.incomingPhoneNumbers(phoneSid).fetch();
+    } catch (e) {
+      throw new Error(
+        "Your texting number must be refreshed for delivery. " +
+          "In Team → Notifications, tap Refresh texting number, then try again."
+      );
+    }
+  } else if ((tenant.twilioSubaccountSid || "").toString().trim()) {
+    throw new Error(
+      "Your texting number must be refreshed for delivery. " +
+        "In Team → Notifications, tap Refresh texting number, then try again."
+    );
+  }
   const outboundCount = Number(tenant.smsOutboundCount || 0);
   if (outboundCount >= MAX_TENANT_OUTBOUND_SMS) {
     throw new Error("Outbound SMS limit reached (1,000 total).");
   }
 
-  const msg = await client.messages.create({
-    from,
+  const messagingServiceSid = getMasterMessagingServiceSid();
+  const msg = await master.messages.create({
     to: toE164,
     body: body.slice(0, 1600),
+    messagingServiceSid,
+    from,
   });
 
   const logRef = getDb()
@@ -263,6 +359,8 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta) {
   await getDb().collection("tenants").doc(tenantId).set(
     {
       smsOutboundCount: admin.firestore.FieldValue.increment(1),
+      twilioMessagingServiceSid: messagingServiceSid,
+      twilioSubaccountSid: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -319,28 +417,27 @@ async function suspendTenantSms(tenantId, reason) {
   );
 }
 
-async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus) {
+async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch) {
   const status = (subscriptionStatus || "").toString().trim().toLowerCase();
+  const extra = billingPatch && typeof billingPatch === "object" ? billingPatch : {};
   const tenantRef = getDb().collection("tenants").doc(tenantId);
   const tenantSnap = await tenantRef.get();
   if (!tenantSnap.exists) return;
   const tenant = tenantSnap.data();
   const ownerUid = tenant.ownerUid;
+  const tenantFields = {
+    subscriptionStatus: status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (extra.stripeCustomerId) tenantFields.stripeCustomerId = extra.stripeCustomerId;
+  if (extra.stripeSubscriptionId) tenantFields.stripeSubscriptionId = extra.stripeSubscriptionId;
+  if (extra.subscriptionPlan) tenantFields.subscriptionPlan = extra.subscriptionPlan;
   const batch = getDb().batch();
-  batch.set(
-    tenantRef,
-    {
-      subscriptionStatus: status,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  batch.set(tenantRef, tenantFields, { merge: true });
   if (ownerUid) {
-    batch.set(
-      getDb().collection("users").doc(ownerUid),
-      { subscriptionStatus: status },
-      { merge: true }
-    );
+    const userFields = { subscriptionStatus: status };
+    if (extra.subscriptionPlan) userFields.subscriptionPlan = extra.subscriptionPlan;
+    batch.set(getDb().collection("users").doc(ownerUid), userFields, { merge: true });
   }
   await batch.commit();
 
@@ -366,10 +463,13 @@ function extractCustomerPhone(booking) {
 module.exports = {
   twilioAccountSid,
   twilioAuthToken,
+  masterTwilioMessagingServiceSid,
   toE164US,
   tenantHasPaidSubscription,
   tenantIsTrialing,
   tenantCanUseSms,
+  paidSubscriptionBlockReason,
+  smsEligibilityBlockReason,
   resolveSubscriptionStatus,
   provisionTenantSms,
   sendTenantSms,

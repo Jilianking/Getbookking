@@ -357,9 +357,10 @@ struct WebViewRepresentable: UIViewRepresentable {
                 'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;}' +
                 'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected],img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
                 'button.bk-color-band-hit,button.bk-hero-band-hit{outline:none!important;box-shadow:none!important;cursor:pointer!important;}' +
-                '.blade-page .blade-info-half[data-bk-band-tappable],.blade-page .blade-section#services[data-bk-color-surface="card"],.blade-page .blade-testimonials[data-bk-color-surface="card"]{position:relative!important;}' +
-                '.blade-page .blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
-                '.blade-page .blade-band-content [data-edit-key],.blade-page .blade-band-content a,.blade-page .blade-band-content button,.blade-page .blade-band-content [role="button"]{pointer-events:auto!important;}';
+                '[data-bk-band-tappable]{position:relative!important;}' +
+                '.bk-band-content,.blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
+                '.bk-band-content [data-edit-key],.bk-band-content a,.bk-band-content button,.bk-band-content [role="button"],' +
+                '.blade-band-content [data-edit-key],.blade-band-content a,.blade-band-content button,.blade-band-content [role="button"]{pointer-events:auto!important;}';
               document.head.appendChild(sheet);
               var touchMoveSlopPx = 20;
               function isHeroImageQuickEditTarget(el) {
@@ -652,12 +653,13 @@ struct WebViewRepresentable: UIViewRepresentable {
                     openColorSurface('hero', hit.el);
                   }, 380);
                 } else {
-                  var cardBandEl = touchTarget && touchTarget.closest('[data-bk-color-surface="card"]');
-                  if (cardBandEl && touchTarget.closest('[data-bk-band-tappable],#services,.blade-testimonials')) {
+                  var bandEl = touchTarget && touchTarget.closest('[data-bk-color-surface]');
+                  if (bandEl && bandEl.tagName !== 'NAV' && touchTarget.closest('[data-bk-band-tappable],.booking-page-band,.booking-card,.gallery-page-band')) {
                     colorLongPressTimer = setTimeout(function() {
                       colorLongPressFired = true;
                       if (inlineEl) finishActiveInlineNoSave();
-                      openColorSurface('card', cardBandEl);
+                      var sid = bandEl.getAttribute('data-bk-color-surface');
+                      if (sid) openColorSurface(sid, bandEl);
                     }, 420);
                   }
                 }
@@ -752,82 +754,49 @@ struct WebViewRepresentable: UIViewRepresentable {
                   dirty = {};
                 }
               };
-              function upgradeBladeBandTaps() {
-                if (!document.querySelector || !document.querySelector('.blade-page')) return;
+              function ensureColorBandHitAndWrap(el) {
+                if (!el || el.tagName === 'NAV') return;
+                if (!el.getAttribute('data-bk-band-tappable')) el.setAttribute('data-bk-band-tappable', '');
+                var hasHit = false;
+                for (var i = 0; i < el.children.length; i++) {
+                  if (el.children[i].classList && el.children[i].classList.contains('bk-color-band-hit')) { hasHit = true; break; }
+                }
+                if (!hasHit) {
+                  var btn = document.createElement('button');
+                  btn.type = 'button';
+                  btn.className = 'bk-color-band-hit';
+                  btn.setAttribute('aria-label', 'Edit section background');
+                  el.insertBefore(btn, el.firstChild);
+                }
+                if (!el.querySelector('.bk-band-content') && !el.querySelector('.blade-band-content')) {
+                  var wrap = document.createElement('div');
+                  wrap.className = 'bk-band-content';
+                  var move = [];
+                  for (var j = 0; j < el.children.length; j++) {
+                    var ch = el.children[j];
+                    if (ch.classList && ch.classList.contains('bk-color-band-hit')) continue;
+                    move.push(ch);
+                  }
+                  for (var k = 0; k < move.length; k++) wrap.appendChild(move[k]);
+                  el.appendChild(wrap);
+                }
+              }
+              function upgradeColorBandTaps() {
+                if (!document.querySelectorAll) return;
                 [].forEach.call(document.querySelectorAll('.blade-page .blade-info-section'), function(sec) {
                   sec.removeAttribute('data-bk-color-surface');
-                  var secHit = sec.querySelector('.bk-color-band-hit');
-                  if (secHit && secHit.parentNode === sec) secHit.parentNode.removeChild(secHit);
+                  var secHit = sec.querySelector(':scope > .bk-color-band-hit');
+                  if (secHit) secHit.parentNode.removeChild(secHit);
                 });
                 [].forEach.call(document.querySelectorAll('.blade-page .blade-info-half'), function(half) {
                   if (!half.getAttribute('data-bk-color-surface')) half.setAttribute('data-bk-color-surface', 'card');
-                  if (!half.getAttribute('data-bk-band-tappable')) half.setAttribute('data-bk-band-tappable', '');
-                  var hasHit = false;
-                  for (var i = 0; i < half.children.length; i++) {
-                    if (half.children[i].classList && half.children[i].classList.contains('bk-color-band-hit')) { hasHit = true; break; }
-                  }
-                  if (!hasHit) {
-                    var btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'bk-color-band-hit';
-                    btn.setAttribute('aria-label', 'Edit section background');
-                    half.insertBefore(btn, half.firstChild);
-                  }
-                  if (!half.querySelector('.blade-band-content')) {
-                    var wrap = document.createElement('div');
-                    wrap.className = 'blade-band-content';
-                    var move = [];
-                    for (var j = 0; j < half.children.length; j++) {
-                      var ch = half.children[j];
-                      if (ch.classList && ch.classList.contains('bk-color-band-hit')) continue;
-                      move.push(ch);
-                    }
-                    for (var k = 0; k < move.length; k++) wrap.appendChild(move[k]);
-                    half.appendChild(wrap);
-                  }
+                  ensureColorBandHitAndWrap(half);
                 });
-                var services = document.querySelector('.blade-page #services[data-bk-color-surface="card"]');
-                if (services && !services.querySelector('.bk-color-band-hit')) {
-                  var sbtn = document.createElement('button');
-                  sbtn.type = 'button';
-                  sbtn.className = 'bk-color-band-hit';
-                  sbtn.setAttribute('aria-label', 'Edit section background');
-                  services.insertBefore(sbtn, services.firstChild);
-                }
-                if (services && !services.querySelector('.blade-band-content')) {
-                  var swrap = document.createElement('div');
-                  swrap.className = 'blade-band-content';
-                  var smove = [];
-                  for (var si = 0; si < services.children.length; si++) {
-                    var sch = services.children[si];
-                    if (sch.classList && sch.classList.contains('bk-color-band-hit')) continue;
-                    smove.push(sch);
-                  }
-                  for (var sj = 0; sj < smove.length; sj++) swrap.appendChild(smove[sj]);
-                  services.appendChild(swrap);
-                }
-                var reviews = document.querySelector('.blade-page .blade-testimonials[data-bk-color-surface="card"]');
-                if (reviews && !reviews.querySelector('.bk-color-band-hit')) {
-                  var rbtn = document.createElement('button');
-                  rbtn.type = 'button';
-                  rbtn.className = 'bk-color-band-hit';
-                  rbtn.setAttribute('aria-label', 'Edit section background');
-                  reviews.insertBefore(rbtn, reviews.firstChild);
-                }
-                if (reviews && !reviews.querySelector('.blade-band-content')) {
-                  var rwrap = document.createElement('div');
-                  rwrap.className = 'blade-band-content';
-                  var rmove = [];
-                  for (var ri = 0; ri < reviews.children.length; ri++) {
-                    var rch = reviews.children[ri];
-                    if (rch.classList && rch.classList.contains('bk-color-band-hit')) continue;
-                    rmove.push(rch);
-                  }
-                  for (var rk = 0; rk < rmove.length; rk++) rwrap.appendChild(rmove[rk]);
-                  reviews.appendChild(rwrap);
-                }
+                [].forEach.call(document.querySelectorAll('[data-bk-color-surface][data-bk-band-tappable]'), function(el) {
+                  ensureColorBandHitAndWrap(el);
+                });
               }
-              upgradeBladeBandTaps();
+              upgradeColorBandTaps();
               window.__bkQuickEditInstalled = true;
               window.__bkQuickEditCleanup = function() {
                 finishActiveInlineNoSave();

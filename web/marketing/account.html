@@ -177,12 +177,30 @@
 
     var params = new URLSearchParams(window.location.search);
     var stripeParam = params.get('stripe');
+    var billingParam = params.get('billing');
     if (stripeParam === 'success') {
       showPanel('stripeSuccessPanel');
     } else if (stripeParam === 'refresh') {
       showPanel('stripeRefreshPanel');
     } else {
       showPanel('accountDefaultPanel');
+    }
+
+    function syncBillingAfterPortalReturn() {
+      var statusEl = document.getElementById('billingStatus');
+      var errEl = document.getElementById('billingError');
+      if (statusEl) statusEl.textContent = 'Syncing billing from Stripe…';
+      if (errEl) errEl.classList.add('hidden');
+      return fns.httpsCallable('syncTenantBillingFromStripe')({}).then(function() {
+        history.replaceState({}, '', 'account.html');
+        loadBilling();
+      }).catch(function(err) {
+        if (errEl) {
+          errEl.textContent = (err && err.message) ? err.message : String(err);
+          errEl.classList.remove('hidden');
+        }
+        loadBilling();
+      });
     }
 
     document.getElementById('signOutLink').addEventListener('click', function(ev) {
@@ -272,6 +290,10 @@
       if (emailEl && user.email) {
         emailEl.textContent = 'Signed in as ' + user.email;
         emailEl.classList.remove('hidden');
+      }
+      if (billingParam === 'portal') {
+        syncBillingAfterPortalReturn();
+        return;
       }
       if (stripeParam !== 'success' && stripeParam !== 'refresh') {
         loadBilling();

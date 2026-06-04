@@ -8,8 +8,20 @@ struct MessagesView: View {
     @State private var composePrefillPhone = ""
     @State private var composePrefillName = ""
     @State private var searchText = ""
+    @State private var showErrorAlert = false
     var drawerState: DrawerState
     let sectionTitle: String
+
+    private var filteredSummaries: [SmsThreadSummary] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return viewModel.threadSummaries }
+        let qDigits = PhoneFormatting.digits(from: searchText)
+        return viewModel.threadSummaries.filter { summary in
+            summary.clientName.lowercased().contains(q)
+                || summary.lastMessageBody.lowercased().contains(q)
+                || (!qDigits.isEmpty && PhoneFormatting.digits(from: summary.threadId).contains(qDigits))
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -29,14 +41,31 @@ struct MessagesView: View {
                     .padding(.horizontal)
                     .padding(.vertical, 8)
 
-                    // Threads List
-                    List(viewModel.threads, id: \.self) { threadId in
-                        ThreadRow(threadId: threadId, viewModel: viewModel)
-                            .onTapGesture {
-                                selectedThreadId = threadId
+                    Group {
+                        if filteredSummaries.isEmpty {
+                            ContentUnavailableView {
+                                Label("No messages yet", systemImage: "message")
+                            } description: {
+                                Text(searchText.isEmpty
+                                    ? "Tap the compose button to text a client."
+                                    : "No conversations match your search.")
+                            } actions: {
+                                if searchText.isEmpty {
+                                    Button("New message") { showingCompose = true }
+                                }
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            List(filteredSummaries) { summary in
+                                ThreadRow(summary: summary, viewModel: viewModel)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedThreadId = summary.threadId
+                                    }
+                            }
+                            .listStyle(.plain)
+                        }
                     }
-                    .listStyle(.plain)
                     .refreshable {
                         await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
                     }
@@ -63,8 +92,21 @@ struct MessagesView: View {
                     viewModel: viewModel,
                     drawerState: drawerState,
                     prefillPhone: composePrefillPhone,
-                    prefillClientName: composePrefillName
+                    prefillClientName: composePrefillName,
+                    onSent: { threadId in
+                        selectedThreadId = threadId
+                    }
                 )
+            }
+            .onChange(of: viewModel.lastError) { _, err in
+                showErrorAlert = err != nil
+            }
+            .alert("Message", isPresented: $showErrorAlert) {
+                Button("OK", role: .cancel) {
+                    viewModel.lastError = nil
+                }
+            } message: {
+                Text(viewModel.lastError ?? "")
             }
             .onChange(of: drawerState.messagesShouldOpenCompose) { _, shouldOpen in
                 guard shouldOpen else { return }
@@ -97,10 +139,8 @@ struct MessagesView: View {
 }
 
 struct ThreadRow: View {
-    let threadId: String
+    let summary: SmsThreadSummary
     @ObservedObject var viewModel: MessagesViewModel
-    @State private var lastMessage: Message?
-    @State private var clientName: String = ""
 
     var body: some View {
         HStack(spacing: 12) {
@@ -108,44 +148,28 @@ struct ThreadRow: View {
                 .fill(Color.purple.opacity(0.8))
                 .frame(width: 44, height: 44)
                 .overlay(
-                    Text(clientName.prefix(1).uppercased())
+                    Text(summary.clientName.prefix(1).uppercased())
                         .font(.headline)
                         .foregroundColor(.white)
                 )
             VStack(alignment: .leading, spacing: 4) {
-                Text(clientName.isEmpty ? "Loading..." : clientName)
+                Text(summary.clientName)
                     .font(.system(size: 16, weight: .semibold))
-                if let message = lastMessage {
-                    Text(message.content)
+                if !summary.lastMessageBody.isEmpty {
+                    Text(summary.lastMessageBody)
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
             }
             Spacer()
-            if let message = lastMessage {
-                Text(message.createdAt, style: .time)
+            if let lastAt = summary.lastMessageAt {
+                Text(lastAt, style: .time)
                     .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Button(action: {}) {
-                Image(systemName: "ellipsis")
-                    .font(.body)
                     .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 8)
-        .onAppear {
-            loadThreadInfo()
-        }
-    }
-
-    private func loadThreadInfo() {
-        Task {
-            let msgs = await viewModel.loadMessages(for: threadId)
-            lastMessage = msgs.last
-            clientName = lastMessage?.clientName ?? "Unknown"
-        }
     }
 }
 
@@ -158,6 +182,7 @@ struct MessageThreadView: View {
     @State private var isLoading = false
     @State private var clientName = "Customer"
     @State private var clientPhone = ""
+    @State private var showThreadError = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -180,9 +205,6 @@ struct MessageThreadView: View {
                     }
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
             .padding()
             .background(Color(.systemBackground))
@@ -207,28 +229,35 @@ struct MessageThreadView: View {
                 }
             }
 
-            // Input: lightning, paperclip, field, send
             HStack(spacing: 12) {
-                Button(action: {}) {
-                    Image(systemName: "bolt")
-                        .foregroundColor(.secondary)
-                }
-                Button(action: {}) {
-                    Image(systemName: "paperclip")
-                        .foregroundColor(.secondary)
-                }
                 TextField("Type a message...", text: $newMessage)
                     .textFieldStyle(.roundedBorder)
                 Button(action: sendMessage) {
-                    Image(systemName: "paperplane.fill")
-                        .foregroundColor(.blue)
+                    if isLoading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                            .foregroundColor(newMessage.isEmpty ? .secondary : .blue)
+                    }
                 }
-                .disabled(newMessage.isEmpty || isLoading)
+                .disabled(newMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
             }
             .padding()
         }
         .task {
+            if let summary = viewModel.summary(for: threadId) {
+                clientName = summary.clientName
+                clientPhone = PhoneFormatting.displayUS(summary.threadId)
+            }
             await loadMessages()
+        }
+        .onChange(of: viewModel.lastError) { _, err in
+            showThreadError = err != nil
+        }
+        .alert("Could not send", isPresented: $showThreadError) {
+            Button("OK", role: .cancel) { viewModel.lastError = nil }
+        } message: {
+            Text(viewModel.lastError ?? "")
         }
         .onAppear {
             startListening()
@@ -253,12 +282,13 @@ struct MessageThreadView: View {
     }
 
     private func sendMessage() {
-        guard !newMessage.isEmpty else { return }
+        let body = newMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return }
         isLoading = true
         Task {
-            await viewModel.sendMessage(threadId: threadId, content: newMessage)
+            let ok = await viewModel.sendMessage(threadId: threadId, content: body)
             await MainActor.run {
-                newMessage = ""
+                if ok { newMessage = "" }
                 isLoading = false
             }
         }
@@ -295,7 +325,9 @@ struct ComposeMessageView: View {
     var drawerState: DrawerState
     var prefillPhone: String = ""
     var prefillClientName: String = ""
+    var onSent: ((String) -> Void)?
     @Environment(\.dismiss) var dismiss
+    @State private var showSendError = false
     @State private var clientPhone = ""
     @State private var message = ""
     @State private var selectedClientName = ""
@@ -409,26 +441,24 @@ struct ComposeMessageView: View {
                 Spacer()
 
                 HStack(spacing: 10) {
-                    Button(action: {}) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .regular))
-                            .foregroundColor(.white.opacity(0.9))
-                            .frame(width: 40, height: 40)
-                            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                    }
-
                     HStack(spacing: 8) {
                         TextField("iMessage", text: $message, axis: .vertical)
                             .focused($messageFieldFocused)
                             .foregroundColor(.white)
                             .lineLimit(1...4)
                         Button(action: {
-                            if canSend { sendMessage() }
+                            if canSend && !viewModel.isSending { sendMessage() }
                         }) {
-                            Image(systemName: canSend ? "arrow.up.circle.fill" : "mic")
-                                .font(.system(size: 21, weight: .regular))
-                                .foregroundColor(canSend ? .blue : .white.opacity(0.55))
+                            if viewModel.isSending {
+                                ProgressView()
+                                    .tint(.blue)
+                            } else {
+                                Image(systemName: canSend ? "arrow.up.circle.fill" : "arrow.up.circle")
+                                    .font(.system(size: 21, weight: .regular))
+                                    .foregroundColor(canSend ? .blue : .white.opacity(0.55))
+                            }
                         }
+                        .disabled(!canSend || viewModel.isSending)
                     }
                     .padding(.horizontal, 14)
                     .frame(minHeight: 42)
@@ -452,6 +482,14 @@ struct ComposeMessageView: View {
             Task {
                 await viewModel.loadComposeClients()
             }
+        }
+        .onChange(of: viewModel.lastError) { _, err in
+            showSendError = err != nil
+        }
+        .alert("Could not send", isPresented: $showSendError) {
+            Button("OK", role: .cancel) { viewModel.lastError = nil }
+        } message: {
+            Text(viewModel.lastError ?? "")
         }
         .sheet(isPresented: $showingClientPicker) {
             ComposeClientPickerSheet(
@@ -486,10 +524,7 @@ struct ComposeMessageView: View {
     }
 
     private var recipientPhoneForSend: String? {
-        let normalized = PhoneFormatting.normalizedForStorage(clientPhone)
-        guard let normalized else { return nil }
-        let digitCount = PhoneFormatting.digits(from: normalized).count
-        return digitCount >= 10 ? normalized : nil
+        PhoneFormatting.e164US(clientPhone)
     }
 
     private var canSend: Bool {
@@ -498,24 +533,28 @@ struct ComposeMessageView: View {
     }
 
     private func sendMessage() {
-        guard let trimmedPhone = recipientPhoneForSend else { return }
+        guard let e164Phone = recipientPhoneForSend else { return }
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else { return }
-        if selectedClientName.isEmpty {
+        var name = selectedClientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
             if let match = viewModel.composeClients.first(where: {
-                PhoneFormatting.digits(from: $0.phone ?? "") == PhoneFormatting.digits(from: trimmedPhone)
+                PhoneFormatting.digits(from: $0.phone ?? "") == PhoneFormatting.digits(from: e164Phone)
             }) {
-                selectedClientName = match.name
+                name = match.name
             }
         }
         Task {
-            await viewModel.sendMessage(
-                threadId: trimmedPhone,
+            let ok = await viewModel.sendMessage(
+                threadId: e164Phone,
                 content: trimmedMessage,
-                clientName: selectedClientName,
-                clientId: trimmedPhone
+                clientName: name.isEmpty ? nil : name,
+                clientId: e164Phone
             )
-            dismiss()
+            if ok {
+                onSent?(e164Phone)
+                dismiss()
+            }
         }
     }
 }

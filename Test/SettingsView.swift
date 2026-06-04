@@ -194,6 +194,7 @@ private struct AccountSettingsDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var billingViewModel = ManagerSettingsViewModel()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var profilePhotoCropItem: SingleImageCropSheetItem?
     @State private var showIndustryChangeAlert = false
@@ -372,37 +373,70 @@ private struct AccountSettingsDetailView: View {
                 }
                 if viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
-                        header: Text("Plan"),
-                        footer: billingViewModel.subscriptionTrialing
-                            ? Text("Client texting and your dedicated number are available after you start your paid subscription. Free trial includes your site and booking tools only.")
-                                .font(.caption2)
-                            : nil
+                        header: Text("Plan & billing"),
+                        footer: Text("Manage subscription, payment method, and invoices in Stripe. Changes sync automatically or use Sync billing.")
+                            .font(.caption2)
                     ) {
                         HStack {
                             Text("Current plan")
                             Spacer()
-                            Text(viewModel.tenantSubscriptionPlan.displayName)
+                            Text(billingViewModel.tenantSubscriptionPlan.displayName)
                                 .foregroundStyle(.secondary)
                         }
-                        if billingViewModel.subscriptionTrialing, viewModel.isTenantOwner {
+                        if viewModel.isTenantOwner {
+                            HStack {
+                                Text("Billing status")
+                                Spacer()
+                                Text(billingStatusLabel)
+                                    .foregroundStyle(billingStatusColor)
+                            }
                             Button {
-                                Task { await billingViewModel.startSubscriptionToday() }
+                                Task { await billingViewModel.openStripeBillingPortal() }
                             } label: {
                                 HStack {
-                                    if billingViewModel.isStartingSubscription {
+                                    if billingViewModel.isOpeningBillingPortal {
                                         ProgressView()
                                             .scaleEffect(0.9)
                                     }
-                                    Text("Start subscription today")
+                                    Text("Manage billing in Stripe")
                                 }
                             }
-                            .disabled(billingViewModel.isStartingSubscription)
-                        } else if billingViewModel.subscriptionPaid {
-                            HStack {
-                                Text("Subscription")
-                                Spacer()
-                                Text("Active")
-                                    .foregroundStyle(.green)
+                            .disabled(
+                                billingViewModel.isOpeningBillingPortal ||
+                                billingViewModel.isSyncingBilling
+                            )
+                            Button {
+                                Task { await billingViewModel.syncBillingFromStripe() }
+                            } label: {
+                                HStack {
+                                    if billingViewModel.isSyncingBilling {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    }
+                                    Text("Sync billing from Stripe")
+                                }
+                            }
+                            .disabled(
+                                billingViewModel.isSyncingBilling ||
+                                billingViewModel.isOpeningBillingPortal
+                            )
+                            if billingViewModel.subscriptionTrialing {
+                                Button {
+                                    Task { await billingViewModel.startSubscriptionToday() }
+                                } label: {
+                                    HStack {
+                                        if billingViewModel.isStartingSubscription {
+                                            ProgressView()
+                                                .scaleEffect(0.9)
+                                        }
+                                        Text("Start subscription today")
+                                    }
+                                }
+                                .disabled(
+                                    billingViewModel.isStartingSubscription ||
+                                    billingViewModel.isSyncingBilling ||
+                                    billingViewModel.isOpeningBillingPortal
+                                )
                             }
                         }
                     }
@@ -433,6 +467,10 @@ private struct AccountSettingsDetailView: View {
                 await billingViewModel.load(isDemoMode: false)
             }
             hasLoadedIndustryOnce = true
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await billingViewModel.syncBillingAfterPortalIfNeeded() }
         }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {
@@ -478,6 +516,19 @@ private struct AccountSettingsDetailView: View {
             return authName
         }
         return "—"
+    }
+
+    private var billingStatusLabel: String {
+        if billingViewModel.subscriptionPaid { return "Active" }
+        if billingViewModel.subscriptionTrialing { return "Free trial" }
+        let raw = billingViewModel.subscriptionStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? "Not linked" : raw.capitalized
+    }
+
+    private var billingStatusColor: Color {
+        if billingViewModel.subscriptionPaid { return .green }
+        if billingViewModel.subscriptionTrialing { return .secondary }
+        return .orange
     }
 
     private var industryChangeAlertTitle: String {

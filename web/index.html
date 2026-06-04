@@ -2495,19 +2495,23 @@
       appearance: none;
       -webkit-appearance: none;
     }
-    .blade-page .blade-info-half[data-bk-band-tappable],
-    .blade-page .blade-section[data-bk-color-surface="card"] {
+    [data-bk-band-tappable] {
       position: relative;
     }
-    .blade-page .blade-band-content {
+    .bk-band-content,
+    .blade-band-content {
       position: relative;
       z-index: 1;
       pointer-events: none;
     }
-    .blade-page .blade-band-content [data-edit-key],
-    .blade-page .blade-band-content a,
-    .blade-page .blade-band-content button,
-    .blade-page .blade-band-content [role="button"] {
+    .bk-band-content [data-edit-key],
+    .bk-band-content a,
+    .bk-band-content button,
+    .bk-band-content [role="button"],
+    .blade-band-content [data-edit-key],
+    .blade-band-content a,
+    .blade-band-content button,
+    .blade-band-content [role="button"] {
       pointer-events: auto;
     }
     .blade-page .blade-section-header,
@@ -5931,6 +5935,32 @@
         applyBodyPageColors(patch, 'page');
       }
 
+      /** Paint every Quick-edit color band from palette tokens (home + /book + /gallery). */
+      function applyColorSurfaceBands(tenant) {
+        if (!tenant) return;
+        var c = tenantColors(tenant);
+        [].forEach.call(document.querySelectorAll('[data-bk-color-surface]'), function(el) {
+          if (el.tagName === 'NAV') return;
+          var sid = el.getAttribute('data-bk-color-surface');
+          if (!sid) return;
+          var bg = null;
+          var fg = null;
+          if (sid === 'page') { bg = c.bg; fg = c.fg; }
+          else if (sid === 'hero') {
+            if (isBladeTheme(tenant) || isStonecutTheme(tenant) || (isClassicTheme(tenant) && !isStudio12Theme(tenant))) {
+              bg = c.bg; fg = c.fg;
+            } else return;
+          }
+          else if (sid === 'card') { bg = c.card; fg = c.fg; }
+          else if (sid === 'featured') { bg = c.featuredBg; fg = c.featuredFg; }
+          else if (sid === 'gallery') { bg = c.galleryBg; fg = c.galleryFg; }
+          else if (sid === 'about') { bg = c.aboutBg; fg = c.aboutFg; }
+          else return;
+          if (bg) el.style.background = bg;
+          if (fg) el.style.color = fg;
+        });
+      }
+
       /** Live preview color updates from app Quick edit (tap band or chrome). */
       function applyPreviewColorPatch(patch, opts) {
         if (!patch) return;
@@ -5952,6 +5982,7 @@
           applyClassicHomePlaceholderColors(patch);
           applyEmptyImageSlotColors(patch);
         }
+        applyColorSurfaceBands(patch);
       }
       window.__bkApplyPreviewColorPatch = applyPreviewColorPatch;
 
@@ -5974,6 +6005,7 @@
         applyBladeHomeBandColors(t);
         applyStonecutHomeBandColors(t);
         applyStudio12HomeBandColors(t);
+        applyColorSurfaceBands(t);
         [].forEach.call(document.querySelectorAll('.card'), function(el) {
           el.style.background = c.card;
         });
@@ -6501,9 +6533,9 @@
         var servicesBody = serviceCards
           ? '<div class="blade-services-grid">' + serviceCards + '</div>'
           : '<p class="blade-section-desc blade-fade-up" style="max-width:none">' + wcSpan(tenant, 'wc.blade.servicesEmpty', 'Add active services in the app to list them here.') + '</p>';
-        var servicesSection = '<section class="blade-section" id="services" data-bk-color-surface="card">' +
+        var servicesSection = '<section class="blade-section" id="services" data-bk-color-surface="card" data-bk-band-tappable>' +
           bkColorBandHitButtonHtml() +
-          '<div class="blade-band-content">' +
+          '<div class="bk-band-content blade-band-content">' +
           '<div class="blade-section-header blade-fade-up">' +
           '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.servicesEyebrow', 'What we offer') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.servicesTitle', 'OUR SERVICES') + '</h2></div>' +
           '</div>' + servicesBody + '</div></section>';
@@ -6517,11 +6549,12 @@
               return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img' + editKey + ' src="' + esc(u) + '" alt=""></div></div>';
             }).join('');
           }
-          gallerySection = '<section class="blade-gallery-strip" id="blade-gallery" data-bk-color-surface="featured">' +
+          gallerySection = '<section class="blade-gallery-strip" id="blade-gallery" data-bk-color-surface="featured" data-bk-band-tappable>' +
+            bkColorBandInnerWrap(
             '<div class="blade-section-header blade-fade-up" style="padding-right:40px">' +
             '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.galleryEyebrow', 'Portfolio') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.galleryTitle', 'THE GALLERY') + '</h2></div>' +
             '</div>' +
-            '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls, true) + bladeMarqueeChunk(gUrls, false) + '</div></section>';
+            '<div class="blade-gallery-marquee">' + bladeMarqueeChunk(gUrls, true) + bladeMarqueeChunk(gUrls, false) + '</div>') + '</section>';
         }
         var hoursSnippet = '';
         if (tenantShowBusinessHours(tenant)) {
@@ -6537,13 +6570,13 @@
           : '<div class="blade-hero-cta" style="margin-top:28px">' +
             '<a href="' + anchorHome + '#services" class="blade-btn-ghost">' + wcSpan(tenant, 'wc.blade.viewServices', 'View services') + '</a>' +
             '</div>';
-        var bookPanel = '<section class="blade-book-panel" id="blade-booking" data-bk-color-surface="card">' +
-          '<div class="blade-fade-up">' +
+        var bookPanel = '<section class="blade-book-panel" id="blade-booking" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="blade-fade-up">' +
           '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.bookPanelSectionLabel', 'Reserve') + '</div>' +
           '<h2 class="blade-book-title">' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine1', 'BOOK YOUR') + '<br><span>' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine2', 'APPOINTMENT') + '</span></h2>' +
           hoursSnippet +
           bookPanelCtas +
-          '</div></section>';
+          '</div>') + '</section>';
         var revs = tenant.reviews || [];
         var testimonialSection = '';
         if (revs.length) {
@@ -6556,9 +6589,9 @@
               '<div class="blade-testimonial-author">— ' + esc(rv.name || 'Client') +
               (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
           }
-          testimonialSection = '<section class="blade-testimonials" data-bk-color-surface="card">' +
+          testimonialSection = '<section class="blade-testimonials" data-bk-color-surface="card" data-bk-band-tappable>' +
             bkColorBandHitButtonHtml() +
-            '<div class="blade-band-content">' +
+            '<div class="bk-band-content blade-band-content">' +
             '<div class="blade-section-header blade-fade-up">' +
             '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.reviewsEyebrow', 'Reviews') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.reviewsTitle', 'WHAT THEY SAY') + '</h2></div></div>' +
             '<div class="blade-testimonials-grid">' + tCards + '</div></div></section>';
@@ -6608,7 +6641,7 @@
         var whenHalfBlade = tenantShowBusinessHours(tenant)
           ? ('<div class="blade-info-half blade-fade-up" data-bk-color-surface="card" data-bk-band-tappable>' +
             bkColorBandHitButtonHtml() +
-            '<div class="blade-band-content">' +
+            '<div class="bk-band-content blade-band-content">' +
             '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.whenLabel', 'When') + '</div>' +
             '<h3 class="blade-section-title" style="font-size:38px">' + wcSpan(tenant, 'wc.blade.hoursTitle', 'HOURS') + '</h3>' + hoursInfo +
             '</div></div>')
@@ -6617,7 +6650,7 @@
           whenHalfBlade +
           '<div class="blade-info-half blade-fade-up" data-bk-color-surface="card" data-bk-band-tappable>' +
           bkColorBandHitButtonHtml() +
-          '<div class="blade-band-content">' +
+          '<div class="bk-band-content blade-band-content">' +
           '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.whereLabel', 'Where') + '</div>' +
           whereBlock +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="blade-address-phone"><span data-edit-key="contactPhone">' + phoneDisplay + '</span></a>' : '') +
@@ -6717,12 +6750,12 @@
           if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
           var cards = luxeTenantProductCardsHtml(tenant);
           if (!cards) return '';
-          return '<section class="stonecut-section stonecut-shop-preview" id="shop" data-bk-color-surface="card">' +
-            '<div class="stonecut-eyebrow">Retail</div>' +
+          return '<section class="stonecut-section stonecut-shop-preview" id="shop" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="stonecut-eyebrow">Retail</div>' +
             '<h2 class="stonecut-heading">Shop</h2>' +
             '<p class="stonecut-shop-lead">Studio retail, curated for clients—see everything on the full shop.</p>' +
             '<div class="stonecut-shop-grid">' + cards + '</div>' +
-            '<a href="' + base + '/shop" class="stonecut-btn stonecut-btn-primary" style="margin-top:28px;display:inline-block">' + wcSpan(tenant, 'wc.stonecut.shopFull', 'Full shop') + '</a>' +
+            '<a href="' + base + '/shop" class="stonecut-btn stonecut-btn-primary" style="margin-top:28px;display:inline-block">' + wcSpan(tenant, 'wc.stonecut.shopFull', 'Full shop') + '</a>') +
             '</section>';
         })();
         return '<div class="stonecut-page">' +
@@ -6740,7 +6773,7 @@
           '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
           shopPreviewSection +
-          '<section class="stonecut-section" id="location" data-bk-color-surface="about"><div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
+          '<section class="stonecut-section" id="location" data-bk-color-surface="about" data-bk-band-tappable>' + bkColorBandInnerWrap('<div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
           (tenantShowBusinessHours(tenant)
             ? ('<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
               (tenantBusinessHoursTrimmed(tenant)
@@ -6751,7 +6784,7 @@
           '<div class="stonecut-info-card"><div class="stonecut-eyebrow">Where</div><h3><span data-edit-key="' + whereHeadEditKeySc + '">' + esc(whereHeadline) + '</span></h3>' +
           (mapQuery ? '<a href="' + esc(mapQuery) + '" class="stonecut-address-link" target="_blank" rel="noopener noreferrer">' + addrBodyWrappedSc + '</a>' : '<div class="stonecut-address-link">' + addrBodyWrappedSc + '</div>') +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="stonecut-phone"><span data-edit-key="contactPhone">' + phoneDisplay + '</span></a>' : '') +
-          '</div></div></section>' +
+          '</div></div>') + '</section>' +
           stonecutSiteFooterHtml(tenant) +
           sidebar +
           '</div>';
@@ -6812,6 +6845,10 @@
       /** Invisible full-bleed button for section background color in app Quick edit. */
       function bkColorBandHitButtonHtml() {
         return '<button type="button" class="bk-color-band-hit" aria-label="Edit section background"></button>';
+      }
+      /** Wrap band inner HTML with invisible hit target + passthrough content layer. */
+      function bkColorBandInnerWrap(innerHtml) {
+        return bkColorBandHitButtonHtml() + '<div class="bk-band-content">' + innerHtml + '</div>';
       }
       function bkHeroBandHitButtonHtml() {
         return bkColorBandHitButtonHtml();
@@ -8001,27 +8038,32 @@
               '</form>' +
             '</div>';
           return '' +
-            '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="' + bookPageStyle + '"' : '') + '>' +
+            '<div class="' + wrapClass + '">' +
               nav +
-              '<div class="booking-shell booking-shell--guided"' + (guidedVars ? ' style="' + guidedVars + '"' : '') + '>' +
+              '<div class="booking-page-band" data-bk-color-surface="page" data-bk-band-tappable' + (bookPageStyle ? ' style="' + bookPageStyle + '"' : '') + '>' +
+              bkColorBandInnerWrap('<div class="booking-shell booking-shell--guided"' + (guidedVars ? ' style="' + guidedVars + '"' : '') + '>' +
                 guidedInner +
+              '</div>') +
               '</div>' +
               bookSiteFooter +
               sidebar +
             '</div>';
         }
-        return '' +
-          '<div class="' + wrapClass + '"' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
-            nav +
-            '<div class="booking-shell">' +
-              bookingPageHeaderHtml +
-              '<div class="booking-card" style="background:'+bookCardBg+'">' +
-                contact +
+        var bookCardInner = contact +
                 '<form id="book-form" class="booking-form">' + html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
                   '<button type="submit" class="booking-submit" data-accent>Request booking</button>' +
-                '</form>' +
+                '</form>';
+        return '' +
+          '<div class="' + wrapClass + '">' +
+            nav +
+            '<div class="booking-page-band" data-bk-color-surface="page" data-bk-band-tappable' + (bookPageStyle ? ' style="'+bookPageStyle+'"' : '') + '>' +
+            bkColorBandInnerWrap('<div class="booking-shell">' +
+              bookingPageHeaderHtml +
+              '<div class="booking-card" data-bk-color-surface="card" data-bk-band-tappable">' +
+              bkColorBandInnerWrap(bookCardInner) +
               '</div>' +
+            '</div>') +
             '</div>' +
             bookSiteFooter +
             sidebar +
@@ -8393,13 +8435,13 @@
         var footerExtra = '';
         if (tenantShowBookPage(tenant)) footerExtra += '<li><a href="' + bookUrl + '">' + wcSpan(tenant, 'wc.blade.footerBook', 'Book') + '</a></li>';
         if (tenantShowGalleryPage(tenant)) footerExtra += '<li><a href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.blade.footerGallery', 'Gallery') + '</a></li>';
-        return '<footer class="blade-footer" data-bk-color-surface="about">' +
-          '<div class="blade-footer-logo"><span data-edit-key="displayName">' + esc(displayName) + '</span></div>' +
+        return '<footer class="blade-footer" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="blade-footer-logo"><span data-edit-key="displayName">' + esc(displayName) + '</span></div>' +
           '<ul class="blade-footer-links">' +
           (igUrl ? '<li><a href="' + esc(igUrl) + '" target="_blank" rel="noopener noreferrer">' + wcSpan(tenant, 'wc.blade.footerInstagram', 'Instagram') + '</a></li>' : '') +
           footerExtra +
           '</ul>' +
-          '<p class="blade-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
+          '<p class="blade-footer-copy">' + footerLegalLineHtml(tenant) + '</p>') +
           '</footer>';
       }
       /** Stonecut home-style © line. */
@@ -8462,12 +8504,12 @@
         } else {
           luxeLocationInner = '<span data-edit-key="serviceArea">Add in app</span>';
         }
-        return '<section class="luxe-contact" data-bk-color-surface="about">' +
-          '<div class="luxe-contact-inner">' +
+        return '<section class="luxe-contact" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="luxe-contact-inner">' +
             '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactLocation', 'Location') + '</h3><p>' + luxeLocationInner + '</p></div>' +
             luxeHoursBlock +
             '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactConnect', 'Connect') + '</h3><p>' + connectHtml + '</p></div>' +
-          '</div>' +
+          '</div>') +
         '</section>' + legal;
       }
       function galleryPage(tenant) {
@@ -8497,8 +8539,8 @@
             s12LightClasses += ' s12-gallery-light--strip-centered';
           }
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
-            '<div class="' + s12LightClasses + '">' +
-            s12GalleryInner + '</div>' + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
+            '<div class="' + s12LightClasses + ' gallery-page-band" data-bk-color-surface="gallery" data-bk-band-tappable>' +
+            bkColorBandInnerWrap(s12GalleryInner) + '</div>' + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
         }
 
         var nav = isBladeTheme(tenant)
@@ -8553,9 +8595,10 @@
         var galleryMainBlock = stripPage
           ? ('<div class="gallery-page-strip-main">' + galleryHeaderBlock + galleryShellBlock + '</div>')
           : (galleryHeaderBlock + galleryShellBlock);
-        return '<div class="' + galleryWrapClass + '" style="'+galleryPageStyle+'">' +
+        return '<div class="' + galleryWrapClass + '">' +
           nav +
-          galleryMainBlock +
+          '<div class="gallery-page-band" data-bk-color-surface="gallery" data-bk-band-tappable style="'+galleryPageStyle+'">' +
+          bkColorBandInnerWrap(galleryMainBlock) + '</div>' +
           gallerySiteFooter +
           galleryLightboxShellHtml() +
           sidebar +
@@ -8660,14 +8703,14 @@
             }
             return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder" data-edit-key="classicFeaturedWorkEmpty" role="button" aria-label="Edit featured work empty message">' + esc(opts.galleryPlaceholder) + '</div>');
           })();
-          featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured">' +
-            '<div class="tattoo-featured-inner">' +
+          featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="tattoo-featured-inner">' +
             '<p class="classic-section-eyebrow"><span data-edit-key="classicFeaturedWorkEyebrow">' + esc(classicFeaturedEyebrow) + '</span></p>' +
             '<h2><span data-edit-key="classicFeaturedWorkHeading">' + esc(classicFeaturedHeading) + '</span></h2>' +
             '<p class="tattoo-featured-sub"><span data-edit-key="' + (gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty') + '">' + esc(gallery.length ? classicFeaturedSub : classicFeaturedEmpty) + '</span></p>' +
             '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
             '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">' + wcSpan(tenant, 'wc.classic.galleryLink', 'View full gallery \u2192') + '</a>' +
-            '</div></section>';
+            '</div>') + '</section>';
         }
 
         var servicesHtml = '';
@@ -8711,8 +8754,8 @@
           }
           var listBlock = '<div class="classic-service-list">' + rows + '</div>';
           if (classicSvcExpand) {
-            servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable" data-bk-color-surface="card">' +
-              '<div class="classic-services">' +
+            servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable" data-bk-color-surface="card" data-bk-band-tappable>' +
+              bkColorBandInnerWrap('<div class="classic-services">' +
               '<details class="classic-services-details">' +
               '<summary class="classic-services-summary">' +
               '<div class="classic-services-summary-text">' +
@@ -8722,14 +8765,14 @@
               '<span class="classic-services-expand-hint">View menu</span>' +
               '</summary>' +
               listBlock +
-              '</details></div></section>';
+              '</details></div>') + '</section>';
           } else {
-            servicesHtml = '<section id="services" class="classic-services-section" data-bk-color-surface="card">' +
-              '<div class="classic-services">' +
+            servicesHtml = '<section id="services" class="classic-services-section" data-bk-color-surface="card" data-bk-band-tappable>' +
+              bkColorBandInnerWrap('<div class="classic-services">' +
               '<p class="classic-section-eyebrow"><span data-edit-key="classicServicesEyebrow">' + esc(classicSvcEyebrow) + '</span></p>' +
               '<h2><span data-edit-key="classicServicesHeading">' + esc(classicSvcHeading) + '</span></h2>' +
               listBlock +
-              '</div></section>';
+              '</div>') + '</section>';
           }
         }
 
@@ -8794,14 +8837,14 @@
           ? ('<h2><span data-edit-key="classicAboutHeading">' + esc(aboutHeadingCustom) + '</span></h2>')
           : ('<h2><span data-edit-key="classicAboutHeading">' + opts.aboutHeading + '</span></h2>');
         var aboutHtml = tenantShowAboutPage(tenant)
-          ? '<section id="about" class="classic-about-section" data-bk-color-surface="about">' +
-          '<div class="classic-about-inner-v2">' +
+          ? '<section id="about" class="classic-about-section" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="classic-about-inner-v2">' +
           '<p class="classic-section-eyebrow"><span data-edit-key="classicAboutEyebrow">' + esc(aboutEyebrow) + '</span></p>' +
           aboutHeadingHtml +
           '<p class="classic-about-bio-v2"><span data-edit-key="aboutText">' + aboutBioDisplay + '</span></p>' +
           classicStatsHtml +
           classicContactLines +
-          '</div></section>'
+          '</div>') + '</section>'
           : '';
 
         var footerHtml = classicSiteFooterHtml(tenant, opts.defaultName);
@@ -9163,16 +9206,16 @@
           }
         }
         var servicesSectionHtml = showServicesSection
-          ? '<section class="s12-services" id="s12-services" data-bk-color-surface="card">' +
-            '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.servicesEyebrow', 'What we offer') + '</div>' +
+          ? '<section class="s12-services" id="s12-services" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.servicesEyebrow', 'What we offer') + '</div>' +
             '<h2 class="s12-section-title s12-fade">' + wcSpan(tenant, 'wc.s12.servicesTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.servicesEm', 'services') + '</em></h2>' +
-            '<div class="s12-svc-grid">' + svcCells + '</div></section>'
+            '<div class="s12-svc-grid">' + svcCells + '</div>') + '</section>'
           : '';
         var processSectionHtml = showProcessSection
-          ? '<section class="s12-process" data-bk-color-surface="card">' +
-            '<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.processLabel', 'How it works') + '</div>' +
+          ? '<section class="s12-process" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="s12-section-label s12-fade">' + wcSpan(tenant, 'wc.s12.processLabel', 'How it works') + '</div>' +
             '<h2 class="s12-section-title s12-fade" style="margin-bottom:48px">' + wcSpan(tenant, 'wc.s12.processTitleLead', 'Your') + ' <em>' + wcSpan(tenant, 'wc.s12.processTitleEm', 'experience') + '</em></h2>' +
-            '<div class="s12-process-grid">' + procCells + '</div></section>'
+            '<div class="s12-process-grid">' + procCells + '</div>') + '</section>'
           : '';
         var bcHeadMerged = (tenant.studio12BookCtaHeadline || '').trim();
         var bcL1, bcEm;
@@ -9206,21 +9249,21 @@
         }
         s12HeroActions += '<a class="s12-btn-outline" href="' + exploreHref + '">' + wcSpan(tenant, 'wc.s12.exploreCta', exploreLabel) + '</a></div>';
         var gallerySectionHtml = tenantShowGalleryPage(tenant)
-          ? '<section class="s12-gallery-light" data-bk-color-surface="featured">' +
-          '<div class="s12-gallery-head">' +
+          ? '<section class="s12-gallery-light" data-bk-color-surface="featured" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="s12-gallery-head">' +
           '<div class="s12-fade"><div class="s12-phil-label" style="color:var(--s12-clay)">' + wcSpan(tenant, 'wc.s12.galleryLabel', 'Our work') + '</div>' +
           '<h2 class="s12-gallery-title">' + wcSpan(tenant, 'wc.s12.galleryTitleLead', 'The') + ' <em>' + wcSpan(tenant, 'wc.s12.galleryTitleEm', 'gallery') + '</em></h2></div>' +
           (igLink ? '<a class="s12-gallery-link s12-fade" href="' + igLink + '" target="_blank" rel="noopener"><span data-edit-key="instagramHandle">@' + esc(ig) + '</span></a>' : '<a class="s12-gallery-link s12-fade" href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.s12.galleryViewLink', 'View gallery') + '</a>') +
-          '</div>' + studio12GalleryMarqueeHtml(gItems, Math.max(1, gUrls.length)) + '</section>'
+          '</div>' + studio12GalleryMarqueeHtml(gItems, Math.max(1, gUrls.length))) + '</section>'
           : '';
         var bookCtaSectionHtml = tenantShowBookPage(tenant)
-          ? '<section class="s12-book-cta" id="s12-booking" data-bk-color-surface="card">' +
-          '<div class="s12-fade">' +
+          ? '<section class="s12-book-cta" id="s12-booking" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="s12-fade">' +
           '<div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.bookSectionLabel', 'Reserve') + '</div>' +
           '<h2 class="s12-book-cta-title">' + '<span data-edit-key="studio12BookCtaLine1">' + esc(bcL1) + '</span><br><em><span data-edit-key="studio12BookCtaItalic">' + esc(bcEm) + '</span></em></h2>' +
           '<p class="s12-book-cta-body"><span data-edit-key="studio12BookCtaBody">' + esc(bcBody) + '</span></p>' +
           '<a class="s12-btn-dark" href="' + bookUrl + '">' + wcSpan(tenant, 'wc.s12.bookSectionCta', 'Request appointment') + '</a></div>' +
-          '<div class="s12-fade">' + bcImgCol + '</div></section>'
+          '<div class="s12-fade">' + bcImgCol + '</div>') + '</section>'
           : '';
         return '<div class="studio12-page">' + studio12NavHtml(tenant) +
           '<section class="s12-hero" data-bk-color-surface="hero">' +
@@ -9233,22 +9276,22 @@
           s12HeroActions +
           '</div></section>' +
           '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
-          '<section class="s12-philosophy" data-bk-color-surface="card">' +
-          '<div class="s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
+          '<section class="s12-philosophy" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
           philTitleHtml +
           '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
           '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>' +
-          '<div class="s12-fade">' + philImgCol + '</div></section>' +
+          '<div class="s12-fade">' + philImgCol + '</div>') + '</section>' +
           servicesSectionHtml +
           gallerySectionHtml +
           processSectionHtml +
           bookCtaSectionHtml +
           testSection +
-          '<div class="' + s12InfoClass + '" data-bk-color-surface="about">' +
-          s12HoursHalf +
+          '<div class="' + s12InfoClass + '" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap(s12HoursHalf +
           '<div class="s12-info-half s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.findUsLabel', 'Find us') + '</div>' +
           s12InfoTitleHtml(tenant, 'wc.s12.studioTitleLead', 'The', 'wc.s12.studioTitleEm', 'studio') +
-          addrHtml + phoneEl + '</div></div>' +
+          addrHtml + phoneEl + '</div>') + '</div>' +
           studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
 
@@ -9465,10 +9508,10 @@
               imgTag +
             '</div>';
           }
-          servicesSection = '<section id="gallery" class="luxe-services-section" data-bk-color-surface="featured">' +
-            '<p class="luxe-section-label"><span data-edit-key="luxeFeaturedWorkEyebrow">' + esc(stripEyebrow) + '</span></p>' +
+          servicesSection = '<section id="gallery" class="luxe-services-section" data-bk-color-surface="featured" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<p class="luxe-section-label"><span data-edit-key="luxeFeaturedWorkEyebrow">' + esc(stripEyebrow) + '</span></p>' +
             '<h2 class="luxe-section-heading"><span data-edit-key="luxeFeaturedWorkHeading">' + esc(stripHeading) + '</span></h2>' +
-            '<div class="luxe-services-grid">' + serviceCards + '</div>' +
+            '<div class="luxe-services-grid">' + serviceCards + '</div>') +
           '</section>';
         }
 
@@ -9527,7 +9570,7 @@
               listInner +
               '</section>';
           }
-          homeServicesSection = '<div class="luxe-home-services-band" data-bk-color-surface="card">' + homeServicesSection + '</div>';
+          homeServicesSection = '<div class="luxe-home-services-band" data-bk-color-surface="card" data-bk-band-tappable>' + bkColorBandInnerWrap(homeServicesSection) + '</div>';
         }
 
         var promoTag = tenant.tagline || 'Book with confidence.';
@@ -9537,12 +9580,12 @@
         var promoCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-promo-cta">' + wcSpan(tenant, 'wc.luxe.promoCta', 'Book Now') + '</a>'
           : '';
-        var promo = '<section class="luxe-promo" data-bk-color-surface="card">' +
-          '<div class="luxe-promo-inner">' +
+        var promo = '<section class="luxe-promo" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="luxe-promo-inner">' +
             '<h2><span data-edit-key="luxePromoHeadline">' + esc(promoHeadline) + '</span></h2>' +
             '<p><span data-edit-key="tagline">' + esc(promoTag) + '</span></p>' +
             promoCta +
-          '</div>' +
+          '</div>') +
         '</section>';
 
         var aboutBody = (tenant.aboutText || tenant.tagline)
@@ -9551,13 +9594,13 @@
         var teamCards = '';
 
         var teamSection = tenantShowAboutPage(tenant)
-          ? '<section id="about" class="luxe-team-section" data-bk-color-surface="about">' +
-          '<div class="luxe-team-inner">' +
+          ? '<section id="about" class="luxe-team-section" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="luxe-team-inner">' +
             '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.aboutEyebrow', 'About Us') + '</p>' +
             '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.teamMeetPrefix', 'Meet') + ' <span data-edit-key="displayName">' + esc(displayName) + '</span></h2>' +
             '<p class="luxe-team-bio"><span data-edit-key="aboutText">' + aboutBody + '</span></p>' +
             teamCards +
-          '</div>' +
+          '</div>') +
         '</section>'
           : '';
 

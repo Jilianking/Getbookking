@@ -47,11 +47,6 @@ class SecretsManager {
         return secrets["API_LOCAL_URL"] as? String ?? "http://localhost:3000/api"
     }
     
-    // MARK: - Admin Configuration
-    var adminPasswordHash: String {
-        return secrets["ADMIN_PASSWORD_HASH"] as? String ?? ""
-    }
-    
     // MARK: - Stripe Configuration (if needed)
     var stripePublishableKey: String {
         return secrets["STRIPE_PUBLISHABLE_KEY"] as? String ?? ""

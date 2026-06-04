@@ -513,6 +513,84 @@ async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, bil
   }
 }
 
+const SMS_PRESET_MAX_LEN = 500;
+const SMS_QUICK_REPLY_MAX = 12;
+const SMS_QUICK_REPLY_ITEM_MAX = 300;
+
+function defaultSmsPresetConfirmed() {
+  return "{business}: Your appointment request for {service} is confirmed. Reply STOP to opt out.";
+}
+
+function defaultSmsPresetDeclined() {
+  return "{business}: We're unable to take this request at this time. Reply STOP to opt out.";
+}
+
+function defaultSmsQuickPresets() {
+  return [
+    "Thanks for reaching out! We'll get back to you shortly.",
+    "See you at your appointment!",
+    "Can you share your preferred date and time?",
+  ];
+}
+
+function normalizeSmsQuickPresets(raw) {
+  if (!Array.isArray(raw)) return defaultSmsQuickPresets();
+  const out = [];
+  for (const item of raw) {
+    const s = (item || "").toString().trim();
+    if (!s) continue;
+    out.push(s.slice(0, SMS_QUICK_REPLY_ITEM_MAX));
+    if (out.length >= SMS_QUICK_REPLY_MAX) break;
+  }
+  return out.length ? out : defaultSmsQuickPresets();
+}
+
+function tenantSmsPresets(tenant) {
+  const businessDefault = defaultSmsPresetConfirmed();
+  const confirmed = ((tenant && tenant.smsPresetConfirmed) || businessDefault).toString().trim();
+  const declined = ((tenant && tenant.smsPresetDeclined) || defaultSmsPresetDeclined())
+    .toString()
+    .trim();
+  return {
+    smsPresetConfirmed: confirmed.slice(0, SMS_PRESET_MAX_LEN) || defaultSmsPresetConfirmed(),
+    smsPresetDeclined: declined.slice(0, SMS_PRESET_MAX_LEN) || defaultSmsPresetDeclined(),
+    smsQuickPresets: normalizeSmsQuickPresets(tenant && tenant.smsQuickPresets),
+  };
+}
+
+/** Replace {business}, {businessName}, {service}, {serviceName} in preset templates. */
+function renderSmsPreset(template, ctx) {
+  const business = ((ctx && ctx.business) || "Your provider").toString().trim().slice(0, 120);
+  const service = ((ctx && ctx.service) || "").toString().trim().slice(0, 120);
+  let body = (template || "").toString();
+  body = body.replace(/\{businessName\}/gi, business);
+  body = body.replace(/\{business\}/gi, business);
+  body = body.replace(/\{serviceName\}/gi, service);
+  body = body.replace(/\{service\}/gi, service);
+  if (!service) {
+    body = body.replace(/\s+for\s+(?=[.,!?]|$)/gi, " ");
+    body = body.replace(/\s+for\s*$/gi, "");
+  }
+  body = body.replace(/\s{2,}/g, " ").trim();
+  return body.slice(0, 1600);
+}
+
+function bookingStatusSmsBody(tenant, status, booking) {
+  const presets = tenantSmsPresets(tenant);
+  const business = ((tenant && (tenant.businessName || tenant.displayName)) || "Your provider")
+    .toString()
+    .trim();
+  const service = ((booking && booking.serviceName) || "").toString().trim();
+  const ctx = { business, service };
+  if (status === "confirmed") {
+    return renderSmsPreset(presets.smsPresetConfirmed, ctx);
+  }
+  if (status === "declined") {
+    return renderSmsPreset(presets.smsPresetDeclined, ctx);
+  }
+  return null;
+}
+
 function extractCustomerPhone(booking) {
   const direct = booking.customerPhone;
   if (direct) {
@@ -550,4 +628,13 @@ module.exports = {
   SMS_MONTHLY_LIMIT_MESSAGE,
   smsMonthlyUsageForTenant,
   currentSmsUsagePeriodUtc,
+  defaultSmsPresetConfirmed,
+  defaultSmsPresetDeclined,
+  defaultSmsQuickPresets,
+  tenantSmsPresets,
+  normalizeSmsQuickPresets,
+  renderSmsPreset,
+  bookingStatusSmsBody,
+  SMS_PRESET_MAX_LEN,
+  SMS_QUICK_REPLY_MAX,
 };

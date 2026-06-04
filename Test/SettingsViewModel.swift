@@ -15,7 +15,7 @@ class SettingsViewModel: ObservableObject {
     @Published var depositAmount: Double?
     @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
-    @Published var timeZoneId: String = ""
+    @Published var timeZoneId: String = TimeZone.current.identifier
     @Published var blockedDates: Set<String> = []
     @Published var availableDates: Set<String> = []
     @Published var isLoading = false
@@ -175,7 +175,9 @@ class SettingsViewModel: ObservableObject {
                         ? [TimeSlot(open: 9, close: 18)]
                         : p.availability.timeSlots
                     daysOpen = Set(p.availability.daysOpen)
-                    timeZoneId = p.availability.timeZone.isEmpty ? TimeZone.current.identifier : p.availability.timeZone
+                    timeZoneId = Self.normalizedTimeZoneId(
+                        p.availability.timeZone.isEmpty ? TimeZone.current.identifier : p.availability.timeZone
+                    )
                     blockedDates = Set(p.availability.blockedDates)
                     availableDates = Set(p.availability.availableDates)
                 } else {
@@ -271,6 +273,12 @@ class SettingsViewModel: ObservableObject {
 
     func saveWorkflow(isOwner: Bool) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard isOwner else {
+            await MainActor.run {
+                errorMessage = "Only the business owner can update booking workflow."
+            }
+            return
+        }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             var workflowData: [String: Any] = [
@@ -280,7 +288,7 @@ class SettingsViewModel: ObservableObject {
                 workflowData["confirmationType"] = confirmationType.rawValue
                 if let amount = depositAmount { workflowData["depositAmount"] = amount }
             }
-            if isOwner, tenantId != nil {
+            if tenantId != nil {
                 var callable: [String: Any] = [
                     "managersApproveAppointments": managersApproveAppointments,
                 ]
@@ -326,16 +334,18 @@ class SettingsViewModel: ObservableObject {
                 if let days = slot.recurringDays { d["recurringDays"] = days }
                 return d
             }
+            let resolvedTimeZone = Self.normalizedTimeZoneId(timeZoneId)
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "availability": [
                     "timeSlots": slotsData,
                     "daysOpen": Array(daysOpen).sorted(),
-                    "timeZone": timeZoneId.isEmpty ? TimeZone.current.identifier : timeZoneId,
+                    "timeZone": resolvedTimeZone,
                     "blockedDates": Array(blockedDates).sorted(),
                     "availableDates": Array(availableDates).sorted()
                 ]
             ])
             await MainActor.run {
+                timeZoneId = resolvedTimeZone
                 saveSuccess = true
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -514,5 +524,15 @@ class SettingsViewModel: ObservableObject {
                 isCreatingTeamInvite = false
             }
         }
+    }
+
+    static let sortedTimeZoneIdentifiers: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
+
+    static func normalizedTimeZoneId(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, TimeZone(identifier: trimmed) != nil {
+            return trimmed
+        }
+        return TimeZone.current.identifier
     }
 }

@@ -8,13 +8,19 @@ struct TeamManagerPolicySaveSection: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
     var label: String = "Save"
+    /// When set, runs instead of `saveManagerPolicy` (e.g. messaging presets).
+    var saveAction: (() async -> Void)?
 
     var body: some View {
         Section {
             Button {
                 Task {
-                    await viewModel.saveManagerPolicy()
-                    await authViewModel.refreshTeamAccess()
+                    if let saveAction {
+                        await saveAction()
+                    } else {
+                        await viewModel.saveManagerPolicy()
+                        await authViewModel.refreshTeamAccess()
+                    }
                 }
             } label: {
                 HStack {

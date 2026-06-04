@@ -1,14 +1,17 @@
 import Foundation
 import Combine
+import FirebaseFunctions
 
 class MessagesViewModel: ObservableObject {
     @Published var threadSummaries: [SmsThreadSummary] = []
     @Published var messages: [String: [Message]] = [:]
     @Published var composeClients: [Client] = []
+    @Published var smsQuickPresets: [String] = []
     @Published var lastError: String?
     @Published var isSending = false
 
     private let firebaseService = FirebaseService()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     private var activeMessageThreadId: String?
 
     var threads: [String] {
@@ -58,6 +61,29 @@ class MessagesViewModel: ObservableObject {
 
     func stopThreadsListening() {
         firebaseService.stopThreadsListener()
+    }
+
+    func loadSmsQuickPresets(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            await MainActor.run {
+                smsQuickPresets = ManagerSettingsViewModel.defaultQuickReplyPresets
+            }
+            return
+        }
+        do {
+            let result = try await functions.httpsCallable("listTenantMembers").call([:])
+            guard let data = result.data as? [String: Any] else { return }
+            let quick = (data["smsQuickPresets"] as? [String])?
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty } ?? []
+            await MainActor.run {
+                smsQuickPresets = quick.isEmpty
+                    ? ManagerSettingsViewModel.defaultQuickReplyPresets
+                    : quick
+            }
+        } catch {
+            print("Error loading SMS quick presets: \(error)")
+        }
     }
 
     func loadComposeClients(isDemoMode: Bool = false) async {

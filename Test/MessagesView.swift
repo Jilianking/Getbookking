@@ -110,6 +110,7 @@ struct MessagesView: View {
                         selectedThreadId = threadId
                     }
                 )
+                .environmentObject(authViewModel)
             }
             .onChange(of: viewModel.lastError) { _, err in
                 showErrorAlert = err != nil
@@ -134,6 +135,7 @@ struct MessagesView: View {
             .task {
                 viewModel.startThreadsListening(isDemoMode: authViewModel.isDemoMode)
                 await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
                 if drawerState.messagesShouldOpenCompose {
                     composePrefillPhone = drawerState.messagesComposePhone ?? ""
                     composePrefillName = drawerState.messagesComposeClientName ?? ""
@@ -242,6 +244,10 @@ struct MessageThreadView: View {
                 }
             }
 
+            SmsQuickReplyChips(presets: viewModel.smsQuickPresets) { text in
+                newMessage = text
+            }
+
             HStack(spacing: 12) {
                 TextField("Type a message...", text: $newMessage)
                     .textFieldStyle(.roundedBorder)
@@ -334,6 +340,7 @@ struct MessageBubble: View {
 }
 
 struct ComposeMessageView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
     var prefillPhone: String = ""
@@ -451,6 +458,12 @@ struct ComposeMessageView: View {
                     .padding(.horizontal, 18)
                 }
 
+                SmsQuickReplyChips(presets: viewModel.smsQuickPresets, darkStyle: true) { text in
+                    message = text
+                    messageFieldFocused = true
+                }
+                .padding(.horizontal, 18)
+
                 Spacer()
 
                 HStack(spacing: 10) {
@@ -493,7 +506,8 @@ struct ComposeMessageView: View {
                 messageFieldFocused = true
             }
             Task {
-                await viewModel.loadComposeClients()
+                await viewModel.loadComposeClients(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
             }
         }
         .onChange(of: viewModel.lastError) { _, err in
@@ -622,5 +636,55 @@ private struct ComposeClientPickerSheet: View {
             }
         }
         .navigationViewStyle(.stack)
+    }
+}
+
+/// Horizontal chips for owner-configured quick replies in Messages compose and threads.
+struct SmsQuickReplyChips: View {
+    let presets: [String]
+    var darkStyle: Bool = false
+    let onSelect: (String) -> Void
+
+    private var usable: [String] {
+        presets
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        if usable.isEmpty {
+            EmptyView()
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(usable.enumerated()), id: \.offset) { _, text in
+                        Button {
+                            onSelect(text)
+                        } label: {
+                            Text(text)
+                                .font(.caption)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                        .background(chipBackground)
+                        .foregroundStyle(chipForeground)
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, darkStyle ? 0 : 12)
+            }
+            .frame(maxHeight: 72)
+        }
+    }
+
+    private var chipBackground: Color {
+        darkStyle ? Color.white.opacity(0.12) : Color(.secondarySystemFill)
+    }
+
+    private var chipForeground: Color {
+        darkStyle ? Color.white.opacity(0.92) : Color.primary
     }
 }

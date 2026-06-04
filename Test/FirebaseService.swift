@@ -80,8 +80,15 @@ class FirebaseService: ObservableObject {
     }
 
     // MARK: - Fetch Available Time Slots
-    func fetchAvailableTimeSlots(for date: Date) async throws -> [String] {
-        let calendar = Calendar.current
+    func fetchAvailableTimeSlots(
+        for date: Date,
+        availability: ProviderAvailability = .default
+    ) async throws -> [String] {
+        var calendar = Calendar.current
+        let tzId = availability.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tzId.isEmpty, let tz = TimeZone(identifier: tzId) {
+            calendar.timeZone = tz
+        }
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         let startTimestamp = Timestamp(date: startOfDay)
@@ -93,26 +100,15 @@ class FirebaseService: ObservableObject {
             .whereField("status", in: ["pending", "approved"])
             .getDocuments()
 
-        let bookedSlots = snapshot.documents.compactMap { doc -> String? in
+        let bookedSlots = Set(snapshot.documents.compactMap { doc -> String? in
             doc.data()["timeSlot"] as? String
-        }
-        let allSlots = generateTimeSlots()
+        })
+        let allSlots = BookingAssignSchedulePlanner.bookableSlotLabels(
+            on: date,
+            availability: availability,
+            calendar: calendar
+        )
         return allSlots.filter { !bookedSlots.contains($0) }
-    }
-
-    private func generateTimeSlots() -> [String] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        var slots: [String] = []
-        let calendar = Calendar.current
-        var date = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
-        while calendar.component(.hour, from: date) < 18 {
-            slots.append(formatter.string(from: date))
-            if let nextDate = calendar.date(byAdding: .hour, value: 1, to: date) {
-                date = nextDate
-            } else { break }
-        }
-        return slots
     }
 
     // MARK: - Validate Promo Code

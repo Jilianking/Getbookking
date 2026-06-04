@@ -77,12 +77,22 @@ struct TeamSettingsHubView: View {
                 }
 
                 NavigationLink {
+                    TeamClientMessagingSettingsView(viewModel: teamPolicyViewModel)
+                        .environmentObject(authViewModel)
+                } label: {
+                    settingsRow(
+                        title: "Messaging",
+                        subtitle: "Texting number, monthly limit, confirm/decline presets"
+                    )
+                }
+
+                NavigationLink {
                     TeamNotificationsSettingsView(viewModel: teamPolicyViewModel)
                         .environmentObject(authViewModel)
                 } label: {
                     settingsRow(
                         title: "Notifications",
-                        subtitle: "Client texting, SMS toggles, summary email"
+                        subtitle: "Client SMS toggles and summary email"
                     )
                 }
             }

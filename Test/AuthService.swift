@@ -166,13 +166,6 @@ class AuthViewModel: ObservableObject {
             await PushNotificationManager.shared.clearTokenForSignOut(providerUid: uid)
         }
         try? Auth.auth().signOut()
-        isAuthenticated = false
-        currentUserEmail = nil
-        currentUserDisplayName = nil
-        tenantLogoUrl = nil
-        accountPhotoUrl = nil
-        teamAccess = EffectiveTeamAccess()
-        tenantSubscriptionPlan = .solo
     }
 
     /// Demo mode: full app experience without Firebase sign-in.

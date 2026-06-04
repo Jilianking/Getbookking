@@ -19,7 +19,7 @@ struct MessagesSettingsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding()
             } else if viewModel.isTenantOwner {
-                TeamNotificationsSettingsView(viewModel: viewModel)
+                TeamClientMessagingSettingsView(viewModel: viewModel)
                     .environmentObject(authViewModel)
             } else {
                 managerReadOnlyContent

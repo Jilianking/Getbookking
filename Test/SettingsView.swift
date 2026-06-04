@@ -144,9 +144,11 @@ struct SettingsView: View {
                         )
                         .font(.caption2)
                     ) {
-                        TextField("Time zone", text: $viewModel.timeZoneId)
-                            .textFieldStyle(.roundedBorder)
-                            .autocapitalization(.none)
+                        Picker("Time zone", selection: $viewModel.timeZoneId) {
+                            ForEach(SettingsViewModel.sortedTimeZoneIdentifiers, id: \.self) { zoneId in
+                                Text(zoneId).tag(zoneId)
+                            }
+                        }
                         Button("Save") {
                             Task {
                                 await viewModel.saveAvailability()

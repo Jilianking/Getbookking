@@ -58,6 +58,21 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var shouldSyncBillingAfterPortal = false
     @Published var isProvisioningSms = false
 
+    @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
+    @Published var smsPresetDeclined: String = ManagerSettingsViewModel.defaultPresetDeclined
+    @Published var smsQuickPresets: [String] = ManagerSettingsViewModel.defaultQuickReplyPresets
+
+    static let maxQuickReplies = 12
+    static let defaultPresetConfirmed =
+        "{business}: Your appointment request for {service} is confirmed. Reply STOP to opt out."
+    static let defaultPresetDeclined =
+        "{business}: We're unable to take this request at this time. Reply STOP to opt out."
+    static let defaultQuickReplyPresets: [String] = [
+        "Thanks for reaching out! We'll get back to you shortly.",
+        "See you at your appointment!",
+        "Can you share your preferred date and time?",
+    ]
+
     var smsPhoneDisplay: String {
         PhoneFormatting.displayUS(smsPhoneNumber)
     }
@@ -124,6 +139,13 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsMonthlyLimit = (data["smsMonthlyLimit"] as? Int) ?? 1000
             smsMonthlyUsageCount = (data["smsMonthlyUsageCount"] as? Int) ?? 0
             smsMonthlyUsageRemaining = (data["smsMonthlyUsageRemaining"] as? Int) ?? smsMonthlyLimit
+            smsPresetConfirmed = (data["smsPresetConfirmed"] as? String) ?? Self.defaultPresetConfirmed
+            smsPresetDeclined = (data["smsPresetDeclined"] as? String) ?? Self.defaultPresetDeclined
+            if let quick = data["smsQuickPresets"] as? [String], !quick.isEmpty {
+                smsQuickPresets = quick
+            } else {
+                smsQuickPresets = Self.defaultQuickReplyPresets
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -215,6 +237,36 @@ final class ManagerSettingsViewModel: ObservableObject {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isProvisioningSms = false
+    }
+
+    func saveMessagingPresets() async {
+        guard isTenantOwner else { return }
+        isSavingPolicy = true
+        errorMessage = nil
+        saveSuccess = false
+        let confirmed = smsPresetConfirmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let declined = smsPresetDeclined.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quick = smsQuickPresets
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(Self.maxQuickReplies)
+            .map { String($0.prefix(300)) }
+        do {
+            _ = try await functions.httpsCallable("updateTenantMessagingPresets").call([
+                "smsPresetConfirmed": confirmed.isEmpty ? Self.defaultPresetConfirmed : confirmed,
+                "smsPresetDeclined": declined.isEmpty ? Self.defaultPresetDeclined : declined,
+                "smsQuickPresets": quick.isEmpty ? Self.defaultQuickReplyPresets : Array(quick),
+            ])
+            saveSuccess = true
+            await load(isDemoMode: false)
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await MainActor.run { saveSuccess = false }
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isSavingPolicy = false
     }
 
     func saveManagerPolicy() async {

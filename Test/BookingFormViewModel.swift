@@ -16,6 +16,7 @@ class BookingFormViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isLoadingSlots = false
 
+    private var providerAvailability: ProviderAvailability = .default
     private let firebaseService = FirebaseService()
 
     var servicesForPicker: [(id: String, name: String, slug: String)] {
@@ -44,6 +45,7 @@ class BookingFormViewModel: ObservableObject {
         await MainActor.run { isLoading = true }
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            providerAvailability = profile?.availability ?? .default
             if let tid = profile?.tenantId {
                 let services = try await firebaseService.fetchTenantServices(tenantId: tid)
                 await MainActor.run {
@@ -75,7 +77,10 @@ class BookingFormViewModel: ObservableObject {
     func loadAvailableTimeSlots(for date: Date) async {
         await MainActor.run { isLoadingSlots = true; availableTimeSlots = [] }
         do {
-            let slots = try await firebaseService.fetchAvailableTimeSlots(for: date)
+            let slots = try await firebaseService.fetchAvailableTimeSlots(
+                for: date,
+                availability: providerAvailability
+            )
             await MainActor.run {
                 availableTimeSlots = slots
                 isLoadingSlots = false

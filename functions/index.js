@@ -2887,8 +2887,50 @@ function serializeMessagingFields(tenant, ownerUserData) {
     smsMonthlyUsageCount: usage.count,
     smsMonthlyUsageRemaining: usage.remaining,
     smsUsagePeriod: usage.period,
+    ...sms.tenantSmsPresets(tenant),
   };
 }
+
+/** Owner: SMS message presets (confirm / decline / quick replies). */
+exports.updateTenantMessagingPresets = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can update messaging presets."
+    );
+  }
+  const confirmed = (data && data.smsPresetConfirmed != null
+    ? data.smsPresetConfirmed
+    : ""
+  )
+    .toString()
+    .trim()
+    .slice(0, sms.SMS_PRESET_MAX_LEN);
+  const declined = (data && data.smsPresetDeclined != null ? data.smsPresetDeclined : "")
+    .toString()
+    .trim()
+    .slice(0, sms.SMS_PRESET_MAX_LEN);
+  const quick = sms.normalizeSmsQuickPresets(data && data.smsQuickPresets);
+  await db.collection("tenants").doc(ctx.tenantId).set(
+    {
+      smsPresetConfirmed: confirmed || sms.defaultSmsPresetConfirmed(),
+      smsPresetDeclined: declined || sms.defaultSmsPresetDeclined(),
+      smsQuickPresets: quick,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return {
+    ok: true,
+    smsPresetConfirmed: confirmed || sms.defaultSmsPresetConfirmed(),
+    smsPresetDeclined: declined || sms.defaultSmsPresetDeclined(),
+    smsQuickPresets: quick,
+  };
+});
 
 /** Owner: pull Stripe customer/subscription into Firestore (fixes dashboard vs app mismatch). */
 exports.syncTenantBillingFromStripe = functions
@@ -3199,16 +3241,7 @@ exports.onTenantBookingRequestSms = functions
     const to = sms.extractCustomerPhone(after);
     if (!to) return null;
 
-    const business = (tenant.businessName || tenant.displayName || "Your provider").toString();
-    let body = null;
-    if (next === "confirmed") {
-      const svc = (after.serviceName || "").toString().trim();
-      body = svc
-        ? `${business}: Your appointment request for ${svc} is confirmed. Reply STOP to opt out.`
-        : `${business}: Your appointment request is confirmed. Reply STOP to opt out.`;
-    } else if (next === "declined") {
-      body = `${business}: We're unable to take this request at this time. Reply STOP to opt out.`;
-    }
+    const body = sms.bookingStatusSmsBody(tenant, next, after);
     if (!body) return null;
 
     const optId = to.replace(/\W/g, "_");

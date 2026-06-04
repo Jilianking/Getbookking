@@ -115,7 +115,27 @@ enum BookingAssignSchedulePlanner {
         return "Available"
     }
 
-    private static func generateSlotStarts(
+    /// Labels for client booking pickers (`h:mm a`, en_US_POSIX) from provider availability.
+    static func bookableSlotLabels(
+        on date: Date,
+        availability: ProviderAvailability,
+        calendar: Calendar = .current
+    ) -> [String] {
+        var cal = calendar
+        let tzId = availability.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tzId.isEmpty, let tz = TimeZone(identifier: tzId) {
+            cal.timeZone = tz
+        }
+        let dayStart = cal.startOfDay(for: date)
+        let starts = generateSlotStarts(on: dayStart, availability: availability, calendar: cal)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = cal.timeZone
+        return starts.map { formatter.string(from: $0) }
+    }
+
+    static func generateSlotStarts(
         on dayStart: Date,
         availability: ProviderAvailability,
         calendar: Calendar

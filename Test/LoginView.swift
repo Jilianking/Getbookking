@@ -143,7 +143,6 @@ struct LoginView: View {
                     isLoading = false
                 }
             }
-            await MainActor.run { isLoading = false }
         }
     }
 }

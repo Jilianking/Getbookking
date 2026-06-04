@@ -16,6 +16,7 @@ struct EffectiveTeamAccess: Equatable {
     var confirmationType: BookingConfirmationType = .requestApprove
     var bookingRequiresApproval: Bool = true
     var managersApproveAppointments: Bool = true
+    var subscriptionPlan: SubscriptionPlan = .solo
 
     static let ownerFullAccess = EffectiveTeamAccess(
         isOwner: true,
@@ -32,7 +33,8 @@ struct EffectiveTeamAccess: Equatable {
         ),
         confirmationType: .requestApprove,
         bookingRequiresApproval: true,
-        managersApproveAppointments: true
+        managersApproveAppointments: true,
+        subscriptionPlan: .studio
     )
 
     var canManageBookingPolicy: Bool { isOwner }
@@ -126,7 +128,8 @@ enum TenantTeamAccessService {
                 ),
                 confirmationType: current.confirmationType,
                 bookingRequiresApproval: current.bookingRequiresApproval,
-                managersApproveAppointments: current.managersApproveAppointments
+                managersApproveAppointments: current.managersApproveAppointments,
+                subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
             )
         } catch {
             return current
@@ -147,7 +150,8 @@ enum TenantTeamAccessService {
             permissions: perms,
             confirmationType: confirmation,
             bookingRequiresApproval: requiresApproval,
-            managersApproveAppointments: managersApprove
+            managersApproveAppointments: managersApprove,
+            subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: data["subscriptionPlan"] as? String)
         )
     }
 }

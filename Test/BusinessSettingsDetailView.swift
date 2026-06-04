@@ -1,10 +1,12 @@
 //
-//  TeamSettingsDetailView.swift
+//  BusinessSettingsDetailView.swift
+//
+//  Solo plan: booking, design, and notifications without team-management sections.
 //
 
 import SwiftUI
 
-struct TeamSettingsDetailView: View {
+struct BusinessSettingsDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var teamPolicyViewModel: ManagerSettingsViewModel
     @ObservedObject var settingsViewModel: SettingsViewModel
@@ -15,7 +17,7 @@ struct TeamSettingsDetailView: View {
             settingsViewModel: settingsViewModel,
             teamPolicyViewModel: teamPolicyViewModel,
             isDemoMode: isDemoMode,
-            includeTeamManagementSections: true
+            includeTeamManagementSections: false
         )
         .environmentObject(authViewModel)
     }

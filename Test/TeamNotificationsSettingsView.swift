@@ -95,7 +95,7 @@ struct TeamNotificationsSettingsView: View {
             Text("Client texting")
         } footer: {
             if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.smsStatus == "active" {
-                Text("If texts fail to send, use Refresh texting number to move your line onto the platform messaging service. You may get a new local number.")
+                Text("Limit is 1,000 texts per calendar month (UTC), inbound and outbound combined. If texts fail to send, use Refresh texting number to move your line onto the platform messaging service.")
                     .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode {
                 Text("Subscription changes in Stripe (portal or Dashboard) sync via webhooks or Sync billing. Manage card, plan, and invoices in Stripe.")
@@ -190,6 +190,11 @@ struct TeamNotificationsSettingsView: View {
                 .foregroundStyle(.secondary)
             Text(viewModel.smsPhoneDisplay)
                 .font(.body.monospacedDigit())
+            Text(
+                "\(viewModel.smsMonthlyUsageCount) of \(viewModel.smsMonthlyLimit) texts this month (sent and received)"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if viewModel.isProvisioningSms {
                 HStack {
                     ProgressView()

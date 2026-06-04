@@ -48,6 +48,9 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsPhoneNumber: String = ""
     @Published var smsCanUse: Bool = false
     @Published var smsProvisionError: String = ""
+    @Published var smsMonthlyUsageCount: Int = 0
+    @Published var smsMonthlyUsageRemaining: Int = 1000
+    @Published var smsMonthlyLimit: Int = 1000
     @Published var isStartingSubscription = false
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
@@ -118,6 +121,9 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsPhoneNumber = (data["smsPhoneNumber"] as? String) ?? ""
             smsCanUse = data["smsCanUse"] as? Bool ?? false
             smsProvisionError = (data["smsProvisionError"] as? String) ?? ""
+            smsMonthlyLimit = (data["smsMonthlyLimit"] as? Int) ?? 1000
+            smsMonthlyUsageCount = (data["smsMonthlyUsageCount"] as? Int) ?? 0
+            smsMonthlyUsageRemaining = (data["smsMonthlyUsageRemaining"] as? Int) ?? smsMonthlyLimit
         } catch {
             errorMessage = error.localizedDescription
         }

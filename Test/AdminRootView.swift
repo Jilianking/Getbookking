@@ -152,6 +152,18 @@ struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var drawerState = DrawerState()
 
+    /// Solo owners use Business settings only; hide Team from the drawer.
+    private var drawerSections: [AdminSection] {
+        let hideTeam =
+            !authViewModel.isDemoMode
+            && authViewModel.teamAccess.isOwner
+            && authViewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+        if hideTeam {
+            return AdminSection.drawerOrder.filter { $0 != .team }
+        }
+        return AdminSection.drawerOrder
+    }
+
     var body: some View {
         ZStack(alignment: .leading) {
             // Main content
@@ -174,6 +186,16 @@ struct AdminRootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
+        .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
+            if !drawerSections.contains(drawerState.selectedSection) {
+                drawerState.selectedSection = .dashboard
+            }
+        }
+        .task(id: authViewModel.isAuthenticated) {
+            if authViewModel.isAuthenticated {
+                await authViewModel.refreshTeamAccess()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
             if let url = note.userInfo?["logoUrl"] as? String {
                 authViewModel.applyTenantLogoCache(url)
@@ -229,7 +251,7 @@ struct AdminRootView: View {
 
             // Menu
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(AdminSection.drawerOrder) { section in
+                ForEach(drawerSections) { section in
                     Button(action: {
                         drawerState.selectedSection = section
                         drawerState.isOpen = false

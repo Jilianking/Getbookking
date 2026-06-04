@@ -39,7 +39,7 @@ struct ManagerSettingsView: View {
                 }
             }
 
-            if viewModel.isTenantOwner {
+            if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.allowsTeamInvites {
                 Section {
                     Text("Studio team rules are in Settings → Team settings.")
                         .font(.caption)

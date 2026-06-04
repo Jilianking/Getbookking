@@ -36,6 +36,11 @@ enum SubscriptionPlan: String, CaseIterable {
         self != .solo
     }
 
+    /// Solo owners use Business settings (not Team settings) in the app.
+    var usesBusinessSettingsHub: Bool {
+        self == .solo
+    }
+
     /// Total members (owner + staff) allowed for this plan tier.
     var maxSeats: Int {
         switch self {
@@ -72,6 +77,7 @@ class AuthViewModel: ObservableObject {
     @Published var accountPhotoUrl: String?
     /// Team role + manager toggles + tenant booking policy (from `getMyTeamAccess`).
     @Published var teamAccess: EffectiveTeamAccess = .ownerFullAccess
+    @Published var tenantSubscriptionPlan: SubscriptionPlan = .solo
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     private let firebaseService = FirebaseService()
@@ -96,6 +102,7 @@ class AuthViewModel: ObservableObject {
                     self.tenantLogoUrl = nil
                     self.accountPhotoUrl = nil
                     self.teamAccess = EffectiveTeamAccess()
+                    self.tenantSubscriptionPlan = .solo
                 }
             }
         }
@@ -165,6 +172,7 @@ class AuthViewModel: ObservableObject {
         tenantLogoUrl = nil
         accountPhotoUrl = nil
         teamAccess = EffectiveTeamAccess()
+        tenantSubscriptionPlan = .solo
     }
 
     /// Demo mode: full app experience without Firebase sign-in.
@@ -176,15 +184,18 @@ class AuthViewModel: ObservableObject {
         tenantLogoUrl = nil
         accountPhotoUrl = nil
         teamAccess = .ownerFullAccess
+        tenantSubscriptionPlan = .studio
     }
 
     func refreshTeamAccess() async {
         if isDemoMode {
             teamAccess = .ownerFullAccess
+            tenantSubscriptionPlan = .studio
             return
         }
         guard let uid = Auth.auth().currentUser?.uid else {
             teamAccess = EffectiveTeamAccess()
+            tenantSubscriptionPlan = .solo
             return
         }
         var access = await TenantTeamAccessService.fetchCurrentAccess(isDemoMode: false)
@@ -196,6 +207,7 @@ class AuthViewModel: ObservableObject {
             )
         }
         teamAccess = access
+        tenantSubscriptionPlan = access.subscriptionPlan
     }
 
     /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.

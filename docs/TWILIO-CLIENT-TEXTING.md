@@ -2,6 +2,7 @@
 
 ## Product rules
 
+- **Monthly cap**: 1,000 SMS per tenant per calendar month (**UTC**), **inbound + outbound** combined (`smsUsagePeriod`, `smsUsageCount` on tenant). STOP/HELP/START auto-replies are not logged toward the cap.
 - **30-day free trial**: no client SMS, no phone number provisioning.
 - **Paid subscription** (`active` in Stripe): owner may enable client texting (opt-in).
 - **Mid-trial upgrade**: Account settings or Notifications → **Start subscription today** ends trial and charges the card.

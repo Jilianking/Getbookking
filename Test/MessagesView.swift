@@ -9,6 +9,7 @@ struct MessagesView: View {
     @State private var composePrefillName = ""
     @State private var searchText = ""
     @State private var showErrorAlert = false
+    @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -80,9 +81,21 @@ struct MessagesView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     if selectedThreadId == nil {
-                        Button(action: { showingCompose = true }) {
-                            Image(systemName: "square.and.pencil")
-                                .font(.body)
+                        HStack(spacing: 16) {
+                            NavigationLink {
+                                MessagesSettingsView(viewModel: messagingSettingsViewModel)
+                                    .environmentObject(authViewModel)
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.body)
+                            }
+                            .accessibilityLabel("Messaging settings")
+
+                            Button(action: { showingCompose = true }) {
+                                Image(systemName: "square.and.pencil")
+                                    .font(.body)
+                            }
+                            .accessibilityLabel("New message")
                         }
                     }
                 }

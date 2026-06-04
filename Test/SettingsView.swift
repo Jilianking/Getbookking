@@ -76,7 +76,7 @@ struct SettingsView: View {
                     if !viewModel.isTenantOwner {
                         Section(
                             header: Text("Booking policy"),
-                            footer: Text("Studio booking is configured by the owner under Team settings → Booking settings.")
+                            footer: Text("Booking confirmation is configured by the owner under Settings.")
                                 .font(.caption2)
                         ) {
                             HStack {
@@ -90,23 +90,46 @@ struct SettingsView: View {
 
                     if viewModel.isTenantOwner {
                         Section(
-                            footer: Text("Studio rules for managers and booking. People and per-person options are on the Team screen.")
-                                .font(.caption2)
+                            footer: Text(
+                                viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+                                    ? "Booking, design, and client texting for your business."
+                                    : "Studio rules for managers and booking. People and per-person options are on the Team screen."
+                            )
+                            .font(.caption2)
                         ) {
-                            NavigationLink {
-                                TeamSettingsDetailView(
-                                    teamPolicyViewModel: teamPolicyViewModel,
-                                    settingsViewModel: viewModel,
-                                    isDemoMode: authViewModel.isDemoMode
-                                )
-                                .environmentObject(authViewModel)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Team settings")
-                                        .font(.subheadline.weight(.medium))
-                                    Text("Booking, design, clients, notifications")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                            if viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
+                                NavigationLink {
+                                    BusinessSettingsDetailView(
+                                        teamPolicyViewModel: teamPolicyViewModel,
+                                        settingsViewModel: viewModel,
+                                        isDemoMode: authViewModel.isDemoMode
+                                    )
+                                    .environmentObject(authViewModel)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Business settings")
+                                            .font(.subheadline.weight(.medium))
+                                        Text("Booking, design, notifications")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            } else {
+                                NavigationLink {
+                                    TeamSettingsDetailView(
+                                        teamPolicyViewModel: teamPolicyViewModel,
+                                        settingsViewModel: viewModel,
+                                        isDemoMode: authViewModel.isDemoMode
+                                    )
+                                    .environmentObject(authViewModel)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Team settings")
+                                            .font(.subheadline.weight(.medium))
+                                        Text("Booking, design, clients, notifications")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -114,8 +137,12 @@ struct SettingsView: View {
 
                     Section(
                         header: Text("Scheduling & Availability"),
-                        footer: Text("Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings.")
-                            .font(.caption2)
+                        footer: Text(
+                            viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+                                ? "Your personal hours and time zone. Booking flow is in Business settings → Booking settings."
+                                : "Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings."
+                        )
+                        .font(.caption2)
                     ) {
                         TextField("Time zone", text: $viewModel.timeZoneId)
                             .textFieldStyle(.roundedBorder)

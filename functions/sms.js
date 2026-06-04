@@ -13,7 +13,64 @@ const masterTwilioMessagingServiceSid = defineString("MASTER_TWILIO_MESSAGING_SE
   default: "",
   description: "Twilio Messaging Service SID for the approved US A2P 10DLC campaign",
 });
-const MAX_TENANT_OUTBOUND_SMS = 1000;
+const MAX_TENANT_SMS_PER_MONTH = 1000;
+const SMS_MONTHLY_LIMIT_MESSAGE =
+  "Monthly SMS limit reached (1,000 messages including sent and received). Resets next calendar month (UTC).";
+
+function currentSmsUsagePeriodUtc() {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/** Inbound + outbound messages counted toward the monthly cap. */
+function smsMonthlyUsageForTenant(tenant) {
+  const period = currentSmsUsagePeriodUtc();
+  const storedPeriod = (tenant && tenant.smsUsagePeriod) || "";
+  if (storedPeriod === period) {
+    return {
+      period,
+      count: Number(tenant.smsUsageCount || 0),
+      limit: MAX_TENANT_SMS_PER_MONTH,
+      remaining: Math.max(0, MAX_TENANT_SMS_PER_MONTH - Number(tenant.smsUsageCount || 0)),
+    };
+  }
+  return {
+    period,
+    count: 0,
+    limit: MAX_TENANT_SMS_PER_MONTH,
+    remaining: MAX_TENANT_SMS_PER_MONTH,
+  };
+}
+
+/**
+ * Reserve one message against the tenant monthly cap (atomic). Throws if at limit.
+ */
+async function consumeSmsMonthlySlot(tenantId) {
+  const period = currentSmsUsagePeriodUtc();
+  const ref = getDb().collection("tenants").doc(tenantId);
+  await getDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() : {};
+    let count = 0;
+    if ((data.smsUsagePeriod || "").toString() === period) {
+      count = Number(data.smsUsageCount || 0);
+    }
+    if (count >= MAX_TENANT_SMS_PER_MONTH) {
+      throw new Error(SMS_MONTHLY_LIMIT_MESSAGE);
+    }
+    tx.set(
+      ref,
+      {
+        smsUsagePeriod: period,
+        smsUsageCount: count + 1,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+}
 
 function getDb() {
   return admin.firestore();
@@ -326,10 +383,7 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
         "In Team → Notifications, tap Refresh texting number, then try again."
     );
   }
-  const outboundCount = Number(tenant.smsOutboundCount || 0);
-  if (outboundCount >= MAX_TENANT_OUTBOUND_SMS) {
-    throw new Error("Outbound SMS limit reached (1,000 total).");
-  }
+  await consumeSmsMonthlySlot(tenantId);
 
   const messagingServiceSid = getMasterMessagingServiceSid();
   const msg = await master.messages.create({
@@ -358,7 +412,6 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
 
   await getDb().collection("tenants").doc(tenantId).set(
     {
-      smsOutboundCount: admin.firestore.FieldValue.increment(1),
       twilioMessagingServiceSid: messagingServiceSid,
       twilioSubaccountSid: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -377,12 +430,25 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   return msg;
 }
 
+/**
+ * Log inbound client SMS and count toward monthly usage. Returns false if monthly cap reached.
+ */
 async function recordInboundTenantSms(tenantId, inbound) {
   const from = (inbound && inbound.from) || "";
   const to = (inbound && inbound.to) || "";
   const body = ((inbound && inbound.body) || "").toString();
   const threadId = (inbound && inbound.threadId) || threadIdFromPhone(from);
-  if (!tenantId || !from || !to) return;
+  if (!tenantId || !from || !to) return false;
+
+  try {
+    await consumeSmsMonthlySlot(tenantId);
+  } catch (e) {
+    if (String(e.message || e).includes("Monthly SMS limit")) {
+      console.warn("recordInboundTenantSms: monthly cap", tenantId);
+      return false;
+    }
+    throw e;
+  }
 
   await getDb()
     .collection("tenants")
@@ -403,6 +469,7 @@ async function recordInboundTenantSms(tenantId, inbound) {
     lastMessageBody: body.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+  return true;
 }
 
 async function suspendTenantSms(tenantId, reason) {
@@ -479,5 +546,8 @@ module.exports = {
   extractCustomerPhone,
   inboundWebhookUrl,
   threadIdFromPhone,
-  MAX_TENANT_OUTBOUND_SMS,
+  MAX_TENANT_SMS_PER_MONTH,
+  SMS_MONTHLY_LIMIT_MESSAGE,
+  smsMonthlyUsageForTenant,
+  currentSmsUsagePeriodUtc,
 };

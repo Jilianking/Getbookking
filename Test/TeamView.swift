@@ -26,6 +26,10 @@ struct TeamView: View {
                 if !hasLoadedTeamContext && !authViewModel.isDemoMode {
                     ProgressView("Loading team…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if showsOwnerTeamUI,
+                          teamViewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
+                    SoloOwnerTeamPlaceholderView()
+                        .environmentObject(authViewModel)
                 } else if showsOwnerTeamUI {
                     ManagerSettingsView(
                         viewModel: teamViewModel,
@@ -80,6 +84,19 @@ struct TeamView: View {
             await authViewModel.refreshTeamAccess()
         }
         hasLoadedTeamContext = true
+    }
+}
+
+// MARK: - Solo owner (Team drawer hidden; fallback if navigated here)
+
+private struct SoloOwnerTeamPlaceholderView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("Solo plan", systemImage: "person.fill")
+        } description: {
+            Text("Your plan is owner-only. Manage booking, design, and client texting under Settings → Business settings, or open Messages and tap the gear icon.")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

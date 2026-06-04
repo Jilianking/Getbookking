@@ -2118,6 +2118,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     tenantId: ctx.tenantId,
     isOwner,
     accessRole: isOwner ? "owner" : ctx.accessRole,
+    subscriptionPlan: normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan),
     managerPermissions: ctx.managerPermissions,
     confirmationType: ctx.workflow.confirmationType,
     responseTimeHours: ctx.workflow.responseTimeHours,
@@ -2871,6 +2872,7 @@ function serializeMessagingFields(tenant, ownerUserData) {
   const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
   const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
   const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
+  const usage = sms.smsMonthlyUsageForTenant(tenant);
   return {
     subscriptionStatus,
     subscriptionPaid: paid,
@@ -2881,6 +2883,10 @@ function serializeMessagingFields(tenant, ownerUserData) {
     smsCanEnable: paid && (tenant.smsStatus || "off") !== "active",
     smsCanUse: canUse,
     smsProvisionError: (tenant.smsProvisionError || "").toString(),
+    smsMonthlyLimit: usage.limit,
+    smsMonthlyUsageCount: usage.count,
+    smsMonthlyUsageRemaining: usage.remaining,
+    smsUsagePeriod: usage.period,
   };
 }
 
@@ -3107,11 +3113,8 @@ exports.sendClientSms = functions
       return { ok: true, sid: sent.sid, status: sent.status || "" };
     } catch (e) {
       const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
-      if (msg.includes("Outbound SMS limit reached")) {
-        throw new functions.https.HttpsError(
-          "resource-exhausted",
-          `This business has reached its ${sms.MAX_TENANT_OUTBOUND_SMS} total outbound text limit.`
-        );
+      if (msg.includes("Monthly SMS limit reached")) {
+        throw new functions.https.HttpsError("resource-exhausted", msg);
       }
       throw new functions.https.HttpsError("failed-precondition", msg);
     }

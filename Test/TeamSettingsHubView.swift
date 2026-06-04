@@ -11,13 +11,23 @@ struct TeamSettingsHubView: View {
     @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var teamPolicyViewModel: ManagerSettingsViewModel
     var isDemoMode: Bool
+    /// When false (Solo), hide manager-only sections and team-oriented copy.
+    var includeTeamManagementSections: Bool = true
 
     var body: some View {
         List {
-            Section {
-                Text("Studio-wide rules for managers and booking. Per-person job title, overrides, and payment split are on the Team screen.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if includeTeamManagementSections {
+                Section {
+                    Text("Studio-wide rules for managers and booking. Per-person job title, overrides, and payment split are on the Team screen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Section {
+                    Text("Booking, your website services, and client texting for your business.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if teamPolicyViewModel.isLoading && teamPolicyViewModel.members.isEmpty {
@@ -54,14 +64,16 @@ struct TeamSettingsHubView: View {
                     )
                 }
 
-                NavigationLink {
-                    TeamClientsReportsSettingsView(viewModel: teamPolicyViewModel)
-                        .environmentObject(authViewModel)
-                } label: {
-                    settingsRow(
-                        title: "Clients & reports",
-                        subtitle: "Client list and earnings for managers"
-                    )
+                if includeTeamManagementSections {
+                    NavigationLink {
+                        TeamClientsReportsSettingsView(viewModel: teamPolicyViewModel)
+                            .environmentObject(authViewModel)
+                    } label: {
+                        settingsRow(
+                            title: "Clients & reports",
+                            subtitle: "Client list and earnings for managers"
+                        )
+                    }
                 }
 
                 NavigationLink {
@@ -83,7 +95,7 @@ struct TeamSettingsHubView: View {
                 }
             }
         }
-        .navigationTitle("Team settings")
+        .navigationTitle(includeTeamManagementSections ? "Team settings" : "Business settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await teamPolicyViewModel.load(isDemoMode: isDemoMode)

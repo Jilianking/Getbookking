@@ -1,0 +1,420 @@
+//
+//  AppDesign.swift
+//
+//  Shared visual language aligned with Get Bookking marketing (warm neutrals, card UI).
+//
+
+import SwiftUI
+
+enum AppDesign {
+    static let background = Color(red: 0.99, green: 0.98, blue: 0.96)
+    static let cardBackground = Color.white
+    static let textPrimary = Color(red: 0.10, green: 0.08, blue: 0.06)
+    static let textSecondary = Color(red: 0.42, green: 0.37, blue: 0.29)
+    static let brandDark = Color(red: 0.17, green: 0.13, blue: 0.09)
+    static let brandWarm = Color(red: 0.55, green: 0.44, blue: 0.28)
+    static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
+    static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
+    static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)
+    static let declineBackground = Color(red: 0.99, green: 0.91, blue: 0.91)
+    static let searchBackground = Color(red: 0.94, green: 0.94, blue: 0.93)
+    static let chipBorder = Color(red: 0.88, green: 0.86, blue: 0.84)
+    static let drawerWidth: CGFloat = 300
+
+    static func softStatusColors(for status: String) -> (foreground: Color, background: Color) {
+        switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "new", "pending":
+            return (accentBlue, accentBlue.opacity(0.12))
+        case "confirmed":
+            return (accentGreen, accentGreen.opacity(0.14))
+        case "declined", "cancelled":
+            return (accentRed, declineBackground)
+        default:
+            return (textSecondary, searchBackground)
+        }
+    }
+}
+
+struct AppCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(AppDesign.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+    }
+}
+
+extension View {
+    func appCard() -> some View {
+        modifier(AppCardModifier())
+    }
+
+    func appScreenBackground() -> some View {
+        background(AppDesign.background)
+    }
+
+    /// Cream list surface (Form/List) without changing row logic.
+    func appListSurface() -> some View {
+        scrollContentBackground(.hidden)
+            .background(AppDesign.background)
+    }
+}
+
+struct AppSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppDesign.textSecondary.opacity(0.85))
+            .tracking(0.6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+    }
+}
+
+struct AppSettingsRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    var value: String?
+    var status: String?
+    var statusColor: Color = AppDesign.accentGreen
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(iconColor.opacity(0.14))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                )
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppDesign.textPrimary)
+            Spacer(minLength: 8)
+            if let status {
+                Text(status)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor)
+            } else if let value {
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .lineLimit(1)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.secondary.opacity(0.55))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+}
+
+/// KPI tile for Insights dashboard (icon square + value + trend).
+struct InsightMetricTile: View {
+    let icon: String
+    let iconColor: Color
+    let iconBackground: Color
+    let value: String
+    let label: String
+    let trend: String
+    var trendPositive: Bool = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(iconBackground)
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                )
+            Text(value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(AppDesign.textPrimary)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+            Text(trend)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(trendPositive ? AppDesign.accentGreen : AppDesign.textSecondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .appCard()
+    }
+}
+
+struct AppStatCard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+            Text(value)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(AppDesign.textPrimary)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(AppDesign.textSecondary.opacity(0.9))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .appCard()
+    }
+}
+
+struct AppQuickActionCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(AppDesign.brandDark)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .appCard()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct AppStatusPill: View {
+    let text: String
+    var color: Color = AppDesign.accentBlue
+    var soft: Bool = false
+
+    var body: some View {
+        let colors = soft
+            ? AppDesign.softStatusColors(for: text)
+            : (foreground: .white, background: color)
+        Text(displayText)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(colors.foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(colors.background)
+            .clipShape(Capsule())
+    }
+
+    private var displayText: String {
+        let lower = text.lowercased()
+        if lower == "new" { return "New" }
+        if lower == "confirmed" { return "Confirmed" }
+        if lower == "declined" { return "Declined" }
+        if lower == "cancelled" { return "Cancelled" }
+        return text.capitalized
+    }
+}
+
+struct AppSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(AppDesign.textSecondary.opacity(0.7))
+            TextField(placeholder, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(AppDesign.searchBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+struct AppFilterChipBar<Filter: Hashable>: View {
+    let filters: [(filter: Filter, title: String)]
+    @Binding var selection: Filter
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(filters.indices, id: \.self) { index in
+                    let item = filters[index]
+                    let selected = selection == item.filter
+                    Button {
+                        selection = item.filter
+                    } label: {
+                        Text(item.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(selected ? Color.white : AppDesign.textPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(selected ? AppDesign.brandDark : AppDesign.cardBackground)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(selected ? Color.clear : AppDesign.chipBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+}
+
+struct AppMetadataChip: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .foregroundStyle(AppDesign.textSecondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(AppDesign.searchBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppDesign.chipBorder.opacity(0.6), lineWidth: 1)
+        )
+    }
+}
+
+struct AppPrimaryButtonStyle: ButtonStyle {
+    var enabled: Bool = true
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(enabled ? AppDesign.brandDark : AppDesign.brandDark.opacity(0.4))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .opacity(configuration.isPressed ? 0.88 : 1)
+    }
+}
+
+struct AppDeclineButtonStyle: ButtonStyle {
+    var enabled: Bool = true
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(AppDesign.accentRed)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(AppDesign.declineBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+struct AppDrawerBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count > 99 ? "99+" : "\(count)")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.red)
+                .clipShape(Capsule())
+        }
+    }
+}
+
+/// Tenant / user avatar for drawer and settings profile card.
+struct AppAvatarView: View {
+    let tenantLogoURL: String?
+    let accountPhotoURL: String?
+    let displayNameFallback: String?
+    var size: CGFloat = 44
+
+    @State private var imageOpaque = false
+    @State private var imageRetryCount = 0
+
+    private var resolvedImageURL: URL? {
+        let a = accountPhotoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !a.isEmpty, let u = URL(string: a) { return u }
+        let t = tenantLogoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !t.isEmpty, let u = URL(string: t) { return u }
+        return nil
+    }
+
+    private var initials: String {
+        let name = displayNameFallback ?? "A"
+        let parts = name.split(separator: " ")
+        if parts.count >= 2 {
+            return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
+        }
+        return String(name.prefix(2)).uppercased()
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(AppDesign.accentGreen.opacity(0.85))
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(initials)
+                        .font(.system(size: size * 0.34, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+            if let url = resolvedImageURL {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .onAppear {
+                                withAnimation(.easeIn(duration: 0.2)) { imageOpaque = true }
+                            }
+                    } else {
+                        Color.clear
+                    }
+                }
+                .id("\(url.absoluteString)-\(imageRetryCount)")
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .opacity(imageOpaque ? 1 : 0)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}

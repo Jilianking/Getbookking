@@ -44,21 +44,46 @@ class ClientsViewModel: ObservableObject {
         }
     }
     
-    func createClient(_ client: Client) async {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        do {
-            let profile = try await firebaseService.fetchProviderProfile(uid: uid)
-            if let tid = profile?.tenantId {
-                let customerId = (client.phone ?? "").replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
-                let docId = customerId.isEmpty ? UUID().uuidString : customerId
-                try await firebaseService.upsertTenantCustomer(tenantId: tid, customerId: docId, name: client.name, email: client.email, phone: client.phone)
-            } else {
-                _ = try await firebaseService.createClient(client)
-            }
-            await loadClients()
-        } catch {
-            print("Error creating client: \(error)")
+    /// Creates a customer; returns document id for navigation.
+    func createClient(_ client: Client) async throws -> String {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            throw NSError(
+                domain: "ClientsViewModel",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "You must be signed in to add a customer."]
+            )
         }
+        let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+        if let tid = profile?.tenantId {
+            let docId = Self.tenantCustomerDocumentId(email: client.email, phone: client.phone)
+            try await firebaseService.upsertTenantCustomer(
+                tenantId: tid,
+                customerId: docId,
+                name: client.name,
+                email: client.email,
+                phone: client.phone
+            )
+            await loadClients()
+            return docId
+        }
+        let legacyId = try await firebaseService.createClient(client)
+        await loadClients()
+        return legacyId
+    }
+
+    static func tenantCustomerDocumentId(email: String, phone: String?) -> String {
+        let digits = PhoneFormatting.digits(from: PhoneFormatting.normalizedForStorage(phone) ?? "")
+        if digits.count >= 10 { return String(digits.suffix(10)) }
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !normalizedEmail.isEmpty {
+            let safe = normalizedEmail.replacingOccurrences(
+                of: "[^a-z0-9]+",
+                with: "_",
+                options: .regularExpression
+            )
+            return String(safe.prefix(120))
+        }
+        return UUID().uuidString
     }
     
     func updateClient(_ clientId: String, updates: [String: Any]) async {

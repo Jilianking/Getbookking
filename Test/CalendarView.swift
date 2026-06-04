@@ -18,47 +18,42 @@ struct CalendarView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                Text("Manage your appointments and schedule")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.bottom, 12)
-
-                // New Booking button
                 Button(action: { showingBookingForm = true }) {
                     HStack {
                         Image(systemName: "plus")
                         Text("New Booking")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.black)
+                    .padding(.vertical, 14)
+                    .background(AppDesign.brandDark)
                     .foregroundColor(.white)
-                    .cornerRadius(12)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
 
-                // View mode: Month | Week | Day
-                HStack {
-                    Text("View:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    ForEach(CalendarViewMode.allCases, id: \.self) { mode in
-                        Button(action: { viewMode = mode }) {
-                            Text(mode.rawValue)
-                                .font(.subheadline.weight(.medium))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(viewMode == mode ? Color.black : Color.gray.opacity(0.15))
-                                .foregroundColor(viewMode == mode ? .white : .primary)
-                                .cornerRadius(8)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(CalendarViewMode.allCases, id: \.self) { mode in
+                            let selected = viewMode == mode
+                            Button { viewMode = mode } label: {
+                                Text(mode.rawValue)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(selected ? Color.white : AppDesign.textPrimary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 9)
+                                    .background(selected ? AppDesign.brandDark : AppDesign.cardBackground)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(selected ? Color.clear : AppDesign.chipBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    Spacer()
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal)
                 .padding(.bottom, 12)
 
                 // Calendar
@@ -75,11 +70,14 @@ struct CalendarView: View {
                         EventRow(event: event)
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(AppDesign.background)
                 }
                 .refreshable {
                     await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode)
                 }
             }
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -112,39 +110,24 @@ struct EventRow: View {
     let event: Event
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(event.title)
-                    .font(.system(size: 18, weight: .semibold))
-
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
                 Spacer()
-
                 Text(event.start, style: .time)
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
             }
-
             Text(event.clientName)
-                .font(.system(size: 14))
-                .foregroundColor(.secondary)
-
-            Text(event.type.rawValue.capitalized)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(typeColor)
-                .cornerRadius(6)
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textSecondary)
+            AppStatusPill(text: event.type.rawValue.capitalized, soft: true)
         }
+        .padding(14)
+        .appCard()
         .padding(.vertical, 4)
     }
 
-    var typeColor: Color {
-        switch event.type {
-        case .appointment: return .blue
-        case .consultation: return .green
-        case .touchup: return .orange
-        case .flash: return .purple
-        }
-    }
 }

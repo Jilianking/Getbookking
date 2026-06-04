@@ -41,6 +41,7 @@ struct TeamView: View {
                         .environmentObject(authViewModel)
                 }
             }
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {

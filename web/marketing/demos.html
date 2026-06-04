@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live demo sites — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/logo-dark-32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand-dark: #2C2018;
+      --brand-warm: #8B6F47;
+      --brand-cream: #F5EDD8;
+      --brand-offwhite: #FDFAF6;
+      --text-primary: #1A1410;
+      --text-secondary: #6B5E4A;
+      --text-tertiary: #9A8A7A;
+      --border: #E8E0D4;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: var(--brand-offwhite);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 40px;
+      height: 64px;
+      background: rgba(255,255,255,0.92);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 500;
+      font-size: 15px;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .nav-logo img { width: 24px; height: 24px; }
+    .nav-back {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+    .nav-back:hover { color: var(--text-primary); }
+    main {
+      flex: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 56px 24px 80px;
+      width: 100%;
+    }
+    h1 {
+      font-size: clamp(32px, 5vw, 42px);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .lead {
+      font-size: 17px;
+      font-weight: 300;
+      color: var(--text-secondary);
+      max-width: 520px;
+      margin-bottom: 40px;
+    }
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 640px) {
+      .demo-grid { grid-template-columns: 1fr; }
+      nav { padding: 0 20px; }
+    }
+    .demo-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 24px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      display: block;
+    }
+    .demo-card:hover {
+      border-color: var(--brand-warm);
+      box-shadow: 0 8px 24px rgba(44, 32, 24, 0.08);
+    }
+    .demo-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .demo-name {
+      font-size: 20px;
+      font-weight: 500;
+    }
+    .demo-theme {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      white-space: nowrap;
+    }
+    .demo-tagline {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .demo-meta {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+    .demo-cta {
+      margin-top: 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--brand-warm);
+    }
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 13px;
+      color: var(--text-tertiary);
+      border-top: 1px solid var(--border);
+      background: #fff;
+    }
+    footer a { color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html" class="nav-logo">
+      <img src="assets/brand/logo-dark-64.png" alt="" width="24" height="24" />
+      <span>Get Bookking</span>
+    </a>
+    <a href="index.html" class="nav-back">&larr; Back to home</a>
+  </nav>
+
+  <main>
+    <h1>Explore live demo sites</h1>
+    <p class="lead">Real booking websites built with Get Bookking — no login required. Pick your industry and see what your business could look like.</p>
+    <div class="demo-grid" id="demoGrid"></div>
+  </main>
+
+  <footer>
+    <a href="signup.html">Start your free month</a>
+    &nbsp;&middot;&nbsp;
+    <a href="index.html">Home</a>
+  </footer>
+
+  <script src="demo-sites.js"></script>
+  <script>
+    (function () {
+      var grid = document.getElementById("demoGrid");
+      var useStaging = /[?&]staging=1/.test(location.search);
+      BookkingDemoSites.demos.forEach(function (d) {
+        var url = BookkingDemoSites.url(d.slug, useStaging);
+        var card = document.createElement("a");
+        card.className = "demo-card";
+        card.href = url;
+        card.target = "_blank";
+        card.rel = "noopener noreferrer";
+        card.innerHTML =
+          '<div class="demo-card-top">' +
+            '<div class="demo-name">' + d.name + '</div>' +
+            '<div class="demo-theme">' + d.theme + '</div>' +
+          '</div>' +
+          '<div class="demo-tagline">' + d.tagline + '</div>' +
+          '<div class="demo-meta">' + d.industry + ' · ' + d.location + '</div>' +
+          '<div class="demo-cta">Open live site &rarr;</div>';
+        grid.appendChild(card);
+      });
+    })();
+  </script>
+</body>
+</html>

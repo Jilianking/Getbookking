@@ -82,7 +82,7 @@ class FirebaseService: ObservableObject {
     // MARK: - Fetch Available Time Slots
     func fetchAvailableTimeSlots(
         for date: Date,
-        availability: ProviderAvailability = .default
+        availability: ProviderAvailability
     ) async throws -> [String] {
         var calendar = Calendar.current
         let tzId = availability.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)

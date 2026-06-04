@@ -25,6 +25,7 @@ struct MessagesSettingsView: View {
                 managerReadOnlyContent
             }
         }
+        .appListSurface()
         .navigationTitle("Messaging settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {

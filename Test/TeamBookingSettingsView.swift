@@ -112,6 +112,7 @@ struct TeamBookingSettingsView: View {
                 }
             }
         }
+        .appListSurface()
         .navigationTitle("Booking settings")
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -27,6 +27,7 @@ struct TeamClientMessagingSettingsView: View {
                 )
             }
         }
+        .appListSurface()
         .navigationTitle("Messaging")
         .navigationBarTitleDisplayMode(.inline)
         .task {

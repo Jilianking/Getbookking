@@ -7,183 +7,52 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import FirebaseAuth
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
+    @StateObject private var paymentsViewModel = PaymentsViewModel()
     @State private var showingLogoutAlert = false
+    @State private var settingsAlertMessage: String?
     var drawerState: DrawerState
     let sectionTitle: String
 
     var body: some View {
         NavigationView {
-            List {
-                Section {
-                    if authViewModel.isDemoMode {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            Text("Demo mode")
-                                .foregroundColor(.secondary)
-                        }
-                    } else if let email = authViewModel.currentUserEmail {
-                        NavigationLink {
-                            AccountSettingsDetailView(viewModel: viewModel)
-                                .environmentObject(authViewModel)
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(
-                                        viewModel.accountDisplayName.isEmpty
-                                            ? (authViewModel.currentUserDisplayName ?? "Account")
-                                            : viewModel.accountDisplayName
-                                    )
-                                    .font(.subheadline.weight(.medium))
-                                    Text(email)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if viewModel.isTenantOwner,
-                                       let industryName = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName {
-                                        Text(industryName)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: "person.crop.circle")
-                            Text("Account")
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    profileCard
+
+                    if !authViewModel.isDemoMode && viewModel.hasProfile {
+                        businessSection
+                        paymentsSection
                     }
 
-                    Button(action: { showingLogoutAlert = true }) {
-                        HStack {
-                            Image(systemName: "arrow.right.square")
-                            Text("Logout")
-                                .foregroundColor(.red)
-                        }
-                    }
-                } header: {
-                    Text("Account")
-                }
+                    accountSection
 
-                if !authViewModel.isDemoMode && viewModel.hasProfile {
-                    if !viewModel.isTenantOwner {
-                        Section(
-                            header: Text("Booking policy"),
-                            footer: Text("Booking confirmation is configured by the owner under Settings.")
-                                .font(.caption2)
-                        ) {
-                            HStack {
-                                Text("Booking confirmation")
-                                Spacer()
-                                Text(viewModel.tenantConfirmationType.displayName)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-
-                    if viewModel.isTenantOwner {
-                        Section(
-                            footer: Text(
-                                viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                                    ? "Booking, design, and client texting for your business."
-                                    : "Studio rules for managers and booking. People and per-person options are on the Team screen."
-                            )
-                            .font(.caption2)
-                        ) {
-                            if viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
-                                NavigationLink {
-                                    BusinessSettingsDetailView(
-                                        teamPolicyViewModel: teamPolicyViewModel,
-                                        settingsViewModel: viewModel,
-                                        isDemoMode: authViewModel.isDemoMode
-                                    )
-                                    .environmentObject(authViewModel)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Business settings")
-                                            .font(.subheadline.weight(.medium))
-                                        Text("Booking, design, notifications")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            } else {
-                                NavigationLink {
-                                    TeamSettingsDetailView(
-                                        teamPolicyViewModel: teamPolicyViewModel,
-                                        settingsViewModel: viewModel,
-                                        isDemoMode: authViewModel.isDemoMode
-                                    )
-                                    .environmentObject(authViewModel)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Team settings")
-                                            .font(.subheadline.weight(.medium))
-                                        Text("Booking, design, clients, notifications")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Section(
-                        header: Text("Scheduling & Availability"),
-                        footer: Text(
-                            viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                                ? "Your personal hours and time zone. Booking flow is in Business settings → Booking settings."
-                                : "Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings."
-                        )
-                        .font(.caption2)
-                    ) {
-                        Picker("Time zone", selection: $viewModel.timeZoneId) {
-                            ForEach(SettingsViewModel.sortedTimeZoneIdentifiers, id: \.self) { zoneId in
-                                Text(zoneId).tag(zoneId)
-                            }
-                        }
-                        Button("Save") {
-                            Task {
-                                await viewModel.saveAvailability()
-                                await authViewModel.refreshTeamAccess()
-                            }
-                        }
-                        .disabled(viewModel.isLoading)
-                        if viewModel.saveSuccess {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("Saved")
-                                    .foregroundColor(.green)
-                            }
-                        }
-                    }
-                }
-
-                if let msg = viewModel.errorMessage {
-                    Section {
+                    if let msg = viewModel.errorMessage {
                         Text(msg)
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 4)
                     }
-                }
 
-                Section(header: Text("App")) {
                     HStack {
                         Text("Version")
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
                         Spacer()
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
+                        Text(Constants.App.version)
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
                     }
+                    .padding(.horizontal, 4)
                 }
+                .padding(16)
             }
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -200,21 +69,336 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to logout?")
             }
+            .alert("Settings", isPresented: Binding(
+                get: { settingsAlertMessage != nil },
+                set: { if !$0 { settingsAlertMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { settingsAlertMessage = nil }
+            } message: {
+                Text(settingsAlertMessage ?? "")
+            }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
+                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
+                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 await authViewModel.refreshTeamAccess()
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private var profileCard: some View {
+        Group {
+            if authViewModel.isDemoMode {
+                HStack(spacing: 14) {
+                    AppAvatarView(
+                        tenantLogoURL: nil,
+                        accountPhotoURL: nil,
+                        displayNameFallback: "Demo",
+                        size: 56
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Demo mode")
+                            .font(.headline)
+                        Text("Sign in to manage your business")
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .appCard()
+            } else if let email = authViewModel.currentUserEmail {
+                NavigationLink {
+                    AccountSettingsDetailView(viewModel: viewModel)
+                        .environmentObject(authViewModel)
+                } label: {
+                    HStack(spacing: 14) {
+                        AppAvatarView(
+                            tenantLogoURL: authViewModel.tenantLogoUrl,
+                            accountPhotoURL: authViewModel.accountPhotoUrl,
+                            displayNameFallback: profileDisplayName,
+                            size: 56
+                        )
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(profileDisplayName)
+                                .font(.headline)
+                                .foregroundStyle(AppDesign.textPrimary)
+                            Text(email)
+                                .font(.subheadline)
+                                .foregroundStyle(AppDesign.textSecondary)
+                            if viewModel.isTenantOwner {
+                                Text(planIndustryPill)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppDesign.accentGreen)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(AppDesign.accentGreen.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                    .appCard()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var profileDisplayName: String {
+        if !viewModel.accountDisplayName.isEmpty { return viewModel.accountDisplayName }
+        if !viewModel.businessDisplayName.isEmpty { return viewModel.businessDisplayName }
+        return authViewModel.currentUserDisplayName ?? "Account"
+    }
+
+    private var planIndustryPill: String {
+        let industry = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "Business"
+        return "\(viewModel.tenantSubscriptionPlan.displayName) · \(industry)"
+    }
+
+    @ViewBuilder
+    private var businessSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Business")
+
+            VStack(spacing: 0) {
+                if viewModel.isTenantOwner {
+                    if viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
+                        NavigationLink {
+                            BusinessSettingsDetailView(
+                                teamPolicyViewModel: teamPolicyViewModel,
+                                settingsViewModel: viewModel,
+                                isDemoMode: authViewModel.isDemoMode
+                            )
+                            .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(
+                                icon: "storefront.fill",
+                                iconColor: .purple,
+                                title: "Business settings"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        NavigationLink {
+                            TeamSettingsDetailView(
+                                teamPolicyViewModel: teamPolicyViewModel,
+                                settingsViewModel: viewModel,
+                                isDemoMode: authViewModel.isDemoMode
+                            )
+                            .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(
+                                icon: "person.3.fill",
+                                iconColor: .purple,
+                                title: "Team settings"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if teamPolicyViewModel.smsStatus == "active", !teamPolicyViewModel.smsPhoneNumber.isEmpty {
+                        NavigationLink {
+                            TeamClientMessagingSettingsView(viewModel: teamPolicyViewModel)
+                                .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(
+                                icon: "message.fill",
+                                iconColor: .orange,
+                                title: "Messaging",
+                                value: PhoneFormatting.displayUS(teamPolicyViewModel.smsPhoneNumber)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack {
+                        Text("Booking confirmation")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(viewModel.tenantConfirmationType.displayName)
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                    .padding(16)
+                }
+
+                Divider().padding(.leading, 52)
+
+                NavigationLink {
+                    PersonalSchedulingSettingsView(viewModel: viewModel)
+                        .environmentObject(authViewModel)
+                } label: {
+                    AppSettingsRow(
+                        icon: "calendar",
+                        iconColor: AppDesign.accentGreen,
+                        title: "Scheduling & hours",
+                        value: SettingsViewModel.shortTimeZoneLabel(viewModel.timeZoneId)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .appCard()
+        }
+    }
+
+    @ViewBuilder
+    private var paymentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Payments")
+
+            VStack(spacing: 0) {
+                Button {
+                    drawerState.selectedSection = .payments
+                    drawerState.isOpen = false
+                } label: {
+                    AppSettingsRow(
+                        icon: "s.circle.fill",
+                        iconColor: AppDesign.accentGreen,
+                        title: "Stripe Connect",
+                        status: paymentsViewModel.stripeConnected ? "Connected" : "Setup",
+                        statusColor: paymentsViewModel.stripeConnected ? AppDesign.accentGreen : AppDesign.brandWarm
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 52)
+
+                Button {
+                    drawerState.selectedSection = .payments
+                    drawerState.isOpen = false
+                } label: {
+                    AppSettingsRow(
+                        icon: "iphone.gen3",
+                        iconColor: AppDesign.accentBlue,
+                        title: "Tap to Pay",
+                        status: tapToPayStatus,
+                        statusColor: tapToPayStatus == "Configured" ? AppDesign.textSecondary : AppDesign.brandWarm
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .appCard()
+        }
+    }
+
+    private var tapToPayStatus: String {
+        TapToPayLocationStore.shared.resolvedLocationId.isEmpty ? "Setup" : "Configured"
+    }
+
+    private var accountSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Account")
+
+            VStack(spacing: 0) {
+                if !authViewModel.isDemoMode, authViewModel.currentUserEmail != nil {
+                    Button { sendPasswordReset() } label: {
+                        AppSettingsRow(icon: "lock.fill", iconColor: .gray, title: "Change password")
+                    }
+                    .buttonStyle(.plain)
+
+                    if viewModel.isTenantOwner {
+                        Divider().padding(.leading, 52)
+                        NavigationLink {
+                            TeamNotificationsSettingsView(viewModel: teamPolicyViewModel)
+                                .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(icon: "bell.fill", iconColor: AppDesign.accentBlue, title: "Notifications")
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Divider().padding(.leading, 52)
+                    Link(destination: URL(string: Constants.Hosting.marketingWebOrigin)!) {
+                        AppSettingsRow(icon: "info.circle.fill", iconColor: .gray, title: "Support")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().padding(.leading, 52)
+                }
+
+                Button { showingLogoutAlert = true } label: {
+                    HStack {
+                        AppSettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: .red, title: "Log out")
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .appCard()
+        }
+    }
+
+    private func sendPasswordReset() {
+        guard let email = authViewModel.currentUserEmail else { return }
+        Task {
+            do {
+                try await Auth.auth().sendPasswordReset(withEmail: email)
+                await MainActor.run {
+                    settingsAlertMessage = "Password reset email sent to \(email)."
+                }
+            } catch {
+                await MainActor.run {
+                    settingsAlertMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Personal scheduling (hours + time zone)
+
+struct PersonalSchedulingSettingsView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        List {
+            Section(
+                footer: Text(
+                    viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+                        ? "Your personal hours and time zone. Booking flow is in Business settings → Booking settings."
+                        : "Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings."
+                )
+                .font(.caption2)
+            ) {
+                Picker("Time zone", selection: $viewModel.timeZoneId) {
+                    ForEach(SettingsViewModel.sortedTimeZoneIdentifiers, id: \.self) { zoneId in
+                        Text(zoneId).tag(zoneId)
+                    }
+                }
+                NavigationLink("Edit availability & calendar") {
+                    DaysOpenCalendarSheet(viewModel: viewModel)
+                }
+                Button("Save") {
+                    Task {
+                        await viewModel.saveAvailability()
+                        await authViewModel.refreshTeamAccess()
+                    }
+                }
+                .disabled(viewModel.isLoading)
+                if viewModel.saveSuccess {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .appListSurface()
+        .navigationTitle("Scheduling & hours")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -478,6 +662,7 @@ private struct AccountSettingsDetailView: View {
                 }
             }
         }
+        .appListSurface()
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
         .alert(industryChangeAlertTitle, isPresented: $showIndustryChangeAlert) {
@@ -686,8 +871,8 @@ struct DaysOpenCalendarSheet: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(12)
-                                        .background(viewModel.hasInvalidSlot(slot) ? Color.red.opacity(0.1) : Color.gray.opacity(0.06))
-                                        .cornerRadius(10)
+                                        .background(viewModel.hasInvalidSlot(slot) ? AppDesign.declineBackground : AppDesign.searchBackground)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                     }
                                     .buttonStyle(.plain)
                                     Picker("", selection: Binding(
@@ -739,11 +924,11 @@ struct DaysOpenCalendarSheet: View {
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.gray.opacity(0.08))
-                    .cornerRadius(12)
+                    .appCard()
                     .padding(.horizontal, 24)
                 }
             }
+            .appScreenBackground()
             .navigationTitle("Scheduling")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -796,9 +981,9 @@ struct DaysOpenCalendarSheet: View {
                         .font(.caption2.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background((slot.recurringDays ?? []).contains(day) ? Color.black : Color.gray.opacity(0.15))
-                        .foregroundColor((slot.recurringDays ?? []).contains(day) ? .white : .primary)
-                        .cornerRadius(8)
+                        .background((slot.recurringDays ?? []).contains(day) ? AppDesign.brandDark : AppDesign.searchBackground)
+                        .foregroundStyle((slot.recurringDays ?? []).contains(day) ? Color.white : AppDesign.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -850,6 +1035,7 @@ struct TimeSlotEditSheet: View {
                     }
                 }
             }
+            .appListSurface()
             .navigationTitle("Edit time slot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -889,7 +1075,7 @@ struct CalendarDateCell: View {
                 .background(backgroundColor)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isToday ? Color.black : Color.clear, lineWidth: 2)
+                        .stroke(isToday ? AppDesign.brandDark : Color.clear, lineWidth: 2)
                 )
                 .foregroundColor(foregroundColor)
                 .cornerRadius(8)
@@ -901,7 +1087,7 @@ struct CalendarDateCell: View {
     private var backgroundColor: Color {
         if isBlocked { return Color.red.opacity(0.3) }
         if isAvailable { return Color.green.opacity(0.4) }
-        if isToday { return Color.black.opacity(0.08) }
+        if isToday { return AppDesign.searchBackground }
         return Color.clear
     }
 

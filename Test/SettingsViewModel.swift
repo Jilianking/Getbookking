@@ -28,6 +28,7 @@ class SettingsViewModel: ObservableObject {
     @Published var profilePhotoUrl: String = ""
     @Published var isUploadingLogo = false
     @Published var accountDisplayName: String = ""
+    @Published var businessDisplayName: String = ""
     /// Editable full name (Settings → Account); persisted to Firestore + Firebase Auth display name.
     @Published var accountFullNameDraft: String = ""
     @Published var isSavingAccountName = false
@@ -162,6 +163,7 @@ class SettingsViewModel: ObservableObject {
                     let shown = Self.accountDisplayString(from: p)
                     accountDisplayName = shown
                     accountFullNameDraft = shown
+                    businessDisplayName = p.business
                     if ownerMatch {
                         confirmationType = resolvedTenantType
                         managersApproveAppointments = tenantManagersApprove
@@ -527,6 +529,20 @@ class SettingsViewModel: ObservableObject {
     }
 
     static let sortedTimeZoneIdentifiers: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
+
+    static func shortTimeZoneLabel(_ id: String) -> String {
+        let known: [String: String] = [
+            "America/New_York": "America/NY",
+            "America/Los_Angeles": "America/LA",
+            "America/Chicago": "America/CHI",
+            "America/Denver": "America/DEN",
+            "America/Phoenix": "America/PHX",
+        ]
+        if let mapped = known[id] { return mapped }
+        let parts = id.split(separator: "/")
+        guard parts.count == 2 else { return id }
+        return "\(parts[0])/\(parts[1].prefix(3))"
+    }
 
     static func normalizedTimeZoneId(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)

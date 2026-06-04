@@ -29,6 +29,11 @@
            url('/fonts/Butler-Regular.woff') format('woff');
       font-display: swap;
     }
+    /* Marketing homepage iframe embed (`?bk_embed=1`) */
+    html.bk-marketing-embed .tattoo-sidebar { display: none !important; }
+    html.bk-marketing-embed body > footer { display: none !important; }
+    html.bk-marketing-embed { overflow-x: hidden; }
+
     :root {
       /* UI: sidebar, body, forms, section titles (Inter). Hero headline uses --font-hero; template picks the stack. */
       --font-display: 'Inter', system-ui, sans-serif;
@@ -5526,6 +5531,9 @@
 
   <script>
     (function() {
+      if (/(?:^|[?&])bk_embed=1(?:&|$)/.test(location.search || '')) {
+        document.documentElement.classList.add('bk-marketing-embed');
+      }
       if (typeof firebase === 'undefined' || typeof firebaseConfig === 'undefined') {
         document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase failed to load.</p></div></div>';
         return;

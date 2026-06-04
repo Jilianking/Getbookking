@@ -4,9 +4,13 @@ import FirebaseAuth
 
 class DashboardViewModel: ObservableObject {
     @Published var pendingRequestsCount = 0
+    @Published var unreadRequestsCount = 0
     @Published var upcomingBookingsCount = 0
+    @Published var confirmedThisMonthCount = 0
     @Published var totalClientsCount = 0
     @Published var monthlyRevenue: Double = 0
+    @Published var businessDisplayName: String = ""
+    @Published var tenantIndustry: String = BookingTemplate.custom.rawValue
     @Published var recentRequests: [Request] = []
     @Published var recentBookingRequests: [BookingRequest] = []
     @Published var useTenantData = false
@@ -20,9 +24,13 @@ class DashboardViewModel: ObservableObject {
         if isDemoMode {
             await MainActor.run {
                 pendingRequestsCount = 0
+                unreadRequestsCount = 0
                 upcomingBookingsCount = 0
+                confirmedThisMonthCount = 0
                 totalClientsCount = 0
                 monthlyRevenue = 0
+                businessDisplayName = ""
+                tenantIndustry = BookingTemplate.custom.rawValue
                 recentRequests = []
                 recentBookingRequests = []
                 useTenantData = false
@@ -41,14 +49,33 @@ class DashboardViewModel: ObservableObject {
             if let tid = profile?.tenantId {
                 let bookingReqs = try await firebaseService.fetchTenantBookingRequests(tenantId: tid)
                 let customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
-                let pending = bookingReqs.filter { $0.status == "NEW" }
-                let upcoming = bookingReqs.filter { $0.status == "confirmed" }
+                var industry = profile?.industry ?? BookingTemplate.custom.rawValue
+                if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
+                    industry = (tenant["industry"] as? String) ?? industry
+                }
+                let pending = bookingReqs.filter { ($0.status).uppercased() == "NEW" }
+                let unread = bookingReqs.filter {
+                    $0.status.uppercased() == "NEW" && $0.readAt == nil
+                }
+                let upcoming = bookingReqs.filter { $0.status.lowercased() == "confirmed" }
+                let monthStart = Calendar.current.date(
+                    from: Calendar.current.dateComponents([.year, .month], from: Date())
+                ) ?? Date()
+                let confirmedMonth = bookingReqs.filter { req in
+                    guard req.status.lowercased() == "confirmed" else { return false }
+                    guard let created = req.createdAt else { return false }
+                    return created >= monthStart
+                }
                 await MainActor.run {
                     useTenantData = true
                     pendingRequestsCount = pending.count
+                    unreadRequestsCount = unread.count
                     upcomingBookingsCount = upcoming.count
+                    confirmedThisMonthCount = confirmedMonth.count
                     totalClientsCount = customers.count
                     monthlyRevenue = 0
+                    businessDisplayName = profile?.business ?? ""
+                    tenantIndustry = industry
                     recentBookingRequests = Array(bookingReqs.prefix(10))
                     recentRequests = []
                     isLoading = false
@@ -78,9 +105,13 @@ class DashboardViewModel: ObservableObject {
                 await MainActor.run {
                     useTenantData = false
                     pendingRequestsCount = pending.count
+                    unreadRequestsCount = pending.filter { $0.reviewedAt == nil }.count
                     upcomingBookingsCount = upcoming.count
+                    confirmedThisMonthCount = upcoming.count
                     totalClientsCount = clients.count
                     monthlyRevenue = revenue
+                    businessDisplayName = profile?.business ?? ""
+                    tenantIndustry = profile?.industry ?? BookingTemplate.custom.rawValue
                     recentRequests = Array(requests.prefix(10))
                     recentBookingRequests = []
                     isLoading = false

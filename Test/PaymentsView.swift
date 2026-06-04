@@ -46,7 +46,7 @@ struct PaymentsView: View {
                     .overlay {
                         if viewModel.isEnsuringTapToPayLocation {
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.systemBackground).opacity(0.85))
+                                .fill(AppDesign.cardBackground.opacity(0.85))
                             ProgressView()
                         }
                     }
@@ -84,10 +84,8 @@ struct PaymentsView: View {
                             Image(systemName: "chevron.right")
                                 .foregroundColor(.secondary)
                         }
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                        .padding(16)
+                        .appCard()
                     }
                     .buttonStyle(.plain)
                     .disabled(!viewModel.stripeConnected || viewModel.availableBalance <= 0)
@@ -98,7 +96,7 @@ struct PaymentsView: View {
                 }
                 .padding(.vertical, 20)
             }
-            .background(Color.gray.opacity(0.06))
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -191,7 +189,7 @@ struct PaymentsView: View {
     private var paymentsIntro: some View {
         Text("Accept payments and manage your earnings")
             .font(.subheadline)
-            .foregroundColor(.secondary)
+            .foregroundStyle(AppDesign.textSecondary)
             .padding(.horizontal)
     }
 
@@ -205,8 +203,7 @@ struct PaymentsView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(24)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
+                    .appCard()
                     .padding(.horizontal)
             } else if viewModel.transactions.isEmpty {
                 VStack(spacing: 12) {
@@ -222,9 +219,7 @@ struct PaymentsView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(32)
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                .appCard()
                 .padding(.horizontal)
             } else {
                 VStack(spacing: 0) {
@@ -232,9 +227,7 @@ struct PaymentsView: View {
                         PaymentTransactionRow(transaction: txn, viewModel: viewModel)
                     }
                 }
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                .appCard()
                 .padding(.horizontal)
             }
         }
@@ -327,10 +320,8 @@ struct PaymentActionCard: View {
                 Image(systemName: "chevron.right")
                     .foregroundColor(.secondary)
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+            .padding(16)
+            .appCard()
         }
         .buttonStyle(.plain)
         .disabled(disabled)

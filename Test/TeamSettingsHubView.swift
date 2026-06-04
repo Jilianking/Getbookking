@@ -105,6 +105,7 @@ struct TeamSettingsHubView: View {
                 }
             }
         }
+        .appListSurface()
         .navigationTitle(includeTeamManagementSections ? "Team settings" : "Business settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {

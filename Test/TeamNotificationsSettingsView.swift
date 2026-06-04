@@ -39,6 +39,7 @@ struct TeamNotificationsSettingsView: View {
 
             TeamManagerPolicySaveSection(viewModel: viewModel, label: "Save")
         }
+        .appListSurface()
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task {

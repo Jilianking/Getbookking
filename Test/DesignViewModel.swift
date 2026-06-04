@@ -1043,7 +1043,7 @@ class DesignViewModel: ObservableObject {
                 let paletteFamily = WebTheme(rawValue: resolvedTheme)?.family ?? .classic
                 let storedPaletteId = tenant?["webColorPaletteId"] as? String
                 webColorPaletteId = WebColorPalettes.resolvedPaletteId(stored: storedPaletteId, family: paletteFamily)
-                if (storedPaletteId as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if (storedPaletteId ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     snapFeaturedWorkColorsToNearestPreset()
                 }
                 sidebarIconColorHome = tenant?["sidebarIconColorHome"] as? String ?? ""

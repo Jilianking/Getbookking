@@ -17,45 +17,48 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 32) {
-            // Branding
-            Text("Booking App")
-                .font(.system(size: 36, weight: .bold))
+            Text("Get Bookking")
+                .font(.system(size: 36, weight: .bold, design: .serif))
+                .foregroundStyle(AppDesign.textPrimary)
                 .padding(.top, 80)
 
             signInCard
 
             Spacer()
         }
-        .background(Color.gray.opacity(0.06))
+        .appScreenBackground()
     }
 
     private var signInCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Sign in")
                 .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(AppDesign.textPrimary)
             Text("Use your account to manage bookings")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(AppDesign.textSecondary)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.textPrimary)
                 TextField("you@example.com", text: $email)
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
                     .padding(12)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(10)
+                    .background(AppDesign.searchBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(AppDesign.chipBorder, lineWidth: 1)
                     )
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.textPrimary)
                 HStack {
                     if isPasswordVisible {
                         TextField("Password", text: $password)
@@ -64,15 +67,15 @@ struct LoginView: View {
                     }
                     Button(action: { isPasswordVisible.toggle() }) {
                         Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(AppDesign.textSecondary)
                     }
                 }
                 .padding(12)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(10)
+                .background(AppDesign.searchBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppDesign.chipBorder, lineWidth: 1)
                 )
             }
 
@@ -87,47 +90,44 @@ struct LoginView: View {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .frame(maxWidth: .infinity)
-                        .padding()
                 } else {
                     Text("Sign in")
-                        .frame(maxWidth: .infinity)
-                        .padding()
                 }
             }
-            .background(Color.black)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .buttonStyle(AppPrimaryButtonStyle(enabled: !isLoading && !email.isEmpty && !password.isEmpty))
             .disabled(isLoading || email.isEmpty || password.isEmpty)
 
             Button(action: openMarketingSignUp) {
                 Text("Create an account")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
-                    .padding()
             }
-            .foregroundColor(.primary)
+            .foregroundStyle(AppDesign.textPrimary)
+            .padding(.vertical, 14)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppDesign.chipBorder, lineWidth: 1)
             )
-            .cornerRadius(12)
 
-            Button("Demo login (no backend)") {
-                authViewModel.demoLogin()
+            Button(action: openMarketingDemos) {
+                Text("Explore demo websites")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
             }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
             .padding(.top, 4)
         }
         .padding(24)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
+        .appCard()
         .padding(.horizontal, 24)
     }
 
     private func openMarketingSignUp() {
         guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func openMarketingDemos() {
+        guard let url = URL(string: Constants.Hosting.marketingDemosURL) else { return }
         UIApplication.shared.open(url)
     }
 

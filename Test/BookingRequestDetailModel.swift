@@ -242,8 +242,8 @@ struct BookingRequestFormMediaGalleryView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .frame(minHeight: 112)
-                                    .background(Color.gray.opacity(0.12))
-                                    .cornerRadius(12)
+                                    .background(AppDesign.searchBackground)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 }
                             } else {
                                 AsyncImage(url: url) { phase in
@@ -251,8 +251,8 @@ struct BookingRequestFormMediaGalleryView: View {
                                     case .empty:
                                         ProgressView()
                                             .frame(maxWidth: .infinity, minHeight: 120)
-                                            .background(Color.gray.opacity(0.08))
-                                            .cornerRadius(12)
+                                            .background(AppDesign.searchBackground)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     case .success(let image):
                                         image
                                             .resizable()
@@ -271,8 +271,8 @@ struct BookingRequestFormMediaGalleryView: View {
                                             }
                                             .foregroundColor(.primary)
                                             .frame(maxWidth: .infinity, minHeight: 120)
-                                            .background(Color.gray.opacity(0.1))
-                                            .cornerRadius(12)
+                                            .background(AppDesign.searchBackground)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                         }
                                     @unknown default:
                                         EmptyView()
@@ -335,9 +335,7 @@ struct BookingRequestFormSectionsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                .appCard()
             }
         }
     }

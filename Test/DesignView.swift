@@ -46,7 +46,7 @@ struct DesignView: View {
                     previewContent
                 }
             }
-            .background(Color(.systemGroupedBackground))
+            .appScreenBackground()
             .navigationTitle(isShowingBuilder ? sectionTitle : "Design")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -262,14 +262,14 @@ struct DesignView: View {
                                     AsyncImage(url: url) { image in
                                         image.resizable().aspectRatio(contentMode: .fill)
                                     } placeholder: {
-                                        Color.gray.opacity(0.2)
+                                        AppDesign.searchBackground
                                     }
                                     .frame(width: previewThumbSize.width, height: previewThumbSize.height)
                                     .clipped()
                                     .cornerRadius(8)
                                 } else {
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.gray.opacity(0.2))
+                                        .fill(AppDesign.searchBackground)
                                         .frame(width: previewThumbSize.width, height: previewThumbSize.height)
                                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                                 }
@@ -374,14 +374,14 @@ struct DesignView: View {
                                     AsyncImage(url: url) { image in
                                         image.resizable().aspectRatio(contentMode: .fill)
                                     } placeholder: {
-                                        Color.gray.opacity(0.2)
+                                        AppDesign.searchBackground
                                     }
                                     .frame(width: previewThumbSize.width, height: previewThumbSize.height)
                                     .clipped()
                                     .cornerRadius(8)
                                 } else {
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.gray.opacity(0.2))
+                                        .fill(AppDesign.searchBackground)
                                         .frame(width: previewThumbSize.width, height: previewThumbSize.height)
                                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                                 }
@@ -601,7 +601,7 @@ struct DesignView: View {
                 }
             }
         }
-        .background(Color(.systemBackground))
+        .appCard()
         .onChange(of: isQuickEditEnabled) { _, enabled in
             if !enabled {
                 quickEditInlineFocus = nil
@@ -632,7 +632,7 @@ struct DesignView: View {
             .background(Color(.systemGray5))
             .cornerRadius(8)
             .padding()
-            .background(Color(.systemBackground))
+            .appCard()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let msg = viewModel.errorMessage {
@@ -1749,14 +1749,14 @@ struct HeroImageUploadSection: View {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Color.gray.opacity(0.2)
+                        AppDesign.searchBackground
                     }
                     .frame(width: 80, height: 56)
                     .clipped()
                     .cornerRadius(8)
                 } else {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(AppDesign.searchBackground)
                         .frame(width: 80, height: 56)
                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 }
@@ -1838,14 +1838,14 @@ struct Studio12AuxImageUploadSection: View {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Color.gray.opacity(0.2)
+                        AppDesign.searchBackground
                     }
                     .frame(width: 80, height: 56)
                     .clipped()
                     .cornerRadius(8)
                 } else {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(AppDesign.searchBackground)
                         .frame(width: 80, height: 56)
                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 }
@@ -1945,7 +1945,7 @@ struct GalleryImagesSection: View {
                             AsyncImage(url: url) { image in
                                 image.resizable().aspectRatio(contentMode: .fill)
                             } placeholder: {
-                                Color.gray.opacity(0.2)
+                                AppDesign.searchBackground
                             }
                             .frame(width: 72, height: 72)
                             .clipped()
@@ -2120,7 +2120,7 @@ struct FeaturedWorkHomeGallerySection: View {
                 AsyncImage(url: url) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Color.gray.opacity(0.2)
+                    AppDesign.searchBackground
                 }
                 .frame(width: 72, height: 72)
                 .clipped()
@@ -2805,7 +2805,7 @@ private struct DesignThemePickerBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color(.systemBackground))
+        .appCard()
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -3239,7 +3239,7 @@ private struct TemplateFamilyCard: View {
             }
             .padding(14)
         }
-        .background(Color(.systemBackground))
+        .appCard()
         .cornerRadius(14)
         .overlay(
             RoundedRectangle(cornerRadius: 14)
@@ -3467,7 +3467,7 @@ private struct ClassicTemplatePreview: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color(.systemBackground))
+                .appCard()
                 ZStack(alignment: .bottom) {
                     Rectangle()
                         .fill(

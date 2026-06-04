@@ -110,6 +110,7 @@ struct TeamMemberDetailView: View {
                 }
             }
         }
+        .appListSurface()
         .navigationTitle(member.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -30,17 +30,9 @@ struct MessagesView: View {
                 if let threadId = selectedThreadId {
                     MessageThreadView(threadId: threadId, viewModel: viewModel, onBack: { selectedThreadId = nil })
                 } else {
-                    // Search
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        TextField("Search conversations...", text: $searchText)
-                    }
-                    .padding(10)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    AppSearchField(placeholder: "Search conversations...", text: $searchText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
 
                     Group {
                         if filteredSummaries.isEmpty {
@@ -65,6 +57,8 @@ struct MessagesView: View {
                                     }
                             }
                             .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .background(AppDesign.background)
                         }
                     }
                     .refreshable {
@@ -72,6 +66,7 @@ struct MessagesView: View {
                     }
                 }
             }
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -159,32 +154,33 @@ struct ThreadRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.purple.opacity(0.8))
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Text(summary.clientName.prefix(1).uppercased())
-                        .font(.headline)
-                        .foregroundColor(.white)
-                )
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: nil,
+                displayNameFallback: summary.clientName,
+                size: 44
+            )
             VStack(alignment: .leading, spacing: 4) {
                 Text(summary.clientName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
                 if !summary.lastMessageBody.isEmpty {
                     Text(summary.lastMessageBody)
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .lineLimit(2)
                 }
             }
             Spacer()
             if let lastAt = summary.lastMessageAt {
                 Text(lastAt, style: .time)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(AppDesign.textSecondary)
             }
         }
-        .padding(.vertical, 8)
+        .padding(14)
+        .appCard()
+        .padding(.vertical, 4)
     }
 }
 
@@ -206,10 +202,12 @@ struct MessageThreadView: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                Circle()
-                    .fill(Color.purple.opacity(0.8))
-                    .frame(width: 40, height: 40)
-                    .overlay(Text(clientName.prefix(1).uppercased()).font(.headline).foregroundColor(.white))
+                AppAvatarView(
+                    tenantLogoURL: nil,
+                    accountPhotoURL: nil,
+                    displayNameFallback: clientName,
+                    size: 40
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(clientName)
                         .font(.headline)
@@ -222,7 +220,7 @@ struct MessageThreadView: View {
                 Spacer()
             }
             .padding()
-            .background(Color(.systemBackground))
+            .background(AppDesign.cardBackground)
 
             Divider()
 
@@ -325,8 +323,8 @@ struct MessageBubble: View {
             VStack(alignment: message.sender == .admin ? .trailing : .leading, spacing: 4) {
                 Text(message.content)
                     .padding()
-                    .background(message.sender == .admin ? Color.blue : Color.gray.opacity(0.2))
-                    .foregroundColor(message.sender == .admin ? .white : .primary)
+                    .background(message.sender == .admin ? AppDesign.accentBlue : AppDesign.searchBackground)
+                    .foregroundStyle(message.sender == .admin ? Color.white : AppDesign.textPrimary)
                     .cornerRadius(16)
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
@@ -627,6 +625,7 @@ private struct ComposeClientPickerSheet: View {
                     .buttonStyle(.plain)
                 }
             }
+            .appListSurface()
             .searchable(text: $searchText, prompt: "Search name or number")
             .navigationTitle("Choose Recipient")
             .toolbar {

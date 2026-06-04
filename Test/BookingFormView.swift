@@ -98,19 +98,27 @@ struct BookingFormView: View {
                     TextField("Any special requests...", text: $notes)
                 }
                 
-                Button(action: submitBooking) {
-                    HStack {
+                Section {
+                    Button(action: submitBooking) {
                         if isSubmitting {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                Spacer()
+                            }
+                        } else {
+                            Text("Submit Booking")
                         }
-                        Text(isSubmitting ? "Submitting..." : "Submit Booking")
-                            .fontWeight(.semibold)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(AppPrimaryButtonStyle(enabled: isFormValid && !isSubmitting))
+                    .disabled(!isFormValid || isSubmitting)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
+                    .listRowBackground(Color.clear)
                 }
-                .disabled(!isFormValid || isSubmitting)
             }
+            .appListSurface()
+            .appScreenBackground()
             .navigationTitle("New Booking")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

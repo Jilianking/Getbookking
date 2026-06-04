@@ -29,6 +29,7 @@ struct TeamClientsReportsSettingsView: View {
 
             TeamManagerPolicySaveSection(viewModel: viewModel, label: "Save")
         }
+        .appListSurface()
         .navigationTitle("Clients & reports")
         .navigationBarTitleDisplayMode(.inline)
     }

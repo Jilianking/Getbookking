@@ -29,7 +29,7 @@ struct ClientProfileView: View {
 
             bottomActionBar
         }
-        .background(Color(.systemGroupedBackground))
+        .appScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -62,21 +62,20 @@ struct ClientProfileView: View {
 
     private var profileHeader: some View {
         VStack(spacing: 12) {
-            Circle()
-                .fill(Color.black)
-                .frame(width: 64, height: 64)
-                .overlay(
-                    Text(viewModel.client.name.prefix(1).uppercased())
-                        .font(.title2.weight(.semibold))
-                        .foregroundColor(.white)
-                )
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: nil,
+                displayNameFallback: viewModel.client.name,
+                size: 64
+            )
 
             Text(viewModel.client.name)
                 .font(.title2.weight(.semibold))
+                .foregroundStyle(AppDesign.textPrimary)
 
             Text("Client since \(viewModel.client.createdAt.formatted(date: .abbreviated, time: .omitted))")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(AppDesign.textSecondary)
 
             HStack(spacing: 8) {
                 if viewModel.client.vip {
@@ -90,9 +89,7 @@ struct ClientProfileView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
         .padding(.horizontal, 16)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+        .appCard()
         .padding(.horizontal, 16)
         .padding(.top, 12)
     }
@@ -106,12 +103,14 @@ struct ClientProfileView: View {
                     } label: {
                         Text(tab.title)
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(viewModel.selectedTab == tab ? Color.white : AppDesign.textPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(viewModel.selectedTab == tab ? Color.primary : Color(.systemBackground))
-                            .foregroundColor(viewModel.selectedTab == tab ? Color(.systemBackground) : .primary)
+                            .background(viewModel.selectedTab == tab ? AppDesign.brandDark : AppDesign.cardBackground)
                             .clipShape(Capsule())
-                            .shadow(color: .black.opacity(viewModel.selectedTab == tab ? 0 : 0.04), radius: 4, y: 1)
+                            .overlay(
+                                Capsule().stroke(viewModel.selectedTab == tab ? Color.clear : AppDesign.chipBorder, lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
@@ -400,7 +399,7 @@ struct ClientProfileView: View {
                     await clientsViewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(AppPrimaryButtonStyle())
         }
         .padding(.horizontal, 16)
     }
@@ -475,9 +474,7 @@ private struct ProfileDetailCard<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+        .appCard()
     }
 }
 
@@ -538,9 +535,7 @@ private struct ProfileStatCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+        .appCard()
     }
 }
 
@@ -634,6 +629,7 @@ private struct ClientProfileEditSheet: View {
                     }
                 }
             }
+            .appListSurface()
             .navigationTitle("Edit client")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

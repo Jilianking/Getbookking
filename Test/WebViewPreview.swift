@@ -76,7 +76,7 @@ struct WebViewPreview: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 } else {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(AppDesign.searchBackground)
                         .frame(height: height ?? 200)
                         .overlay(
                             Text("Connect your business to see preview")

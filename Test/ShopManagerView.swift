@@ -37,7 +37,7 @@ struct ShopManagerView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
-            .background(Color(.systemGroupedBackground))
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -187,8 +187,7 @@ struct ShopManagerView: View {
             }
             .buttonStyle(.plain)
         }
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .appCard()
     }
 
     private var settingsCard: some View {
@@ -248,8 +247,7 @@ struct ShopManagerView: View {
             }
             .buttonStyle(.plain)
         }
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .appCard()
     }
 }
 
@@ -270,11 +268,7 @@ private struct ShopStatTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-                .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-        )
+        .appCard()
     }
 }
 
@@ -478,7 +472,7 @@ struct ShopCatalogView: View {
             }
             .padding(16)
         }
-        .background(Color(.systemGroupedBackground))
+        .appScreenBackground()
     }
 
     private func productRow(_ product: Product) -> some View {
@@ -610,7 +604,7 @@ struct ShopCatalogView: View {
                                 .multilineTextAlignment(.trailing)
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                    .appCard()
 
                     shopSheetSectionHeader("Pricing")
                     HStack(alignment: .top, spacing: 12) {
@@ -629,7 +623,7 @@ struct ShopCatalogView: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                        .appCard()
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("SALE PRICE")
@@ -646,7 +640,7 @@ struct ShopCatalogView: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                        .appCard()
                     }
 
                     Toggle(isOn: $newProductVisible) {
@@ -671,7 +665,7 @@ struct ShopCatalogView: View {
                         }
                         .padding(16)
                         .frame(maxWidth: .infinity)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                        .appCard()
                         Text("Coming soon")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
@@ -681,7 +675,7 @@ struct ShopCatalogView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 28)
             }
-            .background(Color(.systemGroupedBackground))
+            .appScreenBackground()
             .navigationTitle("New product")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

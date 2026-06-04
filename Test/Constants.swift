@@ -42,6 +42,8 @@ struct Constants {
         static let marketingWebOrigin = "https://getbookking.com"
         /// Public sign-up wizard (`signup.html`).
         static var marketingSignUpURL: String { "\(marketingWebOrigin)/signup.html" }
+        /// Live showcase tenant sites (`demos.html`).
+        static var marketingDemosURL: String { "\(marketingWebOrigin)/demos.html" }
     }
 
     /// Region for callable Cloud Functions (must match `firebase functions:log` / console and `web/join.html`).

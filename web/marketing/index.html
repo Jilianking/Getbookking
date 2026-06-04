@@ -331,22 +331,76 @@
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--border);
-      height: 420px;
+      height: 600px;
       position: relative;
+      background: #f0ebe4;
     }
 
-    .tpl-screen {
+    .tpl-live-wrap {
       position: absolute;
       inset: 0;
+      overflow: hidden;
       display: none;
-      flex-direction: column;
-      opacity: 0;
+    }
+
+    .tpl-live-wrap.show {
+      display: block;
+    }
+
+    /* Desktop: full-width iframe so demos use their wide layout */
+    .tpl-live-scaler {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+    }
+
+    .tpl-live-iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+      display: block;
+    }
+
+    .tpl-live-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: var(--text-tertiary);
+      background: var(--brand-offwhite);
+      z-index: 1;
       transition: opacity 0.2s;
     }
 
-    .tpl-screen.show {
-      display: flex;
-      opacity: 1;
+    .tpl-live-wrap.is-loaded .tpl-live-loading {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .tpl-open-full {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      z-index: 3;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid var(--border);
+      color: var(--brand-warm);
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .tpl-open-full:hover {
+      border-color: var(--brand-warm);
+      color: var(--text-primary);
     }
 
     .tpl-link {
@@ -715,7 +769,23 @@
       .pricing-grid { grid-template-columns: 1fr; }
       .tpl-tabs { gap: 6px; }
       .tpl-tab { font-size: 12px; padding: 6px 14px; }
-      .tpl-frame { height: 360px; }
+      .tpl-frame { height: 420px; }
+      .tpl-live-scaler {
+        inset: auto;
+        top: 0;
+        left: 50%;
+        width: 390px;
+        height: 844px;
+        margin-left: -195px;
+        transform: scale(0.48);
+        transform-origin: top center;
+      }
+      .tpl-live-iframe {
+        width: 390px;
+        height: 844px;
+        border-radius: 12px;
+        box-shadow: 0 12px 40px rgba(44, 32, 24, 0.12);
+      }
       .footer-cta { padding: 72px 24px; }
       footer { padding: 28px 24px; flex-direction: column; align-items: flex-start; gap: 20px; }
       .footer-links { flex-wrap: wrap; gap: 16px; }
@@ -733,6 +803,7 @@
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
       <li><a href="#templates">Templates</a></li>
+      <li><a href="demos.html">Demos</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#faq">FAQ</a></li>
     </ul>
@@ -749,7 +820,7 @@
     <p class="hero-sub">Get Bookking builds your website, takes your bookings, and manages your clients — so you can focus on the work.</p>
     <div class="hero-ctas">
       <a href="signup.html" class="btn-primary">Get started free</a>
-      <a href="https://test-app-96812.web.app/index.html" class="btn-secondary">See a demo site</a>
+      <a href="demos.html" class="btn-secondary">See demo sites</a>
     </div>
     <div class="audience-pills">
       <span class="pill">Barbers</span>
@@ -811,102 +882,21 @@
         <p>Every template is purpose-built — not a generic theme with your logo swapped in.</p>
       </div>
       <div class="tpl-tabs">
-        <button class="tpl-tab active" onclick="showTpl('barber', this)">Dark editorial — barber</button>
-        <button class="tpl-tab" onclick="showTpl('stylist', this)">Soft luxury — hair stylist</button>
-        <button class="tpl-tab" onclick="showTpl('tattoo', this)">Brutalist — tattoo studio</button>
-        <button class="tpl-tab" onclick="showTpl('nail', this)">Warm modern — nail salon</button>
+        <button type="button" class="tpl-tab active" data-demo-id="barber">Dark editorial — barber</button>
+        <button type="button" class="tpl-tab" data-demo-id="stylist">Soft luxury — hair stylist</button>
+        <button type="button" class="tpl-tab" data-demo-id="tattoo">Brutalist — tattoo studio</button>
+        <button type="button" class="tpl-tab" data-demo-id="nail">Warm modern — nail salon</button>
       </div>
-      <div class="tpl-frame">
-
-        <!-- Barber -->
-        <div class="tpl-screen t-barber show" id="tpl-barber">
-          <div class="tnav">
-            <div class="tlogo">Brandon Smith</div>
-            <div class="tlinks"><span>Services</span><span>Gallery</span><span>Book</span></div>
+      <div class="tpl-frame" id="tplFrame">
+        <div class="tpl-live-wrap show" id="tplLiveWrap" data-demo-id="barber">
+          <div class="tpl-live-loading" id="tplLiveLoading">Loading live preview…</div>
+          <div class="tpl-live-scaler">
+            <iframe class="tpl-live-iframe" id="tplLiveIframe" title="Live demo website preview" loading="lazy"></iframe>
           </div>
-          <div class="tbody">
-            <div class="tlabel">Est. 2018 · Plymouth, PA</div>
-            <div class="thead">Sharp cuts.<br><em>Sharper style.</em></div>
-            <div class="tsub">Walk-ins welcome · Mon–Sat 9am–7pm</div>
-            <div class="tbtn">Book an appointment</div>
-          </div>
-          <div class="tbar">
-            <div class="tbar-item"><div class="tbar-n">Starting at</div><div class="tbar-v">$35</div></div>
-            <div class="tbar-item"><div class="tbar-n">Experience</div><div class="tbar-v">12 yrs</div></div>
-            <div class="tbar-item"><div class="tbar-n">Next open</div><div class="tbar-v">Today</div></div>
-          </div>
+          <a class="tpl-open-full" id="tplOpenFull" href="#" target="_blank" rel="noopener noreferrer">Open full site &rarr;</a>
         </div>
-
-        <!-- Stylist -->
-        <div class="tpl-screen t-stylist" id="tpl-stylist">
-          <div class="tnav">
-            <div class="tlogo">Élise Studio</div>
-            <div class="tlinks"><span>Services</span><span>Gallery</span><span>Book</span></div>
-          </div>
-          <div class="tbody">
-            <div class="tleft">
-              <div class="ttag">Hair · Color · Treatments</div>
-              <div class="thead">Where hair<br>becomes <em>art.</em></div>
-              <div class="tsub">Bespoke color and styling in a calm, unhurried space.</div>
-              <div class="tbtn">Book a consultation</div>
-            </div>
-            <div class="timg">
-              <svg viewBox="0 0 60 80"><ellipse cx="30" cy="20" rx="12" ry="14"/><path d="M18 34 Q10 50 14 70 Q22 60 30 68 Q38 60 46 70 Q50 50 42 34"/></svg>
-            </div>
-          </div>
-          <div class="tbar">
-            <div class="tbar-chip"><div class="tbar-n">Color</div><div class="tbar-v">from $120</div></div>
-            <div class="tbar-chip"><div class="tbar-n">Cut & style</div><div class="tbar-v">from $75</div></div>
-            <div class="tbar-chip"><div class="tbar-n">Treatment</div><div class="tbar-v">from $60</div></div>
-          </div>
-        </div>
-
-        <!-- Tattoo -->
-        <div class="tpl-screen t-tattoo" id="tpl-tattoo">
-          <div class="tnav">
-            <div class="tlogo">Ink & Iron</div>
-            <div class="tlinks"><span>Artists</span><span>Flash</span><span>Book</span></div>
-          </div>
-          <div class="tbody">
-            <div class="thead"><span>Custom</span><br>Tattoo<br>Studio.</div>
-            <div class="tsub">Philadelphia · By appointment only</div>
-            <div class="tbtn">Request a session</div>
-          </div>
-          <div class="tbar">
-            <div class="tbar-item"><div class="tbar-n">Artists</div><div class="tbar-v">4</div></div>
-            <div class="tbar-item"><div class="tbar-n">Min. deposit</div><div class="tbar-v">$100</div></div>
-            <div class="tbar-item"><div class="tbar-n">Wait time</div><div class="tbar-v">~2 wks</div></div>
-          </div>
-        </div>
-
-        <!-- Nail -->
-        <div class="tpl-screen t-nail" id="tpl-nail">
-          <div class="tnav">
-            <div class="tlogo">Petal Nails</div>
-            <div class="tlinks"><span>Services</span><span>Gallery</span><span>Book</span></div>
-          </div>
-          <div class="tbody">
-            <div class="tleft">
-              <div class="ttag">Nails · Gel · Art</div>
-              <div class="thead">Nails that<br>make you <em>smile.</em></div>
-              <div class="tsub">Premium gel, acrylics, and nail art in a relaxed space.</div>
-              <div class="tbtn">Book now</div>
-            </div>
-            <div class="tchips">
-              <div class="chip"><div class="chip-n">Gel set</div><div class="chip-v">$55</div></div>
-              <div class="chip"><div class="chip-n">Nail art</div><div class="chip-v">from $15</div></div>
-              <div class="chip"><div class="chip-n">Next slot</div><div class="chip-v">Today</div></div>
-            </div>
-          </div>
-          <div class="tbar">
-            <div class="tpill">Classic manicure</div>
-            <div class="tpill">Gel extensions</div>
-            <div class="tpill">Nail art</div>
-          </div>
-        </div>
-
       </div>
-      <p class="tpl-link">These are live previews — <a href="https://test-app-96812.web.app/index.html">see the full demo site &rarr;</a></p>
+      <p class="tpl-link">Live preview of real demo sites — <a href="demos.html">explore all four &rarr;</a></p>
     </div>
   </section>
 
@@ -1059,13 +1049,61 @@
     <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
+  <script src="demo-sites.js"></script>
   <script>
-    function showTpl(id, btn) {
-      document.querySelectorAll('.tpl-screen').forEach(s => s.classList.remove('show'));
-      document.querySelectorAll('.tpl-tab').forEach(t => t.classList.remove('active'));
-      document.getElementById('tpl-' + id).classList.add('show');
-      btn.classList.add('active');
-    }
+    (function () {
+      var useStaging = /[?&]staging=1/.test(location.search);
+      var demoIdByTab = ['barber', 'stylist', 'tattoo', 'nail'];
+      var iframe = document.getElementById('tplLiveIframe');
+      var wrap = document.getElementById('tplLiveWrap');
+      var loading = document.getElementById('tplLiveLoading');
+      var openFull = document.getElementById('tplOpenFull');
+      var loadedSlug = '';
+
+      function demoForId(id) {
+        return BookkingDemoSites.find(id);
+      }
+
+      function setLivePreview(demoId) {
+        var d = demoForId(demoId);
+        if (!d || !iframe) return;
+        wrap.setAttribute('data-demo-id', demoId);
+        var embedUrl = BookkingDemoSites.url(d.slug, useStaging, true);
+        var fullUrl = BookkingDemoSites.url(d.slug, useStaging, false);
+        openFull.href = fullUrl;
+        if (loadedSlug !== d.slug) {
+          loadedSlug = d.slug;
+          wrap.classList.remove('is-loaded');
+          loading.style.display = 'flex';
+          iframe.src = embedUrl;
+        }
+      }
+
+      window.showTpl = function (id, btn) {
+        document.querySelectorAll('.tpl-tab').forEach(function (t) {
+          t.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+        setLivePreview(id);
+      };
+
+      if (iframe) {
+        iframe.addEventListener('load', function () {
+          wrap.classList.add('is-loaded');
+          loading.style.display = 'none';
+        });
+      }
+
+      document.querySelectorAll('.tpl-tab').forEach(function (tab) {
+        var id = tab.getAttribute('data-demo-id');
+        if (!id) return;
+        tab.addEventListener('click', function () {
+          showTpl(id, tab);
+        });
+      });
+
+      setLivePreview('barber');
+    })();
   </script>
 
 </body>

@@ -24,6 +24,7 @@ struct TeamDesignServicesSettingsView: View {
 
             TeamManagerPolicySaveSection(viewModel: viewModel, label: "Save")
         }
+        .appListSurface()
         .navigationTitle("Design & services")
         .navigationBarTitleDisplayMode(.inline)
     }

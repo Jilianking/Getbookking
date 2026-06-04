@@ -55,31 +55,27 @@ struct RequestsView: View {
     var drawerState: DrawerState
     let sectionTitle: String
 
+    private var statusChipFilters: [(filter: BookingRequestFilter, title: String)] {
+        [
+            (.all, "All"),
+            (.newOnly, "New"),
+            (.confirmed, "Confirmed"),
+        ]
+    }
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                Text("Manage and review appointment requests")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                AppSearchField(placeholder: "Search by name or email...", text: $searchText)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 10)
 
-                // Search
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    TextField("Search by name or email...", text: $searchText)
-                }
-                .padding(10)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(10)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                AppFilterChipBar(filters: statusChipFilters, selection: $requestFilter)
+                    .padding(.bottom, 10)
 
-                // Team filter (tenant) or status filter (legacy) + refresh
-                HStack(alignment: .center, spacing: 8) {
-                    if showsTeamFilter {
+                if showsTeamFilter {
+                    HStack(spacing: 8) {
                         filterMenuLabel(
                             title: "\(teamFilterTitle) (\(teamFilterCount(for: teamFilterKey)))"
                         ) {
@@ -98,29 +94,22 @@ struct RequestsView: View {
                                 }
                             }
                         }
-                    } else if !viewModel.useTenantData {
-                        filterMenuLabel(
-                            title: "\(requestFilter.title) (\(legacyFilterCount(for: requestFilter)))"
-                        ) {
-                            Picker("Status", selection: $requestFilter) {
-                                ForEach(BookingRequestFilter.allCases) { filter in
-                                    Text("\(filter.title) (\(legacyFilterCount(for: filter)))")
-                                        .tag(filter)
-                                }
-                            }
+                        Button(action: { Task { await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode) } }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .padding(10)
+                                .background(AppDesign.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(AppDesign.chipBorder, lineWidth: 1)
+                                )
                         }
                     }
-
-                    Button(action: { Task { await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode) } }) {
-                        Image(systemName: "arrow.clockwise")
-                            .padding(8)
-                            .background(Color.black)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
 
                 // List
                 if viewModel.isLoading {
@@ -137,22 +126,29 @@ struct RequestsView: View {
                     List {
                         if viewModel.useTenantData {
                             ForEach(filteredBookingRequests) { br in
-                                BookingRequestListRow(request: br)
-                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.clear)
-                                    .onTapGesture { selectedBookingRequest = br }
+                                BookingRequestListRow(
+                                    request: br,
+                                    viewModel: viewModel,
+                                    teamAccess: authViewModel.teamAccess
+                                )
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .onTapGesture { selectedBookingRequest = br }
                             }
                         } else {
                             ForEach(filteredRequests) { request in
                                 RequestListRow(request: request)
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
                                     .onTapGesture { selectedRequest = request }
                             }
                         }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .background(Color(.systemGroupedBackground))
+                    .background(AppDesign.background)
 
                     Text("Showing \(viewModel.useTenantData ? filteredBookingRequests.count : filteredRequests.count) of \(viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count) request(s)")
                         .font(.caption)
@@ -176,6 +172,7 @@ struct RequestsView: View {
                     }
                 }
             }
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -257,9 +254,13 @@ struct RequestsView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.gray.opacity(0.12))
-            .foregroundColor(.primary)
-            .cornerRadius(8)
+            .background(AppDesign.searchBackground)
+            .foregroundStyle(AppDesign.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(AppDesign.chipBorder, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -308,6 +309,7 @@ struct RequestsView: View {
         var list = viewModel.bookingRequests.filter {
             $0.matchesAssigneeFilter(key: teamFilterKey, roster: viewModel.teamFilterRoster)
         }
+        list = list.filter { requestFilter.matches($0) }
         if !searchText.isEmpty {
             list = list.filter {
                 ($0.customerName ?? "").localizedCaseInsensitiveContains(searchText) ||
@@ -318,92 +320,110 @@ struct RequestsView: View {
     }
 }
 
-// MARK: - Status Badge (Square-style colored pill)
-private func statusBadgeColor(_ status: String) -> Color {
-    switch status.lowercased() {
-    case "new": return Color.green
-    case "confirmed": return Color.blue
-    case "reviewed": return Color.gray
-    case "declined", "cancelled": return Color.red.opacity(0.9)
-    default: return Color.gray
-    }
-}
-
 struct StatusBadgeView: View {
     let status: String
 
     var body: some View {
-        Text(status.uppercased())
-            .font(.caption2.weight(.semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(statusBadgeColor(status))
-            .clipShape(Capsule())
+        AppStatusPill(text: status, soft: true)
     }
 }
 
 struct BookingRequestListRow: View {
     let request: BookingRequest
+    @ObservedObject var viewModel: RequestsViewModel
+    let teamAccess: EffectiveTeamAccess
 
-    /// Green dot only for unread NEW requests; no dot otherwise.
-    private var showUnreadNewDot: Bool {
-        request.status.uppercased() == "NEW" && request.readAt == nil
+    private var statusLower: String {
+        request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private var serviceAndDateLine: String {
-        let service = (request.serviceName ?? request.serviceSlug ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let when = request.requestedStartTime ?? request.createdAt
-        let dateStr = when.map {
-            $0.formatted(.dateTime.month(.abbreviated).day().year())
-        } ?? ""
-        let staff = request.assignedMemberDisplayLabel
-        var parts: [String] = []
-        if !service.isEmpty { parts.append(service) }
-        if !dateStr.isEmpty { parts.append(dateStr) }
-        if let staff, !staff.isEmpty { parts.append(staff) }
-        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+    private var canShowApprovalActions: Bool {
+        teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending")
+    }
+
+    private var serviceName: String {
+        (request.serviceName ?? request.serviceSlug ?? "Appointment").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var submittedAgo: String {
+        guard let created = request.createdAt else { return "" }
+        let interval = Date().timeIntervalSince(created)
+        if interval < 3600 { return "\(max(1, Int(interval / 60)))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return created.formatted(.dateTime.month(.abbreviated).day())
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Circle()
-                .fill(Color.black)
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Text((request.customerName ?? "?").prefix(2).uppercased())
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                AppAvatarView(
+                    tenantLogoURL: nil,
+                    accountPhotoURL: nil,
+                    displayNameFallback: request.customerName,
+                    size: 44
                 )
-            VStack(alignment: .leading, spacing: 4) {
-                Text(request.customerName ?? "Unknown")
-                    .font(.subheadline.weight(.semibold))
-                Text(serviceAndDateLine)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                Text(request.createdAt?.formatted(.dateTime.month(.abbreviated).day().hour().minute()) ?? "Submitted —")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(request.customerName ?? "Unknown")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    if !submittedAgo.isEmpty {
+                        Text("Requested \(submittedAgo)")
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                AppStatusPill(text: request.status, soft: true)
             }
-            Spacer()
-            Group {
-                if showUnreadNewDot {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 8, height: 8)
-                } else {
-                    Color.clear.frame(width: 8, height: 8)
+
+            HStack(spacing: 8) {
+                AppMetadataChip(icon: "scissors", text: serviceName)
+                if let start = request.requestedStartTime {
+                    AppMetadataChip(
+                        icon: "calendar",
+                        text: start.formatted(.dateTime.month(.abbreviated).day())
+                    )
+                    AppMetadataChip(
+                        icon: "clock",
+                        text: start.formatted(date: .omitted, time: .shortened)
+                    )
+                } else if let preferred = request.preferredTime, !preferred.isEmpty {
+                    AppMetadataChip(icon: "clock", text: preferred)
                 }
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.secondary)
+
+            if canShowApprovalActions, let docId = request.documentId, !docId.isEmpty {
+                HStack(spacing: 10) {
+                    Button {
+                        Task {
+                            await viewModel.setBookingRequestStatus(
+                                requestId: docId,
+                                status: "declined",
+                                notes: request.notes
+                            )
+                        }
+                    } label: {
+                        Text("Decline")
+                    }
+                    .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
+
+                    Button {
+                        Task {
+                            await viewModel.setBookingRequestStatus(
+                                requestId: docId,
+                                status: "confirmed",
+                                notes: request.notes
+                            )
+                        }
+                    } label: {
+                        Text("Confirm")
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus))
+                }
+            }
         }
         .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        .appCard()
     }
 }
 
@@ -445,23 +465,21 @@ struct BookingRequestDetailView: View {
                 VStack(spacing: 16) {
                     // Header: avatar, name (no status pill — read state uses `readAt` only)
                     VStack(spacing: 12) {
-                        Circle()
-                            .fill(Color.black)
-                            .frame(width: 64, height: 64)
-                            .overlay(
-                                Text((request.customerName ?? "?").prefix(2).uppercased())
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundColor(.white)
-                            )
+                        AppAvatarView(
+                            tenantLogoURL: nil,
+                            accountPhotoURL: nil,
+                            displayNameFallback: request.customerName ?? "?",
+                            size: 64
+                        )
                         Text(request.customerName ?? "Unknown")
                             .font(.title2.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                        AppStatusPill(text: currentRequest.status, soft: true)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 20)
                     .padding(.horizontal, 16)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    .appCard()
 
                     // Service / appointment type
                     VStack(alignment: .leading, spacing: 12) {
@@ -481,9 +499,7 @@ struct BookingRequestDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    .appCard()
 
                     // Appointment scheduling
                     VStack(alignment: .leading, spacing: 12) {
@@ -518,9 +534,7 @@ struct BookingRequestDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    .appCard()
 
                     // Contact
                     VStack(alignment: .leading, spacing: 0) {
@@ -612,9 +626,7 @@ struct BookingRequestDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    .appCard()
 
                     // Notes
                     if let notes = request.notes, !notes.isEmpty {
@@ -626,9 +638,7 @@ struct BookingRequestDetailView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(16)
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                        .appCard()
                     }
 
                     // Custom form fields (web / admin)
@@ -656,10 +666,8 @@ struct BookingRequestDetailView: View {
                                     }
                                 } label: {
                                     Text("Decline")
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
                                 .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
 
                                 Button {
@@ -672,30 +680,25 @@ struct BookingRequestDetailView: View {
                                     }
                                 } label: {
                                     Text("Confirm")
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
                                 }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
                                 .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
                             }
                         }
                         .padding(16)
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                        .appCard()
                     } else if teamAccess.bookingRequiresApproval && !teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending") {
                         Text("You can view this request but cannot approve or decline it.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppDesign.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
-                            .background(Color(.systemBackground))
-                            .cornerRadius(12)
+                            .appCard()
                     }
                 }
                 .padding(16)
             }
-            .background(Color(.systemGroupedBackground))
+            .appScreenBackground()
             .navigationTitle(request.customerName ?? "Request")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -845,39 +848,26 @@ struct RequestListRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "square")
-                .font(.body)
-                .foregroundColor(.gray)
-            Circle()
-                .fill(Color.black)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(request.customerName.prefix(2).uppercased())
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.white)
-                )
-            VStack(alignment: .leading, spacing: 2) {
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: nil,
+                displayNameFallback: request.customerName,
+                size: 44
+            )
+            VStack(alignment: .leading, spacing: 4) {
                 Text(request.customerName)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
                 Text(request.customerEmail)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(AppDesign.textSecondary)
                     .lineLimit(1)
-                if let phone = request.customerPhone {
-                    Text(PhoneFormatting.displayUS(phone))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             Spacer()
-            Text(request.appointmentDate != nil ? request.appointmentDate!.formatted(.dateTime.month(.abbreviated).day()) : request.submittedAt.formatted(.dateTime.month(.abbreviated).day()))
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            AppStatusPill(text: request.status.rawValue, soft: true)
         }
-        .padding(.vertical, 8)
+        .padding(16)
+        .appCard()
     }
 }
 
@@ -935,6 +925,8 @@ struct RequestDetailView: View {
                     }
                 }
             }
+            .appListSurface()
+            .appScreenBackground()
             .navigationTitle(request.customerName)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

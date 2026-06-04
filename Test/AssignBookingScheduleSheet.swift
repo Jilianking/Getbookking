@@ -91,7 +91,7 @@ struct AssignBookingScheduleSheet: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
             }
-            .background(Color(.systemGroupedBackground))
+            .appScreenBackground()
             .navigationTitle(assignTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -144,8 +144,8 @@ struct AssignBookingScheduleSheet: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
-                            .background(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .background(isSelected ? AppDesign.brandDark : AppDesign.searchBackground)
+                            .foregroundStyle(isSelected ? Color.white : AppDesign.textPrimary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -181,8 +181,7 @@ struct AssignBookingScheduleSheet: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .appCard()
     }
 
     private func slotChip(_ slot: AssignScheduleSlot, memberUid: String) -> some View {
@@ -215,7 +214,7 @@ struct AssignBookingScheduleSheet: View {
 
     private func chipBackground(_ state: AssignScheduleSlotState) -> Color {
         switch state {
-        case .available: return Color(.systemBackground)
+        case .available: return AppDesign.cardBackground
         case .taken: return Color(.tertiarySystemFill)
         case .matchesPreferred: return Color.orange.opacity(0.2)
         case .selected: return Color.accentColor.opacity(0.15)

@@ -31,21 +31,44 @@ enum AdminSection: String, CaseIterable, Identifiable {
         ]
     }
 
-    var title: String {
+    /// Short label for nav bar and drawer (matches product mockups).
+    var shortTitle: String {
         switch self {
-        case .dashboard: return "Management Dashboard"
-        case .requests: return "Booking Requests"
+        case .dashboard: return "Dashboard"
+        case .requests: return "Requests"
         case .calendar: return "Calendar"
         case .messages: return "Messages"
-        case .clients: return "Customers"
+        case .clients: return "Clients"
         case .team: return "Team"
-        case .design: return "Web Page Design"
+        case .design: return "Design"
         case .shop: return "Shop"
-        case .aiTools: return "AI Tools"
+        case .aiTools: return "AI tools"
         case .insights: return "Insights"
         case .payments: return "Payments"
         case .settings: return "Settings"
         }
+    }
+
+    var title: String { shortTitle }
+
+    enum DrawerGroup: String, Hashable {
+        case main = "Main"
+        case business = "Business"
+        case more = "More"
+    }
+
+    var drawerGroup: DrawerGroup {
+        switch self {
+        case .dashboard, .requests, .calendar, .messages: return .main
+        case .clients, .team, .design, .insights, .payments: return .business
+        case .shop, .aiTools, .settings: return .more
+        }
+    }
+
+    static let drawerGroupOrder: [DrawerGroup] = [.main, .business, .more]
+
+    var showsBetaBadge: Bool {
+        self == .shop
     }
 
     var icon: String {
@@ -78,79 +101,10 @@ final class DrawerState {
     var messagesShouldOpenCompose = false
 }
 
-/// Initials always visible; profile photo preferred, then tenant logo; fades in when loaded.
-private struct DrawerTenantLogoView: View {
-    let tenantLogoURL: String?
-    let accountPhotoURL: String?
-    let displayNameFallback: String?
-    private let side: CGFloat = 44
-    @State private var logoOpaque = false
-    @State private var imageRetryCount = 0
-
-    private var resolvedImageURL: URL? {
-        let a = accountPhotoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !a.isEmpty, let u = URL(string: a) { return u }
-        let t = tenantLogoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !t.isEmpty, let u = URL(string: t) { return u }
-        return nil
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.green.opacity(0.8))
-                .frame(width: side, height: side)
-                .overlay(
-                    Text((displayNameFallback ?? "A").prefix(1).uppercased())
-                        .font(.headline)
-                        .foregroundColor(.white)
-                )
-            if let url = resolvedImageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .onAppear {
-                                withAnimation(.easeIn(duration: 0.22)) {
-                                    logoOpaque = true
-                                }
-                            }
-                    case .failure:
-                        Color.clear
-                            .onAppear {
-                                guard imageRetryCount < 3 else { return }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-                                    imageRetryCount += 1
-                                }
-                            }
-                    default:
-                        Color.clear
-                    }
-                }
-                .id("\(url.absoluteString)-\(imageRetryCount)")
-                .frame(width: side, height: side)
-                .clipShape(Circle())
-                .opacity(logoOpaque ? 1 : 0)
-                .animation(.easeIn(duration: 0.22), value: logoOpaque)
-            }
-        }
-        .frame(width: side, height: side)
-        .onChange(of: tenantLogoURL) { _, _ in
-            logoOpaque = false
-            imageRetryCount = 0
-        }
-        .onChange(of: accountPhotoURL) { _, _ in
-            logoOpaque = false
-            imageRetryCount = 0
-        }
-    }
-}
-
 struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var drawerState = DrawerState()
+    @StateObject private var dashboardMetrics = DashboardViewModel()
 
     /// Solo owners use Business settings only; hide Team from the drawer.
     private var drawerSections: [AdminSection] {
@@ -179,13 +133,18 @@ struct AdminRootView: View {
                     .onTapGesture { drawerState.isOpen = false }
 
                 drawerContent
-                    .frame(width: 280)
-                    .background(Color(.systemBackground))
-                    .shadow(radius: 8)
+                    .frame(width: AppDesign.drawerWidth)
+                    .background(AppDesign.cardBackground)
+                    .shadow(color: .black.opacity(0.12), radius: 12, x: 4, y: 0)
                     .transition(.move(edge: .leading))
             }
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
+        .onChange(of: drawerState.isOpen) { _, isOpen in
+            if isOpen, authViewModel.isAuthenticated {
+                Task { await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode) }
+            }
+        }
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
                 drawerState.selectedSection = .dashboard
@@ -194,6 +153,7 @@ struct AdminRootView: View {
         .task(id: authViewModel.isAuthenticated) {
             if authViewModel.isAuthenticated {
                 await authViewModel.refreshTeamAccess()
+                await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
@@ -233,69 +193,124 @@ struct AdminRootView: View {
         }
     }
 
+    private var drawerBusinessSubtitle: String {
+        let industry = BookingTemplate(rawValue: dashboardMetrics.tenantIndustry)?.displayName ?? "Business"
+        let plan = authViewModel.tenantSubscriptionPlan.displayName
+        return "\(industry) · \(plan)"
+    }
+
+    private var drawerDisplayName: String {
+        let business = dashboardMetrics.businessDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !business.isEmpty { return business }
+        return authViewModel.currentUserDisplayName ?? "Your business"
+    }
+
+    private func badgeCount(for section: AdminSection) -> Int {
+        switch section {
+        case .requests: return dashboardMetrics.unreadRequestsCount
+        default: return 0
+        }
+    }
+
     private var drawerContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Admin App")
-                    .font(.headline)
-                Spacer()
+            HStack(alignment: .top, spacing: 12) {
+                AppAvatarView(
+                    tenantLogoURL: authViewModel.tenantLogoUrl,
+                    accountPhotoURL: authViewModel.accountPhotoUrl,
+                    displayNameFallback: drawerDisplayName,
+                    size: 48
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(drawerDisplayName)
+                        .font(.headline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                    Text(drawerBusinessSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+                Spacer(minLength: 0)
                 Button(action: { drawerState.isOpen = false }) {
                     Image(systemName: "xmark")
                         .font(.body.weight(.medium))
+                        .foregroundStyle(AppDesign.textSecondary)
                 }
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(AdminSection.drawerGroupOrder, id: \.self) { group in
+                        let items = drawerSections.filter { $0.drawerGroup == group }
+                        if !items.isEmpty {
+                            AppSectionHeader(title: group.rawValue)
+                            VStack(spacing: 4) {
+                                ForEach(items) { section in
+                                    drawerRow(section)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
 
             Divider()
+                .padding(.top, 8)
 
-            // Menu
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(drawerSections) { section in
-                    Button(action: {
-                        drawerState.selectedSection = section
-                        drawerState.isOpen = false
-                    }) {
-                        HStack(spacing: 12) {
-                            Image(systemName: section.icon)
-                                .frame(width: 24, alignment: .center)
-                            Text(section.title)
-                                .font(.subheadline)
-                        }
-                        .foregroundColor(drawerState.selectedSection == section ? .white : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
-                        .background(drawerState.selectedSection == section ? Color.black : Color.clear)
-                        .cornerRadius(8)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 2)
-                }
-            }
-            .padding(.vertical, 8)
-
-            Spacer()
-
-            // User block (avatar = business logo when set in Web Page Design)
             HStack(spacing: 12) {
-                DrawerTenantLogoView(
+                AppAvatarView(
                     tenantLogoURL: authViewModel.tenantLogoUrl,
                     accountPhotoURL: authViewModel.accountPhotoUrl,
-                    displayNameFallback: authViewModel.currentUserDisplayName
+                    displayNameFallback: authViewModel.currentUserDisplayName,
+                    size: 40
                 )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(authViewModel.currentUserDisplayName ?? "Admin User")
+                    Text(authViewModel.currentUserDisplayName ?? "Owner")
                         .font(.subheadline.weight(.semibold))
-                    Text(authViewModel.currentUserEmail ?? "admin@adminapp.com")
+                    Text(authViewModel.teamAccess.isOwner ? "Owner" : "Team member")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(AppDesign.textSecondary)
                 }
                 Spacer()
             }
-            .padding()
+            .padding(16)
         }
-        .padding(.top, 8)
+    }
+
+    private func drawerRow(_ section: AdminSection) -> some View {
+        let selected = drawerState.selectedSection == section
+        return Button {
+            drawerState.selectedSection = section
+            drawerState.isOpen = false
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: section.icon)
+                    .frame(width: 22, alignment: .center)
+                    .font(.system(size: 15, weight: .medium))
+                Text(section.shortTitle)
+                    .font(.subheadline.weight(selected ? .semibold : .regular))
+                if section.showsBetaBadge {
+                    Text("Beta")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AppDesign.brandWarm)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppDesign.brandWarm.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                AppDrawerBadge(count: badgeCount(for: section))
+            }
+            .foregroundStyle(selected ? Color.white : AppDesign.textPrimary)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 14)
+            .background(selected ? AppDesign.brandDark : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -315,7 +330,7 @@ struct PlaceholderSectionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
             }
-            .background(Color.gray.opacity(0.06))
+            .appScreenBackground()
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

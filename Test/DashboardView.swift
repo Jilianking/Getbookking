@@ -3,172 +3,150 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var paymentsViewModel = PaymentsViewModel()
     @State private var showingBookingForm = false
     var drawerState: DrawerState
     let sectionTitle: String
+
+    private let statColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Subtitle
-                    Text("Real-time overview of your business")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                    LazyVGrid(columns: statColumns, spacing: 12) {
+                        AppStatCard(
+                            title: "New requests",
+                            value: "\(viewModel.pendingRequestsCount)",
+                            subtitle: viewModel.unreadRequestsCount > 0
+                                ? "\(viewModel.unreadRequestsCount) unread"
+                                : "awaiting review"
+                        )
+                        AppStatCard(
+                            title: "Confirmed",
+                            value: "\(viewModel.confirmedThisMonthCount)",
+                            subtitle: "this month"
+                        )
+                        AppStatCard(
+                            title: "Clients",
+                            value: "\(viewModel.totalClientsCount)",
+                            subtitle: "total"
+                        )
+                        AppStatCard(
+                            title: "Balance",
+                            value: balanceDisplay,
+                            subtitle: paymentsViewModel.stripeConnected ? "available" : "connect Stripe"
+                        )
+                    }
+                    .padding(.horizontal)
 
-                    // Action buttons
                     HStack(spacing: 12) {
-                        Button(action: {
+                        AppQuickActionCard(
+                            icon: "message.fill",
+                            title: "Message",
+                            subtitle: "Text a client"
+                        ) {
                             drawerState.selectedSection = .messages
                             drawerState.isOpen = false
-                        }) {
-                            HStack {
-                                Image(systemName: "message")
-                                Text("Message")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.systemBackground))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                            .cornerRadius(12)
                         }
-                        .foregroundColor(.primary)
-
-                        Button(action: { showingBookingForm = true }) {
-                            HStack {
-                                Image(systemName: "calendar.badge.plus")
-                                Text("New Booking")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
+                        AppQuickActionCard(
+                            icon: "calendar.badge.plus",
+                            title: "New booking",
+                            subtitle: "Add manually"
+                        ) {
+                            showingBookingForm = true
                         }
                     }
                     .padding(.horizontal)
 
-                    // Payments card
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Payments")
-                                    .font(.title2.weight(.bold))
-                                Text("Quick payment overview")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Button("View All") {
-                                drawerState.selectedSection = .payments
-                                drawerState.isOpen = false
-                            }
-                                .font(.subheadline.weight(.medium))
-                                .foregroundColor(.green)
-                        }
-                        .padding(.horizontal)
-
-                        Button(action: {
-                            drawerState.selectedSection = .payments
-                            drawerState.isOpen = false
-                        }) {
-                            HStack(spacing: 16) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.green.opacity(0.2))
-                                    .frame(width: 48, height: 48)
-                                    .overlay(Image(systemName: "folder.fill").foregroundColor(.green))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("View Payments")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Manage payments & transactions")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "dollarsign")
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding()
-                            .background(Color.gray.opacity(0.06))
-                            .cornerRadius(12)
-                            .padding(.horizontal)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 12)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(16)
-                    .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-                    .padding(.horizontal)
-
-                    // Recent Requests card
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Recent Requests")
-                                    .font(.title2.weight(.bold))
-                                Text("Latest booking inquiries")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Button("View All") {
-                                drawerState.selectedSection = .requests
-                                drawerState.isOpen = false
-                            }
-                                .font(.subheadline.weight(.medium))
-                                .foregroundColor(.blue)
-                        }
-                        .padding(.horizontal)
-
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if viewModel.useTenantData {
-                            ForEach(viewModel.recentBookingRequests.prefix(5)) { br in
-                                DashboardBookingRequestRow(request: br)
-                            }
-                            .padding(.horizontal)
-                        } else {
-                            ForEach(viewModel.recentRequests.prefix(5)) { request in
-                                DashboardRequestRow(request: request)
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                    .padding(.vertical, 12)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(16)
-                    .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-                    .padding(.horizontal)
+                    recentRequestsCard
                 }
-                .padding(.vertical, 20)
+                .padding(.vertical, 16)
             }
-            .background(Color.gray.opacity(0.06))
+            .appScreenBackground()
             .navigationTitle(sectionTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
-                            .font(.body)
                     }
                 }
             }
             .refreshable {
                 await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
+                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
         }
         .navigationViewStyle(.stack)
         .task {
             await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
         }
         .sheet(isPresented: $showingBookingForm) {
             BookingFormView(drawerState: drawerState)
                 .environmentObject(authViewModel)
-                .onDisappear { Task { await viewModel.loadData(isDemoMode: authViewModel.isDemoMode) } }
+                .onDisappear {
+                    Task { await viewModel.loadData(isDemoMode: authViewModel.isDemoMode) }
+                }
         }
+    }
+
+    private var balanceDisplay: String {
+        if paymentsViewModel.availableBalance > 0 {
+            return String(format: "$%.0f", paymentsViewModel.availableBalance)
+        }
+        if viewModel.monthlyRevenue > 0 {
+            return String(format: "$%.0f", viewModel.monthlyRevenue)
+        }
+        return "$0"
+    }
+
+    private var recentRequestsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Recent requests")
+                    .font(.headline)
+                    .foregroundStyle(AppDesign.textPrimary)
+                Spacer()
+                Button("View all") {
+                    drawerState.selectedSection = .requests
+                    drawerState.isOpen = false
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppDesign.accentBlue)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else if viewModel.useTenantData {
+                if viewModel.recentBookingRequests.isEmpty {
+                    Text("No requests yet")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(viewModel.recentBookingRequests.prefix(5)) { br in
+                            DashboardBookingRequestRow(request: br)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
+            } else {
+                ForEach(viewModel.recentRequests.prefix(5)) { request in
+                    DashboardRequestRow(request: request)
+                }
+                .padding(.horizontal, 12)
+            }
+        }
+        .padding(.bottom, 16)
+        .appCard()
+        .padding(.horizontal)
     }
 }
 
@@ -178,7 +156,7 @@ struct DashboardBookingRequestRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(Color.purple.opacity(0.8))
+                .fill(AppDesign.brandDark.opacity(0.85))
                 .frame(width: 40, height: 40)
                 .overlay(
                     Text((request.customerName ?? "?").prefix(2).uppercased())
@@ -193,12 +171,26 @@ struct DashboardBookingRequestRow: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            AppStatusPill(text: statusLabel, color: statusColor)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .padding(.horizontal, 4)
+    }
+
+    private var statusLabel: String {
+        let s = request.status.uppercased()
+        if s == "NEW" { return "New" }
+        if s == "CONFIRMED" { return "Confirmed" }
+        if s == "DECLINED" { return "Declined" }
+        return request.status.capitalized
+    }
+
+    private var statusColor: Color {
+        let s = request.status.uppercased()
+        if s == "NEW" { return AppDesign.accentBlue }
+        if s == "CONFIRMED" { return AppDesign.accentGreen }
+        if s == "DECLINED" { return .red.opacity(0.85) }
+        return .gray
     }
 }
 
@@ -208,7 +200,7 @@ struct DashboardRequestRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(Color.purple.opacity(0.8))
+                .fill(AppDesign.brandDark.opacity(0.85))
                 .frame(width: 40, height: 40)
                 .overlay(
                     Text(request.customerName.prefix(2).uppercased())
@@ -223,23 +215,17 @@ struct DashboardRequestRow: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Text(request.status.rawValue.capitalized)
-                .font(.caption.weight(.medium))
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(statusColor)
-                .cornerRadius(8)
+            AppStatusPill(text: request.status.rawValue.capitalized, color: statusColor)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .padding(.horizontal, 4)
     }
 
     private var statusColor: Color {
         switch request.status {
-        case .pending: return .orange
-        case .confirmed: return .green
-        case .declined: return .red
+        case .pending: return AppDesign.accentBlue
+        case .confirmed: return AppDesign.accentGreen
+        case .declined: return .red.opacity(0.85)
         default: return .gray
         }
     }

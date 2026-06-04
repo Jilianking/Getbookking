@@ -84,6 +84,7 @@ struct ManagerSettingsView: View {
                 }
             }
         }
+        .appListSurface()
         .modifier(TeamManagementNavigationTitle(show: showInlineNavigationTitle))
         .sheet(isPresented: $viewModel.presentInviteSheet) {
             TeamInviteSheet(viewModel: viewModel)
@@ -145,23 +146,12 @@ struct TeamMemberRow: View {
 
     @ViewBuilder
     private var avatar: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.secondarySystemGroupedBackground))
-                .frame(width: 44, height: 44)
-            Text(member.initials)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-            if let url = URL(string: member.profilePhotoUrl), !member.profilePhotoUrl.isEmpty {
-                AsyncImage(url: url) { phase in
-                    if case .success(let img) = phase {
-                        img.resizable().scaledToFill()
-                    }
-                }
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-            }
-        }
+        AppAvatarView(
+            tenantLogoURL: nil,
+            accountPhotoURL: member.profilePhotoUrl.isEmpty ? nil : member.profilePhotoUrl,
+            displayNameFallback: member.displayName,
+            size: 44
+        )
     }
 }
 
@@ -241,6 +231,7 @@ private struct TeamInviteSheet: View {
                     }
                 }
             }
+            .appListSurface()
             .navigationTitle("Invite team member")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

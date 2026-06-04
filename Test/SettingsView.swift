@@ -30,6 +30,7 @@ struct SettingsView: View {
                         paymentsSection
                     }
 
+                    appearanceSection
                     accountSection
 
                     if let msg = viewModel.errorMessage {
@@ -53,11 +54,14 @@ struct SettingsView: View {
                 .padding(16)
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(sectionTitle)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
             }
@@ -109,6 +113,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Demo mode")
                             .font(.headline)
+                            .foregroundStyle(AppDesign.textPrimary)
                         Text("Sign in to manage your business")
                             .font(.caption)
                             .foregroundStyle(AppDesign.textSecondary)
@@ -298,6 +303,29 @@ struct SettingsView: View {
 
     private var tapToPayStatus: String {
         TapToPayLocationStore.shared.resolvedLocationId.isEmpty ? "Setup" : "Configured"
+    }
+
+    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.system.rawValue
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Appearance")
+
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Theme", selection: $appearanceRaw) {
+                    ForEach(AppAppearance.allCases) { mode in
+                        Text(mode.label).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("System follows your iPhone light or dark setting.")
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .padding(16)
+            .appCard()
+        }
     }
 
     private var accountSection: some View {

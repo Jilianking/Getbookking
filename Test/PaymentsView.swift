@@ -97,11 +97,14 @@ struct PaymentsView: View {
                 .padding(.vertical, 20)
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(sectionTitle)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
             }

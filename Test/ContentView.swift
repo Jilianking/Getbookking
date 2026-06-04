@@ -10,6 +10,11 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.system.rawValue
+
+    private var appAppearance: AppAppearance {
+        AppAppearance(rawValue: appearanceRaw) ?? .system
+    }
 
     var body: some View {
         Group {
@@ -21,6 +26,7 @@ struct ContentView: View {
                     .environmentObject(authViewModel)
             }
         }
+        .preferredColorScheme(appAppearance.preferredColorScheme)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
                 Task { await authViewModel.refreshTenantLogoFromServer() }

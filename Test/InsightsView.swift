@@ -68,12 +68,14 @@ struct InsightsView: View {
                 .padding(.bottom, 24)
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(sectionTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -81,6 +83,7 @@ struct InsightsView: View {
                         Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                     .disabled(viewModel.isLoading)
                 }

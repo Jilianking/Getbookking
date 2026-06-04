@@ -47,6 +47,7 @@ struct DesignView: View {
                 }
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(isShowingBuilder ? sectionTitle : "Design")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -56,9 +57,11 @@ struct DesignView: View {
                             Button("Preview") {
                                 isShowingBuilder = false
                             }
+                            .foregroundStyle(AppDesign.textPrimary)
                         } else {
                             Button(action: { drawerState.isOpen = true }) {
                                 Image(systemName: "line.3.horizontal")
+                                    .foregroundStyle(AppDesign.textPrimary)
                             }
                         }
                     }

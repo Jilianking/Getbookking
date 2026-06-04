@@ -64,11 +64,14 @@ struct DashboardView: View {
                 .padding(.vertical, 16)
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(sectionTitle)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
             }
@@ -166,9 +169,10 @@ struct DashboardBookingRequestRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(request.customerName ?? "Unknown")
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
                 Text("\(request.serviceName ?? request.serviceSlug ?? "-") · \(request.createdAt?.formatted(.dateTime.month(.abbreviated).day()) ?? "-")")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(AppDesign.textSecondary)
             }
             Spacer()
             AppStatusPill(text: statusLabel, color: statusColor)
@@ -210,9 +214,10 @@ struct DashboardRequestRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(request.customerName)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
                 Text("\(request.service.rawValue) · \(request.submittedAt, style: .date)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(AppDesign.textSecondary)
             }
             Spacer()
             AppStatusPill(text: request.status.rawValue.capitalized, color: statusColor)

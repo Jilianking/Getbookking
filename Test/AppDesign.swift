@@ -1,25 +1,59 @@
 //
 //  AppDesign.swift
 //
-//  Shared visual language aligned with Get Bookking marketing (warm neutrals, card UI).
+//  Shared visual language (warm neutrals, card UI) with light/dark adaptive colors.
 //
 
 import SwiftUI
+import UIKit
 
 enum AppDesign {
-    static let background = Color(red: 0.99, green: 0.98, blue: 0.96)
-    static let cardBackground = Color.white
-    static let textPrimary = Color(red: 0.10, green: 0.08, blue: 0.06)
-    static let textSecondary = Color(red: 0.42, green: 0.37, blue: 0.29)
+    static let drawerWidth: CGFloat = 300
+
+    // Accents (readable on both surfaces)
     static let brandDark = Color(red: 0.17, green: 0.13, blue: 0.09)
     static let brandWarm = Color(red: 0.55, green: 0.44, blue: 0.28)
     static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
     static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
     static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)
-    static let declineBackground = Color(red: 0.99, green: 0.91, blue: 0.91)
-    static let searchBackground = Color(red: 0.94, green: 0.94, blue: 0.93)
-    static let chipBorder = Color(red: 0.88, green: 0.86, blue: 0.84)
-    static let drawerWidth: CGFloat = 300
+
+    static let background = adaptive(
+        light: UIColor(red: 0.99, green: 0.98, blue: 0.96, alpha: 1),
+        dark: UIColor(red: 0.09, green: 0.08, blue: 0.07, alpha: 1)
+    )
+    static let cardBackground = adaptive(
+        light: .white,
+        dark: UIColor(red: 0.16, green: 0.14, blue: 0.12, alpha: 1)
+    )
+    static let textPrimary = adaptive(
+        light: UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 1),
+        dark: UIColor(red: 0.96, green: 0.94, blue: 0.91, alpha: 1)
+    )
+    static let textSecondary = adaptive(
+        light: UIColor(red: 0.42, green: 0.37, blue: 0.29, alpha: 1),
+        dark: UIColor(red: 0.68, green: 0.62, blue: 0.55, alpha: 1)
+    )
+    static let declineBackground = adaptive(
+        light: UIColor(red: 0.99, green: 0.91, blue: 0.91, alpha: 1),
+        dark: UIColor(red: 0.28, green: 0.14, blue: 0.14, alpha: 1)
+    )
+    static let searchBackground = adaptive(
+        light: UIColor(red: 0.94, green: 0.94, blue: 0.93, alpha: 1),
+        dark: UIColor(red: 0.22, green: 0.20, blue: 0.18, alpha: 1)
+    )
+    static let chipBorder = adaptive(
+        light: UIColor(red: 0.88, green: 0.86, blue: 0.84, alpha: 1),
+        dark: UIColor(red: 0.32, green: 0.29, blue: 0.26, alpha: 1)
+    )
+    static let navBarForeground = textPrimary
+    static let chipSelectedForeground = Color.white
+    static let chipSelectedBackground = brandDark
+
+    private static func adaptive(light: UIColor, dark: UIColor) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        })
+    }
 
     static func softStatusColors(for status: String) -> (foreground: Color, background: Color) {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -33,14 +67,25 @@ enum AppDesign {
             return (textSecondary, searchBackground)
         }
     }
+
+    static func cardShadowOpacity(for colorScheme: ColorScheme) -> Double {
+        colorScheme == .dark ? 0.2 : 0.04
+    }
 }
 
 struct AppCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
         content
             .background(AppDesign.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+            .shadow(
+                color: .black.opacity(AppDesign.cardShadowOpacity(for: colorScheme)),
+                radius: 8,
+                x: 0,
+                y: 2
+            )
     }
 }
 
@@ -53,10 +98,26 @@ extension View {
         background(AppDesign.background)
     }
 
-    /// Cream list surface (Form/List) without changing row logic.
     func appListSurface() -> some View {
         scrollContentBackground(.hidden)
             .background(AppDesign.background)
+    }
+}
+
+private struct AppNavigationChromeModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .toolbarBackground(AppDesign.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
+    }
+}
+
+extension View {
+    func appNavigationChrome() -> some View {
+        modifier(AppNavigationChromeModifier())
     }
 }
 
@@ -109,14 +170,13 @@ struct AppSettingsRow: View {
             }
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.secondary.opacity(0.55))
+                .foregroundStyle(AppDesign.textSecondary.opacity(0.55))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
     }
 }
 
-/// KPI tile for Insights dashboard (icon square + value + trend).
 struct InsightMetricTile: View {
     let icon: String
     let iconColor: Color
@@ -192,7 +252,7 @@ struct AppQuickActionCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
                     .font(.title2)
-                    .foregroundStyle(AppDesign.brandDark)
+                    .foregroundStyle(AppDesign.textPrimary)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppDesign.textPrimary)
@@ -247,6 +307,7 @@ struct AppSearchField: View {
             TextField(placeholder, text: $text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .foregroundStyle(AppDesign.textPrimary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -270,10 +331,10 @@ struct AppFilterChipBar<Filter: Hashable>: View {
                     } label: {
                         Text(item.title)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(selected ? Color.white : AppDesign.textPrimary)
+                            .foregroundStyle(selected ? AppDesign.chipSelectedForeground : AppDesign.textPrimary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 9)
-                            .background(selected ? AppDesign.brandDark : AppDesign.cardBackground)
+                            .background(selected ? AppDesign.chipSelectedBackground : AppDesign.cardBackground)
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule()
@@ -359,7 +420,6 @@ struct AppDrawerBadge: View {
     }
 }
 
-/// Tenant / user avatar for drawer and settings profile card.
 struct AppAvatarView: View {
     let tenantLogoURL: String?
     let accountPhotoURL: String?

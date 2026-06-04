@@ -38,12 +38,14 @@ struct ShopManagerView: View {
                 .padding(.vertical, 12)
             }
             .appScreenBackground()
+            .appNavigationChrome()
             .navigationTitle(sectionTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
                         Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
             }

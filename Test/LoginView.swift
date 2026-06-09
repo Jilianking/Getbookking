@@ -77,6 +77,17 @@ struct LoginView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(AppDesign.chipBorder, lineWidth: 1)
                 )
+
+                HStack {
+                    Spacer()
+                    Button(action: openMarketingForgotPassword) {
+                        Text("Forgot password?")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(AppDesign.linkAccent)
+                    .disabled(isLoading)
+                }
+                .padding(.top, 4)
             }
 
             if !errorMessage.isEmpty {
@@ -128,6 +139,11 @@ struct LoginView: View {
 
     private func openMarketingDemos() {
         guard let url = URL(string: Constants.Hosting.marketingDemosURL) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func openMarketingForgotPassword() {
+        guard let url = Constants.Hosting.marketingForgotPasswordURL(email: email) else { return }
         UIApplication.shared.open(url)
     }
 

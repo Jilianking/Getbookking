@@ -10,15 +10,29 @@ import UIKit
 enum AppDesign {
     static let drawerWidth: CGFloat = 300
 
-    // Accents (readable on both surfaces)
-    static let brandDark = Color(red: 0.17, green: 0.13, blue: 0.09)
-    static let brandWarm = Color(red: 0.55, green: 0.44, blue: 0.28)
+    // Marketing site tokens (https://marketing — light mode)
+    static let brandDark = Color(hex: 0x2C2018)
+    static let brandWarm = Color(hex: 0x8B6F47)
+    static let brandCream = adaptive(
+        light: UIColor(hex: 0xF5EDD8),
+        dark: UIColor(red: 0.22, green: 0.20, blue: 0.18, alpha: 1)
+    )
+    static let brandMuted = adaptive(
+        light: UIColor(hex: 0xC9B8A0),
+        dark: UIColor(red: 0.45, green: 0.40, blue: 0.36, alpha: 1)
+    )
+
+    /// Legacy iOS accents — prefer brandWarm / brandDark in new UI.
     static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
     static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
     static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)
+    static let statusCancelled = adaptive(
+        light: UIColor(hex: 0x8B4A3A),
+        dark: UIColor(red: 0.85, green: 0.45, blue: 0.38, alpha: 1)
+    )
 
     static let background = adaptive(
-        light: UIColor(red: 0.99, green: 0.98, blue: 0.96, alpha: 1),
+        light: UIColor(hex: 0xFDFAF6),
         dark: UIColor(red: 0.09, green: 0.08, blue: 0.07, alpha: 1)
     )
     static let cardBackground = adaptive(
@@ -26,26 +40,29 @@ enum AppDesign {
         dark: UIColor(red: 0.16, green: 0.14, blue: 0.12, alpha: 1)
     )
     static let textPrimary = adaptive(
-        light: UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 1),
+        light: UIColor(hex: 0x1A1410),
         dark: UIColor(red: 0.96, green: 0.94, blue: 0.91, alpha: 1)
     )
     static let textSecondary = adaptive(
-        light: UIColor(red: 0.42, green: 0.37, blue: 0.29, alpha: 1),
+        light: UIColor(hex: 0x6B5E4A),
         dark: UIColor(red: 0.68, green: 0.62, blue: 0.55, alpha: 1)
     )
     static let declineBackground = adaptive(
-        light: UIColor(red: 0.99, green: 0.91, blue: 0.91, alpha: 1),
+        light: UIColor(red: 0.98, green: 0.93, blue: 0.90, alpha: 1),
         dark: UIColor(red: 0.28, green: 0.14, blue: 0.14, alpha: 1)
     )
     static let searchBackground = adaptive(
-        light: UIColor(red: 0.94, green: 0.94, blue: 0.93, alpha: 1),
+        light: UIColor(hex: 0xF5EDD8),
         dark: UIColor(red: 0.22, green: 0.20, blue: 0.18, alpha: 1)
     )
     static let chipBorder = adaptive(
-        light: UIColor(red: 0.88, green: 0.86, blue: 0.84, alpha: 1),
+        light: UIColor(hex: 0xE8E0D4),
         dark: UIColor(red: 0.32, green: 0.29, blue: 0.26, alpha: 1)
     )
-    static let navBarForeground = textPrimary
+    static let linkAccent = brandWarm
+    static let iconTileForeground = brandWarm
+    static let iconTileBackground = brandCream
+    static let chartBarFill = brandWarm
     static let chipSelectedForeground = Color.white
     static let chipSelectedBackground = brandDark
 
@@ -58,11 +75,11 @@ enum AppDesign {
     static func softStatusColors(for status: String) -> (foreground: Color, background: Color) {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "new", "pending":
-            return (accentBlue, accentBlue.opacity(0.12))
+            return (brandWarm, brandCream)
         case "confirmed":
-            return (accentGreen, accentGreen.opacity(0.14))
+            return (brandDark, brandCream)
         case "declined", "cancelled":
-            return (accentRed, declineBackground)
+            return (statusCancelled, declineBackground)
         default:
             return (textSecondary, searchBackground)
         }
@@ -118,6 +135,21 @@ private struct AppNavigationChromeModifier: ViewModifier {
 extension View {
     func appNavigationChrome() -> some View {
         modifier(AppNavigationChromeModifier())
+    }
+}
+
+/// Visible screen title when using inline navigation bar (marketing-style headline).
+struct AppScreenTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.largeTitle.bold())
+            .foregroundStyle(AppDesign.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
     }
 }
 
@@ -206,7 +238,7 @@ struct InsightMetricTile: View {
                 .foregroundStyle(AppDesign.textSecondary)
             Text(trend)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(trendPositive ? AppDesign.accentGreen : AppDesign.textSecondary)
+                .foregroundStyle(trendPositive ? AppDesign.brandWarm : AppDesign.textSecondary)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
         }
@@ -394,7 +426,7 @@ struct AppDeclineButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(AppDesign.accentRed)
+            .foregroundStyle(AppDesign.statusCancelled)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background(AppDesign.declineBackground)
@@ -449,7 +481,7 @@ struct AppAvatarView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(AppDesign.accentGreen.opacity(0.85))
+                .fill(AppDesign.brandDark.opacity(0.92))
                 .frame(width: size, height: size)
                 .overlay(
                     Text(initials)
@@ -476,5 +508,22 @@ struct AppAvatarView: View {
             }
         }
         .frame(width: size, height: size)
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: Int, alpha: CGFloat = 1) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: alpha
+        )
+    }
+}
+
+private extension Color {
+    init(hex: Int) {
+        self.init(uiColor: UIColor(hex: hex))
     }
 }

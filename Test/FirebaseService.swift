@@ -901,7 +901,11 @@ class FirebaseService: ObservableObject {
             "bookingModeDefault": "request",
             "requireApprovalForSlotBookings": true,
             "maxBookingWindowDays": 30,
-            "bufferMinutes": 15
+            "bufferMinutes": 15,
+            "workflow": [
+                "confirmationType": ProviderWorkflow.default.confirmationType.rawValue,
+                "responseTimeHours": ProviderWorkflow.default.responseTimeHours
+            ]
         ])
         return ref.documentID
     }
@@ -970,7 +974,7 @@ class FirebaseService: ObservableObject {
             if let typeRaw = wf["confirmationType"] as? String, let type = BookingConfirmationType(rawValue: typeRaw) {
                 workflow.confirmationType = type
             } else if let modeRaw = wf["mode"] as? String {
-                workflow.confirmationType = (modeRaw == "fixed_slots") ? .instantBook : .requestApprove
+                workflow.confirmationType = (modeRaw == "fixed_slots") ? .instantBook : .noBooking
             }
             workflow.responseTimeHours = wf["responseTimeHours"] as? Int ?? workflow.responseTimeHours
             workflow.depositAmount = wf["depositAmount"] as? Double

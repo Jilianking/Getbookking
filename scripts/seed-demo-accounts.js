@@ -297,18 +297,7 @@ const DEMO_ACCOUNTS = [
     instagramHandle: "northlinetattoo",
     webColorPaletteId: "berry-noir",
     paletteKey: "stonecut:berry-noir",
-    heroImageUrl: u("1611500641799-7c87404d47d0", 1200, 1500),
-    featuredWorkImages: [
-      u("1590246292337-6329e383436a", 900, 1100),
-      u("1598210987933-0e7d8f7b2b0e", 900, 1100),
-      u("1578662996442-48f60103fc96", 900, 1100),
-    ],
-    galleryImages: [
-      u("1611500641799-7c87404d47d0", 800, 1000),
-      u("1590246292337-6329e383436a", 800, 1000),
-      u("1551218808-94e45611d4d0", 800, 1000),
-      u("1578662996442-48f60103fc96", 800, 1000),
-    ],
+    /* hero + gallery: custom uploads */
     services: [
       { name: "Consultation", description: "Discuss your idea and design direction.", durationMinutes: 30, price: 0 },
       { name: "Small piece", description: "Minimal or fine line work.", durationMinutes: 60, price: 200 },

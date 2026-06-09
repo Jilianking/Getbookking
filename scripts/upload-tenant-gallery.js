@@ -72,6 +72,7 @@ function parseArgs(argv) {
     tenantId: null,
     files: [],
     featured: true,
+    append: false,
   };
   for (const arg of argv) {
     if (arg.startsWith("--slug=")) out.slug = arg.slice(7).trim().toLowerCase();
@@ -87,6 +88,7 @@ function parseArgs(argv) {
       );
     } else if (arg.startsWith("--file=")) out.files.push(arg.slice(7).trim());
     else if (arg === "--no-featured") out.featured = false;
+    else if (arg === "--append") out.append = true;
     else if (arg === "--help" || arg === "-h") out.help = true;
   }
   return out;
@@ -137,6 +139,7 @@ Upload gallery images for a tenant (/gallery page).
   node scripts/upload-tenant-gallery.js --slug=coles-chair --file=a.png --file=b.png
 
   --no-featured   do not copy URLs to featuredWorkImages (home strip)
+  --append        add to existing gallery instead of replacing
 `);
     process.exit(args.help ? 0 : 1);
   }
@@ -149,6 +152,7 @@ Upload gallery images for a tenant (/gallery page).
   const { db, storage } = await createGoogleClients(projectId);
 
   let tenantId = args.tenantId;
+  let existing = { galleryImages: [], featuredWorkImages: [] };
   if (!tenantId) {
     if (!args.slug) throw new Error("Provide --slug= or --tenantId=");
     const snap = await db
@@ -158,25 +162,36 @@ Upload gallery images for a tenant (/gallery page).
       .get();
     if (snap.empty) throw new Error(`Tenant not found: ${args.slug}`);
     tenantId = snap.docs[0].id;
+    existing = snap.docs[0].data() || existing;
+  } else if (args.append) {
+    const doc = await db.collection("tenants").doc(tenantId).get();
+    existing = doc.data() || existing;
   }
 
-  const urls = [];
+  const newUrls = [];
   for (let i = 0; i < args.files.length; i++) {
     const url = await uploadGalleryImage(storage, tenantId, args.files[i]);
-    urls.push(url);
+    newUrls.push(url);
     console.log(`  [${i + 1}/${args.files.length}] ${path.basename(args.files[i])}`);
   }
 
+  const galleryImages = args.append
+    ? [...(existing.galleryImages || []), ...newUrls]
+    : newUrls;
   const patch = {
-    galleryImages: urls,
+    galleryImages,
     updatedAt: FieldValue.serverTimestamp(),
   };
-  if (args.featured) patch.featuredWorkImages = urls;
+  if (args.featured) {
+    patch.featuredWorkImages = args.append
+      ? [...(existing.featuredWorkImages || []), ...newUrls]
+      : newUrls;
+  }
 
   await db.collection("tenants").doc(tenantId).set(patch, { merge: true });
 
   console.log(`\nTenant: ${tenantId}${args.slug ? ` (${args.slug})` : ""}`);
-  console.log(`Gallery: ${urls.length} images`);
+  console.log(`Gallery: ${galleryImages.length} images total (${newUrls.length} added)`);
   if (args.featured) console.log("Home featured strip: same images");
   console.log(`View: https://${args.slug || "tenant"}.getbookking.com/gallery`);
 }

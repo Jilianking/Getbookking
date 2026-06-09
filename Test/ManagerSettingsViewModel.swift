@@ -34,7 +34,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var isUpdatingMember = false
     /// From tenant booking policy (`request_approve`, etc.).
     @Published var tenantBookingRequiresApproval: Bool = true
-    @Published var tenantDefaultConfirmationType: String = BookingConfirmationType.requestApprove.rawValue
+    @Published var tenantDefaultConfirmationType: String = BookingConfirmationType.noBooking.rawValue
     @Published var managersApproveAppointments: Bool = true
     /// Set by parent toolbar or in-list invite button.
     @Published var presentInviteSheet = false
@@ -119,7 +119,7 @@ final class ManagerSettingsViewModel: ObservableObject {
             notifications = ManagerNotifications(dictionary: data["managerNotifications"] as? [String: Any])
             tenantBookingRequiresApproval = data["bookingRequiresApproval"] as? Bool ?? true
             tenantDefaultConfirmationType = (data["confirmationType"] as? String)
-                ?? BookingConfirmationType.requestApprove.rawValue
+                ?? BookingConfirmationType.noBooking.rawValue
             managersApproveAppointments = data["managersApproveAppointments"] as? Bool ?? true
             if !managersApproveAppointments || !tenantBookingRequiresApproval {
                 permissions.approveRejectRequests = false

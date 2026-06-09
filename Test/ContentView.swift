@@ -31,6 +31,7 @@ struct ContentView: View {
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
                 Task { await authViewModel.refreshTenantLogoFromServer() }
                 TapToPayAppLifecycle.warmUpReaderIfConfigured()
+                StripeConnectRefresh.request()
             }
         }
     }

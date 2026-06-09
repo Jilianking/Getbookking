@@ -27,6 +27,9 @@ class PaymentsViewModel: ObservableObject {
     @Published var pendingBalance: Double = 0
     /// True when Stripe Connect can accept charges (not just when an account id exists).
     @Published var stripeConnected: Bool = false
+    /// Tenant has a saved Connect account id (setup was started or completed).
+    @Published var stripeHasAccount: Bool = false
+    @Published var stripeDetailsSubmitted: Bool = false
     /// Show Connect / complete-setup banner when onboarding isn't finished.
     @Published var needsStripeConnect: Bool = true
     @Published var stripeStatusHint: String?
@@ -45,11 +48,62 @@ class PaymentsViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
+    /// Settings row / banner title for current Connect state.
+    var stripeConnectStatusLabel: String {
+        if stripeConnected { return "Connected" }
+        if stripeHasAccount && stripeDetailsSubmitted { return "In review" }
+        if stripeHasAccount { return "Finish setup" }
+        return "Setup"
+    }
+
+    /// Alert when payments are blocked from Messages or similar.
+    var stripePaymentsBlockedMessage: String {
+        if stripeConnected { return "" }
+        if stripeHasAccount && stripeDetailsSubmitted {
+            return "Stripe is reviewing your payout account. Pull to refresh on Payments, or check back soon."
+        }
+        if stripeHasAccount {
+            return "Finish Stripe setup in Payments to accept deposits and payment links."
+        }
+        return "Connect Stripe in Payments to accept deposits and payment links."
+    }
+
+    var stripeConnectBannerTitle: String {
+        if stripeHasAccount && stripeDetailsSubmitted {
+            return "Stripe account in review"
+        }
+        if stripeHasAccount {
+            return "Finish Stripe setup"
+        }
+        return "Connect Stripe to accept payments"
+    }
+
+    func refresh(isDemoMode: Bool = false) async {
+        await loadData(isDemoMode: isDemoMode)
+    }
+
+    /// Lightweight refresh after returning from Safari (skips full profile load when tenant is known).
+    func refreshStripeConnectStatus(isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        guard Auth.auth().currentUser != nil else { return }
+        if tenantId == nil {
+            await loadData(isDemoMode: false)
+            return
+        }
+        await refreshStripeStatus()
+        if stripeConnected {
+            await loadBalance()
+            await loadTransactions()
+        }
+    }
+
     func loadData(isDemoMode: Bool = false) async {
         isLoading = true
         errorMessage = nil
         if isDemoMode {
             stripeConnected = false
+            stripeHasAccount = false
+            stripeDetailsSubmitted = false
             needsStripeConnect = true
             stripeStatusHint = "Sign in with a real account to connect Stripe."
             isLoading = false
@@ -57,6 +111,8 @@ class PaymentsViewModel: ObservableObject {
         }
         guard let uid = Auth.auth().currentUser?.uid else {
             stripeConnected = false
+            stripeHasAccount = false
+            stripeDetailsSubmitted = false
             needsStripeConnect = true
             isLoading = false
             return
@@ -66,6 +122,8 @@ class PaymentsViewModel: ObservableObject {
             guard let tid = profile?.tenantId else {
                 tenantId = nil
                 stripeConnected = false
+                stripeHasAccount = false
+                stripeDetailsSubmitted = false
                 needsStripeConnect = true
                 stripeStatusHint = "Complete business setup before connecting payments."
                 isLoading = false
@@ -104,6 +162,8 @@ class PaymentsViewModel: ObservableObject {
             let detailsSubmitted = data?["detailsSubmitted"] as? Bool ?? false
             let payoutsEnabled = data?["payoutsEnabled"] as? Bool ?? false
 
+            stripeHasAccount = hasAccount
+            stripeDetailsSubmitted = detailsSubmitted
             stripeConnected = chargesEnabled
             needsStripeConnect = !chargesEnabled
             if let loc = data?["terminalLocationId"] as? String, !loc.isEmpty {
@@ -112,16 +172,18 @@ class PaymentsViewModel: ObservableObject {
             if chargesEnabled {
                 stripeStatusHint = nil
             } else if hasAccount && detailsSubmitted {
-                stripeStatusHint = "Stripe is reviewing your account. Pull to refresh."
+                stripeStatusHint = "Stripe is reviewing your account. Return to the app after setup — status updates automatically."
             } else if hasAccount {
-                stripeStatusHint = "Finish Stripe setup to accept payments."
+                stripeStatusHint = "Tap to continue where you left off."
             } else {
-                stripeStatusHint = nil
+                stripeStatusHint = "Deposits, tips, and service payments"
             }
             _ = payoutsEnabled
         } catch {
             let stripeAccountId = try? await firebaseService.fetchTenantStripeAccountId(tenantId: tenantId ?? "")
             let hasId = !(stripeAccountId ?? "").isEmpty
+            stripeHasAccount = hasId
+            stripeDetailsSubmitted = false
             stripeConnected = false
             needsStripeConnect = true
             stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
@@ -173,10 +235,6 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func refresh(isDemoMode: Bool = false) async {
-        await loadData(isDemoMode: isDemoMode)
-    }
-
     func createConnectAccountLink(isDemoMode: Bool = false) async {
         if isDemoMode {
             errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
@@ -184,6 +242,10 @@ class PaymentsViewModel: ObservableObject {
         }
         guard Auth.auth().currentUser != nil else {
             errorMessage = "You must be signed in to connect Stripe."
+            return
+        }
+        if stripeConnected {
+            stripeStatusHint = nil
             return
         }
         isConnectingStripe = true
@@ -196,21 +258,35 @@ class PaymentsViewModel: ObservableObject {
                 "refreshUrl": "\(base)/account.html?stripe=refresh",
             ])
             let data = result.data as? [String: Any]
-            let urlString = data?["url"] as? String
-            guard let url = urlString.flatMap({ URL(string: $0) }) else {
+            isConnectingStripe = false
+
+            if data?["alreadyConnected"] as? Bool == true {
+                await refreshStripeConnectStatus(isDemoMode: false)
+                stripeStatusHint = nil
+                return
+            }
+
+            if data?["pendingReview"] as? Bool == true {
+                stripeHasAccount = true
+                stripeDetailsSubmitted = true
+                needsStripeConnect = true
+                stripeStatusHint = "Stripe is reviewing your account. You'll be notified when charges are enabled."
+                await refreshStripeConnectStatus(isDemoMode: false)
+                return
+            }
+
+            guard let urlString = data?["url"] as? String,
+                  let url = URL(string: urlString) else {
                 throw NSError(
                     domain: "Payments",
                     code: -1,
                     userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
                 )
             }
-            isConnectingStripe = false
             let opened = await UIApplication.shared.open(url)
             if !opened {
                 errorMessage = "Could not open Stripe. Check that Safari is available."
-                return
             }
-            await loadData(isDemoMode: false)
         } catch {
             isConnectingStripe = false
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)

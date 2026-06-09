@@ -28,7 +28,12 @@ struct MessagesView: View {
         NavigationView {
             VStack(spacing: 0) {
                 if let threadId = selectedThreadId {
-                    MessageThreadView(threadId: threadId, viewModel: viewModel, onBack: { selectedThreadId = nil })
+                    MessageThreadView(
+                        threadId: threadId,
+                        viewModel: viewModel,
+                        drawerState: drawerState,
+                        onBack: { selectedThreadId = nil }
+                    )
                 } else {
                     AppSearchField(placeholder: "Search conversations...", text: $searchText)
                         .padding(.horizontal, 16)
@@ -188,8 +193,10 @@ struct ThreadRow: View {
 }
 
 struct MessageThreadView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     let threadId: String
     @ObservedObject var viewModel: MessagesViewModel
+    var drawerState: DrawerState
     let onBack: () -> Void
     @State private var messages: [Message] = []
     @State private var newMessage = ""
@@ -245,24 +252,19 @@ struct MessageThreadView: View {
                 }
             }
 
-            SmsQuickReplyChips(presets: viewModel.smsQuickPresets) { text in
-                newMessage = text
-            }
-
-            HStack(spacing: 12) {
-                TextField("Type a message...", text: $newMessage)
-                    .textFieldStyle(.roundedBorder)
-                Button(action: sendMessage) {
-                    if isLoading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                            .foregroundColor(newMessage.isEmpty ? .secondary : .blue)
-                    }
-                }
-                .disabled(newMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
-            }
-            .padding()
+            MessageComposerBar(
+                message: $newMessage,
+                darkStyle: true,
+                placeholder: "Type a message...",
+                quickPresets: viewModel.smsQuickPresets,
+                isSending: isLoading,
+                canSend: !newMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onSend: sendMessage,
+                clientName: clientName,
+                clientPhone: clientPhone,
+                drawerState: drawerState,
+                isDemoMode: authViewModel.isDemoMode
+            )
         }
         .task {
             if let summary = viewModel.summary(for: threadId) {
@@ -270,6 +272,7 @@ struct MessageThreadView: View {
                 clientPhone = PhoneFormatting.displayUS(summary.threadId)
             }
             await loadMessages()
+            await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
         }
         .onChange(of: viewModel.lastError) { _, err in
             showThreadError = err != nil
@@ -459,40 +462,21 @@ struct ComposeMessageView: View {
                     .padding(.horizontal, 18)
                 }
 
-                SmsQuickReplyChips(presets: viewModel.smsQuickPresets, darkStyle: true) { text in
-                    message = text
-                    messageFieldFocused = true
-                }
-                .padding(.horizontal, 18)
-
                 Spacer()
 
-                HStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        TextField("iMessage", text: $message, axis: .vertical)
-                            .focused($messageFieldFocused)
-                            .foregroundColor(.white)
-                            .lineLimit(1...4)
-                        Button(action: {
-                            if canSend && !viewModel.isSending { sendMessage() }
-                        }) {
-                            if viewModel.isSending {
-                                ProgressView()
-                                    .tint(.blue)
-                            } else {
-                                Image(systemName: canSend ? "arrow.up.circle.fill" : "arrow.up.circle")
-                                    .font(.system(size: 21, weight: .regular))
-                                    .foregroundColor(canSend ? .blue : .white.opacity(0.55))
-                            }
-                        }
-                        .disabled(!canSend || viewModel.isSending)
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 42)
-                    .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 12)
+                MessageComposerBar(
+                    message: $message,
+                    darkStyle: true,
+                    placeholder: "iMessage",
+                    quickPresets: viewModel.smsQuickPresets,
+                    isSending: viewModel.isSending,
+                    canSend: canSend,
+                    onSend: sendMessage,
+                    clientName: selectedClientName,
+                    clientPhone: clientPhone,
+                    drawerState: drawerState,
+                    isDemoMode: authViewModel.isDemoMode
+                )
             }
         }.onAppear {
             if clientPhone.isEmpty, !prefillPhone.isEmpty {
@@ -641,52 +625,3 @@ private struct ComposeClientPickerSheet: View {
     }
 }
 
-/// Horizontal chips for owner-configured quick replies in Messages compose and threads.
-struct SmsQuickReplyChips: View {
-    let presets: [String]
-    var darkStyle: Bool = false
-    let onSelect: (String) -> Void
-
-    private var usable: [String] {
-        presets
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    var body: some View {
-        if usable.isEmpty {
-            EmptyView()
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(usable.enumerated()), id: \.offset) { _, text in
-                        Button {
-                            onSelect(text)
-                        } label: {
-                            Text(text)
-                                .font(.caption)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.plain)
-                        .background(chipBackground)
-                        .foregroundStyle(chipForeground)
-                        .clipShape(Capsule())
-                    }
-                }
-                .padding(.horizontal, darkStyle ? 0 : 12)
-            }
-            .frame(maxHeight: 72)
-        }
-    }
-
-    private var chipBackground: Color {
-        darkStyle ? Color.white.opacity(0.12) : Color(.secondarySystemFill)
-    }
-
-    private var chipForeground: Color {
-        darkStyle ? Color.white.opacity(0.92) : Color.primary
-    }
-}

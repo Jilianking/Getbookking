@@ -20,7 +20,14 @@
 
 5. **Deploy**: `firebase deploy --only functions`
 
-6. **Twilio client texting** (optional):
+6. **Seed Stripe test subscriptions** (optional, for dashboard / MRR experiments):
+   ```bash
+   cd ..   # from functions/ to Test/
+   STRIPE_SECRET_KEY=sk_test_... node scripts/seed-stripe-subscriptions.js --count=50 --with-connect-fees
+   ```
+   Creates Firebase Auth + Firestore tenants, **backdated paid subscriptions** (default 3 months), and **30 Connect customer payments per tenant** with the 1% platform application fee. Options: `--member-months=3`, `--payments-per-tenant=30`, `--force-payments` (add more Connect charges to existing seeds). Requires `firebase login` and test-mode keys.
+
+7. **Twilio client texting** (optional):
    ```bash
    firebase functions:secrets:set TWILIO_ACCOUNT_SID
    firebase functions:secrets:set TWILIO_AUTH_TOKEN

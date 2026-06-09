@@ -42,8 +42,22 @@ struct Constants {
         static let marketingWebOrigin = "https://getbookking.com"
         /// Public sign-up wizard (`signup.html`).
         static var marketingSignUpURL: String { "\(marketingWebOrigin)/signup.html" }
+        /// Account login (`login.html`).
+        static var marketingLoginURL: String { "\(marketingWebOrigin)/login.html" }
+        /// Password reset page (`forgot-password.html`).
+        static var marketingForgotPasswordPageURL: String { "\(marketingWebOrigin)/forgot-password.html" }
         /// Live showcase tenant sites (`demos.html`).
         static var marketingDemosURL: String { "\(marketingWebOrigin)/demos.html" }
+
+        /// Opens web forgot-password with optional email prefill from the iOS app.
+        static func marketingForgotPasswordURL(email: String) -> URL? {
+            var components = URLComponents(string: marketingForgotPasswordPageURL)
+            let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                components?.queryItems = [URLQueryItem(name: "email", value: trimmed)]
+            }
+            return components?.url
+        }
     }
 
     /// Region for callable Cloud Functions (must match `firebase functions:log` / console and `web/join.html`).

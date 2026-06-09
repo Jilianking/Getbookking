@@ -14,6 +14,7 @@ struct DashboardView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    AppScreenTitle(title: sectionTitle)
                     LazyVGrid(columns: statColumns, spacing: 12) {
                         AppStatCard(
                             title: "New requests",
@@ -65,8 +66,7 @@ struct DashboardView: View {
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
@@ -84,6 +84,9 @@ struct DashboardView: View {
         .task {
             await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
+            Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
         }
         .sheet(isPresented: $showingBookingForm) {
             BookingFormView(drawerState: drawerState)
@@ -116,7 +119,7 @@ struct DashboardView: View {
                     drawerState.isOpen = false
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppDesign.accentBlue)
+                .foregroundStyle(AppDesign.linkAccent)
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -175,7 +178,7 @@ struct DashboardBookingRequestRow: View {
                     .foregroundStyle(AppDesign.textSecondary)
             }
             Spacer()
-            AppStatusPill(text: statusLabel, color: statusColor)
+            AppStatusPill(text: statusLabel, soft: true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
@@ -187,14 +190,6 @@ struct DashboardBookingRequestRow: View {
         if s == "CONFIRMED" { return "Confirmed" }
         if s == "DECLINED" { return "Declined" }
         return request.status.capitalized
-    }
-
-    private var statusColor: Color {
-        let s = request.status.uppercased()
-        if s == "NEW" { return AppDesign.accentBlue }
-        if s == "CONFIRMED" { return AppDesign.accentGreen }
-        if s == "DECLINED" { return .red.opacity(0.85) }
-        return .gray
     }
 }
 
@@ -220,18 +215,9 @@ struct DashboardRequestRow: View {
                     .foregroundStyle(AppDesign.textSecondary)
             }
             Spacer()
-            AppStatusPill(text: request.status.rawValue.capitalized, color: statusColor)
+            AppStatusPill(text: request.status.rawValue.capitalized, soft: true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
-    }
-
-    private var statusColor: Color {
-        switch request.status {
-        case .pending: return AppDesign.accentBlue
-        case .confirmed: return AppDesign.accentGreen
-        case .declined: return .red.opacity(0.85)
-        default: return .gray
-        }
     }
 }

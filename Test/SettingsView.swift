@@ -7,7 +7,6 @@
 import SwiftUI
 import PhotosUI
 import UIKit
-import FirebaseAuth
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -23,6 +22,7 @@ struct SettingsView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    AppScreenTitle(title: sectionTitle)
                     profileCard
 
                     if !authViewModel.isDemoMode && viewModel.hasProfile {
@@ -55,8 +55,7 @@ struct SettingsView: View {
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
@@ -95,6 +94,9 @@ struct SettingsView: View {
                 }
                 await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 await authViewModel.refreshTeamAccess()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
+                Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
             }
         }
         .navigationViewStyle(.stack)
@@ -275,7 +277,7 @@ struct SettingsView: View {
                         icon: "s.circle.fill",
                         iconColor: AppDesign.accentGreen,
                         title: "Stripe Connect",
-                        status: paymentsViewModel.stripeConnected ? "Connected" : "Setup",
+                        status: paymentsViewModel.stripeConnectStatusLabel,
                         statusColor: paymentsViewModel.stripeConnected ? AppDesign.accentGreen : AppDesign.brandWarm
                     )
                 }
@@ -374,7 +376,7 @@ struct SettingsView: View {
         guard let email = authViewModel.currentUserEmail else { return }
         Task {
             do {
-                try await Auth.auth().sendPasswordReset(withEmail: email)
+                try await authViewModel.sendPasswordReset(email: email)
                 await MainActor.run {
                     settingsAlertMessage = "Password reset email sent to \(email)."
                 }
@@ -841,7 +843,11 @@ struct DaysOpenCalendarSheet: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text(viewModel.confirmationType.usesFixedSlots ? "Fixed time slots" : "Open booking")
+                    Text(
+                        viewModel.confirmationType.allowsBooking
+                            ? (viewModel.confirmationType.usesFixedSlots ? "Fixed time slots" : "Open booking")
+                            : "Booking disabled"
+                    )
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity)

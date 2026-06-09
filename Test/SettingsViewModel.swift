@@ -10,7 +10,7 @@ import FirebaseAuth
 import FirebaseFunctions
 
 class SettingsViewModel: ObservableObject {
-    @Published var confirmationType: BookingConfirmationType = .requestApprove
+    @Published var confirmationType: BookingConfirmationType = .noBooking
     @Published var managersApproveAppointments: Bool = true
     @Published var depositAmount: Double?
     @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
@@ -46,7 +46,7 @@ class SettingsViewModel: ObservableObject {
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     /// Tenant-wide policy from `tenants.workflow` (shown read-only to non-owners).
-    @Published var tenantConfirmationType: BookingConfirmationType = .requestApprove
+    @Published var tenantConfirmationType: BookingConfirmationType = .noBooking
     @Published var tenantBookingRequiresApproval: Bool = true
 
     let dayLabels: [(Int, String)] = [
@@ -93,7 +93,7 @@ class SettingsViewModel: ObservableObject {
         await MainActor.run { isLoading = true; errorMessage = nil; teamInviteError = nil }
         if isDemoMode {
             await MainActor.run {
-                confirmationType = .requestApprove
+                confirmationType = .noBooking
                 managersApproveAppointments = true
                 depositAmount = nil
                 timeSlots = [TimeSlot(open: 9, close: 18)]
@@ -126,7 +126,7 @@ class SettingsViewModel: ObservableObject {
             var tid: String?
             var planResolved = SubscriptionPlan.solo
             var ownerMatch = false
-            var resolvedTenantType = BookingConfirmationType.requestApprove
+            var resolvedTenantType = BookingConfirmationType.noBooking
             var resolvedTenantRequiresApproval = true
             var tenantDeposit: Double?
             var tenantManagersApprove = true

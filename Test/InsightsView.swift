@@ -37,8 +37,8 @@ struct InsightsView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    AppScreenTitle(title: sectionTitle)
                     AppFilterChipBar(filters: rangeChipFilters, selection: $viewModel.selectedRange)
-                        .padding(.top, 4)
 
                     if let err = viewModel.loadError {
                         Text(err)
@@ -69,8 +69,7 @@ struct InsightsView: View {
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
@@ -105,44 +104,24 @@ struct InsightsView: View {
 
     private var kpiGrid: some View {
         LazyVGrid(columns: kpiColumns, spacing: 12) {
-            InsightMetricTile(
-                icon: "calendar",
-                iconColor: AppDesign.accentBlue,
-                iconBackground: AppDesign.accentBlue.opacity(0.12),
-                value: "\(viewModel.bookingsInRange)",
-                label: "Bookings",
-                trend: viewModel.bookingsTrendText,
-                trendPositive: viewModel.bookingsTrendText.contains("+")
-            )
-            InsightMetricTile(
-                icon: "dollarsign",
-                iconColor: AppDesign.accentGreen,
-                iconBackground: AppDesign.accentGreen.opacity(0.14),
-                value: formatRevenue(viewModel.revenueInRange),
-                label: "Revenue",
-                trend: viewModel.revenueTrendText,
-                trendPositive: !viewModel.revenueTrendText.contains("↘")
-            )
-            InsightMetricTile(
-                icon: "person.2.fill",
-                iconColor: Color(red: 0.55, green: 0.35, blue: 0.85),
-                iconBackground: Color(red: 0.55, green: 0.35, blue: 0.85).opacity(0.12),
-                value: "\(viewModel.clientsTotal)",
-                label: "Clients",
-                trend: viewModel.clientsTrendText,
-                trendPositive: true
-            )
-            InsightMetricTile(
-                icon: "xmark.circle.fill",
-                iconColor: AppDesign.accentRed,
-                iconBackground: AppDesign.declineBackground,
-                value: "\(viewModel.noShowsInRange)",
-                label: "No-shows",
-                trend: viewModel.noShowsTrendText,
-                trendPositive: viewModel.noShowsInRange == 0
-            )
+            insightMetric(icon: "calendar", value: "\(viewModel.bookingsInRange)", label: "Bookings", trend: viewModel.bookingsTrendText, trendPositive: viewModel.bookingsTrendText.contains("+"))
+            insightMetric(icon: "dollarsign", value: formatRevenue(viewModel.revenueInRange), label: "Revenue", trend: viewModel.revenueTrendText, trendPositive: !viewModel.revenueTrendText.contains("↘"))
+            insightMetric(icon: "person.2.fill", value: "\(viewModel.clientsTotal)", label: "Clients", trend: viewModel.clientsTrendText, trendPositive: true)
+            insightMetric(icon: "xmark.circle.fill", value: "\(viewModel.noShowsInRange)", label: "No-shows", trend: viewModel.noShowsTrendText, trendPositive: viewModel.noShowsInRange == 0)
         }
         .padding(.horizontal, 16)
+    }
+
+    private func insightMetric(icon: String, value: String, label: String, trend: String, trendPositive: Bool) -> some View {
+        InsightMetricTile(
+            icon: icon,
+            iconColor: AppDesign.iconTileForeground,
+            iconBackground: AppDesign.iconTileBackground,
+            value: value,
+            label: label,
+            trend: trend,
+            trendPositive: trendPositive
+        )
     }
 
     // MARK: - Bookings breakdown
@@ -153,7 +132,7 @@ struct InsightsView: View {
         return InsightCardContainer {
             InsightCardHeader(
                 icon: "doc.text.fill",
-                iconColor: AppDesign.accentBlue,
+                iconColor: AppDesign.iconTileForeground,
                 title: "Bookings",
                 trailing: {
                     Button("View all") {
@@ -161,15 +140,15 @@ struct InsightsView: View {
                         drawerState.isOpen = false
                     }
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppDesign.accentBlue)
+                    .foregroundStyle(AppDesign.linkAccent)
                 }
             )
             VStack(spacing: 0) {
-                breakdownRow(dot: AppDesign.accentBlue, label: "New", count: b.newCount, percent: b.percent(b.newCount, total: total))
+                breakdownRow(dot: AppDesign.brandWarm, label: "New", count: b.newCount, percent: b.percent(b.newCount, total: total))
                 InsightDivider()
-                breakdownRow(dot: AppDesign.accentGreen, label: "Confirmed", count: b.confirmed, percent: b.percent(b.confirmed, total: total))
+                breakdownRow(dot: AppDesign.brandDark, label: "Confirmed", count: b.confirmed, percent: b.percent(b.confirmed, total: total))
                 InsightDivider()
-                breakdownRow(dot: AppDesign.accentRed, label: "Cancelled", count: b.cancelledOrDeclined, percent: b.percent(b.cancelledOrDeclined, total: total))
+                breakdownRow(dot: AppDesign.statusCancelled, label: "Cancelled", count: b.cancelledOrDeclined, percent: b.percent(b.cancelledOrDeclined, total: total))
                 if b.other > 0 {
                     InsightDivider()
                     breakdownRow(dot: AppDesign.textSecondary, label: "Other", count: b.other, percent: b.percent(b.other, total: total))
@@ -205,7 +184,7 @@ struct InsightsView: View {
         return InsightCardContainer {
             InsightCardHeader(
                 icon: "chart.bar.fill",
-                iconColor: AppDesign.accentBlue,
+                iconColor: AppDesign.iconTileForeground,
                 title: "Top services",
                 trailing: {
                     Text(viewModel.selectedRange.periodLabel)
@@ -227,7 +206,7 @@ struct InsightsView: View {
         InsightCardContainer {
             InsightCardHeader(
                 icon: "person.2.fill",
-                iconColor: Color(red: 0.55, green: 0.35, blue: 0.85),
+                iconColor: AppDesign.iconTileForeground,
                 title: "Clients",
                 trailing: {
                     Button("View all") {
@@ -235,7 +214,7 @@ struct InsightsView: View {
                         drawerState.isOpen = false
                     }
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppDesign.accentBlue)
+                    .foregroundStyle(AppDesign.linkAccent)
                 }
             )
             VStack(spacing: 0) {
@@ -244,7 +223,7 @@ struct InsightsView: View {
                 metricListRow(
                     label: "New (\(viewModel.selectedRange.periodLabel))",
                     value: "\(viewModel.clientsNewInRange)",
-                    valueColor: viewModel.clientsNewInRange > 0 ? AppDesign.accentGreen : AppDesign.textPrimary,
+                    valueColor: viewModel.clientsNewInRange > 0 ? AppDesign.brandWarm : AppDesign.textPrimary,
                     prefix: viewModel.clientsNewInRange > 0 ? "+" : nil
                 )
             }
@@ -258,7 +237,7 @@ struct InsightsView: View {
             HStack(spacing: 10) {
                 Image(systemName: "creditcard.fill")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(AppDesign.accentGreen)
+                    .foregroundStyle(AppDesign.iconTileForeground)
                     .frame(width: 28, alignment: .center)
                 Text("Payments")
                     .font(.headline.weight(.bold))
@@ -271,10 +250,10 @@ struct InsightsView: View {
                         Text("Stripe connected")
                             .font(.caption2.weight(.semibold))
                     }
-                    .foregroundStyle(AppDesign.accentGreen)
+                    .foregroundStyle(AppDesign.brandWarm)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(AppDesign.accentGreen.opacity(0.12))
+                    .background(AppDesign.brandCream)
                     .clipShape(Capsule())
                 }
             }
@@ -283,7 +262,7 @@ struct InsightsView: View {
                     metricListRow(
                         label: "Available balance",
                         value: formatCurrency(viewModel.availableBalance),
-                        valueColor: AppDesign.accentGreen
+                        valueColor: AppDesign.brandWarm
                     )
                     InsightDivider()
                     metricListRow(label: "Pending", value: formatCurrency(viewModel.pendingBalance))
@@ -312,7 +291,7 @@ struct InsightsView: View {
         InsightCardContainer {
             InsightCardHeader(
                 icon: "dollarsign.circle.fill",
-                iconColor: AppDesign.accentGreen,
+                iconColor: AppDesign.iconTileForeground,
                 title: "Revenue",
                 trailing: {
                     Text(viewModel.selectedRange.periodLabel)
@@ -323,7 +302,7 @@ struct InsightsView: View {
             metricListRow(
                 label: "Completed bookings",
                 value: formatRevenue(viewModel.revenueInRange),
-                valueColor: AppDesign.accentGreen
+                valueColor: AppDesign.brandWarm
             )
         }
     }
@@ -447,7 +426,7 @@ private struct InsightBarRow: View {
                         .fill(AppDesign.searchBackground)
                         .frame(height: 8)
                     Capsule()
-                        .fill(AppDesign.accentBlue)
+                        .fill(AppDesign.chartBarFill)
                         .frame(width: max(width, value > 0 ? 8 : 0), height: 8)
                 }
             }

@@ -6253,11 +6253,15 @@
         var base = tenantBaseUrl(tenant);
         return '<div class="container"><div class="card"><p>This page isn’t available.</p><p><a href="' + esc(base + '/home') + '">Back to home</a></p></div></div>';
       }
+      function tenantAllowsBooking(tenant) {
+        var type = (tenant.workflow && tenant.workflow.confirmationType) || 'no_booking';
+        return String(type).toLowerCase() !== 'no_booking';
+      }
       function tenantShowGalleryPage(tenant) {
         return tenant.showGalleryPage !== false;
       }
       function tenantShowBookPage(tenant) {
-        return tenant.showBookPage !== false;
+        return tenant.showBookPage !== false && tenantAllowsBooking(tenant);
       }
       function tenantShowAboutPage(tenant) {
         return tenant.showAboutPage !== false;
@@ -8237,6 +8241,14 @@
               showBookPage: data.showBookPage !== false,
               showAboutPage: data.showAboutPage !== false,
               shopEnabled: data.shopEnabled || false,
+              workflow: (function() {
+                var wf = data.workflow;
+                if (!wf || typeof wf !== 'object') return { confirmationType: '' };
+                return {
+                  confirmationType: (wf.confirmationType || '').toString()
+                };
+              })(),
+              ownerUid: (data.ownerUid || '').toString(),
               classicFeaturedWorkEyebrow: data.classicFeaturedWorkEyebrow || '',
               classicFeaturedWorkHeading: data.classicFeaturedWorkHeading || '',
               classicFeaturedWorkSub: data.classicFeaturedWorkSub || '',
@@ -8269,7 +8281,24 @@
               row.featuredWorkImages = data.featuredWorkImages || [];
             }
             row.resolvedWebThemeId = resolvedWebThemeId(row);
-            return row;
+            var tenantType = (row.workflow && row.workflow.confirmationType) || '';
+            if (tenantType || !row.ownerUid) {
+              if (!tenantType) {
+                row.workflow = { confirmationType: 'no_booking' };
+              }
+              return row;
+            }
+            return db.collection('users').doc(row.ownerUid).get().then(function(ownerSnap) {
+              var ownerType = '';
+              if (ownerSnap.exists) {
+                var ownerWf = ownerSnap.data().workflow;
+                if (ownerWf && ownerWf.confirmationType) {
+                  ownerType = String(ownerWf.confirmationType);
+                }
+              }
+              row.workflow = { confirmationType: ownerType || 'no_booking' };
+              return row;
+            });
           });
       }
       /** Light portfolio themes: accent drawer matches primary CTA (BOOK NOW). */

@@ -118,6 +118,19 @@ class AuthViewModel: ObservableObject {
         _ = try await Auth.auth().signIn(withEmail: email, password: password)
         PushNotificationManager.shared.syncTokenAfterSignIn()
     }
+
+    /// Sends Firebase password reset email (login screen and Settings → Change password).
+    func sendPasswordReset(email: String) async throws {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(
+                domain: "AuthViewModel",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Enter your email address first."]
+            )
+        }
+        try await Auth.auth().sendPasswordReset(withEmail: trimmed)
+    }
     
     func signUp(
         email: String,

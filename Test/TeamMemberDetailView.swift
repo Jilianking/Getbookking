@@ -39,7 +39,7 @@ struct TeamMemberDetailView: View {
 
     private var studioConfirmationLabel: String {
         let type = BookingConfirmationType(rawValue: viewModel.tenantDefaultConfirmationType)
-            ?? .requestApprove
+            ?? .noBooking
         return type.displayName
     }
 

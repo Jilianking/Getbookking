@@ -337,7 +337,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
       timeZone: "America/New_York",
     },
     workflow: {
-      confirmationType: "request_approve",
+      confirmationType: "no_booking",
       responseTimeHours: 24,
     },
     createdAt: now,
@@ -541,14 +541,36 @@ exports.createConnectAccountLink = functions
         await tenantRef.set({ stripeAccountId }, { merge: true });
       }
 
+      const account = await stripe.accounts.retrieve(stripeAccountId);
+      if (account.charges_enabled) {
+        return {
+          alreadyConnected: true,
+          chargesEnabled: true,
+          hasAccount: true,
+          detailsSubmitted: account.details_submitted ?? false,
+        };
+      }
+
+      const currentlyDue =
+        (account.requirements && account.requirements.currently_due) || [];
+      if (account.details_submitted && currentlyDue.length === 0) {
+        return {
+          pendingReview: true,
+          hasAccount: true,
+          detailsSubmitted: true,
+          chargesEnabled: false,
+        };
+      }
+
       const baseUrl = (data?.returnBaseUrl ?? "https://getbookking.com").toString().replace(/\/$/, "");
       const returnUrl = data?.returnUrl ?? `${baseUrl}/account.html?stripe=success`;
       const refreshUrl = data?.refreshUrl ?? `${baseUrl}/account.html?stripe=refresh`;
+      const linkType = account.details_submitted ? "account_update" : "account_onboarding";
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccountId,
         refresh_url: refreshUrl,
         return_url: returnUrl,
-        type: "account_onboarding",
+        type: linkType,
       });
 
       if (!accountLink?.url) {
@@ -558,7 +580,13 @@ exports.createConnectAccountLink = functions
         );
       }
 
-      return { url: accountLink.url };
+      return {
+        url: accountLink.url,
+        linkType,
+        hasAccount: true,
+        detailsSubmitted: account.details_submitted ?? false,
+        chargesEnabled: false,
+      };
     } catch (err) {
       if (err instanceof functions.https.HttpsError) {
         throw err;
@@ -1064,6 +1092,19 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is not accepting bookings"
+    );
+  }
+
+  let ownerUserData = null;
+  if (tenantData.ownerUid) {
+    const ownerSnap = await db.collection("users").doc(tenantData.ownerUid).get();
+    if (ownerSnap.exists) ownerUserData = ownerSnap.data();
+  }
+  const workflow = resolveTenantWorkflow(tenantData, ownerUserData);
+  if (!bookingAllowsOnlineBooking(workflow.confirmationType)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting bookings right now."
     );
   }
 
@@ -1637,12 +1678,18 @@ const DEFAULT_MANAGER_PERMISSIONS = {
 };
 
 const DEFAULT_TENANT_WORKFLOW = {
-  confirmationType: "request_approve",
+  confirmationType: "no_booking",
   responseTimeHours: 24,
 };
 
+function bookingAllowsOnlineBooking(confirmationType) {
+  const t = (confirmationType || "").toString().trim().toLowerCase();
+  return t !== "no_booking";
+}
+
 function bookingRequiresApproval(confirmationType) {
   const t = (confirmationType || "").toString().trim().toLowerCase();
+  if (t === "no_booking") return false;
   return (
     t === "request_approve" ||
     t === "approve_and_deposit" ||
@@ -2055,7 +2102,7 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
     timeZone: "America/New_York",
   };
   const defaultWorkflow = {
-    confirmationType: "request_approve",
+    confirmationType: "no_booking",
     responseTimeHours: 24,
   };
 
@@ -2157,6 +2204,7 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
   if (managersApprove && data && data.confirmationType != null) {
     const confirmationType = (data.confirmationType || "").toString().trim().toLowerCase();
     const allowed = [
+      "no_booking",
       "instant_book",
       "request_approve",
       "deposit_to_confirm",

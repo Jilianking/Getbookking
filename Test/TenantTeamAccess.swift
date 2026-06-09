@@ -13,7 +13,7 @@ struct EffectiveTeamAccess: Equatable {
     var isOwner: Bool = false
     var accessRole: TeamAccessRole = .owner
     var permissions: ManagerPermissions = .defaults
-    var confirmationType: BookingConfirmationType = .requestApprove
+    var confirmationType: BookingConfirmationType = .noBooking
     var bookingRequiresApproval: Bool = true
     var managersApproveAppointments: Bool = true
     var subscriptionPlan: SubscriptionPlan = .solo
@@ -31,7 +31,7 @@ struct EffectiveTeamAccess: Equatable {
             viewEarningsReports: true,
             sendClientNotifications: true
         ),
-        confirmationType: .requestApprove,
+        confirmationType: .noBooking,
         bookingRequiresApproval: true,
         managersApproveAppointments: true,
         subscriptionPlan: .studio
@@ -140,8 +140,8 @@ enum TenantTeamAccessService {
         let isOwner = data["isOwner"] as? Bool ?? false
         let role = TeamAccessRole.fromFirestore(data["accessRole"] as? String)
         let perms = ManagerPermissions(dictionary: data["managerPermissions"] as? [String: Any])
-        let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.requestApprove.rawValue
-        let confirmation = BookingConfirmationType(rawValue: rawType) ?? .requestApprove
+        let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.noBooking.rawValue
+        let confirmation = BookingConfirmationType(rawValue: rawType) ?? .noBooking
         let requiresApproval = data["bookingRequiresApproval"] as? Bool ?? confirmation.requiresApproval
         let managersApprove = data["managersApproveAppointments"] as? Bool ?? true
         return EffectiveTeamAccess(

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * Seed team members (Firebase Auth + users/{uid}) for a tenant slug.
+ * Seed team members (Firebase Auth + users/{uid}) for a tenant.
  *
  * Usage (from Test/):
  *   node scripts/seed-team-members.js --slug=test100
+ *   node scripts/seed-team-members.js --email=daisybleu@gmail.com
+ *   node scripts/seed-team-members.js --email=owner@example.com --count=2
  *
  * Auth:
  *   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccountKey.json"
@@ -131,64 +133,102 @@ async function createOrUpdateAuthUser(projectId, accessToken, { email, password,
   }
   return { uid: body.localId, created: true };
 }
-const { resolveTenantBySlug } = require(path.join(
-  __dirname,
-  "../functions/seedBookingRequestsLib"
-));
+const {
+  resolveTenantBySlug,
+  resolveTenantByOwnerEmail,
+} = require(path.join(__dirname, "../functions/seedBookingRequestsLib"));
 
 const DEFAULT_PROJECT = "test-app-96812";
 const DEFAULT_PASSWORD = "1Abcdefg!";
 
-const BARBER_MEMBERS = [
-  {
-    email: "marc.barber1@example.com",
-    firstName: "Marc",
-    lastName: "Reyes",
-    phone: "5552010001",
-    jobTitle: "Barber",
-  },
-  {
-    email: "diego.barber2@example.com",
-    firstName: "Diego",
-    lastName: "Cole",
-    phone: "5552010002",
-    jobTitle: "Barber",
-  },
-  {
-    email: "james.barber3@example.com",
-    firstName: "James",
-    lastName: "Ortiz",
-    phone: "5552010003",
-    jobTitle: "Barber",
-  },
-];
+const MEMBER_PRESETS = {
+  barber: [
+    {
+      email: "marc.barber1@example.com",
+      firstName: "Marc",
+      lastName: "Reyes",
+      phone: "5552010001",
+      jobTitle: "Barber",
+    },
+    {
+      email: "diego.barber2@example.com",
+      firstName: "Diego",
+      lastName: "Cole",
+      phone: "5552010002",
+      jobTitle: "Barber",
+    },
+    {
+      email: "james.barber3@example.com",
+      firstName: "James",
+      lastName: "Ortiz",
+      phone: "5552010003",
+      jobTitle: "Barber",
+    },
+  ],
+  tattoos: [
+    {
+      email: "maya.artist1@example.com",
+      firstName: "Maya",
+      lastName: "Chen",
+      phone: "5553010001",
+      jobTitle: "Artist",
+    },
+    {
+      email: "leo.artist2@example.com",
+      firstName: "Leo",
+      lastName: "Vega",
+      phone: "5553010002",
+      jobTitle: "Artist",
+    },
+  ],
+};
 
 function parseArgs(argv) {
   const out = {
-    slug: "test100",
+    slug: null,
     tenantId: null,
+    email: null,
+    count: null,
     project: DEFAULT_PROJECT,
     password: DEFAULT_PASSWORD,
   };
   for (const arg of argv) {
     if (arg.startsWith("--slug=")) out.slug = arg.slice(7).trim().toLowerCase();
     else if (arg.startsWith("--tenantId=")) out.tenantId = arg.slice(11).trim();
-    else if (arg.startsWith("--project=")) out.project = arg.slice(10).trim();
+    else if (arg.startsWith("--email=")) out.email = arg.slice(8).trim().toLowerCase();
+    else if (arg.startsWith("--count=")) {
+      out.count = Math.max(1, parseInt(arg.slice(8), 10) || 1);
+    } else if (arg.startsWith("--project=")) out.project = arg.slice(10).trim();
     else if (arg.startsWith("--password=")) out.password = arg.slice(11);
     else if (arg === "--help" || arg === "-h") out.help = true;
   }
   return out;
 }
 
-async function resolveTenant(db, { slug, tenantId }) {
+function membersForTenant(tenant, count) {
+  const industry = (tenant.data.industry || "barber").toString().trim().toLowerCase();
+  const preset = MEMBER_PRESETS[industry] || MEMBER_PRESETS.barber;
+  if (count != null) return preset.slice(0, count);
+  return preset;
+}
+
+async function resolveTenant(db, { slug, tenantId, email }) {
   if (tenantId) {
     const doc = await db.collection("tenants").doc(tenantId).get();
     if (!doc.exists) throw new Error(`Tenant not found: ${tenantId}`);
     return { id: tenantId, data: doc.data() };
   }
-  const t = await resolveTenantBySlug(db, slug);
-  const doc = await db.collection("tenants").doc(t.id).get();
-  return { id: t.id, data: doc.data() };
+  if (email) {
+    const t = await resolveTenantByOwnerEmail(db, email);
+    const doc = await db.collection("tenants").doc(t.id).get();
+    return { id: t.id, data: doc.data() };
+  }
+  if (slug) {
+    const t = await resolveTenantBySlug(db, slug);
+    const doc = await db.collection("tenants").doc(t.id).get();
+    return { id: t.id, data: doc.data() };
+  }
+  throw new Error("Provide --email=owner@example.com, --slug=..., or --tenantId=...");
 }
 
 function normalizePlan(raw) {
@@ -247,11 +287,13 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     console.log(`
-Seed barber team members for a tenant (Auth + Firestore users/{uid}).
+Seed team members for a tenant (Auth + Firestore users/{uid}).
 
   node scripts/seed-team-members.js --slug=test100
+  node scripts/seed-team-members.js --email=daisybleu@gmail.com
+  node scripts/seed-team-members.js --email=owner@example.com --count=2
 
-Members: ${BARBER_MEMBERS.map((m) => m.email).join(", ")}
+Presets: barber (3), tattoos (2). --count limits how many are seeded.
 Default password: ${DEFAULT_PASSWORD}
 `);
     process.exit(0);
@@ -261,12 +303,14 @@ Default password: ${DEFAULT_PASSWORD}
   const { db, accessToken } = await createGoogleClients(projectId);
 
   const tenant = await resolveTenant(db, args);
+  const members = membersForTenant(tenant, args.count);
   let plan = normalizePlan(tenant.data.subscriptionPlan);
 
   console.log(`Project: ${projectId}`);
-  console.log(`Tenant: ${tenant.data.slug || args.slug} (${tenant.id})`);
+  console.log(`Tenant: ${tenant.data.slug || args.slug || "(no slug)"} (${tenant.id})`);
   console.log(`Industry: ${tenant.data.industry || "(none)"}`);
   console.log(`Plan: ${plan}`);
+  console.log(`Seeding ${members.length} member(s): ${members.map((m) => m.email).join(", ")}`);
 
   if (plan === "solo") {
     await db.collection("tenants").doc(tenant.id).update({
@@ -283,14 +327,14 @@ Default password: ${DEFAULT_PASSWORD}
     snap.docs.map((d) => [(d.data().email || "").toLowerCase(), d])
   );
 
-  const toAdd = BARBER_MEMBERS.filter((m) => !byEmail.has(m.email.toLowerCase())).length;
+  const toAdd = members.filter((m) => !byEmail.has(m.email.toLowerCase())).length;
   if (snap.size + toAdd > maxSeats(plan)) {
     throw new Error(
       `Seat limit ${maxSeats(plan)} on plan ${plan}; roster ${snap.size}, adding ${toAdd}.`
     );
   }
 
-  for (const member of BARBER_MEMBERS) {
+  for (const member of members) {
     const displayName = `${member.firstName} ${member.lastName}`;
     const existing = byEmail.get(member.email.toLowerCase());
     let uid;
@@ -326,8 +370,8 @@ Default password: ${DEFAULT_PASSWORD}
       );
     });
 
-  console.log(`\nBarber login password: ${args.password}`);
-  console.log("Sign in as test100@example.com → Team to verify.");
+  console.log(`\nTeam member login password: ${args.password}`);
+  console.log("Sign in as the business owner → Team to verify.");
 }
 
 main().catch((err) => {

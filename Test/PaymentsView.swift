@@ -114,6 +114,9 @@ struct PaymentsView: View {
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
+                Task { await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
+            }
             .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
                 DepositLinkSheet(viewModel: viewModel) {
                     showDepositLinkSheet = false
@@ -248,19 +251,25 @@ private struct StripeConnectBanner: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
 
+    private var isPendingReview: Bool {
+        viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: {
-                Task { await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                if isPendingReview {
+                    Task { await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode) }
+                } else {
+                    Task { await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                }
             }) {
                 HStack(spacing: 12) {
-                    Image(systemName: "link.circle.fill")
+                    Image(systemName: isPendingReview ? "clock.fill" : "link.circle.fill")
                         .font(.title2)
-                        .foregroundColor(.purple)
+                        .foregroundColor(isPendingReview ? .orange : .purple)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(viewModel.stripeStatusHint == nil
-                            ? "Connect Stripe to accept payments"
-                            : "Complete Stripe setup")
+                        Text(viewModel.stripeConnectBannerTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.primary)
                         Text(viewModel.stripeStatusHint ?? "Deposits, tips, and service payments")
@@ -272,16 +281,16 @@ private struct StripeConnectBanner: View {
                         ProgressView()
                             .scaleEffect(0.9)
                     } else {
-                        Image(systemName: "chevron.right")
+                        Image(systemName: isPendingReview ? "arrow.clockwise" : "chevron.right")
                             .foregroundColor(.secondary)
                     }
                 }
                 .padding()
-                .background(Color.purple.opacity(0.08))
+                .background((isPendingReview ? Color.orange : Color.purple).opacity(0.08))
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+                        .stroke((isPendingReview ? Color.orange : Color.purple).opacity(0.3), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)

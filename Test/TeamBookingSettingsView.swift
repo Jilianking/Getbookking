@@ -12,10 +12,10 @@ struct TeamBookingSettingsView: View {
     var body: some View {
         List {
             Section(
-                header: Text("Client booking flow"),
+                header: Text("Studio booking policy"),
                 footer: clientBookingFooter
             ) {
-                Toggle("Managers approve appointments", isOn: $settingsViewModel.managersApproveAppointments)
+                Toggle("Owner sets team booking type", isOn: $settingsViewModel.managersApproveAppointments)
                     .onChange(of: settingsViewModel.managersApproveAppointments) { _, enabled in
                         if !enabled {
                             teamPolicyViewModel.permissions.approveRejectRequests = false
@@ -120,9 +120,9 @@ struct TeamBookingSettingsView: View {
     private var clientBookingFooter: some View {
         Group {
             if settingsViewModel.managersApproveAppointments {
-                Text("Default flow for the studio when managers approve requests. Per-artist overrides are on Team → member profile.")
+                Text("Your booking type applies to everyone on the team. Turn off to let each person choose their own in Settings → My booking type.")
             } else {
-                Text("Booking confirmation is set per team member on Team → member profile.")
+                Text("Each person chooses their booking type in Settings → My booking type.")
             }
         }
         .font(.caption2)

@@ -130,6 +130,11 @@ struct TeamMemberRow: View {
                     .background(badgeColor.opacity(0.15))
                     .foregroundStyle(badgeColor)
                     .clipShape(Capsule())
+                if member.personalBookingTypeDisplayName != "Not set yet" {
+                    Text(member.personalBookingTypeDisplayName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 0)
         }

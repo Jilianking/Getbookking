@@ -1,7 +1,7 @@
 //
 //  TeamMemberDetailView.swift
 //
-//  Owner: per-member job title, booking override, payment split.
+//  Owner: per-member job title, payment split; read-only personal booking type.
 //
 
 import SwiftUI
@@ -35,12 +35,6 @@ struct TeamMemberDetailView: View {
             _jobTitlePresetId = State(initialValue: TeamJobTitleCatalog.customOptionId)
             _customJobTitle = State(initialValue: title)
         }
-    }
-
-    private var studioConfirmationLabel: String {
-        let type = BookingConfirmationType(rawValue: viewModel.tenantDefaultConfirmationType)
-            ?? .noBooking
-        return type.displayName
     }
 
     private var resolvedJobTitle: String {
@@ -182,28 +176,18 @@ struct TeamMemberDetailView: View {
     private var bookingSection: some View {
         Section(
             header: Text("Booking"),
-            footer: Text("Studio default: \(studioConfirmationLabel). Set in Settings → Booking policy.")
+            footer: Text(bookingSectionFooter)
                 .font(.caption2)
         ) {
-            Toggle("Use studio booking policy", isOn: $memberSettings.useStudioBookingPolicy)
-            if !memberSettings.useStudioBookingPolicy {
-                Picker("Booking type", selection: bookingOverrideBinding) {
-                    ForEach(BookingConfirmationType.allCases, id: \.self) { type in
-                        Text(type.displayName).tag(type.rawValue)
-                    }
-                }
-            }
+            LabeledContent("Booking type", value: member.personalBookingTypeDisplayName)
         }
     }
 
-    private var bookingOverrideBinding: Binding<String> {
-        Binding(
-            get: {
-                memberSettings.bookingConfirmationOverride
-                    ?? viewModel.tenantDefaultConfirmationType
-            },
-            set: { memberSettings.bookingConfirmationOverride = $0 }
-        )
+    private var bookingSectionFooter: String {
+        if viewModel.managersApproveAppointments {
+            return "Set by owner in Settings → Booking settings."
+        }
+        return "Self-managed — they set this in Settings → My booking type."
     }
 
     @ViewBuilder
@@ -259,6 +243,8 @@ struct TeamMemberDetailView: View {
     }
 
     private func save() async {
+        memberSettings.useStudioBookingPolicy = false
+        memberSettings.bookingConfirmationOverride = nil
         let title = member.accessRole == .manager ? "Manager" : resolvedJobTitle
         let ok = await viewModel.saveMemberSettings(
             memberUid: member.uid,

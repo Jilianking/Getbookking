@@ -10,9 +10,16 @@ import FirebaseAuth
 import FirebaseFunctions
 
 class SettingsViewModel: ObservableObject {
-    @Published var confirmationType: BookingConfirmationType = .noBooking
+    /// Studio-wide booking policy (owner edits in Business → Booking settings).
+    @Published var confirmationType: BookingConfirmationType = .requestApprove
     @Published var managersApproveAppointments: Bool = true
     @Published var depositAmount: Double?
+    /// This user's personal booking flow (Settings → My booking type).
+    @Published var personalConfirmationType: BookingConfirmationType = .requestApprove
+    @Published var personalDepositAmount: Double?
+    /// When true, personal flow follows studio policy instead of `personalConfirmationType`.
+    @Published var usesStudioBookingPolicy: Bool = false
+    @Published var personalSaveSuccess = false
     @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
     @Published var timeZoneId: String = TimeZone.current.identifier
@@ -29,6 +36,10 @@ class SettingsViewModel: ObservableObject {
     @Published var isUploadingLogo = false
     @Published var accountDisplayName: String = ""
     @Published var businessDisplayName: String = ""
+    /// Editable studio name (Settings → Account); synced to user profile + tenant.
+    @Published var businessNameDraft: String = ""
+    @Published var isSavingBusinessName = false
+    @Published var businessNameSaveSuccess = false
     /// Editable full name (Settings → Account); persisted to Firestore + Firebase Auth display name.
     @Published var accountFullNameDraft: String = ""
     @Published var isSavingAccountName = false
@@ -46,7 +57,7 @@ class SettingsViewModel: ObservableObject {
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
     /// Tenant-wide policy from `tenants.workflow` (shown read-only to non-owners).
-    @Published var tenantConfirmationType: BookingConfirmationType = .noBooking
+    @Published var tenantConfirmationType: BookingConfirmationType = .requestApprove
     @Published var tenantBookingRequiresApproval: Bool = true
 
     let dayLabels: [(Int, String)] = [
@@ -82,6 +93,16 @@ class SettingsViewModel: ObservableObject {
         slot.close <= slot.open
     }
 
+    var effectiveBookingConfirmationType: BookingConfirmationType {
+        if isTenantOwner { return personalConfirmationType }
+        if managersApproveAppointments { return tenantConfirmationType }
+        return personalConfirmationType
+    }
+
+    var ownerControlsTeamBookingType: Bool {
+        managersApproveAppointments
+    }
+
     func formatHour(_ hour: Int) -> String {
         if hour == 0 { return "12 AM" }
         if hour == 12 { return "12 PM" }
@@ -93,7 +114,9 @@ class SettingsViewModel: ObservableObject {
         await MainActor.run { isLoading = true; errorMessage = nil; teamInviteError = nil }
         if isDemoMode {
             await MainActor.run {
-                confirmationType = .noBooking
+                confirmationType = .requestApprove
+                personalConfirmationType = .requestApprove
+                usesStudioBookingPolicy = false
                 managersApproveAppointments = true
                 depositAmount = nil
                 timeSlots = [TimeSlot(open: 9, close: 18)]
@@ -107,6 +130,8 @@ class SettingsViewModel: ObservableObject {
                 profilePhotoUrl = ""
                 accountDisplayName = "Demo User"
                 accountFullNameDraft = "Demo User"
+                businessDisplayName = "Demo Studio"
+                businessNameDraft = "Demo Studio"
                 tenantSubscriptionPlan = .solo
                 isTenantOwner = false
                 teamInviteShareURL = nil
@@ -126,17 +151,25 @@ class SettingsViewModel: ObservableObject {
             var tid: String?
             var planResolved = SubscriptionPlan.solo
             var ownerMatch = false
-            var resolvedTenantType = BookingConfirmationType.noBooking
+            var resolvedTenantType = BookingConfirmationType.requestApprove
             var resolvedTenantRequiresApproval = true
             var tenantDeposit: Double?
             var tenantManagersApprove = true
+            var memberSettings = TeamMemberSettings()
+            var resolvedBusinessName = profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
+                memberSettings = (try? await firebaseService.fetchUserMemberSettings(uid: uid)) ?? TeamMemberSettings()
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
                     industry = tenant["industry"] as? String
                     planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
                     if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                         ownerMatch = (ownerUid == uid)
+                    }
+                    if resolvedBusinessName.isEmpty {
+                        let tenantName = (tenant["displayName"] as? String ?? tenant["businessName"] as? String ?? "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !tenantName.isEmpty { resolvedBusinessName = tenantName }
                     }
                     if let wf = tenant["workflow"] as? [String: Any],
                        let typeRaw = wf["confirmationType"] as? String,
@@ -163,15 +196,17 @@ class SettingsViewModel: ObservableObject {
                     let shown = Self.accountDisplayString(from: p)
                     accountDisplayName = shown
                     accountFullNameDraft = shown
-                    businessDisplayName = p.business
+                    businessDisplayName = resolvedBusinessName
+                    businessNameDraft = resolvedBusinessName
+                    personalConfirmationType = p.workflow.confirmationType
+                    personalDepositAmount = p.workflow.depositAmount
+                    usesStudioBookingPolicy = memberSettings.useStudioBookingPolicy
                     if ownerMatch {
                         confirmationType = resolvedTenantType
                         managersApproveAppointments = tenantManagersApprove
-                        depositAmount = tenantDeposit ?? p.workflow.depositAmount
+                        depositAmount = tenantDeposit
                     } else {
-                        confirmationType = resolvedTenantType
                         managersApproveAppointments = tenantManagersApprove
-                        depositAmount = p.workflow.depositAmount
                     }
                     timeSlots = p.availability.timeSlots.isEmpty
                         ? [TimeSlot(open: 9, close: 18)]
@@ -191,6 +226,8 @@ class SettingsViewModel: ObservableObject {
                     profilePhotoUrl = ""
                     accountDisplayName = ""
                     accountFullNameDraft = ""
+                    businessDisplayName = ""
+                    businessNameDraft = ""
                 }
                 isLoading = false
             }
@@ -198,6 +235,46 @@ class SettingsViewModel: ObservableObject {
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 isLoading = false
+            }
+        }
+    }
+
+    func saveBusinessName() async {
+        guard isTenantOwner else {
+            await MainActor.run {
+                errorMessage = "Only the business owner can update the business name."
+            }
+            return
+        }
+        guard let uid = Auth.auth().currentUser?.uid, let tid = tenantId else { return }
+        let trimmed = businessNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await MainActor.run {
+            isSavingBusinessName = true
+            errorMessage = nil
+            businessNameSaveSuccess = false
+        }
+        do {
+            try await firebaseService.syncBusinessName(uid: uid, tenantId: tid, name: trimmed)
+            await MainActor.run {
+                businessDisplayName = trimmed
+                businessNameDraft = trimmed
+                isSavingBusinessName = false
+                businessNameSaveSuccess = true
+                NotificationCenter.default.post(
+                    name: .tenantBusinessNameDidChange,
+                    object: nil,
+                    userInfo: ["businessName": trimmed]
+                )
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    businessNameSaveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isSavingBusinessName = false
             }
         }
     }
@@ -283,13 +360,6 @@ class SettingsViewModel: ObservableObject {
         }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
-            var workflowData: [String: Any] = [
-                "managersApproveAppointments": managersApproveAppointments,
-            ]
-            if managersApproveAppointments {
-                workflowData["confirmationType"] = confirmationType.rawValue
-                if let amount = depositAmount { workflowData["depositAmount"] = amount }
-            }
             if tenantId != nil {
                 var callable: [String: Any] = [
                     "managersApproveAppointments": managersApproveAppointments,
@@ -312,13 +382,41 @@ class SettingsViewModel: ObservableObject {
                 }
             }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
-                "workflow": workflowData
+                "workflow": [
+                    "managersApproveAppointments": managersApproveAppointments,
+                ] as [String: Any]
             ])
             await MainActor.run {
                 saveSuccess = true
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     saveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func savePersonalWorkflow() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        await MainActor.run { errorMessage = nil; personalSaveSuccess = false }
+        do {
+            var workflowData: [String: Any] = [
+                "confirmationType": personalConfirmationType.rawValue,
+                "responseTimeHours": ProviderWorkflow.default.responseTimeHours,
+            ]
+            if personalConfirmationType.requiresDeposit, let amount = personalDepositAmount, amount > 0 {
+                workflowData["depositAmount"] = amount
+            }
+            try await firebaseService.updateProviderProfile(uid: uid, updates: [
+                "workflow": workflowData
+            ])
+            await MainActor.run {
+                personalSaveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    personalSaveSuccess = false
                 }
             }
         } catch {

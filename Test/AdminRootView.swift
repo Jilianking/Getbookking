@@ -161,6 +161,9 @@ struct AdminRootView: View {
                 authViewModel.applyTenantLogoCache(url)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .tenantBusinessNameDidChange)) { _ in
+            Task { await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode) }
+        }
     }
 
     @ViewBuilder

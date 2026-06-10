@@ -232,17 +232,22 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                } else {
-                    HStack {
-                        Text("Booking confirmation")
-                            .font(.subheadline)
-                        Spacer()
-                        Text(viewModel.tenantConfirmationType.displayName)
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
-                    }
-                    .padding(16)
+
+                    Divider().padding(.leading, 52)
                 }
+
+                NavigationLink {
+                    PersonalBookingSettingsView(viewModel: viewModel)
+                        .environmentObject(authViewModel)
+                } label: {
+                    AppSettingsRow(
+                        icon: "calendar.badge.clock",
+                        iconColor: AppDesign.accentBlue,
+                        title: "My booking type",
+                        value: viewModel.effectiveBookingConfirmationType.displayName
+                    )
+                }
+                .buttonStyle(.plain)
 
                 Divider().padding(.leading, 52)
 
@@ -400,8 +405,8 @@ struct PersonalSchedulingSettingsView: View {
             Section(
                 footer: Text(
                     viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                        ? "Your personal hours and time zone. Booking flow is in Business settings → Booking settings."
-                        : "Your personal hours and time zone. Studio booking flow is in Team settings → Booking settings."
+                        ? "Your personal hours and time zone. Studio default is in Business settings → Booking settings. Your booking type is in My booking type above."
+                        : "Your personal hours and time zone. Studio booking policy is in Team settings → Booking settings when you use studio policy."
                 )
                 .font(.caption2)
             ) {
@@ -559,7 +564,7 @@ private struct AccountSettingsDetailView: View {
                 if viewModel.hasProfile {
                     Section(
                         header: Text("Your name"),
-                        footer: Text("Your personal name is set when you sign up and can’t be changed here. To update your business name on your website, use Website Design → Business name.")
+                        footer: Text("Your personal name as shown to clients and team members.")
                             .font(.caption2)
                     ) {
                         HStack {
@@ -568,6 +573,41 @@ private struct AccountSettingsDetailView: View {
                             Text(accountNameReadOnlyLabel)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                if viewModel.hasProfile, viewModel.isTenantOwner, viewModel.tenantId != nil {
+                    Section(
+                        header: Text("Business name"),
+                        footer: Text("Shown in the app sidebar and on your public website. Website Design uses the same name.")
+                            .font(.caption2)
+                    ) {
+                        TextField("Business name", text: $viewModel.businessNameDraft)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                        Button {
+                            Task { await viewModel.saveBusinessName() }
+                        } label: {
+                            HStack {
+                                Text("Save business name")
+                                if viewModel.isSavingBusinessName {
+                                    Spacer()
+                                    ProgressView()
+                                        .scaleEffect(0.9)
+                                }
+                            }
+                        }
+                        .disabled(
+                            viewModel.isSavingBusinessName
+                                || viewModel.businessNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
+                        if viewModel.businessNameSaveSuccess {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Business name saved")
+                                    .foregroundColor(.green)
+                            }
                         }
                     }
                 }
@@ -843,11 +883,7 @@ struct DaysOpenCalendarSheet: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text(
-                        viewModel.confirmationType.allowsBooking
-                            ? (viewModel.confirmationType.usesFixedSlots ? "Fixed time slots" : "Open booking")
-                            : "Booking disabled"
-                    )
+                    Text(viewModel.effectiveBookingConfirmationType.usesFixedSlots ? "Fixed time slots" : "Open booking")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity)
@@ -871,11 +907,11 @@ struct DaysOpenCalendarSheet: View {
                             if let date = dateOpt {
                                 CalendarDateCell(
                                     date: date,
-                                    isBlocked: !viewModel.confirmationType.usesFixedSlots && viewModel.isDateBlocked(date),
-                                    isAvailable: viewModel.confirmationType.usesFixedSlots && viewModel.isDateAvailable(date),
+                                    isBlocked: !viewModel.effectiveBookingConfirmationType.usesFixedSlots && viewModel.isDateBlocked(date),
+                                    isAvailable: viewModel.effectiveBookingConfirmationType.usesFixedSlots && viewModel.isDateAvailable(date),
                                     isToday: Calendar.current.isDateInToday(date)
                                 ) {
-                                    if viewModel.confirmationType.usesFixedSlots {
+                                    if viewModel.effectiveBookingConfirmationType.usesFixedSlots {
                                         viewModel.toggleAvailableDate(date)
                                     } else {
                                         viewModel.toggleBlockedDate(date)

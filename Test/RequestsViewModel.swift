@@ -265,7 +265,9 @@ class RequestsViewModel: ObservableObject {
                     profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                     accessRole: .owner,
                     jobTitle: "",
-                    memberSettings: TeamMemberSettings()
+                    memberSettings: TeamMemberSettings(),
+                    personalConfirmationType: Self.parsePersonalConfirmationType(row),
+                    effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
                 )
             }
             return TenantTeamMember(
@@ -275,9 +277,23 @@ class RequestsViewModel: ObservableObject {
                 profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                 accessRole: role,
                 jobTitle: (row["jobTitle"] as? String) ?? "",
-                memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any])
+                memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
+                personalConfirmationType: Self.parsePersonalConfirmationType(row),
+                effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
             )
         }
+    }
+
+    private static func parsePersonalConfirmationType(_ row: [String: Any]) -> String? {
+        let raw = (row["personalConfirmationType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? nil : raw
+    }
+
+    private static func parseEffectiveConfirmationType(_ row: [String: Any]) -> String? {
+        let raw = (row["effectiveConfirmationType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? nil : raw
     }
 
     func deleteRequest(_ requestId: String) async {

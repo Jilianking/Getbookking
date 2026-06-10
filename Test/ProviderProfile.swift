@@ -82,14 +82,13 @@ struct ProviderWorkflow {
     var depositAmount: Double?
 
     static let `default` = ProviderWorkflow(
-        confirmationType: .noBooking,
+        confirmationType: .requestApprove,
         responseTimeHours: 24,
         depositAmount: nil
     )
 }
 
 enum BookingConfirmationType: String, CaseIterable, Codable {
-    case noBooking = "no_booking"
     case instantBook = "instant_book"
     case requestApprove = "request_approve"
     case depositToConfirm = "deposit_to_confirm"
@@ -98,7 +97,6 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
 
     var displayName: String {
         switch self {
-        case .noBooking: return "No booking"
         case .instantBook: return "Instant book"
         case .requestApprove: return "Request + approve"
         case .depositToConfirm: return "Deposit to confirm"
@@ -109,7 +107,6 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
 
     var description: String {
         switch self {
-        case .noBooking: return "Not accepting online bookings"
         case .instantBook: return "No approval – customer books immediately"
         case .requestApprove: return "Manual approval required"
         case .depositToConfirm: return "Auto-confirm once deposit paid"
@@ -118,20 +115,16 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
         }
     }
 
-    var allowsBooking: Bool {
-        self != .noBooking
-    }
-
     var requiresApproval: Bool {
         switch self {
-        case .noBooking, .instantBook, .depositToConfirm: return false
+        case .instantBook, .depositToConfirm: return false
         case .requestApprove, .approveAndDeposit, .consultationFirst: return true
         }
     }
 
     var requiresDeposit: Bool {
         switch self {
-        case .noBooking, .instantBook, .requestApprove: return false
+        case .instantBook, .requestApprove: return false
         case .depositToConfirm, .approveAndDeposit: return true
         case .consultationFirst: return false
         }
@@ -140,8 +133,8 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
     /// Uses fixed date selection (tap to select available) vs block dates (shop hours, tap to block)
     var usesFixedSlots: Bool {
         switch self {
-        case .noBooking, .requestApprove, .approveAndDeposit, .consultationFirst: return false
         case .instantBook, .depositToConfirm: return true
+        case .requestApprove, .approveAndDeposit, .consultationFirst: return false
         }
     }
 }

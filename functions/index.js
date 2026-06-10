@@ -337,7 +337,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
       timeZone: "America/New_York",
     },
     workflow: {
-      confirmationType: "no_booking",
+      confirmationType: "request_approve",
       responseTimeHours: 24,
     },
     createdAt: now,
@@ -1095,19 +1095,6 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     );
   }
 
-  let ownerUserData = null;
-  if (tenantData.ownerUid) {
-    const ownerSnap = await db.collection("users").doc(tenantData.ownerUid).get();
-    if (ownerSnap.exists) ownerUserData = ownerSnap.data();
-  }
-  const workflow = resolveTenantWorkflow(tenantData, ownerUserData);
-  if (!bookingAllowsOnlineBooking(workflow.confirmationType)) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "This business is not accepting bookings right now."
-    );
-  }
-
   const customerPhone = normalizeCustomerPhone(data?.customerPhone);
   const smsConsentAccepted = data?.smsConsentAccepted === true;
   if (customerPhone && !smsConsentAccepted) {
@@ -1678,18 +1665,12 @@ const DEFAULT_MANAGER_PERMISSIONS = {
 };
 
 const DEFAULT_TENANT_WORKFLOW = {
-  confirmationType: "no_booking",
+  confirmationType: "request_approve",
   responseTimeHours: 24,
 };
 
-function bookingAllowsOnlineBooking(confirmationType) {
-  const t = (confirmationType || "").toString().trim().toLowerCase();
-  return t !== "no_booking";
-}
-
 function bookingRequiresApproval(confirmationType) {
   const t = (confirmationType || "").toString().trim().toLowerCase();
-  if (t === "no_booking") return false;
   return (
     t === "request_approve" ||
     t === "approve_and_deposit" ||
@@ -1725,6 +1706,47 @@ function resolveTenantWorkflow(tenant, ownerUserData) {
   return { ...DEFAULT_TENANT_WORKFLOW, managersApproveAppointments: true };
 }
 
+function resolveEffectiveBookingWorkflow(tenant, userData, ownerUserData, memberUid) {
+  const tenantWf = resolveTenantWorkflow(tenant, ownerUserData || null);
+  const ownerUid = ((tenant && tenant.ownerUid) || "").toString();
+  const uid = (memberUid || "").toString();
+  const isOwner = Boolean(ownerUid && uid && ownerUid === uid);
+  const ownerControlsTeam =
+    !isOwner && managersApproveAppointments(tenantWf);
+
+  if (ownerControlsTeam) {
+    return {
+      confirmationType: tenantWf.confirmationType,
+      responseTimeHours: tenantWf.responseTimeHours,
+      depositAmount: tenantWf.depositAmount,
+      usesStudioBookingPolicy: true,
+    };
+  }
+
+  const personalWf =
+    userData && userData.workflow && typeof userData.workflow === "object"
+      ? userData.workflow
+      : {};
+  let confirmationType = (personalWf.confirmationType || "").toString().trim();
+  if (!confirmationType) {
+    confirmationType =
+      tenantWf.confirmationType || DEFAULT_TENANT_WORKFLOW.confirmationType;
+  }
+
+  return {
+    confirmationType,
+    responseTimeHours:
+      personalWf.responseTimeHours != null
+        ? personalWf.responseTimeHours
+        : tenantWf.responseTimeHours,
+    depositAmount:
+      personalWf.depositAmount != null
+        ? personalWf.depositAmount
+        : tenantWf.depositAmount,
+    usesStudioBookingPolicy: false,
+  };
+}
+
 async function getMemberAccessContext(uid) {
   const userDoc = await db.collection("users").doc(uid).get();
   if (!userDoc.exists) {
@@ -1749,7 +1771,12 @@ async function getMemberAccessContext(uid) {
     const ownerSnap = await db.collection("users").doc(tenant.ownerUid).get();
     if (ownerSnap.exists) ownerUserData = ownerSnap.data();
   }
-  const workflow = resolveTenantWorkflow(tenant, isOwner ? userData : ownerUserData);
+  const workflow = resolveEffectiveBookingWorkflow(
+    tenant,
+    userData,
+    isOwner ? userData : ownerUserData,
+    uid
+  );
   const accessRole = isOwner ? "owner" : parseAccessRole(userData.role || userData.accessRole);
   const managerPermissions = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
   return {
@@ -1760,9 +1787,13 @@ async function getMemberAccessContext(uid) {
     isOwner,
     accessRole,
     workflow,
+    tenantWorkflow: resolveTenantWorkflow(tenant, isOwner ? userData : ownerUserData),
     managerPermissions,
     bookingRequiresApproval: bookingRequiresApproval(workflow.confirmationType),
-    managersApproveAppointments: managersApproveAppointments(workflow),
+    managersApproveAppointments: managersApproveAppointments(
+      resolveTenantWorkflow(tenant, isOwner ? userData : ownerUserData)
+    ),
+    usesStudioBookingPolicy: workflow.usesStudioBookingPolicy === true,
   };
 }
 
@@ -1792,7 +1823,7 @@ const PAYMENT_SPLIT_APPLIES = new Set(["service", "deposit", "both"]);
 
 function normalizeMemberSettings(raw) {
   const d = raw && typeof raw === "object" ? raw : {};
-  const useStudio = d.useStudioBookingPolicy !== false;
+  const useStudio = d.useStudioBookingPolicy === true;
   let bookingConfirmationOverride = (d.bookingConfirmationOverride || "")
     .toString()
     .trim();
@@ -1845,13 +1876,23 @@ async function assertTenantOwnerUid(uid, tenantId) {
   return tenant;
 }
 
-function serializeTeamMember(doc, ownerUid) {
+function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
   const d = doc.data();
   const uid = doc.id;
   const fn = (d.firstName || "").toString().trim();
   const ln = (d.lastName || "").toString().trim();
   let accessRole = parseAccessRole(d.role || d.accessRole);
   if (uid === ownerUid) accessRole = "owner";
+  const effective = resolveEffectiveBookingWorkflow(
+    tenant,
+    d,
+    ownerUserData || null,
+    uid
+  );
+  const personalRaw =
+    d.workflow && d.workflow.confirmationType
+      ? String(d.workflow.confirmationType).trim()
+      : "";
   return {
     uid,
     firstName: fn,
@@ -1863,6 +1904,8 @@ function serializeTeamMember(doc, ownerUid) {
     role: accessRole,
     jobTitle: (d.jobTitle || "").toString(),
     memberSettings: normalizeMemberSettings(d.memberSettings),
+    personalConfirmationType: personalRaw,
+    effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
 }
 
@@ -2102,7 +2145,7 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
     timeZone: "America/New_York",
   };
   const defaultWorkflow = {
-    confirmationType: "no_booking",
+    confirmationType: "request_approve",
     responseTimeHours: 24,
   };
 
@@ -2171,6 +2214,8 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     responseTimeHours: ctx.workflow.responseTimeHours,
     bookingRequiresApproval: ctx.bookingRequiresApproval,
     managersApproveAppointments: ctx.managersApproveAppointments,
+    usesStudioBookingPolicy: ctx.usesStudioBookingPolicy === true,
+    tenantConfirmationType: ctx.tenantWorkflow.confirmationType,
   };
 });
 
@@ -2204,7 +2249,6 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
   if (managersApprove && data && data.confirmationType != null) {
     const confirmationType = (data.confirmationType || "").toString().trim().toLowerCase();
     const allowed = [
-      "no_booking",
       "instant_book",
       "request_approve",
       "deposit_to_confirm",
@@ -2226,7 +2270,14 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
     workflow,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  await db.collection("users").doc(uid).set({ workflow }, { merge: true });
+  await db.collection("users").doc(uid).set(
+    {
+      workflow: {
+        managersApproveAppointments: managersApprove,
+      },
+    },
+    { merge: true }
+  );
   const effectiveType =
     workflow.confirmationType || DEFAULT_TENANT_WORKFLOW.confirmationType;
   return {
@@ -2361,7 +2412,14 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
   const tenant = ctx.tenant;
   const isOwner = ctx.isOwner;
   const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
-  const members = snap.docs.map((doc) => serializeTeamMember(doc, tenant.ownerUid));
+  const ownerSnap = tenant.ownerUid
+    ? await db.collection("users").doc(tenant.ownerUid).get()
+    : null;
+  const ownerData =
+    ownerSnap && ownerSnap.exists ? ownerSnap.data() : null;
+  const members = snap.docs.map((doc) =>
+    serializeTeamMember(doc, tenant.ownerUid, tenant, ownerData)
+  );
   members.sort((a, b) => {
     const rank = { owner: 0, manager: 1, member: 2 };
     const ra = rank[a.accessRole] ?? 3;
@@ -2371,16 +2429,8 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
   });
   const perms = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
   const notifs = tenant.managerNotifications || DEFAULT_MANAGER_NOTIFICATIONS;
-  const ownerSnap = tenant.ownerUid
-    ? await db.collection("users").doc(tenant.ownerUid).get()
-    : null;
-  const workflow = resolveTenantWorkflow(
-    tenant,
-    ownerSnap && ownerSnap.exists ? ownerSnap.data() : null
-  );
+  const workflow = resolveTenantWorkflow(tenant, ownerData);
   const confirmationType = workflow.confirmationType;
-  const ownerData =
-    ownerSnap && ownerSnap.exists ? ownerSnap.data() : null;
   const messaging = serializeMessagingFields(tenant, ownerData);
   return {
     tenantId,

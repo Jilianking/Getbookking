@@ -257,4 +257,6 @@ class AuthViewModel: ObservableObject {
 extension Notification.Name {
     /// Posted with `userInfo["logoUrl"]` when the tenant logo changes in Firestore from this app.
     static let tenantLogoDidChange = Notification.Name("tenantLogoDidChange")
+    /// Posted with `userInfo["businessName"]` when the studio business name changes in Firestore from this app.
+    static let tenantBusinessNameDidChange = Notification.Name("tenantBusinessNameDidChange")
 }

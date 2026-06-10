@@ -80,7 +80,7 @@ struct TeamApproveRejectRow: View {
                 Text("Off")
                     .foregroundStyle(.secondary)
             }
-            Text("Turn on Managers approve appointments above, or set booking per team member on Team.")
+            Text("Turn on Owner sets team booking type above to enable manager approvals for the studio flow.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         } else if viewModel.tenantBookingRequiresApproval {

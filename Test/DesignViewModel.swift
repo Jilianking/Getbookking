@@ -405,10 +405,19 @@ class DesignViewModel: ObservableObject {
         do {
             switch fieldKey {
             case "displayName":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
+                if let uid = Auth.auth().currentUser?.uid {
+                    try await firebaseService.syncBusinessName(uid: uid, tenantId: tid, name: trimmed)
+                } else {
+                    try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
+                }
                 await MainActor.run {
                     displayName = trimmed
                     if invalidatePreview { invalidateWebPreview() }
+                    NotificationCenter.default.post(
+                        name: .tenantBusinessNameDidChange,
+                        object: nil,
+                        userInfo: ["businessName": trimmed]
+                    )
                 }
             case "tagline":
                 try await firebaseService.updateTenant(tenantId: tid, updates: ["tagline": trimmed])
@@ -1091,6 +1100,7 @@ class DesignViewModel: ObservableObject {
         }
         var updates: [String: Any] = [
             "displayName": displayName,
+            "businessName": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             "logoUrl": logoUrl,
             "heroImageUrl": heroImageUrl,
             "heroImagePixelWidth": heroImagePixelWidth,
@@ -1174,6 +1184,17 @@ class DesignViewModel: ObservableObject {
                 .map { ["title": $0.title, "body": $0.body] }
         }
         await saveTenantUpdates(tid, updates)
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedName.isEmpty, let uid = Auth.auth().currentUser?.uid {
+            try? await firebaseService.updateProviderProfile(uid: uid, updates: ["business": trimmedName])
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .tenantBusinessNameDidChange,
+                    object: nil,
+                    userInfo: ["businessName": trimmedName]
+                )
+            }
+        }
     }
 
     /// Keeps Gallery page colors in sync with Featured work for portfolio-style web themes.

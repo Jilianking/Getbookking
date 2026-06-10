@@ -651,11 +651,35 @@ class FirebaseService: ObservableObject {
         return parseProviderProfile(data: data)
     }
 
+    func fetchUserMemberSettings(uid: String) async throws -> TeamMemberSettings {
+        guard let safeUid = sanitizedFirestoreId(uid) else { return TeamMemberSettings() }
+        let doc = try await db.collection("users").document(safeUid).getDocument()
+        guard doc.exists, let data = doc.data() else { return TeamMemberSettings() }
+        return TeamMemberSettings(dictionary: data["memberSettings"] as? [String: Any])
+    }
+
     func updateProviderProfile(uid: String, updates: [String: Any]) async throws {
         guard let safeUid = sanitizedFirestoreId(uid) else {
             throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid user id"])
         }
         try await db.collection("users").document(safeUid).setData(updates, merge: true)
+    }
+
+    /// Keeps `users.business` and tenant `displayName` / `businessName` aligned.
+    func syncBusinessName(uid: String, tenantId: String, name: String) async throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(
+                domain: "FirebaseService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Business name cannot be empty."]
+            )
+        }
+        try await updateProviderProfile(uid: uid, updates: ["business": trimmed])
+        try await updateTenant(tenantId: tenantId, updates: [
+            "displayName": trimmed,
+            "businessName": trimmed,
+        ])
     }
 
     // MARK: - Tenant design (branding, services)
@@ -974,7 +998,7 @@ class FirebaseService: ObservableObject {
             if let typeRaw = wf["confirmationType"] as? String, let type = BookingConfirmationType(rawValue: typeRaw) {
                 workflow.confirmationType = type
             } else if let modeRaw = wf["mode"] as? String {
-                workflow.confirmationType = (modeRaw == "fixed_slots") ? .instantBook : .noBooking
+                workflow.confirmationType = (modeRaw == "fixed_slots") ? .instantBook : .requestApprove
             }
             workflow.responseTimeHours = wf["responseTimeHours"] as? Int ?? workflow.responseTimeHours
             workflow.depositAmount = wf["depositAmount"] as? Double

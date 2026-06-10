@@ -110,8 +110,8 @@ enum PaymentSplitAppliesTo: String, CaseIterable, Identifiable {
 }
 
 struct TeamMemberSettings: Equatable {
-    /// When true, uses tenant booking policy from Settings.
-    var useStudioBookingPolicy: Bool = true
+    /// When true, uses tenant booking policy from Settings. Default false = self-managed.
+    var useStudioBookingPolicy: Bool = false
     var bookingConfirmationOverride: String?
     var paymentSplitPercent: Int = 0
     var paymentSplitAppliesTo: PaymentSplitAppliesTo = .service
@@ -247,10 +247,23 @@ struct TenantTeamMember: Identifiable, Equatable {
     let accessRole: TeamAccessRole
     let jobTitle: String
     let memberSettings: TeamMemberSettings
+    /// From `users/{uid}.workflow.confirmationType` when self-managed.
+    let personalConfirmationType: String?
+    /// Resolved type for display (owner policy or personal).
+    let effectiveConfirmationType: String?
 
     var id: String { uid }
 
     var isEditable: Bool { accessRole != .owner }
+
+    var personalBookingTypeDisplayName: String {
+        let raw = (effectiveConfirmationType ?? personalConfirmationType ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let type = BookingConfirmationType(rawValue: raw) else {
+            return "Not set yet"
+        }
+        return type.displayName
+    }
 
     var badgeLabel: String {
         switch accessRole {

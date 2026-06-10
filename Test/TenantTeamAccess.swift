@@ -13,9 +13,10 @@ struct EffectiveTeamAccess: Equatable {
     var isOwner: Bool = false
     var accessRole: TeamAccessRole = .owner
     var permissions: ManagerPermissions = .defaults
-    var confirmationType: BookingConfirmationType = .noBooking
+    var confirmationType: BookingConfirmationType = .requestApprove
     var bookingRequiresApproval: Bool = true
     var managersApproveAppointments: Bool = true
+    var usesStudioBookingPolicy: Bool = false
     var subscriptionPlan: SubscriptionPlan = .solo
 
     static let ownerFullAccess = EffectiveTeamAccess(
@@ -31,9 +32,10 @@ struct EffectiveTeamAccess: Equatable {
             viewEarningsReports: true,
             sendClientNotifications: true
         ),
-        confirmationType: .noBooking,
+        confirmationType: .requestApprove,
         bookingRequiresApproval: true,
         managersApproveAppointments: true,
+        usesStudioBookingPolicy: false,
         subscriptionPlan: .studio
     )
 
@@ -129,6 +131,7 @@ enum TenantTeamAccessService {
                 confirmationType: current.confirmationType,
                 bookingRequiresApproval: current.bookingRequiresApproval,
                 managersApproveAppointments: current.managersApproveAppointments,
+                usesStudioBookingPolicy: current.usesStudioBookingPolicy,
                 subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
             )
         } catch {
@@ -140,10 +143,11 @@ enum TenantTeamAccessService {
         let isOwner = data["isOwner"] as? Bool ?? false
         let role = TeamAccessRole.fromFirestore(data["accessRole"] as? String)
         let perms = ManagerPermissions(dictionary: data["managerPermissions"] as? [String: Any])
-        let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.noBooking.rawValue
-        let confirmation = BookingConfirmationType(rawValue: rawType) ?? .noBooking
+        let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.requestApprove.rawValue
+        let confirmation = BookingConfirmationType(rawValue: rawType) ?? .requestApprove
         let requiresApproval = data["bookingRequiresApproval"] as? Bool ?? confirmation.requiresApproval
         let managersApprove = data["managersApproveAppointments"] as? Bool ?? true
+        let usesStudio = data["usesStudioBookingPolicy"] as? Bool ?? false
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
@@ -151,6 +155,7 @@ enum TenantTeamAccessService {
             confirmationType: confirmation,
             bookingRequiresApproval: requiresApproval,
             managersApproveAppointments: managersApprove,
+            usesStudioBookingPolicy: usesStudio,
             subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: data["subscriptionPlan"] as? String)
         )
     }

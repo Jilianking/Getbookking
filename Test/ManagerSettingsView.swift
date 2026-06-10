@@ -50,7 +50,7 @@ struct ManagerSettingsView: View {
             Section(
                 header: Text("Team members"),
                 footer: viewModel.isTenantOwner
-                    ? Text("Tap a member for job title, booking override, and payment split. Manager capabilities are set in Settings.")
+                    ? Text("Tap a member for job title and payment split. Manager capabilities are set in Settings.")
                         .font(.caption2)
                     : Text("Your access is based on roles & permissions in Settings.")
                         .font(.caption2)
@@ -132,6 +132,11 @@ struct TeamMemberRow: View {
                     .clipShape(Capsule())
                 if member.personalBookingTypeDisplayName != "Not set yet" {
                     Text(member.personalBookingTypeDisplayName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let split = member.paymentSplitSummary {
+                    Text(split)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

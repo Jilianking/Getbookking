@@ -396,6 +396,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                     uid: uid,
                     displayName: name,
                     email: (row["email"] as? String) ?? "",
+                    phone: (row["phone"] as? String) ?? "",
                     profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                     accessRole: .owner,
                     jobTitle: "",
@@ -408,6 +409,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 uid: uid,
                 displayName: name,
                 email: (row["email"] as? String) ?? "",
+                phone: (row["phone"] as? String) ?? "",
                 profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                 accessRole: role,
                 jobTitle: (row["jobTitle"] as? String) ?? "",
@@ -432,9 +434,9 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

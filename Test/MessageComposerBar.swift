@@ -511,7 +511,7 @@ struct MessageInsertPaymentLinkSheet: View {
                     Button {
                         Task {
                             viewModel.depositLinkUrl = nil
-                            await viewModel.createDepositLink(amountCents: amountCents)
+                            await viewModel.createDepositLink(serviceAmountCents: amountCents)
                         }
                     } label: {
                         HStack {

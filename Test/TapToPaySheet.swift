@@ -25,13 +25,17 @@ struct TapToPaySheet: View {
     @State private var showShareReceipt = false
     @State private var receiptText = ""
 
-    private var amountCents: Int {
+    private var serviceAmountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
         return Int(round(value * 100))
     }
 
+    private var checkout: CardCheckoutBreakdown {
+        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents)
+    }
+
     private var canPay: Bool {
-        amountCents >= 50 && phase == .entry
+        serviceAmountCents >= 50 && phase == .entry
     }
 
     private var locationId: String {
@@ -117,9 +121,15 @@ struct TapToPaySheet: View {
                 .multilineTextAlignment(.center)
                 .disabled(!readerSession.isReaderReady && locationId.isEmpty == false)
 
+            if canPay {
+                CardCheckoutBreakdownView(breakdown: checkout)
+            }
+
             Button(action: { Task { await pay() } }) {
                 HStack {
-                    Text("Charge")
+                    Text(checkout.surchargeCents > 0
+                        ? "Charge \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
+                        : "Charge")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
@@ -185,10 +195,18 @@ struct TapToPaySheet: View {
             guard !locationId.isEmpty else {
                 throw TapToPayTerminalManager.TapToPayError.missingLocationId
             }
-            let clientSecret = try await viewModel.createPaymentIntentForTapToPay(amountCents: amountCents)
-            try await TapToPayTerminalManager.shared.processPayment(clientSecret: clientSecret, locationId: locationId)
+            let intent = try await viewModel.createPaymentIntentForTapToPay(
+                serviceAmountCents: serviceAmountCents
+            )
+            try await TapToPayTerminalManager.shared.processPayment(
+                clientSecret: intent.clientSecret,
+                locationId: locationId
+            )
+            if !intent.paymentIntentId.isEmpty {
+                await viewModel.recordTenantPayment(paymentIntentId: intent.paymentIntentId)
+            }
             await viewModel.loadData(isDemoMode: false)
-            phase = .approved(amountCents: amountCents)
+            phase = .approved(amountCents: intent.checkout.totalCents)
         } catch {
             let text = TapToPayErrorMapper.userMessage(for: error)
             if text.localizedCaseInsensitiveContains("declin") {

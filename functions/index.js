@@ -665,6 +665,49 @@ function platformFeeCents(amountCents) {
   return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
 }
 
+/** Restaurant-style card surcharge on top of service/deposit (default 3%). */
+const DEFAULT_CARD_SURCHARGE_BPS = 300;
+
+function readTenantCardSurchargeSettings(tenant) {
+  const t = tenant && typeof tenant === "object" ? tenant : {};
+  const enabled = t.cardSurchargeEnabled !== false;
+  let bps = parseInt(t.cardSurchargeBps, 10);
+  if (Number.isNaN(bps)) bps = DEFAULT_CARD_SURCHARGE_BPS;
+  bps = Math.min(500, Math.max(0, bps));
+  return { enabled, bps };
+}
+
+/**
+ * Service/deposit amount + optional card surcharge → total charged to customer.
+ * Platform fee is still deducted from the Connect balance on the total charge.
+ */
+function computeCardCheckoutAmounts(serviceCents, tenant) {
+  const service = Math.max(0, Math.round(Number(serviceCents)));
+  const { enabled, bps } = readTenantCardSurchargeSettings(tenant);
+  let surchargeCents = 0;
+  if (enabled && bps > 0 && service > 0) {
+    surchargeCents = Math.round((service * bps) / 10000);
+    if (surchargeCents < 1 && service >= 50) surchargeCents = 1;
+  }
+  return {
+    serviceCents: service,
+    surchargeCents,
+    totalCents: service + surchargeCents,
+    cardSurchargeEnabled: enabled,
+    cardSurchargeBps: bps,
+  };
+}
+
+function parseServiceAmountCents(data) {
+  if (typeof data?.serviceAmountCents === "number") {
+    return Math.round(data.serviceAmountCents);
+  }
+  if (typeof data?.amountCents === "number") {
+    return Math.round(data.amountCents);
+  }
+  return null;
+}
+
 /** Helper: get stripeAccountId for authenticated user's tenant */
 async function getStripeAccountIdForUser(uid) {
   const userDoc = await db.collection("users").doc(uid).get();
@@ -888,18 +931,25 @@ exports.createDepositLink = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const amountCents = data?.amountCents ?? 500; // default $5
-    if (typeof amountCents !== "number" || amountCents < 50) {
+    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
         "Amount must be at least 50 cents ($0.50)"
       );
     }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    const tenantDoc = tenantId
+      ? await db.collection("tenants").doc(tenantId).get()
+      : null;
+    const tenant = tenantDoc && tenantDoc.exists ? tenantDoc.data() : {};
+    const checkout = computeCardCheckoutAmounts(serviceAmount, tenant);
     const productName = (data?.productName || "Deposit").toString().trim() || "Deposit";
     const productDescription = data?.productDescription
       ? data.productDescription.toString().trim()
       : undefined;
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const stripeAccountId = await getStripeAccountIdForUser(uid);
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -914,27 +964,51 @@ exports.createDepositLink = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const roundedAmount = Math.round(amountCents);
-    const feeCents = platformFeeCents(roundedAmount);
-    const productData = { name: productName };
-    if (productDescription) productData.description = productDescription;
+    const feeCents = platformFeeCents(checkout.totalCents);
+    const lineItems = [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: { name: productName, ...(productDescription ? { description: productDescription } : {}) },
+          unit_amount: checkout.serviceCents,
+        },
+        quantity: 1,
+      },
+    ];
+    if (checkout.surchargeCents > 0) {
+      const pct = (checkout.cardSurchargeBps / 100).toFixed(1);
+      lineItems.push({
+        price_data: {
+          currency: "usd",
+          product_data: { name: `Card processing (${pct}%)` },
+          unit_amount: checkout.surchargeCents,
+        },
+        quantity: 1,
+      });
+    }
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
     const link = await stripe.paymentLinks.create(
       {
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: productData,
-              unit_amount: roundedAmount,
-            },
-            quantity: 1,
-          },
-        ],
+        line_items: lineItems,
         application_fee_amount: feeCents,
+        metadata: {
+          tenantId: tenantId || "",
+          paymentKind: "deposit",
+          serviceAmountCents: String(checkout.serviceCents),
+          surchargeCents: String(checkout.surchargeCents),
+          bookingRequestId,
+          initiatedByUid: uid,
+        },
       },
       { stripeAccount: stripeAccountId }
     );
-    return { url: link.url, platformFeeCents: feeCents };
+    return {
+      url: link.url,
+      platformFeeCents: feeCents,
+      serviceCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+    };
   });
 
 /**
@@ -1197,14 +1271,21 @@ exports.createPaymentIntentForTapToPay = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const amountCents = data?.amountCents ?? 100; // default $1 for testing
-    if (typeof amountCents !== "number" || amountCents < 50) {
+    const serviceAmount = parseServiceAmountCents(data) ?? 100;
+    if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
         "Amount must be at least 50 cents ($0.50)"
       );
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    const tenantDoc = tenantId
+      ? await db.collection("tenants").doc(tenantId).get()
+      : null;
+    const tenant = tenantDoc && tenantDoc.exists ? tenantDoc.data() : {};
+    const checkout = computeCardCheckoutAmounts(serviceAmount, tenant);
+    const stripeAccountId = await getStripeAccountIdForUser(uid);
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -1219,16 +1300,23 @@ exports.createPaymentIntentForTapToPay = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const roundedAmount = Math.round(amountCents);
-    const feeCents = platformFeeCents(roundedAmount);
+    const feeCents = platformFeeCents(checkout.totalCents);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
     const pi = await stripe.paymentIntents.create(
       {
-        amount: roundedAmount,
+        amount: checkout.totalCents,
         currency: "usd",
-        // Stripe Terminal (Tap to Pay on iPhone) expects `card_present`.
         payment_method_types: ["card_present"],
         application_fee_amount: feeCents,
         capture_method: "automatic",
+        metadata: {
+          tenantId: tenantId || "",
+          paymentKind: "service",
+          serviceAmountCents: String(checkout.serviceCents),
+          surchargeCents: String(checkout.surchargeCents),
+          bookingRequestId,
+          initiatedByUid: uid,
+        },
       },
       { stripeAccount: stripeAccountId }
     );
@@ -1236,6 +1324,9 @@ exports.createPaymentIntentForTapToPay = functions
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       platformFeeCents: feeCents,
+      serviceCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
     };
   });
 
@@ -1838,8 +1929,13 @@ function normalizeMemberSettings(raw) {
   if (!PAYMENT_SPLIT_APPLIES.has(paymentSplitAppliesTo)) {
     paymentSplitAppliesTo = "service";
   }
+  let paymentSplitEnabled = d.paymentSplitEnabled === true;
+  if (d.paymentSplitEnabled === undefined && paymentSplitPercent > 0) {
+    paymentSplitEnabled = true;
+  }
   const out = {
     useStudioBookingPolicy: useStudio,
+    paymentSplitEnabled,
     paymentSplitPercent,
     paymentSplitAppliesTo,
   };
@@ -1848,6 +1944,255 @@ function normalizeMemberSettings(raw) {
   }
   return out;
 }
+
+function paymentKindMatchesSplit(settings, paymentKind) {
+  const normalized = normalizeMemberSettings(settings);
+  if (!normalized.paymentSplitEnabled || normalized.paymentSplitPercent <= 0) {
+    return false;
+  }
+  const kind = (paymentKind || "service").toString().trim().toLowerCase();
+  const applies = normalized.paymentSplitAppliesTo;
+  if (applies === "both") return true;
+  if (kind === "deposit") return applies === "deposit";
+  return applies === "service";
+}
+
+/** Split on service/deposit amount; card surcharge stays with studio. */
+function computeTeamPaymentSplit({
+  memberSettings,
+  paymentKind,
+  serviceCents,
+}) {
+  const service = Math.max(0, Math.round(Number(serviceCents)));
+  if (!paymentKindMatchesSplit(memberSettings, paymentKind)) {
+    return {
+      splitApplied: false,
+      splitPercentApplied: 0,
+      artistShareCents: 0,
+      studioServiceShareCents: service,
+    };
+  }
+  const normalized = normalizeMemberSettings(memberSettings);
+  const percent = normalized.paymentSplitPercent;
+  const artistShareCents = Math.round((service * percent) / 100);
+  return {
+    splitApplied: true,
+    splitPercentApplied: percent,
+    artistShareCents,
+    studioServiceShareCents: service - artistShareCents,
+  };
+}
+
+function resolveAttributedMemberUid(tenant, bookingRequest) {
+  const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
+  const assigned = ((bookingRequest && bookingRequest.assignedMemberUid) || "")
+    .toString()
+    .trim();
+  if (assigned) return assigned;
+  return ownerUid;
+}
+
+async function loadBookingRequestForPayment(tenantId, requestId) {
+  const rid = (requestId || "").toString().trim();
+  if (!tenantId || !rid) return null;
+  const snap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .doc(rid)
+    .get();
+  return snap.exists ? snap.data() : null;
+}
+
+/**
+ * Records payment + team split for reporting after a successful card charge.
+ * Params: { paymentIntentId: string }
+ */
+exports.recordTenantPayment = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const paymentIntentId = (data?.paymentIntentId || "").toString().trim();
+    if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Valid paymentIntentId required"
+      );
+    }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    if (!tenantId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No business linked to this account."
+      );
+    }
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Business not found.");
+    }
+    const tenant = tenantSnap.data();
+    const stripeAccountId = (tenant.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+      stripeAccount: stripeAccountId,
+    });
+    if (pi.status !== "succeeded") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Payment is not complete yet."
+      );
+    }
+    const meta = pi.metadata || {};
+    if ((meta.tenantId || "").toString() !== tenantId) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Payment does not belong to this business."
+      );
+    }
+    const serviceCents = parseInt(meta.serviceAmountCents, 10);
+    const surchargeCents = parseInt(meta.surchargeCents, 10);
+    const paymentKind = (meta.paymentKind || "service").toString();
+    const bookingRequestId = (meta.bookingRequestId || "").toString().trim();
+    const resolvedService =
+      Number.isNaN(serviceCents) || serviceCents <= 0
+        ? Math.max(0, (pi.amount || 0) - (Number.isNaN(surchargeCents) ? 0 : surchargeCents))
+        : serviceCents;
+    const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
+    const grossCents = pi.amount || resolvedService + resolvedSurcharge;
+
+    let stripeFeeCents = 0;
+    const chargeId =
+      typeof pi.latest_charge === "string"
+        ? pi.latest_charge
+        : pi.latest_charge && pi.latest_charge.id;
+    if (chargeId) {
+      try {
+        const charge = await stripe.charges.retrieve(chargeId, {
+          stripeAccount: stripeAccountId,
+        });
+        if (charge.balance_transaction) {
+          const btId =
+            typeof charge.balance_transaction === "string"
+              ? charge.balance_transaction
+              : charge.balance_transaction.id;
+          const bt = await stripe.balanceTransactions.retrieve(btId, {
+            stripeAccount: stripeAccountId,
+          });
+          stripeFeeCents = bt.fee || 0;
+        }
+      } catch (feeErr) {
+        console.warn("recordTenantPayment fee lookup", feeErr.message);
+      }
+    }
+    const platformFee = platformFeeCents(grossCents);
+
+    const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
+    const attributedMemberUid = resolveAttributedMemberUid(tenant, booking);
+    const ownerUid = (tenant.ownerUid || "").toString();
+    let memberSettings = {};
+    if (attributedMemberUid && attributedMemberUid !== ownerUid) {
+      const memberSnap = await db.collection("users").doc(attributedMemberUid).get();
+      if (memberSnap.exists && memberSnap.data().tenantId === tenantId) {
+        memberSettings = memberSnap.data().memberSettings || {};
+      }
+    }
+
+    const split = computeTeamPaymentSplit({
+      memberSettings,
+      paymentKind,
+      serviceCents: resolvedService,
+    });
+
+    const ledgerRef = db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("paymentLedger")
+      .doc(paymentIntentId);
+    const existing = await ledgerRef.get();
+    if (existing.exists) {
+      return { ok: true, alreadyRecorded: true, ledgerId: paymentIntentId };
+    }
+
+    await ledgerRef.set({
+      paymentIntentId,
+      chargeId: chargeId || null,
+      bookingRequestId: bookingRequestId || null,
+      attributedMemberUid: attributedMemberUid || ownerUid,
+      paymentKind,
+      serviceCents: resolvedService,
+      surchargeCents: resolvedSurcharge,
+      grossCents,
+      stripeFeeCents,
+      platformFeeCents: platformFee,
+      splitApplied: split.splitApplied,
+      splitPercentApplied: split.splitPercentApplied,
+      artistShareCents: split.artistShareCents,
+      studioServiceShareCents: split.studioServiceShareCents,
+      initiatedByUid: (meta.initiatedByUid || uid).toString(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      ok: true,
+      ledgerId: paymentIntentId,
+      serviceCents: resolvedService,
+      surchargeCents: resolvedSurcharge,
+      grossCents,
+      artistShareCents: split.artistShareCents,
+      studioServiceShareCents: split.studioServiceShareCents,
+    };
+  });
+
+/** Owner-only: toggle restaurant-style card surcharge at checkout. */
+exports.updateTenantCardSurcharge = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+  }
+  const uid = context.auth.uid;
+  const tenantId = await getTenantIdForUser(uid);
+  if (!tenantId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No business linked to this account."
+    );
+  }
+  await assertTenantOwnerUid(uid, tenantId);
+  const patch = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+  if (data && data.cardSurchargeEnabled != null) {
+    patch.cardSurchargeEnabled = data.cardSurchargeEnabled === true;
+  }
+  if (data && data.cardSurchargeBps != null) {
+    let bps = parseInt(data.cardSurchargeBps, 10);
+    if (Number.isNaN(bps)) bps = DEFAULT_CARD_SURCHARGE_BPS;
+    patch.cardSurchargeBps = Math.min(500, Math.max(0, bps));
+  }
+  await db.collection("tenants").doc(tenantId).set(patch, { merge: true });
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  const settings = readTenantCardSurchargeSettings(
+    tenantSnap.exists ? tenantSnap.data() : {}
+  );
+  return {
+    ok: true,
+    cardSurchargeEnabled: settings.enabled,
+    cardSurchargeBps: settings.bps,
+  };
+});
 
 function defaultJobTitleForIndustry(industry) {
   const map = {
@@ -1899,6 +2244,7 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     lastName: ln,
     displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Member").toString(),
     email: (d.email || "").toString(),
+    phone: (d.phone || "").toString(),
     profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
     accessRole,
     role: accessRole,

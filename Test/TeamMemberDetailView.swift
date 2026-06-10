@@ -194,22 +194,28 @@ struct TeamMemberDetailView: View {
     private var paymentSection: some View {
         Section(
             header: Text("Payment split"),
-            footer: Text("Percentage of service/deposit revenue attributed to this person for reporting. Payout routing is not configured yet.")
+            footer: Text("Split is calculated on the service/deposit amount (before the card processing fee added at checkout). Unassigned bookings stay with the studio. Auto-payout to artists requires their own Stripe Connect account (coming soon).")
                 .font(.caption2)
         ) {
-            Stepper(
-                value: $memberSettings.paymentSplitPercent,
-                in: 0...100,
-                step: 5
-            ) {
-                HStack {
-                    Text("Split")
-                    Spacer()
-                    Text("\(memberSettings.paymentSplitPercent)%")
-                        .foregroundStyle(.secondary)
+            Toggle("Enable payment split", isOn: $memberSettings.paymentSplitEnabled)
+                .onChange(of: memberSettings.paymentSplitEnabled) { _, enabled in
+                    if enabled, memberSettings.paymentSplitPercent < 5 {
+                        memberSettings.paymentSplitPercent = 70
+                    }
                 }
-            }
-            if memberSettings.paymentSplitPercent > 0 {
+            if memberSettings.paymentSplitEnabled {
+                Stepper(
+                    value: $memberSettings.paymentSplitPercent,
+                    in: 5...100,
+                    step: 5
+                ) {
+                    HStack {
+                        Text("Artist share")
+                        Spacer()
+                        Text("\(memberSettings.paymentSplitPercent)%")
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Picker("Applies to", selection: $memberSettings.paymentSplitAppliesTo) {
                     ForEach(PaymentSplitAppliesTo.allCases) { opt in
                         Text(opt.displayName).tag(opt)

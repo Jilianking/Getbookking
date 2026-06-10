@@ -21,6 +21,14 @@ struct PaymentTransaction: Identifiable {
     let chargeId: String?
 }
 
+#if TAP_TO_PAY_ENABLED
+struct TapToPayPaymentIntent {
+    let clientSecret: String
+    let paymentIntentId: String
+    let checkout: CardCheckoutBreakdown
+}
+#endif
+
 @MainActor
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
@@ -44,6 +52,10 @@ class PaymentsViewModel: ObservableObject {
     @Published var isCreatingDepositLink = false
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
+    /// Restaurant-style card surcharge on top of service/deposit (default on, 3%).
+    @Published var cardSurchargeEnabled: Bool = true
+    @Published var cardSurchargeBps: Int = CardCheckoutPricing.defaultSurchargeBps
+    @Published var isSavingCardSurcharge = false
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -130,11 +142,24 @@ class PaymentsViewModel: ObservableObject {
                 return
             }
             tenantId = tid
-            if let tenant = try? await firebaseService.fetchTenant(tenantId: tid),
-               let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
-                isTenantOwner = (ownerUid == uid)
+            if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
+                if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
+                    isTenantOwner = (ownerUid == uid)
+                } else {
+                    isTenantOwner = false
+                }
+                cardSurchargeEnabled = tenant["cardSurchargeEnabled"] as? Bool ?? true
+                if let bps = tenant["cardSurchargeBps"] as? Int {
+                    cardSurchargeBps = min(500, max(0, bps))
+                } else if let bps = tenant["cardSurchargeBps"] as? Double {
+                    cardSurchargeBps = min(500, max(0, Int(bps)))
+                } else {
+                    cardSurchargeBps = CardCheckoutPricing.defaultSurchargeBps
+                }
             } else {
                 isTenantOwner = false
+                cardSurchargeEnabled = true
+                cardSurchargeBps = CardCheckoutPricing.defaultSurchargeBps
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
@@ -293,14 +318,49 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    /// Creates a Stripe Payment Link for the given amount. amountCents in USD cents (e.g. 2500 = $25).
-    func createDepositLink(amountCents: Int) async {
-        guard amountCents >= 50 else { return }
+    func checkoutBreakdown(serviceCents: Int) -> CardCheckoutBreakdown {
+        CardCheckoutPricing.breakdown(
+            serviceCents: serviceCents,
+            surchargeEnabled: cardSurchargeEnabled,
+            surchargeBps: cardSurchargeBps
+        )
+    }
+
+    func saveCardSurchargeSettings(enabled: Bool) async {
+        guard isTenantOwner, tenantId != nil else { return }
+        isSavingCardSurcharge = true
+        errorMessage = nil
+        do {
+            let result = try await functions.httpsCallable("updateTenantCardSurcharge").call([
+                "cardSurchargeEnabled": enabled,
+                "cardSurchargeBps": cardSurchargeBps,
+            ])
+            if let data = result.data as? [String: Any] {
+                cardSurchargeEnabled = data["cardSurchargeEnabled"] as? Bool ?? enabled
+                if let bps = data["cardSurchargeBps"] as? Int {
+                    cardSurchargeBps = bps
+                }
+            } else {
+                cardSurchargeEnabled = enabled
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isSavingCardSurcharge = false
+    }
+
+    /// Creates a Stripe Payment Link for the service/deposit amount (surcharge added server-side if enabled).
+    func createDepositLink(serviceAmountCents: Int, bookingRequestId: String? = nil) async {
+        guard serviceAmountCents >= 50 else { return }
         isCreatingDepositLink = true
         errorMessage = nil
         depositLinkUrl = nil
         do {
-            let result = try await functions.httpsCallable("createDepositLink").call(["amountCents": amountCents])
+            var payload: [String: Any] = ["serviceAmountCents": serviceAmountCents]
+            if let bookingRequestId, !bookingRequestId.isEmpty {
+                payload["bookingRequestId"] = bookingRequestId
+            }
+            let result = try await functions.httpsCallable("createDepositLink").call(payload)
             let data = result.data as? [String: Any]
             let urlString = data?["url"] as? String
             isCreatingDepositLink = false
@@ -308,6 +368,17 @@ class PaymentsViewModel: ObservableObject {
             if urlString == nil { errorMessage = "Invalid response from server" }
         } catch {
             isCreatingDepositLink = false
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+    }
+
+    func recordTenantPayment(paymentIntentId: String) async {
+        guard !paymentIntentId.isEmpty else { return }
+        do {
+            _ = try await functions.httpsCallable("recordTenantPayment").call([
+                "paymentIntentId": paymentIntentId,
+            ])
+        } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
@@ -367,19 +438,23 @@ class PaymentsViewModel: ObservableObject {
         return resolvedTapToPayLocationId
     }
 
-    /// Creates a Stripe PaymentIntent for Tap to Pay (Stripe Terminal).
-    /// - Returns: `client_secret` for the created PaymentIntent.
-    func createPaymentIntentForTapToPay(amountCents: Int) async throws -> String {
-        guard amountCents >= 50 else {
+    /// Creates a Stripe PaymentIntent for Tap to Pay (service amount; surcharge added server-side if enabled).
+    func createPaymentIntentForTapToPay(
+        serviceAmountCents: Int,
+        bookingRequestId: String? = nil
+    ) async throws -> TapToPayPaymentIntent {
+        guard serviceAmountCents >= 50 else {
             throw NSError(
                 domain: "TapToPay",
                 code: 0,
                 userInfo: [NSLocalizedDescriptionKey: "Amount must be at least $0.50"]
             )
         }
-        let result = try await functions.httpsCallable("createPaymentIntentForTapToPay").call([
-            "amountCents": amountCents,
-        ])
+        var payload: [String: Any] = ["serviceAmountCents": serviceAmountCents]
+        if let bookingRequestId, !bookingRequestId.isEmpty {
+            payload["bookingRequestId"] = bookingRequestId
+        }
+        let result = try await functions.httpsCallable("createPaymentIntentForTapToPay").call(payload)
         let data = result.data as? [String: Any]
         guard let clientSecret = data?["clientSecret"] as? String, !clientSecret.isEmpty else {
             throw NSError(
@@ -388,7 +463,22 @@ class PaymentsViewModel: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: "Invalid response from server (missing clientSecret)"]
             )
         }
-        return clientSecret
+        let paymentIntentId = (data?["paymentIntentId"] as? String) ?? ""
+        let service = (data?["serviceCents"] as? Int) ?? serviceAmountCents
+        let surcharge = (data?["surchargeCents"] as? Int) ?? 0
+        let total = (data?["totalCents"] as? Int) ?? (service + surcharge)
+        let checkout = CardCheckoutBreakdown(
+            serviceCents: service,
+            surchargeCents: surcharge,
+            totalCents: total,
+            surchargeEnabled: surcharge > 0,
+            surchargeBps: cardSurchargeBps
+        )
+        return TapToPayPaymentIntent(
+            clientSecret: clientSecret,
+            paymentIntentId: paymentIntentId,
+            checkout: checkout
+        )
     }
     #endif
 

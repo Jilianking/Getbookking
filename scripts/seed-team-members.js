@@ -276,6 +276,7 @@ function buildUserPatch(tenant, member) {
     },
     memberSettings: {
       useStudioBookingPolicy: true,
+      paymentSplitEnabled: false,
       paymentSplitPercent: 0,
       paymentSplitAppliesTo: "service",
     },

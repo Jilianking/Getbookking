@@ -113,6 +113,8 @@ struct TeamMemberSettings: Equatable {
     /// When true, uses tenant booking policy from Settings. Default false = self-managed.
     var useStudioBookingPolicy: Bool = false
     var bookingConfirmationOverride: String?
+    /// Owner enables revenue split for this team member.
+    var paymentSplitEnabled: Bool = false
     var paymentSplitPercent: Int = 0
     var paymentSplitAppliesTo: PaymentSplitAppliesTo = .service
 
@@ -135,11 +137,17 @@ struct TeamMemberSettings: Equatable {
            let parsed = PaymentSplitAppliesTo(rawValue: raw) {
             paymentSplitAppliesTo = parsed
         }
+        if let enabled = d["paymentSplitEnabled"] as? Bool {
+            paymentSplitEnabled = enabled
+        } else {
+            paymentSplitEnabled = paymentSplitPercent > 0
+        }
     }
 
     var firestoreDictionary: [String: Any] {
         var d: [String: Any] = [
             "useStudioBookingPolicy": useStudioBookingPolicy,
+            "paymentSplitEnabled": paymentSplitEnabled,
             "paymentSplitPercent": paymentSplitPercent,
             "paymentSplitAppliesTo": paymentSplitAppliesTo.rawValue,
         ]
@@ -243,6 +251,7 @@ struct TenantTeamMember: Identifiable, Equatable {
     let uid: String
     let displayName: String
     let email: String
+    let phone: String
     let profilePhotoUrl: String
     let accessRole: TeamAccessRole
     let jobTitle: String
@@ -281,5 +290,10 @@ struct TenantTeamMember: Identifiable, Equatable {
             return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
         }
         return String(displayName.prefix(2)).uppercased()
+    }
+
+    var paymentSplitSummary: String? {
+        guard memberSettings.paymentSplitEnabled, memberSettings.paymentSplitPercent > 0 else { return nil }
+        return "\(memberSettings.paymentSplitPercent)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
     }
 }

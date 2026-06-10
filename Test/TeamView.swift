@@ -103,66 +103,41 @@ private struct SoloOwnerTeamPlaceholderView: View {
     }
 }
 
-// MARK: - Non-owner: my role + read-only roster
+// MARK: - Non-owner: my agreement + team directory
 
 private struct TeamMemberOverviewContent: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
 
+    private var currentMember: TenantTeamMember? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return viewModel.members.first { $0.uid == uid }
+    }
+
     var body: some View {
         List {
-            Section(header: Text("My role")) {
-                HStack {
-                    Text("Access")
-                    Spacer()
-                    Text(authViewModel.teamAccess.accessRole.displayName)
-                        .foregroundStyle(.secondary)
-                }
-                if authViewModel.teamAccess.accessRole == .member {
-                    Text("Job title and permissions are set by the business owner.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             Section {
-                TeamPermissionSummaryRow(
-                    title: "View all bookings",
-                    enabled: authViewModel.teamAccess.canViewAllBookings
-                )
-                TeamPermissionSummaryRow(
-                    title: "Approve & reject requests",
-                    enabled: authViewModel.teamAccess.canApproveRejectRequests
-                )
-                TeamPermissionSummaryRow(
-                    title: "Edit services & pricing",
-                    enabled: authViewModel.teamAccess.canEditServicesPricing
-                )
-                TeamPermissionSummaryRow(
-                    title: "Manage artist schedules",
-                    enabled: authViewModel.teamAccess.canManageArtistSchedules
-                )
-                TeamPermissionSummaryRow(
-                    title: "Access client list",
-                    enabled: authViewModel.teamAccess.canAccessClientList
-                )
-                TeamPermissionSummaryRow(
-                    title: "View earnings & reports",
-                    enabled: authViewModel.teamAccess.isOwner
-                        || (authViewModel.teamAccess.accessRole == .manager
-                            && authViewModel.teamAccess.permissions.viewEarningsReports)
-                )
+                DisclosureGroup {
+                    agreementDetails
+                } label: {
+                    HStack {
+                        Text("Access")
+                        Spacer()
+                        Text(authViewModel.teamAccess.accessRole.displayName)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             } header: {
-                Text("What I can do")
+                Text("My role")
             } footer: {
-                Text("Your access follows Settings → Team settings. Per-person options are on member profiles.")
+                Text("Terms are set by your studio owner. Contact them to request changes.")
                     .font(.caption2)
             }
 
             if !viewModel.members.isEmpty {
                 Section(header: Text("Team members")) {
                     ForEach(viewModel.members) { member in
-                        TeamMemberRow(member: member)
+                        TeamMemberDirectoryRow(member: member)
                     }
                 }
             }
@@ -176,19 +151,99 @@ private struct TeamMemberOverviewContent: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var agreementDetails: some View {
+        if let me = currentMember {
+            LabeledContent("Job title", value: me.badgeLabel)
+            LabeledContent("Booking type", value: me.personalBookingTypeDisplayName)
+            if let split = me.paymentSplitSummary {
+                LabeledContent("Payment split", value: split)
+                Text("Split applies to the service amount before any card processing fee at checkout.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No payment split configured for you.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            LabeledContent("Role", value: authViewModel.teamAccess.accessRole.displayName)
+            Text("Your studio profile is still loading. Pull to refresh if details are missing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
 
-struct TeamPermissionSummaryRow: View {
-    let title: String
-    let enabled: Bool
+// MARK: - Staff roster: name, role, contact only
+
+struct TeamMemberDirectoryRow: View {
+    let member: TenantTeamMember
+
+    private var emailTrimmed: String {
+        member.email.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var phoneTrimmed: String {
+        member.phone.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var phoneDisplay: String {
+        let formatted = PhoneFormatting.displayUS(phoneTrimmed)
+        return formatted.isEmpty ? phoneTrimmed : formatted
+    }
 
     var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Image(systemName: enabled ? "checkmark.circle.fill" : "xmark.circle")
-                .foregroundStyle(enabled ? .green : .secondary)
+        HStack(alignment: .top, spacing: 12) {
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: member.profilePhotoUrl.isEmpty ? nil : member.profilePhotoUrl,
+                displayNameFallback: member.displayName,
+                size: 44
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                Text(member.displayName)
+                    .font(.subheadline.weight(.semibold))
+                Text(member.badgeLabel)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(roleColor.opacity(0.15))
+                    .foregroundStyle(roleColor)
+                    .clipShape(Capsule())
+                if !emailTrimmed.isEmpty {
+                    if let url = URL(string: "mailto:\(emailTrimmed)") {
+                        Link(emailTrimmed, destination: url)
+                            .font(.caption)
+                    } else {
+                        Text(emailTrimmed)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !phoneTrimmed.isEmpty {
+                    if let e164 = PhoneFormatting.e164US(phoneTrimmed),
+                       let url = URL(string: "tel:\(e164)") {
+                        Link(phoneDisplay, destination: url)
+                            .font(.caption)
+                    } else {
+                        Text(phoneDisplay)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
         }
-        .font(.subheadline)
+        .padding(.vertical, 4)
+    }
+
+    private var roleColor: Color {
+        switch member.accessRole {
+        case .owner: return .primary
+        case .manager: return .blue
+        case .member: return .secondary
+        }
     }
 }

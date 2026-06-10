@@ -193,10 +193,31 @@ struct PaymentsView: View {
     #endif
 
     private var paymentsIntro: some View {
-        Text("Accept payments and manage your earnings")
-            .font(.subheadline)
-            .foregroundStyle(AppDesign.textSecondary)
-            .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Accept payments and manage your earnings")
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textSecondary)
+            if viewModel.isTenantOwner, viewModel.stripeConnected {
+                Toggle(isOn: Binding(
+                    get: { viewModel.cardSurchargeEnabled },
+                    set: { newValue in
+                        Task { await viewModel.saveCardSurchargeSettings(enabled: newValue) }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Add card processing fee at checkout")
+                            .font(.subheadline)
+                        Text("Customer pays service amount plus \(viewModel.checkoutBreakdown(serviceCents: 10_000).surchargePercentLabel) when paying by card.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(viewModel.isSavingCardSurcharge)
+                .padding(16)
+                .appCard()
+            }
+        }
+        .padding(.horizontal)
     }
 
     private var paymentsRecentActivity: some View {
@@ -431,12 +452,16 @@ struct DepositLinkSheet: View {
         ("$200", 20_000),
     ]
 
-    private var amountCents: Int {
+    private var serviceAmountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
         return Int(round(value * 100))
     }
 
-    private var canCreate: Bool { amountCents >= 50 }
+    private var checkout: CardCheckoutBreakdown {
+        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents)
+    }
+
+    private var canCreate: Bool { serviceAmountCents >= 50 }
 
     var body: some View {
         NavigationView {
@@ -444,7 +469,7 @@ struct DepositLinkSheet: View {
                 Text("Enter deposit amount")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Text("Customer pays this amount. Bookking retains a 1% platform fee on customer payments (not on your subscription).")
+                Text("Customer pays the deposit plus any card processing fee you have enabled. Bookking retains a 1% platform fee from your Connect balance.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -457,6 +482,11 @@ struct DepositLinkSheet: View {
                     .multilineTextAlignment(.center)
                     .focused($isAmountFocused)
                     .padding(.horizontal, 24)
+
+                if canCreate {
+                    CardCheckoutBreakdownView(breakdown: checkout)
+                        .padding(.horizontal, 24)
+                }
 
                 if let err = viewModel.errorMessage {
                     Text(err)
@@ -483,14 +513,16 @@ struct DepositLinkSheet: View {
                     .padding()
                 } else {
                     Button(action: {
-                        Task { await viewModel.createDepositLink(amountCents: amountCents) }
+                        Task { await viewModel.createDepositLink(serviceAmountCents: serviceAmountCents) }
                     }) {
                         HStack {
                             if viewModel.isCreatingDepositLink {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text("Create link")
+                                Text(checkout.surchargeCents > 0
+                                    ? "Create link · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
+                                    : "Create link")
                             }
                         }
                         .frame(maxWidth: .infinity)

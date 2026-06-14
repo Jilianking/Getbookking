@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.system.rawValue
+    @State private var lastForegroundRefresh: Date?
 
     private var appAppearance: AppAppearance {
         AppAppearance(rawValue: appearanceRaw) ?? .system
@@ -29,6 +30,12 @@ struct ContentView: View {
         .preferredColorScheme(appAppearance.preferredColorScheme)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
+                let now = Date()
+                if let last = lastForegroundRefresh, now.timeIntervalSince(last) < 120 {
+                    TapToPayAppLifecycle.warmUpReaderIfConfigured()
+                    return
+                }
+                lastForegroundRefresh = now
                 Task { await authViewModel.refreshTenantLogoFromServer() }
                 TapToPayAppLifecycle.warmUpReaderIfConfigured()
                 StripeConnectRefresh.request()
@@ -40,4 +47,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(AuthViewModel())
+        .environmentObject(TenantSessionStore())
 }

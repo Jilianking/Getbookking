@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ClientsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = ClientsViewModel()
     @State private var searchText = ""
     @State private var navPath: [String] = []
@@ -62,7 +63,10 @@ struct ClientsView: View {
                     .scrollContentBackground(.hidden)
                     .background(AppDesign.background)
                     .refreshable {
-                        await viewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
+                        await viewModel.refreshClients(
+                            isDemoMode: authViewModel.isDemoMode,
+                            sessionStore: sessionStore
+                        )
                         openPendingCustomerProfileIfNeeded()
                     }
                 }
@@ -87,7 +91,10 @@ struct ClientsView: View {
                 }
             }
             .task {
-                await viewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadClients(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                 openPendingCustomerProfileIfNeeded()
             }
             .onChange(of: drawerState.customersDetailClientId) { _, _ in

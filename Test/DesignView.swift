@@ -33,7 +33,8 @@ struct DesignView: View {
     @State private var quickEditStudio12PhilosophySheet = false
     @State private var quickEditStudio12BookCtaSheet = false
     @State private var formFieldToEdit: FormField?
-    @State private var isDesignPickerPresented = false
+    @State private var isColorPickerPresented = false
+    @State private var isTemplatePickerPresented = false
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -73,16 +74,20 @@ struct DesignView: View {
                                 if viewModel.hasTenant, !authViewModel.isDemoMode {
                                     Text("Preview")
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(isQuickEditEnabled ? Color.secondary : Color.primary)
+                                        .foregroundStyle(
+                                            isQuickEditEnabled ? AppDesign.textSecondary : AppDesign.textPrimary
+                                        )
                                     Toggle("", isOn: $isQuickEditEnabled)
                                         .labelsHidden()
-                                        .toggleStyle(.switch)
+                                        .toggleStyle(AppTwoToneSwitchToggleStyle())
                                         .accessibilityLabel("Quick edit")
                                 }
                                 Button("Builder") {
                                     isQuickEditEnabled = false
                                     isShowingBuilder = true
                                 }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
                                 if viewModel.hasTenant, URL(string: viewModel.bookingUrl) != nil {
                                     Button(action: openInSafari) {
                                         Image(systemName: "safari")
@@ -494,10 +499,11 @@ struct DesignView: View {
                 DesignThemePickerBar(
                     viewModel: viewModel,
                     paletteName: activePaletteDisplayName,
-                    templateName: activeTemplateFamily.displayName,
+                    templateFamily: activeTemplateFamily,
                     accentHex: viewModel.primaryColorHex,
                     industry: viewModel.industry,
-                    isPresented: $isDesignPickerPresented
+                    isColorPickerPresented: $isColorPickerPresented,
+                    isTemplatePickerPresented: $isTemplatePickerPresented
                 )
             }
             ZStack(alignment: .bottom) {
@@ -516,6 +522,7 @@ struct DesignView: View {
                     }
                 case let .inlineFocus(focus):
                     quickEditInlineFocus = focus
+                    isQuickEditChromeCollapsed = true
                 case .inlineBlur:
                     quickEditInlineFocus = nil
                 case let .openColorSurface(surfaceId):
@@ -787,12 +794,12 @@ struct DesignView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Color palette")
                     .font(.headline)
-                if WebColorPalettes.usesAccentPicker(family: activeTemplateFamily) {
-                    Text("Choose a base theme, then pick an accent color. Switching layout above resets to Original.")
+                if WebColorPalettes.showsAccentChipRowInPicker(for: activeTemplateFamily) {
+                    Text("Pick a background style, then choose your button & highlight color. Switching layout above resets to Original.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else {
-                    Text("Colors for your \(activeTemplateFamily.displayName) template. Switching layout above resets to Original.")
+                    Text("Pick a color preset. Switching layout above resets to Original.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1187,7 +1194,7 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Booking form style")
                 .font(.headline)
-            Text("Layout for your /book page. Accent and form colors follow the palette on the Template tab.")
+            Text("Layout for your /book page. Colors follow your Template tab preset.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if authViewModel.teamAccess.canManageBookingFormStyle {
@@ -2749,61 +2756,66 @@ private struct EditTenantServiceSheet: View {
 }
 
 
-// MARK: - Preview design picker (template + palette popover)
+// MARK: - Preview design picker (separate color + template dropdowns)
 
 private struct DesignThemePickerBar: View {
     @ObservedObject var viewModel: DesignViewModel
     let paletteName: String
-    let templateName: String
+    let templateFamily: TemplateFamily
     let accentHex: String
     let industry: String?
-    @Binding var isPresented: Bool
+    @Binding var isColorPickerPresented: Bool
+    @Binding var isTemplatePickerPresented: Bool
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             Spacer(minLength: 0)
-            Button {
-                isPresented = true
-            } label: {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(Color(hex: accentHex))
-                        .frame(width: 10, height: 10)
-                        .overlay(
-                            Circle()
-                                .stroke(Color(.separator).opacity(0.4), lineWidth: 0.5)
-                        )
-                    Text("\(paletteName) · \(templateName)")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule()
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isLoading)
-            .popover(isPresented: $isPresented, arrowEdge: .top) {
-                DesignThemePickerPopover(
+            DesignPickerPill(
+                title: paletteName,
+                isPresented: $isColorPickerPresented,
+                isDisabled: viewModel.isLoading
+            ) {
+                Circle()
+                    .fill(Color(hex: accentHex))
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .stroke(Color(.separator).opacity(0.4), lineWidth: 0.5)
+                    )
+            } popover: {
+                DesignColorPickerPopover(
                     viewModel: viewModel,
-                    industry: industry,
-                    onDismiss: { isPresented = false }
+                    onDismiss: { isColorPickerPresented = false }
                 )
                 .frame(width: 340)
                 .presentationCompactAdaptation(.popover)
             }
+            .onChange(of: isColorPickerPresented) { _, isOpen in
+                if isOpen { isTemplatePickerPresented = false }
+            }
+
+            DesignPickerPill(
+                title: templateFamily.displayName,
+                isPresented: $isTemplatePickerPresented,
+                isDisabled: viewModel.isLoading
+            ) {
+                Image(systemName: templateFamily.icon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, height: 14)
+            } popover: {
+                DesignTemplatePickerPopover(
+                    viewModel: viewModel,
+                    industry: industry,
+                    onDismiss: { isTemplatePickerPresented = false }
+                )
+                .frame(width: 320)
+                .presentationCompactAdaptation(.popover)
+            }
+            .onChange(of: isTemplatePickerPresented) { _, isOpen in
+                if isOpen { isColorPickerPresented = false }
+            }
+
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
@@ -2815,7 +2827,75 @@ private struct DesignThemePickerBar: View {
     }
 }
 
-private struct DesignThemePickerPopover: View {
+private struct DesignPickerPill<Leading: View, Popover: View>: View {
+    let title: String
+    @Binding var isPresented: Bool
+    let isDisabled: Bool
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let popover: () -> Popover
+
+    var body: some View {
+        Button {
+            isPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                leading()
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            popover()
+        }
+    }
+}
+
+private struct DesignColorPickerPopover: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+
+    private var activeFamily: TemplateFamily {
+        WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SITE COLORS")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.6)
+                DesignColorPalettePickerSection(
+                    viewModel: viewModel,
+                    family: activeFamily,
+                    onSelected: onDismiss
+                )
+            }
+            .padding(18)
+        }
+        .frame(maxHeight: 560)
+    }
+}
+
+private struct DesignTemplatePickerPopover: View {
     @ObservedObject var viewModel: DesignViewModel
     let industry: String?
     let onDismiss: () -> Void
@@ -2825,54 +2905,34 @@ private struct DesignThemePickerPopover: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("COLOR PALETTE")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .tracking(0.6)
-                    DesignColorPalettePickerSection(
-                        viewModel: viewModel,
-                        family: activeFamily,
-                        onSelected: onDismiss
-                    )
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("TEMPLATE")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .tracking(0.6)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(TemplateFamily.allCases) { family in
-                                DesignThemeTemplatePickerCell(
-                                    family: family,
-                                    isActive: activeFamily == family,
-                                    isBusy: viewModel.isLoading
-                                ) {
-                                    let theme = WebTheme.theme(for: family, industry: industry)
-                                    Task {
-                                        await viewModel.applyWebTheme(theme)
-                                        onDismiss()
-                                    }
-                                }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("TEMPLATE")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.6)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(TemplateFamily.allCases) { family in
+                        DesignThemeTemplatePickerCell(
+                            family: family,
+                            isActive: activeFamily == family,
+                            isBusy: viewModel.isLoading
+                        ) {
+                            let theme = WebTheme.theme(for: family, industry: industry)
+                            Task {
+                                await viewModel.applyWebTheme(theme)
+                                onDismiss()
                             }
                         }
-                        .padding(.vertical, 2)
                     }
                 }
-
-                Text("Switching template resets colors to that layout’s Original preset.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                .padding(.vertical, 2)
             }
-            .padding(18)
+            Text("Switching template resets colors to that layout’s Original preset.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
-        .frame(maxHeight: 640)
+        .padding(18)
     }
 }
 
@@ -3065,8 +3125,11 @@ private struct WebColorAccentChipSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Accent color")
+            Text("Button & highlight color")
                 .font(.subheadline.weight(.semibold))
+            Text("Updates BOOK NOW, links, and highlighted text. Background stays the same.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(accents) { accent in

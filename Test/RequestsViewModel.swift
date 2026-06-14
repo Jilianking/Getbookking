@@ -21,6 +21,7 @@ class RequestsViewModel: ObservableObject {
     
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+    var sessionStore: TenantSessionStore?
     
     var useTenantData: Bool { tenantId != nil }
 
@@ -43,7 +44,7 @@ class RequestsViewModel: ObservableObject {
         return BookingTemplate(rawValue: raw)
     }
     
-    func loadRequests(isDemoMode: Bool = false) async {
+    func loadRequests(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
@@ -64,6 +65,27 @@ class RequestsViewModel: ObservableObject {
                 await MainActor.run { isLoading = false }
                 return
             }
+
+            if let sessionStore {
+                await sessionStore.ensureSessionLoaded(isDemoMode: false)
+                async let bookings: () = sessionStore.loadBookingsIfNeeded(force: false, isDemoMode: false)
+                async let newBookings: () = sessionStore.loadNewBookingsIfNeeded(force: false, isDemoMode: false)
+                async let members: () = sessionStore.loadTeamMembersIfNeeded(force: false, isDemoMode: false)
+                _ = await (bookings, newBookings, members)
+                let availability = sessionStore.profile?.availability ?? .default
+                let industryRaw = sessionStore.tenantIndustry
+                await MainActor.run {
+                    tenantId = sessionStore.tenantId
+                    tenantIndustry = industryRaw.isEmpty ? nil : industryRaw
+                    bookingRequests = sessionStore.bookingRequests
+                    teamMembers = sessionStore.teamMembers
+                    studioAvailability = availability
+                    requests = []
+                    isLoading = false
+                }
+                return
+            }
+
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             let tid = profile?.tenantId
             let availability = profile?.availability ?? .default
@@ -106,6 +128,20 @@ class RequestsViewModel: ObservableObject {
             print("Error loading requests: \(error)")
         }
     }
+
+    func refreshRequests(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
+        let store = sessionStore ?? self.sessionStore
+        if let store {
+            store.invalidateBookings()
+            store.invalidateTeamMembers()
+            await store.loadNewBookingsIfNeeded(force: true, isDemoMode: isDemoMode)
+        }
+        await loadRequests(isDemoMode: isDemoMode, sessionStore: store)
+    }
+
+    private func reloadAfterMutation(isDemoMode: Bool = false) async {
+        await refreshRequests(isDemoMode: isDemoMode, sessionStore: sessionStore)
+    }
     
     func updateRequest(_ requestId: String, status: Request.RequestStatus, notes: String?) async {
         var updates: [String: Any] = ["status": status.rawValue]
@@ -118,7 +154,7 @@ class RequestsViewModel: ObservableObject {
             } else {
                 try await firebaseService.updateRequest(requestId, updates: updates)
             }
-            await loadRequests()
+            await reloadAfterMutation()
         } catch {
             print("Error updating request: \(error)")
         }
@@ -130,7 +166,8 @@ class RequestsViewModel: ObservableObject {
 
     /// Uses Cloud Function so manager `approveRejectRequests` is enforced server-side.
     func setBookingRequestStatus(requestId: String, status: String, notes: String?) async {
-        guard tenantId != nil else { return }
+        guard resolvedTenantId != nil else { return }
+        await markBookingRequestAsRead(requestId: requestId)
         await MainActor.run {
             isUpdatingStatus = true
             actionError = nil
@@ -142,7 +179,7 @@ class RequestsViewModel: ObservableObject {
         if let notes { payload["notes"] = notes }
         do {
             _ = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
-            await loadRequests()
+            await reloadAfterMutation()
         } catch {
             await MainActor.run {
                 actionError = error.localizedDescription
@@ -189,7 +226,7 @@ class RequestsViewModel: ObservableObject {
                 requestId: requestId,
                 updates: updates
             )
-            await loadRequests()
+            await reloadAfterMutation()
         } catch {
             await MainActor.run {
                 actionError = error.localizedDescription
@@ -198,19 +235,55 @@ class RequestsViewModel: ObservableObject {
         await MainActor.run { isUpdatingAssignment = false }
     }
 
+    /// Marks opened if still unread (`readAt` nil). Safe to call on list tap and detail open.
+    func markBookingRequestAsReadIfNeeded(_ booking: BookingRequest) async {
+        guard booking.readAt == nil else { return }
+        guard let requestId = booking.documentId, !requestId.isEmpty else { return }
+        _ = await markBookingRequestAsRead(requestId: requestId)
+    }
+
+    private var resolvedTenantId: String? {
+        tenantId ?? sessionStore?.tenantId
+    }
+
+    private func syncViewModelReadAt(requestId: String, readAt: Date) {
+        if let index = bookingRequests.firstIndex(where: { $0.documentId == requestId || $0.id == requestId }) {
+            bookingRequests[index].readAt = readAt
+        }
+    }
+
     /// Marks the request as opened in-app (`readAt`). Does not change `status` (e.g. stays NEW).
     @discardableResult
     func markBookingRequestAsRead(requestId: String) async -> Bool {
-        guard let tid = tenantId else { return false }
+        let trimmed = requestId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let readAt = Date()
+        await MainActor.run {
+            sessionStore?.markBookingRequestReadLocally(requestId: trimmed, readAt: readAt)
+            syncViewModelReadAt(requestId: trimmed, readAt: readAt)
+        }
+
+        if let store = sessionStore {
+            await store.markBookingRequestAsRead(
+                requestId: trimmed,
+                tenantId: resolvedTenantId
+            )
+            return true
+        }
+
+        guard let tid = resolvedTenantId else { return true }
         do {
             try await firebaseService.updateTenantBookingRequest(
                 tenantId: tid,
-                requestId: requestId,
-                updates: ["readAt": Date()]
+                requestId: trimmed,
+                updates: ["readAt": readAt]
             )
-            await loadRequests()
             return true
         } catch {
+            await MainActor.run {
+                actionError = error.localizedDescription
+            }
             print("Error marking booking request read: \(error)")
             return false
         }
@@ -235,7 +308,7 @@ class RequestsViewModel: ObservableObject {
             let result = try await functions.httpsCallable("seedTenantBookingRequests").call(payload)
             let data = result.data as? [String: Any]
             let written = data?["written"] as? Int ?? count
-            await loadRequests()
+            await reloadAfterMutation()
             await MainActor.run {
                 seedMessage = "Added \(written) test request(s). Pull to refresh if needed."
             }
@@ -249,53 +322,7 @@ class RequestsViewModel: ObservableObject {
     }
 
     private static func parseTeamMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {
-        guard let raw else { return [] }
-        return raw.compactMap { row in
-            guard let uid = row["uid"] as? String else { return nil }
-            let role = TeamAccessRole.fromFirestore(row["accessRole"] as? String ?? row["role"] as? String)
-            let fn = (row["firstName"] as? String) ?? ""
-            let ln = (row["lastName"] as? String) ?? ""
-            var name = "\(fn) \(ln)".trimmingCharacters(in: .whitespacesAndNewlines)
-            if name.isEmpty { name = (row["displayName"] as? String) ?? (row["name"] as? String) ?? "Member" }
-            if uid == ownerUid {
-                return TenantTeamMember(
-                    uid: uid,
-                    displayName: name,
-                    email: (row["email"] as? String) ?? "",
-                    phone: (row["phone"] as? String) ?? "",
-                    profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
-                    accessRole: .owner,
-                    jobTitle: "",
-                    memberSettings: TeamMemberSettings(),
-                    personalConfirmationType: Self.parsePersonalConfirmationType(row),
-                    effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
-                )
-            }
-            return TenantTeamMember(
-                uid: uid,
-                displayName: name,
-                email: (row["email"] as? String) ?? "",
-                phone: (row["phone"] as? String) ?? "",
-                profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
-                accessRole: role,
-                jobTitle: (row["jobTitle"] as? String) ?? "",
-                memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
-                personalConfirmationType: Self.parsePersonalConfirmationType(row),
-                effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
-            )
-        }
-    }
-
-    private static func parsePersonalConfirmationType(_ row: [String: Any]) -> String? {
-        let raw = (row["personalConfirmationType"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return raw.isEmpty ? nil : raw
-    }
-
-    private static func parseEffectiveConfirmationType(_ row: [String: Any]) -> String? {
-        let raw = (row["effectiveConfirmationType"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return raw.isEmpty ? nil : raw
+        TenantSessionStore.parseTeamMembers(raw, ownerUid: ownerUid)
     }
 
     func deleteRequest(_ requestId: String) async {
@@ -305,7 +332,7 @@ class RequestsViewModel: ObservableObject {
                 await updateBookingRequest(requestId, status: "cancelled", notes: nil)
             } else {
                 try await firebaseService.deleteRequest(requestId)
-                await loadRequests()
+                await reloadAfterMutation()
             }
         } catch {
             print("Error deleting request: \(error)")

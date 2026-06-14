@@ -109,6 +109,23 @@ enum PaymentSplitAppliesTo: String, CaseIterable, Identifiable {
     }
 }
 
+/// How a team member receives customer payments.
+enum MemberPayoutMode: String, CaseIterable, Codable, Identifiable {
+    /// Charges land on the studio Connect account (payroll / front desk).
+    case studioPayroll = "studio_payroll"
+    /// Member connects own Stripe and takes Tap to Pay on their account.
+    case independent = "independent"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .studioPayroll: return "Studio payroll"
+        case .independent: return "Takes own payments"
+        }
+    }
+}
+
 struct TeamMemberSettings: Equatable {
     /// When true, uses tenant booking policy from Settings. Default false = self-managed.
     var useStudioBookingPolicy: Bool = false
@@ -117,6 +134,8 @@ struct TeamMemberSettings: Equatable {
     var paymentSplitEnabled: Bool = false
     var paymentSplitPercent: Int = 0
     var paymentSplitAppliesTo: PaymentSplitAppliesTo = .service
+    /// Independent members connect their own Stripe; studio_payroll uses the studio account.
+    var payoutMode: MemberPayoutMode = .independent
 
     init() {}
 
@@ -142,6 +161,10 @@ struct TeamMemberSettings: Equatable {
         } else {
             paymentSplitEnabled = paymentSplitPercent > 0
         }
+        if let raw = d["payoutMode"] as? String,
+           let parsed = MemberPayoutMode(rawValue: raw) {
+            payoutMode = parsed
+        }
     }
 
     var firestoreDictionary: [String: Any] {
@@ -150,6 +173,7 @@ struct TeamMemberSettings: Equatable {
             "paymentSplitEnabled": paymentSplitEnabled,
             "paymentSplitPercent": paymentSplitPercent,
             "paymentSplitAppliesTo": paymentSplitAppliesTo.rawValue,
+            "payoutMode": payoutMode.rawValue,
         ]
         if let override = bookingConfirmationOverride, !useStudioBookingPolicy {
             d["bookingConfirmationOverride"] = override
@@ -295,5 +319,10 @@ struct TenantTeamMember: Identifiable, Equatable {
     var paymentSplitSummary: String? {
         guard memberSettings.paymentSplitEnabled, memberSettings.paymentSplitPercent > 0 else { return nil }
         return "\(memberSettings.paymentSplitPercent)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
+    }
+
+    var payoutModeSummary: String? {
+        guard accessRole != .owner else { return nil }
+        return memberSettings.payoutMode.displayName
     }
 }

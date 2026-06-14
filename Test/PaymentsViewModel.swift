@@ -43,6 +43,10 @@ class PaymentsViewModel: ObservableObject {
     @Published var stripeStatusHint: String?
     @Published var tenantId: String?
     @Published var isTenantOwner = false
+    @Published var canTakePayments = true
+    @Published var usesOwnPayments = false
+    @Published var isStudioPayroll = false
+    @Published var paymentStripeScope = "tenant"
     @Published var isEnsuringTapToPayLocation = false
     @Published var isLoading = false
     @Published var isConnectingStripe = false
@@ -142,6 +146,10 @@ class PaymentsViewModel: ObservableObject {
                 return
             }
             tenantId = tid
+            let teamAccess = await TenantTeamAccessService.fetchCurrentAccess(isDemoMode: false)
+            canTakePayments = teamAccess.canTakePayments
+            usesOwnPayments = teamAccess.usesOwnPayments
+            isStudioPayroll = !teamAccess.isOwner && teamAccess.payoutMode == .studioPayroll
             if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
                 if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                     isTenantOwner = (ownerUid == uid)
@@ -190,9 +198,29 @@ class PaymentsViewModel: ObservableObject {
             stripeHasAccount = hasAccount
             stripeDetailsSubmitted = detailsSubmitted
             stripeConnected = chargesEnabled
-            needsStripeConnect = !chargesEnabled
-            if let loc = data?["terminalLocationId"] as? String, !loc.isEmpty {
-                TapToPayLocationStore.shared.updateTenantLocationId(loc)
+            needsStripeConnect = canTakePayments && !chargesEnabled
+            if let loc = data?["terminalLocationId"] as? String {
+                TapToPayLocationStore.shared.applyConnectStatus(
+                    terminalLocationId: loc,
+                    paymentScope: data?["paymentScope"] as? String
+                )
+            }
+            if let scope = data?["paymentScope"] as? String, !scope.isEmpty {
+                paymentStripeScope = scope
+            }
+            if data?["studioPayroll"] as? Bool == true {
+                isStudioPayroll = true
+                canTakePayments = false
+                needsStripeConnect = false
+            }
+            if let canTake = data?["canTakePayments"] as? Bool {
+                canTakePayments = canTake
+                if !canTake {
+                    needsStripeConnect = false
+                }
+            }
+            if let own = data?["usesOwnPayments"] as? Bool {
+                usesOwnPayments = own
             }
             if chargesEnabled {
                 stripeStatusHint = nil
@@ -426,7 +454,10 @@ class PaymentsViewModel: ObservableObject {
         let data = result.data as? [String: Any]
         let locationId = (data?["locationId"] as? String) ?? ""
         if !locationId.isEmpty {
-            TapToPayLocationStore.shared.updateTenantLocationId(locationId)
+            TapToPayLocationStore.shared.applyConnectStatus(
+                terminalLocationId: locationId,
+                paymentScope: data?["paymentScope"] as? String ?? paymentStripeScope
+            )
         }
         guard !resolvedTapToPayLocationId.isEmpty else {
             throw NSError(

@@ -11,6 +11,8 @@ final class TapToPayLocationStore: ObservableObject {
     static let shared = TapToPayLocationStore()
 
     @Published private(set) var tenantLocationId: String = ""
+    @Published private(set) var memberLocationId: String = ""
+    @Published private(set) var usesMemberLocation: Bool = false
 
     private init() {}
 
@@ -18,10 +20,27 @@ final class TapToPayLocationStore: ObservableObject {
         tenantLocationId = id.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Tenant location from Firestore, else optional dev override in Secrets.plist.
+    func updateMemberLocationId(_ id: String) {
+        memberLocationId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func applyConnectStatus(terminalLocationId: String?, paymentScope: String?) {
+        let loc = (terminalLocationId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let scope = (paymentScope ?? "tenant").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if scope == "user" {
+            usesMemberLocation = true
+            memberLocationId = loc
+        } else {
+            usesMemberLocation = false
+            tenantLocationId = loc
+        }
+    }
+
+    /// Resolved location from Connect status, else optional dev override in Secrets.plist.
     var resolvedLocationId: String {
-        let fromTenant = tenantLocationId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !fromTenant.isEmpty { return fromTenant }
+        let primary = usesMemberLocation ? memberLocationId : tenantLocationId
+        let trimmed = primary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
         return SecretsManager.shared.tapToPayLocationId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

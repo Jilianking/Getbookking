@@ -825,6 +825,140 @@ async function writeBarberSeedBookingRequests(db, tenantId, Timestamp, opts = {}
   return { written, tenantId, perBarber, barbers: BARBER_STAFF.length };
 }
 
+/** Tattoo artists (matches scripts/seed-team-members.js tattoos preset). */
+const TATTOO_STAFF = [
+  { name: "Maya Chen", email: "maya.artist1@example.com" },
+  { name: "Leo Vega", email: "leo.artist2@example.com" },
+];
+
+const TATTOO_SERVICES = [
+  "Consultation",
+  "Full session",
+  "Touch-up",
+  "Custom piece",
+  "Half day",
+  "Walk-in",
+];
+
+const TATTOO_CLIENT_FIRST = [
+  "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Quinn",
+  "Avery", "Blake", "Cameron", "Drew", "Emery", "Finley", "Harper", "Jesse",
+  "Skyler", "Rowan", "Sage", "Phoenix",
+];
+
+const TATTOO_CLIENT_LAST = [
+  "Lee", "Kim", "Patel", "Garcia", "Nguyen", "Smith", "Brown", "Martinez",
+  "Wilson", "Anderson", "Thomas", "Jackson", "White", "Harris", "Clark", "Lewis",
+  "Torres", "Rivera", "Brooks", "Hayes",
+];
+
+async function resolveStaffUids(db, tenantId, staff) {
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const byEmail = new Map(
+    snap.docs.map((d) => [(d.data().email || "").toString().trim().toLowerCase(), d.id])
+  );
+  return staff.map((member) => ({
+    ...member,
+    uid: byEmail.get(member.email.toLowerCase()) || null,
+  }));
+}
+
+function buildTattooSeedBookingRequestDoc(
+  tenantId,
+  { artist, slotIndex, globalIndex, appointmentDate, Timestamp }
+) {
+  const first = TATTOO_CLIENT_FIRST[globalIndex % TATTOO_CLIENT_FIRST.length];
+  const last = TATTOO_CLIENT_LAST[(globalIndex + slotIndex) % TATTOO_CLIENT_LAST.length];
+  const hour = BARBER_APPOINTMENT_HOURS[slotIndex % BARBER_APPOINTMENT_HOURS.length];
+  const start = new Date(appointmentDate);
+  start.setHours(hour, (slotIndex % 2) * 30, 0, 0);
+  const createdAt = new Date(start.getTime() - 86400000 * (2 + (slotIndex % 5)));
+
+  const serviceName = TATTOO_SERVICES[slotIndex % TATTOO_SERVICES.length];
+  const preferredTime = `${hour > 12 ? hour - 12 : hour}:${start.getMinutes() === 0 ? "00" : "30"} ${hour >= 12 ? "PM" : "AM"}`;
+
+  const doc = {
+    status: barberPickStatus(slotIndex),
+    source: "seed",
+    tenantId,
+    customerName: `${first} ${last}`,
+    customerEmail: `${first}.${last}.${globalIndex}@example.com`.toLowerCase(),
+    customerPhone: `555${String(4010000 + globalIndex).slice(0, 7)}`,
+    serviceName,
+    preferredTime,
+    notes: `Seeded appointment — artist: ${artist.name}`,
+    assignedMemberName: artist.name,
+    assignedMemberEmail: artist.email,
+    formResponses: {
+      placement: ["Forearm", "Upper arm", "Back", "Ribcage", "Thigh"][slotIndex % 5],
+      tattooStyle: ["Blackwork", "Neo-traditional", "Fine line", "Japanese", "Realism"][
+        slotIndex % 5
+      ],
+      sizeEstimate: ["Small (2–4 in)", "Medium (4–8 in)", "Large (8+ in)"][slotIndex % 3],
+    },
+    createdAt: Timestamp.fromDate(createdAt),
+    requestedStartTime: Timestamp.fromDate(start),
+  };
+  if (artist.uid) doc.assignedMemberUid = artist.uid;
+  return doc;
+}
+
+/**
+ * Spread `perArtist` appointments per tattoo artist between startDate and endDate (inclusive).
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} tenantId
+ * @param {{ fromDate: (d: Date) => unknown }} Timestamp — Firestore Timestamp class
+ * @param {{ perArtist?: number, startDate?: Date, endDate?: Date }} opts
+ */
+async function writeTattooSeedBookingRequests(db, tenantId, Timestamp, opts = {}) {
+  const perArtist = Math.min(50, Math.max(1, opts.perArtist ?? 10));
+  const startDate = opts.startDate ?? new Date("2026-05-20T12:00:00");
+  const endDate = opts.endDate ?? new Date("2026-06-30T12:00:00");
+  const rangeMs = Math.max(0, endDate.getTime() - startDate.getTime());
+  const rangeDays = Math.max(1, Math.floor(rangeMs / 86400000));
+
+  const artists = await resolveStaffUids(db, tenantId, TATTOO_STAFF);
+
+  let written = 0;
+  let globalIndex = 0;
+  let batch = db.batch();
+  let ops = 0;
+
+  for (const artist of artists) {
+    for (let slot = 0; slot < perArtist; slot++) {
+      const dayOffset = Math.floor((slot * rangeDays) / perArtist);
+      const appointmentDate = new Date(startDate);
+      appointmentDate.setDate(appointmentDate.getDate() + dayOffset);
+
+      const ref = db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("bookingRequests")
+        .doc();
+      batch.set(
+        ref,
+        buildTattooSeedBookingRequestDoc(tenantId, {
+          artist,
+          slotIndex: slot,
+          globalIndex,
+          appointmentDate,
+          Timestamp,
+        })
+      );
+      ops++;
+      written++;
+      globalIndex++;
+      if (ops >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+  }
+  if (ops > 0) await batch.commit();
+  return { written, tenantId, perArtist, artists: artists.length };
+}
+
 module.exports = {
   SEED_CONFIRM,
   MAX_SEED_COUNT,
@@ -838,6 +972,10 @@ module.exports = {
   resolveTenantByOwnerEmail,
   writeSeedBookingRequests,
   writeBarberSeedBookingRequests,
+  TATTOO_STAFF,
+  TATTOO_SERVICES,
+  buildTattooSeedBookingRequestDoc,
+  writeTattooSeedBookingRequests,
   writeRepeatCustomerSeedData,
   enrichRepeatCustomerProfiles,
   profileSeedForIndex,

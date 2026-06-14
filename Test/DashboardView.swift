@@ -2,13 +2,22 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @StateObject private var viewModel = DashboardViewModel()
+    @EnvironmentObject var sessionStore: TenantSessionStore
+    @ObservedObject var viewModel: DashboardViewModel
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @State private var showingBookingForm = false
     var drawerState: DrawerState
     let sectionTitle: String
 
     private let statColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+    private var displayPendingRequestsCount: Int {
+        viewModel.useTenantData ? sessionStore.pendingRequestsCount : viewModel.pendingRequestsCount
+    }
+
+    private var displayUnreadRequestsCount: Int {
+        viewModel.useTenantData ? sessionStore.unreadRequestsCount : viewModel.unreadRequestsCount
+    }
 
     var body: some View {
         NavigationView {
@@ -18,9 +27,9 @@ struct DashboardView: View {
                     LazyVGrid(columns: statColumns, spacing: 12) {
                         AppStatCard(
                             title: "New requests",
-                            value: "\(viewModel.pendingRequestsCount)",
-                            subtitle: viewModel.unreadRequestsCount > 0
-                                ? "\(viewModel.unreadRequestsCount) unread"
+                            value: "\(displayPendingRequestsCount)",
+                            subtitle: displayUnreadRequestsCount > 0
+                                ? "\(displayUnreadRequestsCount) unread"
                                 : "awaiting review"
                         )
                         AppStatCard(
@@ -76,13 +85,13 @@ struct DashboardView: View {
                 }
             }
             .refreshable {
-                await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.refresh(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
                 await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
             }
         }
         .navigationViewStyle(.stack)
         .task {
-            await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
             await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
         }
         .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
@@ -92,7 +101,10 @@ struct DashboardView: View {
             BookingFormView(drawerState: drawerState)
                 .environmentObject(authViewModel)
                 .onDisappear {
-                    Task { await viewModel.loadData(isDemoMode: authViewModel.isDemoMode) }
+                    Task {
+                        sessionStore.invalidateBookings()
+                        await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
+                    }
                 }
         }
     }

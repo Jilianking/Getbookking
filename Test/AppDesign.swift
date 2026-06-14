@@ -436,6 +436,35 @@ struct AppDeclineButtonStyle: ButtonStyle {
     }
 }
 
+/// Switch with distinct track colors for on/off (Quick edit, feature toggles).
+struct AppTwoToneSwitchToggleStyle: ToggleStyle {
+    var onColor: Color = AppDesign.brandWarm
+    var offColor: Color = AppDesign.chipBorder
+
+    private let trackWidth: CGFloat = 51
+    private let trackHeight: CGFloat = 31
+    private let thumbPadding: CGFloat = 2
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(configuration.isOn ? onColor : offColor)
+                    .frame(width: trackWidth, height: trackHeight)
+                Circle()
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.14), radius: 1, x: 0, y: 1)
+                    .padding(thumbPadding)
+            }
+            .frame(width: trackWidth, height: trackHeight)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: configuration.isOn)
+    }
+}
+
 struct AppDrawerBadge: View {
     let count: Int
 

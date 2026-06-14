@@ -23,7 +23,9 @@ struct PaymentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     paymentsIntro
-                    if viewModel.needsStripeConnect {
+                    if viewModel.isStudioPayroll {
+                        studioPayrollBanner
+                    } else if viewModel.needsStripeConnect {
                         StripeConnectBanner(
                             viewModel: viewModel,
                             isDemoMode: authViewModel.isDemoMode
@@ -36,23 +38,26 @@ struct PaymentsView: View {
                     }
 
                     #if TAP_TO_PAY_ENABLED
-                    PaymentActionCard(
-                        icon: "wave.3.right.circle.fill",
-                        iconColor: .blue,
-                        title: "Tap to Pay on iPhone",
-                        subtitle: tapToPayCardSubtitle,
-                        action: { handleTapToPayTapped() }
-                    )
-                    .overlay {
-                        if viewModel.isEnsuringTapToPayLocation {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(AppDesign.cardBackground.opacity(0.85))
-                            ProgressView()
+                    if viewModel.canTakePayments {
+                        PaymentActionCard(
+                            icon: "wave.3.right.circle.fill",
+                            iconColor: .blue,
+                            title: "Tap to Pay on iPhone",
+                            subtitle: tapToPayCardSubtitle,
+                            action: { handleTapToPayTapped() }
+                        )
+                        .overlay {
+                            if viewModel.isEnsuringTapToPayLocation {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(AppDesign.cardBackground.opacity(0.85))
+                                ProgressView()
+                            }
                         }
+                        .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
                     }
-                    .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
                     #endif
 
+                    if viewModel.canTakePayments {
                     // Deposit Link
                     PaymentActionCard(
                         icon: "link",
@@ -91,6 +96,7 @@ struct PaymentsView: View {
                     .disabled(!viewModel.stripeConnected || viewModel.availableBalance <= 0)
                     .opacity((viewModel.stripeConnected && viewModel.availableBalance > 0) ? 1 : 0.6)
                     .padding(.horizontal)
+                    }
 
                     paymentsRecentActivity
                 }
@@ -149,10 +155,9 @@ struct PaymentsView: View {
     #if TAP_TO_PAY_ENABLED
     private var tapToPayCardSubtitle: String {
         if !viewModel.stripeConnected {
-            return "Set up Stripe to enable in-person payments"
-        }
-        if !viewModel.isTenantOwner {
-            return "Ask your studio admin to enable Tap to Pay"
+            return viewModel.usesOwnPayments
+                ? "Connect your Stripe account to enable in-person payments"
+                : "Set up Stripe to enable in-person payments"
         }
         return "Accept contactless cards and wallets (1% platform fee)"
     }
@@ -162,12 +167,12 @@ struct PaymentsView: View {
             tapToPayAlertMessage = "Tap to Pay isn't available in demo mode."
             return
         }
-        if let block = TapToPayEligibility.blockingMessage() {
-            tapToPayAlertMessage = block
+        if !viewModel.canTakePayments {
+            tapToPayAlertMessage = "Your studio collects payments for you. Ask your admin to enable independent payouts."
             return
         }
-        if !viewModel.isTenantOwner {
-            tapToPayAlertMessage = "Only the studio owner can enable Tap to Pay. Contact your admin."
+        if let block = TapToPayEligibility.blockingMessage() {
+            tapToPayAlertMessage = block
             return
         }
         if !viewModel.stripeConnected {
@@ -217,6 +222,26 @@ struct PaymentsView: View {
                 .appCard()
             }
         }
+        .padding(.horizontal)
+    }
+
+    private var studioPayrollBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "building.2.fill")
+                .font(.title2)
+                .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Studio payroll")
+                    .font(.subheadline.weight(.semibold))
+                Text("Payments go through your studio account. Contact your admin to take your own payments.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
         .padding(.horizontal)
     }
 

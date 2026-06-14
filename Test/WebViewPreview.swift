@@ -326,10 +326,11 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               var sheet = document.createElement('style');
               sheet.id = 'bk-quick-edit-style';
+              var bkGroupedTextSelector = '.s12-section-title,.s12-section-label,.s12-info-title,.s12-test-title,.s12-gallery-title,.s12-book-cta-title,.s12-phil-title,.luxe-section-heading,.luxe-section-label,.classic-section-eyebrow,.classic-hero-tag,.classic-hero-name,.classic-home .tattoo-featured-inner h2,.classic-services h2,.tattoo-featured-sub,.blade-section-label,.blade-section-title,.blade-book-title,.blade-where-city,.blade-hero-title,.stonecut-heading,a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key],div.s12-svc-cell[data-edit-key],[data-edit-key^="svc:"][data-edit-key$=":edit"],div.s12-process-cell[data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"]';
               sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
-                '.s12-section-title,.s12-info-title,.s12-test-title,.s12-gallery-title,.s12-book-cta-title,.s12-phil-title,.luxe-section-heading,.luxe-section-label,.classic-section-eyebrow,.classic-hero-tag,.classic-hero-name,.classic-home .tattoo-featured-inner h2,.classic-services h2,.tattoo-featured-sub,.blade-section-label,.blade-section-title,.blade-book-title,.blade-where-city{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
-                '.s12-section-title [data-edit-key],.s12-info-title [data-edit-key],.s12-test-title [data-edit-key],.s12-gallery-title [data-edit-key],.s12-book-cta-title [data-edit-key],.s12-phil-title [data-edit-key],.luxe-section-heading [data-edit-key],.luxe-section-label [data-edit-key],.classic-section-eyebrow [data-edit-key],.classic-hero-tag [data-edit-key],.classic-hero-name [data-edit-key],.classic-home .tattoo-featured-inner h2 [data-edit-key],.classic-services h2 [data-edit-key],.tattoo-featured-sub [data-edit-key],.blade-section-label [data-edit-key],.blade-section-title [data-edit-key],.blade-book-title [data-edit-key],.blade-where-city [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                bkGroupedTextSelector + '{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
+                bkGroupedTextSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
@@ -351,6 +352,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-bk-color-surface] [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;box-shadow:none!important;}' +
                 '[data-bk-color-surface][data-bk-color-active]{outline:3px dashed rgba(0,122,255,0.88)!important;}' +
+                bkGroupedTextSelector + '[data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                bkGroupedTextSelector + '[data-bk-quick-edit-selected] [data-edit-key],' + bkGroupedTextSelector + ':has([data-bk-inline-editing]) [data-edit-key],'+ bkGroupedTextSelector + ':has([data-bk-inline-editing]) [data-edit-key][data-bk-inline-editing]{outline:none!important;box-shadow:none!important;}' +
+                bkGroupedTextSelector + ':has([data-bk-inline-editing]){position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '[data-edit-key][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-edit-key][data-bk-inline-editing][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
@@ -451,6 +455,12 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!el || !el.closest) return el;
                 var btn = el.closest('a.classic-btn-primary,a.classic-btn-ghost,a.luxe-hero-cta,a.luxe-promo-cta,a.tattoo-gallery-link,a.blade-btn-primary,a.blade-btn-ghost,a.blade-nav-book,a.stonecut-btn,a.s12-btn-dark,a.s12-btn-outline,a.s12-nav-book,a.s12-gallery-link');
                 if (btn && btn.querySelector('[data-edit-key]')) return btn;
+                var innerKey = el.closest('[data-edit-key]');
+                if (innerKey) {
+                  var grouped = innerKey.closest(bkGroupedTextSelector);
+                  if (grouped && grouped !== innerKey) return grouped;
+                  return innerKey;
+                }
                 return el;
               }
               function setQuickEditSelected(el) {

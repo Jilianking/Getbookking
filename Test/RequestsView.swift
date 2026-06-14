@@ -45,6 +45,7 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
 
 struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = RequestsViewModel()
     @State private var requestFilter: BookingRequestFilter = .all
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
@@ -94,7 +95,14 @@ struct RequestsView: View {
                                 }
                             }
                         }
-                        Button(action: { Task { await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode) } }) {
+                        Button(action: {
+                            Task {
+                                await viewModel.refreshRequests(
+                                    isDemoMode: authViewModel.isDemoMode,
+                                    sessionStore: sessionStore
+                                )
+                            }
+                        }) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(AppDesign.textPrimary)
@@ -129,12 +137,18 @@ struct RequestsView: View {
                                 BookingRequestListRow(
                                     request: br,
                                     viewModel: viewModel,
-                                    teamAccess: authViewModel.teamAccess
+                                    teamAccess: authViewModel.teamAccess,
+                                    onMarkRead: { requestId in
+                                        sessionStore.markBookingRequestReadLocally(requestId: requestId)
+                                        if let index = viewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+                                            viewModel.bookingRequests[index].readAt = Date()
+                                        }
+                                    }
                                 )
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
-                                .onTapGesture { selectedBookingRequest = br }
+                                .onTapGesture { openBookingRequest(br) }
                             }
                         } else {
                             ForEach(filteredRequests) { request in
@@ -225,12 +239,38 @@ struct RequestsView: View {
                     teamAccess: authViewModel.teamAccess
                 )
             }
+            .onAppear {
+                viewModel.sessionStore = sessionStore
+            }
             .task {
-                await viewModel.loadRequests(isDemoMode: authViewModel.isDemoMode)
-                await authViewModel.refreshTeamAccess()
+                viewModel.sessionStore = sessionStore
+                await viewModel.loadRequests(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private func openBookingRequest(_ booking: BookingRequest) {
+        markBookingRequestReadLocally(booking)
+        selectedBookingRequest = booking
+        Task {
+            await viewModel.markBookingRequestAsReadIfNeeded(booking)
+        }
+    }
+
+    /// Immediate badge drop — does not wait on Firestore or view model tenant id.
+    private func markBookingRequestReadLocally(_ booking: BookingRequest) {
+        guard booking.readAt == nil,
+              let requestId = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestId.isEmpty else { return }
+        let readAt = Date()
+        sessionStore.markBookingRequestReadLocally(requestId: requestId, readAt: readAt)
+        if let index = viewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+            viewModel.bookingRequests[index].readAt = readAt
+        }
     }
 
     private var showsTeamFilter: Bool {
@@ -335,6 +375,7 @@ struct BookingRequestListRow: View {
     let request: BookingRequest
     @ObservedObject var viewModel: RequestsViewModel
     let teamAccess: EffectiveTeamAccess
+    var onMarkRead: ((String) -> Void)? = nil
 
     private var statusLower: String {
         request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -398,6 +439,7 @@ struct BookingRequestListRow: View {
             if canShowApprovalActions, let docId = request.documentId, !docId.isEmpty {
                 HStack(spacing: 10) {
                     Button {
+                        onMarkRead?(docId)
                         Task {
                             await viewModel.setBookingRequestStatus(
                                 requestId: docId,
@@ -411,6 +453,7 @@ struct BookingRequestListRow: View {
                     .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
 
                     Button {
+                        onMarkRead?(docId)
                         Task {
                             await viewModel.setBookingRequestStatus(
                                 requestId: docId,
@@ -435,6 +478,7 @@ struct BookingRequestDetailView: View {
     @ObservedObject var viewModel: RequestsViewModel
     var drawerState: DrawerState
     let teamAccess: EffectiveTeamAccess
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @Environment(\.dismiss) var dismiss
     @State private var assigneePickerKey: String = BookingAssigneeFilter.unassignedKey
     @State private var assigneePickerReady = false
@@ -722,6 +766,7 @@ struct BookingRequestDetailView: View {
             AssignBookingScheduleSheet(request: currentRequest, viewModel: viewModel)
         }
         .task(id: request.documentId) {
+            markReadLocallyIfNeeded()
             await markReadIfNeeded()
             let exists = await viewModel.isBookingRequestCustomerInContacts(currentRequest)
             await MainActor.run { contactAlreadyExists = exists }
@@ -830,11 +875,20 @@ struct BookingRequestDetailView: View {
         return BookingAssigneeFilter.unassignedKey
     }
 
-    /// First open sets `readAt` in Firestore (status stays NEW). List hides the green dot after reload.
+    private func markReadLocallyIfNeeded() {
+        guard currentRequest.readAt == nil,
+              let requestId = currentRequest.documentId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestId.isEmpty else { return }
+        let readAt = Date()
+        sessionStore.markBookingRequestReadLocally(requestId: requestId, readAt: readAt)
+        if let index = viewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+            viewModel.bookingRequests[index].readAt = readAt
+        }
+    }
+
+    /// Detail open also marks read (idempotent if list tap already did).
     private func markReadIfNeeded() async {
-        guard currentRequest.readAt == nil else { return }
-        guard let rid = currentRequest.documentId else { return }
-        _ = await viewModel.markBookingRequestAsRead(requestId: rid)
+        await viewModel.markBookingRequestAsReadIfNeeded(currentRequest)
     }
 
     private func openCustomerInCustomersList() {

@@ -18,6 +18,10 @@ struct EffectiveTeamAccess: Equatable {
     var managersApproveAppointments: Bool = true
     var usesStudioBookingPolicy: Bool = false
     var subscriptionPlan: SubscriptionPlan = .solo
+    /// Independent members connect own Stripe; studio_payroll uses studio account.
+    var payoutMode: MemberPayoutMode = .independent
+    var usesOwnPayments: Bool = false
+    var canTakePayments: Bool = true
 
     static let ownerFullAccess = EffectiveTeamAccess(
         isOwner: true,
@@ -36,7 +40,10 @@ struct EffectiveTeamAccess: Equatable {
         bookingRequiresApproval: true,
         managersApproveAppointments: true,
         usesStudioBookingPolicy: false,
-        subscriptionPlan: .studio
+        subscriptionPlan: .studio,
+        payoutMode: .independent,
+        usesOwnPayments: false,
+        canTakePayments: true
     )
 
     var canManageBookingPolicy: Bool { isOwner }
@@ -132,7 +139,10 @@ enum TenantTeamAccessService {
                 bookingRequiresApproval: current.bookingRequiresApproval,
                 managersApproveAppointments: current.managersApproveAppointments,
                 usesStudioBookingPolicy: current.usesStudioBookingPolicy,
-                subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
+                subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String),
+                payoutMode: current.payoutMode,
+                usesOwnPayments: current.usesOwnPayments,
+                canTakePayments: true
             )
         } catch {
             return current
@@ -148,6 +158,10 @@ enum TenantTeamAccessService {
         let requiresApproval = data["bookingRequiresApproval"] as? Bool ?? confirmation.requiresApproval
         let managersApprove = data["managersApproveAppointments"] as? Bool ?? true
         let usesStudio = data["usesStudioBookingPolicy"] as? Bool ?? false
+        let payoutRaw = (data["payoutMode"] as? String) ?? MemberPayoutMode.independent.rawValue
+        let payoutMode = MemberPayoutMode(rawValue: payoutRaw) ?? .independent
+        let usesOwnPayments = data["usesOwnPayments"] as? Bool ?? false
+        let canTakePayments = data["canTakePayments"] as? Bool ?? true
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
@@ -156,7 +170,10 @@ enum TenantTeamAccessService {
             bookingRequiresApproval: requiresApproval,
             managersApproveAppointments: managersApprove,
             usesStudioBookingPolicy: usesStudio,
-            subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: data["subscriptionPlan"] as? String)
+            subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: data["subscriptionPlan"] as? String),
+            payoutMode: payoutMode,
+            usesOwnPayments: usesOwnPayments,
+            canTakePayments: canTakePayments
         )
     }
 }

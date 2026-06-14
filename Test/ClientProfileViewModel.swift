@@ -27,6 +27,13 @@ struct ClientVisitSummary: Identifiable {
     let price: Double?
 }
 
+enum NotesSaveState: Equatable {
+    case idle
+    case saving
+    case saved
+    case failed(String)
+}
+
 @MainActor
 final class ClientProfileViewModel: ObservableObject {
     @Published var client: Client
@@ -35,9 +42,14 @@ final class ClientProfileViewModel: ObservableObject {
     @Published var bookings: [BookingRequest] = []
     @Published var servicePrices: [String: Double] = [:]
     @Published var saveError: String?
+    @Published var noteEntries: [Client.ClientNoteEntry] = []
+    @Published var notesSaveState: NotesSaveState = .idle
 
     private let firebaseService = FirebaseService()
     private var tenantId: String?
+    private var authorDisplayName: String?
+    private var notesSaveTask: Task<Void, Never>?
+    private var notesPersistGeneration = 0
 
     init(client: Client) {
         self.client = client
@@ -173,6 +185,10 @@ final class ClientProfileViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             guard let tid = profile?.tenantId else { return }
             tenantId = tid
+            if let profile {
+                let name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                authorDisplayName = name.isEmpty ? profile.business : name
+            }
 
             async let bookingTask = firebaseService.fetchTenantBookingRequests(tenantId: tid)
             async let servicesTask = firebaseService.fetchTenantServices(tenantId: tid)
@@ -189,23 +205,129 @@ final class ClientProfileViewModel: ObservableObject {
                 bookings = fetchedBookings
                 servicePrices = Self.priceLookup(from: services)
             }
+            syncNoteEntriesFromClient()
         } catch {
             print("Client profile load error: \(error)")
         }
     }
 
-    func saveNotes(_ notes: String) async {
+    func syncNoteEntriesFromClient() {
+        noteEntries = Self.sortedNoteEntries(client.resolvedNoteEntries)
+    }
+
+    func addNoteEntry() {
+        let entry = Client.ClientNoteEntry(
+            body: "",
+            createdAt: Date(),
+            authorName: authorDisplayName
+        )
+        noteEntries.insert(entry, at: 0)
+    }
+
+    func deleteNoteEntry(id: String) {
+        noteEntries.removeAll { $0.id == id }
+        scheduleNoteEntriesSave(delayNanoseconds: 0)
+    }
+
+    func noteEntryBodyChanged(id: String) {
+        guard let index = noteEntries.firstIndex(where: { $0.id == id }) else { return }
+        noteEntries[index].updatedAt = Date()
+        scheduleNoteEntriesSave()
+    }
+
+    func scheduleNoteEntriesSave(delayNanoseconds: UInt64 = 700_000_000) {
+        notesSaveTask?.cancel()
+        notesSaveTask = Task {
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await persistNoteEntries()
+        }
+    }
+
+    func flushNoteEntriesSave() async {
+        notesSaveTask?.cancel()
+        await persistNoteEntries()
+    }
+
+    private func persistNoteEntries() async {
         guard let tid = tenantId, let customerId = client.id else { return }
+        notesPersistGeneration += 1
+        let generation = notesPersistGeneration
+        notesSaveState = .saving
+
+        let drafts = noteEntries.filter {
+            $0.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let cleaned = noteEntries
+            .map { entry in
+                Client.ClientNoteEntry(
+                    id: entry.id,
+                    body: entry.body.trimmingCharacters(in: .whitespacesAndNewlines),
+                    createdAt: entry.createdAt,
+                    updatedAt: entry.updatedAt,
+                    authorName: entry.authorName
+                )
+            }
+            .filter { !$0.body.isEmpty }
+
+        let sorted = Self.sortedNoteEntries(cleaned)
+        var updates: [String: Any] = [
+            "noteEntries": Self.firestorePayload(for: sorted),
+        ]
+        if sorted.isEmpty {
+            updates["notes"] = FieldValue.delete()
+        } else if let latest = sorted.first {
+            updates["notes"] = latest.body
+        }
+
         do {
             try await firebaseService.updateTenantCustomer(
                 tenantId: tid,
                 customerId: customerId,
-                updates: ["notes": notes.trimmingCharacters(in: .whitespacesAndNewlines)]
+                updates: updates
             )
-            client.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard generation == notesPersistGeneration else { return }
+            noteEntries = Self.sortedNoteEntries(cleaned + drafts)
+            client.noteEntries = sorted.isEmpty ? nil : sorted
+            client.notes = sorted.first?.body
+            notesSaveState = .saved
             saveError = nil
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard generation == notesPersistGeneration else { return }
+                if notesSaveState == .saved {
+                    notesSaveState = .idle
+                }
+            }
         } catch {
+            guard generation == notesPersistGeneration else { return }
+            notesSaveState = .failed(error.localizedDescription)
             saveError = error.localizedDescription
+        }
+    }
+
+    private static func sortedNoteEntries(_ entries: [Client.ClientNoteEntry]) -> [Client.ClientNoteEntry] {
+        entries.sorted {
+            ($0.updatedAt ?? $0.createdAt) > ($1.updatedAt ?? $1.createdAt)
+        }
+    }
+
+    private static func firestorePayload(for entries: [Client.ClientNoteEntry]) -> [[String: Any]] {
+        entries.map { entry in
+            var row: [String: Any] = [
+                "id": entry.id,
+                "body": entry.body,
+                "createdAt": Timestamp(date: entry.createdAt),
+            ]
+            if let updatedAt = entry.updatedAt {
+                row["updatedAt"] = Timestamp(date: updatedAt)
+            }
+            if let authorName = entry.authorName, !authorName.isEmpty {
+                row["authorName"] = authorName
+            }
+            return row
         }
     }
 

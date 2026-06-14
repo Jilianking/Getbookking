@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessagesView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = MessagesViewModel()
     @State private var selectedThreadId: String?
     @State private var showingCompose = false
@@ -138,7 +139,10 @@ struct MessagesView: View {
             .task {
                 viewModel.startThreadsListening(isDemoMode: authViewModel.isDemoMode)
                 await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadSmsQuickPresets(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                 if drawerState.messagesShouldOpenCompose {
                     composePrefillPhone = drawerState.messagesComposePhone ?? ""
                     composePrefillName = drawerState.messagesComposeClientName ?? ""

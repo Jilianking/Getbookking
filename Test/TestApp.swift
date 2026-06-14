@@ -12,11 +12,14 @@ import FirebaseCore
 @main
 struct TestApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @StateObject private var authViewModel = AuthViewModel()
+    @StateObject private var sessionStore = TenantSessionStore()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(AuthViewModel())
+                .environmentObject(authViewModel)
+                .environmentObject(sessionStore)
         }
     }
 }

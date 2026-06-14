@@ -523,10 +523,22 @@ exports.createConnectAccountLink = functions
         );
       }
 
+      const payCtx = await resolvePaymentStripeContext(uid);
+      if (!payCtx?.canConnect) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Your studio collects payments for you. Ask your admin to enable independent payouts."
+        );
+      }
+
       const tenantRef = db.collection("tenants").doc(tenantId);
       const tenantDoc = await tenantRef.get();
       const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
-      let stripeAccountId = tenantData.stripeAccountId;
+      const accountRef =
+        payCtx.scope === "user"
+          ? db.collection("users").doc(uid)
+          : tenantRef;
+      let stripeAccountId = payCtx.stripeAccountId;
 
       if (!stripeAccountId) {
         const account = await stripe.accounts.create({
@@ -538,7 +550,7 @@ exports.createConnectAccountLink = functions
           },
         });
         stripeAccountId = account.id;
-        await tenantRef.set({ stripeAccountId }, { merge: true });
+        await accountRef.set({ stripeAccountId }, { merge: true });
       }
 
       const account = await stripe.accounts.retrieve(stripeAccountId);
@@ -586,6 +598,7 @@ exports.createConnectAccountLink = functions
         hasAccount: true,
         detailsSubmitted: account.details_submitted ?? false,
         chargesEnabled: false,
+        paymentScope: payCtx.scope,
       };
     } catch (err) {
       if (err instanceof functions.https.HttpsError) {
@@ -620,19 +633,26 @@ exports.getConnectAccountStatus = functions
       );
     }
 
-    const userDoc = await db.collection("users").doc(uid).get();
-    if (!userDoc.exists) {
-      return { hasAccount: false };
-    }
-    const tenantId = userDoc.data().tenantId;
-    if (!tenantId) {
-      return { hasAccount: false };
+    const payCtx = await resolvePaymentStripeContext(uid);
+    if (!payCtx?.canTakePayments) {
+      return {
+        hasAccount: false,
+        canTakePayments: false,
+        usesOwnPayments: false,
+        payoutMode: payCtx?.payoutMode || "studio_payroll",
+        studioPayroll: true,
+      };
     }
 
-    const tenantDoc = await db.collection("tenants").doc(tenantId).get();
-    const stripeAccountId = tenantDoc.data()?.stripeAccountId;
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
-      return { hasAccount: false };
+      return {
+        hasAccount: false,
+        canTakePayments: true,
+        usesOwnPayments: payCtx.scope === "user",
+        payoutMode: payCtx.payoutMode,
+        paymentScope: payCtx.scope,
+      };
     }
 
     const stripe = new Stripe(secretKey, {
@@ -640,8 +660,7 @@ exports.getConnectAccountStatus = functions
     });
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
-    const terminalLocationId =
-      (tenantDoc.data()?.stripeTerminalLocationId || "").toString().trim() || null;
+    const terminalLocationId = payCtx.terminalLocationId || null;
 
     return {
       hasAccount: true,
@@ -649,6 +668,10 @@ exports.getConnectAccountStatus = functions
       chargesEnabled: account.charges_enabled ?? false,
       payoutsEnabled: account.payouts_enabled ?? false,
       terminalLocationId,
+      canTakePayments: true,
+      usesOwnPayments: payCtx.scope === "user",
+      payoutMode: payCtx.payoutMode,
+      paymentScope: payCtx.scope,
     };
   });
 
@@ -708,14 +731,82 @@ function parseServiceAmountCents(data) {
   return null;
 }
 
-/** Helper: get stripeAccountId for authenticated user's tenant */
-async function getStripeAccountIdForUser(uid) {
+/** Helper: resolve Stripe Connect account + Terminal location for a user. */
+async function resolvePaymentStripeContext(uid) {
   const userDoc = await db.collection("users").doc(uid).get();
   if (!userDoc.exists) return null;
-  const tenantId = userDoc.data().tenantId;
+  const userData = userDoc.data();
+  const tenantId = userData.tenantId;
   if (!tenantId) return null;
+
   const tenantDoc = await db.collection("tenants").doc(tenantId).get();
-  return tenantDoc.data()?.stripeAccountId ?? null;
+  if (!tenantDoc.exists) return null;
+  const tenant = tenantDoc.data();
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  const isOwner = ownerUid === uid;
+
+  if (isOwner) {
+    const stripeAccountId = (tenant.stripeAccountId || "").toString().trim() || null;
+    const terminalLocationId =
+      (tenant.stripeTerminalLocationId || "").toString().trim() || null;
+    return {
+      scope: "tenant",
+      tenantId,
+      stripeAccountId,
+      terminalLocationId,
+      canConnect: true,
+      canTakePayments: true,
+      payoutMode: null,
+      isOwner: true,
+    };
+  }
+
+  const payoutMode = normalizeMemberSettings(userData.memberSettings).payoutMode;
+  const usesOwnPayments = payoutMode === "independent";
+
+  if (usesOwnPayments) {
+    const stripeAccountId = (userData.stripeAccountId || "").toString().trim() || null;
+    const terminalLocationId =
+      (userData.stripeTerminalLocationId || "").toString().trim() || null;
+    return {
+      scope: "user",
+      tenantId,
+      stripeAccountId,
+      terminalLocationId,
+      canConnect: true,
+      canTakePayments: true,
+      payoutMode,
+      isOwner: false,
+    };
+  }
+
+  return {
+    scope: "tenant",
+    tenantId,
+    stripeAccountId: null,
+    terminalLocationId: null,
+    canConnect: false,
+    canTakePayments: false,
+    payoutMode,
+    isOwner: false,
+  };
+}
+
+/** Helper: get stripeAccountId for authenticated user's effective payment account */
+async function getStripeAccountIdForUser(uid) {
+  const ctx = await resolvePaymentStripeContext(uid);
+  return ctx?.stripeAccountId ?? null;
+}
+
+async function assertCanTakePayments(uid) {
+  const ctx = await resolvePaymentStripeContext(uid);
+  if (!ctx?.canTakePayments) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+    );
+  }
+  return ctx;
 }
 
 async function getTenantIdForUser(uid) {
@@ -780,6 +871,32 @@ async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAcc
   );
   const locationId = location.id;
   await db.collection("tenants").doc(tenantId).set(
+    { stripeTerminalLocationId: locationId },
+    { merge: true }
+  );
+  return locationId;
+}
+
+/**
+ * Ensures users/{uid}.stripeTerminalLocationId exists (Terminal Location on member Connect account).
+ */
+async function ensureStripeTerminalLocationForUser(uid, stripe, stripeAccountId, userData, tenantData) {
+  const existing = (userData.stripeTerminalLocationId || "").toString().trim();
+  if (existing) {
+    return existing;
+  }
+  const displayName =
+    (userData.displayName || userData.name || "Provider").toString().trim() || "Provider";
+  const address = terminalAddressFromTenant(tenantData);
+  const location = await stripe.terminal.locations.create(
+    {
+      display_name: displayName.slice(0, 100),
+      address,
+    },
+    { stripeAccount: stripeAccountId }
+  );
+  const locationId = location.id;
+  await db.collection("users").doc(uid).set(
     { stripeTerminalLocationId: locationId },
     { merge: true }
   );
@@ -861,7 +978,8 @@ exports.getConnectBalance = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       return { availableCents: 0, pendingCents: 0 };
     }
@@ -898,7 +1016,8 @@ exports.createPayout = functions
         "Amount must be at least 50 cents ($0.50)"
       );
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -939,6 +1058,7 @@ exports.createDepositLink = functions
       );
     }
     const uid = context.auth.uid;
+    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
     const tenantDoc = tenantId
       ? await db.collection("tenants").doc(tenantId).get()
@@ -949,7 +1069,8 @@ exports.createDepositLink = functions
     const productDescription = data?.productDescription
       ? data.productDescription.toString().trim()
       : undefined;
-    const stripeAccountId = await getStripeAccountIdForUser(uid);
+    const payCtx = await assertCanTakePayments(uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -1022,7 +1143,8 @@ exports.getConnectBalanceTransactions = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       return { transactions: [] };
     }
@@ -1076,7 +1198,8 @@ exports.getReceiptUrl = functions
     if (!chargeId || !chargeId.startsWith("ch_")) {
       throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
     }
@@ -1111,7 +1234,8 @@ exports.createRefund = functions
     if (!chargeId || !chargeId.startsWith("ch_")) {
       throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
     }
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
     }
@@ -1279,6 +1403,7 @@ exports.createPaymentIntentForTapToPay = functions
       );
     }
     const uid = context.auth.uid;
+    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
     const tenantDoc = tenantId
       ? await db.collection("tenants").doc(tenantId).get()
@@ -1341,7 +1466,8 @@ exports.createTerminalConnectionTokenForTapToPay = functions
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
 
-    const stripeAccountId = await getStripeAccountIdForUser(context.auth.uid);
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -1370,8 +1496,8 @@ exports.createTerminalConnectionTokenForTapToPay = functions
   });
 
 /**
- * Creates (if needed) a Stripe Terminal Location for the tenant and returns its id (tml_…).
- * Owner-only. Stored on tenants.stripeTerminalLocationId.
+ * Creates (if needed) a Stripe Terminal Location and returns its id (tml_…).
+ * Owner → tenants.stripeTerminalLocationId; independent member → users.stripeTerminalLocationId.
  */
 exports.ensureTapToPayTerminalLocation = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -1380,16 +1506,14 @@ exports.ensureTapToPayTerminalLocation = functions
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
     const uid = context.auth.uid;
-    const tenantId = await getTenantIdForUser(uid);
-    if (!tenantId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "No business linked to this account."
-      );
+    const payCtx = await assertCanTakePayments(uid);
+    const tenantId = payCtx.tenantId;
+    const tenantDoc = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Business not found.");
     }
-    const tenantDoc = await assertTenantOwner(uid, tenantId);
     const tenantData = tenantDoc.data() || {};
-    const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
+    const stripeAccountId = (payCtx.stripeAccountId || "").toString().trim();
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -1411,14 +1535,25 @@ exports.ensureTapToPayTerminalLocation = functions
         "Finish Stripe setup before using Tap to Pay."
       );
     }
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
     try {
-      const locationId = await ensureStripeTerminalLocationForTenant(
-        tenantId,
-        stripe,
-        stripeAccountId,
-        tenantData
-      );
-      return { locationId };
+      const locationId =
+        payCtx.scope === "user"
+          ? await ensureStripeTerminalLocationForUser(
+              uid,
+              stripe,
+              stripeAccountId,
+              userData,
+              tenantData
+            )
+          : await ensureStripeTerminalLocationForTenant(
+              tenantId,
+              stripe,
+              stripeAccountId,
+              tenantData
+            );
+      return { locationId, paymentScope: payCtx.scope };
     } catch (err) {
       console.error("ensureTapToPayTerminalLocation", err);
       const msg =
@@ -1911,6 +2046,7 @@ function normalizeJobTitle(title) {
 }
 
 const PAYMENT_SPLIT_APPLIES = new Set(["service", "deposit", "both"]);
+const PAYOUT_MODES = new Set(["studio_payroll", "independent"]);
 
 function normalizeMemberSettings(raw) {
   const d = raw && typeof raw === "object" ? raw : {};
@@ -1933,11 +2069,14 @@ function normalizeMemberSettings(raw) {
   if (d.paymentSplitEnabled === undefined && paymentSplitPercent > 0) {
     paymentSplitEnabled = true;
   }
+  let payoutMode = (d.payoutMode || "independent").toString().trim().toLowerCase();
+  if (!PAYOUT_MODES.has(payoutMode)) payoutMode = "independent";
   const out = {
     useStudioBookingPolicy: useStudio,
     paymentSplitEnabled,
     paymentSplitPercent,
     paymentSplitAppliesTo,
+    payoutMode,
   };
   if (!useStudio && bookingConfirmationOverride) {
     out.bookingConfirmationOverride = bookingConfirmationOverride;
@@ -1983,12 +2122,14 @@ function computeTeamPaymentSplit({
   };
 }
 
-function resolveAttributedMemberUid(tenant, bookingRequest) {
+function resolveAttributedMemberUid(tenant, bookingRequest, initiatedByUid) {
   const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
   const assigned = ((bookingRequest && bookingRequest.assignedMemberUid) || "")
     .toString()
     .trim();
   if (assigned) return assigned;
+  const initiator = (initiatedByUid || "").toString().trim();
+  if (initiator && initiator !== ownerUid) return initiator;
   return ownerUid;
 }
 
@@ -2022,6 +2163,7 @@ exports.recordTenantPayment = functions
       );
     }
     const uid = context.auth.uid;
+    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
     if (!tenantId) {
       throw new functions.https.HttpsError(
@@ -2034,11 +2176,12 @@ exports.recordTenantPayment = functions
       throw new functions.https.HttpsError("not-found", "Business not found.");
     }
     const tenant = tenantSnap.data();
-    const stripeAccountId = (tenant.stripeAccountId || "").toString().trim();
+    const chargeCtx = await resolvePaymentStripeContext(uid);
+    const stripeAccountId = (chargeCtx && chargeCtx.stripeAccountId) || "";
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "No Stripe account linked"
+        "No Stripe account linked for this payment"
       );
     }
     const secretKey = stripeSecretKey.value();
@@ -2103,7 +2246,8 @@ exports.recordTenantPayment = functions
     const platformFee = platformFeeCents(grossCents);
 
     const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
-    const attributedMemberUid = resolveAttributedMemberUid(tenant, booking);
+    const initiatedByUid = (meta.initiatedByUid || uid).toString();
+    const attributedMemberUid = resolveAttributedMemberUid(tenant, booking, initiatedByUid);
     const ownerUid = (tenant.ownerUid || "").toString();
     let memberSettings = {};
     if (attributedMemberUid && attributedMemberUid !== ownerUid) {
@@ -2144,7 +2288,8 @@ exports.recordTenantPayment = functions
       splitPercentApplied: split.splitPercentApplied,
       artistShareCents: split.artistShareCents,
       studioServiceShareCents: split.studioServiceShareCents,
-      initiatedByUid: (meta.initiatedByUid || uid).toString(),
+      initiatedByUid,
+      chargeStripeScope: chargeCtx?.scope || "tenant",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -2550,6 +2695,8 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
   }
   const ctx = await getMemberAccessContext(context.auth.uid);
   const isOwner = ctx.isOwner || ctx.tenant.ownerUid === context.auth.uid;
+  const memberSettings = normalizeMemberSettings(ctx.userData.memberSettings);
+  const usesOwnPayments = !isOwner && memberSettings.payoutMode === "independent";
   return {
     tenantId: ctx.tenantId,
     isOwner,
@@ -2562,6 +2709,9 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     managersApproveAppointments: ctx.managersApproveAppointments,
     usesStudioBookingPolicy: ctx.usesStudioBookingPolicy === true,
     tenantConfirmationType: ctx.tenantWorkflow.confirmationType,
+    payoutMode: isOwner ? null : memberSettings.payoutMode,
+    usesOwnPayments,
+    canTakePayments: isOwner || usesOwnPayments,
   };
 });
 

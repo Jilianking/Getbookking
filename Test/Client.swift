@@ -9,6 +9,7 @@ struct Client: Codable, Identifiable {
     var lastContact: Date?
     var totalAppointments: Int
     var notes: String?
+    var noteEntries: [ClientNoteEntry]?
     var preferences: ClientPreferences?
     var vip: Bool
     var smsOptedIn: Bool?
@@ -27,6 +28,7 @@ struct Client: Codable, Identifiable {
         lastContact: Date? = nil,
         totalAppointments: Int = 0,
         notes: String? = nil,
+        noteEntries: [ClientNoteEntry]? = nil,
         preferences: ClientPreferences? = nil,
         vip: Bool = false,
         smsOptedIn: Bool? = nil,
@@ -44,6 +46,7 @@ struct Client: Codable, Identifiable {
         self.lastContact = lastContact
         self.totalAppointments = totalAppointments
         self.notes = notes
+        self.noteEntries = noteEntries
         self.preferences = preferences
         self.vip = vip
         self.smsOptedIn = smsOptedIn
@@ -52,6 +55,50 @@ struct Client: Codable, Identifiable {
         self.birthday = birthday
         self.referralSource = referralSource
         self.profileExtras = profileExtras
+    }
+
+    /// Internal note card (Notes tab); persisted as `noteEntries` on the customer doc.
+    struct ClientNoteEntry: Codable, Identifiable, Equatable {
+        var id: String
+        var body: String
+        var createdAt: Date
+        var updatedAt: Date?
+        var authorName: String?
+
+        init(
+            id: String = UUID().uuidString,
+            body: String = "",
+            createdAt: Date = Date(),
+            updatedAt: Date? = nil,
+            authorName: String? = nil
+        ) {
+            self.id = id
+            self.body = body
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+            self.authorName = authorName
+        }
+    }
+
+    /// Merges `noteEntries` with legacy single `notes` string.
+    var resolvedNoteEntries: [ClientNoteEntry] {
+        if let noteEntries, !noteEntries.isEmpty { return noteEntries }
+        if let legacy = notes?.trimmingCharacters(in: .whitespacesAndNewlines), !legacy.isEmpty {
+            return [ClientNoteEntry(body: legacy, createdAt: createdAt)]
+        }
+        return []
+    }
+
+    /// Newest non-empty note for Overview preview.
+    var latestNotePreview: String? {
+        let sorted = resolvedNoteEntries.sorted {
+            ($0.updatedAt ?? $0.createdAt) > ($1.updatedAt ?? $1.createdAt)
+        }
+        for entry in sorted {
+            let trimmed = entry.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return nil
     }
 
     struct ClientProfileExtra: Codable, Identifiable, Equatable {

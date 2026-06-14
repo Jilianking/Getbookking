@@ -1,0 +1,388 @@
+//
+//  TenantSessionStore.swift
+//
+//  Shared session cache for tenant profile, team roster, bookings, and customers.
+//
+
+import Foundation
+import Combine
+import FirebaseAuth
+import FirebaseFunctions
+
+@MainActor
+final class TenantSessionStore: ObservableObject {
+    static let dataCacheTTL: TimeInterval = 60
+
+    @Published private(set) var profile: ProviderProfile?
+    @Published private(set) var tenantId: String?
+    @Published private(set) var tenant: [String: Any]?
+    @Published private(set) var teamMembers: [TenantTeamMember] = []
+    @Published private(set) var bookingRequests: [BookingRequest] = []
+    /// Status `NEW` rows — drives drawer badge via `unreadRequestsCount`.
+    @Published private(set) var newBookingRequests: [BookingRequest] = []
+    @Published private(set) var customers: [Client] = []
+    @Published private(set) var smsQuickPresets: [String] = []
+    @Published private(set) var ownerUid: String?
+
+    private let firebaseService = FirebaseService()
+    private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+
+    private var sessionLoaded = false
+    private var bookingsLoadedAt: Date?
+    private var customersLoadedAt: Date?
+    private var teamMembersLoadedAt: Date?
+    private var newBookingsLoadedAt: Date?
+    private var customerCountCache: Int?
+
+    var businessDisplayName: String {
+        profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    var tenantIndustry: String {
+        let fromTenant = (tenant?["industry"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !fromTenant.isEmpty { return fromTenant }
+        return profile?.industry ?? BookingTemplate.custom.rawValue
+    }
+
+    /// Drawer badge + dashboard unread subtitle (updated when `newBookingRequests` changes).
+    @Published private(set) var unreadRequestsCount = 0
+
+    var pendingRequestsCount: Int {
+        newBookingRequests.count
+    }
+
+    static func isNewWorkflowStatus(_ status: String) -> Bool {
+        let s = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return s == "new" || s == "pending"
+    }
+
+    static func filterNewWorkflowRequests(_ list: [BookingRequest]) -> [BookingRequest] {
+        list
+            .filter { isNewWorkflowStatus($0.status) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+    }
+
+    private func syncUnreadRequestsCount() {
+        unreadRequestsCount = newBookingRequests.filter { $0.readAt == nil }.count
+    }
+
+    func reset() {
+        profile = nil
+        tenantId = nil
+        tenant = nil
+        teamMembers = []
+        bookingRequests = []
+        customers = []
+        smsQuickPresets = []
+        ownerUid = nil
+        sessionLoaded = false
+        bookingsLoadedAt = nil
+        customersLoadedAt = nil
+        teamMembersLoadedAt = nil
+        newBookingsLoadedAt = nil
+        newBookingRequests = []
+        unreadRequestsCount = 0
+        customerCountCache = nil
+    }
+
+    func bootstrap(isDemoMode: Bool) async {
+        if isDemoMode {
+            reset()
+            return
+        }
+        await ensureSessionLoaded(isDemoMode: false)
+        async let bookings: () = loadBookingsIfNeeded(force: false, isDemoMode: false)
+        async let newBookings: () = loadNewBookingsIfNeeded(force: false, isDemoMode: false)
+        async let members: () = loadTeamMembersIfNeeded(force: false, isDemoMode: false)
+        _ = await (bookings, newBookings, members)
+    }
+
+    func ensureSessionLoaded(isDemoMode: Bool) async {
+        if isDemoMode {
+            reset()
+            return
+        }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            reset()
+            return
+        }
+        if sessionLoaded, profile != nil { return }
+
+        do {
+            let fetchedProfile = try await firebaseService.fetchProviderProfile(uid: uid)
+            profile = fetchedProfile
+            tenantId = fetchedProfile?.tenantId
+            if let tid = fetchedProfile?.tenantId {
+                tenant = try await firebaseService.fetchTenant(tenantId: tid)
+            } else {
+                tenant = nil
+            }
+            sessionLoaded = true
+        } catch {
+            print("TenantSessionStore session load error: \(error)")
+        }
+    }
+
+    func loadBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard let tid = tenantId else { return }
+        if !force, let loadedAt = bookingsLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+            return
+        }
+        do {
+            bookingRequests = try await firebaseService.fetchTenantBookingRequests(tenantId: tid)
+            bookingsLoadedAt = Date()
+        } catch {
+            print("TenantSessionStore bookings load error: \(error)")
+        }
+    }
+
+    /// Lightweight fetch for dashboard stats and drawer badges.
+    func loadDashboardBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard let tid = tenantId else { return }
+        if !force, let loadedAt = bookingsLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL,
+           !bookingRequests.isEmpty {
+            return
+        }
+        do {
+            bookingRequests = try await firebaseService.fetchTenantBookingRequests(
+                tenantId: tid,
+                limit: 100
+            )
+            bookingsLoadedAt = Date()
+        } catch {
+            print("TenantSessionStore dashboard bookings load error: \(error)")
+        }
+    }
+
+    func loadNewBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard let tid = tenantId else { return }
+        if !force, let loadedAt = newBookingsLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+            return
+        }
+        do {
+            if !force,
+               !bookingRequests.isEmpty,
+               let loadedAt = bookingsLoadedAt,
+               Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+                newBookingRequests = Self.filterNewWorkflowRequests(bookingRequests)
+            } else {
+                let fetched = try await firebaseService.fetchTenantBookingRequests(
+                    tenantId: tid,
+                    limit: 200
+                )
+                newBookingRequests = Self.filterNewWorkflowRequests(fetched)
+            }
+            newBookingsLoadedAt = Date()
+            syncUnreadRequestsCount()
+        } catch {
+            print("TenantSessionStore new bookings load error: \(error)")
+        }
+    }
+
+    func loadCustomersIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard let tid = tenantId else { return }
+        if !force, let loadedAt = customersLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL,
+           !customers.isEmpty {
+            return
+        }
+        do {
+            customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
+            customersLoadedAt = Date()
+            customerCountCache = customers.count
+        } catch {
+            print("TenantSessionStore customers load error: \(error)")
+        }
+    }
+
+    func customerCount(isDemoMode: Bool = false) async -> Int {
+        if isDemoMode { return 0 }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard let tid = tenantId else { return 0 }
+        if let customerCountCache { return customerCountCache }
+        do {
+            let count = try await firebaseService.countTenantCustomers(tenantId: tid)
+            customerCountCache = count
+            return count
+        } catch {
+            print("TenantSessionStore customer count error: \(error)")
+            return customers.count
+        }
+    }
+
+    func loadTeamMembersIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        await ensureSessionLoaded(isDemoMode: false)
+        guard tenantId != nil else { return }
+        if !force, let loadedAt = teamMembersLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL,
+           !teamMembers.isEmpty {
+            return
+        }
+        do {
+            let result = try await functions.httpsCallable("listTenantMembers").call([:])
+            guard let data = result.data as? [String: Any] else { return }
+            ownerUid = data["ownerUid"] as? String
+            teamMembers = Self.parseTeamMembers(
+                data["members"] as? [[String: Any]],
+                ownerUid: ownerUid
+            )
+            let quick = (data["smsQuickPresets"] as? [String])?
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty } ?? []
+            smsQuickPresets = quick.isEmpty
+                ? ManagerSettingsViewModel.defaultQuickReplyPresets
+                : quick
+            teamMembersLoadedAt = Date()
+        } catch {
+            print("TenantSessionStore team members load error: \(error)")
+        }
+    }
+
+    /// Optimistic update when a request is opened (`readAt` only; status stays NEW).
+    func markBookingRequestReadLocally(requestId: String, readAt: Date = Date()) {
+        let matches: (BookingRequest) -> Bool = { req in
+            req.documentId == requestId || req.id == requestId
+        }
+        guard let bookingIndex = bookingRequests.firstIndex(where: matches) else {
+            if let index = newBookingRequests.firstIndex(where: matches) {
+                var updated = newBookingRequests[index]
+                if updated.readAt == nil {
+                    updated.readAt = readAt
+                    newBookingRequests[index] = updated
+                }
+            }
+            syncUnreadRequestsCount()
+            return
+        }
+
+        var updatedBooking = bookingRequests[bookingIndex]
+        guard updatedBooking.readAt == nil else {
+            syncUnreadRequestsCount()
+            return
+        }
+        updatedBooking.readAt = readAt
+        bookingRequests[bookingIndex] = updatedBooking
+
+        if Self.isNewWorkflowStatus(updatedBooking.status) {
+            if let index = newBookingRequests.firstIndex(where: matches) {
+                newBookingRequests[index] = updatedBooking
+            } else {
+                newBookingRequests.append(updatedBooking)
+                newBookingRequests.sort {
+                    ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+                }
+            }
+        }
+        syncUnreadRequestsCount()
+    }
+
+    /// Updates badge immediately, then persists `readAt` when a tenant id is available.
+    func markBookingRequestAsRead(requestId: String, tenantId overrideTenantId: String? = nil) async {
+        let trimmed = requestId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let readAt = Date()
+        markBookingRequestReadLocally(requestId: trimmed, readAt: readAt)
+        guard let tid = overrideTenantId ?? tenantId else { return }
+        do {
+            try await firebaseService.updateTenantBookingRequest(
+                tenantId: tid,
+                requestId: trimmed,
+                updates: ["readAt": readAt]
+            )
+        } catch {
+            print("TenantSessionStore mark booking request read error: \(error)")
+        }
+    }
+
+    func markBookingRequestAsReadIfNeeded(
+        _ booking: BookingRequest,
+        tenantId overrideTenantId: String? = nil
+    ) async {
+        guard booking.readAt == nil else { return }
+        guard let requestId = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestId.isEmpty else { return }
+        await markBookingRequestAsRead(requestId: requestId, tenantId: overrideTenantId)
+    }
+
+    func invalidateBookings() {
+        bookingsLoadedAt = nil
+        newBookingsLoadedAt = nil
+    }
+
+    func invalidateCustomers() {
+        customersLoadedAt = nil
+        customerCountCache = nil
+    }
+
+    func invalidateTeamMembers() {
+        teamMembersLoadedAt = nil
+    }
+
+    func refreshProfileAndTenant() async {
+        sessionLoaded = false
+        await ensureSessionLoaded(isDemoMode: false)
+    }
+
+    static func parseTeamMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {
+        guard let raw else { return [] }
+        return raw.compactMap { row in
+            guard let uid = row["uid"] as? String else { return nil }
+            let role = TeamAccessRole.fromFirestore(row["accessRole"] as? String ?? row["role"] as? String)
+            let fn = (row["firstName"] as? String) ?? ""
+            let ln = (row["lastName"] as? String) ?? ""
+            var name = "\(fn) \(ln)".trimmingCharacters(in: .whitespacesAndNewlines)
+            if name.isEmpty { name = (row["displayName"] as? String) ?? (row["name"] as? String) ?? "Member" }
+            if uid == ownerUid {
+                return TenantTeamMember(
+                    uid: uid,
+                    displayName: name,
+                    email: (row["email"] as? String) ?? "",
+                    phone: (row["phone"] as? String) ?? "",
+                    profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
+                    accessRole: .owner,
+                    jobTitle: "",
+                    memberSettings: TeamMemberSettings(),
+                    personalConfirmationType: parsePersonalConfirmationType(row),
+                    effectiveConfirmationType: parseEffectiveConfirmationType(row)
+                )
+            }
+            return TenantTeamMember(
+                uid: uid,
+                displayName: name,
+                email: (row["email"] as? String) ?? "",
+                phone: (row["phone"] as? String) ?? "",
+                profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
+                accessRole: role,
+                jobTitle: (row["jobTitle"] as? String) ?? "",
+                memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
+                personalConfirmationType: parsePersonalConfirmationType(row),
+                effectiveConfirmationType: parseEffectiveConfirmationType(row)
+            )
+        }
+    }
+
+    private static func parsePersonalConfirmationType(_ row: [String: Any]) -> String? {
+        let raw = (row["personalConfirmationType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? nil : raw
+    }
+
+    private static func parseEffectiveConfirmationType(_ row: [String: Any]) -> String? {
+        let raw = (row["effectiveConfirmationType"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? nil : raw
+    }
+}

@@ -18,7 +18,7 @@ class DashboardViewModel: ObservableObject {
     
     private let firebaseService = FirebaseService()
     
-    func loadData(isDemoMode: Bool = false) async {
+    func loadData(sessionStore: TenantSessionStore, isDemoMode: Bool = false) async {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
@@ -40,23 +40,19 @@ class DashboardViewModel: ObservableObject {
         }
         
         do {
-            guard let uid = Auth.auth().currentUser?.uid else {
+            guard Auth.auth().currentUser?.uid != nil else {
                 await MainActor.run { isLoading = false }
                 return
             }
-            let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            await sessionStore.ensureSessionLoaded(isDemoMode: false)
+            async let dashboardBookings: () = sessionStore.loadDashboardBookingsIfNeeded(isDemoMode: false)
+            async let newBookings: () = sessionStore.loadNewBookingsIfNeeded(isDemoMode: false)
+            async let customerTotal = sessionStore.customerCount(isDemoMode: false)
+            _ = await (dashboardBookings, newBookings)
+            let clientsCount = await customerTotal
             
-            if let tid = profile?.tenantId {
-                let bookingReqs = try await firebaseService.fetchTenantBookingRequests(tenantId: tid)
-                let customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
-                var industry = profile?.industry ?? BookingTemplate.custom.rawValue
-                if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
-                    industry = (tenant["industry"] as? String) ?? industry
-                }
-                let pending = bookingReqs.filter { ($0.status).uppercased() == "NEW" }
-                let unread = bookingReqs.filter {
-                    $0.status.uppercased() == "NEW" && $0.readAt == nil
-                }
+            if sessionStore.tenantId != nil {
+                let bookingReqs = sessionStore.bookingRequests
                 let upcoming = bookingReqs.filter { $0.status.lowercased() == "confirmed" }
                 let monthStart = Calendar.current.date(
                     from: Calendar.current.dateComponents([.year, .month], from: Date())
@@ -68,14 +64,14 @@ class DashboardViewModel: ObservableObject {
                 }
                 await MainActor.run {
                     useTenantData = true
-                    pendingRequestsCount = pending.count
-                    unreadRequestsCount = unread.count
+                    pendingRequestsCount = sessionStore.pendingRequestsCount
+                    unreadRequestsCount = sessionStore.unreadRequestsCount
                     upcomingBookingsCount = upcoming.count
                     confirmedThisMonthCount = confirmedMonth.count
-                    totalClientsCount = customers.count
+                    totalClientsCount = clientsCount
                     monthlyRevenue = 0
-                    businessDisplayName = profile?.business ?? ""
-                    tenantIndustry = industry
+                    businessDisplayName = sessionStore.businessDisplayName
+                    tenantIndustry = sessionStore.tenantIndustry
                     recentBookingRequests = Array(bookingReqs.prefix(10))
                     recentRequests = []
                     isLoading = false
@@ -110,8 +106,8 @@ class DashboardViewModel: ObservableObject {
                     confirmedThisMonthCount = upcoming.count
                     totalClientsCount = clients.count
                     monthlyRevenue = revenue
-                    businessDisplayName = profile?.business ?? ""
-                    tenantIndustry = profile?.industry ?? BookingTemplate.custom.rawValue
+                    businessDisplayName = sessionStore.businessDisplayName
+                    tenantIndustry = sessionStore.tenantIndustry
                     recentRequests = Array(requests.prefix(10))
                     recentBookingRequests = []
                     isLoading = false
@@ -123,8 +119,8 @@ class DashboardViewModel: ObservableObject {
         }
     }
     
-    func refresh(isDemoMode: Bool = false) async {
-        await loadData(isDemoMode: isDemoMode)
+    func refresh(sessionStore: TenantSessionStore, isDemoMode: Bool = false) async {
+        sessionStore.invalidateBookings()
+        await loadData(sessionStore: sessionStore, isDemoMode: isDemoMode)
     }
 }
-

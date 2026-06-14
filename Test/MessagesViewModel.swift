@@ -63,10 +63,17 @@ class MessagesViewModel: ObservableObject {
         firebaseService.stopThreadsListener()
     }
 
-    func loadSmsQuickPresets(isDemoMode: Bool = false) async {
+    func loadSmsQuickPresets(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         if isDemoMode {
             await MainActor.run {
                 smsQuickPresets = ManagerSettingsViewModel.defaultQuickReplyPresets
+            }
+            return
+        }
+        if let sessionStore {
+            await sessionStore.loadTeamMembersIfNeeded(force: false, isDemoMode: false)
+            await MainActor.run {
+                smsQuickPresets = sessionStore.smsQuickPresets
             }
             return
         }

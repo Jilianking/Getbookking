@@ -93,7 +93,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
 final class DrawerState {
     var isOpen = false
     var selectedSection: AdminSection = .dashboard
-    /// Opens a specific customer profile in Customers (Firestore doc id).
+    /// Opens a specific customer profile in Clients (Firestore doc id).
     var customersDetailClientId: String?
     /// Prefill Messages compose from customer profile.
     var messagesComposePhone: String?
@@ -103,8 +103,10 @@ final class DrawerState {
 
 struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @State private var drawerState = DrawerState()
     @StateObject private var dashboardMetrics = DashboardViewModel()
+    @State private var visitedSections: Set<AdminSection> = [.dashboard]
 
     /// Solo owners use Business settings only; hide Team from the drawer.
     private var drawerSections: [AdminSection] {
@@ -140,10 +142,8 @@ struct AdminRootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
-        .onChange(of: drawerState.isOpen) { _, isOpen in
-            if isOpen, authViewModel.isAuthenticated {
-                Task { await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode) }
-            }
+        .onChange(of: drawerState.selectedSection) { _, section in
+            visitedSections.insert(section)
         }
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
@@ -152,8 +152,13 @@ struct AdminRootView: View {
         }
         .task(id: authViewModel.isAuthenticated) {
             if authViewModel.isAuthenticated {
-                await authViewModel.refreshTeamAccess()
-                await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode)
+                await sessionStore.bootstrap(isDemoMode: authViewModel.isDemoMode)
+                await dashboardMetrics.loadData(
+                    sessionStore: sessionStore,
+                    isDemoMode: authViewModel.isDemoMode
+                )
+            } else {
+                sessionStore.reset()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
@@ -162,55 +167,97 @@ struct AdminRootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tenantBusinessNameDidChange)) { _ in
-            Task { await dashboardMetrics.loadData(isDemoMode: authViewModel.isDemoMode) }
+            Task {
+                await sessionStore.refreshProfileAndTenant()
+                await dashboardMetrics.loadData(
+                    sessionStore: sessionStore,
+                    isDemoMode: authViewModel.isDemoMode
+                )
+            }
         }
     }
 
     @ViewBuilder
     private var mainContent: some View {
-        switch drawerState.selectedSection {
-        case .dashboard:
-            DashboardView(drawerState: drawerState, sectionTitle: AdminSection.dashboard.title)
-        case .requests:
-            RequestsView(drawerState: drawerState, sectionTitle: AdminSection.requests.title)
-        case .calendar:
-            CalendarView(drawerState: drawerState, sectionTitle: AdminSection.calendar.title)
-        case .messages:
-            MessagesView(drawerState: drawerState, sectionTitle: AdminSection.messages.title)
-        case .clients:
-            ClientsView(drawerState: drawerState, sectionTitle: AdminSection.clients.title)
-        case .team:
-            TeamView(drawerState: drawerState, sectionTitle: AdminSection.team.title)
-        case .design:
-            DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
-        case .shop:
-            ShopManagerView(drawerState: drawerState, sectionTitle: AdminSection.shop.title)
-        case .aiTools:
-            AILogoGeneratorView(drawerState: drawerState, sectionTitle: AdminSection.aiTools.title)
-        case .insights:
-            InsightsView(drawerState: drawerState, sectionTitle: AdminSection.insights.title)
-        case .payments:
-            PaymentsView(drawerState: drawerState, sectionTitle: AdminSection.payments.title)
-        case .settings:
-            SettingsView(drawerState: drawerState, sectionTitle: AdminSection.settings.title)
+        ZStack {
+            if visitedSections.contains(.dashboard) {
+                DashboardView(
+                    viewModel: dashboardMetrics,
+                    drawerState: drawerState,
+                    sectionTitle: AdminSection.dashboard.title
+                )
+                .sectionVisible(drawerState.selectedSection == .dashboard)
+            }
+            if visitedSections.contains(.requests) {
+                RequestsView(drawerState: drawerState, sectionTitle: AdminSection.requests.title)
+                    .sectionVisible(drawerState.selectedSection == .requests)
+            }
+            if visitedSections.contains(.calendar) {
+                CalendarView(drawerState: drawerState, sectionTitle: AdminSection.calendar.title)
+                    .sectionVisible(drawerState.selectedSection == .calendar)
+            }
+            if visitedSections.contains(.messages) {
+                MessagesView(drawerState: drawerState, sectionTitle: AdminSection.messages.title)
+                    .sectionVisible(drawerState.selectedSection == .messages)
+            }
+            if visitedSections.contains(.clients) {
+                ClientsView(drawerState: drawerState, sectionTitle: AdminSection.clients.title)
+                    .sectionVisible(drawerState.selectedSection == .clients)
+            }
+            if visitedSections.contains(.team) {
+                TeamView(drawerState: drawerState, sectionTitle: AdminSection.team.title)
+                    .sectionVisible(drawerState.selectedSection == .team)
+            }
+            if visitedSections.contains(.design) {
+                DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
+                    .sectionVisible(drawerState.selectedSection == .design)
+            }
+            if visitedSections.contains(.shop) {
+                ShopManagerView(drawerState: drawerState, sectionTitle: AdminSection.shop.title)
+                    .sectionVisible(drawerState.selectedSection == .shop)
+            }
+            if visitedSections.contains(.aiTools) {
+                AILogoGeneratorView(drawerState: drawerState, sectionTitle: AdminSection.aiTools.title)
+                    .sectionVisible(drawerState.selectedSection == .aiTools)
+            }
+            if visitedSections.contains(.insights) {
+                InsightsView(drawerState: drawerState, sectionTitle: AdminSection.insights.title)
+                    .sectionVisible(drawerState.selectedSection == .insights)
+            }
+            if visitedSections.contains(.payments) {
+                PaymentsView(drawerState: drawerState, sectionTitle: AdminSection.payments.title)
+                    .sectionVisible(drawerState.selectedSection == .payments)
+            }
+            if visitedSections.contains(.settings) {
+                SettingsView(drawerState: drawerState, sectionTitle: AdminSection.settings.title)
+                    .sectionVisible(drawerState.selectedSection == .settings)
+            }
         }
     }
 
     private var drawerBusinessSubtitle: String {
-        let industry = BookingTemplate(rawValue: dashboardMetrics.tenantIndustry)?.displayName ?? "Business"
+        let industry = BookingTemplate(rawValue: sessionStore.tenantIndustry)?.displayName ?? "Business"
         let plan = authViewModel.tenantSubscriptionPlan.displayName
         return "\(industry) · \(plan)"
     }
 
     private var drawerDisplayName: String {
-        let business = dashboardMetrics.businessDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !authViewModel.teamAccess.isOwner {
+            return authViewModel.currentUserDisplayName ?? "Team member"
+        }
+        let business = sessionStore.businessDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !business.isEmpty { return business }
         return authViewModel.currentUserDisplayName ?? "Your business"
     }
 
+    /// Team members see their own avatar at the top; owners see the studio logo.
+    private var drawerHeaderTenantLogoURL: String? {
+        authViewModel.teamAccess.isOwner ? authViewModel.tenantLogoUrl : nil
+    }
+
     private func badgeCount(for section: AdminSection) -> Int {
         switch section {
-        case .requests: return dashboardMetrics.unreadRequestsCount
+        case .requests: return sessionStore.unreadRequestsCount
         default: return 0
         }
     }
@@ -219,7 +266,7 @@ struct AdminRootView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
                 AppAvatarView(
-                    tenantLogoURL: authViewModel.tenantLogoUrl,
+                    tenantLogoURL: drawerHeaderTenantLogoURL,
                     accountPhotoURL: authViewModel.accountPhotoUrl,
                     displayNameFallback: drawerDisplayName,
                     size: 48
@@ -306,6 +353,7 @@ struct AdminRootView: View {
                 }
                 Spacer()
                 AppDrawerBadge(count: badgeCount(for: section))
+                    .id(section == .requests ? sessionStore.unreadRequestsCount : 0)
             }
             .foregroundStyle(selected ? Color.white : AppDesign.textPrimary)
             .padding(.vertical, 11)
@@ -314,6 +362,14 @@ struct AdminRootView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension View {
+    func sectionVisible(_ visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .allowsHitTesting(visible)
+            .accessibilityHidden(!visible)
     }
 }
 

@@ -8,7 +8,7 @@ class ClientsViewModel: ObservableObject {
     
     private let firebaseService = FirebaseService()
     
-    func loadClients(isDemoMode: Bool = false) async {
+    func loadClients(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
@@ -20,6 +20,21 @@ class ClientsViewModel: ObservableObject {
         }
         
         do {
+            guard Auth.auth().currentUser?.uid != nil else {
+                await MainActor.run { isLoading = false }
+                return
+            }
+
+            if let sessionStore {
+                await sessionStore.ensureSessionLoaded(isDemoMode: false)
+                await sessionStore.loadCustomersIfNeeded(force: false, isDemoMode: false)
+                await MainActor.run {
+                    clients = sessionStore.customers
+                    isLoading = false
+                }
+                return
+            }
+
             guard let uid = Auth.auth().currentUser?.uid else {
                 await MainActor.run { isLoading = false }
                 return
@@ -42,6 +57,11 @@ class ClientsViewModel: ObservableObject {
             await MainActor.run { isLoading = false }
             print("Error loading clients: \(error)")
         }
+    }
+
+    func refreshClients(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
+        sessionStore?.invalidateCustomers()
+        await loadClients(isDemoMode: isDemoMode, sessionStore: sessionStore)
     }
     
     /// Creates a customer; returns document id for navigation.

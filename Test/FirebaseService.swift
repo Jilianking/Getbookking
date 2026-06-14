@@ -395,12 +395,23 @@ class FirebaseService: ObservableObject {
         return doc.data()?["stripeAccountId"] as? String
     }
 
-    func fetchTenantBookingRequests(tenantId: String) async throws -> [BookingRequest] {
-        let snapshot = try await db.collection("tenants").document(tenantId)
+    func fetchTenantBookingRequests(
+        tenantId: String,
+        limit: Int? = nil,
+        status: String? = nil
+    ) async throws -> [BookingRequest] {
+        var query: Query = db.collection("tenants").document(tenantId)
             .collection("bookingRequests")
-            .order(by: "createdAt", descending: true)
-            .getDocuments()
-        return snapshot.documents.compactMap { doc -> BookingRequest? in
+        if let status {
+            query = query.whereField("status", isEqualTo: status.uppercased())
+        } else {
+            query = query.order(by: "createdAt", descending: true)
+            if let limit {
+                query = query.limit(to: limit)
+            }
+        }
+        let snapshot = try await query.getDocuments()
+        let results = snapshot.documents.compactMap { doc -> BookingRequest? in
             let d = doc.data()
             return BookingRequest(
                 documentId: doc.documentID,
@@ -429,6 +440,12 @@ class FirebaseService: ObservableObject {
                 smsConsentAt: (d["smsConsentAt"] as? Timestamp)?.dateValue()
             )
         }
+        if status != nil {
+            return results.sorted {
+                ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+            }
+        }
+        return results
     }
 
     func updateTenantBookingRequest(tenantId: String, requestId: String, updates: [String: Any]) async throws {
@@ -521,6 +538,26 @@ class FirebaseService: ObservableObject {
             }
             return parsed.isEmpty ? nil : parsed
         }()
+        let noteEntries: [Client.ClientNoteEntry]? = {
+            guard let raw = data["noteEntries"] as? [[String: Any]] else { return nil }
+            let parsed = raw.compactMap { item -> Client.ClientNoteEntry? in
+                let body = (item["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !body.isEmpty else { return nil }
+                let id = (item["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
+                let createdAt = (item["createdAt"] as? Timestamp)?.dateValue()
+                    ?? (item["updatedAt"] as? Timestamp)?.dateValue()
+                    ?? Date()
+                return Client.ClientNoteEntry(
+                    id: id,
+                    body: body,
+                    createdAt: createdAt,
+                    updatedAt: (item["updatedAt"] as? Timestamp)?.dateValue(),
+                    authorName: item["authorName"] as? String
+                )
+            }
+            return parsed.isEmpty ? nil : parsed
+        }()
+        let legacyNotes = data["notes"] as? String ?? data["internalNotes"] as? String
         return Client(
             id: documentId,
             name: name,
@@ -529,7 +566,8 @@ class FirebaseService: ObservableObject {
             createdAt: createdAt ?? updatedAt ?? Date(),
             lastContact: updatedAt,
             totalAppointments: data["totalAppointments"] as? Int ?? 0,
-            notes: data["notes"] as? String ?? data["internalNotes"] as? String,
+            notes: legacyNotes,
+            noteEntries: noteEntries,
             preferences: preferences,
             vip: data["vip"] as? Bool ?? false,
             smsOptedIn: data["smsOptedIn"] as? Bool,
@@ -541,11 +579,22 @@ class FirebaseService: ObservableObject {
         )
     }
 
-    func fetchTenantCustomers(tenantId: String) async throws -> [Client] {
+    func fetchTenantCustomers(tenantId: String, limit: Int? = nil) async throws -> [Client] {
+        var query: Query = db.collection("tenants").document(tenantId)
+            .collection("customers")
+        if let limit {
+            query = query.limit(to: limit)
+        }
+        let snapshot = try await query.getDocuments()
+        return snapshot.documents.compactMap { clientFromFirestoreData(documentId: $0.documentID, data: $0.data()) }
+    }
+
+    func countTenantCustomers(tenantId: String) async throws -> Int {
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("customers")
-            .getDocuments()
-        return snapshot.documents.compactMap { clientFromFirestoreData(documentId: $0.documentID, data: $0.data()) }
+            .count
+            .getAggregation(source: .server)
+        return Int(truncating: snapshot.count)
     }
 
     func fetchTenantCustomer(tenantId: String, customerId: String) async throws -> Client? {

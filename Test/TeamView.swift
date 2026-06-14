@@ -167,6 +167,9 @@ private struct TeamMemberOverviewContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let payout = me.payoutModeSummary {
+                LabeledContent("Payments", value: payout)
+            }
         } else {
             LabeledContent("Role", value: authViewModel.teamAccess.accessRole.displayName)
             Text("Your studio profile is still loading. Pull to refresh if details are missing.")

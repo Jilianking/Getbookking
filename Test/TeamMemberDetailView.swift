@@ -193,8 +193,19 @@ struct TeamMemberDetailView: View {
     @ViewBuilder
     private var paymentSection: some View {
         Section(
+            header: Text("Payments"),
+            footer: Text(paymentSectionFooter)
+                .font(.caption2)
+        ) {
+            Picker("Payout mode", selection: $memberSettings.payoutMode) {
+                ForEach(MemberPayoutMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+        }
+        Section(
             header: Text("Payment split"),
-            footer: Text("Split is calculated on the service/deposit amount (before the card processing fee added at checkout). Unassigned bookings stay with the studio. Auto-payout to artists requires their own Stripe Connect account (coming soon).")
+            footer: Text("Split is calculated on the service/deposit amount (before the card processing fee added at checkout). Unassigned bookings stay with the studio.")
                 .font(.caption2)
         ) {
             Toggle("Enable payment split", isOn: $memberSettings.paymentSplitEnabled)
@@ -222,6 +233,15 @@ struct TeamMemberDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var paymentSectionFooter: String {
+        switch memberSettings.payoutMode {
+        case .independent:
+            return "They connect their own Stripe and can use Tap to Pay. Studio split is tracked in reports."
+        case .studioPayroll:
+            return "Charges go to the studio Connect account. Use payment split for revenue reporting."
         }
     }
 

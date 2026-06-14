@@ -8,7 +8,6 @@ struct ClientProfileView: View {
 
     @State private var showingEditSheet = false
     @State private var showingBookingForm = false
-    @State private var notesDraft = ""
 
     init(client: Client, clientsViewModel: ClientsViewModel, drawerState: DrawerState) {
         _viewModel = StateObject(wrappedValue: ClientProfileViewModel(client: client))
@@ -42,7 +41,9 @@ struct ClientProfileView: View {
         }
         .task {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)
-            notesDraft = viewModel.client.notes ?? ""
+        }
+        .onDisappear {
+            Task { await viewModel.flushNoteEntriesSave() }
         }
         .sheet(isPresented: $showingEditSheet) {
             ClientProfileEditSheet(viewModel: viewModel) {
@@ -166,15 +167,23 @@ struct ClientProfileView: View {
                 }
             }
 
-            if let notes = viewModel.client.notes, !notes.isEmpty {
+            if let preview = viewModel.client.latestNotePreview {
                 ProfileDetailCard(sectionTitle: "Internal notes") {
-                    Text(notes)
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(Color.yellow.opacity(0.12))
-                        .cornerRadius(10)
-                        .padding(.top, 4)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(preview)
+                            .font(.subheadline)
+                            .lineLimit(4)
+                        if viewModel.client.resolvedNoteEntries.count > 1 {
+                            Text("\(viewModel.client.resolvedNoteEntries.count) notes")
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(Color.yellow.opacity(0.12))
+                    .cornerRadius(10)
+                    .padding(.top, 4)
                 }
             }
 
@@ -388,20 +397,89 @@ struct ClientProfileView: View {
 
     private var notesTab: some View {
         VStack(spacing: 22) {
-            ProfileDetailCard(sectionTitle: "Internal notes") {
-                TextEditor(text: $notesDraft)
-                    .frame(minHeight: 180)
-                    .scrollContentBackground(.hidden)
-            }
-            Button("Save notes") {
-                Task {
-                    await viewModel.saveNotes(notesDraft)
-                    await clientsViewModel.loadClients(isDemoMode: authViewModel.isDemoMode)
+            HStack {
+                notesSaveStatusLabel
+                Spacer()
+                Button {
+                    viewModel.addNoteEntry()
+                } label: {
+                    Label("Add note", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
                 }
             }
-            .buttonStyle(AppPrimaryButtonStyle())
+
+            if viewModel.noteEntries.isEmpty {
+                ProfileDetailCard(sectionTitle: "Internal notes") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("No notes yet. Add one to track preferences, allergies, or session details.")
+                            .font(.subheadline)
+                            .foregroundStyle(AppDesign.textSecondary)
+                        Button {
+                            viewModel.addNoteEntry()
+                        } label: {
+                            Label("Add note", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                }
+            } else {
+                ForEach($viewModel.noteEntries) { $entry in
+                    ProfileDetailCard(sectionTitle: noteCardTitle(for: entry)) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            TextEditor(text: $entry.body)
+                                .frame(minHeight: 120)
+                                .scrollContentBackground(.hidden)
+                                .onChange(of: entry.body) { _, _ in
+                                    viewModel.noteEntryBodyChanged(id: entry.id)
+                                }
+
+                            HStack {
+                                if let author = entry.authorName, !author.isEmpty {
+                                    Text(author)
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    viewModel.deleteNoteEntry(id: entry.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var notesSaveStatusLabel: some View {
+        switch viewModel.notesSaveState {
+        case .idle:
+            EmptyView()
+        case .saving:
+            Text("Saving…")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+        case .saved:
+            Text("Saved")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .failed(let message):
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(+2)
+        }
+    }
+
+    private func noteCardTitle(for entry: Client.ClientNoteEntry) -> String {
+        let stamp = entry.updatedAt ?? entry.createdAt
+        return stamp.formatted(date: .abbreviated, time: .shortened)
     }
 
     private var bottomActionBar: some View {

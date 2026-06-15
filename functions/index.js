@@ -3075,6 +3075,396 @@ exports.removeTenantMember = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
+const TENANT_SUBCOLLECTIONS = [
+  "services",
+  "products",
+  "customers",
+  "bookingRequests",
+  "smsThreads",
+  "smsLog",
+  "smsOptOuts",
+];
+
+function parseLifecycleConfirmPhrase(data, expected) {
+  const phrase = ((data && data.confirmPhrase) || "").toString().trim().toUpperCase();
+  if (phrase !== expected) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      `Type ${expected} to confirm.`
+    );
+  }
+}
+
+async function deleteFirestoreQueryInBatches(query, batchSize = 300) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const snap = await query.limit(batchSize).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.size < batchSize) return;
+  }
+}
+
+async function deleteCollectionRef(collectionRef) {
+  await deleteFirestoreQueryInBatches(collectionRef);
+}
+
+async function deleteUserDeviceTokens(uid) {
+  await deleteCollectionRef(db.collection("users").doc(uid).collection("deviceTokens"));
+}
+
+async function deleteStoragePrefix(prefix) {
+  try {
+    const bucket = admin.storage().bucket();
+    const [files] = await bucket.getFiles({ prefix });
+    await Promise.all(files.map((file) => file.delete().catch(() => null)));
+  } catch (err) {
+    console.warn("deleteStoragePrefix", prefix, err.message || err);
+  }
+}
+
+async function deleteUserProfileStorage(uid) {
+  try {
+    const bucket = admin.storage().bucket();
+    await bucket.file(`users/${uid}/profile.jpg`).delete();
+  } catch (_) {
+    /* optional */
+  }
+}
+
+const UNLINK_TENANT_USER_PATCH = {
+  tenantId: admin.firestore.FieldValue.delete(),
+  tenantSlug: admin.firestore.FieldValue.delete(),
+  role: admin.firestore.FieldValue.delete(),
+  accessRole: admin.firestore.FieldValue.delete(),
+  jobTitle: admin.firestore.FieldValue.delete(),
+};
+
+async function unlinkUsersFromTenant(tenantId, excludeUid) {
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const batch = db.batch();
+  let count = 0;
+  snap.docs.forEach((doc) => {
+    if (excludeUid && doc.id === excludeUid) return;
+    batch.set(doc.ref, UNLINK_TENANT_USER_PATCH, { merge: true });
+    count += 1;
+  });
+  if (count > 0) await batch.commit();
+  return count;
+}
+
+async function countOtherTeamMembers(tenantId, uid) {
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  return snap.docs.filter((doc) => doc.id !== uid).length;
+}
+
+async function cancelTenantStripeSubscription(tenantData) {
+  const stripeSubscriptionId = (tenantData.stripeSubscriptionId || "").toString().trim();
+  if (!stripeSubscriptionId) return;
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) return;
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  try {
+    await stripe.subscriptions.cancel(stripeSubscriptionId);
+  } catch (err) {
+    console.warn("cancelTenantStripeSubscription", stripeSubscriptionId, err.message || err);
+  }
+}
+
+async function deleteTenantInvitesForTenant(tenantId) {
+  const snap = await db.collection("tenantInvites").where("tenantId", "==", tenantId).get();
+  if (snap.empty) return;
+  const batch = db.batch();
+  snap.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+async function deleteTenantData(tenantId) {
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  for (const sub of TENANT_SUBCOLLECTIONS) {
+    await deleteCollectionRef(tenantRef.collection(sub));
+  }
+  await deleteTenantInvitesForTenant(tenantId);
+  await deleteStoragePrefix(`tenants/${tenantId}/`);
+  await tenantRef.delete();
+}
+
+async function deleteUserFirestoreAndAuth(uid) {
+  await deleteUserDeviceTokens(uid);
+  await deleteUserProfileStorage(uid);
+  await db.collection("pendingProviderSignups").doc(uid).delete().catch(() => null);
+  await db.collection("users").doc(uid).delete().catch(() => null);
+  await admin.auth().deleteUser(uid);
+}
+
+function memberIndependentStripeAccountId(userData) {
+  const accountId = (userData.stripeAccountId || "").toString().trim();
+  if (!accountId) return null;
+  const payoutMode = normalizeMemberSettings(userData.memberSettings).payoutMode;
+  return payoutMode === "independent" ? accountId : null;
+}
+
+async function getConnectUsdBalanceCents(stripeAccountId) {
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey || !stripeAccountId) {
+    return { availableCents: 0, pendingCents: 0 };
+  }
+  try {
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const balance = await stripe.balance.retrieve(
+      {},
+      { stripeAccount: stripeAccountId }
+    );
+    const available = balance.available?.find((b) => b.currency === "usd");
+    const pending = balance.pending?.find((b) => b.currency === "usd");
+    return {
+      availableCents: available?.amount ?? 0,
+      pendingCents: pending?.amount ?? 0,
+    };
+  } catch (err) {
+    console.warn("getConnectUsdBalanceCents", stripeAccountId, err.message || err);
+    return { availableCents: 0, pendingCents: 0 };
+  }
+}
+
+/** Only blocks deletion when an independent Connect account still holds funds. */
+async function assessMemberStripeDeletionBlock(userData) {
+  const accountId = memberIndependentStripeAccountId(userData);
+  if (!accountId) {
+    return {
+      hasStripeConnectAccount: false,
+      stripeBalanceBlocksDeletion: false,
+      stripeBalanceBlockMessage: "",
+    };
+  }
+  const { availableCents, pendingCents } = await getConnectUsdBalanceCents(accountId);
+  const blocks = availableCents > 0 || pendingCents > 0;
+  return {
+    hasStripeConnectAccount: true,
+    stripeBalanceBlocksDeletion: blocks,
+    stripeBalanceBlockMessage: blocks
+      ? "Withdraw your Stripe payout balance in Payments before deleting your account."
+      : "",
+  };
+}
+
+/** Read-only: whether Delete account is allowed and if transfer is required first. */
+exports.getAccountDeletionEligibility = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const userSnap = await db.collection("users").doc(uid).get();
+  if (!userSnap.exists) {
+    return {
+      ok: true,
+      hasProfile: false,
+      isOwner: false,
+      teamMemberCount: 0,
+      otherTeamMemberCount: 0,
+      requiresTransfer: false,
+      canDelete: true,
+      businessName: "",
+    };
+  }
+  const userData = userSnap.data() || {};
+  const tenantId = (userData.tenantId || "").toString().trim();
+  if (!tenantId) {
+    return {
+      ok: true,
+      hasProfile: true,
+      isOwner: false,
+      teamMemberCount: 0,
+      otherTeamMemberCount: 0,
+      requiresTransfer: false,
+      canDelete: true,
+      businessName: "",
+    };
+  }
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    return {
+      ok: true,
+      hasProfile: true,
+      isOwner: false,
+      teamMemberCount: 0,
+      otherTeamMemberCount: 0,
+      requiresTransfer: false,
+      canDelete: true,
+      businessName: "",
+    };
+  }
+  const tenant = tenantSnap.data() || {};
+  const isOwner = tenant.ownerUid === uid;
+  const teamMemberCount = await countUsersForTenant(tenantId);
+  const otherTeamMemberCount = await countOtherTeamMembers(tenantId, uid);
+  const requiresTransfer = isOwner && otherTeamMemberCount > 0;
+  const businessName = (
+    tenant.displayName ||
+    tenant.businessName ||
+    userData.business ||
+    ""
+  ).toString();
+  const stripeAssessment = await assessMemberStripeDeletionBlock(userData);
+  return {
+    ok: true,
+    hasProfile: true,
+    isOwner,
+    teamMemberCount,
+    otherTeamMemberCount,
+    requiresTransfer,
+    canDelete: !requiresTransfer && !stripeAssessment.stripeBalanceBlocksDeletion,
+    businessName,
+    hasStripeConnectAccount: stripeAssessment.hasStripeConnectAccount,
+    stripeBalanceBlocksDeletion: stripeAssessment.stripeBalanceBlocksDeletion,
+    stripeBalanceBlockMessage: stripeAssessment.stripeBalanceBlockMessage,
+  };
+});
+
+/** Owner-only: transfer business ownership to an existing team member. */
+exports.transferTenantOwnership = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    parseLifecycleConfirmPhrase(data, "TRANSFER");
+    const uid = context.auth.uid;
+    const newOwnerUid = ((data && data.newOwnerUid) || "").toString().trim();
+    if (!newOwnerUid) {
+      throw new functions.https.HttpsError("invalid-argument", "newOwnerUid is required.");
+    }
+    if (newOwnerUid === uid) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Choose a different team member."
+      );
+    }
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "User profile not found.");
+    }
+    const tenantId = userDoc.data().tenantId;
+    if (!tenantId) {
+      throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+    }
+    const tenant = await assertTenantOwnerUid(uid, tenantId);
+    const newOwnerRef = db.collection("users").doc(newOwnerUid);
+    const newOwnerSnap = await newOwnerRef.get();
+    if (!newOwnerSnap.exists || newOwnerSnap.data().tenantId !== tenantId) {
+      throw new functions.https.HttpsError("not-found", "Team member not found.");
+    }
+    const batch = db.batch();
+    batch.set(
+      db.collection("tenants").doc(tenantId),
+      {
+        ownerUid: newOwnerUid,
+        ownerId: newOwnerUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    batch.set(
+      newOwnerRef,
+      {
+        role: "owner",
+        accessRole: "owner",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    batch.set(
+      db.collection("users").doc(uid),
+      {
+        role: "manager",
+        accessRole: "manager",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await batch.commit();
+
+    const newOwnerEmail = (newOwnerSnap.data().email || "").toString().trim();
+    const stripeCustomerId = (tenant.stripeCustomerId || "").toString().trim();
+    if (stripeCustomerId && newOwnerEmail) {
+      const secretKey = stripeSecretKey.value();
+      if (secretKey) {
+        try {
+          const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+          await stripe.customers.update(stripeCustomerId, { email: newOwnerEmail });
+        } catch (err) {
+          console.warn("transferTenantOwnership stripe customer email", err.message || err);
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      tenantId,
+      newOwnerUid,
+      billingUpdateRecommended: Boolean(stripeCustomerId),
+    };
+  });
+
+/** Delete the signed-in user's account. Owners with other team members must transfer first. */
+exports.deleteMyAccount = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    parseLifecycleConfirmPhrase(data, "DELETE");
+    const uid = context.auth.uid;
+    const userSnap = await db.collection("users").doc(uid).get();
+    const userData = userSnap.exists ? userSnap.data() || {} : {};
+    const tenantId = (userData.tenantId || "").toString().trim();
+
+    const stripeAssessment = await assessMemberStripeDeletionBlock(userData);
+    if (stripeAssessment.stripeBalanceBlocksDeletion) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        stripeAssessment.stripeBalanceBlockMessage ||
+          "Withdraw your Stripe payout balance in Payments before deleting your account."
+      );
+    }
+
+    if (!tenantId) {
+      await deleteUserFirestoreAndAuth(uid);
+      return { ok: true, deletedTenant: false };
+    }
+
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) {
+      await deleteUserFirestoreAndAuth(uid);
+      return { ok: true, deletedTenant: false };
+    }
+
+    const tenant = tenantSnap.data() || {};
+    const isOwner = tenant.ownerUid === uid;
+    const otherMembers = await countOtherTeamMembers(tenantId, uid);
+
+    if (isOwner && otherMembers > 0) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Transfer ownership to a team member before deleting your account."
+      );
+    }
+
+    if (isOwner) {
+      await cancelTenantStripeSubscription(tenant);
+      await deleteTenantData(tenantId);
+      await deleteUserFirestoreAndAuth(uid);
+      return { ok: true, deletedTenant: true };
+    }
+
+    await deleteUserFirestoreAndAuth(uid);
+    return { ok: true, deletedTenant: false, leftTenant: true };
+  });
+
 /** Allowed origins for Stripe Billing Portal `return_url` (marketing + staging). */
 const BILLING_PORTAL_RETURN_ORIGINS = new Set([
   "https://getbookking.com",

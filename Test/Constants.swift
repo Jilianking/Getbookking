@@ -48,6 +48,8 @@ struct Constants {
         static var marketingForgotPasswordPageURL: String { "\(marketingWebOrigin)/forgot-password.html" }
         /// Live showcase tenant sites (`demos.html`).
         static var marketingDemosURL: String { "\(marketingWebOrigin)/demos.html" }
+        static var marketingPrivacyURL: String { "\(marketingWebOrigin)/privacy.html" }
+        static var marketingTermsURL: String { "\(marketingWebOrigin)/terms.html" }
 
         /// Opens web forgot-password with optional email prefill from the iOS app.
         static func marketingForgotPasswordURL(email: String) -> URL? {

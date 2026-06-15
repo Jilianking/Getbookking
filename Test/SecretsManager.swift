@@ -39,7 +39,7 @@ class SecretsManager {
         #if DEBUG
         return secrets["API_BASE_URL_DEBUG"] as? String ?? "http://localhost:3000/api"
         #else
-        return secrets["API_BASE_URL"] as? String ?? "https://bleustattoos.vercel.app/api"
+        return secrets["API_BASE_URL"] as? String ?? ""
         #endif
     }
     

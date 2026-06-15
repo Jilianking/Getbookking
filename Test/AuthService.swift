@@ -131,6 +131,26 @@ class AuthViewModel: ObservableObject {
         }
         try await Auth.auth().sendPasswordReset(withEmail: trimmed)
     }
+
+    /// Required before sensitive actions such as account deletion.
+    func reauthenticate(password: String) async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "AuthViewModel",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "You are not signed in."]
+            )
+        }
+        guard let email = currentUserEmail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty else {
+            throw NSError(
+                domain: "AuthViewModel",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "No email on this account."]
+            )
+        }
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+        try await user.reauthenticate(with: credential)
+    }
     
     func signUp(
         email: String,

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @State private var showingLogoutAlert = false
+    @State private var showingDeleteAccountSheet = false
     @State private var settingsAlertMessage: String?
     var drawerState: DrawerState
     let sectionTitle: String
@@ -30,7 +31,6 @@ struct SettingsView: View {
                         paymentsSection
                     }
 
-                    appearanceSection
                     accountSection
 
                     if let msg = viewModel.errorMessage {
@@ -40,16 +40,18 @@ struct SettingsView: View {
                             .padding(.horizontal, 4)
                     }
 
-                    HStack {
-                        Text("Version")
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
-                        Spacer()
-                        Text(Constants.App.version)
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
+                    HStack(alignment: .center) {
+                        HStack(spacing: 6) {
+                            Text("Version")
+                            Text(Constants.App.version)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        Spacer(minLength: 0)
+                        AppSunMoonAppearanceToggle(isDark: appearanceIsDark)
                     }
                     .padding(.horizontal, 4)
+                    .padding(.top, 24)
                 }
                 .padding(16)
             }
@@ -82,6 +84,7 @@ struct SettingsView: View {
             }
             .task {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
@@ -89,11 +92,16 @@ struct SettingsView: View {
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
                 await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 await authViewModel.refreshTeamAccess()
+            }
+            .sheet(isPresented: $showingDeleteAccountSheet) {
+                DeleteAccountSettingsSheet(viewModel: viewModel)
+                    .environmentObject(authViewModel)
             }
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
@@ -312,27 +320,13 @@ struct SettingsView: View {
         TapToPayLocationStore.shared.resolvedLocationId.isEmpty ? "Setup" : "Configured"
     }
 
-    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.light.rawValue
 
-    private var appearanceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AppSectionHeader(title: "Appearance")
-
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Theme", selection: $appearanceRaw) {
-                    ForEach(AppAppearance.allCases) { mode in
-                        Text(mode.label).tag(mode.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text("System follows your iPhone light or dark setting.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
-            }
-            .padding(16)
-            .appCard()
-        }
+    private var appearanceIsDark: Binding<Bool> {
+        Binding(
+            get: { AppAppearance.resolved(from: appearanceRaw).isDark },
+            set: { appearanceRaw = ($0 ? AppAppearance.dark : AppAppearance.light).rawValue }
+        )
     }
 
     private var accountSection: some View {
@@ -357,6 +351,22 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
 
+                    if viewModel.isTenantOwner,
+                       viewModel.deletionEligibility?.otherTeamMemberCount ?? 0 > 0 {
+                        Divider().padding(.leading, 52)
+                        NavigationLink {
+                            TransferOwnershipSettingsView(viewModel: viewModel)
+                                .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(
+                                icon: "person.crop.circle.badge.checkmark",
+                                iconColor: AppDesign.accentBlue,
+                                title: "Transfer ownership"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Divider().padding(.leading, 52)
                     Link(destination: URL(string: Constants.Hosting.marketingWebOrigin)!) {
                         AppSettingsRow(icon: "info.circle.fill", iconColor: .gray, title: "Support")
@@ -366,6 +376,20 @@ struct SettingsView: View {
                     Divider().padding(.leading, 52)
                 }
 
+                Link(destination: URL(string: Constants.Hosting.marketingPrivacyURL)!) {
+                    AppSettingsRow(icon: "hand.raised.fill", iconColor: .gray, title: "Privacy Policy")
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 52)
+
+                Link(destination: URL(string: Constants.Hosting.marketingTermsURL)!) {
+                    AppSettingsRow(icon: "doc.text.fill", iconColor: .gray, title: "Terms of Service")
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 52)
+
                 Button { showingLogoutAlert = true } label: {
                     HStack {
                         AppSettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: .red, title: "Log out")
@@ -374,6 +398,17 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
             .appCard()
+
+            if !authViewModel.isDemoMode, authViewModel.currentUserEmail != nil {
+                Button { showingDeleteAccountSheet = true } label: {
+                    Text("Delete account")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+            }
         }
     }
 

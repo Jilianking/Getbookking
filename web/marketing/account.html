@@ -113,6 +113,95 @@
     .billing-box h2 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
   .billing-status { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; }
     .acct-error { color: #b42318; font-size: 14px; margin-top: 8px; }
+    .acct-danger-box {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border, #e8e8e8);
+    }
+    .acct-danger-box h2 { font-size: 18px; margin: 0 0 8px; }
+    .acct-danger-box p { font-size: 14px; color: var(--text-secondary, #667085); margin: 0 0 12px; }
+    .btn-danger {
+      display: inline-block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #fda29b;
+      background: #fff;
+      color: #b42318;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-danger:hover { background: #fef3f2; }
+    .lifecycle-field {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border, #d0d5dd);
+      margin-top: 8px;
+      font-size: 15px;
+    }
+    .transfer-member-list { list-style: none; padding: 0; margin: 12px 0 0; }
+    .transfer-member-list li { margin-bottom: 8px; }
+    .transfer-member-list button {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border, #d0d5dd);
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .transfer-member-list button:hover { background: #f9fafb; }
+    .acct-delete-footer {
+      margin-top: 12px;
+      padding-top: 4px;
+      text-align: center;
+    }
+    .acct-delete-link {
+      background: none;
+      border: none;
+      font-size: 15px;
+      color: #667085;
+      cursor: pointer;
+      padding: 8px 12px;
+    }
+    .acct-delete-link:hover { color: #667085; text-decoration: underline; }
+    .acct-delete-panel {
+      margin-top: 12px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #eaecf0;
+      background: #fcfcfd;
+      text-align: left;
+    }
+    .acct-delete-panel h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      color: #344054;
+    }
+    .acct-delete-panel p {
+      font-size: 13px;
+      color: #667085;
+      margin: 0 0 12px;
+    }
+    .acct-delete-submit {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #fda29b;
+      background: #fff;
+      color: #b42318;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
     .footer-links { margin-top: 28px; font-size: 14px; }
     .footer-links a { color: var(--brand-warm); text-decoration: none; font-weight: 500; }
     .footer-links a:hover { text-decoration: underline; }
@@ -150,11 +239,33 @@
           <p id="billingNote" class="hidden" style="font-size:13px;margin-top:12px;">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
           <p id="billingError" class="acct-error hidden"></p>
         </div>
+        <div id="transferOwnershipBox" class="acct-danger-box hidden">
+          <h2>Transfer ownership</h2>
+          <p id="transferOwnershipHelp">Make a team member the new owner before you delete your account.</p>
+          <ul id="transferMemberList" class="transfer-member-list"></ul>
+          <p id="transferError" class="acct-error hidden"></p>
+        </div>
         <a href="index.html" class="btn-primary">Back to home</a>
         <div class="footer-links">
           <a href="#" id="signOutLink">Sign out</a>
           &nbsp;&middot;&nbsp;
           <a href="login.html">Log in</a>
+        </div>
+        <div id="deleteAccountFooter" class="acct-delete-footer hidden">
+          <button type="button" id="showDeleteAccountLink" class="acct-delete-link">Delete account</button>
+          <div id="deleteAccountPanel" class="acct-delete-panel hidden">
+            <h2>Delete account</h2>
+            <p id="deleteAccountHelp">Loading…</p>
+            <input id="deleteConfirmPhrase" class="lifecycle-field hidden" type="text" placeholder="Type DELETE" autocomplete="off" />
+            <input id="deletePassword" class="lifecycle-field hidden" type="password" placeholder="Password" autocomplete="current-password" />
+            <button type="button" id="deleteAccountBtn" class="acct-delete-submit hidden">Delete my account</button>
+            <p id="deleteStripeFootnote" class="hidden" style="font-size:12px;color:#667085;margin-top:12px;line-height:1.45;">
+              Your Stripe payout account stays active on Stripe.
+              <a href="https://connect.stripe.com/express_login" target="_blank" rel="noopener noreferrer" style="color:var(--brand-warm);">Sign in at Stripe Express</a>
+              with the email you used for payouts — not your Bookking password.
+            </p>
+            <p id="deleteAccountError" class="acct-error hidden"></p>
+          </div>
         </div>
       </div>
     </div>
@@ -280,6 +391,142 @@
       });
     });
 
+    function loadAccountLifecycle() {
+      var transferBox = document.getElementById('transferOwnershipBox');
+      var deleteFooter = document.getElementById('deleteAccountFooter');
+      var deletePanel = document.getElementById('deleteAccountPanel');
+      var deleteHelp = document.getElementById('deleteAccountHelp');
+      var deleteBtn = document.getElementById('deleteAccountBtn');
+      var deletePhrase = document.getElementById('deleteConfirmPhrase');
+      var deletePassword = document.getElementById('deletePassword');
+      var deleteErr = document.getElementById('deleteAccountError');
+      var deleteStripeFootnote = document.getElementById('deleteStripeFootnote');
+      var transferList = document.getElementById('transferMemberList');
+      var transferErr = document.getElementById('transferError');
+      if (!deleteFooter) return;
+      deleteFooter.classList.remove('hidden');
+      deletePanel.classList.add('hidden');
+      deleteErr.classList.add('hidden');
+      if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
+      transferErr.classList.add('hidden');
+      if (transferBox) transferBox.classList.add('hidden');
+      fns.httpsCallable('getAccountDeletionEligibility')({}).then(function(res) {
+        var d = res.data || {};
+        var business = (d.businessName || 'this business').toString();
+        if (d.requiresTransfer) {
+          deleteHelp.textContent = 'You are the owner of ' + business + '. Transfer ownership first, then you can delete your account without shutting down the business for your team.';
+          deleteBtn.classList.add('hidden');
+          deletePhrase.classList.add('hidden');
+          deletePassword.classList.add('hidden');
+          if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
+          if (transferBox) transferBox.classList.remove('hidden');
+          return fns.httpsCallable('listTenantMembers')({});
+        }
+        if (d.isOwner) {
+          deleteHelp.textContent = 'This permanently deletes your business, cancels your subscription, removes your booking site, and deletes your account. This cannot be undone.';
+        } else {
+          deleteHelp.textContent = 'You will leave ' + business + ' and your Bookking account will be permanently deleted. The business will keep running.';
+        }
+        if (d.stripeBalanceBlocksDeletion) {
+          deleteHelp.textContent = (d.stripeBalanceBlockMessage || 'Withdraw your Stripe payout balance in Payments before deleting your account.');
+          deleteBtn.classList.add('hidden');
+          deletePhrase.classList.add('hidden');
+          deletePassword.classList.add('hidden');
+          if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
+          return null;
+        }
+        if (deleteStripeFootnote) {
+          deleteStripeFootnote.classList.toggle('hidden', !d.hasStripeConnectAccount);
+        }
+        if (d.canDelete) {
+          deleteBtn.classList.remove('hidden');
+          deletePhrase.classList.remove('hidden');
+          deletePassword.classList.remove('hidden');
+        } else {
+          deleteBtn.classList.add('hidden');
+          deletePhrase.classList.add('hidden');
+          deletePassword.classList.add('hidden');
+        }
+        return null;
+      }).then(function(membersRes) {
+        if (!membersRes || !membersRes.data) return;
+        var members = membersRes.data.members || [];
+        var ownerUid = membersRes.data.ownerUid || '';
+        transferList.innerHTML = '';
+        members.filter(function(m) { return m.uid !== ownerUid; }).forEach(function(m) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = (m.displayName || 'Team member') + (m.email ? ' — ' + m.email : '');
+          btn.addEventListener('click', function() {
+            var phrase = window.prompt('Type TRANSFER to make ' + (m.displayName || 'this person') + ' the new owner.');
+            if (!phrase || phrase.trim().toUpperCase() !== 'TRANSFER') return;
+            transferErr.classList.add('hidden');
+            fns.httpsCallable('transferTenantOwnership')({
+              newOwnerUid: m.uid,
+              confirmPhrase: phrase.trim()
+            }).then(function() {
+              window.alert((m.displayName || 'Team member') + ' is now the owner. They should update billing below.');
+              loadAccountLifecycle();
+              loadBilling();
+            }).catch(function(err) {
+              transferErr.textContent = (err && err.message) ? err.message : String(err);
+              transferErr.classList.remove('hidden');
+            });
+          });
+          li.appendChild(btn);
+          transferList.appendChild(li);
+        });
+      }).catch(function(err) {
+        deleteHelp.textContent = 'Could not load account options.';
+        deleteErr.textContent = (err && err.message) ? err.message : String(err);
+        deleteErr.classList.remove('hidden');
+      });
+    }
+
+    document.getElementById('showDeleteAccountLink').addEventListener('click', function() {
+      var panel = document.getElementById('deleteAccountPanel');
+      panel.classList.toggle('hidden');
+    });
+
+    document.getElementById('deleteAccountBtn').addEventListener('click', function() {
+      var btn = document.getElementById('deleteAccountBtn');
+      var deleteErr = document.getElementById('deleteAccountError');
+      var phrase = (document.getElementById('deleteConfirmPhrase').value || '').trim();
+      var password = (document.getElementById('deletePassword').value || '');
+      if (phrase.toUpperCase() !== 'DELETE') {
+        deleteErr.textContent = 'Type DELETE to confirm.';
+        deleteErr.classList.remove('hidden');
+        return;
+      }
+      if (!password) {
+        deleteErr.textContent = 'Enter your password.';
+        deleteErr.classList.remove('hidden');
+        return;
+      }
+      btn.disabled = true;
+      deleteErr.classList.add('hidden');
+      var user = auth.currentUser;
+      if (!user || !user.email) {
+        deleteErr.textContent = 'Not signed in.';
+        deleteErr.classList.remove('hidden');
+        btn.disabled = false;
+        return;
+      }
+      var credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+      user.reauthenticateWithCredential(credential).then(function() {
+        return fns.httpsCallable('deleteMyAccount')({ confirmPhrase: phrase });
+      }).then(function() {
+        return auth.signOut();
+      }).then(function() {
+        window.location.href = 'login.html?deleted=1';
+      }).catch(function(err) {
+        deleteErr.textContent = (err && err.message) ? err.message : String(err);
+        deleteErr.classList.remove('hidden');
+        btn.disabled = false;
+      });
+    });
+
     auth.onAuthStateChanged(function(user) {
       if (!user) {
         if (stripeParam === 'success' || stripeParam === 'refresh') return;
@@ -297,6 +544,7 @@
       }
       if (stripeParam !== 'success' && stripeParam !== 'refresh') {
         loadBilling();
+        loadAccountLifecycle();
       }
     });
   </script>

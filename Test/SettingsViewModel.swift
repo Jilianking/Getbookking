@@ -53,6 +53,14 @@ class SettingsViewModel: ObservableObject {
     @Published var isCreatingTeamInvite = false
     @Published var teamInviteError: String?
 
+    /// Account deletion / ownership transfer (Settings → Account).
+    @Published var deletionEligibility: AccountDeletionEligibility?
+    @Published var transferCandidates: [TenantTeamMember] = []
+    @Published var isLoadingAccountLifecycle = false
+    @Published var isDeletingAccount = false
+    @Published var isTransferringOwnership = false
+    @Published var accountLifecycleMessage: String?
+
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
@@ -648,5 +656,111 @@ class SettingsViewModel: ObservableObject {
             return trimmed
         }
         return TimeZone.current.identifier
+    }
+
+    func loadAccountLifecycle(isDemoMode: Bool) async {
+        if isDemoMode {
+            await MainActor.run {
+                deletionEligibility = nil
+                transferCandidates = []
+            }
+            return
+        }
+        await MainActor.run {
+            isLoadingAccountLifecycle = true
+            accountLifecycleMessage = nil
+        }
+        do {
+            let eligibilityResult = try await functions
+                .httpsCallable("getAccountDeletionEligibility")
+                .call([:])
+            let eligibilityData = eligibilityResult.data as? [String: Any] ?? [:]
+            let parsed = AccountDeletionEligibility(data: eligibilityData)
+            var candidates: [TenantTeamMember] = []
+            if parsed.isOwner, parsed.otherTeamMemberCount > 0 {
+                let membersResult = try await functions
+                    .httpsCallable("listTenantMembers")
+                    .call([:])
+                let membersData = membersResult.data as? [String: Any]
+                let ownerUid = membersData?["ownerUid"] as? String
+                candidates = Self.parseTransferCandidates(
+                    membersData?["members"] as? [[String: Any]],
+                    ownerUid: ownerUid
+                )
+            }
+            await MainActor.run {
+                deletionEligibility = parsed
+                transferCandidates = candidates
+                isLoadingAccountLifecycle = false
+            }
+        } catch {
+            await MainActor.run {
+                deletionEligibility = nil
+                transferCandidates = []
+                accountLifecycleMessage = error.localizedDescription
+                isLoadingAccountLifecycle = false
+            }
+        }
+    }
+
+    func deleteAccount(confirmPhrase: String) async throws {
+        await MainActor.run {
+            isDeletingAccount = true
+            accountLifecycleMessage = nil
+        }
+        defer {
+            Task { @MainActor in isDeletingAccount = false }
+        }
+        _ = try await functions.httpsCallable("deleteMyAccount").call([
+            "confirmPhrase": confirmPhrase,
+        ])
+    }
+
+    func transferOwnership(to newOwnerUid: String, confirmPhrase: String) async throws {
+        await MainActor.run {
+            isTransferringOwnership = true
+            accountLifecycleMessage = nil
+        }
+        defer {
+            Task { @MainActor in isTransferringOwnership = false }
+        }
+        _ = try await functions.httpsCallable("transferTenantOwnership").call([
+            "newOwnerUid": newOwnerUid,
+            "confirmPhrase": confirmPhrase,
+        ])
+    }
+
+    private static func parseTransferCandidates(
+        _ raw: [[String: Any]]?,
+        ownerUid: String?
+    ) -> [TenantTeamMember] {
+        TenantSessionStore.parseTeamMembers(raw, ownerUid: ownerUid)
+            .filter { $0.accessRole != .owner }
+    }
+}
+
+struct AccountDeletionEligibility {
+    let hasProfile: Bool
+    let isOwner: Bool
+    let teamMemberCount: Int
+    let otherTeamMemberCount: Int
+    let requiresTransfer: Bool
+    let canDelete: Bool
+    let businessName: String
+    let hasStripeConnectAccount: Bool
+    let stripeBalanceBlocksDeletion: Bool
+    let stripeBalanceBlockMessage: String
+
+    init(data: [String: Any]) {
+        hasProfile = data["hasProfile"] as? Bool ?? false
+        isOwner = data["isOwner"] as? Bool ?? false
+        teamMemberCount = data["teamMemberCount"] as? Int ?? 0
+        otherTeamMemberCount = data["otherTeamMemberCount"] as? Int ?? 0
+        requiresTransfer = data["requiresTransfer"] as? Bool ?? false
+        canDelete = data["canDelete"] as? Bool ?? true
+        businessName = (data["businessName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        hasStripeConnectAccount = data["hasStripeConnectAccount"] as? Bool ?? false
+        stripeBalanceBlocksDeletion = data["stripeBalanceBlocksDeletion"] as? Bool ?? false
+        stripeBalanceBlockMessage = (data["stripeBalanceBlockMessage"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

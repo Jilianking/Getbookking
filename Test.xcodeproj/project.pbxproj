@@ -426,8 +426,11 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated logos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -478,8 +481,11 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated logos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

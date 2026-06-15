@@ -10,11 +10,11 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.light.rawValue
     @State private var lastForegroundRefresh: Date?
 
     private var appAppearance: AppAppearance {
-        AppAppearance(rawValue: appearanceRaw) ?? .system
+        AppAppearance.resolved(from: appearanceRaw)
     }
 
     var body: some View {

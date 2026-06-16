@@ -68,6 +68,7 @@ enum SubscriptionPlan: String, CaseIterable {
 @MainActor
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
+    @Published private(set) var currentUserUid: String?
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
     @Published var isDemoMode = false
@@ -86,16 +87,28 @@ class AuthViewModel: ObservableObject {
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
                 guard let self = self else { return }
-                if user != nil {
+                if let user {
+                    let newUid = user.uid
+                    if let previousUid = self.currentUserUid, previousUid != newUid {
+                        self.tenantLogoUrl = nil
+                        self.teamAccess = EffectiveTeamAccess()
+                        self.tenantSubscriptionPlan = .solo
+                        NotificationCenter.default.post(name: .authUserDidChange, object: nil)
+                    }
+                    self.currentUserUid = newUid
                     self.isAuthenticated = true
                     self.isDemoMode = false
-                    self.currentUserEmail = user?.email
-                    self.currentUserDisplayName = user?.displayName
-                    self.accountPhotoUrl = user?.photoURL?.absoluteString
+                    self.currentUserEmail = user.email
+                    self.currentUserDisplayName = user.displayName
+                    self.accountPhotoUrl = user.photoURL?.absoluteString
                     PushNotificationManager.shared.syncTokenAfterSignIn()
                     await self.refreshTenantLogoFromServer()
                     await self.refreshTeamAccess()
                 } else if !self.isDemoMode {
+                    if self.currentUserUid != nil {
+                        NotificationCenter.default.post(name: .authUserDidChange, object: nil)
+                    }
+                    self.currentUserUid = nil
                     self.isAuthenticated = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
@@ -205,6 +218,7 @@ class AuthViewModel: ObservableObject {
     func demoLogin() {
         isDemoMode = true
         isAuthenticated = true
+        currentUserUid = "demo"
         currentUserEmail = "demo@example.com"
         currentUserDisplayName = "Demo Provider"
         tenantLogoUrl = nil
@@ -275,6 +289,8 @@ class AuthViewModel: ObservableObject {
 }
 
 extension Notification.Name {
+    /// Posted when Firebase Auth uid changes (sign-in, sign-out, or account switch).
+    static let authUserDidChange = Notification.Name("authUserDidChange")
     /// Posted with `userInfo["logoUrl"]` when the tenant logo changes in Firestore from this app.
     static let tenantLogoDidChange = Notification.Name("tenantLogoDidChange")
     /// Posted with `userInfo["businessName"]` when the studio business name changes in Firestore from this app.

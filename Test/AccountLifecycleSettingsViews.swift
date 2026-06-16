@@ -1,122 +1,10 @@
 //
 //  AccountLifecycleSettingsViews.swift
 //
-//  Transfer ownership and delete account (Settings → Account).
+//  Delete account (Settings → Account), including ownership transfer when required.
 //
 
 import SwiftUI
-
-struct TransferOwnershipSettingsView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
-    @ObservedObject var viewModel: SettingsViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var selectedMemberUid: String?
-    @State private var confirmPhrase = ""
-    @State private var showingConfirmSheet = false
-    @State private var successMessage: String?
-
-    var body: some View {
-        List {
-            Section {
-                Text(
-                    "Choose a team member to become the new owner. They will manage billing and the business. Your booking site stays the same."
-                )
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
-            }
-
-            Section("Team members") {
-                if viewModel.transferCandidates.isEmpty {
-                    Text("No other team members yet.")
-                        .foregroundStyle(AppDesign.textSecondary)
-                } else {
-                    ForEach(viewModel.transferCandidates) { member in
-                        Button {
-                            selectedMemberUid = member.uid
-                            showingConfirmSheet = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(member.displayName)
-                                        .foregroundStyle(AppDesign.textPrimary)
-                                    if !member.email.isEmpty {
-                                        Text(member.email)
-                                            .font(.caption)
-                                            .foregroundStyle(AppDesign.textSecondary)
-                                    }
-                                }
-                                Spacer()
-                                Text(member.accessRole.displayName)
-                                    .font(.caption)
-                                    .foregroundStyle(AppDesign.textSecondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Transfer ownership")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingConfirmSheet) {
-            TransferOwnershipConfirmSheet(
-                memberName: selectedMemberDisplayName,
-                confirmPhrase: $confirmPhrase,
-                isSubmitting: viewModel.isTransferringOwnership,
-                onCancel: {
-                    confirmPhrase = ""
-                    showingConfirmSheet = false
-                },
-                onConfirm: submitTransfer
-            )
-        }
-        .alert("Ownership transferred", isPresented: Binding(
-            get: { successMessage != nil },
-            set: { if !$0 { successMessage = nil } }
-        )) {
-            Button("OK") {
-                successMessage = nil
-                dismiss()
-            }
-        } message: {
-            Text(successMessage ?? "")
-        }
-        .alert("Transfer failed", isPresented: Binding(
-            get: { viewModel.accountLifecycleMessage != nil && showingConfirmSheet == false && successMessage == nil },
-            set: { if !$0 { viewModel.accountLifecycleMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { viewModel.accountLifecycleMessage = nil }
-        } message: {
-            Text(viewModel.accountLifecycleMessage ?? "")
-        }
-    }
-
-    private var selectedMemberDisplayName: String {
-        guard let uid = selectedMemberUid else { return "this team member" }
-        return viewModel.transferCandidates.first(where: { $0.uid == uid })?.displayName ?? "this team member"
-    }
-
-    private func submitTransfer() {
-        guard let uid = selectedMemberUid else { return }
-        Task {
-            do {
-                try await viewModel.transferOwnership(to: uid, confirmPhrase: confirmPhrase)
-                await authViewModel.refreshTeamAccess()
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
-                await MainActor.run {
-                    confirmPhrase = ""
-                    showingConfirmSheet = false
-                    successMessage = "\(selectedMemberDisplayName) is now the owner. Ask them to update billing in account settings."
-                }
-            } catch {
-                await MainActor.run {
-                    viewModel.accountLifecycleMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-}
 
 private struct TransferOwnershipConfirmSheet: View {
     let memberName: String
@@ -162,8 +50,14 @@ struct DeleteAccountSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var confirmPhrase = ""
+    @State private var shutdownConfirmPhrase = ""
     @State private var password = ""
     @State private var localError: String?
+    @State private var selectedMemberUid: String?
+    @State private var transferConfirmPhrase = ""
+    @State private var showingTransferConfirmSheet = false
+    @State private var transferSuccessMessage: String?
+    @State private var showingTransferOptions = false
 
     private static let stripeExpressLoginURL = URL(string: "https://connect.stripe.com/express_login")!
 
@@ -195,13 +89,25 @@ struct DeleteAccountSettingsSheet: View {
                             deletionSummary(for: eligibility)
                         }
 
-                        if eligibility.requiresTransfer {
+                        if let transferSuccessMessage {
                             deleteInfoCard {
-                                Text("Transfer ownership to a team member first. Then you can delete your account without shutting down the business.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(AppDesign.textSecondary)
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(AppDesign.brandWarm)
+                                    Text(transferSuccessMessage)
+                                        .font(.subheadline)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
                             }
-                        } else if eligibility.stripeBalanceBlocksDeletion {
+                        }
+
+                        if eligibility.requiresTransfer {
+                            transferOwnershipOption
+
+                            orDivider
+                        }
+
+                        if eligibility.stripeBalanceBlocksDeletion {
                             deleteInfoCard {
                                 Text(eligibility.stripeBalanceBlockMessage.isEmpty
                                     ? "Withdraw your Stripe payout balance in Payments before deleting your account."
@@ -209,52 +115,8 @@ struct DeleteAccountSettingsSheet: View {
                                     .font(.subheadline)
                                     .foregroundStyle(AppDesign.accentRed)
                             }
-                        } else {
-                            VStack(spacing: 0) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    TextField("Type DELETE", text: $confirmPhrase)
-                                        .textInputAutocapitalization(.characters)
-                                        .autocorrectionDisabled()
-                                        .font(.body)
-                                        .foregroundStyle(AppDesign.textPrimary)
-
-                                    Divider()
-
-                                    SecureField("Password", text: $password)
-                                        .font(.body)
-                                        .foregroundStyle(AppDesign.textPrimary)
-                                }
-                                .padding(16)
-                            }
-                            .appCard()
-
-                            if eligibility.hasStripeConnectAccount {
-                                stripeConnectFootnote
-                            }
-
-                            Button {
-                                submitDeletion()
-                            } label: {
-                                Group {
-                                    if viewModel.isDeletingAccount {
-                                        ProgressView()
-                                            .tint(.white)
-                                    } else {
-                                        Text("Delete my account")
-                                            .font(.subheadline.weight(.semibold))
-                                    }
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(canSubmit ? AppDesign.accentRed : AppDesign.accentRed.opacity(0.4))
-                            )
-                            .disabled(!canSubmit || viewModel.isDeletingAccount)
-                            .padding(.top, 4)
+                        } else if eligibility.canDelete || eligibility.requiresShutdownConfirm {
+                            deleteAccountSection(for: eligibility)
                         }
                     } else {
                         deleteInfoCard {
@@ -292,9 +154,217 @@ struct DeleteAccountSettingsSheet: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(isPresented: $showingTransferConfirmSheet) {
+            TransferOwnershipConfirmSheet(
+                memberName: selectedMemberDisplayName,
+                confirmPhrase: $transferConfirmPhrase,
+                isSubmitting: viewModel.isTransferringOwnership,
+                onCancel: {
+                    transferConfirmPhrase = ""
+                    showingTransferConfirmSheet = false
+                },
+                onConfirm: submitTransfer
+            )
+        }
         .task {
             if eligibility == nil {
                 await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
+            }
+        }
+    }
+
+    private var orDivider: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(AppDesign.textSecondary.opacity(0.2))
+                .frame(height: 1)
+            Text("Or")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(AppDesign.textSecondary)
+            Rectangle()
+                .fill(AppDesign.textSecondary.opacity(0.2))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder
+    private func deleteAccountSection(for eligibility: AccountDeletionEligibility) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if eligibility.requiresShutdownConfirm {
+                Text("Delete account and shut down the business for your team.")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .padding(.horizontal, 4)
+            }
+
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("Type DELETE", text: $confirmPhrase)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.body)
+                        .foregroundStyle(AppDesign.textPrimary)
+
+                    if eligibility.requiresShutdownConfirm {
+                        Divider()
+
+                        TextField("Type SHUTDOWN", text: $shutdownConfirmPhrase)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .font(.body)
+                            .foregroundStyle(AppDesign.textPrimary)
+                    }
+
+                    Divider()
+
+                    SecureField("Password", text: $password)
+                        .font(.body)
+                        .foregroundStyle(AppDesign.textPrimary)
+                }
+                .padding(16)
+            }
+            .appCard()
+
+            if eligibility.hasStripeConnectAccount {
+                stripeConnectFootnote
+            }
+
+            Button {
+                submitDeletion(requiresShutdown: eligibility.requiresShutdownConfirm)
+            } label: {
+                Group {
+                    if viewModel.isDeletingAccount {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text(eligibility.requiresShutdownConfirm
+                            ? "Delete account and shut down business"
+                            : "Delete my account")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(canSubmit(requiresShutdown: eligibility.requiresShutdownConfirm)
+                        ? AppDesign.accentRed
+                        : AppDesign.accentRed.opacity(0.4))
+            )
+            .disabled(!canSubmit(requiresShutdown: eligibility.requiresShutdownConfirm) || viewModel.isDeletingAccount)
+            .padding(.top, 4)
+        }
+    }
+
+    private var transferOwnershipOption: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("To delete without shutting down the business, transfer ownership first.")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+                .padding(.horizontal, 4)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showingTransferOptions.toggle()
+                }
+            } label: {
+                Text(showingTransferOptions ? "Hide transfer options" : "Transfer ownership")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppDesign.textPrimary)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppDesign.textSecondary.opacity(0.25), lineWidth: 1)
+            )
+
+            if showingTransferOptions {
+                transferMemberPicker
+            }
+        }
+    }
+
+    private var transferMemberPicker: some View {
+        deleteInfoCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose who should become the new owner. They will manage billing and the business.")
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+
+                if viewModel.transferCandidates.isEmpty {
+                    Text("No other team members yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(viewModel.transferCandidates.enumerated()), id: \.element.id) { index, member in
+                            if index > 0 {
+                                Divider()
+                            }
+                            Button {
+                                selectedMemberUid = member.uid
+                                showingTransferConfirmSheet = true
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(member.displayName)
+                                            .font(.subheadline)
+                                            .foregroundStyle(AppDesign.textPrimary)
+                                        if !member.email.isEmpty {
+                                            Text(member.email)
+                                                .font(.caption)
+                                                .foregroundStyle(AppDesign.textSecondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text(member.accessRole.displayName)
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppDesign.textSecondary.opacity(0.6))
+                                }
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var selectedMemberDisplayName: String {
+        guard let uid = selectedMemberUid else { return "this team member" }
+        return viewModel.transferCandidates.first(where: { $0.uid == uid })?.displayName ?? "this team member"
+    }
+
+    private func submitTransfer() {
+        guard let uid = selectedMemberUid else { return }
+        Task {
+            do {
+                try await viewModel.transferOwnership(to: uid, confirmPhrase: transferConfirmPhrase)
+                await authViewModel.refreshTeamAccess()
+                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
+                await MainActor.run {
+                    transferConfirmPhrase = ""
+                    showingTransferConfirmSheet = false
+                    showingTransferOptions = false
+                    transferSuccessMessage = "\(selectedMemberDisplayName) is now the owner. You can delete your account below. Ask them to update billing in Payments."
+                    localError = nil
+                    viewModel.accountLifecycleMessage = nil
+                }
+            } catch {
+                await MainActor.run {
+                    localError = error.localizedDescription
+                }
             }
         }
     }
@@ -366,16 +436,23 @@ struct DeleteAccountSettingsSheet: View {
         return "Could not load account options. Check your connection and try again."
     }
 
-    private var canSubmit: Bool {
-        confirmPhrase.uppercased() == "DELETE" && !password.isEmpty
+    private func canSubmit(requiresShutdown: Bool) -> Bool {
+        guard confirmPhrase.uppercased() == "DELETE", !password.isEmpty else { return false }
+        if requiresShutdown {
+            return shutdownConfirmPhrase.uppercased() == "SHUTDOWN"
+        }
+        return true
     }
 
-    private func submitDeletion() {
+    private func submitDeletion(requiresShutdown: Bool) {
         localError = nil
         Task {
             do {
                 try await authViewModel.reauthenticate(password: password)
-                try await viewModel.deleteAccount(confirmPhrase: confirmPhrase)
+                try await viewModel.deleteAccount(
+                    confirmPhrase: confirmPhrase,
+                    shutdownConfirmPhrase: requiresShutdown ? shutdownConfirmPhrase : nil
+                )
                 await MainActor.run {
                     dismiss()
                     authViewModel.logout()

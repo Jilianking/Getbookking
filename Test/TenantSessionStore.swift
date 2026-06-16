@@ -33,6 +33,7 @@ final class TenantSessionStore: ObservableObject {
     private var teamMembersLoadedAt: Date?
     private var newBookingsLoadedAt: Date?
     private var customerCountCache: Int?
+    private var loadedUid: String?
 
     var businessDisplayName: String {
         profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -43,6 +44,18 @@ final class TenantSessionStore: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !fromTenant.isEmpty { return fromTenant }
         return profile?.industry ?? BookingTemplate.custom.rawValue
+    }
+
+    var tenantIndustryCustomLabel: String {
+        (tenant?["industryCustomLabel"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    var tenantIndustryDisplayName: String {
+        BookingTemplate.displayLabel(
+            forIndustryRaw: tenantIndustry,
+            customLabel: tenantIndustryCustomLabel
+        )
     }
 
     /// Drawer badge + dashboard unread subtitle (updated when `newBookingRequests` changes).
@@ -84,6 +97,7 @@ final class TenantSessionStore: ObservableObject {
         newBookingRequests = []
         unreadRequestsCount = 0
         customerCountCache = nil
+        loadedUid = nil
     }
 
     func bootstrap(isDemoMode: Bool) async {
@@ -107,7 +121,10 @@ final class TenantSessionStore: ObservableObject {
             reset()
             return
         }
-        if sessionLoaded, profile != nil { return }
+        if let loadedUid, loadedUid != uid {
+            reset()
+        }
+        if sessionLoaded, profile != nil, loadedUid == uid { return }
 
         do {
             let fetchedProfile = try await firebaseService.fetchProviderProfile(uid: uid)
@@ -118,6 +135,7 @@ final class TenantSessionStore: ObservableObject {
             } else {
                 tenant = nil
             }
+            loadedUid = uid
             sessionLoaded = true
         } catch {
             print("TenantSessionStore session load error: \(error)")

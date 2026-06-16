@@ -170,6 +170,7 @@ class DesignViewModel: ObservableObject {
 
     // Template / industry (business type — set in Settings)
     @Published var industry: String?
+    @Published var industryCustomLabel: String = ""
     /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
     @Published var webThemeId: String = ""
     /// Curated color preset for the active template family (`webColorPaletteId` on tenant).
@@ -1040,6 +1041,8 @@ class DesignViewModel: ObservableObject {
                 showBookPage = tenant?["showBookPage"] as? Bool ?? true
                 showAboutPage = tenant?["showAboutPage"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
+                industryCustomLabel = (tenant?["industryCustomLabel"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 studio12ProcessSteps = Self.mergedStudio12ProcessSteps(
                     from: tenant?["studio12ProcessSteps"],
                     industry: tenant?["industry"] as? String

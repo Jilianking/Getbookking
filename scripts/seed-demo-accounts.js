@@ -225,6 +225,29 @@ const PALETTES = {
 
 const DEMO_ACCOUNTS = [
   {
+    slug: "canvas-studio",
+    email: "demo-canvas-studio@getbookking.com",
+    firstName: "Alex",
+    lastName: "Rivera",
+    business: "Canvas Studio",
+    industry: "custom",
+    industryCustomLabel: "Interior Design",
+    webThemeId: "custom-standard",
+    webColorPaletteId: "original",
+    paletteKey: "classic:original",
+    subscriptionPlan: "solo",
+    tagline: "Spaces that feel intentional.",
+    serviceCity: "Saint Petersburg",
+    serviceStateAbbr: "FL",
+    businessHours: "Mon–Fri 9am–5pm",
+    services: [
+      { name: "Consultation", description: "Discuss your needs and preferences.", durationMinutes: 30, price: 0 },
+      { name: "Standard service", description: "Professional service tailored to you.", durationMinutes: 45, price: 120 },
+      { name: "Premium service", description: "Enhanced service with added detail.", durationMinutes: 60, price: 180 },
+      { name: "Full service", description: "Complete experience from start to finish.", durationMinutes: 90, price: 250 },
+    ],
+  },
+  {
     slug: "coles-chair",
     email: "demo-coles-chair@getbookking.com",
     firstName: "Marcus",
@@ -232,23 +255,62 @@ const DEMO_ACCOUNTS = [
     business: "Cole's Chair",
     industry: "barber",
     webThemeId: "blade-v1",
-    webColorPaletteId: "copper-ledger",
-    paletteKey: "blade:copper-ledger",
+    webColorPaletteId: "original",
+    paletteKey: "blade:original",
     subscriptionPlan: "solo",
     tagline: "Sharp lines. Clean chair.",
     serviceCity: "Austin",
     serviceStateAbbr: "TX",
     businessHours: "Tue–Sat 9am–7pm · Walk-ins until 2pm",
-    bladeHeroTagline: "Est. 2016 · Downtown Austin",
+    bladeHeroTagline: "Where every line is intentional",
     bladeHeroDescription:
-      "Precision fades, beard sculpts, and full grooming in a calm, focused chair.",
+      "A private grooming experience for men who care about the details. Precision fades, hot-towel shaves, and beard work — unhurried, by appointment.",
+    aboutText:
+      "Cole's Chair opened in 2016 with one belief: a great haircut should feel like a ritual, not a transaction. Our chair is unhurried — one client at a time, full attention, no walk-in chaos. From the first comb stroke to the final hot towel, every service is built around precision, calm, and craft.",
+    reviews: [
+      {
+        quote: "Best fade I've had in Austin. Marcus doesn't rush — you feel it.",
+        name: "James R.",
+        service: "Signature fade",
+      },
+      {
+        quote: "The hot-towel shave is unreal. Felt like a different person walking out.",
+        name: "David M.",
+        service: "Hot-towel shave",
+      },
+      {
+        quote: "Finally a barbershop that treats grooming like an art.",
+        name: "Andre T.",
+        service: "The Full Cole",
+      },
+    ],
     instagramHandle: "coleschair",
-    /* hero + gallery: custom uploads — not overwritten on seed */
+    /* hero + gallery: uploaded via scripts/upload-tenant-hero.js + upload-tenant-gallery.js */
     services: [
-      { name: "Skin fade", description: "Clean fade with sharp detailing.", durationMinutes: 45, price: 42 },
-      { name: "Beard sculpt", description: "Defined shape and clean finish.", durationMinutes: 20, price: 28 },
-      { name: "Line-up", description: "Crisp edges and a polished finish.", durationMinutes: 20, price: 22 },
-      { name: "The Full Cole", description: "Haircut, beard, and full grooming.", durationMinutes: 75, price: 65 },
+      {
+        name: "Signature fade",
+        description: "Hand-finished skin fade with razor-defined edges and custom texture.",
+        durationMinutes: 50,
+        price: 48,
+      },
+      {
+        name: "Beard sculpt",
+        description: "Shape, line, and finish with straight-razor detailing.",
+        durationMinutes: 25,
+        price: 32,
+      },
+      {
+        name: "Hot-towel shave",
+        description: "Traditional straight-razor shave with steamed towels and post-shave ritual.",
+        durationMinutes: 40,
+        price: 45,
+      },
+      {
+        name: "The Full Cole",
+        description: "Haircut, beard sculpt, hot towel, and scalp treatment. The complete experience.",
+        durationMinutes: 90,
+        price: 85,
+      },
     ],
   },
   {
@@ -271,8 +333,8 @@ const DEMO_ACCOUNTS = [
     studio12BookCtaBody:
       "Tell us your goals — we'll match you with the right service and time.",
     instagramHandle: "studioamara",
-    webColorPaletteId: "rose-quartz",
-    paletteKey: "studio12:rose-quartz",
+    webColorPaletteId: "original",
+    paletteKey: "studio12:original",
     /* hero + gallery: custom uploads — not overwritten on seed */
     services: [
       { name: "Signature cut", description: "Custom cut designed for your look.", durationMinutes: 60, price: 85 },
@@ -295,8 +357,8 @@ const DEMO_ACCOUNTS = [
     serviceStateAbbr: "OR",
     businessHours: "By appointment · Tue–Sat",
     instagramHandle: "northlinetattoo",
-    webColorPaletteId: "berry-noir",
-    paletteKey: "stonecut:berry-noir",
+    webColorPaletteId: "original",
+    paletteKey: "stonecut:original",
     /* hero + gallery: custom uploads */
     services: [
       { name: "Consultation", description: "Discuss your idea and design direction.", durationMinutes: 30, price: 0 },
@@ -320,8 +382,8 @@ const DEMO_ACCOUNTS = [
     businessHours: "Mon–Sat 10am–7pm",
     luxeHeroTagline: "Nails · Gel · Art",
     instagramHandle: "gildedpalm",
-    webColorPaletteId: "terracotta-clay",
-    paletteKey: "luxe:terracotta-clay",
+    webColorPaletteId: "original",
+    paletteKey: "luxe:original",
     heroImageUrl: u("1604654894610-6dd4e01d13f3", 1200, 1500),
     featuredWorkImages: [
       u("1632345031435-4c42d6e2a88f", 900, 1100),
@@ -454,6 +516,8 @@ async function seedOne(db, projectId, accessToken, demo, password) {
 
   if (demo.bladeHeroTagline) tenantPatch.bladeHeroTagline = demo.bladeHeroTagline;
   if (demo.bladeHeroDescription) tenantPatch.bladeHeroDescription = demo.bladeHeroDescription;
+  if (demo.aboutText) tenantPatch.aboutText = demo.aboutText;
+  if (demo.reviews && demo.reviews.length) tenantPatch.reviews = demo.reviews;
   if (demo.luxeHeroTagline) tenantPatch.luxeHeroTagline = demo.luxeHeroTagline;
   if (demo.studio12HeroEyebrow) tenantPatch.studio12HeroEyebrow = demo.studio12HeroEyebrow;
   if (demo.studio12HeroHeadline) tenantPatch.studio12HeroHeadline = demo.studio12HeroHeadline;

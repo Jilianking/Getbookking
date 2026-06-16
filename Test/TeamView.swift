@@ -66,7 +66,7 @@ struct TeamView: View {
                 }
             }
         }
-        .task(id: authViewModel.isAuthenticated) {
+        .task(id: authViewModel.currentUserUid) {
             await reloadTeamContext()
         }
         .refreshable {

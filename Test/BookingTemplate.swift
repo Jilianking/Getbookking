@@ -26,6 +26,22 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         }
     }
 
+    /// User-facing industry label; uses `industryCustomLabel` when industry is `custom`.
+    static func displayLabel(forIndustryRaw raw: String?, customLabel: String? = nil) -> String {
+        let industry = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let custom = (customLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if industry == BookingTemplate.custom.rawValue, !custom.isEmpty {
+            return custom
+        }
+        if let template = BookingTemplate(rawValue: industry) {
+            return template.displayName
+        }
+        if !industry.isEmpty {
+            return industry.prefix(1).uppercased() + industry.dropFirst()
+        }
+        return "Business"
+    }
+
     var icon: String {
         switch self {
         case .hair: return "scissors"
@@ -290,7 +306,12 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Nail art", 30),
             ]
         case .custom:
-            return []
+            return [
+                ("Consultation", 30),
+                ("Standard service", 45),
+                ("Premium service", 60),
+                ("Full service", 90),
+            ]
         }
     }
 

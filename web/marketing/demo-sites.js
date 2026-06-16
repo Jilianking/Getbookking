@@ -5,6 +5,15 @@
 
   var DEMOS = [
     {
+      id: "classic",
+      slug: "canvas-studio",
+      name: "Canvas Studio",
+      industry: "Interior Design",
+      theme: "Classic",
+      tagline: "Spaces that feel intentional.",
+      location: "Saint Petersburg, FL",
+    },
+    {
       id: "barber",
       slug: "coles-chair",
       name: "Cole's Chair",

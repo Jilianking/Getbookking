@@ -687,7 +687,7 @@ struct DesignView: View {
             }
         } message: {
             Text(
-                "Your current services will be removed and replaced with four starter services for \(BookingTemplate(rawValue: viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")?.displayName ?? "your business type"). You can edit order and details below."
+                "Your current services will be removed and replaced with four starter services for \(BookingTemplate.displayLabel(forIndustryRaw: viewModel.industry?.trimmingCharacters(in: .whitespacesAndNewlines), customLabel: viewModel.industryCustomLabel)). You can edit order and details below."
             )
         }
         .alert("Replace experience steps?", isPresented: $showStudio12ProcessStartersConfirm) {
@@ -2809,7 +2809,7 @@ private struct DesignThemePickerBar: View {
                     industry: industry,
                     onDismiss: { isTemplatePickerPresented = false }
                 )
-                .frame(width: 320)
+                .frame(width: 340)
                 .presentationCompactAdaptation(.popover)
             }
             .onChange(of: isTemplatePickerPresented) { _, isOpen in
@@ -2910,8 +2910,8 @@ private struct DesignTemplatePickerPopover: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .tracking(0.6)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+            ScrollView {
+                VStack(spacing: 10) {
                     ForEach(TemplateFamily.allCases) { family in
                         DesignThemeTemplatePickerCell(
                             family: family,
@@ -2928,6 +2928,7 @@ private struct DesignTemplatePickerPopover: View {
                 }
                 .padding(.vertical, 2)
             }
+            .frame(maxHeight: 400)
             Text("Switching template resets colors to that layout’s Original preset.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -3085,6 +3086,9 @@ private struct DesignThemePalettePickerCell: View {
 }
 
 private struct DesignThemeTemplatePickerCell: View {
+    private static let previewWidth: CGFloat = 104
+    private static let previewHeight: CGFloat = 68
+
     let family: TemplateFamily
     let isActive: Bool
     let isBusy: Bool
@@ -3092,17 +3096,24 @@ private struct DesignThemeTemplatePickerCell: View {
 
     var body: some View {
         Button(action: select) {
-            VStack(spacing: 0) {
+            HStack(spacing: 12) {
                 TemplateMiniPreview(family: family)
-                    .frame(width: 88, height: 56)
+                    .frame(width: Self.previewWidth, height: Self.previewHeight)
                     .clipped()
                 Text(family.displayName)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .padding(.vertical, 8)
-                    .frame(width: 88)
+                Spacer(minLength: 0)
+                if isActive {
+                    Text("Active")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
@@ -3497,7 +3508,7 @@ private struct LuxeTemplatePreview: View {
                 }
                 .frame(height: 72)
                 HStack(spacing: 5) {
-                    ForEach(0..<3, id: \.self) { i in
+                    ForEach(0..<3, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color(.systemGray5))
                             .frame(width: 36, height: 44)

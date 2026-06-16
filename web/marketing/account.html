@@ -42,13 +42,13 @@
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      font-size: 16px;
+      font-size: 18px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
       color: var(--text-primary);
       text-decoration: none;
     }
-    .acct-header a.brand img { width: 22px; height: 22px; }
+    .acct-header a.brand img { width: 32px; height: 32px; }
     .acct-wrap {
       flex: 1;
       display: flex;
@@ -211,7 +211,7 @@
 <body>
   <header class="acct-header">
     <a class="brand" href="index.html" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-64.png" alt="" width="22" height="22" />
+      <img src="assets/brand/logo-dark-64.png" alt="" width="32" height="32" />
       <span>Get Bookking</span>
     </a>
   </header>
@@ -239,12 +239,6 @@
           <p id="billingNote" class="hidden" style="font-size:13px;margin-top:12px;">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
           <p id="billingError" class="acct-error hidden"></p>
         </div>
-        <div id="transferOwnershipBox" class="acct-danger-box hidden">
-          <h2>Transfer ownership</h2>
-          <p id="transferOwnershipHelp">Make a team member the new owner before you delete your account.</p>
-          <ul id="transferMemberList" class="transfer-member-list"></ul>
-          <p id="transferError" class="acct-error hidden"></p>
-        </div>
         <a href="index.html" class="btn-primary">Back to home</a>
         <div class="footer-links">
           <a href="#" id="signOutLink">Sign out</a>
@@ -256,7 +250,23 @@
           <div id="deleteAccountPanel" class="acct-delete-panel hidden">
             <h2>Delete account</h2>
             <p id="deleteAccountHelp">Loading…</p>
+            <p id="deleteTransferHint" class="hidden" style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">
+              To delete without shutting down the business, transfer ownership first.
+            </p>
+            <button type="button" id="showTransferOwnershipBtn" class="btn-secondary hidden">Transfer ownership</button>
+            <div id="transferOwnershipBox" class="hidden">
+              <p id="transferOwnershipHelp" style="font-size:14px;color:var(--text-secondary);margin:0 0 12px;">
+                Choose a team member to become the new owner. They will manage billing and the business.
+              </p>
+              <ul id="transferMemberList" class="transfer-member-list"></ul>
+              <p id="transferError" class="acct-error hidden"></p>
+            </div>
+            <p id="deleteOrDivider" class="hidden" style="font-size:13px;color:var(--text-secondary);text-align:center;margin:16px 0;">Or</p>
+            <p id="deleteShutdownHelp" class="hidden" style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">
+              Delete account and shut down the business for your team.
+            </p>
             <input id="deleteConfirmPhrase" class="lifecycle-field hidden" type="text" placeholder="Type DELETE" autocomplete="off" />
+            <input id="deleteShutdownPhrase" class="lifecycle-field hidden" type="text" placeholder="Type SHUTDOWN" autocomplete="off" />
             <input id="deletePassword" class="lifecycle-field hidden" type="password" placeholder="Password" autocomplete="current-password" />
             <button type="button" id="deleteAccountBtn" class="acct-delete-submit hidden">Delete my account</button>
             <p id="deleteStripeFootnote" class="hidden" style="font-size:12px;color:#667085;margin-top:12px;line-height:1.45;">
@@ -391,63 +401,90 @@
       });
     });
 
+    var deleteRequiresShutdown = false;
+
+    function hideDeleteFormFields() {
+      ['deleteConfirmPhrase', 'deleteShutdownPhrase', 'deletePassword', 'deleteAccountBtn', 'deleteShutdownHelp', 'deleteStripeFootnote'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+    }
+
+    function showDeleteFormFields(d) {
+      var deleteBtn = document.getElementById('deleteAccountBtn');
+      var deletePhrase = document.getElementById('deleteConfirmPhrase');
+      var deleteShutdownPhrase = document.getElementById('deleteShutdownPhrase');
+      var deletePassword = document.getElementById('deletePassword');
+      var deleteShutdownHelp = document.getElementById('deleteShutdownHelp');
+      var deleteStripeFootnote = document.getElementById('deleteStripeFootnote');
+      if (!deleteBtn || !deletePhrase || !deletePassword) return;
+      deleteRequiresShutdown = !!(d.requiresShutdownConfirm || d.requiresTransfer);
+      deletePhrase.classList.remove('hidden');
+      deletePassword.classList.remove('hidden');
+      deleteBtn.classList.remove('hidden');
+      if (deleteShutdownPhrase) {
+        deleteShutdownPhrase.classList.toggle('hidden', !deleteRequiresShutdown);
+        deleteShutdownPhrase.value = '';
+      }
+      if (deleteShutdownHelp) {
+        deleteShutdownHelp.classList.toggle('hidden', !deleteRequiresShutdown);
+      }
+      deleteBtn.textContent = deleteRequiresShutdown
+        ? 'Delete account and shut down business'
+        : 'Delete my account';
+      if (deleteStripeFootnote) {
+        deleteStripeFootnote.classList.toggle('hidden', !d.hasStripeConnectAccount);
+      }
+    }
+
     function loadAccountLifecycle() {
       var transferBox = document.getElementById('transferOwnershipBox');
       var deleteFooter = document.getElementById('deleteAccountFooter');
       var deletePanel = document.getElementById('deleteAccountPanel');
       var deleteHelp = document.getElementById('deleteAccountHelp');
-      var deleteBtn = document.getElementById('deleteAccountBtn');
-      var deletePhrase = document.getElementById('deleteConfirmPhrase');
-      var deletePassword = document.getElementById('deletePassword');
+      var deleteTransferHint = document.getElementById('deleteTransferHint');
+      var deleteOrDivider = document.getElementById('deleteOrDivider');
+      var showTransferBtn = document.getElementById('showTransferOwnershipBtn');
       var deleteErr = document.getElementById('deleteAccountError');
-      var deleteStripeFootnote = document.getElementById('deleteStripeFootnote');
       var transferList = document.getElementById('transferMemberList');
       var transferErr = document.getElementById('transferError');
       if (!deleteFooter) return;
       deleteFooter.classList.remove('hidden');
       deletePanel.classList.add('hidden');
       deleteErr.classList.add('hidden');
-      if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
+      deleteRequiresShutdown = false;
+      hideDeleteFormFields();
       transferErr.classList.add('hidden');
       if (transferBox) transferBox.classList.add('hidden');
+      if (deleteTransferHint) deleteTransferHint.classList.add('hidden');
+      if (deleteOrDivider) deleteOrDivider.classList.add('hidden');
+      if (showTransferBtn) {
+        showTransferBtn.classList.add('hidden');
+        showTransferBtn.textContent = 'Transfer ownership';
+      }
       fns.httpsCallable('getAccountDeletionEligibility')({}).then(function(res) {
         var d = res.data || {};
         var business = (d.businessName || 'this business').toString();
+        var membersPromise = null;
         if (d.requiresTransfer) {
-          deleteHelp.textContent = 'You are the owner of ' + business + '. Transfer ownership first, then you can delete your account without shutting down the business for your team.';
-          deleteBtn.classList.add('hidden');
-          deletePhrase.classList.add('hidden');
-          deletePassword.classList.add('hidden');
-          if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
-          if (transferBox) transferBox.classList.remove('hidden');
-          return fns.httpsCallable('listTenantMembers')({});
-        }
-        if (d.isOwner) {
+          deleteHelp.textContent = 'You are the owner of ' + business + '. Deleting now would shut down the business for your team. This cannot be undone.';
+          if (deleteTransferHint) deleteTransferHint.classList.remove('hidden');
+          if (showTransferBtn) showTransferBtn.classList.remove('hidden');
+          if (deleteOrDivider) deleteOrDivider.classList.remove('hidden');
+          membersPromise = fns.httpsCallable('listTenantMembers')({});
+        } else if (d.isOwner) {
           deleteHelp.textContent = 'This permanently deletes your business, cancels your subscription, removes your booking site, and deletes your account. This cannot be undone.';
         } else {
           deleteHelp.textContent = 'You will leave ' + business + ' and your Bookking account will be permanently deleted. The business will keep running.';
         }
         if (d.stripeBalanceBlocksDeletion) {
           deleteHelp.textContent = (d.stripeBalanceBlockMessage || 'Withdraw your Stripe payout balance in Payments before deleting your account.');
-          deleteBtn.classList.add('hidden');
-          deletePhrase.classList.add('hidden');
-          deletePassword.classList.add('hidden');
-          if (deleteStripeFootnote) deleteStripeFootnote.classList.add('hidden');
-          return null;
+          return membersPromise;
         }
-        if (deleteStripeFootnote) {
-          deleteStripeFootnote.classList.toggle('hidden', !d.hasStripeConnectAccount);
+        if (d.canDelete || d.requiresShutdownConfirm || d.requiresTransfer) {
+          showDeleteFormFields(d);
         }
-        if (d.canDelete) {
-          deleteBtn.classList.remove('hidden');
-          deletePhrase.classList.remove('hidden');
-          deletePassword.classList.remove('hidden');
-        } else {
-          deleteBtn.classList.add('hidden');
-          deletePhrase.classList.add('hidden');
-          deletePassword.classList.add('hidden');
-        }
-        return null;
+        return membersPromise;
       }).then(function(membersRes) {
         if (!membersRes || !membersRes.data) return;
         var members = membersRes.data.members || [];
@@ -466,9 +503,15 @@
               newOwnerUid: m.uid,
               confirmPhrase: phrase.trim()
             }).then(function() {
-              window.alert((m.displayName || 'Team member') + ' is now the owner. They should update billing below.');
+              window.alert((m.displayName || 'Team member') + ' is now the owner. You can delete your account below. They should update billing in Subscription.');
+              var transferBox = document.getElementById('transferOwnershipBox');
+              var showTransferBtn = document.getElementById('showTransferOwnershipBtn');
+              if (transferBox) transferBox.classList.add('hidden');
+              if (showTransferBtn) showTransferBtn.textContent = 'Transfer ownership';
               loadAccountLifecycle();
               loadBilling();
+              var panel = document.getElementById('deleteAccountPanel');
+              if (panel) panel.classList.remove('hidden');
             }).catch(function(err) {
               transferErr.textContent = (err && err.message) ? err.message : String(err);
               transferErr.classList.remove('hidden');
@@ -489,13 +532,27 @@
       panel.classList.toggle('hidden');
     });
 
+    document.getElementById('showTransferOwnershipBtn').addEventListener('click', function() {
+      var transferBox = document.getElementById('transferOwnershipBox');
+      var btn = document.getElementById('showTransferOwnershipBtn');
+      if (!transferBox || !btn) return;
+      var showing = transferBox.classList.toggle('hidden') === false;
+      btn.textContent = showing ? 'Hide transfer options' : 'Transfer ownership';
+    });
+
     document.getElementById('deleteAccountBtn').addEventListener('click', function() {
       var btn = document.getElementById('deleteAccountBtn');
       var deleteErr = document.getElementById('deleteAccountError');
       var phrase = (document.getElementById('deleteConfirmPhrase').value || '').trim();
+      var shutdownPhrase = (document.getElementById('deleteShutdownPhrase').value || '').trim();
       var password = (document.getElementById('deletePassword').value || '');
       if (phrase.toUpperCase() !== 'DELETE') {
         deleteErr.textContent = 'Type DELETE to confirm.';
+        deleteErr.classList.remove('hidden');
+        return;
+      }
+      if (deleteRequiresShutdown && shutdownPhrase.toUpperCase() !== 'SHUTDOWN') {
+        deleteErr.textContent = 'Type SHUTDOWN to confirm shutting down the business.';
         deleteErr.classList.remove('hidden');
         return;
       }
@@ -513,9 +570,13 @@
         btn.disabled = false;
         return;
       }
+      var payload = { confirmPhrase: phrase };
+      if (deleteRequiresShutdown) {
+        payload.shutdownConfirmPhrase = shutdownPhrase;
+      }
       var credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
       user.reauthenticateWithCredential(credential).then(function() {
-        return fns.httpsCallable('deleteMyAccount')({ confirmPhrase: phrase });
+        return fns.httpsCallable('deleteMyAccount')(payload);
       }).then(function() {
         return auth.signOut();
       }).then(function() {

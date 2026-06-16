@@ -150,14 +150,15 @@ struct AdminRootView: View {
                 drawerState.selectedSection = .dashboard
             }
         }
-        .task(id: authViewModel.isAuthenticated) {
-            if authViewModel.isAuthenticated {
+        .task(id: authViewModel.currentUserUid) {
+            if authViewModel.isAuthenticated, authViewModel.currentUserUid != nil {
+                sessionStore.reset()
                 await sessionStore.bootstrap(isDemoMode: authViewModel.isDemoMode)
                 await dashboardMetrics.loadData(
                     sessionStore: sessionStore,
                     isDemoMode: authViewModel.isDemoMode
                 )
-            } else {
+            } else if !authViewModel.isAuthenticated {
                 sessionStore.reset()
             }
         }
@@ -236,7 +237,7 @@ struct AdminRootView: View {
     }
 
     private var drawerBusinessSubtitle: String {
-        let industry = BookingTemplate(rawValue: sessionStore.tenantIndustry)?.displayName ?? "Business"
+        let industry = sessionStore.tenantIndustryDisplayName
         let plan = authViewModel.tenantSubscriptionPlan.displayName
         return "\(industry) · \(plan)"
     }

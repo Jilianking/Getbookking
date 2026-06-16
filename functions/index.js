@@ -232,11 +232,18 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   const userRef = db.collection("users").doc(uid);
   const existingUser = await userRef.get();
   if (existingUser.exists && existingUser.data().tenantId) {
+    const pendingRef = db.collection("pendingProviderSignups").doc(uid);
+    const pendingSnap = await pendingRef.get();
+    if (pendingSnap.exists) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "This account already has a business. Log in to the app or sign up with a new email."
+      );
+    }
     const tid = existingUser.data().tenantId;
     const tSnap = await db.collection("tenants").doc(tid).get();
     const slug = tSnap.exists ? tSnap.data().slug || "" : "";
-    await db.collection("pendingProviderSignups").doc(uid).delete().catch(() => {});
-    return { tenantId: tid, slug };
+    return { tenantId: tid, slug, alreadyProvisioned: true };
   }
 
   const {
@@ -1658,7 +1665,7 @@ exports.createProviderSubscriptionCheckout = functions
     if (userSnap.exists && userSnap.data().tenantId) {
       throw new functions.https.HttpsError(
         "already-exists",
-        "This account already has a business set up."
+        "This account already has a business. Log in to the app or sign up with a new email."
       );
     }
 
@@ -3317,7 +3324,8 @@ exports.getAccountDeletionEligibility = functions
     teamMemberCount,
     otherTeamMemberCount,
     requiresTransfer,
-    canDelete: !requiresTransfer && !stripeAssessment.stripeBalanceBlocksDeletion,
+    requiresShutdownConfirm: requiresTransfer,
+    canDelete: !stripeAssessment.stripeBalanceBlocksDeletion,
     businessName,
     hasStripeConnectAccount: stripeAssessment.hasStripeConnectAccount,
     stripeBalanceBlocksDeletion: stripeAssessment.stripeBalanceBlocksDeletion,
@@ -3410,7 +3418,7 @@ exports.transferTenantOwnership = functions
     };
   });
 
-/** Delete the signed-in user's account. Owners with other team members must transfer first. */
+/** Delete the signed-in user's account. Owners with team may shut down the business (SHUTDOWN) or transfer first. */
 exports.deleteMyAccount = functions
   .runWith({ secrets: [stripeSecretKey] })
   .https.onCall(async (data, context) => {
@@ -3448,10 +3456,20 @@ exports.deleteMyAccount = functions
     const otherMembers = await countOtherTeamMembers(tenantId, uid);
 
     if (isOwner && otherMembers > 0) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Transfer ownership to a team member before deleting your account."
-      );
+      const shutdownPhrase = ((data && data.shutdownConfirmPhrase) || "")
+        .toString()
+        .trim()
+        .toUpperCase();
+      if (shutdownPhrase !== "SHUTDOWN") {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Type SHUTDOWN to confirm shutting down the business for your team."
+        );
+      }
+      await cancelTenantStripeSubscription(tenant);
+      await deleteTenantData(tenantId);
+      await deleteUserFirestoreAndAuth(uid);
+      return { ok: true, deletedTenant: true, shutDownBusiness: true };
     }
 
     if (isOwner) {

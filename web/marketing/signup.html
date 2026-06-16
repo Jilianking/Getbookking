@@ -62,14 +62,14 @@
       gap: 12px;
       font-family: var(--brand-wordmark-font);
       font-weight: var(--brand-wordmark-weight);
-      font-size: 16px;
+      font-size: 18px;
       letter-spacing: var(--brand-wordmark-tracking);
       text-transform: uppercase;
       color: var(--text-primary);
       text-decoration: none;
       line-height: 1;
     }
-    .signup-header > a img { width: 22px; height: 22px; display: block; flex-shrink: 0; }
+    .signup-header > a img { width: 32px; height: 32px; display: block; flex-shrink: 0; }
 
     .signup-header .step-indicator {
       font-size: 13px;
@@ -626,7 +626,7 @@
   <!-- HEADER -->
   <header class="signup-header">
     <a href="index.html" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-64.png" alt="" width="22" height="22" />
+      <img src="assets/brand/logo-dark-64.png" alt="" width="32" height="32" />
       <span>Get Bookking</span>
     </a>
     <nav style="display:flex;align-items:center;gap:16px;margin-left:auto;">
@@ -962,6 +962,9 @@
       if (code.indexOf('failed-precondition') !== -1 || code === 'functions/failed-precondition') {
         return msg || (d != null ? String(d) : 'This request could not be completed.');
       }
+      if (code.indexOf('already-exists') !== -1 || code === 'functions/already-exists') {
+        return msg || 'This account already has a business. Log in or use a different email.';
+      }
       return msg || code || 'Something went wrong. Please try again.';
     }
 
@@ -1186,25 +1189,27 @@
 
       try {
         var user;
+        var signupEmail = (state.email || '').trim().toLowerCase();
+        var signedIn = auth.currentUser;
+        if (signedIn && signedIn.email && signedIn.email.toLowerCase() !== signupEmail) {
+          await auth.signOut();
+        }
         try {
           var cred = await auth.createUserWithEmailAndPassword(state.email, state.password);
           user = cred.user;
         } catch (regErr) {
           if (regErr && regErr.code === 'auth/email-already-in-use') {
-            try {
-              await auth.signInWithEmailAndPassword(state.email, state.password);
-              user = auth.currentUser;
-            } catch (signErr) {
-              embeddedCheckoutLoading = false;
-              if (mountEl) mountEl.innerHTML = '';
-              if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
-              errEl.textContent = 'This email already has an account. Use the password from step 3, or choose a different email.';
-              errEl.style.display = 'block';
-              return;
-            }
-          } else {
-            throw regErr;
+            embeddedCheckoutLoading = false;
+            if (mountEl) mountEl.innerHTML = '';
+            if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
+            errEl.innerHTML =
+              'This email already has an account. ' +
+              '<a href="login.html" style="color:var(--brand-warm);">Log in</a> ' +
+              'or use a different email to create a new business.';
+            errEl.style.display = 'block';
+            return;
           }
+          throw regErr;
         }
         if (user) {
           await user.updateProfile({ displayName: displayName });

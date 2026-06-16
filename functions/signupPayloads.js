@@ -296,7 +296,12 @@ const defaultServicesByIndustry = {
     { name: "Acrylic full set", durationMinutes: 90 },
     { name: "Nail art", durationMinutes: 30 },
   ],
-  custom: [],
+  custom: [
+    { name: "Consultation", durationMinutes: 30 },
+    { name: "Standard service", durationMinutes: 45 },
+    { name: "Premium service", durationMinutes: 60 },
+    { name: "Full service", durationMinutes: 90 },
+  ],
 };
 
 function themesForIndustry(industry) {

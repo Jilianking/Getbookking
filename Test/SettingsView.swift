@@ -181,7 +181,10 @@ struct SettingsView: View {
     }
 
     private var planIndustryPill: String {
-        let industry = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "Business"
+        let industry = BookingTemplate.displayLabel(
+            forIndustryRaw: viewModel.selectedIndustry,
+            customLabel: viewModel.industryCustomLabel
+        )
         return "\(viewModel.tenantSubscriptionPlan.displayName) · \(industry)"
     }
 
@@ -286,28 +289,13 @@ struct SettingsView: View {
                     drawerState.selectedSection = .payments
                     drawerState.isOpen = false
                 } label: {
+                    let status = paymentsSetupStatus
                     AppSettingsRow(
                         icon: "s.circle.fill",
                         iconColor: AppDesign.accentGreen,
-                        title: "Stripe Connect",
-                        status: paymentsViewModel.stripeConnectStatusLabel,
-                        statusColor: paymentsViewModel.stripeConnected ? AppDesign.accentGreen : AppDesign.brandWarm
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Divider().padding(.leading, 52)
-
-                Button {
-                    drawerState.selectedSection = .payments
-                    drawerState.isOpen = false
-                } label: {
-                    AppSettingsRow(
-                        icon: "iphone.gen3",
-                        iconColor: AppDesign.accentBlue,
-                        title: "Tap to Pay",
-                        status: tapToPayStatus,
-                        statusColor: tapToPayStatus == "Configured" ? AppDesign.textSecondary : AppDesign.brandWarm
+                        title: "Stripe & Tap to Pay",
+                        status: status.label,
+                        statusColor: status.color
                     )
                 }
                 .buttonStyle(.plain)
@@ -316,8 +304,18 @@ struct SettingsView: View {
         }
     }
 
-    private var tapToPayStatus: String {
-        TapToPayLocationStore.shared.resolvedLocationId.isEmpty ? "Setup" : "Configured"
+    private var paymentsSetupStatus: (label: String, color: Color) {
+        if !paymentsViewModel.stripeConnected {
+            return ("Setup", AppDesign.brandWarm)
+        }
+        #if TAP_TO_PAY_ENABLED
+        if TapToPayLocationStore.shared.resolvedLocationId.isEmpty {
+            return ("Connected", AppDesign.accentGreen)
+        }
+        return ("Ready", AppDesign.accentGreen)
+        #else
+        return ("Connected", AppDesign.accentGreen)
+        #endif
     }
 
     @AppStorage(AppAppearanceStorage.key) private var appearanceRaw = AppAppearance.light.rawValue
@@ -347,22 +345,6 @@ struct SettingsView: View {
                                 .environmentObject(authViewModel)
                         } label: {
                             AppSettingsRow(icon: "bell.fill", iconColor: AppDesign.accentBlue, title: "Notifications")
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if viewModel.isTenantOwner,
-                       viewModel.deletionEligibility?.otherTeamMemberCount ?? 0 > 0 {
-                        Divider().padding(.leading, 52)
-                        NavigationLink {
-                            TransferOwnershipSettingsView(viewModel: viewModel)
-                                .environmentObject(authViewModel)
-                        } label: {
-                            AppSettingsRow(
-                                icon: "person.crop.circle.badge.checkmark",
-                                iconColor: AppDesign.accentBlue,
-                                title: "Transfer ownership"
-                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -666,6 +648,10 @@ private struct AccountSettingsDetailView: View {
                             previousIndustryForCancel = oldValue
                             showIndustryChangeAlert = true
                         }
+                        if viewModel.selectedIndustry == BookingTemplate.custom.rawValue,
+                           !viewModel.industryCustomLabel.isEmpty {
+                            LabeledContent("Custom industry name", value: viewModel.industryCustomLabel)
+                        }
                         Button(action: {
                             Task { await viewModel.applyTemplateAndSave() }
                         }) {
@@ -851,7 +837,10 @@ private struct AccountSettingsDetailView: View {
     }
 
     private var industryChangeAlertTitle: String {
-        let name = BookingTemplate(rawValue: viewModel.selectedIndustry)?.displayName ?? "this type"
+        let name = BookingTemplate.displayLabel(
+            forIndustryRaw: viewModel.selectedIndustry,
+            customLabel: viewModel.industryCustomLabel
+        )
         return "Switch to \(name)?"
     }
 
@@ -861,11 +850,13 @@ private struct AccountSettingsDetailView: View {
         }
         switch template {
         case .custom:
+            let customName = viewModel.industryCustomLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            let modeLabel = customName.isEmpty ? "Custom" : customName
             return """
-            You're entering Custom mode.
+            You're entering \(modeLabel) mode.
 
             • Booking form switches to a generic field set (editable in Website Design).
-            • Your current services are removed. Custom starts with no default services—add them under Book in Website Design.
+            • Your current services are removed and replaced with four generic starter services.
             • In Website Design, only templates for Custom are available under Website templates.
 
             You can customize everything after saving.

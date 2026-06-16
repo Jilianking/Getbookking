@@ -636,6 +636,15 @@ class FirebaseService: ObservableObject {
         industry: String,
         subscriptionPlan: String
     ) async throws {
+        if let existing = try await fetchProviderProfile(uid: uid),
+           let existingTenantId = existing.tenantId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !existingTenantId.isEmpty {
+            throw NSError(
+                domain: "FirebaseService",
+                code: 409,
+                userInfo: [NSLocalizedDescriptionKey: "This account already has a business set up."]
+            )
+        }
         let slugValue = slug(from: business).isEmpty ? "business\(uid.prefix(8))" : slug(from: business)
         let indNorm = industry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let trimmedIndustry = industry.trimmingCharacters(in: .whitespacesAndNewlines)

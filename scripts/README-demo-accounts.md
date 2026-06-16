@@ -42,7 +42,7 @@ Use owner accounts to upload photos and tweak copy in the app. Do not share pass
 
 | Slug | Palette | Images |
 |------|---------|--------|
-| coles-chair | `copper-ledger` | Unsplash hero + featured + gallery |
+| coles-chair | `copper-ledger` | Custom hero + 12-gallery (see `scripts/assets/coles-chair/`) |
 | studio-amara | `rose-quartz` | Unsplash hero + featured + gallery |
 | northline-tattoo | `berry-noir` | Unsplash hero + featured + gallery |
 | gilded-palm | `terracotta-clay` | Unsplash hero + featured + gallery |

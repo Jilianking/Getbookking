@@ -31,6 +31,7 @@ class SettingsViewModel: ObservableObject {
     @Published var hasProfile = false
     @Published var tenantId: String?
     @Published var selectedIndustry: String = BookingTemplate.custom.rawValue
+    @Published var industryCustomLabel: String = ""
     @Published var isSavingService = false
     @Published var profilePhotoUrl: String = ""
     @Published var isUploadingLogo = false
@@ -135,8 +136,7 @@ class SettingsViewModel: ObservableObject {
                 hasProfile = false
                 tenantId = nil
                 selectedIndustry = BookingTemplate.custom.rawValue
-                profilePhotoUrl = ""
-                accountDisplayName = "Demo User"
+                industryCustomLabel = ""
                 accountFullNameDraft = "Demo User"
                 businessDisplayName = "Demo Studio"
                 businessNameDraft = "Demo Studio"
@@ -156,6 +156,7 @@ class SettingsViewModel: ObservableObject {
             }
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             var industry: String?
+            var industryLabel: String?
             var tid: String?
             var planResolved = SubscriptionPlan.solo
             var ownerMatch = false
@@ -170,6 +171,7 @@ class SettingsViewModel: ObservableObject {
                 memberSettings = (try? await firebaseService.fetchUserMemberSettings(uid: uid)) ?? TeamMemberSettings()
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
                     industry = tenant["industry"] as? String
+                    industryLabel = tenant["industryCustomLabel"] as? String
                     planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
                     if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                         ownerMatch = (ownerUid == uid)
@@ -200,6 +202,7 @@ class SettingsViewModel: ObservableObject {
                     tenantConfirmationType = resolvedTenantType
                     tenantBookingRequiresApproval = resolvedTenantRequiresApproval
                     selectedIndustry = industry ?? BookingTemplate.custom.rawValue
+                    industryCustomLabel = (industryLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     profilePhotoUrl = p.profilePhotoUrl
                     let shown = Self.accountDisplayString(from: p)
                     accountDisplayName = shown
@@ -231,6 +234,7 @@ class SettingsViewModel: ObservableObject {
                     tenantSubscriptionPlan = .solo
                     isTenantOwner = false
                     selectedIndustry = BookingTemplate.custom.rawValue
+                    industryCustomLabel = ""
                     profilePhotoUrl = ""
                     accountDisplayName = ""
                     accountFullNameDraft = ""
@@ -703,7 +707,7 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func deleteAccount(confirmPhrase: String) async throws {
+    func deleteAccount(confirmPhrase: String, shutdownConfirmPhrase: String? = nil) async throws {
         await MainActor.run {
             isDeletingAccount = true
             accountLifecycleMessage = nil
@@ -711,9 +715,13 @@ class SettingsViewModel: ObservableObject {
         defer {
             Task { @MainActor in isDeletingAccount = false }
         }
-        _ = try await functions.httpsCallable("deleteMyAccount").call([
+        var payload: [String: Any] = [
             "confirmPhrase": confirmPhrase,
-        ])
+        ]
+        if let shutdownConfirmPhrase, !shutdownConfirmPhrase.isEmpty {
+            payload["shutdownConfirmPhrase"] = shutdownConfirmPhrase
+        }
+        _ = try await functions.httpsCallable("deleteMyAccount").call(payload)
     }
 
     func transferOwnership(to newOwnerUid: String, confirmPhrase: String) async throws {
@@ -745,6 +753,7 @@ struct AccountDeletionEligibility {
     let teamMemberCount: Int
     let otherTeamMemberCount: Int
     let requiresTransfer: Bool
+    let requiresShutdownConfirm: Bool
     let canDelete: Bool
     let businessName: String
     let hasStripeConnectAccount: Bool
@@ -757,6 +766,7 @@ struct AccountDeletionEligibility {
         teamMemberCount = data["teamMemberCount"] as? Int ?? 0
         otherTeamMemberCount = data["otherTeamMemberCount"] as? Int ?? 0
         requiresTransfer = data["requiresTransfer"] as? Bool ?? false
+        requiresShutdownConfirm = data["requiresShutdownConfirm"] as? Bool ?? requiresTransfer
         canDelete = data["canDelete"] as? Bool ?? true
         businessName = (data["businessName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         hasStripeConnectAccount = data["hasStripeConnectAccount"] as? Bool ?? false

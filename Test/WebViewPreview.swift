@@ -3,7 +3,8 @@
 //
 //  WKWebView wrapper for in-app preview of booking page.
 //  Injects viewport to match WebView width so layout matches Safari.
-//  Quick edit: `heroImage` and `svc:*` → native sheet; other keys → inline edit; saves when Quick edit is turned off (batched, one preview reload).
+//  Quick edit: `heroImage` and `svc:*` → native sheet; other keys → inline edit.
+//  Text saves defer WKWebView reload until Quick edit is turned off or Design is left.
 //
 
 import SwiftUI
@@ -250,23 +251,13 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// While quick edit is on, block in-preview navigation to booking URLs so `<a href="/book/...">` taps can edit instead of loading the book flow.
+        /// While quick edit is on, block in-preview link navigation so taps edit instead of loading another page.
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard quickEditEnabled else {
                 decisionHandler(.allow)
                 return
             }
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url else {
-                decisionHandler(.allow)
-                return
-            }
-            let path = url.path.lowercased()
-            if path == "/book" || path.hasPrefix("/book/") {
-                decisionHandler(.cancel)
-                return
-            }
-            if path == "/gallery" || path.hasPrefix("/gallery/") {
+            if navigationAction.navigationType == .linkActivated {
                 decisionHandler(.cancel)
                 return
             }
@@ -313,7 +304,7 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
             let js = """
             (function(){
-              if (window.__bkQuickEditCleanup) { try { window.__bkQuickEditCleanup(); } catch(e) {} }
+              if (window.__bkQuickEditCleanup) { try { window.__bkQuickEditCleanup(false); } catch(e) {} }
               var dirty = {};
               function currentText(el) {
                 var raw = (el.innerText != null ? el.innerText : el.textContent) || '';
@@ -373,6 +364,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function isEditableQuickEditTarget(el) {
                 if (!el || !el.closest) return false;
+                if (isBlueOutlinedTextRegion(el)) return true;
                 if (el.closest('.bk-color-band-hit, .bk-hero-band-hit')) return false;
                 if (isHeroImageQuickEditTarget(el)) return true;
                 if (el.closest('a[href], button, input, textarea, select, [contenteditable="true"], [role="button"]')) return true;
@@ -386,10 +378,47 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!el || !el.closest) return false;
                 return !!el.closest('.blade-hero-right,.classic-hero-right,.stonecut-hero-right,.s12-hero-img-col,.bk-hero-image-hit,.luxe-hero-image-hit');
               }
+              function closestGroupedTextContainer(el) {
+                if (!el || !el.closest) return null;
+                return el.closest(bkGroupedTextSelector);
+              }
+              /** Blue dashed outline = text-only; never open section color from these regions. */
+              function isBlueOutlinedTextRegion(el) {
+                if (!el || !el.closest) return false;
+                if (closestGroupedTextContainer(el)) return true;
+                var keyed = el.closest('[data-edit-key]');
+                if (!keyed) return false;
+                var tk = keyed.getAttribute('data-edit-key');
+                return !!(tk && tk.indexOf('color:') !== 0);
+              }
+              function resolveGroupedTextEditTarget(el) {
+                if (!el || !el.closest) return null;
+                var grouped = closestGroupedTextContainer(el);
+                if (!grouped) return null;
+                var selfKey = grouped.getAttribute && grouped.getAttribute('data-edit-key');
+                if (selfKey) {
+                  if (isSheetOnlyKey(selfKey)) return { type: 'sheet', el: grouped };
+                  if (selfKey.indexOf('color:') !== 0) return { type: 'text', el: grouped };
+                }
+                var keyed = el.closest('[data-edit-key]');
+                if (keyed && grouped.contains(keyed)) {
+                  var tk = keyed.getAttribute('data-edit-key');
+                  if (tk && isSheetOnlyKey(tk)) return { type: 'sheet', el: keyed };
+                  if (tk && tk.indexOf('color:') !== 0) return { type: 'text', el: keyed };
+                }
+                var first = grouped.querySelector('[data-edit-key]');
+                if (first) {
+                  var fk = first.getAttribute('data-edit-key');
+                  if (fk && isSheetOnlyKey(fk)) return { type: 'sheet', el: first };
+                  if (fk && fk.indexOf('color:') !== 0) return { type: 'text', el: first };
+                }
+                return null;
+              }
               /** True when tap is on editable copy inside a color band (not wrapper padding). */
               function isInsideSurfaceTextKey(el, surf) {
                 if (!el || !surf || !el.closest) return false;
                 if (!surf.contains(el)) return false;
+                if (closestGroupedTextContainer(el)) return true;
                 var keyed = el.closest('[data-edit-key]');
                 if (el.closest('a[href], button, [role="button"]')) {
                   return !!(keyed && surf.contains(keyed));
@@ -402,11 +431,12 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!keyed || !surf.contains(keyed)) return false;
                 var tk = keyed.getAttribute('data-edit-key');
                 if (!tk || tk.indexOf('color:') === 0 || isSheetOnlyKey(tk)) return false;
-                return keyed === el;
+                return true;
               }
               /** Open padding in a color band → section color; blue copy → text. */
               function isBandOpenSpaceTap(el) {
                 if (!el || !el.closest) return false;
+                if (isBlueOutlinedTextRegion(el)) return false;
                 if (el.closest('.bk-color-band-hit, .bk-hero-band-hit')) return true;
                 var surf = el.closest('[data-bk-color-surface]');
                 if (!surf) return false;
@@ -422,6 +452,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var el = ev.target;
                 while (el && el.nodeType !== 1) el = el.parentNode;
                 if (!el || !el.closest) return { type: 'none' };
+                var groupedHit = resolveGroupedTextEditTarget(el);
+                if (groupedHit) return groupedHit;
                 if (isBandOpenSpaceTap(el)) {
                   var colorBand = el.closest('[data-bk-color-surface]');
                   if (colorBand) {
@@ -444,7 +476,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                   if (tk && isSheetOnlyKey(tk)) return { type: 'sheet', el: textEl };
                   if (tk && tk.indexOf('color:') !== 0) return { type: 'text', el: textEl };
                 }
-                if (surf) {
+                if (surf && !isBlueOutlinedTextRegion(el)) {
                   var sid = surf.getAttribute('data-bk-color-surface');
                   if (sid) return { type: 'color', surface: sid, el: surf };
                 }
@@ -602,7 +634,6 @@ struct WebViewRepresentable: UIViewRepresentable {
                 t.setAttribute('spellcheck', 'true');
                 t.setAttribute('data-bk-inline-editing', '1');
                 t.addEventListener('blur', onInlineBlur);
-                noteDirtyFrom(t);
                 setTimeout(function() {
                   try {
                     t.focus();
@@ -662,7 +693,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                     if (inlineEl) finishActiveInlineNoSave();
                     openColorSurface('hero', hit.el);
                   }, 380);
-                } else {
+                } else if (!isBlueOutlinedTextRegion(touchTarget)) {
                   var bandEl = touchTarget && touchTarget.closest('[data-bk-color-surface]');
                   if (bandEl && bandEl.tagName !== 'NAV' && touchTarget.closest('[data-bk-band-tappable],.booking-page-band,.booking-card,.gallery-page-band')) {
                     colorLongPressTimer = setTimeout(function() {
@@ -808,16 +839,18 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               upgradeColorBandTaps();
               window.__bkQuickEditInstalled = true;
-              window.__bkQuickEditCleanup = function() {
-                finishActiveInlineNoSave();
+              window.__bkQuickEditCleanup = function(commitToNative) {
+                if (commitToNative !== false) {
+                  finishActiveInlineNoSave();
+                  var keys = Object.keys(dirty);
+                  if (keys.length) {
+                    postToNative({ action: 'inlineSaveBatch', changes: dirty });
+                    dirty = {};
+                  }
+                }
                 [].forEach.call(document.querySelectorAll('[data-bk-quick-edit-selected]'), function(node) {
                   node.removeAttribute('data-bk-quick-edit-selected');
                 });
-                var keys = Object.keys(dirty);
-                if (keys.length) {
-                  postToNative({ action: 'inlineSaveBatch', changes: dirty });
-                  dirty = {};
-                }
                 document.removeEventListener('touchstart', onTouchStart, { capture: true });
                 document.removeEventListener('touchend', onTouchEnd, { capture: true });
                 document.removeEventListener('click', onTap, true);
@@ -845,7 +878,7 @@ struct WebViewRepresentable: UIViewRepresentable {
 
         private func uninstallQuickEdit(webView: WKWebView) {
             quickEditInstallInFlight = false
-            let js = "(function(){ if (window.__bkQuickEditCleanup) try { window.__bkQuickEditCleanup(); } catch(e) {} })();"
+            let js = "(function(){ if (window.__bkQuickEditCleanup) try { window.__bkQuickEditCleanup(true); } catch(e) {} })();"
             webView.evaluateJavaScript(js) { [weak self] _, _ in
                 guard let self else { return }
                 self.quickEditInstalledForDocument = false

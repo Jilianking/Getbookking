@@ -359,7 +359,7 @@ const DEMO_ACCOUNTS = [
     instagramHandle: "northlinetattoo",
     webColorPaletteId: "original",
     paletteKey: "stonecut:original",
-    /* hero + gallery: custom uploads */
+    /* hero + gallery: scripts/assets/northline-tattoo/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
     services: [
       { name: "Consultation", description: "Discuss your idea and design direction.", durationMinutes: 30, price: 0 },
       { name: "Small piece", description: "Minimal or fine line work.", durationMinutes: 60, price: 200 },

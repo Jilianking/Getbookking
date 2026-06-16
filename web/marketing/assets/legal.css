@@ -43,16 +43,16 @@ nav {
   justify-content: space-between;
   align-items: center;
   padding: 0 40px;
-  height: 64px;
+  height: 80px;
 }
 
 .nav-logo {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   font-family: var(--brand-wordmark-font);
   font-weight: var(--brand-wordmark-weight);
-  font-size: 18px;
+  font-size: 22px;
   letter-spacing: var(--brand-wordmark-tracking);
   text-transform: uppercase;
   color: var(--text-primary);
@@ -62,10 +62,11 @@ nav {
 .nav-logo:hover { text-decoration: none; color: var(--text-primary); }
 
 .nav-logo-mark {
-  width: 32px;
-  height: 32px;
+  width: 56px;
+  height: 56px;
   display: block;
   flex-shrink: 0;
+  border-radius: 50%;
 }
 
 .nav-links {
@@ -236,10 +237,10 @@ footer {
 .footer-logo {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   font-family: var(--brand-wordmark-font);
   font-weight: var(--brand-wordmark-weight);
-  font-size: 13px;
+  font-size: 20px;
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: #B5A695;
@@ -247,9 +248,10 @@ footer {
 }
 
 .footer-logo-mark {
-  width: 18px;
-  height: 18px;
+  width: 48px;
+  height: 48px;
   display: block;
+  border-radius: 50%;
   flex-shrink: 0;
   opacity: 0.92;
 }

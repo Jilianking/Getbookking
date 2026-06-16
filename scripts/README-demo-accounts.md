@@ -44,7 +44,7 @@ Use owner accounts to upload photos and tweak copy in the app. Do not share pass
 |------|---------|--------|
 | coles-chair | `copper-ledger` | Custom hero + 12-gallery (see `scripts/assets/coles-chair/`) |
 | studio-amara | `rose-quartz` | Unsplash hero + featured + gallery |
-| northline-tattoo | `berry-noir` | Unsplash hero + featured + gallery |
+| northline-tattoo | `berry-noir` | Custom hero + 12-gallery (see `scripts/assets/northline-tattoo/`) |
 | gilded-palm | `terracotta-clay` | Unsplash hero + featured + gallery |
 
 Re-run `node scripts/seed-demo-accounts.js` to refresh. Replace with your own uploads in Website Design anytime.

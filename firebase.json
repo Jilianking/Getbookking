@@ -48,6 +48,15 @@
           ]
         },
         {
+          "source": "assets/brand/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=3600, must-revalidate"
+            }
+          ]
+        },
+        {
           "source": "**/*.@(js|css|png|jpg|jpeg|gif|ico|svg|webp|woff2)",
           "headers": [
             {

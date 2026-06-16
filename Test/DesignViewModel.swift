@@ -38,6 +38,8 @@ class DesignViewModel: ObservableObject {
     @Published private(set) var isSavingBladeServices = false
     /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
     @Published private(set) var webPreviewReloadToken: UInt64 = 0
+    /// Set while Quick edit is active; flushed when the session ends (toggle off or leave Design).
+    private(set) var pendingWebPreviewReload = false
 
     // Home: appearance + hero + featured work
     @Published var displayName: String = ""
@@ -222,6 +224,17 @@ class DesignViewModel: ObservableObject {
 
     func invalidateWebPreview() {
         webPreviewReloadToken &+= 1
+    }
+
+    func deferWebPreviewReload() {
+        pendingWebPreviewReload = true
+    }
+
+    @MainActor
+    func flushDeferredWebPreviewReloadIfNeeded() {
+        guard pendingWebPreviewReload else { return }
+        pendingWebPreviewReload = false
+        invalidateWebPreview()
     }
 
     /// Matches `studio12SplitHeroHeadline` in `web/index.html`.
@@ -766,13 +779,20 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    /// Applies many WKWebView preview edits with a single cache-bust reload (used when Quick edit is turned off).
-    func saveQuickEditBatch(_ pairs: [(fieldKey: String, value: String)]) async {
+    /// Applies many WKWebView preview edits. Pass `reloadPreview: false` during Quick edit (reload is deferred until the session ends).
+    func saveQuickEditBatch(_ pairs: [(fieldKey: String, value: String)], reloadPreview: Bool = true) async {
         guard !pairs.isEmpty else { return }
         for pair in pairs {
             await saveQuickEdit(fieldKey: pair.fieldKey, value: pair.value, invalidatePreview: false)
         }
-        await MainActor.run { invalidateWebPreview() }
+        await MainActor.run {
+            if reloadPreview {
+                pendingWebPreviewReload = false
+                invalidateWebPreview()
+            } else {
+                deferWebPreviewReload()
+            }
+        }
     }
 
     func applyFeaturedWorkPreset(_ preset: FeaturedWorkColorPreset) {

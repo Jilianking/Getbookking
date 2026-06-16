@@ -1375,6 +1375,7 @@
       /* 5fr/7fr gives the photo ~58% of the row so it reads as the hero
          while the text column still has room for the title + CTAs. */
       grid-template-columns: 5fr 7fr;
+      position: relative;
       /* Symmetric gutters (matches Stonecut) so the photo is not flush to the viewport. */
       padding-top: 36px;
       padding-left: clamp(20px, 4vw, 48px);
@@ -1386,6 +1387,8 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
+      position: relative;
+      z-index: 2;
     }
     .classic-hero-tag {
       font-size: 10px;
@@ -4061,12 +4064,18 @@
     .stonecut-page .stonecut-hero {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      position: relative;
       border-bottom: 1px solid rgba(232,224,208,.08);
       /* Symmetric gutters so the photo column is not flush to the viewport edge. */
       padding-left: clamp(20px, 4vw, 48px);
       padding-right: clamp(20px, 4vw, 48px);
     }
-    .stonecut-page .stonecut-hero-left { padding: 28px 40px 72px; align-self: start; }
+    .stonecut-page .stonecut-hero-left {
+      padding: 28px 40px 72px;
+      align-self: start;
+      position: relative;
+      z-index: 2;
+    }
     .stonecut-page .stonecut-tag { font-size: 9px; letter-spacing: .34em; text-transform: uppercase; color: var(--bk-accent, #c0221a); margin: 0 0 22px; }
     .stonecut-page .stonecut-title {
       font-family: var(--sc-display-font);
@@ -4586,6 +4595,7 @@
       justify-content: center;
       padding: 100px 40px 60px 36px;
       position: relative;
+      z-index: 2;
     }
 
     .studio12-page .s12-hero-tag {

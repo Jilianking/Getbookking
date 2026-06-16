@@ -102,6 +102,13 @@ struct DesignView: View {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
                 await authViewModel.refreshTeamAccess()
             }
+            .onDisappear {
+                if isQuickEditEnabled {
+                    isQuickEditEnabled = false
+                } else {
+                    viewModel.flushDeferredWebPreviewReloadIfNeeded()
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
                 if let url = note.userInfo?["logoUrl"] as? String {
                     viewModel.syncLogoUrlFromExternal(url)
@@ -518,7 +525,12 @@ struct DesignView: View {
                     guard !changes.isEmpty else { return }
                     Task {
                         let pairs = changes.map { (fieldKey: $0.key, value: $0.value) }
-                        await viewModel.saveQuickEditBatch(pairs)
+                        await viewModel.saveQuickEditBatch(pairs, reloadPreview: false)
+                        await MainActor.run {
+                            if !isQuickEditEnabled {
+                                viewModel.flushDeferredWebPreviewReloadIfNeeded()
+                            }
+                        }
                     }
                 case let .inlineFocus(focus):
                     quickEditInlineFocus = focus

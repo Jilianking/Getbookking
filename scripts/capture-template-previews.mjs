@@ -15,10 +15,10 @@ const ORIGIN = process.env.TEMPLATE_PREVIEW_ORIGIN || "https://test-app-96812.we
 
 /** Slug on staging that uses each template family (see seed-demo-accounts.js). */
 const CAPTURES = [
-  { family: "classic", slug: "canvas-studio", file: "template-preview-classic.png" },
+  { family: "classic", slug: "northline-tattoo", file: "template-preview-classic.png" },
   { family: "luxe", slug: "gilded-palm", file: "template-preview-luxe.png" },
   { family: "blade", slug: "coles-chair", file: "template-preview-blade.png" },
-  { family: "stonecut", slug: "northline-tattoo", file: "template-preview-stonecut.png" },
+  { family: "stonecut", slug: "stone-cut-barbers", file: "template-preview-stonecut.png" },
   { family: "studio12", slug: "studio-amara", file: "template-preview-studio12.png" },
 ];
 

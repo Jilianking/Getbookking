@@ -1,6 +1,6 @@
 # Marketing demo accounts
 
-Four solo showcase tenants for public sites (no visitor login).
+Five solo showcase tenants for public sites (no visitor login).
 
 ## Seed / update
 
@@ -18,10 +18,11 @@ Password: `DEMO_ACCOUNT_PASSWORD` env var, or default `BookkingDemo2026!`.
 
 | Slug | Business | Theme | Public URL |
 |------|----------|-------|------------|
+| `northline-tattoo` | Northline Tattoo | Classic | https://northline-tattoo.getbookking.com |
 | `coles-chair` | Cole's Chair | Blade | https://coles-chair.getbookking.com |
 | `studio-amara` | Studio Amara | Studio 12 | https://studio-amara.getbookking.com |
-| `northline-tattoo` | Northline Tattoo | Stonecut | https://northline-tattoo.getbookking.com |
-| `gilded-palm` | Gilded Palm | Luxe | https://gilded-palm.getbookking.com |
+| `stone-cut-barbers` | Stone Cut Barbers | Stonecut | https://stone-cut-barbers.getbookking.com |
+| `gilded-palm` | Maison Lumière | Luxe | https://gilded-palm.getbookking.com |
 
 Staging: `https://test-app-96812.web.app/{slug}`
 
@@ -31,9 +32,10 @@ Marketing picker: https://getbookking.com/demos.html (`?staging=1` for staging U
 
 | Email | Slug |
 |-------|------|
+| demo-northline@getbookking.com | northline-tattoo |
 | demo-coles-chair@getbookking.com | coles-chair |
 | demo-studio-amara@getbookking.com | studio-amara |
-| demo-northline@getbookking.com | northline-tattoo |
+| demo-stone-cut-barbers@getbookking.com | stone-cut-barbers |
 | demo-gilded-palm@getbookking.com | gilded-palm |
 
 Use owner accounts to upload photos and tweak copy in the app. Do not share passwords publicly.
@@ -42,10 +44,11 @@ Use owner accounts to upload photos and tweak copy in the app. Do not share pass
 
 | Slug | Palette | Images |
 |------|---------|--------|
+| northline-tattoo | `warm-coral` (custom) | Custom hero + 8-gallery (see `scripts/assets/northline-tattoo/`) |
 | coles-chair | `copper-ledger` | Custom hero + 12-gallery (see `scripts/assets/coles-chair/`) |
-| studio-amara | `rose-quartz` | Unsplash hero + featured + gallery |
-| northline-tattoo | `berry-noir` | Custom hero + 12-gallery (see `scripts/assets/northline-tattoo/`) |
-| gilded-palm | `terracotta-clay` | Unsplash hero + featured + gallery |
+| studio-amara | `rose-quartz` (custom) | User nail set: hero + 6-gallery + philosophy + book CTA (`scripts/assets/studio-amara/`) |
+| stone-cut-barbers | `barber-chocolate` (custom) | Custom hero + 9-gallery (see `scripts/assets/stone-cut-barbers/`) |
+| gilded-palm | `terracotta-clay` (custom) | Custom hero + 10-gallery + 5 shop products (see `scripts/assets/gilded-palm/`) |
 
 Re-run `node scripts/seed-demo-accounts.js` to refresh. Replace with your own uploads in Website Design anytime.
 

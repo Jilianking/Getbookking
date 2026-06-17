@@ -177,7 +177,7 @@ class SettingsViewModel: ObservableObject {
                         ownerMatch = (ownerUid == uid)
                     }
                     if resolvedBusinessName.isEmpty {
-                        let tenantName = (tenant["displayName"] as? String ?? tenant["businessName"] as? String ?? "")
+                        let tenantName = (tenant["businessName"] as? String ?? tenant["displayName"] as? String ?? "")
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if !tenantName.isEmpty { resolvedBusinessName = tenantName }
                     }

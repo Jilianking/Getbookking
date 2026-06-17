@@ -1,7 +1,7 @@
 //
 //  DesignView.swift
 //
-//  Web page design: Preview mode (default) + Builder mode with tabs.
+//  Web page design: Preview mode (default) + Manage mode with tabs.
 //
 
 import SwiftUI
@@ -11,8 +11,8 @@ import UIKit
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DesignViewModel()
-    @State private var selectedTab: DesignTab = .template
-    @State private var isShowingBuilder = false
+    @State private var selectedTab: DesignTab = .gallery
+    @State private var isShowingManage = false
     @State private var businessHoursDaySheet: BusinessHoursDaySheetToken?
     @State private var businessHoursExceptionSheet: BusinessHoursException?
     @State private var showBladeStarterConfirm = false
@@ -33,6 +33,8 @@ struct DesignView: View {
     @State private var quickEditStudio12PhilosophySheet = false
     @State private var quickEditStudio12BookCtaSheet = false
     @State private var formFieldToEdit: FormField?
+    @State private var manageGalleryBatchCrop: MultiImageCropSheetItem?
+    @State private var showGalleryPickerLoadError = false
     @State private var isColorPickerPresented = false
     @State private var isTemplatePickerPresented = false
     var drawerState: DrawerState
@@ -41,22 +43,22 @@ struct DesignView: View {
     var body: some View {
         NavigationView {
             Group {
-                if isShowingBuilder {
-                    builderContent
+                if isShowingManage {
+                    manageContent
                 } else {
                     previewContent
                 }
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(isShowingBuilder ? sectionTitle : "Design")
+            .navigationTitle(isShowingManage ? "Manage" : "Design")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Group {
-                        if isShowingBuilder {
+                        if isShowingManage {
                             Button("Preview") {
-                                isShowingBuilder = false
+                                isShowingManage = false
                             }
                             .foregroundStyle(AppDesign.textPrimary)
                         } else {
@@ -69,7 +71,7 @@ struct DesignView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Group {
-                        if !isShowingBuilder {
+                        if !isShowingManage {
                             HStack(spacing: 12) {
                                 if viewModel.hasTenant, !authViewModel.isDemoMode {
                                     Text("Preview")
@@ -82,9 +84,10 @@ struct DesignView: View {
                                         .toggleStyle(AppTwoToneSwitchToggleStyle())
                                         .accessibilityLabel("Quick edit")
                                 }
-                                Button("Builder") {
+                                Button("Manage") {
                                     isQuickEditEnabled = false
-                                    isShowingBuilder = true
+                                    selectedTab = .gallery
+                                    isShowingManage = true
                                 }
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(AppDesign.textPrimary)
@@ -223,6 +226,25 @@ struct DesignView: View {
                         formFieldToEdit = nil
                     }
                 )
+            }
+            .sheet(item: $manageGalleryBatchCrop, onDismiss: { manageGalleryBatchCrop = nil }) { batch in
+                UploadImagePreparationSheet(
+                    images: batch.images,
+                    advice: isStudio12Template ? UploadImageAdvice.galleryStudio12 : UploadImageAdvice.gallery,
+                    navigationTitle: "Gallery photos",
+                    allowedChoices: [manageGalleryLockedCropChoice],
+                    defaultChoice: manageGalleryLockedCropChoice,
+                    onUseJPEGData: { dataList in
+                        manageGalleryBatchCrop = nil
+                        guard !dataList.isEmpty else { return }
+                        Task { await viewModel.addGalleryImages(imageDataList: dataList) }
+                    }
+                )
+            }
+            .alert("Couldn't load photos", isPresented: $showGalleryPickerLoadError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Try again or choose different images from your library.")
             }
         }
         .navigationViewStyle(.stack)
@@ -634,14 +656,14 @@ struct DesignView: View {
         }
     }
 
-    private var builderContent: some View {
+    private var manageContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ForEach(visibleDesignTabs, id: \.self) { tab in
+                ForEach(DesignTab.manageTabs, id: \.self) { tab in
                     Button {
                         selectedTab = tab
                     } label: {
-                        Text(tab.rawValue.capitalized)
+                        Text(tab.manageSegmentTitle)
                             .font(.subheadline.weight(.medium))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -677,12 +699,24 @@ struct DesignView: View {
                         contentUnavailable
                     } else {
                         switch selectedTab {
-                        case .template: templateContent
-                        case .home: homeContent
-                        case .gallery: galleryContent
-                        case .book: bookContent
-                        case .about: aboutContent
-                        case .shop: shopContent
+                        case .gallery:
+                            ManageGalleryTabContent(
+                                viewModel: viewModel,
+                                isStudio12Template: isStudio12Template,
+                                galleryBatchCrop: $manageGalleryBatchCrop,
+                                showGalleryPickerLoadError: $showGalleryPickerLoadError
+                            )
+                        case .book:
+                            ManageBookTabContent(
+                                viewModel: viewModel,
+                                teamAccess: authViewModel.teamAccess,
+                                serviceToEdit: $bladeServiceToEdit,
+                                formFieldToEdit: $formFieldToEdit
+                            )
+                        case .shop:
+                            ManageShopTabContent(viewModel: viewModel)
+                        default:
+                            EmptyView()
                         }
                     }
                 }
@@ -736,12 +770,20 @@ struct DesignView: View {
     private var isBladeTemplate: Bool { activeTemplateFamily == .blade || activeTemplateFamily == .stonecut }
     private var isStudio12Template: Bool { activeTemplateFamily == .studio12 }
 
+    private var manageGalleryLockedCropChoice: UploadCropAspectChoice {
+        switch viewModel.galleryLayoutStyle {
+        case .masonry: return .original
+        case .horizontalStrip: return .portrait4_5
+        case .classicGrid: return isStudio12Template ? .portrait4_5 : .landscape4_3
+        }
+    }
+
     private var studio12BookingTemplate: BookingTemplate {
         Studio12IndustryCopy.template(from: viewModel.industry)
     }
 
     private var visibleDesignTabs: [DesignTab] {
-        DesignTab.allCases
+        DesignTab.manageTabs
     }
 
     /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.
@@ -873,7 +915,16 @@ struct DesignView: View {
             // Hero
             Text("Hero")
                 .font(.headline)
-            TextField("Business name", text: $viewModel.displayName)
+            Text("Name on website")
+                .font(.subheadline.weight(.medium))
+            Text("Shown on your public site. Leave blank to use your app business name from Settings.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField(
+                "Name on website",
+                text: $viewModel.displayName,
+                prompt: Text(viewModel.appBusinessName.isEmpty ? "Studio" : viewModel.appBusinessName)
+            )
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
@@ -998,7 +1049,16 @@ struct DesignView: View {
             Text("Hero")
                 .font(.headline)
                 .padding(.top, 4)
-            TextField("Business name", text: $viewModel.displayName)
+            Text("Name on website")
+                .font(.subheadline.weight(.medium))
+            Text("Shown on your public site. Leave blank to use your app business name from Settings.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField(
+                "Name on website",
+                text: $viewModel.displayName,
+                prompt: Text(viewModel.appBusinessName.isEmpty ? "Studio" : viewModel.appBusinessName)
+            )
                 .textFieldStyle(.roundedBorder)
             HeroImageUploadSection(viewModel: viewModel)
 
@@ -1924,15 +1984,46 @@ struct Studio12AuxImageUploadSection: View {
 }
 
 // MARK: - Gallery page images only
+private struct GalleryThumbFrame: ViewModifier {
+    let large: Bool
+
+    func body(content: Content) -> some View {
+        if large {
+            content
+                .aspectRatio(4 / 5, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipped()
+        } else {
+            content
+                .frame(width: 72, height: 72)
+                .clipped()
+                .cornerRadius(8)
+        }
+    }
+}
+
 struct GalleryImagesSection: View {
     @ObservedObject var viewModel: DesignViewModel
     /// When the live site template is Studio 12, gallery presets and copy match the home strip + /gallery tiles.
     var isStudio12Site: Bool = false
+    /// Minimum thumbnail width; use ~140 in Manage mode for a two-column grid.
+    var thumbMinimum: CGFloat = 72
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var galleryBatchCrop: MultiImageCropSheetItem?
 
     /// Wraps thumbnails in rows; parent `ScrollView` handles vertical scrolling.
-    private let thumbGridColumns = [GridItem(.adaptive(minimum: 72), spacing: 12)]
+    private var thumbGridColumns: [GridItem] {
+        if thumbMinimum >= 100 {
+            return [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12),
+            ]
+        }
+        return [GridItem(.adaptive(minimum: thumbMinimum), spacing: 12)]
+    }
+
+    private var usesLargeManageCells: Bool { thumbMinimum >= 100 }
 
     private var galleryAdvice: String {
         isStudio12Site ? UploadImageAdvice.galleryStudio12 : UploadImageAdvice.gallery
@@ -1955,32 +2046,49 @@ struct GalleryImagesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Gallery page photos")
-                .font(.subheadline.weight(.medium))
-            Text(galleryAdvice)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if !usesLargeManageCells {
+                Text("Gallery page photos")
+                    .font(.subheadline.weight(.medium))
+                Text(galleryAdvice)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             LazyVGrid(columns: thumbGridColumns, alignment: .leading, spacing: 12) {
                 ForEach(Array(viewModel.galleryImages.enumerated()), id: \.offset) { index, urlString in
                     if let url = URL(string: urlString) {
                         ZStack(alignment: .topTrailing) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                AppDesign.searchBackground
+                            Group {
+                                if usesLargeManageCells {
+                                    AsyncImage(url: url) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        AppDesign.searchBackground
+                                    }
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                } else {
+                                    AsyncImage(url: url) { image in
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } placeholder: {
+                                        AppDesign.searchBackground
+                                    }
+                                    .frame(width: 72, height: 72)
+                                }
                             }
-                            .frame(width: 72, height: 72)
-                            .clipped()
-                            .cornerRadius(8)
+
                             Button(action: {
                                 Task { await viewModel.removeGalleryImage(at: index) }
                             }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 20))
+                                    .font(.system(size: usesLargeManageCells ? 24 : 20))
                                     .foregroundStyle(.white, .red)
                             }
                             .offset(x: 4, y: -4)
                         }
+                        .modifier(GalleryThumbFrame(large: usesLargeManageCells))
                     }
                 }
                 PhotosPicker(
@@ -1988,14 +2096,27 @@ struct GalleryImagesSection: View {
                     matching: .images,
                     photoLibrary: .shared()
                 ) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
-                        .frame(width: 72, height: 72)
-                        .overlay(
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.secondary)
-                        )
+                    Group {
+                        if usesLargeManageCells {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                                .aspectRatio(4 / 5, contentMode: .fit)
+                                .overlay(
+                                    Image(systemName: "plus")
+                                        .font(.title2)
+                                        .foregroundColor(.secondary)
+                                )
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                                .frame(width: 72, height: 72)
+                                .overlay(
+                                    Image(systemName: "plus")
+                                        .font(.title2)
+                                        .foregroundColor(.secondary)
+                                )
+                        }
+                    }
                 }
                 .onChange(of: selectedItems) { _, newItems in
                     Task {

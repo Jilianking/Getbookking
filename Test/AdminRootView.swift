@@ -16,7 +16,6 @@ enum AdminSection: String, CaseIterable, Identifiable {
     case team
     case design
     case shop
-    case aiTools
     case insights
     case payments
     case settings
@@ -27,7 +26,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     static var drawerOrder: [AdminSection] {
         [
             .dashboard, .requests, .calendar, .messages, .clients,
-            .team, .design, .shop, .aiTools, .insights, .payments, .settings,
+            .team, .design, .shop, .insights, .payments, .settings,
         ]
     }
 
@@ -42,7 +41,6 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .team: return "Team"
         case .design: return "Design"
         case .shop: return "Shop"
-        case .aiTools: return "AI tools"
         case .insights: return "Insights"
         case .payments: return "Payments"
         case .settings: return "Settings"
@@ -61,7 +59,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard, .requests, .calendar, .messages: return .main
         case .clients, .team, .design, .insights, .payments: return .business
-        case .shop, .aiTools, .settings: return .more
+        case .shop, .settings: return .more
         }
     }
 
@@ -81,7 +79,6 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .team: return "person.3.fill"
         case .design: return "paintbrush.fill"
         case .shop: return "bag.fill"
-        case .aiTools: return "sparkles"
         case .insights: return "chart.bar.fill"
         case .payments: return "dollarsign.circle.fill"
         case .settings: return "gear"
@@ -216,10 +213,6 @@ struct AdminRootView: View {
             if visitedSections.contains(.shop) {
                 ShopManagerView(drawerState: drawerState, sectionTitle: AdminSection.shop.title)
                     .sectionVisible(drawerState.selectedSection == .shop)
-            }
-            if visitedSections.contains(.aiTools) {
-                AILogoGeneratorView(drawerState: drawerState, sectionTitle: AdminSection.aiTools.title)
-                    .sectionVisible(drawerState.selectedSection == .aiTools)
             }
             if visitedSections.contains(.insights) {
                 InsightsView(drawerState: drawerState, sectionTitle: AdminSection.insights.title)

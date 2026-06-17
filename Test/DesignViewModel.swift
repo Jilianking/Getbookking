@@ -18,6 +18,17 @@ enum DesignTab: String, CaseIterable {
     case book
     case about
     case shop
+
+    static let manageTabs: [DesignTab] = [.gallery, .book, .shop]
+
+    var manageSegmentTitle: String {
+        switch self {
+        case .gallery: return "Gallery"
+        case .book: return "Book"
+        case .shop: return "Shop"
+        default: return rawValue.capitalized
+        }
+    }
 }
 
 /// Editable “Your experience” steps on Studio 12 home (`studio12ProcessSteps` in Firestore).
@@ -43,6 +54,8 @@ class DesignViewModel: ObservableObject {
 
     // Home: appearance + hero + featured work
     @Published var displayName: String = ""
+    /// App business name from signup/settings (`businessName` / `users.business`); used as website fallback prompt.
+    @Published var appBusinessName: String = ""
     @Published var logoUrl: String = ""
     @Published var heroImageUrl: String = ""
     /// Pixel size of the last uploaded hero JPEG; public site (all templates) matches this aspect so the live hero matches the in-app crop.
@@ -307,7 +320,7 @@ class DesignViewModel: ObservableObject {
         return out
     }
 
-    /// Updates one field on `tenants/{tenantId}/services/{serviceId}` from preview `data-edit-key` (`svc:<id>:name|description`).
+    /// Legacy `svc:<id>:name|description` from older previews; website labels use `wc.svc.<id>.*` overrides only.
     private func persistQuickEditServiceField(fieldKey: String, trimmed: String) async throws {
         guard let tid = tenantId else { return }
         let parts = fieldKey.split(separator: ":").map(String.init)
@@ -315,48 +328,13 @@ class DesignViewModel: ObservableObject {
         let serviceId = parts[1]
         let field = parts[2]
         guard !serviceId.isEmpty, ["name", "description"].contains(field) else { return }
-        var svc = await MainActor.run { services.first { $0.id == serviceId } }
-        if svc == nil {
-            let fetched = try await firebaseService.fetchTenantServices(tenantId: tid)
-            await MainActor.run { services = fetched }
-            svc = await MainActor.run { services.first { $0.id == serviceId } }
-        }
-        guard let service = svc else {
-            await MainActor.run { errorMessage = "That service was not found. Open Builder and refresh, then try again." }
-            return
-        }
         if field == "name", trimmed.isEmpty {
             await MainActor.run { errorMessage = "Service name can’t be empty." }
             return
         }
-        let updates: [String: Any]
-        switch field {
-        case "name":
-            let slug = firebaseService.slug(from: trimmed)
-            updates = firebaseService.tenantServiceDisplayUpdates(
-                name: trimmed,
-                slug: slug,
-                durationMinutes: service.durationMinutes,
-                description: service.description,
-                startingPrice: service.price
-            )
-        case "description":
-            updates = firebaseService.tenantServiceDisplayUpdates(
-                name: service.name,
-                slug: service.slug,
-                durationMinutes: service.durationMinutes,
-                description: trimmed.isEmpty ? nil : trimmed,
-                startingPrice: service.price
-            )
-        default:
-            return
-        }
-        try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
-        let refreshed = try await firebaseService.fetchTenantServices(tenantId: tid)
-        await MainActor.run {
-            services = refreshed
-            errorMessage = nil
-        }
+        let wcKey = "wc.svc.\(serviceId).\(field)"
+        try await persistWebCopyOverride(tenantId: tid, key: wcKey, value: trimmed)
+        await MainActor.run { errorMessage = nil }
     }
 
     private func studio12ProcessStepsFirestorePayload() -> [[String: String]] {
@@ -419,24 +397,9 @@ class DesignViewModel: ObservableObject {
         do {
             switch fieldKey {
             case "displayName":
-                if let uid = Auth.auth().currentUser?.uid {
-                    try await firebaseService.syncBusinessName(uid: uid, tenantId: tid, name: trimmed)
-                } else {
-                    try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
-                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
                 await MainActor.run {
                     displayName = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                    NotificationCenter.default.post(
-                        name: .tenantBusinessNameDidChange,
-                        object: nil,
-                        userInfo: ["businessName": trimmed]
-                    )
-                }
-            case "tagline":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["tagline": trimmed])
-                await MainActor.run {
-                    tagline = trimmed
                     if invalidatePreview { invalidateWebPreview() }
                 }
             case "luxeHeroTagline":
@@ -458,55 +421,6 @@ class DesignViewModel: ObservableObject {
                 try await firebaseService.updateTenant(tenantId: tid, updates: ["bladeHeroDescription": trimmed])
                 await MainActor.run {
                     bladeHeroDescription = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "serviceArea":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["serviceArea": trimmed])
-                await MainActor.run {
-                    serviceArea = trimmed
-                    let parsed = USStateServiceAreaFormatting.parseStoredServiceArea(trimmed)
-                    serviceCity = parsed.city
-                    serviceStateAbbr = parsed.stateAbbr
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "contactAddress":
-                try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "contactAddress": trimmed,
-                    "address": trimmed,
-                ])
-                await MainActor.run {
-                    contactAddress = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "businessHours":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["businessHours": trimmed])
-                await MainActor.run {
-                    businessHours = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "instagramHandle":
-                let ig = trimmed.replacingOccurrences(of: "^@+", with: "", options: .regularExpression)
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["instagramHandle": ig])
-                await MainActor.run {
-                    instagramHandle = ig
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "contactPhone":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["contactPhone": trimmed])
-                await MainActor.run {
-                    contactPhone = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "contactEmail":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["contactEmail": trimmed])
-                await MainActor.run {
-                    contactEmail = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
-            case "aboutText":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["aboutText": trimmed])
-                await MainActor.run {
-                    aboutText = trimmed
                     if invalidatePreview { invalidateWebPreview() }
                 }
             case "classicAboutEyebrow":
@@ -898,7 +812,14 @@ class DesignViewModel: ObservableObject {
                 tenantId = tid
                 tenantSlug = slug
                 bookingUrl = PublicBookingSite.urlString(forSlug: slug)
-                displayName = tenant?["displayName"] as? String ?? ""
+                appBusinessName = (tenant?["businessName"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if appBusinessName.isEmpty {
+                    appBusinessName = (profile?.business ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                displayName = (tenant?["displayName"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 logoUrl = tenant?["logoUrl"] as? String ?? ""
                 heroImageUrl = tenant?["heroImageUrl"] as? String ?? ""
                 if let w = Self.intFromFirestore(tenant?["heroImagePixelWidth"]),
@@ -1122,8 +1043,7 @@ class DesignViewModel: ObservableObject {
             sidebarIconColorBooking = ""
         }
         var updates: [String: Any] = [
-            "displayName": displayName,
-            "businessName": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            "displayName": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             "logoUrl": logoUrl,
             "heroImageUrl": heroImageUrl,
             "heroImagePixelWidth": heroImagePixelWidth,
@@ -1207,17 +1127,6 @@ class DesignViewModel: ObservableObject {
                 .map { ["title": $0.title, "body": $0.body] }
         }
         await saveTenantUpdates(tid, updates)
-        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedName.isEmpty, let uid = Auth.auth().currentUser?.uid {
-            try? await firebaseService.updateProviderProfile(uid: uid, updates: ["business": trimmedName])
-            await MainActor.run {
-                NotificationCenter.default.post(
-                    name: .tenantBusinessNameDidChange,
-                    object: nil,
-                    userInfo: ["businessName": trimmedName]
-                )
-            }
-        }
     }
 
     /// Keeps Gallery page colors in sync with Featured work for portfolio-style web themes.

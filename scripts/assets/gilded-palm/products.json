@@ -1,0 +1,42 @@
+[
+  {
+    "file": "products/01-repair-shampoo.jpg",
+    "name": "Botanical Repair Shampoo",
+    "category": "Shampoo",
+    "description": "Gentle cleanse with shea butter and botanical oils for soft, resilient hair.",
+    "price": 32,
+    "sortOrder": 0
+  },
+  {
+    "file": "products/02-hydrating-conditioner.jpg",
+    "name": "Hydrating Conditioner",
+    "category": "Conditioner",
+    "description": "Silky moisture that detangles and restores shine without weight.",
+    "price": 34,
+    "sortOrder": 1
+  },
+  {
+    "file": "products/03-nourishing-shampoo.jpg",
+    "name": "Nourishing Shampoo",
+    "category": "Shampoo",
+    "description": "Shea, coconut oil, and honey for curls and coils that need extra care.",
+    "price": 28,
+    "sortOrder": 2
+  },
+  {
+    "file": "products/04-lavender-tonic.jpg",
+    "name": "Essential Lavender Tonic",
+    "category": "Treatment",
+    "description": "Calming scalp tonic with aloe, glycerin, and organic lavender oil.",
+    "price": 38,
+    "sortOrder": 3
+  },
+  {
+    "file": "products/05-jojoba-shampoo.jpg",
+    "name": "Jojoba Replenishing Shampoo",
+    "category": "Shampoo",
+    "description": "Vegan formula that replenishes and softens — sulfate-free, salon-grade.",
+    "price": 36,
+    "sortOrder": 4
+  }
+]

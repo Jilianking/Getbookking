@@ -63,6 +63,7 @@ struct MessageComposerBar: View {
     var clientPhone: String
     var drawerState: DrawerState
     var isDemoMode: Bool
+    @FocusState.Binding var fieldFocused: Bool
 
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @State private var actionsExpanded = false
@@ -71,7 +72,6 @@ struct MessageComposerBar: View {
     @State private var paymentSheetKind: MessagePaymentSheetKind?
     @State private var showingBookingForm = false
     @State private var actionNotice: String?
-    @FocusState private var fieldFocused: Bool
 
     private var usablePresets: [String] {
         quickPresets
@@ -140,6 +140,12 @@ struct MessageComposerBar: View {
             Button("OK", role: .cancel) { actionNotice = nil }
         } message: {
             Text(actionNotice ?? "")
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { fieldFocused = false }
+            }
         }
     }
 

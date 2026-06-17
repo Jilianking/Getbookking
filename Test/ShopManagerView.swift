@@ -351,7 +351,7 @@ private struct ShopManageRow: View {
 
 // MARK: - Coming soon detail
 
-private struct ShopComingSoonView: View {
+struct ShopComingSoonView: View {
     let title: String
     let tint: Color
     let bullets: [String]
@@ -387,94 +387,93 @@ private struct ShopComingSoonView: View {
 
 struct ShopCatalogView: View {
     @ObservedObject var viewModel: DesignViewModel
+    var embeddedInDesignManage: Bool = false
     @State private var showAddProduct = false
     @State private var newProductName = ""
     @State private var newProductCategory = ""
     @State private var newProductDescription = ""
     @State private var newProductPrice = ""
-    @State private var newProductSalePrice = ""
     @State private var newProductVisible = true
     @State private var newProductImageItem: PhotosPickerItem? = nil
     @State private var newProductImageData: Data? = nil
     @State private var newProductCropItem: SingleImageCropSheetItem?
+    @State private var showProductPhotoLoadError = false
 
     var body: some View {
         Group {
-            if !viewModel.shopEnabled {
+            if embeddedInDesignManage {
+                catalogListContent
+            } else if !viewModel.shopEnabled {
                 ContentUnavailableView {
                     Label("Shop page is off", systemImage: "bag")
                 } description: {
                     Text("Turn on Shop page enabled in Shop settings or Web Page Design → Shop.")
                 }
             } else {
-                catalogList
+                ScrollView {
+                    catalogListContent
+                }
+                .appScreenBackground()
             }
         }
-        .navigationTitle("Catalog")
+        .navigationTitle(embeddedInDesignManage ? "" : "Catalog")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAddProduct) {
             addProductSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(item: $newProductCropItem, onDismiss: { newProductCropItem = nil }) { item in
-            UploadImagePreparationSheet(
-                images: [item.image],
-                advice: UploadImageAdvice.product,
-                navigationTitle: "Product photo",
-                allowedChoices: UploadCropPresetMenu.product,
-                defaultChoice: .square,
-                onUseJPEGData: { dataList in
-                    newProductImageData = dataList.first
-                    newProductCropItem = nil
-                }
-            )
-        }
     }
 
-    private var catalogList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Products on your site: name, photo, price, sale price, categories, visibility, and variants (variants coming soon).")
+    @ViewBuilder
+    private var catalogListContent: some View {
+        let inner = VStack(alignment: .leading, spacing: 16) {
+            if !embeddedInDesignManage {
+                Text("Products on your site: name, photo, price, categories, and visibility.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
 
-                if viewModel.products.isEmpty && !viewModel.isUploadingProduct {
-                    VStack(spacing: 12) {
-                        Image(systemName: "bag")
-                            .font(.system(size: 36))
-                            .foregroundStyle(.secondary)
-                        Text("No products yet")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 28)
+            if viewModel.products.isEmpty && !viewModel.isUploadingProduct {
+                VStack(spacing: 12) {
+                    Image(systemName: "bag")
+                        .font(.system(size: embeddedInDesignManage ? 28 : 36))
+                        .foregroundStyle(.secondary)
+                    Text("No products yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, embeddedInDesignManage ? 16 : 28)
+            }
 
-                ForEach(viewModel.products) { product in
-                    productRow(product)
-                }
+            ForEach(viewModel.products) { product in
+                productRow(product)
+            }
 
-                if viewModel.isUploadingProduct {
-                    HStack {
-                        ProgressView()
-                        Text("Adding product…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Button {
-                    showAddProduct = true
-                } label: {
-                    Label("Add Product", systemImage: "plus.circle.fill")
-                        .font(.subheadline.weight(.medium))
+            if viewModel.isUploadingProduct {
+                HStack {
+                    ProgressView()
+                    Text("Adding product…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .padding(16)
+
+            Button {
+                showAddProduct = true
+            } label: {
+                Label("Add Product", systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.medium))
+            }
         }
-        .appScreenBackground()
+        .padding(embeddedInDesignManage ? 14 : 16)
+
+        if embeddedInDesignManage {
+            inner.appCard()
+        } else {
+            inner
+        }
     }
 
     private func productRow(_ product: Product) -> some View {
@@ -510,12 +509,8 @@ struct ShopCatalogView: View {
                     Text(product.category).font(.caption).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 6) {
-                    if let sp = product.salePrice {
-                        Text("$\(String(format: "%.2f", sp))").font(.caption.weight(.semibold)).foregroundStyle(.red)
-                        Text("$\(String(format: "%.2f", product.price))").font(.caption).strikethrough().foregroundStyle(.secondary)
-                    } else {
-                        Text("$\(String(format: "%.2f", product.price))").font(.caption.weight(.semibold))
-                    }
+                    Text("$\(String(format: "%.2f", product.price))")
+                        .font(.caption.weight(.semibold))
                 }
             }
             Spacer()
@@ -579,7 +574,10 @@ struct ShopCatalogView: View {
                             guard let data = try? await item.loadTransferable(type: Data.self),
                                   !data.isEmpty,
                                   let uiImage = UIImage(data: data) else {
-                                await MainActor.run { newProductImageItem = nil }
+                                await MainActor.run {
+                                    newProductImageItem = nil
+                                    showProductPhotoLoadError = true
+                                }
                                 return
                             }
                             await MainActor.run {
@@ -609,41 +607,22 @@ struct ShopCatalogView: View {
                     .appCard()
 
                     shopSheetSectionHeader("Pricing")
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("PRICE")
-                                .font(.caption2.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PRICE")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text("$")
+                                .font(.title3.weight(.medium))
                                 .foregroundStyle(.secondary)
-                            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                Text("$")
-                                    .font(.title3.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                TextField("0.00", text: $newProductPrice)
-                                    .keyboardType(.decimalPad)
-                                    .font(.title3.weight(.medium))
-                            }
+                            TextField("0.00", text: $newProductPrice)
+                                .keyboardType(.decimalPad)
+                                .font(.title3.weight(.medium))
                         }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .appCard()
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("SALE PRICE")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                Text("$")
-                                    .font(.title3.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                TextField("—", text: $newProductSalePrice)
-                                    .keyboardType(.decimalPad)
-                                    .font(.title3.weight(.medium))
-                            }
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .appCard()
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .appCard()
 
                     Toggle(isOn: $newProductVisible) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -690,15 +669,13 @@ struct ShopCatalogView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         let price = Double(newProductPrice.trimmingCharacters(in: .whitespaces)) ?? 0
-                        let saleTrim = newProductSalePrice.trimmingCharacters(in: .whitespaces)
-                        let salePrice: Double? = saleTrim.isEmpty ? nil : Double(saleTrim)
                         Task {
                             await viewModel.addProduct(
                                 name: newProductName,
                                 category: newProductCategory,
                                 description: newProductDescription,
                                 price: price,
-                                salePrice: salePrice,
+                                salePrice: nil,
                                 imageData: newProductImageData,
                                 isActive: newProductVisible
                             )
@@ -708,6 +685,24 @@ struct ShopCatalogView: View {
                     }
                     .disabled(newProductName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+            .sheet(item: $newProductCropItem, onDismiss: { newProductCropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: UploadImageAdvice.product,
+                    navigationTitle: "Product photo",
+                    allowedChoices: UploadCropPresetMenu.product,
+                    defaultChoice: .square,
+                    onUseJPEGData: { dataList in
+                        newProductImageData = dataList.first
+                        newProductCropItem = nil
+                    }
+                )
+            }
+            .alert("Couldn't load photo", isPresented: $showProductPhotoLoadError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Try again or choose a different image from your library.")
             }
         }
     }
@@ -735,7 +730,6 @@ struct ShopCatalogView: View {
         newProductCategory = ""
         newProductDescription = ""
         newProductPrice = ""
-        newProductSalePrice = ""
         newProductVisible = true
         newProductImageItem = nil
         newProductImageData = nil

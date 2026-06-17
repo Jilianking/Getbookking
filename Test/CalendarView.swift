@@ -66,15 +66,30 @@ struct CalendarView: View {
                     Text("Appointments")
                         .font(.headline)
                         .padding(.horizontal)
-                    List(filteredEvents) { event in
-                        EventRow(event: event)
+                    if viewModel.isLoading && viewModel.events.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    } else if filteredEvents.isEmpty {
+                        Text("No appointments on this day.")
+                            .font(.subheadline)
+                            .foregroundStyle(AppDesign.textSecondary)
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                    } else {
+                        List(filteredEvents) { event in
+                            EventRow(event: event)
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .background(AppDesign.background)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(AppDesign.background)
                 }
                 .refreshable {
-                    await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode)
+                    await viewModel.loadEvents(
+                        forMonthAround: selectedDate,
+                        isDemoMode: authViewModel.isDemoMode
+                    )
                 }
             }
             .appScreenBackground()
@@ -90,12 +105,30 @@ struct CalendarView: View {
                 }
             }
             .task {
-                await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadEvents(
+                    forMonthAround: selectedDate,
+                    isDemoMode: authViewModel.isDemoMode
+                )
+            }
+            .onChange(of: selectedDate) { _, newDate in
+                Task {
+                    await viewModel.loadEventsIfMonthChanged(
+                        forMonthAround: newDate,
+                        isDemoMode: authViewModel.isDemoMode
+                    )
+                }
             }
             .sheet(isPresented: $showingBookingForm) {
                 BookingFormView(drawerState: drawerState)
                     .environmentObject(authViewModel)
-                    .onDisappear { Task { await viewModel.loadEvents(isDemoMode: authViewModel.isDemoMode) } }
+                    .onDisappear {
+                        Task {
+                            await viewModel.loadEvents(
+                                forMonthAround: selectedDate,
+                                isDemoMode: authViewModel.isDemoMode
+                            )
+                        }
+                    }
             }
         }
         .navigationViewStyle(.stack)
@@ -126,11 +159,18 @@ struct EventRow: View {
             Text(event.clientName)
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
-            AppStatusPill(text: event.type.rawValue.capitalized, soft: true)
+            AppStatusPill(text: statusLabel, soft: true)
         }
         .padding(14)
         .appCard()
         .padding(.vertical, 4)
     }
 
+    private var statusLabel: String {
+        switch event.status {
+        case .confirmed: return "Confirmed"
+        case .pending: return "New"
+        case .cancelled: return "Cancelled"
+        }
+    }
 }

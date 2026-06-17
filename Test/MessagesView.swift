@@ -208,6 +208,7 @@ struct MessageThreadView: View {
     @State private var clientName = "Customer"
     @State private var clientPhone = ""
     @State private var showThreadError = false
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -235,19 +236,25 @@ struct MessageThreadView: View {
             }
             .padding()
             .background(AppDesign.cardBackground)
+            .contentShape(Rectangle())
+            .onTapGesture { isComposerFocused = false }
 
             Divider()
 
             // Messages
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(messages, id: \.stableId) { message in
-                            MessageBubble(message: message)
-                                .id(message.stableId)
+                GeometryReader { geo in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(messages, id: \.stableId) { message in
+                                MessageBubble(message: message)
+                                    .id(message.stableId)
+                            }
                         }
+                        .padding()
+                        .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
                     }
-                    .padding()
+                    .scrollDismissesKeyboard(.interactively)
                 }
                 .onChange(of: messages.count) { _, _ in
                     if let last = messages.last {
@@ -255,6 +262,7 @@ struct MessageThreadView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             MessageComposerBar(
                 message: $newMessage,
@@ -267,7 +275,8 @@ struct MessageThreadView: View {
                 clientName: clientName,
                 clientPhone: clientPhone,
                 drawerState: drawerState,
-                isDemoMode: authViewModel.isDemoMode
+                isDemoMode: authViewModel.isDemoMode,
+                fieldFocused: $isComposerFocused
             )
         }
         .task {
@@ -315,7 +324,10 @@ struct MessageThreadView: View {
         Task {
             let ok = await viewModel.sendMessage(threadId: threadId, content: body)
             await MainActor.run {
-                if ok { newMessage = "" }
+                if ok {
+                    newMessage = ""
+                    isComposerFocused = false
+                }
                 isLoading = false
             }
         }
@@ -325,17 +337,18 @@ struct MessageThreadView: View {
 struct MessageBubble: View {
     let message: Message
 
+    private var isAdmin: Bool { message.sender == .admin }
+
     var body: some View {
         HStack {
-            if message.sender == .admin {
+            if isAdmin {
                 Spacer()
             }
-            VStack(alignment: message.sender == .admin ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
+            VStack(alignment: isAdmin ? .trailing : .leading, spacing: 4) {
+                MessageBubbleText(content: message.content, isAdmin: isAdmin)
                     .padding()
-                    .background(message.sender == .admin ? AppDesign.accentBlue : AppDesign.searchBackground)
-                    .foregroundStyle(message.sender == .admin ? Color.white : AppDesign.textPrimary)
-                    .cornerRadius(16)
+                    .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -344,6 +357,39 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+    }
+}
+
+/// Plain text plus tappable, underlined URLs (payment links, booking links, etc.).
+private struct MessageBubbleText: View {
+    let content: String
+    let isAdmin: Bool
+
+    var body: some View {
+        Text(attributedContent)
+            .font(.body)
+            .tint(isAdmin ? Color.white.opacity(0.95) : AppDesign.linkAccent)
+    }
+
+    private var attributedContent: AttributedString {
+        var result = AttributedString(content)
+        let textColor: Color = isAdmin ? .white : AppDesign.textPrimary
+        let linkColor: Color = isAdmin ? Color.white.opacity(0.95) : AppDesign.linkAccent
+        result.foregroundColor = textColor
+
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return result
+        }
+        let fullRange = NSRange(content.startIndex..<content.endIndex, in: content)
+        for match in detector.matches(in: content, options: [], range: fullRange) {
+            guard let url = match.url,
+                  let stringRange = Range(match.range, in: content),
+                  let attrRange = Range(stringRange, in: result) else { continue }
+            result[attrRange].link = url
+            result[attrRange].underlineStyle = .single
+            result[attrRange].foregroundColor = linkColor
+        }
+        return result
     }
 }
 
@@ -467,6 +513,8 @@ struct ComposeMessageView: View {
                 }
 
                 Spacer()
+                    .contentShape(Rectangle())
+                    .onTapGesture { messageFieldFocused = false }
 
                 MessageComposerBar(
                     message: $message,
@@ -479,7 +527,8 @@ struct ComposeMessageView: View {
                     clientName: selectedClientName,
                     clientPhone: clientPhone,
                     drawerState: drawerState,
-                    isDemoMode: authViewModel.isDemoMode
+                    isDemoMode: authViewModel.isDemoMode,
+                    fieldFocused: $messageFieldFocused
                 )
             }
         }.onAppear {

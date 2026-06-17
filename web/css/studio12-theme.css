@@ -591,8 +591,7 @@
   width: clamp(200px, 17vw, 260px);
   height: clamp(260px, 30vw, 320px);
   overflow: hidden;
-  /* Letterbox behind `object-fit: contain` so app-cropped photos aren’t trimmed again. */
-  background: rgba(28, 22, 18, 0.96);
+  background: transparent;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
   transition: box-shadow 0.4s ease, transform 0.4s ease;
 }
@@ -640,7 +639,7 @@
   aspect-ratio: 4 / 5;
   max-height: 420px;
   overflow: hidden;
-  background: rgba(28, 22, 18, 0.96);
+  background: transparent;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
   transition: box-shadow 0.4s ease, transform 0.4s ease;
 }
@@ -732,10 +731,10 @@
   transition: transform 0.45s ease;
 }
 
-/* Marquee + /gallery grid: show full bitmap (matches app crop editor); letterbox inside tile. */
+/* Marquee + /gallery grid: cover fills tiles (no letterbox bars). */
 .studio12-page .s12-gallery-marquee .s12-g-item img,
 .studio12-page .s12-gallery-page-grid .s12-g-item img {
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
 }
 

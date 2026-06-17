@@ -9,16 +9,10 @@ import Foundation
 enum QuickEditFieldTitles {
     static func title(for key: String) -> String {
         switch key {
-        case "displayName": return "Business name"
-        case "tagline": return "Tagline"
+        case "displayName": return "Name on website"
         case "luxeHeroTagline": return "Hero line"
         case "bladeHeroTagline": return "Hero headline"
         case "bladeHeroDescription": return "Hero description"
-        case "serviceArea": return "City / area"
-        case "contactAddress": return "Street address"
-        case "contactPhone": return "Phone"
-        case "contactEmail": return "Email"
-        case "aboutText": return "About text"
         case "classicAboutEyebrow": return "About section label"
         case "classicAboutHeading": return "About headline"
         case "classicStatYearsValue": return "Stat — years value"
@@ -46,8 +40,6 @@ enum QuickEditFieldTitles {
         case "studio12BookCtaLine1": return "Booking headline"
         case "studio12BookCtaItalic": return "Booking headline accent"
         case "studio12BookCtaBody": return "Booking section text"
-        case "businessHours": return "Business hours"
-        case "instagramHandle": return "Instagram handle"
         case "studio12PhilosophyHeadLine1": return "Philosophy headline (line 1)"
         case "studio12PhilosophyHeadLine2": return "Philosophy headline (line 2)"
         case "studio12PhilosophyHeadItalic": return "Philosophy headline (accent)"
@@ -75,6 +67,31 @@ enum QuickEditFieldTitles {
                 if parts.count == 3, parts[2] == "description" { return "Service description" }
                 return "Service"
             }
+            if key.hasPrefix("wc.contact.") {
+                let tail = String(key.dropFirst("wc.contact.".count))
+                switch tail {
+                case "phone": return "Phone (website only)"
+                case "email": return "Email (website only)"
+                case "hours": return "Hours (website only)"
+                case "address": return "Address (website only)"
+                case "location": return "Location (website only)"
+                case "serviceArea": return "City / area (website only)"
+                case "whereHead": return "Location headline (website only)"
+                case "instagram": return "Instagram (website only)"
+                default: return "Contact: \(tail)"
+                }
+            }
+            if key.hasPrefix("wc.svc.") {
+                let tail = String(key.dropFirst("wc.svc.".count))
+                if tail.hasSuffix(".name") { return "Service name (website only)" }
+                if tail.hasSuffix(".description") { return "Service description (website only)" }
+                return "Service text (website only)"
+            }
+            if key == "wc.classic.heroTag" || key == "wc.classic.heroTagline" { return "Hero tagline (website only)" }
+            if key == "wc.classic.aboutBio" { return "About bio (website only)" }
+            if key == "wc.luxe.promoTag" { return "Promo line (website only)" }
+            if key == "wc.luxe.teamBio" { return "Team bio (website only)" }
+            if key == "wc.s12.heroLead" || key == "wc.s12.navSub" { return "Hero intro (website only)" }
             if key.hasPrefix("wc.") {
                 let tail = String(key.dropFirst(3)).replacingOccurrences(of: ".", with: " → ")
                 return "Site text: \(tail)"

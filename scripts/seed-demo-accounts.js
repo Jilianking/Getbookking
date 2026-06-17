@@ -21,6 +21,10 @@ const { Firestore, FieldValue } = require(path.join(
   __dirname,
   "../functions/node_modules/@google-cloud/firestore"
 ));
+const { formSchemaForIndustry } = require(path.join(
+  __dirname,
+  "../functions/signupPayloads.js"
+));
 
 const DEFAULT_PROJECT = "test-app-96812";
 const DEFAULT_PASSWORD = process.env.DEMO_ACCOUNT_PASSWORD || "BookkingDemo2026!";
@@ -209,6 +213,30 @@ const PALETTES = {
     aboutBg: "#1A1016",
     aboutText: "#EAE0E6",
   }),
+  "stonecut:barber-chocolate": paletteTokens({
+    bg: "#3D2E26",
+    card: "#1E1612",
+    text: "#F5EDE4",
+    accent: "#C0221A",
+    accentHover: "#D42A20",
+    featuredBg: "#3D2E26",
+    featuredText: "#F5EDE4",
+    bookCard: "#1A1410",
+    aboutBg: "#0E0D0A",
+    aboutText: "#A09888",
+  }),
+  "classic:warm-coral": paletteTokens({
+    bg: "#FFF9F7",
+    card: "#F5E0DA",
+    text: "#3A2824",
+    accent: "#E07A62",
+    accentHover: "#C4624E",
+    featuredBg: "#FFF9F7",
+    featuredText: "#3A2824",
+    bookCard: "#FFFFFF",
+    aboutBg: "#3A2824",
+    aboutText: "#FFF9F7",
+  }),
   "luxe:terracotta-clay": paletteTokens({
     bg: "#F9F4EE",
     card: "#E4D0BE",
@@ -225,26 +253,30 @@ const PALETTES = {
 
 const DEMO_ACCOUNTS = [
   {
-    slug: "canvas-studio",
-    email: "demo-canvas-studio@getbookking.com",
-    firstName: "Alex",
-    lastName: "Rivera",
-    business: "Canvas Studio",
-    industry: "custom",
-    industryCustomLabel: "Interior Design",
-    webThemeId: "custom-standard",
-    webColorPaletteId: "original",
-    paletteKey: "classic:original",
+    slug: "northline-tattoo",
+    email: "demo-northline@getbookking.com",
+    firstName: "Sage",
+    lastName: "Morales",
+    business: "Northline Tattoo",
+    displayName: "Northline",
+    industry: "tattoos",
+    webThemeId: "tattoo-studio-v1",
+    webColorPaletteId: "custom",
+    paletteKey: "classic:warm-coral",
     subscriptionPlan: "solo",
-    tagline: "Spaces that feel intentional.",
-    serviceCity: "Saint Petersburg",
-    serviceStateAbbr: "FL",
-    businessHours: "Mon–Fri 9am–5pm",
+    tagline: "Permanent, on purpose.",
+    serviceCity: "Portland",
+    serviceStateAbbr: "OR",
+    businessHours: "By appointment · Tue–Sat",
+    aboutText:
+      "Northline Tattoo is a custom studio built around collaboration, clean execution, and work that ages well. Every piece starts with your idea — we refine design, placement, and pacing together before ink ever touches skin.",
+    instagramHandle: "northlinetattoo",
+    /* hero + gallery: scripts/assets/northline-tattoo/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
     services: [
-      { name: "Consultation", description: "Discuss your needs and preferences.", durationMinutes: 30, price: 0 },
-      { name: "Standard service", description: "Professional service tailored to you.", durationMinutes: 45, price: 120 },
-      { name: "Premium service", description: "Enhanced service with added detail.", durationMinutes: 60, price: 180 },
-      { name: "Full service", description: "Complete experience from start to finish.", durationMinutes: 90, price: 250 },
+      { name: "Consultation", description: "Discuss your idea, placement, and design direction.", durationMinutes: 30, price: 0 },
+      { name: "Small piece", description: "Minimal or fine line work with balanced coverage.", durationMinutes: 60, price: 200 },
+      { name: "Medium piece", description: "Detailed design with thoughtful placement and shading.", durationMinutes: 120, price: 450 },
+      { name: "Full session", description: "Large-scale or ongoing work in a focused session.", durationMinutes: 240, price: 900 },
     ],
   },
   {
@@ -319,52 +351,99 @@ const DEMO_ACCOUNTS = [
     firstName: "Amara",
     lastName: "Okonkwo",
     business: "Studio Amara",
-    industry: "hair",
+    displayName: "Amara",
+    industry: "nails",
     webThemeId: "studio-12-v1",
     subscriptionPlan: "solo",
-    tagline: "Color that respects your hair.",
+    tagline: "",
+    aboutText: "Clean, polished, and done right.",
     serviceCity: "Charleston",
     serviceStateAbbr: "SC",
     businessHours: "Wed–Sat 10am–6pm · By appointment",
-    studio12HeroEyebrow: "Hair · Color · Treatments",
-    studio12HeroHeadline: "Color that respects your hair.",
-    studio12PhilosophyHeadline: "Consult-first color in a calm studio.",
-    studio12BookCtaHeadline: "Ready for your consultation?",
+    studio12HeroEyebrow: "Color · Care · Finish",
+    studio12HeroHeadline: "Nails that elevate",
+    heroTagline: "every day.",
+    studio12PhilosophyHeadline: "Polish is more than color. · It's the details.",
+    studio12BookCtaHeadline: "Ready for your · next set?",
     studio12BookCtaBody:
-      "Tell us your goals — we'll match you with the right service and time.",
+      "Book online in minutes. We'll confirm your slot and follow up with everything you need.",
     instagramHandle: "studioamara",
-    webColorPaletteId: "original",
-    paletteKey: "studio12:original",
-    /* hero + gallery: custom uploads — not overwritten on seed */
+    webColorPaletteId: "custom",
+    paletteKey: "studio12:rose-quartz",
+    /* hero + gallery: scripts/assets/studio-amara/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
+    /* philosophy + book CTA: upload-tenant-studio12-images.js */
     services: [
-      { name: "Signature cut", description: "Custom cut designed for your look.", durationMinutes: 60, price: 85 },
-      { name: "Gloss & blowout", description: "Smooth finish with volume and shine.", durationMinutes: 45, price: 72 },
-      { name: "Single process color", description: "Rich, balanced, long-lasting color.", durationMinutes: 90, price: 145 },
-      { name: "Balayage", description: "Hand-painted dimension and softness.", durationMinutes: 180, price: 220 },
+      {
+        name: "Classic manicure",
+        description: "Clean shaping with a polished, natural finish.",
+        durationMinutes: 45,
+        price: 38,
+      },
+      {
+        name: "Gel manicure",
+        description: "Long-lasting color with a high-shine, chip-resistant finish.",
+        durationMinutes: 60,
+        price: 58,
+      },
+      {
+        name: "Gel extensions",
+        description: "Structured length and shape with a refined, salon-perfect look.",
+        durationMinutes: 90,
+        price: 78,
+      },
+      {
+        name: "Nail art add-on",
+        description: "Micro-art, French tips, or detail work per set.",
+        durationMinutes: 30,
+        price: 18,
+      },
     ],
   },
   {
-    slug: "northline-tattoo",
-    email: "demo-northline@getbookking.com",
-    firstName: "Sage",
-    lastName: "Morales",
-    business: "Northline Tattoo",
-    industry: "tattoos",
+    slug: "stone-cut-barbers",
+    email: "demo-stone-cut-barbers@getbookking.com",
+    firstName: "Marcus",
+    lastName: "Stone",
+    business: "Stone Cut Barbers",
+    displayName: "Stone Cut",
+    industry: "barber",
     webThemeId: "stonecut-v1",
     subscriptionPlan: "solo",
-    tagline: "Permanent, on purpose.",
-    serviceCity: "Portland",
-    serviceStateAbbr: "OR",
-    businessHours: "By appointment · Tue–Sat",
-    instagramHandle: "northlinetattoo",
-    webColorPaletteId: "original",
-    paletteKey: "stonecut:original",
-    /* hero + gallery: scripts/assets/northline-tattoo/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
+    tagline: "Sharp lines. Warm welcome.",
+    serviceCity: "Nashville",
+    serviceStateAbbr: "TN",
+    businessHours: "Tue–Sat 9am–7pm · Walk-ins welcome until 2pm",
+    aboutText:
+      "Stone Cut Barbers opened with one simple idea: every client deserves a sharp cut and a warm chair. We take our time — one appointment at a time, full attention, no rush. From skin fades to hot-towel shaves, every service is built around precision, calm, and craft.",
+    instagramHandle: "stonecutbarbers",
+    webColorPaletteId: "custom",
+    paletteKey: "stonecut:barber-chocolate",
+    /* hero + gallery: scripts/assets/stone-cut-barbers/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
     services: [
-      { name: "Consultation", description: "Discuss your idea and design direction.", durationMinutes: 30, price: 0 },
-      { name: "Small piece", description: "Minimal or fine line work.", durationMinutes: 60, price: 200 },
-      { name: "Medium piece", description: "Detailed design with balanced coverage.", durationMinutes: 120, price: 450 },
-      { name: "Full session", description: "Large-scale or ongoing work.", durationMinutes: 240, price: 900 },
+      {
+        name: "Signature fade",
+        description: "Hand-finished skin fade with razor-defined edges and custom texture on top.",
+        durationMinutes: 45,
+        price: 48,
+      },
+      {
+        name: "Beard sculpt & lineup",
+        description: "Shape, line, and finish with straight-razor detailing along cheeks and jaw.",
+        durationMinutes: 25,
+        price: 32,
+      },
+      {
+        name: "Hot towel shave",
+        description: "Traditional straight-razor shave with steamed towels and a post-shave ritual.",
+        durationMinutes: 40,
+        price: 45,
+      },
+      {
+        name: "The Full Stone Cut",
+        description: "Haircut, beard sculpt, hot towel, and scalp treatment — the complete experience.",
+        durationMinutes: 75,
+        price: 82,
+      },
     ],
   },
   {
@@ -372,38 +451,79 @@ const DEMO_ACCOUNTS = [
     email: "demo-gilded-palm@getbookking.com",
     firstName: "Lina",
     lastName: "Vasquez",
-    business: "Gilded Palm",
-    industry: "nails",
+    business: "Maison Lumière",
+    displayName: "Lumière",
+    industry: "hair",
     webThemeId: "luxe-v1",
     subscriptionPlan: "solo",
-    tagline: "Quiet luxury for your hands.",
+    tagline: "Elevated hair, tailored to you.",
     serviceCity: "Coral Gables",
     serviceStateAbbr: "FL",
-    businessHours: "Mon–Sat 10am–7pm",
-    luxeHeroTagline: "Nails · Gel · Art",
-    instagramHandle: "gildedpalm",
-    webColorPaletteId: "original",
-    paletteKey: "luxe:original",
-    heroImageUrl: u("1604654894610-6dd4e01d13f3", 1200, 1500),
-    featuredWorkImages: [
-      u("1632345031435-4c42d6e2a88f", 900, 1100),
-      u("1519014816941-bf64fb0e2b8e", 900, 1100),
-      u("1522335783442-4271ecc10a7f", 900, 1100),
-    ],
-    galleryImages: [
-      u("1604654894610-6dd4e01d13f3", 800, 1000),
-      u("1632345031435-4c42d6e2a88f", 800, 1000),
-      u("1519014816941-bf64fb0e2b8e", 800, 1000),
-      u("1522335783442-4271ecc10a7f", 800, 1000),
-    ],
+    businessHours: "Mon–Sat 10am–7pm · By appointment",
+    luxeHeroTagline: "Hair · Color · Styling",
+    luxeShowHomeServicesSection: true,
+    shopEnabled: true,
+    aboutText:
+      "Maison Lumière is a consult-first salon for cuts, color, and styling that feel effortless. We work one client at a time in a calm, light-filled space — precision where it matters, softness where you want it.",
+    instagramHandle: "maisonlumiere",
+    webColorPaletteId: "custom",
+    paletteKey: "luxe:terracotta-clay",
+    /* hero + gallery: scripts/assets/gilded-palm/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
+    /* shop products: scripts/assets/gilded-palm/products.json — seed via seed-tenant-products.js */
     services: [
-      { name: "Classic manicure", description: "Clean shaping with a polished finish.", durationMinutes: 45, price: 38 },
-      { name: "Gel manicure", description: "Long-lasting color with high shine.", durationMinutes: 60, price: 58 },
-      { name: "Gel extensions", description: "Structured length with a refined shape.", durationMinutes: 90, price: 78 },
-      { name: "Nail art add-on", description: "Micro-art and detail per set.", durationMinutes: 30, price: 18 },
+      {
+        name: "Signature cut & style",
+        description:
+          "Custom cut shaped for your face, hair, and lifestyle — finished with a polished blowout.",
+        durationMinutes: 75,
+        price: 95,
+      },
+      {
+        name: "Gloss & blowout",
+        description: "Smooth, voluminous finish with mirror-like shine.",
+        durationMinutes: 45,
+        price: 72,
+      },
+      {
+        name: "Single-process color",
+        description: "Rich, balanced color with a healthy, luminous finish.",
+        durationMinutes: 90,
+        price: 145,
+      },
+      {
+        name: "Balayage",
+        description: "Hand-painted dimension for soft, sun-kissed movement.",
+        durationMinutes: 180,
+        price: 240,
+      },
     ],
   },
 ];
+
+/** Industry booking fields; demos can override with `formSchema` on the demo object. */
+function demoFormSchema(demo) {
+  if (demo.formSchema && demo.formSchema.length) return demo.formSchema;
+  const base = formSchemaForIndustry(demo.industry);
+  if (demo.slug === "studio-amara") {
+    return base.concat([
+      {
+        key: "preferredDays",
+        label: "Preferred days",
+        type: "text",
+        required: false,
+      },
+      {
+        key: "preferredTime",
+        label: "Preferred time of day",
+        type: "select",
+        required: false,
+        options: ["Morning", "Afternoon", "Night", "Flexible"],
+        placeholder: "Select preferred time",
+      },
+    ]);
+  }
+  return base;
+}
 
 function serviceArea(city, stateAbbr) {
   return stateAbbr ? `${city}, ${stateAbbr}` : city;
@@ -443,9 +563,11 @@ async function upsertServices(db, tenantId, services) {
     bySlug.set(s, doc.id);
   }
 
+  const activeSlugs = new Set();
   for (let i = 0; i < services.length; i++) {
     const svc = services[i];
     const slug = slugify(svc.name);
+    activeSlugs.add(slug);
     const payload = {
       name: svc.name,
       slug,
@@ -474,6 +596,16 @@ async function upsertServices(db, tenantId, services) {
         .set(payload);
     }
   }
+
+  for (const doc of existing.docs) {
+    const s = doc.data().slug || slugify(doc.data().name || "");
+    if (!activeSlugs.has(s) && doc.data().isActive !== false) {
+      await doc.ref.set(
+        { isActive: false, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    }
+  }
 }
 
 async function seedOne(db, projectId, accessToken, demo, password) {
@@ -491,7 +623,7 @@ async function seedOne(db, projectId, accessToken, demo, password) {
 
   const tenantPatch = {
     slug: demo.slug,
-    displayName: demo.business,
+    displayName: demo.displayName || demo.business,
     businessName: demo.business,
     industry: demo.industry,
     ownerUid: auth.uid,
@@ -505,6 +637,8 @@ async function seedOne(db, projectId, accessToken, demo, password) {
     bufferMinutes: 15,
     webThemeId: demo.webThemeId,
     webColorPaletteId: demo.webColorPaletteId || "",
+    formSchema: demoFormSchema(demo),
+    bookingFormStyleId: demo.bookingFormStyleId || "standard",
     tagline: demo.tagline,
     serviceArea: area,
     serviceCity: demo.serviceCity,
@@ -519,6 +653,13 @@ async function seedOne(db, projectId, accessToken, demo, password) {
   if (demo.aboutText) tenantPatch.aboutText = demo.aboutText;
   if (demo.reviews && demo.reviews.length) tenantPatch.reviews = demo.reviews;
   if (demo.luxeHeroTagline) tenantPatch.luxeHeroTagline = demo.luxeHeroTagline;
+  if (demo.heroTagline) tenantPatch.heroTagline = demo.heroTagline;
+  if (demo.luxeShowHomeServicesSection === true) {
+    tenantPatch.luxeShowHomeServicesSection = true;
+  }
+  if (demo.shopEnabled === true) {
+    tenantPatch.shopEnabled = true;
+  }
   if (demo.studio12HeroEyebrow) tenantPatch.studio12HeroEyebrow = demo.studio12HeroEyebrow;
   if (demo.studio12HeroHeadline) tenantPatch.studio12HeroHeadline = demo.studio12HeroHeadline;
   if (demo.studio12PhilosophyHeadline)

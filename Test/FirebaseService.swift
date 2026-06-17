@@ -723,7 +723,7 @@ class FirebaseService: ObservableObject {
         try await db.collection("users").document(safeUid).setData(updates, merge: true)
     }
 
-    /// Keeps `users.business` and tenant `displayName` / `businessName` aligned.
+    /// Keeps `users.business` and tenant `businessName` aligned (app identity). Website `displayName` is separate.
     func syncBusinessName(uid: String, tenantId: String, name: String) async throws {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -735,7 +735,6 @@ class FirebaseService: ObservableObject {
         }
         try await updateProviderProfile(uid: uid, updates: ["business": trimmed])
         try await updateTenant(tenantId: tenantId, updates: [
-            "displayName": trimmed,
             "businessName": trimmed,
         ])
     }

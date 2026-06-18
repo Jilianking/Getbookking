@@ -19,12 +19,13 @@ enum DesignTab: String, CaseIterable {
     case about
     case shop
 
-    static let manageTabs: [DesignTab] = [.gallery, .book, .shop]
+    static let manageTabs: [DesignTab] = [.gallery, .book, .about, .shop]
 
     var manageSegmentTitle: String {
         switch self {
         case .gallery: return "Gallery"
         case .book: return "Book"
+        case .about: return "About"
         case .shop: return "Shop"
         default: return rawValue.capitalized
         }
@@ -1154,6 +1155,32 @@ class DesignViewModel: ObservableObject {
         await MainActor.run { invalidateWebPreview() }
     }
 
+    /// Removes stale Quick-edit hours copy so the live site uses `businessHours` from the weekly editor.
+    private static func webCopyOverridesWithoutContactHours(_ doc: [String: Any]?) -> [String: String]? {
+        var map = coercedStringMap(doc?["webCopyOverrides"])
+        guard map.removeValue(forKey: "wc.contact.hours") != nil else { return nil }
+        return map
+    }
+
+    func saveBusinessHours() async {
+        guard let tid = tenantId else { return }
+        let hoursString = Self.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
+        var updates: [String: Any] = [
+            "businessHours": hoursString,
+            "showBusinessHoursOnPage": showBusinessHoursOnPage,
+            "businessHoursWeekly": businessHoursWeekly.firestoreDayMap(),
+            "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() },
+        ]
+        if let doc = try? await firebaseService.fetchTenant(tenantId: tid),
+           let clearedOverrides = Self.webCopyOverridesWithoutContactHours(doc) {
+            updates["webCopyOverrides"] = clearedOverrides
+        }
+        await saveTenantUpdates(tid, updates)
+        await MainActor.run {
+            businessHours = hoursString
+        }
+    }
+
     func saveAbout() async {
         guard let tid = tenantId else { return }
         normalizeServiceCityTitleCase()
@@ -1185,6 +1212,10 @@ class DesignViewModel: ObservableObject {
             updates["classicStatRatedLabel"] = classicStatRatedLabel
             updates["classicAboutEyebrow"] = classicAboutEyebrow
             updates["classicAboutHeading"] = classicAboutHeading
+        }
+        if let doc = try? await firebaseService.fetchTenant(tenantId: tid),
+           let clearedOverrides = Self.webCopyOverridesWithoutContactHours(doc) {
+            updates["webCopyOverrides"] = clearedOverrides
         }
         await saveTenantUpdates(tid, updates)
         await MainActor.run {
@@ -2031,6 +2062,57 @@ class DesignViewModel: ObservableObject {
                 isActive: isActive
             )
             await MainActor.run { products.append(product); isUploadingProduct = false; invalidateWebPreview() }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription; isUploadingProduct = false }
+        }
+    }
+
+    func updateProduct(
+        _ product: Product,
+        name: String,
+        category: String,
+        description: String,
+        price: Double,
+        salePrice: Double?,
+        imageData: Data?,
+        isActive: Bool
+    ) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { isUploadingProduct = true }
+        do {
+            var imageUrl: String? = nil
+            if let data = imageData {
+                imageUrl = try await firebaseService.uploadProductImage(tenantId: tid, imageData: data)
+            }
+            try await firebaseService.updateTenantProduct(
+                tenantId: tid,
+                productId: product.id,
+                name: name,
+                category: category,
+                description: description,
+                price: price,
+                salePrice: salePrice,
+                imageUrl: imageUrl,
+                isActive: isActive
+            )
+            let descTrim = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let updated = Product(
+                id: product.id,
+                name: name,
+                category: category,
+                description: descTrim,
+                price: price,
+                salePrice: salePrice,
+                imageUrl: imageUrl ?? product.imageUrl,
+                isActive: isActive
+            )
+            await MainActor.run {
+                if let idx = products.firstIndex(where: { $0.id == product.id }) {
+                    products[idx] = updated
+                }
+                isUploadingProduct = false
+                invalidateWebPreview()
+            }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription; isUploadingProduct = false }
         }

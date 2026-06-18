@@ -924,6 +924,40 @@ class FirebaseService: ObservableObject {
         return ref.documentID
     }
 
+    func updateTenantProduct(
+        tenantId: String,
+        productId: String,
+        name: String,
+        category: String,
+        description: String,
+        price: Double,
+        salePrice: Double?,
+        imageUrl: String?,
+        isActive: Bool
+    ) async throws {
+        var data: [String: Any] = [
+            "name": name,
+            "category": category,
+            "price": price,
+            "isActive": isActive,
+        ]
+        let desc = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if desc.isEmpty {
+            data["description"] = FieldValue.delete()
+        } else {
+            data["description"] = desc
+        }
+        if let sp = salePrice {
+            data["salePrice"] = sp
+        } else {
+            data["salePrice"] = FieldValue.delete()
+        }
+        if let imageUrl {
+            data["imageUrl"] = imageUrl
+        }
+        try await db.collection("tenants").document(tenantId).collection("products").document(productId).updateData(data)
+    }
+
     func deleteTenantProduct(tenantId: String, productId: String) async throws {
         try await db.collection("tenants").document(tenantId).collection("products").document(productId).delete()
     }

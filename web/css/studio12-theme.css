@@ -889,6 +889,62 @@
   line-height: 1.8;
 }
 
+.studio12-page .s12-hours-block--grid {
+  white-space: normal;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.studio12-page .s12-hours-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 1fr) minmax(0, 1.4fr);
+  gap: 12px 20px;
+  align-items: baseline;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.studio12-page .s12-hours-day {
+  font-family: "Jost", sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--s12-taupe) 75%, transparent);
+}
+
+.studio12-page .s12-hours-time {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--s12-espresso);
+  text-align: right;
+  line-height: 1.35;
+}
+
+.studio12-page .s12-hours-time--closed {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-hours-block {
+  color: color-mix(in srgb, var(--bk-about-fg, inherit) 78%, transparent);
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-hours-day {
+  color: color-mix(in srgb, var(--bk-about-fg, inherit) 58%, transparent);
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-hours-time {
+  color: var(--bk-about-fg, inherit);
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-phil-body {
+  color: color-mix(in srgb, var(--bk-about-fg, inherit) 72%, transparent);
+}
+
 .studio12-page .s12-address {
   font-family: "Cormorant Garamond", serif;
   font-size: 17px;

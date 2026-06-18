@@ -52,6 +52,14 @@ Use owner accounts to upload photos and tweak copy in the app. Do not share pass
 
 Re-run `node scripts/seed-demo-accounts.js` to refresh. Replace with your own uploads in Website Design anytime.
 
+If Studio Amara gallery looks empty but hero still shows, restore nail photos from the saved featured strip:
+
+```bash
+node scripts/restore-studio-amara-images.js
+```
+
+Full image upload (hero + 6 gallery + philosophy + book CTA): see `upload-tenant-hero.js`, `upload-tenant-gallery.js`, `upload-tenant-studio12-images.js` and `scripts/assets/studio-amara/`.
+
 ## Marketing live preview
 
 `web/marketing/index.html` embeds `{slug}.getbookking.com/home?bk_embed=1` in the templates section. Deploy **both** hosting targets after changes:

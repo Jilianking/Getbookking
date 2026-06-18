@@ -1,7 +1,7 @@
 //
 //  DesignManageViews.swift
 //
-//  Manage mode tabs in Design (Gallery, Book, Shop).
+//  Manage mode tabs in Design (Gallery, Book, About, Shop).
 //
 
 import SwiftUI
@@ -350,33 +350,35 @@ private struct ManageGalleryEditableCell: View {
     let urlString: String
     let onDelete: () -> Void
 
+    private let cornerRadius: CGFloat = 12
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Group {
-                if let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        Color(.systemGray5)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color(.systemGray5))
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                Group {
+                    if let url = URL(string: urlString) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            Color(.systemGray5)
+                        }
                     }
-                } else {
-                    Color(.systemGray5)
                 }
             }
-
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.white, .red)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .topTrailing) {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white, .red)
+                }
+                .padding(4)
             }
-            .padding(4)
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .clipped()
     }
 }
 
@@ -530,6 +532,234 @@ private struct ManageGalleryStylePickerSheet: View {
 }
 
 // MARK: - Book
+
+struct ManageBusinessHoursBlock: View {
+    @ObservedObject var viewModel: DesignViewModel
+
+    @State private var showManageSheet = false
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading
+    }
+
+    private var hoursSummary: String {
+        let lines = viewModel.businessHoursWeekly.formattedDisplayString()
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard let first = lines.first else { return "Set your weekly hours" }
+        if lines.count == 1 { return first }
+        return first + " · " + "\(lines.count) day groups"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ManageCard {
+                ManageNavigationRow(
+                    title: "Weekly hours",
+                    subtitle: hoursSummary,
+                    value: "Edit"
+                ) {
+                    showManageSheet = true
+                }
+
+                ManageCardDivider()
+
+                ManageToggleRow(
+                    title: "Show hours on site",
+                    subtitle: "About, contact, and footer sections",
+                    isOn: $viewModel.showBusinessHoursOnPage,
+                    disabled: controlsDisabled
+                ) {
+                    Task { await viewModel.saveBusinessHours() }
+                }
+            }
+
+            Text("For appointment availability, use Settings → Scheduling & hours.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showManageSheet) {
+            ManageBusinessHoursSheet(viewModel: viewModel)
+        }
+    }
+}
+
+private struct ManageBusinessHoursSheet: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                BusinessHoursWeeklyEditor(viewModel: viewModel) {
+                    await viewModel.saveBusinessHours()
+                }
+                .padding(16)
+            }
+            .appScreenBackground()
+            .navigationTitle("Business hours")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct ManageAboutTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let isClassicTemplate: Bool
+    let isLuxeTemplate: Bool
+    let isBladeTemplate: Bool
+    let isStudio12Template: Bool
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading
+    }
+
+    private var storyHint: String {
+        if isClassicTemplate {
+            return "Appears in the Meet section on your site and on /about."
+        }
+        if isLuxeTemplate {
+            return "Story and contact appear on /about and on Luxe home (Meet and footer)."
+        }
+        if isBladeTemplate {
+            return "Story on /about. Contact, hours, and address power Blade and Stonecut home sections."
+        }
+        if isStudio12Template {
+            return "Feeds the Our approach section on Studio 12 home and your /about page."
+        }
+        return "Appears on your About page and contact sections on the site."
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ManageSectionHeader("Your story")
+            ManageCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(storyHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
+                        .lineLimit(3...8)
+                        .disabled(controlsDisabled)
+                }
+                .padding(14)
+            }
+
+            if isClassicTemplate {
+                ManageSectionHeader("About stats")
+                ManageCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Three headline figures under your story on Classic home and /about.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ManageToggleRow(
+                            title: "Show stats row",
+                            subtitle: "When off, stats hide but story and contact stay",
+                            isOn: $viewModel.classicShowAboutStats,
+                            disabled: controlsDisabled
+                        )
+                        ManageCardDivider()
+                        classicStatFields(label: "First stat", value: $viewModel.classicStatYearsValue, caption: $viewModel.classicStatYearsLabel)
+                        ManageCardDivider()
+                        classicStatFields(label: "Second stat", value: $viewModel.classicStatClientsValue, caption: $viewModel.classicStatClientsLabel)
+                        ManageCardDivider()
+                        classicStatFields(label: "Third stat", value: $viewModel.classicStatRatedValue, caption: $viewModel.classicStatRatedLabel)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            ManageSectionHeader("Contact")
+            ManageCard {
+                VStack(spacing: 12) {
+                    IconFieldRow(icon: "phone", placeholder: "(555) 123-4567", text: Binding(
+                        get: { viewModel.contactPhone },
+                        set: { viewModel.contactPhone = PhoneFormatting.formatAsYouType($0) }
+                    ))
+                    .keyboardType(.phonePad)
+                    .disabled(controlsDisabled)
+
+                    IconFieldRow(icon: "envelope", placeholder: "example@example.com", text: $viewModel.contactEmail)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .disabled(controlsDisabled)
+
+                    IconFieldRow(icon: "mappin.circle", placeholder: "Street address", text: $viewModel.contactAddress)
+                        .disabled(controlsDisabled)
+
+                    ServiceAreaCityStateFields(viewModel: viewModel)
+
+                    IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
+                        .textInputAutocapitalization(.never)
+                        .disabled(controlsDisabled)
+                }
+                .padding(14)
+            }
+
+            ManageSectionHeader("Business hours")
+            ManageBusinessHoursBlock(viewModel: viewModel)
+
+            ManageSectionHeader("Visibility")
+            ManageCard {
+                ManageToggleRow(
+                    title: "Show contact on site",
+                    subtitle: "Phone, email, address, and Instagram",
+                    isOn: $viewModel.showContactOnPage,
+                    disabled: controlsDisabled
+                )
+                ManageCardDivider()
+                ManageToggleRow(
+                    title: "About page enabled",
+                    subtitle: "Visible at /about on your site",
+                    isOn: $viewModel.showAboutPage,
+                    disabled: controlsDisabled
+                ) {
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Discard") {
+                    Task { await viewModel.loadData() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(controlsDisabled)
+                Button("Save changes") {
+                    Task { await viewModel.saveAbout() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(controlsDisabled)
+            }
+
+            Text("Appointment availability is in Settings → Scheduling & hours.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func classicStatFields(label: String, value: Binding<String>, caption: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 14)
+            TextField("Value", text: value)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 14)
+                .disabled(controlsDisabled)
+            TextField("Caption", text: caption)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 14)
+                .disabled(controlsDisabled)
+        }
+        .padding(.vertical, 8)
+    }
+}
 
 struct ManageBookTabContent: View {
     @ObservedObject var viewModel: DesignViewModel

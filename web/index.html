@@ -5317,6 +5317,53 @@
       white-space: pre-line;
       line-height: 1.8;
     }
+    .studio12-page .s12-hours-block--grid {
+      white-space: normal;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .studio12-page .s12-hours-row {
+      display: grid;
+      grid-template-columns: minmax(88px, 1fr) minmax(0, 1.4fr);
+      gap: 12px 20px;
+      align-items: baseline;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+    .studio12-page .s12-hours-day {
+      font-family: "Jost", sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--s12-taupe) 75%, transparent);
+    }
+    .studio12-page .s12-hours-time {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 17px;
+      font-weight: 400;
+      color: var(--s12-espresso);
+      text-align: right;
+      line-height: 1.35;
+    }
+    .studio12-page .s12-hours-time--closed {
+      opacity: 0.45;
+      font-style: italic;
+    }
+    .studio12-page [data-bk-color-surface="about"] .s12-hours-block {
+      color: color-mix(in srgb, var(--bk-about-fg, inherit) 78%, transparent);
+    }
+    .studio12-page [data-bk-color-surface="about"] .s12-hours-day {
+      color: color-mix(in srgb, var(--bk-about-fg, inherit) 58%, transparent);
+    }
+    .studio12-page [data-bk-color-surface="about"] .s12-hours-time {
+      color: var(--bk-about-fg, inherit);
+    }
+    .studio12-page [data-bk-color-surface="about"] .s12-phil-body {
+      color: color-mix(in srgb, var(--bk-about-fg, inherit) 72%, transparent);
+    }
 
     .studio12-page .s12-address,
     .studio12-page a.s12-address-link {
@@ -6348,6 +6395,81 @@
       }
       function tenantBusinessHoursTrimmed(tenant) {
         return String(tenant.businessHours || '').trim();
+      }
+      /** Parse tenant `businessHoursWeekly` into grouped display rows (Mon-first). */
+      function businessHoursWeeklyGroupedRows(tenant) {
+        var w = tenant && tenant.businessHoursWeekly;
+        if (!w || typeof w !== 'object') return null;
+        var dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        if (!Object.keys(w).length) return null;
+        function intMin(v) {
+          if (v == null) return 0;
+          if (typeof v === 'number') return Math.max(0, Math.min(Math.floor(v), 24 * 60 - 1));
+          var n = parseInt(String(v), 10);
+          return isNaN(n) ? 0 : Math.max(0, Math.min(n, 24 * 60 - 1));
+        }
+        function formatMin(m) {
+          var h = Math.floor(m / 60);
+          var min = m % 60;
+          var d = new Date(2000, 0, 1, h, min);
+          return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        }
+        function parseDay(dayMap) {
+          if (!dayMap || typeof dayMap !== 'object') return { closed: true, ranges: [] };
+          var closed = dayMap.closed === true;
+          var ranges = Array.isArray(dayMap.ranges) ? dayMap.ranges : [];
+          if (!ranges.length && dayMap.openMin != null && dayMap.closeMin != null) {
+            ranges = [{ openMin: dayMap.openMin, closeMin: dayMap.closeMin }];
+          }
+          if (closed || !ranges.length) return { closed: true, ranges: [] };
+          return {
+            closed: false,
+            ranges: ranges.map(function(r) {
+              return { openMin: intMin(r.openMin != null ? r.openMin : r.startMin), closeMin: intMin(r.closeMin != null ? r.closeMin : r.endMin) };
+            })
+          };
+        }
+        function scheduleKey(day) {
+          if (day.closed || !day.ranges.length) return 'closed';
+          return day.ranges.map(function(r) { return r.openMin + '-' + r.closeMin; }).join(',');
+        }
+        function scheduleText(day) {
+          if (day.closed || !day.ranges.length) return 'Closed';
+          return day.ranges.map(function(r) {
+            return formatMin(r.openMin) + ' – ' + formatMin(r.closeMin);
+          }).join(', ');
+        }
+        var days = dayKeys.map(function(k) { return parseDay(w[k]); });
+        var rows = [];
+        var i = 0;
+        while (i < 7) {
+          var j = i;
+          var keyI = scheduleKey(days[i]);
+          while (j + 1 < 7 && scheduleKey(days[j + 1]) === keyI) j++;
+          var label = i === j ? dayLabels[i] : (dayLabels[i] + ' – ' + dayLabels[j]);
+          rows.push({ label: label, time: scheduleText(days[i]), closed: days[i].closed || !days[i].ranges.length });
+          i = j + 1;
+        }
+        return rows;
+      }
+      /** Studio 12 hours: structured grid from weekly schedule, else plain text fallback. */
+      function studio12HoursBlockHtml(tenant) {
+        var rows = businessHoursWeeklyGroupedRows(tenant);
+        if (rows && rows.length) {
+          var inner = rows.map(function(row) {
+            var timeClass = row.closed ? ' s12-hours-time--closed' : '';
+            return '<div class="s12-hours-row">' +
+              '<span class="s12-hours-day">' + esc(row.label) + '</span>' +
+              '<span class="s12-hours-time' + timeClass + '">' + esc(row.time) + '</span></div>';
+          }).join('');
+          return '<div class="s12-hours-block s12-hours-block--grid">' + inner + '</div>';
+        }
+        var hoursTrim = tenantBusinessHoursTrimmed(tenant);
+        if (hoursTrim) {
+          return '<div class="s12-hours-block">' + esc(hoursTrim).replace(/\n/g, '<br>') + '</div>';
+        }
+        return '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.contact.hours', 'Add business hours in the app.') + '</p>';
       }
       function filterSidebarLinksForPageVisibility(tenant, links) {
         if (!Array.isArray(links)) return [];
@@ -9272,12 +9394,9 @@
             '<h2 class="s12-test-title s12-fade">' + wcSpan(tenant, 'wc.s12.testimonialsTitleLead', 'Words from') + ' <em>' + wcSpan(tenant, 'wc.s12.testimonialsTitleEm', 'our clients') + '</em></h2>' +
             '<div class="s12-test-grid">' + testCards + '</div></section>'
           : '';
-        var hoursTrimS12 = tenantBusinessHoursTrimmed(tenant);
         var hoursHtml = '';
         if (tenantShowBusinessHours(tenant)) {
-          hoursHtml = hoursTrimS12
-            ? '<div class="s12-hours-block">' + wcSpanMultiline(tenant, 'wc.contact.hours', hoursTrimS12) + '</div>'
-            : '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.contact.hours', 'Add business hours in the app.') + '</p>';
+          hoursHtml = studio12HoursBlockHtml(tenant);
         }
         var s12InfoClass = 's12-info' + (!tenantShowBusinessHours(tenant) ? ' s12-info--when-hidden' : '');
         var s12HoursHalf = tenantShowBusinessHours(tenant)

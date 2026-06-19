@@ -1392,6 +1392,142 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
 });
 
 /**
+ * Public web: create a shop order at checkout (cart + customer contact).
+ * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes? }
+ */
+exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  const customerName = (data?.customerName || "").toString().trim();
+  const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
+
+  if (!tenantSlug || !customerName || !customerEmail) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "tenantSlug, customerName, and customerEmail are required"
+    );
+  }
+
+  const tenantSnap = await db
+    .collection("tenants")
+    .where("slug", "==", tenantSlug)
+    .limit(1)
+    .get();
+
+  if (tenantSnap.empty) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+
+  const tenantDoc = tenantSnap.docs[0];
+  const tenantId = tenantDoc.id;
+  const tenantData = tenantDoc.data() || {};
+  if (tenantData.isActive === false) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting orders"
+    );
+  }
+  if (tenantData.shopEnabled !== true) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Shop is not enabled for this business"
+    );
+  }
+
+  const rawLines = Array.isArray(data?.lineItems) ? data.lineItems : [];
+  if (!rawLines.length) {
+    throw new functions.https.HttpsError("invalid-argument", "lineItems is required");
+  }
+  if (rawLines.length > 50) {
+    throw new functions.https.HttpsError("invalid-argument", "Too many line items");
+  }
+
+  const productSnap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("products")
+    .get();
+  const productsById = new Map();
+  productSnap.docs.forEach((doc) => {
+    productsById.set(doc.id, doc.data());
+  });
+
+  const lineItems = [];
+  let subtotalCents = 0;
+  for (const raw of rawLines) {
+    const productId = (raw?.productId || "").toString().trim();
+    if (!productId) continue;
+    const prod = productsById.get(productId);
+    if (!prod || prod.isActive === false) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "One or more products are no longer available"
+      );
+    }
+    const qty = Math.min(999, Math.max(1, parseInt(raw?.qty, 10) || 1));
+    const price = Number(prod.price) || 0;
+    let effective = price;
+    const sale = prod.salePrice != null ? Number(prod.salePrice) : NaN;
+    if (!isNaN(sale) && sale >= 0 && sale < price) effective = sale;
+    const unitPriceCents = Math.round(effective * 100);
+    const lineTotalCents = unitPriceCents * qty;
+    subtotalCents += lineTotalCents;
+    const fallbackName = (prod.name || "Item").toString().trim();
+    const clientName = (raw?.name || "").toString().trim();
+    lineItems.push({
+      productId,
+      name: (clientName || fallbackName).slice(0, 200),
+      qty,
+      unitPriceCents,
+      lineTotalCents,
+    });
+  }
+
+  if (!lineItems.length) {
+    throw new functions.https.HttpsError("invalid-argument", "No valid line items");
+  }
+
+  const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
+  const customerPhone = normalizeCustomerPhone(data?.customerPhone);
+  const orderData = {
+    status: "pending",
+    source: "shop",
+    tenantId,
+    customerName,
+    customerEmail,
+    lineItems,
+    subtotalCents,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (customerPhone) orderData.customerPhone = customerPhone;
+  if (notes) orderData.notes = notes;
+
+  const ref = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("shopOrders")
+    .add(orderData);
+
+  const customerRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(customerDocIdForTenant(customerName, customerEmail, customerPhone));
+  await customerRef.set(
+    {
+      name: customerName,
+      email: customerEmail,
+      ...(customerPhone ? { phone: customerPhone } : {}),
+      source: "shop_checkout_web",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return { orderId: ref.id, subtotalCents };
+});
+
+/**
  * Creates a PaymentIntent for Tap to Pay. amountCents in USD cents.
  * Returns { clientSecret, paymentIntentId } for Stripe Terminal SDK.
  * Requires Stripe Terminal iOS SDK + Tap to Pay entitlement for full flow.

@@ -962,6 +962,44 @@ class FirebaseService: ObservableObject {
         try await db.collection("tenants").document(tenantId).collection("products").document(productId).delete()
     }
 
+    // MARK: - Tenant Shop Orders
+
+    func fetchTenantShopOrders(tenantId: String, limit: Int = 200) async throws -> [ShopOrder] {
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("shopOrders")
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snapshot.documents.compactMap { doc -> ShopOrder? in
+            let d = doc.data()
+            let lineItemsRaw = d["lineItems"] as? [[String: Any]]
+            return ShopOrder(
+                id: doc.documentID,
+                status: d["status"] as? String ?? ShopOrderStatus.pending,
+                source: d["source"] as? String,
+                lineItems: ShopOrder.parseLineItems(lineItemsRaw),
+                subtotalCents: d["subtotalCents"] as? Int ?? Int(d["subtotalCents"] as? Double ?? 0),
+                customerName: d["customerName"] as? String,
+                customerEmail: d["customerEmail"] as? String,
+                customerPhone: d["customerPhone"] as? String,
+                notes: d["notes"] as? String,
+                bookingRequestId: d["bookingRequestId"] as? String,
+                createdAt: (d["createdAt"] as? Timestamp)?.dateValue(),
+                readAt: (d["readAt"] as? Timestamp)?.dateValue()
+            )
+        }
+    }
+
+    func updateTenantShopOrder(tenantId: String, orderId: String, updates: [String: Any]) async throws {
+        var firestoreUpdates = updates
+        if let readAt = firestoreUpdates["readAt"] as? Date {
+            firestoreUpdates["readAt"] = Timestamp(date: readAt)
+        }
+        try await db.collection("tenants").document(tenantId)
+            .collection("shopOrders").document(orderId)
+            .setData(firestoreUpdates, merge: true)
+    }
+
     func uploadProductImage(tenantId: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let name = UUID().uuidString + ".jpg"

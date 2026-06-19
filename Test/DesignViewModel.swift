@@ -182,6 +182,7 @@ class DesignViewModel: ObservableObject {
     /// Public `/about` route and About nav link to that URL (default on).
     @Published var showAboutPage: Bool = true
     @Published var products: [Product] = []
+    @Published var shopOrders: [ShopOrder] = []
     @Published var isUploadingProduct = false
 
     // Template / industry (business type — set in Settings)
@@ -1008,6 +1009,12 @@ class DesignViewModel: ObservableObject {
             }
             let fetchedProducts = try await firebaseService.fetchTenantProducts(tenantId: tid)
             await MainActor.run { products = fetchedProducts }
+            do {
+                let fetchedShopOrders = try await firebaseService.fetchTenantShopOrders(tenantId: tid)
+                await MainActor.run { shopOrders = fetchedShopOrders }
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+            }
             if tenant?["webThemeId"] == nil {
                 let def = WebTheme.resolvedThemeId(stored: nil, industry: tenant?["industry"] as? String)
                 try? await firebaseService.updateTenant(tenantId: tid, updates: ["webThemeId": def])
@@ -2123,6 +2130,127 @@ class DesignViewModel: ObservableObject {
         do {
             try await firebaseService.deleteTenantProduct(tenantId: tid, productId: product.id)
             await MainActor.run { products.removeAll { $0.id == product.id }; invalidateWebPreview() }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    var shopOrdersRevenueCents: Int {
+        shopOrders
+            .filter { $0.statusLower != ShopOrderStatus.cancelled }
+            .reduce(0) { $0 + $1.subtotalCents }
+    }
+
+    var shopPendingOrderCount: Int {
+        shopOrders.filter { $0.statusLower == ShopOrderStatus.pending }.count
+    }
+
+    var shopUnreadOrderCount: Int {
+        shopOrders.filter {
+            $0.statusLower == ShopOrderStatus.pending && $0.readAt == nil
+        }.count
+    }
+
+    static func shopOrderCustomerDocumentId(_ order: ShopOrder) -> String? {
+        let email = (order.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(order.customerPhone)
+        let digits = PhoneFormatting.digits(from: phone ?? "")
+        if digits.count >= 10 { return String(digits.suffix(10)) }
+        if !email.isEmpty {
+            let safe = email.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            return String(safe.prefix(120))
+        }
+        return nil
+    }
+
+    func addShopOrderCustomerToContacts(_ order: ShopOrder) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let name = (order.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = (order.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(order.customerPhone)
+        guard !name.isEmpty else {
+            await MainActor.run { errorMessage = "Customer name is required to save contact." }
+            return false
+        }
+        guard !email.isEmpty || (phone != nil && !(phone ?? "").isEmpty) else {
+            await MainActor.run { errorMessage = "Add an email or phone number to save contact." }
+            return false
+        }
+        do {
+            let customerId = Self.shopOrderCustomerDocumentId(order) ?? UUID().uuidString
+            try await firebaseService.upsertTenantCustomer(
+                tenantId: tid,
+                customerId: customerId,
+                name: name,
+                email: email,
+                phone: phone
+            )
+            return true
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+            return false
+        }
+    }
+
+    func isShopOrderCustomerInContacts(_ order: ShopOrder) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let email = (order.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(order.customerPhone) ?? ""
+        let digits = PhoneFormatting.digits(from: phone)
+        let targetPhoneId = digits.count >= 10 ? String(digits.suffix(10)) : ""
+        let targetEmailId = email.isEmpty
+            ? ""
+            : String(email.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression).prefix(120))
+        do {
+            let customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
+            return customers.contains { customer in
+                let existingPhoneDigits = PhoneFormatting.digits(from: customer.phone ?? "")
+                let existingPhoneId = existingPhoneDigits.count >= 10 ? String(existingPhoneDigits.suffix(10)) : ""
+                let existingEmailId = customer.email
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+                if !targetPhoneId.isEmpty && existingPhoneId == targetPhoneId { return true }
+                if !targetEmailId.isEmpty && String(existingEmailId.prefix(120)) == targetEmailId { return true }
+                return false
+            }
+        } catch {
+            return false
+        }
+    }
+
+    func updateShopOrderStatus(_ order: ShopOrder, status: String) async {
+        guard let tid = tenantId else { return }
+        do {
+            try await firebaseService.updateTenantShopOrder(
+                tenantId: tid,
+                orderId: order.id,
+                updates: ["status": status]
+            )
+            await MainActor.run {
+                if let idx = shopOrders.firstIndex(where: { $0.id == order.id }) {
+                    shopOrders[idx].status = status
+                }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func markShopOrderRead(_ order: ShopOrder) async {
+        guard order.readAt == nil, let tid = tenantId else { return }
+        let readAt = Date()
+        do {
+            try await firebaseService.updateTenantShopOrder(
+                tenantId: tid,
+                orderId: order.id,
+                updates: ["readAt": readAt]
+            )
+            await MainActor.run {
+                if let idx = shopOrders.firstIndex(where: { $0.id == order.id }) {
+                    shopOrders[idx].readAt = readAt
+                }
+            }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }

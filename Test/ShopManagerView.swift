@@ -109,8 +109,16 @@ struct ShopManagerView: View {
 
     private var statsRow: some View {
         HStack(spacing: 10) {
-            ShopStatTile(value: "—", caption: "Revenue", valueColor: AppDesign.accentBlue)
-            ShopStatTile(value: "—", caption: "Orders", valueColor: AppDesign.accentRed)
+            ShopStatTile(
+                value: viewModel.shopOrders.isEmpty ? "—" : String(format: "$%.0f", Double(viewModel.shopOrdersRevenueCents) / 100.0),
+                caption: "Revenue",
+                valueColor: AppDesign.accentBlue
+            )
+            ShopStatTile(
+                value: viewModel.shopOrders.isEmpty ? "—" : "\(viewModel.shopOrders.count)",
+                caption: "Orders",
+                valueColor: AppDesign.accentRed
+            )
             ShopStatTile(
                 value: "\(viewModel.products.count)",
                 caption: "Products",
@@ -127,9 +135,20 @@ struct ShopManagerView: View {
                         selectedTab = tab
                     }
                 } label: {
-                    Text(tab.title)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(selectedTab == tab ? AppDesign.textPrimary : AppDesign.textSecondary)
+                    HStack(spacing: 5) {
+                        Text(tab.title)
+                        if tab == .orders, viewModel.shopUnreadOrderCount > 0 {
+                            Text("\(viewModel.shopUnreadOrderCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(AppDesign.accentRed)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(selectedTab == tab ? AppDesign.textPrimary : AppDesign.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(
@@ -151,27 +170,580 @@ struct ShopManagerView: View {
         case .catalog:
             ShopProductCatalogContent(viewModel: viewModel, style: .hub)
         case .orders:
-            ShopInlineComingSoon(
-                title: "Orders",
-                tint: .green,
-                bullets: [
-                    "Order list (status, date, total)",
-                    "Order detail & line items",
-                    "Fulfillment & shipping",
-                    "Refunds & cancellations",
-                ]
-            )
+            ShopOrdersTabContent(viewModel: viewModel, drawerState: drawerState)
         case .analytics:
-            ShopInlineComingSoon(
-                title: "Analytics",
-                tint: .blue,
-                bullets: [
-                    "Revenue over time",
-                    "Top products & categories",
-                    "Conversion & traffic",
-                    "Export reports",
-                ]
-            )
+            ShopAnalyticsTabContent(viewModel: viewModel)
+        }
+    }
+}
+
+// MARK: - Analytics tab
+
+private struct ShopAnalyticsTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @State private var selectedRange: ShopAnalyticsRange = .days30
+
+    private var snapshot: ShopAnalyticsSnapshot {
+        ShopAnalyticsSnapshot.build(orders: viewModel.shopOrders, range: selectedRange)
+    }
+
+    private var maxDailyRevenue: Int {
+        snapshot.dailyRevenue.map(\.revenueCents).max() ?? 0
+    }
+
+    private var maxProductRevenue: Int {
+        snapshot.topProducts.map(\.revenueCents).max() ?? 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ShopAnalyticsRange.allCases) { range in
+                        let selected = selectedRange == range
+                        Button {
+                            selectedRange = range
+                        } label: {
+                            Text(range.chipLabel)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(selected ? AppDesign.chipSelectedForeground : AppDesign.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(selected ? AppDesign.chipSelectedBackground : AppDesign.cardBackground)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(selected ? Color.clear : AppDesign.chipBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if viewModel.shopOrders.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.secondary)
+                    Text("No shop data yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("Analytics appear after your first shop order.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ShopAnalyticsMetricTile(title: "Revenue", value: snapshot.formattedTotalRevenue, tint: AppDesign.accentBlue)
+                    ShopAnalyticsMetricTile(title: "Orders", value: "\(snapshot.orderCount)", tint: AppDesign.accentRed)
+                    ShopAnalyticsMetricTile(title: "Avg order", value: snapshot.orderCount > 0 ? snapshot.formattedAverageOrder : "—", tint: AppDesign.textPrimary)
+                    ShopAnalyticsMetricTile(title: "Fulfilled", value: snapshot.formattedFulfillmentRate, tint: AppDesign.accentGreen)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Revenue")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    if snapshot.dailyRevenue.isEmpty {
+                        Text("No revenue in this period.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(snapshot.dailyRevenue) { row in
+                            ShopAnalyticsBarRow(
+                                label: row.label,
+                                valueLabel: row.revenueCents > 0 ? row.formattedRevenue : "—",
+                                value: row.revenueCents,
+                                maxValue: max(maxDailyRevenue, 1)
+                            )
+                        }
+                    }
+                }
+                .padding(14)
+                .appCard()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Top products")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    if snapshot.topProducts.isEmpty {
+                        Text("No product sales in this period.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(snapshot.topProducts) { product in
+                            ShopAnalyticsBarRow(
+                                label: product.name,
+                                valueLabel: product.formattedRevenue,
+                                value: product.revenueCents,
+                                maxValue: max(maxProductRevenue, 1)
+                            )
+                        }
+                    }
+                }
+                .padding(14)
+                .appCard()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Order status")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                    }
+                    HStack(spacing: 8) {
+                        ShopAnalyticsStatusChip(label: "Pending", count: snapshot.pendingCount, color: AppDesign.brandWarm)
+                        ShopAnalyticsStatusChip(label: "Fulfilled", count: snapshot.fulfilledCount, color: AppDesign.accentGreen)
+                        ShopAnalyticsStatusChip(label: "Cancelled", count: snapshot.cancelledCount, color: AppDesign.textSecondary)
+                    }
+                }
+                .padding(14)
+                .appCard()
+
+                ShareLink(item: snapshot.exportCSV(orders: viewModel.shopOrders)) {
+                    Label("Export CSV", systemImage: "square.and.arrow.up")
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .appCard()
+
+                Text("Revenue is estimated from order totals. Paid checkout and site traffic tracking coming in a later update.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+private struct ShopAnalyticsMetricTile: View {
+    let title: String
+    let value: String
+    var tint: Color = AppDesign.textPrimary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .appCard()
+    }
+}
+
+private struct ShopAnalyticsBarRow: View {
+    let label: String
+    let valueLabel: String
+    let value: Int
+    let maxValue: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .lineLimit(1)
+                Spacer()
+                Text(valueLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            GeometryReader { geo in
+                let width = maxValue > 0 ? geo.size.width * CGFloat(value) / CGFloat(maxValue) : 0
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AppDesign.searchBackground)
+                        .frame(height: 8)
+                    Capsule()
+                        .fill(AppDesign.chartBarFill)
+                        .frame(width: max(value > 0 ? 8 : 0, width), height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+    }
+}
+
+private struct ShopAnalyticsStatusChip: View {
+    let label: String
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("\(count)")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(AppDesign.searchBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+// MARK: - Orders tab
+
+private enum ShopOrderFilter: String, CaseIterable, Identifiable {
+    case all
+    case new
+    case pending
+    case fulfilled
+    case cancelled
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .new: return "New"
+        case .pending: return "Pending"
+        case .fulfilled: return "Fulfilled"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
+    func matches(_ order: ShopOrder) -> Bool {
+        switch self {
+        case .all: return true
+        case .new: return order.statusLower == ShopOrderStatus.pending && order.readAt == nil
+        case .pending: return order.statusLower == ShopOrderStatus.pending
+        case .fulfilled: return order.statusLower == ShopOrderStatus.fulfilled
+        case .cancelled: return order.statusLower == ShopOrderStatus.cancelled
+        }
+    }
+}
+
+private struct ShopOrdersTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    var drawerState: DrawerState
+    @State private var searchText = ""
+    @State private var filter: ShopOrderFilter = .all
+    @State private var selectedOrder: ShopOrder?
+
+    private var filteredOrders: [ShopOrder] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return viewModel.shopOrders.filter { order in
+            guard filter.matches(order) else { return false }
+            guard !q.isEmpty else { return true }
+            if order.displayCustomerName.lowercased().contains(q) { return true }
+            if (order.notes ?? "").lowercased().contains(q) { return true }
+            return order.lineItems.contains {
+                $0.name.lowercased().contains(q)
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AppSearchField(placeholder: "Search orders", text: $searchText)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ShopOrderFilter.allCases) { item in
+                        let selected = filter == item
+                        Button {
+                            filter = item
+                        } label: {
+                            Text(item.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(selected ? AppDesign.chipSelectedForeground : AppDesign.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(selected ? AppDesign.chipSelectedBackground : AppDesign.cardBackground)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(selected ? Color.clear : AppDesign.chipBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if viewModel.shopOrders.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.secondary)
+                    Text("No orders yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("Orders appear when customers checkout from your shop.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else if filteredOrders.isEmpty {
+                Text("No orders match your search.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else {
+                ForEach(filteredOrders) { order in
+                    ShopHubOrderRow(order: order) {
+                        selectedOrder = order
+                    }
+                }
+            }
+
+            if !viewModel.shopOrders.isEmpty {
+                Text("\(filteredOrders.count) of \(viewModel.shopOrders.count) orders")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
+            }
+        }
+        .sheet(item: $selectedOrder) { order in
+            ShopOrderDetailSheet(viewModel: viewModel, order: order, drawerState: drawerState)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct ShopHubOrderRow: View {
+    let order: ShopOrder
+    let onTap: () -> Void
+
+    private var createdLabel: String {
+        guard let created = order.createdAt else { return "" }
+        let interval = Date().timeIntervalSince(created)
+        if interval < 3600 { return "\(max(1, Int(interval / 60)))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return created.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private var statusColors: (foreground: Color, background: Color) {
+        switch order.statusLower {
+        case ShopOrderStatus.pending:
+            return (AppDesign.brandWarm, AppDesign.brandCream)
+        case ShopOrderStatus.fulfilled:
+            return (AppDesign.accentGreen, AppDesign.accentGreen.opacity(0.14))
+        case ShopOrderStatus.cancelled:
+            return (AppDesign.textSecondary, AppDesign.searchBackground)
+        default:
+            return (AppDesign.textSecondary, AppDesign.searchBackground)
+        }
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                if order.isUnread && order.statusLower == ShopOrderStatus.pending {
+                    Circle()
+                        .fill(AppDesign.accentBlue)
+                        .frame(width: 8, height: 8)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(order.displayCustomerName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .lineLimit(1)
+                    Text(order.itemSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if !createdLabel.isEmpty {
+                        Text(createdLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text(order.formattedSubtotal)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    Text(ShopOrderStatus.displayLabel(for: order.status))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(statusColors.foreground)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(statusColors.background)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(12)
+            .appCard()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ShopOrderDetailSheet: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let order: ShopOrder
+    var drawerState: DrawerState
+    @Environment(\.dismiss) private var dismiss
+    @State private var contactInAddressBook = false
+    @State private var contactCheckDone = false
+    @State private var contactSaved = false
+
+    private var currentOrder: ShopOrder {
+        viewModel.shopOrders.first(where: { $0.id == order.id }) ?? order
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(currentOrder.formattedSubtotal)
+                                .font(.title2.weight(.bold))
+                            Spacer()
+                            AppStatusPill(
+                                text: ShopOrderStatus.displayLabel(for: currentOrder.status),
+                                soft: true
+                            )
+                        }
+                        if let created = currentOrder.createdAt {
+                            Text(created.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if currentOrder.hasCustomerContact {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("CONTACT")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            if let name = currentOrder.customerName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                                Label(name, systemImage: "person.fill")
+                                    .font(.subheadline)
+                            }
+                            if let email = currentOrder.customerEmail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
+                                Label(email, systemImage: "envelope.fill")
+                                    .font(.subheadline)
+                            }
+                            if let phone = currentOrder.customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty {
+                                Label(phone, systemImage: "phone.fill")
+                                    .font(.subheadline)
+                            }
+                            if contactCheckDone && !contactInAddressBook {
+                                Button {
+                                    Task {
+                                        contactSaved = await viewModel.addShopOrderCustomerToContacts(currentOrder)
+                                        if contactSaved { contactInAddressBook = true }
+                                    }
+                                } label: {
+                                    Label("Add to contacts", systemImage: "person.crop.circle.badge.plus")
+                                        .font(.subheadline.weight(.medium))
+                                }
+                            } else if contactInAddressBook || contactSaved {
+                                Label("Saved to contacts", systemImage: "checkmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(AppDesign.accentGreen)
+                            }
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .appCard()
+                    }
+
+                    if !currentOrder.lineItems.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("ITEMS")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(currentOrder.lineItems) { item in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.name)
+                                            .font(.subheadline.weight(.medium))
+                                        Text("\(item.qty) × \(item.formattedUnitPrice)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(item.formattedLineTotal)
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .appCard()
+                    }
+
+                    if let notes = currentOrder.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("NOTES")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(notes)
+                                .font(.subheadline)
+                                .foregroundStyle(AppDesign.textPrimary)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .appCard()
+                    }
+
+                    if currentOrder.statusLower == ShopOrderStatus.pending {
+                        VStack(spacing: 10) {
+                            Button {
+                                Task {
+                                    await viewModel.updateShopOrderStatus(currentOrder, status: ShopOrderStatus.fulfilled)
+                                }
+                            } label: {
+                                Text("Mark fulfilled")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(AppPrimaryButtonStyle())
+
+                            Button(role: .destructive) {
+                                Task {
+                                    await viewModel.updateShopOrderStatus(currentOrder, status: ShopOrderStatus.cancelled)
+                                }
+                            } label: {
+                                Text("Cancel order")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .appScreenBackground()
+            .navigationTitle("Order")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task {
+                await viewModel.markShopOrderRead(currentOrder)
+                if currentOrder.hasCustomerContact {
+                    contactInAddressBook = await viewModel.isShopOrderCustomerInContacts(currentOrder)
+                    contactCheckDone = true
+                }
+            }
         }
     }
 }

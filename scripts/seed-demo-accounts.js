@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Seed four public marketing demo tenants (solo).
+ * Seed marketing demo tenants (solo).
  * Creates Auth owners + Firestore tenants + services.
  *
  * Usage (from Test/):
@@ -224,6 +224,18 @@ const PALETTES = {
     bookCard: "#1A1410",
     aboutBg: "#0E0D0A",
     aboutText: "#A09888",
+  }),
+  "stonecut:original": paletteTokens({
+    bg: "#060604",
+    card: "#0E0D0A",
+    text: "#E8E0D0",
+    accent: "#C0221A",
+    accentHover: "#D42A20",
+    featuredBg: "#060604",
+    featuredText: "#E8E0D0",
+    bookCard: "#0E0D0A",
+    aboutBg: "#0E0D0A",
+    aboutText: "#E8E0D0",
   }),
   "classic:warm-coral": paletteTokens({
     bg: "#FFF9F7",
@@ -498,6 +510,54 @@ const DEMO_ACCOUNTS = [
       },
     ],
   },
+  {
+    slug: "iron-district-gym",
+    email: "demo-iron-district@getbookking.com",
+    firstName: "Jordan",
+    lastName: "Reyes",
+    business: "Iron District Gym",
+    displayName: "Jordan Reyes",
+    industry: "custom",
+    industryCustomLabel: "Personal trainer",
+    webThemeId: "stonecut-v1",
+    webColorPaletteId: "original",
+    paletteKey: "stonecut:original",
+    subscriptionPlan: "solo",
+    tagline: "Strength coaching for real life.",
+    serviceCity: "Denver",
+    serviceStateAbbr: "CO",
+    businessHours: "Mon–Fri 5am–9pm · Sat 7am–2pm",
+    aboutText:
+      "I'm Jordan Reyes, head coach at Iron District Gym in Denver. I work with beginners learning barbell basics and experienced lifters chasing their next PR. Every session is form-first, progressive, and built around your schedule — not a one-size-fits-all program.\n\nI train in person at Iron District: a no-frills space for people who show up. Book a free strength assessment to get started, or jump into a personal training session when you're ready.",
+    instagramHandle: "jordanreyes.coach",
+    /* hero + gallery: scripts/assets/iron-district-gym/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
+    services: [
+      {
+        name: "Personal training with Jordan",
+        description: "One-on-one coaching tailored to your goals, form, and schedule.",
+        durationMinutes: 60,
+        price: 85,
+      },
+      {
+        name: "Strength assessment",
+        description: "Movement screen, baseline lifts, and a clear plan you can follow.",
+        durationMinutes: 45,
+        price: 0,
+      },
+      {
+        name: "Coach-led class",
+        description: "Small-group strength or conditioning — Jordan on the floor, all levels welcome.",
+        durationMinutes: 60,
+        price: 28,
+      },
+      {
+        name: "Open gym + coach check-in",
+        description: "Solo training time at Iron District with Jordan available for form checks.",
+        durationMinutes: 60,
+        price: 18,
+      },
+    ],
+  },
 ];
 
 /** Industry booking fields; demos can override with `formSchema` on the demo object. */
@@ -626,6 +686,9 @@ async function seedOne(db, projectId, accessToken, demo, password) {
     displayName: demo.displayName || demo.business,
     businessName: demo.business,
     industry: demo.industry,
+    ...(demo.industryCustomLabel
+      ? { industryCustomLabel: demo.industryCustomLabel }
+      : {}),
     ownerUid: auth.uid,
     subscriptionPlan: demo.subscriptionPlan,
     subscriptionStatus: "active",
@@ -733,7 +796,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     console.log(`
-Seed four marketing demo tenants (Auth owner + Firestore + services).
+Seed marketing demo tenants (Auth owner + Firestore + services).
 
   node scripts/seed-demo-accounts.js
   node scripts/seed-demo-accounts.js --only=coles-chair

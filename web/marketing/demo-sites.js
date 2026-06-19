@@ -49,6 +49,15 @@
       tagline: "Elevated hair, tailored to you.",
       location: "Coral Gables, FL",
     },
+    {
+      id: "gym",
+      slug: "iron-district-gym",
+      name: "Jordan Reyes",
+      industry: "Personal trainer",
+      theme: "Stonecut",
+      tagline: "Strength coaching for real life.",
+      location: "Denver, CO",
+    },
   ];
 
   function demoSiteUrl(slug, useStaging, embed) {

@@ -2526,11 +2526,36 @@
     .bk-band-content a,
     .bk-band-content button,
     .bk-band-content [role="button"],
+    .bk-band-content .booking-form,
+    .bk-band-content .booking-form--guided,
+    .bk-band-content .booking-guided,
+    .bk-band-content .booking-form input,
+    .bk-band-content .booking-form select,
+    .bk-band-content .booking-form textarea,
+    .bk-band-content .booking-form label,
+    .bk-band-content .field-input,
+    .bk-band-content .pref-days-dropdown,
+    .bk-band-content .upload-drop,
     .blade-band-content [data-edit-key],
     .blade-band-content a,
     .blade-band-content button,
-    .blade-band-content [role="button"] {
+    .blade-band-content [role="button"],
+    .blade-band-content .booking-form,
+    .blade-band-content .booking-form--guided,
+    .blade-band-content .booking-guided,
+    .blade-band-content .booking-form input,
+    .blade-band-content .booking-form select,
+    .blade-band-content .booking-form textarea,
+    .blade-band-content .booking-form label,
+    .blade-band-content .field-input,
+    .blade-band-content .pref-days-dropdown,
+    .blade-band-content .upload-drop {
       pointer-events: auto;
+    }
+    /* Quick-edit hit targets sit behind band content; disable on live site so empty taps reach the page. */
+    .bk-color-band-hit,
+    .bk-hero-band-hit {
+      pointer-events: none;
     }
     .blade-page .blade-section-header,
     .blade-page .blade-services-grid {
@@ -2814,7 +2839,13 @@
       outline: 2px solid var(--bk-accent, #C9A96E);
       outline-offset: 3px;
     }
-    #bk-shop-chrome { position: relative; z-index: 1; }
+    #bk-shop-chrome {
+      position: relative;
+      z-index: 10040;
+      pointer-events: none;
+    }
+    #bk-shop-chrome > * { pointer-events: auto; }
+    .bk-shop-nav-cart { pointer-events: auto; }
     .bk-shop-modal {
       display: none;
       position: fixed;
@@ -2850,17 +2881,20 @@
       position: absolute;
       top: 12px;
       right: 12px;
-      width: 36px;
-      height: 36px;
+      width: auto;
+      max-width: none;
+      height: auto;
       border: none;
       background: transparent;
       font-size: 1.5rem;
+      font-weight: 400;
       line-height: 1;
       cursor: pointer;
       color: #666;
-      border-radius: 8px;
+      padding: 0;
+      border-radius: 0;
     }
-    .bk-shop-modal-close:hover { background: rgba(0,0,0,0.06); color: #111; }
+    .bk-shop-modal-close:hover { background: transparent; opacity: 0.65; color: #111; }
     .bk-shop-modal-title { margin: 0 40px 12px 0; font-size: 1.25rem; font-weight: 600; }
     .bk-shop-modal-desc { margin: 0 0 14px; font-size: 0.95rem; line-height: 1.55; color: #555; }
     .bk-shop-modal-price-row { margin-bottom: 18px; font-size: 1.1rem; font-weight: 600; }
@@ -2904,8 +2938,7 @@
       position: absolute;
       top: 0;
       right: 0;
-      width: 100%;
-      max-width: 400px;
+      width: min(400px, 100%);
       height: 100%;
       background: #fff;
       color: #1a1a1a;
@@ -2914,25 +2947,44 @@
       flex-direction: column;
       box-sizing: border-box;
     }
+    @media (max-width: 768px) {
+      .bk-shop-cart-drawer-panel {
+        width: min(400px, 92vw);
+        max-width: 92vw;
+      }
+    }
     .bk-shop-cart-drawer-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 18px 12px;
+      gap: 12px;
+      padding: 16px 16px 12px;
       border-bottom: 1px solid #eee;
     }
-    .bk-shop-cart-drawer-head h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+    .bk-shop-cart-drawer-head h2 {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
     .bk-shop-drawer-close {
+      width: auto;
+      max-width: none;
+      flex-shrink: 0;
+      min-width: 0;
       border: none;
       background: transparent;
       font-size: 1.5rem;
+      font-weight: 400;
       line-height: 1;
       cursor: pointer;
       color: #666;
-      padding: 4px 8px;
-      border-radius: 8px;
+      padding: 0;
+      border-radius: 0;
     }
-    .bk-shop-drawer-close:hover { background: rgba(0,0,0,0.06); }
+    .bk-shop-drawer-close:hover { background: transparent; opacity: 0.65; }
     .bk-shop-cart-lines { flex: 1; overflow: auto; padding: 12px 16px; }
     .bk-shop-cart-empty { margin: 24px 0; text-align: center; color: #888; font-size: 0.95rem; }
     .bk-shop-line {
@@ -2985,8 +3037,8 @@
     .bk-shop-checkout-page h1 { margin: 0 0 8px; font-size: 1.75rem; font-weight: 600; }
     .bk-shop-checkout-lead { margin: 0 0 24px; color: #666; font-size: 0.95rem; line-height: 1.5; }
     .bk-shop-checkout-summary { margin-bottom: 24px; padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.04); }
-    .bk-shop-checkout-line { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 0.95rem; }
-    .bk-shop-checkout-line:last-child { border-bottom: none; }
+    .bk-shop-checkout-summary .bk-shop-line { border-bottom-color: rgba(0,0,0,0.06); }
+    .bk-shop-checkout-summary .bk-shop-line:last-of-type { border-bottom: none; }
     .bk-shop-checkout-total { margin-top: 12px; font-weight: 600; font-size: 1.05rem; }
     .bk-shop-checkout-field { margin-bottom: 14px; }
     .bk-shop-checkout-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
@@ -3067,7 +3119,7 @@
     .blade-page .bk-shop-modal-close,
     .blade-page .bk-shop-drawer-close { color: rgba(245,240,232,0.65); }
     .blade-page .bk-shop-modal-close:hover,
-    .blade-page .bk-shop-drawer-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .blade-page .bk-shop-drawer-close:hover { background: transparent; opacity: 0.65; color: #fff; }
     .blade-page .bk-shop-modal-qty {
       background: #0a0a08;
       border-color: rgba(245,240,232,0.2);
@@ -6938,8 +6990,10 @@
       }
 
       /** Stonecut hero `<em>` line — industry name; city / area stays in `.stonecut-tag` only. */
-      function stonecutIndustryDisplayName(industry) {
-        var k = String(industry || '').trim().toLowerCase();
+      function stonecutIndustryDisplayName(tenant) {
+        var custom = tenant && tenant.industryCustomLabel && String(tenant.industryCustomLabel).trim();
+        if (custom) return custom;
+        var k = String((tenant && tenant.industry) || '').trim().toLowerCase();
         var map = {
           barber: 'Barber',
           hair: 'Hair salon',
@@ -7163,7 +7217,7 @@
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
         var displayName = tenantSiteDisplayName(tenant, 'Studio');
-        var industryLine = stonecutIndustryDisplayName(tenant.industry);
+        var industryLine = stonecutIndustryDisplayName(tenant);
         var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
         var locationHtml = sa
           ? ('<span class="stonecut-nav-location">' + wcSpan(tenant, 'wc.contact.serviceArea', sa) + '</span>')
@@ -7222,7 +7276,11 @@
         var addrBodyPlainSc = addrRaw || sa || 'Add your address in the app.';
         var addrBodyWrappedSc = wcSpanMultiline(tenant, 'wc.contact.location', addrBodyPlainSc);
         var phoneHref = telHrefFromPhone(tenant.contactPhone);
-        var industryLine = stonecutIndustryDisplayName(tenant.industry);
+        var industryLine = stonecutIndustryDisplayName(tenant);
+        var tagTrim = tenant.tagline && String(tenant.tagline).trim() ? String(tenant.tagline).trim() : '';
+        var taglineHtml = tagTrim
+          ? ('<div class="stonecut-tag">' + wcSpan(tenant, 'wc.stonecut.heroTagline', tagTrim) + '</div>')
+          : '';
         var cityTagHtml = sa ? ('<div class="stonecut-tag">' + wcSpan(tenant, 'wc.contact.serviceArea', sa) + '</div>') : '';
         var heroCtaInner = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="stonecut-btn stonecut-btn-primary">' + wcSpan(tenant, 'wc.stonecut.heroBook', 'Book a session') + '</a>'
@@ -7257,6 +7315,7 @@
           bkHeroBandHitButtonHtml() +
           '<div class="stonecut-hero-left" data-bk-hero-band-tappable>' +
           '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em>' + siteNameSpan(tenant, 'Studio') + '</h1>' +
+          taglineHtml +
           cityTagHtml +
           heroCta +
           '</div><div class="stonecut-hero-right">' + (tenant.heroImageUrl
@@ -8670,7 +8729,7 @@
               primaryColor: data.primaryColor, primaryColorHover: data.primaryColorHover || '',
               formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
               contactPhone: data.contactPhone, contactEmail: data.contactEmail, isActive: data.isActive,
-              industry: data.industry || '', heroImageUrl: data.heroImageUrl || '',
+              industry: data.industry || '', industryCustomLabel: data.industryCustomLabel || '', heroImageUrl: data.heroImageUrl || '',
               heroImagePixelWidth: tenantHeroPixelDim(data.heroImagePixelWidth, 16),
               heroImagePixelHeight: tenantHeroPixelDim(data.heroImagePixelHeight, 9),
               galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
@@ -10398,6 +10457,171 @@
         cart.lines = next;
         writeShopCart(tenantId, cart);
       }
+      function shopCartLineHtml(L) {
+        var unit = Number(L.unitPrice) || 0;
+        var pidAttr = esc(L.productId);
+        return '<div class="bk-shop-line" data-product-id="' + pidAttr + '">' +
+          '<div class="bk-shop-line-main">' +
+          '<span class="bk-shop-line-name">' + esc(L.name) + '</span>' +
+          '<span class="bk-shop-line-meta">' + formatMoney(unit) + ' × ' + L.qty + '</span>' +
+          '</div>' +
+          '<div class="bk-shop-line-actions">' +
+          '<button type="button" class="bk-shop-line-dec" data-pid="' + pidAttr + '" aria-label="Decrease quantity">−</button>' +
+          '<span class="bk-shop-line-qty">' + L.qty + '</span>' +
+          '<button type="button" class="bk-shop-line-inc" data-pid="' + pidAttr + '" aria-label="Increase quantity">+</button>' +
+          '<button type="button" class="bk-shop-line-remove" data-pid="' + pidAttr + '" aria-label="Remove">×</button>' +
+          '</div></div>';
+      }
+      function updateShopCartNavCount(tenantId) {
+        var navCount = document.getElementById('bk-shop-nav-count');
+        if (!navCount) return;
+        var cart = readShopCart(tenantId);
+        var n = 0;
+        for (var i = 0; i < cart.lines.length; i++) n += cart.lines[i].qty || 0;
+        if (n > 0) {
+          navCount.textContent = String(n);
+          navCount.style.display = '';
+        } else {
+          navCount.textContent = '';
+          navCount.style.display = 'none';
+        }
+      }
+      function renderShopCartDrawer(tenantId) {
+        var cartLinesEl = document.getElementById('bk-shop-cart-lines');
+        var cartTotalEl = document.getElementById('bk-shop-cart-total');
+        var checkoutBtn = document.getElementById('bk-shop-cart-checkout');
+        if (!cartLinesEl) return;
+        var cart = readShopCart(tenantId);
+        var html = '';
+        var total = 0;
+        if (!cart.lines.length) {
+          html = '<p class="bk-shop-cart-empty">Your cart is empty.</p>';
+        } else {
+          for (var li = 0; li < cart.lines.length; li++) {
+            var L = cart.lines[li];
+            var unit = Number(L.unitPrice) || 0;
+            total += unit * (L.qty || 0);
+            html += shopCartLineHtml(L);
+          }
+        }
+        cartLinesEl.innerHTML = html;
+        if (cartTotalEl) cartTotalEl.textContent = cart.lines.length ? ('Total ' + formatMoney(total)) : '';
+        if (checkoutBtn) checkoutBtn.disabled = !cart.lines.length;
+        updateShopCartNavCount(tenantId);
+      }
+      function refreshAllShopCartUIs(tenantId) {
+        renderShopCartDrawer(tenantId);
+        if (typeof window.__bkShopCheckoutRefresh === 'function') {
+          window.__bkShopCheckoutRefresh();
+        }
+      }
+      function bindShopCartLineDelegate() {
+        if (window.__bkShopCartLineDelegate) return;
+        window.__bkShopCartLineDelegate = true;
+        document.addEventListener('click', function(ev) {
+          var tenant = window.__bkShopActiveTenant;
+          if (!tenant || !tenant.id) return;
+          var btn = ev.target && ev.target.closest
+            ? ev.target.closest('button.bk-shop-line-dec, button.bk-shop-line-inc, button.bk-shop-line-remove')
+            : null;
+          if (!btn) return;
+          var container = btn.closest('#bk-shop-cart-lines, #bk-shop-checkout-summary');
+          if (!container) return;
+          ev.preventDefault();
+          var pid = btn.getAttribute('data-pid');
+          if (!pid) return;
+          if (btn.classList.contains('bk-shop-line-dec')) updateShopCartLineQty(tenant.id, pid, -1);
+          else if (btn.classList.contains('bk-shop-line-inc')) updateShopCartLineQty(tenant.id, pid, 1);
+          else if (btn.classList.contains('bk-shop-line-remove')) removeShopCartLine(tenant.id, pid);
+          refreshAllShopCartUIs(tenant.id);
+        });
+      }
+      function closeShopDrawer() {
+        var drawer = document.getElementById('bk-shop-cart-drawer');
+        if (drawer) drawer.classList.remove('bk-shop-open');
+      }
+      function closeShopModal() {
+        var modal = document.getElementById('bk-shop-modal');
+        if (!modal) return;
+        modal.classList.remove('bk-shop-open');
+        if (modal.dataset) modal.dataset.currentProductId = '';
+      }
+      function openShopDrawer() {
+        var drawer = document.getElementById('bk-shop-cart-drawer');
+        var tenant = window.__bkShopActiveTenant;
+        if (!drawer || !tenant || !tenant.id) return;
+        drawer.classList.add('bk-shop-open');
+        renderShopCartDrawer(tenant.id);
+      }
+      function bindShopChromeDelegate() {
+        if (window.__bkShopChromeDelegate) return;
+        window.__bkShopChromeDelegate = true;
+        document.addEventListener('click', function(ev) {
+          var el = ev.target;
+          if (!el || !el.closest) return;
+          if (el.closest('#bk-shop-nav-cart')) {
+            ev.preventDefault();
+            openShopDrawer();
+            return;
+          }
+          if (el.closest('[data-bk-shop-close="drawer"]')) {
+            var drawer = document.getElementById('bk-shop-cart-drawer');
+            if (drawer && drawer.classList.contains('bk-shop-open')) {
+              ev.preventDefault();
+              closeShopDrawer();
+            }
+            return;
+          }
+          if (el.closest('[data-bk-shop-close="modal"]')) {
+            var modal = document.getElementById('bk-shop-modal');
+            if (modal && modal.classList.contains('bk-shop-open')) {
+              ev.preventDefault();
+              closeShopModal();
+            }
+            return;
+          }
+          if (el.closest('#bk-shop-cart-checkout')) {
+            var tenant = window.__bkShopActiveTenant;
+            if (!tenant || !tenant.id) return;
+            var cart = readShopCart(tenant.id);
+            if (!cart.lines.length) return;
+            ev.preventDefault();
+            closeShopDrawer();
+            location.href = tenantBaseUrl(tenant) + '/shop/checkout';
+            return;
+          }
+          if (el.closest('.bk-shop-modal-add')) {
+            var tenantAdd = window.__bkShopActiveTenant;
+            var modalAdd = document.getElementById('bk-shop-modal');
+            if (!tenantAdd || !tenantAdd.id || !modalAdd) return;
+            var pid = modalAdd.dataset && modalAdd.dataset.currentProductId;
+            if (!pid) return;
+            var prod = findProductById(tenantAdd, pid);
+            if (!prod) return;
+            ev.preventDefault();
+            var mq = document.getElementById('bk-shop-modal-qty');
+            var q = parseInt(mq && mq.value, 10) || 1;
+            if (q < 1) q = 1;
+            addLineToShopCart(tenantAdd.id, prod, q);
+            closeShopModal();
+            updateShopCartNavCount(tenantAdd.id);
+            renderShopCartDrawer(tenantAdd.id);
+          }
+        });
+        if (!window.__bkShopEscBound) {
+          window.__bkShopEscBound = true;
+          document.addEventListener('keydown', function(ev) {
+            if (ev.key !== 'Escape') return;
+            var m = document.getElementById('bk-shop-modal');
+            var d = document.getElementById('bk-shop-cart-drawer');
+            if (m && m.classList.contains('bk-shop-open')) {
+              closeShopModal();
+            } else if (d && d.classList.contains('bk-shop-open')) {
+              closeShopDrawer();
+            }
+          });
+        }
+      }
       function formatShopCartNotes(cart) {
         var lines = cart && cart.lines ? cart.lines : [];
         if (!lines.length) return '';
@@ -10609,15 +10833,15 @@
           for (var i = 0; i < cart.lines.length; i++) {
             var L = cart.lines[i];
             var unit = Number(L.unitPrice) || 0;
-            var sub = unit * (L.qty || 0);
-            total += sub;
-            html += '<div class="bk-shop-checkout-line"><span>' + esc(L.name) + ' × ' + L.qty + '</span><span>' + formatMoney(sub) + '</span></div>';
+            total += unit * (L.qty || 0);
+            html += shopCartLineHtml(L);
           }
           html += '<div class="bk-shop-checkout-total">Total ' + formatMoney(total) + '</div>';
           summaryEl.innerHTML = html;
           form.style.display = '';
         }
 
+        window.__bkShopCheckoutRefresh = renderCheckoutSummary;
         renderCheckoutSummary();
 
         if (form.dataset.bkCheckoutBound) return;
@@ -10683,78 +10907,13 @@
         var cartBtn = document.getElementById('bk-shop-nav-cart');
         if (!modal || !drawer || !cartBtn) return;
         bindClassicMobileCartPlacement(cartBtn);
-        var modalQty = document.getElementById('bk-shop-modal-qty');
-        var modalAdd = modal.querySelector('.bk-shop-modal-add');
-        var cartLinesEl = document.getElementById('bk-shop-cart-lines');
-        var cartTotalEl = document.getElementById('bk-shop-cart-total');
-        var navCount = document.getElementById('bk-shop-nav-count');
-        var checkoutBtn = document.getElementById('bk-shop-cart-checkout');
-        if (cartBtn.dataset.bkShopBound === tenant.id) {
-          updateCartCount();
-          checkoutBtn.disabled = !readShopCart(tenant.id).lines.length;
-          return;
-        }
-        cartBtn.dataset.bkShopBound = tenant.id;
-
-        function closeModal() {
-          modal.classList.remove('bk-shop-open');
-          if (modal.dataset) modal.dataset.currentProductId = '';
-        }
-        function openModal() {
-          modal.classList.add('bk-shop-open');
-        }
-        function closeDrawer() {
-          drawer.classList.remove('bk-shop-open');
-        }
-        function openDrawer() {
-          drawer.classList.add('bk-shop-open');
-          renderCart();
-        }
-        function updateCartCount() {
-          var cart = readShopCart(tenant.id);
-          var n = 0;
-          for (var i = 0; i < cart.lines.length; i++) n += cart.lines[i].qty || 0;
-          if (n > 0) {
-            navCount.textContent = String(n);
-            navCount.style.display = '';
-          } else {
-            navCount.textContent = '';
-            navCount.style.display = 'none';
-          }
-        }
-        function renderCart() {
-          var cart = readShopCart(tenant.id);
-          var html = '';
-          var total = 0;
-          if (!cart.lines.length) {
-            html = '<p class="bk-shop-cart-empty">Your cart is empty.</p>';
-          } else {
-            for (var li = 0; li < cart.lines.length; li++) {
-              var L = cart.lines[li];
-              var unit = Number(L.unitPrice) || 0;
-              var sub = unit * (L.qty || 0);
-              total += sub;
-              var pidAttr = esc(L.productId);
-              html += '<div class="bk-shop-line" data-product-id="' + pidAttr + '">' +
-                '<div class="bk-shop-line-main">' +
-                '<span class="bk-shop-line-name">' + esc(L.name) + '</span>' +
-                '<span class="bk-shop-line-meta">' + formatMoney(unit) + ' × ' + L.qty + '</span>' +
-                '</div>' +
-                '<div class="bk-shop-line-actions">' +
-                '<button type="button" class="bk-shop-line-dec" data-pid="' + pidAttr + '" aria-label="Decrease quantity">−</button>' +
-                '<span class="bk-shop-line-qty">' + L.qty + '</span>' +
-                '<button type="button" class="bk-shop-line-inc" data-pid="' + pidAttr + '" aria-label="Increase quantity">+</button>' +
-                '<button type="button" class="bk-shop-line-remove" data-pid="' + pidAttr + '" aria-label="Remove">×</button>' +
-                '</div></div>';
-            }
-          }
-          cartLinesEl.innerHTML = html;
-          cartTotalEl.textContent = cart.lines.length ? ('Total ' + formatMoney(total)) : '';
-          checkoutBtn.disabled = !cart.lines.length;
-          updateCartCount();
-        }
-
+        bindShopCartLineDelegate();
+        bindShopChromeDelegate();
         window.__bkShopActiveTenant = tenant;
+        renderShopCartDrawer(tenant.id);
+        var checkoutBtn = document.getElementById('bk-shop-cart-checkout');
+        if (checkoutBtn) checkoutBtn.disabled = !readShopCart(tenant.id).lines.length;
+
         if (!window.__bkShopProductDelegate) {
           window.__bkShopProductDelegate = true;
           document.addEventListener('click', function(ev) {
@@ -10797,70 +10956,6 @@
             m.classList.add('bk-shop-open');
           });
         }
-
-        modalAdd.addEventListener('click', function() {
-          var pid = modal.dataset && modal.dataset.currentProductId;
-          if (!pid) return;
-          var prod = findProductById(tenant, pid);
-          if (!prod) return;
-          var q = parseInt(modalQty.value, 10) || 1;
-          if (q < 1) q = 1;
-          addLineToShopCart(tenant.id, prod, q);
-          closeModal();
-          updateCartCount();
-        });
-
-        cartBtn.addEventListener('click', function() {
-          openDrawer();
-        });
-
-        checkoutBtn.addEventListener('click', function() {
-          var cart = readShopCart(tenant.id);
-          if (!cart.lines.length) return;
-          closeDrawer();
-          location.href = tenantBaseUrl(tenant) + '/shop/checkout';
-        });
-
-        cartLinesEl.addEventListener('click', function(ev) {
-          var t = ev.target;
-          if (t.nodeType !== 1) return;
-          if (t.tagName !== 'BUTTON') t = t.closest('button');
-          if (!t || !cartLinesEl.contains(t)) return;
-          var pid = t.getAttribute('data-pid');
-          if (!pid) return;
-          if (t.classList.contains('bk-shop-line-dec')) updateShopCartLineQty(tenant.id, pid, -1);
-          else if (t.classList.contains('bk-shop-line-inc')) updateShopCartLineQty(tenant.id, pid, 1);
-          else if (t.classList.contains('bk-shop-line-remove')) removeShopCartLine(tenant.id, pid);
-          else return;
-          renderCart();
-        });
-
-        var closers = modal.querySelectorAll('[data-bk-shop-close="modal"]');
-        for (var ci = 0; ci < closers.length; ci++) {
-          closers[ci].addEventListener('click', closeModal);
-        }
-        var dclosers = drawer.querySelectorAll('[data-bk-shop-close="drawer"]');
-        for (var di = 0; di < dclosers.length; di++) {
-          dclosers[di].addEventListener('click', closeDrawer);
-        }
-
-        if (!window.__bkShopEscBound) {
-          window.__bkShopEscBound = true;
-          document.addEventListener('keydown', function(ev) {
-            if (ev.key !== 'Escape') return;
-            var m = document.getElementById('bk-shop-modal');
-            var d = document.getElementById('bk-shop-cart-drawer');
-            if (m && m.classList.contains('bk-shop-open')) {
-              m.classList.remove('bk-shop-open');
-              if (m.dataset) m.dataset.currentProductId = '';
-            } else if (d && d.classList.contains('bk-shop-open')) {
-              d.classList.remove('bk-shop-open');
-            }
-          });
-        }
-
-        updateCartCount();
-        checkoutBtn.disabled = !readShopCart(tenant.id).lines.length;
       }
       function loadProducts(tid) {
         return db.collection('tenants').doc(tid).collection('products').get()

@@ -355,7 +355,13 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-bk-band-tappable]{position:relative!important;}' +
                 '.bk-band-content,.blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
                 '.bk-band-content [data-edit-key],.bk-band-content a,.bk-band-content button,.bk-band-content [role="button"],' +
-                '.blade-band-content [data-edit-key],.blade-band-content a,.blade-band-content button,.blade-band-content [role="button"]{pointer-events:auto!important;}';
+                '.bk-band-content .booking-form,.bk-band-content .booking-form--guided,.bk-band-content .booking-guided,' +
+                '.bk-band-content .booking-form input,.bk-band-content .booking-form select,.bk-band-content .booking-form textarea,.bk-band-content .booking-form label,' +
+                '.bk-band-content .field-input,.bk-band-content .pref-days-dropdown,.bk-band-content .upload-drop,' +
+                '.blade-band-content [data-edit-key],.blade-band-content a,.blade-band-content button,.blade-band-content [role="button"],' +
+                '.blade-band-content .booking-form,.blade-band-content .booking-form--guided,.blade-band-content .booking-guided,' +
+                '.blade-band-content .booking-form input,.blade-band-content .booking-form select,.blade-band-content .booking-form textarea,.blade-band-content .booking-form label,' +
+                '.blade-band-content .field-input,.blade-band-content .pref-days-dropdown,.blade-band-content .upload-drop{pointer-events:auto!important;}';
               document.head.appendChild(sheet);
               var touchMoveSlopPx = 20;
               function isHeroImageQuickEditTarget(el) {

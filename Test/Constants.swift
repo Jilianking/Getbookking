@@ -46,8 +46,8 @@ struct Constants {
         static var marketingLoginURL: String { "\(marketingWebOrigin)/login.html" }
         /// Password reset page (`forgot-password.html`).
         static var marketingForgotPasswordPageURL: String { "\(marketingWebOrigin)/forgot-password.html" }
-        /// Live showcase tenant sites (`demos.html`).
-        static var marketingDemosURL: String { "\(marketingWebOrigin)/demos.html" }
+        /// Website template gallery (`templates.html`).
+        static var marketingTemplatesURL: String { "\(marketingWebOrigin)/templates.html" }
         static var marketingPrivacyURL: String { "\(marketingWebOrigin)/privacy.html" }
         static var marketingTermsURL: String { "\(marketingWebOrigin)/terms.html" }
 

@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/nav.css?v=6" />
 </head>
 <body>
 
@@ -25,9 +26,45 @@
       <li><a href="index.html#pricing">Pricing</a></li>
     </ul>
     <div class="nav-actions">
-      <a href="login.html" class="nav-cta">Log in</a>
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="account.html">Your account</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
     </div>
   </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="index.html#pricing">Pricing</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="privacy.html">Privacy</a></li>
+        <li><a href="terms.html" class="is-active">Terms</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
   <section class="legal-hero">
     <div class="sec-inner">
@@ -119,5 +156,10 @@
     <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/nav.js"></script>
+  <script src="assets/nav-auth.js?v=3"></script>
 </body>
 </html>

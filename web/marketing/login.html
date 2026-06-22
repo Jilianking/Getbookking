@@ -115,6 +115,31 @@
     .footer-links { text-align: center; margin-top: 24px; font-size: 14px; color: var(--text-secondary); }
     .footer-links a { color: var(--brand-warm); font-weight: 500; text-decoration: none; }
     .footer-links a:hover { text-decoration: underline; }
+    .login-panel.hidden { display: none; }
+    .signed-in-email { font-weight: 500; color: var(--text-primary); margin-bottom: 20px; }
+    .btn-secondary {
+      width: 100%;
+      padding: 14px 20px;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn-secondary:hover { background: var(--brand-offwhite); }
+    .timeout-msg {
+      font-size: 14px;
+      color: var(--text-secondary);
+      background: var(--brand-offwhite);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+    }
     @media (max-width: 520px) { .acct-header { padding: 0 20px; } }
   </style>
 </head>
@@ -131,9 +156,18 @@
 
   <div class="acct-wrap">
     <div class="acct-card">
-      <h1>Log in</h1>
-      <p class="subtitle">Manage your subscription and open your live site.</p>
-      <form id="loginForm" autocomplete="on">
+      <div id="loginSignedInPanel" class="login-panel hidden">
+        <h1>Already signed in</h1>
+        <p class="subtitle">You have an active session on this browser.</p>
+        <p class="signed-in-email" id="signedInEmail"></p>
+        <a href="account.html" class="btn-primary" style="display:block;text-align:center;text-decoration:none;">Go to my account</a>
+        <button type="button" class="btn-secondary" id="switchAccountBtn">Sign in as someone else</button>
+      </div>
+      <div id="loginFormPanel" class="login-panel">
+        <h1>Log in</h1>
+        <p class="subtitle">Manage your subscription and open your live site.</p>
+        <p class="timeout-msg hidden" id="timeoutMsg">Your session expired after 15 minutes of inactivity. Please sign in again.</p>
+        <form id="loginForm" autocomplete="on">
         <label for="email">Email</label>
         <input type="email" id="email" name="email" autocomplete="username" required />
         <label for="password">Password</label>
@@ -145,6 +179,7 @@
         <a href="forgot-password.html" id="forgotLink">Forgot password?</a>
         &nbsp;&middot;&nbsp;
         <a href="signup.html">Create an account</a>
+      </div>
       </div>
     </div>
   </div>
@@ -162,12 +197,31 @@
       el.classList.toggle('visible', !!msg);
     }
 
+    function showLoginForm() {
+      document.getElementById('loginSignedInPanel').classList.add('hidden');
+      document.getElementById('loginFormPanel').classList.remove('hidden');
+    }
+
+    function showSignedInPanel(email) {
+      document.getElementById('signedInEmail').textContent = email;
+      document.getElementById('loginFormPanel').classList.add('hidden');
+      document.getElementById('loginSignedInPanel').classList.remove('hidden');
+    }
+
     (function applyQueryParams() {
-      var emailParam = (new URLSearchParams(window.location.search).get('email') || '').trim();
+      var params = new URLSearchParams(window.location.search);
+      var emailParam = (params.get('email') || '').trim();
       if (emailParam) {
         document.getElementById('email').value = emailParam;
       }
+      if (params.get('timeout') === '1') {
+        document.getElementById('timeoutMsg').classList.remove('hidden');
+      }
     })();
+
+    document.getElementById('switchAccountBtn').addEventListener('click', function() {
+      auth.signOut().then(showLoginForm);
+    });
 
     document.getElementById('loginForm').addEventListener('submit', function(ev) {
       ev.preventDefault();
@@ -202,10 +256,13 @@
     });
 
     auth.onAuthStateChanged(function(user) {
-      if (user) {
-        window.location.replace('account.html');
+      if (user && user.email) {
+        showSignedInPanel(user.email);
+      } else {
+        showLoginForm();
       }
     });
   </script>
+  <script src="assets/nav-auth.js?v=3"></script>
 </body>
 </html>

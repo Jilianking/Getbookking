@@ -35,6 +35,13 @@ const {
   normalizeIndustry,
 } = require("./signupPayloads");
 const sms = require("./sms");
+const {
+  isDemoShowcaseStripeAccountId,
+  loadDemoShowcaseForPayCtx,
+  demoConnectAccountStatusResponse,
+  demoConnectBalanceResponse,
+  demoConnectTransactionsResponse,
+} = require("./demoShowcasePayments");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -651,6 +658,11 @@ exports.getConnectAccountStatus = functions
       };
     }
 
+    const demoShowcase = await loadDemoShowcaseForPayCtx(db, payCtx);
+    if (demoShowcase) {
+      return demoConnectAccountStatusResponse(demoShowcase.payCtx);
+    }
+
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       return {
@@ -660,6 +672,10 @@ exports.getConnectAccountStatus = functions
         payoutMode: payCtx.payoutMode,
         paymentScope: payCtx.scope,
       };
+    }
+
+    if (isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      return demoConnectAccountStatusResponse(payCtx);
     }
 
     const stripe = new Stripe(secretKey, {
@@ -986,8 +1002,15 @@ exports.getConnectBalance = functions
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
     const payCtx = await assertCanTakePayments(context.auth.uid);
+    const demoShowcase = await loadDemoShowcaseForPayCtx(db, payCtx);
+    if (demoShowcase) {
+      return demoConnectBalanceResponse(demoShowcase.payments);
+    }
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
+      return { availableCents: 0, pendingCents: 0 };
+    }
+    if (isDemoShowcaseStripeAccountId(stripeAccountId)) {
       return { availableCents: 0, pendingCents: 0 };
     }
     const secretKey = stripeSecretKey.value();
@@ -1151,17 +1174,30 @@ exports.getConnectBalanceTransactions = functions
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
     const payCtx = await assertCanTakePayments(context.auth.uid);
+    const startTs = data?.startTimestampSeconds;
+    const endTs = data?.endTimestampSeconds;
+    const limit = Math.min(Math.max(parseInt(data?.limit, 10) || 100, 1), 100);
+
+    const demoShowcase = await loadDemoShowcaseForPayCtx(db, payCtx);
+    if (demoShowcase) {
+      return demoConnectTransactionsResponse(demoShowcase.payments, {
+        startTimestampSeconds: startTs,
+        endTimestampSeconds: endTs,
+        limit,
+      });
+    }
+
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
+      return { transactions: [] };
+    }
+    if (isDemoShowcaseStripeAccountId(stripeAccountId)) {
       return { transactions: [] };
     }
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       return { transactions: [] };
     }
-    const startTs = data?.startTimestampSeconds;
-    const endTs = data?.endTimestampSeconds;
-    const limit = Math.min(Math.max(parseInt(data?.limit, 10) || 100, 1), 100);
 
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const params = { limit };
@@ -3676,6 +3712,171 @@ function formatPaymentMethodLabel(pm) {
   return "";
 }
 
+function formatPaymentMethodExpiry(pm) {
+  if (!pm || typeof pm !== "object" || !pm.card) return "";
+  const month = pm.card.exp_month;
+  const year = pm.card.exp_year;
+  if (!month || !year) return "";
+  const mm = String(month).padStart(2, "0");
+  const yy = String(year).slice(-2);
+  return `${mm} / ${yy}`;
+}
+
+function paymentMethodDisplayFromPm(pm) {
+  return {
+    label: formatPaymentMethodLabel(pm),
+    expiry: formatPaymentMethodExpiry(pm),
+  };
+}
+
+function paymentMethodDisplayFromCard(card) {
+  if (!card || !card.last4) return { label: "", expiry: "" };
+  const b = (card.brand || "Card").toString();
+  const brand = b.charAt(0).toUpperCase() + b.slice(1).replace(/_/g, " ");
+  const label = `${brand} ···· ${card.last4}`;
+  let expiry = "";
+  if (card.exp_month && card.exp_year) {
+    const mm = String(card.exp_month).padStart(2, "0");
+    const yy = String(card.exp_year).slice(-2);
+    expiry = `${mm} / ${yy}`;
+  }
+  return { label, expiry };
+}
+
+async function retrievePaymentMethod(stripe, id) {
+  const pmId = (id || "").toString().trim();
+  if (!pmId) return null;
+  try {
+    return await stripe.paymentMethods.retrieve(pmId);
+  } catch (_) {
+    return null;
+  }
+}
+
+function paymentMethodDisplayFromCharge(charge) {
+  if (!charge || typeof charge !== "object") return { label: "", expiry: "" };
+  const pmd = charge.payment_method_details;
+  if (pmd && pmd.card) return paymentMethodDisplayFromCard(pmd.card);
+  return { label: "", expiry: "" };
+}
+
+async function paymentMethodDisplayFromChargeAsync(stripe, charge) {
+  const fromDetails = paymentMethodDisplayFromCharge(charge);
+  if (fromDetails.label) return fromDetails;
+  if (!charge || typeof charge !== "object") return { label: "", expiry: "" };
+  const pmRef = charge.payment_method;
+  const pmId =
+    typeof pmRef === "string" ? pmRef : pmRef && typeof pmRef === "object" ? pmRef.id : "";
+  if (!pmId) return { label: "", expiry: "" };
+  const pm = await retrievePaymentMethod(stripe, pmId);
+  return paymentMethodDisplayFromPm(pm);
+}
+
+function paymentMethodDisplayIfPresent(pm) {
+  const display = paymentMethodDisplayFromPm(pm);
+  return display.label ? display : null;
+}
+
+async function paymentMethodFromRef(stripe, ref) {
+  if (!ref) return null;
+  if (typeof ref === "object") return ref;
+  return retrievePaymentMethod(stripe, ref);
+}
+
+async function paymentMethodFromPaidInvoice(stripe, invoiceId) {
+  const full = await stripe.invoices.retrieve(invoiceId, {
+    expand: ["payment_intent.payment_method", "charge"],
+  });
+
+  let pi = full.payment_intent;
+  if (typeof pi === "string") {
+    try {
+      pi = await stripe.paymentIntents.retrieve(pi, { expand: ["payment_method"] });
+    } catch (_) {
+      pi = null;
+    }
+  }
+  if (pi && typeof pi === "object" && pi.payment_method) {
+    const pipm = await paymentMethodFromRef(stripe, pi.payment_method);
+    const fromPi = paymentMethodDisplayIfPresent(pipm);
+    if (fromPi) return fromPi;
+  }
+
+  let charge = full.charge;
+  if (typeof charge === "string") {
+    try {
+      charge = await stripe.charges.retrieve(charge);
+    } catch (_) {
+      charge = null;
+    }
+  }
+  return paymentMethodDisplayFromChargeAsync(stripe, charge);
+}
+
+async function resolvePaymentMethodForCustomer(stripe, stripeCustomerId, sub, invoices) {
+  const tryPm = (pm) => paymentMethodDisplayIfPresent(pm);
+
+  let pm = await paymentMethodFromRef(stripe, sub && sub.default_payment_method);
+  let display = tryPm(pm);
+  if (display) return display;
+
+  if (sub && sub.id) {
+    try {
+      const subFresh = await stripe.subscriptions.retrieve(sub.id, {
+        expand: ["default_payment_method"],
+      });
+      pm = await paymentMethodFromRef(stripe, subFresh.default_payment_method);
+      display = tryPm(pm);
+      if (display) return display;
+    } catch (_) {}
+  }
+
+  const cust = await stripe.customers.retrieve(stripeCustomerId, {
+    expand: ["invoice_settings.default_payment_method", "default_source"],
+  });
+  if (!cust.deleted) {
+    pm = await paymentMethodFromRef(
+      stripe,
+      cust.invoice_settings && cust.invoice_settings.default_payment_method
+    );
+    display = tryPm(pm);
+    if (display) return display;
+
+    if (cust.default_source && typeof cust.default_source === "object") {
+      const src = cust.default_source;
+      if (src.object === "card" && src.last4) {
+        return paymentMethodDisplayFromCard(src);
+      }
+      if (src.card && src.card.last4) {
+        return paymentMethodDisplayFromCard(src.card);
+      }
+    }
+  }
+
+  const listed = await stripe.paymentMethods.list({
+    customer: stripeCustomerId,
+    limit: 10,
+  });
+  for (const item of listed.data || []) {
+    display = tryPm(item);
+    if (display) return display;
+  }
+
+  if (invoices && invoices.length) {
+    const paid = invoices.find((inv) => inv.status === "paid" && inv.amount_paid > 0);
+    if (paid && paid.id) {
+      try {
+        const fromInvoice = await paymentMethodFromPaidInvoice(stripe, paid.id);
+        if (fromInvoice.label) return fromInvoice;
+      } catch (err) {
+        console.warn("getBillingSummary invoice payment method", err.message);
+      }
+    }
+  }
+
+  return { label: "", expiry: "" };
+}
+
 /**
  * Marketing account page: Stripe Customer Portal (subscription, payment method, invoices).
  * Enable: Stripe Dashboard → Settings → Billing → Customer portal; allow return URL host there.
@@ -3724,7 +3925,7 @@ exports.createBillingPortalSession = functions
       }
       const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
       const base = billingPortalReturnBase(data);
-      const returnUrl = `${base}/account.html?billing=portal`;
+      const returnUrl = `${base}/billing.html?billing=portal`;
 
       const session = await stripe.billingPortal.sessions.create({
         customer: stripeCustomerId,
@@ -3746,7 +3947,7 @@ exports.createBillingPortalSession = functions
       const baseHint = billingPortalReturnBase(data);
       throw new functions.https.HttpsError(
         "failed-precondition",
-        `Could not open billing portal. In Stripe: enable Customer portal and allow return URL ${baseHint}/account.html. ${raw}`
+        `Could not open billing portal. In Stripe: enable Customer portal and allow return URL ${baseHint}/billing.html. ${raw}`
       );
     }
   });
@@ -3844,24 +4045,16 @@ exports.getBillingSummary = functions
       }
 
       let paymentMethodLabel = "";
-      const dpm = sub && sub.default_payment_method;
-      if (dpm && typeof dpm === "object") {
-        paymentMethodLabel = formatPaymentMethodLabel(dpm);
-      } else if (typeof dpm === "string" && dpm) {
-        try {
-          const pm = await stripe.paymentMethods.retrieve(dpm);
-          paymentMethodLabel = formatPaymentMethodLabel(pm);
-        } catch (_) {}
-      }
-      if (!paymentMethodLabel) {
-        const cust = await stripe.customers.retrieve(stripeCustomerId, {
-          expand: ["invoice_settings.default_payment_method"],
-        });
-        if (!cust.deleted && cust.invoice_settings && cust.invoice_settings.default_payment_method) {
-          const pm = cust.invoice_settings.default_payment_method;
-          if (typeof pm === "object") paymentMethodLabel = formatPaymentMethodLabel(pm);
-        }
-      }
+      let paymentMethodExpiry = "";
+      const invList = await stripe.invoices.list({ customer: stripeCustomerId, limit: 8 });
+      const pmDetails = await resolvePaymentMethodForCustomer(
+        stripe,
+        stripeCustomerId,
+        sub,
+        invList.data
+      );
+      paymentMethodLabel = pmDetails.label || "";
+      paymentMethodExpiry = pmDetails.expiry || "";
 
       let subscriptionPayload = null;
       if (sub) {
@@ -3894,7 +4087,6 @@ exports.getBillingSummary = functions
         };
       }
 
-      const invList = await stripe.invoices.list({ customer: stripeCustomerId, limit: 8 });
       const invoices = invList.data.map((inv) => ({
         id: inv.id,
         number: inv.number || inv.id,
@@ -3910,6 +4102,7 @@ exports.getBillingSummary = functions
         hasStripeCustomer: true,
         firestorePlan,
         paymentMethodLabel: paymentMethodLabel || "",
+        paymentMethodExpiry: paymentMethodExpiry || "",
         subscription: subscriptionPayload,
         invoices,
       };

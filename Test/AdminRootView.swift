@@ -181,8 +181,7 @@ struct AdminRootView: View {
             if visitedSections.contains(.dashboard) {
                 DashboardView(
                     viewModel: dashboardMetrics,
-                    drawerState: drawerState,
-                    sectionTitle: AdminSection.dashboard.title
+                    drawerState: drawerState
                 )
                 .sectionVisible(drawerState.selectedSection == .dashboard)
             }

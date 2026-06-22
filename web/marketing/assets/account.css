@@ -1,0 +1,624 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --brand-dark: #2C2018;
+  --brand-warm: #8B6F47;
+  --brand-cream: #F5EDD8;
+  --brand-offwhite: #FDFAF6;
+  --text-primary: #1A1410;
+  --text-secondary: #6B5E4A;
+  --text-tertiary: #9A8A7A;
+  --border: #E8E0D4;
+  --danger: #b42318;
+  --success: #1a7f4b;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text-primary);
+  background: var(--brand-offwhite);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.acct-header {
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  height: 80px;
+  background: rgba(255,255,255,0.92);
+  border-bottom: 1px solid var(--border);
+}
+
+.acct-header a.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 22px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.acct-header a.brand img { width: 56px; height: 56px; border-radius: 50%; }
+
+.acct-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+
+.acct-page h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(32px, 5vw, 40px);
+  font-weight: 400;
+  margin-bottom: 32px;
+}
+
+.acct-section {
+  margin-bottom: 28px;
+}
+
+.acct-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+}
+
+.acct-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.acct-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.acct-profile-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--brand-cream);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--brand-warm);
+  flex-shrink: 0;
+}
+
+.acct-profile-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.acct-profile-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.acct-profile-email {
+  font-size: 14px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.acct-edit-link {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.acct-edit-link:hover { color: var(--text-primary); }
+
+.acct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 20px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  text-align: left;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+a.acct-row:hover,
+button.acct-row:hover {
+  background: var(--brand-offwhite);
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.acct-row-icon {
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.acct-row-label { flex: 1; }
+
+.acct-row-chevron {
+  color: var(--text-tertiary);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.acct-plan-card {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.acct-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.acct-plan-head h2 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.acct-plan-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--brand-cream);
+  color: var(--brand-warm);
+  border: 1px solid var(--border);
+}
+
+.acct-plan-badge.is-pro {
+  background: var(--brand-dark);
+  color: var(--brand-cream);
+  border-color: var(--brand-dark);
+}
+
+.acct-plan-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+
+.acct-plan-features {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.acct-plan-features li {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 4px 0 4px 18px;
+  position: relative;
+}
+
+.acct-plan-features li::before {
+  content: "•";
+  position: absolute;
+  left: 4px;
+  color: var(--brand-warm);
+}
+
+.btn-upgrade {
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--brand-dark);
+  color: var(--brand-cream);
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-upgrade:hover { opacity: 0.92; }
+.btn-upgrade:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.acct-billing-meta {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.acct-billing-meta-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.acct-billing-meta-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.acct-billing-meta-value {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.acct-billing-history {
+  padding: 16px 20px 8px;
+}
+
+.acct-billing-history-title {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+
+.acct-invoice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.acct-invoice-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.acct-invoice-item:first-child { border-top: none; padding-top: 0; }
+
+.acct-invoice-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.acct-invoice-date {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.acct-invoice-number {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
+.acct-invoice-amount {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.acct-invoice-status {
+  font-size: 12px;
+  text-align: right;
+  color: var(--text-tertiary);
+}
+
+.acct-invoice-status--paid { color: var(--success); }
+
+.acct-invoice-view {
+  font-size: 13px;
+  color: var(--brand-warm);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.acct-invoice-view:hover { color: var(--brand-dark); text-decoration: underline; }
+
+.acct-billing-empty {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  padding-bottom: 8px;
+}
+
+.acct-stripe-link-wrap {
+  padding: 8px 20px 16px;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.acct-stripe-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.acct-stripe-link:hover { color: var(--brand-warm); }
+
+.acct-row--danger .acct-row-label { color: var(--danger); }
+
+.acct-error {
+  color: var(--danger);
+  font-size: 14px;
+  margin-top: 10px;
+  padding: 0 20px 16px;
+}
+
+.acct-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 0 20px 16px;
+  line-height: 1.5;
+}
+
+.acct-stripe-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 24px;
+}
+
+.acct-stripe-panel h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.acct-stripe-panel p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.acct-stripe-panel p.success { color: var(--success); font-weight: 500; }
+
+.acct-danger-zone {
+  margin-top: 8px;
+}
+
+.acct-delete-link {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 12px 20px;
+  width: 100%;
+  text-align: left;
+}
+
+.acct-delete-link:hover { color: var(--danger); }
+
+.acct-delete-panel {
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border);
+  background: #fcfcfd;
+}
+
+.acct-delete-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.acct-delete-panel p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.btn-secondary {
+  display: inline-block;
+  padding: 10px 16px;
+  background: transparent;
+  color: var(--brand-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.lifecycle-field {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.transfer-member-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.transfer-member-list li { margin-bottom: 8px; }
+.transfer-member-list button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.acct-delete-submit {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #fda29b;
+  background: #fff;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  font-family: inherit;
+}
+
+.hidden { display: none !important; }
+
+body.acct-modal-open { overflow: hidden; }
+
+.acct-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 20, 16, 0.4);
+  z-index: 300;
+}
+
+.acct-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 301;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.acct-modal-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 12px 40px rgba(26, 20, 16, 0.12);
+}
+
+.acct-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.acct-modal-head h2 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.acct-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.acct-modal-close:hover { background: var(--brand-offwhite); }
+
+.acct-modal label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+.acct-modal label:first-of-type { margin-top: 0; }
+
+.acct-modal input[type="password"] {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.acct-modal input:focus {
+  outline: none;
+  border-color: var(--brand-warm);
+  box-shadow: 0 0 0 2px rgba(139, 111, 71, 0.15);
+}
+
+.acct-modal-msg {
+  font-size: 14px;
+  margin-top: 14px;
+  line-height: 1.5;
+}
+
+.acct-modal-msg.acct-success { color: var(--success); }
+
+.acct-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.acct-modal-actions .btn-secondary {
+  margin-top: 0;
+  flex: 1;
+}
+
+.acct-modal-forgot {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--brand-warm);
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.acct-modal-forgot:hover { color: var(--brand-dark); }
+
+@media (max-width: 520px) {
+  .acct-header { padding: 0 20px; }
+  .acct-page { padding: 28px 16px 48px; }
+  .acct-invoice-main { grid-template-columns: 1fr; }
+  .acct-invoice-number,
+  .acct-invoice-status { text-align: left; }
+}

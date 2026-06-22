@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Website templates — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand-dark: #2C2018;
+      --brand-warm: #8B6F47;
+      --brand-cream: #F5EDD8;
+      --brand-offwhite: #FDFAF6;
+      --brand-muted: #C9B8A0;
+      --text-primary: #1A1410;
+      --text-secondary: #6B5E4A;
+      --text-tertiary: #9A8A7A;
+      --border: #E8E0D4;
+      --brand-wordmark-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --brand-wordmark-weight: 200;
+      --brand-wordmark-tracking: 0.22em;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: #fff;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body > nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 40px;
+      height: 80px;
+    }
+
+    .nav-logo {
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--brand-wordmark-font);
+      font-weight: var(--brand-wordmark-weight);
+      font-size: 22px;
+      letter-spacing: var(--brand-wordmark-tracking);
+      text-transform: uppercase;
+      color: var(--text-primary);
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    .nav-logo-mark {
+      width: 56px;
+      height: 56px;
+      display: block;
+      flex-shrink: 0;
+      border-radius: 50%;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+      justify-self: center;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-links a.nav-active { color: var(--text-primary); font-weight: 500; }
+
+    .nav-actions { display: flex; align-items: center; gap: 16px; flex-shrink: 0; justify-self: end; }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+      font-size: 14px;
+      padding: 9px 20px;
+      border: 1px solid var(--brand-dark);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-cta:hover { background: var(--brand-dark); color: var(--brand-cream); }
+
+    .btn-primary, a.btn-primary {
+      display: inline-block;
+      padding: 14px 28px;
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    .btn-primary:hover, a.btn-primary:hover { opacity: 0.88; }
+
+    /* ── SHOWCASE ── */
+    .tpl-showcase {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tpl-showcase:last-of-type { border-bottom: none; }
+
+    .tpl-showcase-grid {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 80px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .tpl-showcase--flip .tpl-browser-wrap { order: 2; }
+    .tpl-showcase--flip .tpl-detail { order: 1; }
+
+    .tpl-browser {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 24px 64px rgba(44, 32, 24, 0.09);
+      margin: 0;
+    }
+
+    .tpl-browser img {
+      width: 100%;
+      height: auto;
+      display: block;
+      vertical-align: top;
+      background: #f0ebe4;
+    }
+
+    .tpl-detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-demo, a.btn-demo {
+      display: inline-block;
+      padding: 14px 24px;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      text-decoration: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .btn-demo:hover, a.btn-demo:hover {
+      border-color: var(--brand-warm);
+      background: var(--brand-offwhite);
+    }
+
+    .tpl-index {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-bottom: 6px;
+    }
+
+    .tpl-industry {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--brand-warm);
+      margin-bottom: 12px;
+    }
+
+    .tpl-detail h2 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(40px, 5vw, 52px);
+      font-weight: 400;
+      line-height: 1.05;
+      margin-bottom: 20px;
+    }
+
+    .tpl-detail p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.75;
+      margin-bottom: 16px;
+    }
+
+    .tpl-quote {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: 20px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+      border-left: 2px solid var(--brand-warm);
+      padding-left: 20px;
+      margin: 28px 0 32px;
+    }
+
+    .tpl-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 20px;
+      margin-bottom: 28px;
+    }
+
+    .tpl-swatch-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-width: 52px;
+    }
+
+    .tpl-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .tpl-swatch-label {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      text-align: center;
+    }
+
+    .tpl-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+
+    .tpl-tag {
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      background: var(--brand-offwhite);
+    }
+
+    /* ── FOOTER CTA ── */
+    .footer-cta {
+      padding: 100px 40px;
+      text-align: center;
+      background: var(--brand-dark);
+    }
+
+    .footer-cta h2 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: 400;
+      color: var(--brand-cream);
+      margin-bottom: 18px;
+    }
+
+    .footer-cta p {
+      font-size: 16px;
+      color: #B5A48E;
+      margin-bottom: 44px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .btn-light, a.btn-light {
+      display: inline-block;
+      padding: 15px 36px;
+      background: var(--brand-cream);
+      color: var(--brand-dark);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    .btn-light:hover { opacity: 0.88; }
+
+    footer {
+      background: #1A1208;
+      padding: 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--brand-wordmark-font);
+      font-weight: var(--brand-wordmark-weight);
+      font-size: 20px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: #B5A695;
+    }
+
+    .footer-logo-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      opacity: 0.92;
+    }
+
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 13px; color: #5A4E3E; text-decoration: none; }
+    .footer-links a:hover { color: #B5A695; }
+    .footer-copy { font-size: 13px; color: #5A4E3E; }
+
+    @media (max-width: 900px) {
+      .tpl-showcase-grid {
+        grid-template-columns: 1fr;
+        padding: 56px 24px;
+        gap: 36px;
+      }
+      .tpl-showcase--flip .tpl-browser-wrap,
+      .tpl-showcase--flip .tpl-detail { order: unset; }
+      .footer-cta { padding: 72px 24px; }
+      footer { padding: 28px 24px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+  <link rel="stylesheet" href="assets/nav.css?v=6" />
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-128.png?v=8" alt="" class="nav-logo-mark" width="56" height="56" />
+      <span>Get Bookking</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="templates.html" class="nav-active">Templates</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="account.html">Your account</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="templates.html" class="nav-active">Templates</a></li>
+        <li><a href="index.html#pricing">Pricing</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
+
+  <!-- 01 Blade -->
+  <section class="tpl-showcase" id="blade">
+    <div class="tpl-showcase-grid">
+      <div class="tpl-browser-wrap">
+        <figure class="tpl-browser">
+          <img src="assets/template-previews/blade-desktop.png?v=8" alt="Blade template — personal trainer home page" width="1440" height="3232" />
+        </figure>
+      </div>
+      <div class="tpl-detail">
+        <div class="tpl-index">01</div>
+        <span class="tpl-industry">Personal trainer</span>
+        <h2>Blade</h2>
+        <p>Jordan needed a site that felt as serious as his training philosophy. No stock photos of dumbbells. No pastel gradients. Blade gives him a dark, focused canvas — bold type, full-bleed imagery, and a booking flow that matches the intensity of his sessions.</p>
+        <blockquote class="tpl-quote">Strength. Form. Results.</blockquote>
+        <div class="tpl-swatches">
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#0F0F0E"></span><span class="tpl-swatch-label">Onyx</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#C9A96E"></span><span class="tpl-swatch-label">Gold</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#2A2820"></span><span class="tpl-swatch-label">Charcoal</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#7A7060"></span><span class="tpl-swatch-label">Stone</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F0EAD6"></span><span class="tpl-swatch-label">Cream</span></div>
+        </div>
+        <div class="tpl-tags">
+          <span class="tpl-tag">Bold</span>
+          <span class="tpl-tag">Fitness</span>
+          <span class="tpl-tag">Dark</span>
+        </div>
+        <div class="tpl-detail-actions">
+          <a href="signup.html" class="btn-primary">Use this template</a>
+          <a href="https://iron-district-gym.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 Luxe -->
+  <section class="tpl-showcase tpl-showcase--flip" id="luxe">
+    <div class="tpl-showcase-grid">
+      <div class="tpl-browser-wrap">
+        <figure class="tpl-browser">
+          <img src="assets/template-previews/luxe-desktop.png?v=7" alt="Luxe template — hair salon home page" width="1440" height="3002" />
+        </figure>
+      </div>
+      <div class="tpl-detail">
+        <div class="tpl-index">02</div>
+        <span class="tpl-industry">Hair salon</span>
+        <h2>Luxe</h2>
+        <p>Maison Lumière wanted a site that felt airy, editorial, and effortlessly refined — elevated hair, tailored to you. Luxe uses generous whitespace, soft typography, a built-in shop, and a warm palette that lets the work shine.</p>
+        <blockquote class="tpl-quote">Elevated hair, tailored to you.</blockquote>
+        <div class="tpl-swatches">
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F9F4EE"></span><span class="tpl-swatch-label">Linen</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#1A1410"></span><span class="tpl-swatch-label">Espresso</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#C9A96E"></span><span class="tpl-swatch-label">Caramel</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#9A8A7A"></span><span class="tpl-swatch-label">Stone</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
+        </div>
+        <div class="tpl-tags">
+          <span class="tpl-tag">Luxury</span>
+          <span class="tpl-tag">Editorial</span>
+          <span class="tpl-tag">Salon</span>
+          <span class="tpl-tag">Shop</span>
+        </div>
+        <div class="tpl-detail-actions">
+          <a href="signup.html" class="btn-primary">Use this template</a>
+          <a href="https://gilded-palm.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 Classic -->
+  <section class="tpl-showcase" id="classic">
+    <div class="tpl-showcase-grid">
+      <div class="tpl-browser-wrap">
+        <figure class="tpl-browser">
+          <img src="assets/template-previews/classic-desktop.png?v=7" alt="Classic template — tattoo studio home page" width="1440" height="2473" />
+        </figure>
+      </div>
+      <div class="tpl-detail">
+        <div class="tpl-index">03</div>
+        <span class="tpl-industry">Tattoo studio</span>
+        <h2>Classic</h2>
+        <p>Northline Tattoo lives by a simple belief: the work speaks for itself. The Classic template gets out of the way and lets the portfolio do the talking — clean structure, generous whitespace, every piece front and center.</p>
+        <blockquote class="tpl-quote">The art leads. Everything else follows.</blockquote>
+        <div class="tpl-swatches">
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#111111"></span><span class="tpl-swatch-label">Ink</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#B85C38"></span><span class="tpl-swatch-label">Rust</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F5F0E8"></span><span class="tpl-swatch-label">Parchment</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#888888"></span><span class="tpl-swatch-label">Ash</span></div>
+        </div>
+        <div class="tpl-tags">
+          <span class="tpl-tag">Clean</span>
+          <span class="tpl-tag">Portfolio</span>
+          <span class="tpl-tag">Tattoo</span>
+        </div>
+        <div class="tpl-detail-actions">
+          <a href="signup.html" class="btn-primary">Use this template</a>
+          <a href="https://northline-tattoo.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 Stonecut -->
+  <section class="tpl-showcase tpl-showcase--flip" id="stonecut">
+    <div class="tpl-showcase-grid">
+      <div class="tpl-browser-wrap">
+        <figure class="tpl-browser">
+          <img src="assets/template-previews/stonecut-desktop.png?v=10" alt="Stonecut template — barber home page" width="1440" height="2526" />
+        </figure>
+      </div>
+      <div class="tpl-detail">
+        <div class="tpl-index">04</div>
+        <span class="tpl-industry">Barber</span>
+        <h2>Stonecut</h2>
+        <p>Stone Cut Barbers wanted heritage without feeling dated — sharp lines, warm welcome, and a site that reads like a proper shop sign. Stonecut pairs serif headlines with stone-toned neutrals so the craft feels grounded and premium.</p>
+        <blockquote class="tpl-quote">Sharp lines. Warm welcome.</blockquote>
+        <div class="tpl-swatches">
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F5F0E8"></span><span class="tpl-swatch-label">Parchment</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#2C2018"></span><span class="tpl-swatch-label">Umber</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#8B6F47"></span><span class="tpl-swatch-label">Bronze</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#6B5E4A"></span><span class="tpl-swatch-label">Slate</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
+        </div>
+        <div class="tpl-tags">
+          <span class="tpl-tag">Heritage</span>
+          <span class="tpl-tag">Barber</span>
+          <span class="tpl-tag">Refined</span>
+        </div>
+        <div class="tpl-detail-actions">
+          <a href="signup.html" class="btn-primary">Use this template</a>
+          <a href="https://stone-cut-barbers.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 Studio 12 -->
+  <section class="tpl-showcase" id="studio12">
+    <div class="tpl-showcase-grid">
+      <div class="tpl-browser-wrap">
+        <figure class="tpl-browser">
+          <img src="assets/template-previews/studio12-desktop.png?v=15" alt="Studio 12 template — nail salon home page" width="1440" height="4512" />
+        </figure>
+      </div>
+      <div class="tpl-detail">
+        <div class="tpl-index">05</div>
+        <span class="tpl-industry">Nail salon</span>
+        <h2>Studio 12</h2>
+        <p>Studio Amara needed a site as polished as their manicures — structured, modern, and easy to browse on a phone between appointments. Studio 12 balances clean grids with warm accents so services and gallery work feel inviting, not clinical.</p>
+        <blockquote class="tpl-quote">Clean, polished, and done right.</blockquote>
+        <div class="tpl-swatches">
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FAF6F7"></span><span class="tpl-swatch-label">Blush</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#3C2E32"></span><span class="tpl-swatch-label">Espresso</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#B88490"></span><span class="tpl-swatch-label">Rose</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#E8D6DA"></span><span class="tpl-swatch-label">Dust</span></div>
+          <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
+        </div>
+        <div class="tpl-tags">
+          <span class="tpl-tag">Modern</span>
+          <span class="tpl-tag">Nails</span>
+          <span class="tpl-tag">Warm</span>
+        </div>
+        <div class="tpl-detail-actions">
+          <a href="signup.html" class="btn-primary">Use this template</a>
+          <a href="https://studio-amara.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="footer-cta">
+    <h2>Your first month is on us.</h2>
+    <p>Pick a template, add your services, and go live in minutes.</p>
+    <a href="signup.html" class="btn-light">Get started free &rarr;</a>
+  </section>
+
+  <footer>
+    <div class="footer-logo">
+      <img src="assets/brand/logo-light-128.png?v=8" alt="" class="footer-logo-mark" width="48" height="48" />
+      <span>Get Bookking</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="mailto:support@getbookking.com">Contact</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
+  </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/nav.js"></script>
+  <script src="assets/nav-auth.js?v=3"></script>
+</body>
+</html>

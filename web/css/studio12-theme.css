@@ -345,11 +345,22 @@
 }
 
 .studio12-page .s12-philosophy {
-  padding: 100px 40px;
+  padding: 88px 40px;
+}
+
+.studio12-page .s12-philosophy .bk-band-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 60px;
+  gap: 52px;
   align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.studio12-page .s12-philosophy .s12-aux-img-wrap {
+  aspect-ratio: 1 / 1;
+  max-width: 540px;
 }
 
 .studio12-page .s12-phil-label {
@@ -357,7 +368,7 @@
   letter-spacing: 0.38em;
   text-transform: uppercase;
   color: var(--s12-clay);
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -372,10 +383,10 @@
 
 .studio12-page .s12-phil-title {
   font-family: "Cormorant Garamond", serif;
-  font-size: clamp(32px, 3.5vw, 52px);
+  font-size: clamp(32px, 3.5vw, 48px);
   font-weight: 300;
   line-height: 1.1;
-  margin: 0 0 20px;
+  margin: 0 0 18px;
 }
 
 .studio12-page .s12-phil-title em {
@@ -384,8 +395,8 @@
 }
 
 .studio12-page .s12-phil-body {
-  font-size: 14px;
-  line-height: 1.95;
+  font-size: 16px;
+  line-height: 1.85;
   color: var(--s12-taupe);
   margin-bottom: 12px;
 }
@@ -764,7 +775,7 @@
   font-family: "Cormorant Garamond", serif;
   font-size: 64px;
   font-weight: 300;
-  color: rgba(176, 128, 96, 0.12);
+  color: var(--s12-clay);
   line-height: 1;
   margin-bottom: 12px;
 }
@@ -1067,7 +1078,7 @@
     order: -1;
     min-height: 42vh;
   }
-  .studio12-page .s12-philosophy,
+  .studio12-page .s12-philosophy .bk-band-content,
   .studio12-page .s12-book-cta {
     grid-template-columns: 1fr;
   }

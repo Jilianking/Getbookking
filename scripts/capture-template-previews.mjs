@@ -17,7 +17,7 @@ const ORIGIN = process.env.TEMPLATE_PREVIEW_ORIGIN || "https://test-app-96812.we
 const CAPTURES = [
   { family: "classic", slug: "northline-tattoo", file: "template-preview-classic.png" },
   { family: "luxe", slug: "gilded-palm", file: "template-preview-luxe.png" },
-  { family: "blade", slug: "coles-chair", file: "template-preview-blade.png" },
+  { family: "blade", slug: "iron-district-gym", file: "template-preview-blade.png" },
   { family: "stonecut", slug: "stone-cut-barbers", file: "template-preview-stonecut.png" },
   { family: "studio12", slug: "studio-amara", file: "template-preview-studio12.png" },
 ];

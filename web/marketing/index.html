@@ -42,7 +42,7 @@
     }
 
     /* ── NAV ── */
-    nav {
+    body > nav {
       position: sticky;
       top: 0;
       z-index: 100;
@@ -303,190 +303,26 @@
     .feat-card h3 { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
     .feat-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
 
-    /* ── TEMPLATES ── */
-    .tpl-tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 28px;
-      flex-wrap: wrap;
-    }
-
-    .tpl-tab {
-      font-size: 13px;
-      padding: 8px 18px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
-      transition: all 0.15s;
-    }
-
-    .tpl-tab:hover { border-color: var(--brand-muted); color: var(--text-primary); }
-
-    .tpl-tab.active {
-      background: var(--brand-dark);
-      color: var(--brand-cream);
-      border-color: var(--brand-dark);
-    }
-
-    .tpl-frame {
+    /* ── TEMPLATES TEASER ── */
+    .tpl-teaser-preview {
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--border);
-      height: 600px;
-      position: relative;
+      margin-bottom: 28px;
+      box-shadow: 0 16px 48px rgba(44, 32, 24, 0.08);
+    }
+
+    .tpl-teaser-preview img {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: cover;
+      object-position: top center;
+      max-height: 420px;
       background: #f0ebe4;
     }
 
-    .tpl-live-wrap {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-      display: none;
-    }
-
-    .tpl-live-wrap.show {
-      display: block;
-    }
-
-    /* Desktop: full-width iframe so demos use their wide layout */
-    .tpl-live-scaler {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: auto;
-    }
-
-    .tpl-live-iframe {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: #fff;
-      display: block;
-    }
-
-    .tpl-live-loading {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      color: var(--text-tertiary);
-      background: var(--brand-offwhite);
-      z-index: 1;
-      transition: opacity 0.2s;
-    }
-
-    .tpl-live-wrap.is-loaded .tpl-live-loading {
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .tpl-open-full {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-      z-index: 3;
-      font-size: 12px;
-      font-weight: 500;
-      padding: 8px 14px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.95);
-      border: 1px solid var(--border);
-      color: var(--brand-warm);
-      text-decoration: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    }
-
-    .tpl-open-full:hover {
-      border-color: var(--brand-warm);
-      color: var(--text-primary);
-    }
-
-    .tpl-link {
-      margin-top: 20px;
-      font-size: 13px;
-      color: var(--text-tertiary);
-      text-align: center;
-    }
-
-    .tpl-link a { color: var(--brand-warm); text-decoration: none; }
-    .tpl-link a:hover { text-decoration: underline; }
-
-    /* barber template */
-    .t-barber { background: #0F0F0E; color: #F0EAD6; }
-    .t-barber .tnav { background: #0F0F0E; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2A2820; }
-    .t-barber .tlogo { font-family: 'Instrument Serif', serif; font-size: 18px; color: #C9A96E; letter-spacing: 0.06em; }
-    .t-barber .tlinks { display: flex; gap: 20px; font-size: 12px; color: #7A7060; letter-spacing: 0.1em; text-transform: uppercase; }
-    .t-barber .tbody { padding: 48px 24px 24px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-    .t-barber .tlabel { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #7A7060; margin-bottom: 14px; }
-    .t-barber .thead { font-family: 'Instrument Serif', serif; font-size: 44px; font-weight: 400; line-height: 1.08; color: #F0EAD6; margin-bottom: 10px; }
-    .t-barber .thead em { color: #C9A96E; font-style: italic; }
-    .t-barber .tsub { font-size: 13px; color: #7A7060; margin-bottom: 28px; }
-    .t-barber .tbtn { display: inline-block; padding: 11px 24px; border: 1px solid #C9A96E; color: #C9A96E; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; border-radius: 4px; cursor: pointer; }
-    .t-barber .tbar { display: flex; border-top: 1px solid #2A2820; }
-    .t-barber .tbar-item { flex: 1; padding: 16px; border-right: 1px solid #2A2820; text-align: center; }
-    .t-barber .tbar-item:last-child { border-right: none; }
-    .t-barber .tbar-n { font-size: 10px; color: #7A7060; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
-    .t-barber .tbar-v { font-family: 'Instrument Serif', serif; font-size: 22px; color: #C9A96E; }
-
-    /* stylist template */
-    .t-stylist { background: #FBF7F4; color: #3A2E28; }
-    .t-stylist .tnav { background: #FBF7F4; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #EDE5DC; }
-    .t-stylist .tlogo { font-family: 'Instrument Serif', serif; font-size: 18px; color: #A0806A; letter-spacing: 0.04em; }
-    .t-stylist .tlinks { display: flex; gap: 20px; font-size: 12px; color: #B09A8A; letter-spacing: 0.06em; }
-    .t-stylist .tbody { padding: 40px 24px 20px; flex: 1; display: flex; gap: 24px; align-items: center; }
-    .t-stylist .tleft { flex: 1; }
-    .t-stylist .ttag { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #A0806A; margin-bottom: 12px; }
-    .t-stylist .thead { font-family: 'Instrument Serif', serif; font-size: 36px; line-height: 1.18; color: #3A2E28; margin-bottom: 12px; }
-    .t-stylist .thead em { font-style: italic; color: #A0806A; }
-    .t-stylist .tsub { font-size: 13px; color: #9A8A7E; line-height: 1.65; margin-bottom: 24px; }
-    .t-stylist .tbtn { display: inline-block; padding: 11px 22px; background: #A0806A; color: #FBF7F4; font-size: 13px; border-radius: 6px; cursor: pointer; }
-    .t-stylist .timg { width: 130px; height: 160px; background: #EDE5DC; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-    .t-stylist .timg svg { width: 48px; height: 60px; stroke: #C4A992; fill: none; stroke-width: 1; }
-    .t-stylist .tbar { display: flex; gap: 10px; padding: 14px 24px; border-top: 1px solid #EDE5DC; }
-    .t-stylist .tbar-chip { flex: 1; background: #F4EDE6; border-radius: 8px; padding: 12px; text-align: center; }
-    .t-stylist .tbar-n { font-size: 11px; color: #9A8A7E; margin-bottom: 4px; }
-    .t-stylist .tbar-v { font-size: 15px; font-weight: 500; color: #3A2E28; }
-
-    /* tattoo template */
-    .t-tattoo { background: #EFEFEC; color: #111; }
-    .t-tattoo .tnav { background: #111; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
-    .t-tattoo .tlogo { font-size: 14px; font-weight: 500; color: #EFEFEC; letter-spacing: 0.14em; text-transform: uppercase; }
-    .t-tattoo .tlinks { display: flex; gap: 20px; font-size: 11px; color: #888; letter-spacing: 0.12em; text-transform: uppercase; }
-    .t-tattoo .tbody { padding: 28px 24px; flex: 1; display: flex; flex-direction: column; justify-content: center; border-bottom: 2px solid #111; }
-    .t-tattoo .thead { font-size: 52px; font-weight: 500; line-height: 0.95; letter-spacing: -0.03em; color: #111; margin-bottom: 10px; }
-    .t-tattoo .thead span { color: #fff; background: #111; padding: 0 8px; }
-    .t-tattoo .tsub { font-size: 12px; color: #555; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 24px; }
-    .t-tattoo .tbtn { display: inline-block; padding: 12px 24px; background: #111; color: #EFEFEC; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
-    .t-tattoo .tbar { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 2px solid #111; }
-    .t-tattoo .tbar-item { padding: 16px; border-right: 2px solid #111; }
-    .t-tattoo .tbar-item:last-child { border-right: none; }
-    .t-tattoo .tbar-n { font-size: 10px; color: #888; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
-    .t-tattoo .tbar-v { font-size: 20px; font-weight: 500; color: #111; }
-
-    /* nail template */
-    .t-nail { background: #FFF9F5; color: #2E1F18; }
-    .t-nail .tnav { background: #FFF9F5; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F0E4D8; }
-    .t-nail .tlogo { font-family: 'Instrument Serif', serif; font-size: 18px; color: #C4785A; letter-spacing: 0.04em; }
-    .t-nail .tlinks { display: flex; gap: 20px; font-size: 12px; color: #BFA898; }
-    .t-nail .tbody { padding: 36px 24px 16px; flex: 1; display: flex; gap: 20px; }
-    .t-nail .tleft { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-    .t-nail .ttag { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #C4785A; margin-bottom: 12px; }
-    .t-nail .thead { font-family: 'Instrument Serif', serif; font-size: 34px; line-height: 1.18; color: #2E1F18; margin-bottom: 12px; }
-    .t-nail .thead em { font-style: italic; color: #C4785A; }
-    .t-nail .tsub { font-size: 13px; color: #9A7D70; line-height: 1.65; margin-bottom: 22px; }
-    .t-nail .tbtn { display: inline-block; padding: 10px 20px; background: #C4785A; color: #FFF9F5; font-size: 13px; border-radius: 20px; cursor: pointer; }
-    .t-nail .tchips { display: flex; flex-direction: column; gap: 10px; width: 120px; flex-shrink: 0; justify-content: center; }
-    .t-nail .chip { background: #F0E4D8; border-radius: 10px; padding: 10px 12px; text-align: center; }
-    .t-nail .chip-n { font-size: 10px; color: #BFA898; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
-    .t-nail .chip-v { font-size: 14px; font-weight: 500; color: #2E1F18; }
-    .t-nail .tbar { display: flex; gap: 8px; padding: 12px 24px; border-top: 1px solid #F0E4D8; }
-    .t-nail .tpill { flex: 1; background: #F0E4D8; border-radius: 20px; padding: 9px 10px; text-align: center; font-size: 12px; color: #2E1F18; }
+    .tpl-teaser-cta { text-align: center; }
 
     /* ── HOW IT WORKS ── */
     .steps { display: flex; flex-direction: column; }
@@ -766,40 +602,16 @@
 
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
-      nav {
-        display: flex;
-        justify-content: space-between;
-        padding: 0 20px;
-      }
-      .nav-links { display: none; }
       .hero { padding: 72px 24px 56px; }
       section { padding: 60px 24px; }
       .feat-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
-      .tpl-tabs { gap: 6px; }
-      .tpl-tab { font-size: 12px; padding: 6px 14px; }
-      .tpl-frame { height: 420px; }
-      .tpl-live-scaler {
-        inset: auto;
-        top: 0;
-        left: 50%;
-        width: 390px;
-        height: 844px;
-        margin-left: -195px;
-        transform: scale(0.48);
-        transform-origin: top center;
-      }
-      .tpl-live-iframe {
-        width: 390px;
-        height: 844px;
-        border-radius: 12px;
-        box-shadow: 0 12px 40px rgba(44, 32, 24, 0.12);
-      }
       .footer-cta { padding: 72px 24px; }
       footer { padding: 28px 24px; flex-direction: column; align-items: flex-start; gap: 20px; }
       .footer-links { flex-wrap: wrap; gap: 16px; }
     }
   </style>
+  <link rel="stylesheet" href="assets/nav.css?v=6" />
 </head>
 <body>
 
@@ -811,15 +623,48 @@
     </a>
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
-      <li><a href="#templates">Templates</a></li>
-      <li><a href="demos.html">Demos</a></li>
+      <li><a href="templates.html">Templates</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#faq">FAQ</a></li>
     </ul>
     <div class="nav-actions">
-      <a href="login.html" class="nav-cta">Log in</a>
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="account.html">Your account</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
     </div>
   </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
   <!-- HERO -->
   <section class="hero">
@@ -828,7 +673,6 @@
     <p class="hero-sub">Get Bookking builds your website, takes your bookings, and manages your clients — so you can focus on the work.</p>
     <div class="hero-ctas">
       <a href="signup.html" class="btn-primary">Get started free</a>
-      <a href="demos.html" class="btn-secondary">See demo sites</a>
     </div>
     <div class="audience-pills">
       <span class="pill">Barbers</span>
@@ -889,22 +733,12 @@
         <h2>Made for your industry</h2>
         <p>Every template is purpose-built — not a generic theme with your logo swapped in.</p>
       </div>
-      <div class="tpl-tabs">
-        <button type="button" class="tpl-tab active" data-demo-id="barber">Dark editorial — barber</button>
-        <button type="button" class="tpl-tab" data-demo-id="stylist">Soft luxury — hair stylist</button>
-        <button type="button" class="tpl-tab" data-demo-id="tattoo">Brutalist — tattoo studio</button>
-        <button type="button" class="tpl-tab" data-demo-id="nail">Warm modern — nail salon</button>
+      <div class="tpl-teaser-preview">
+        <img src="assets/template-previews/blade-desktop.png?v=2" alt="Blade template preview" width="1440" height="3232" />
       </div>
-      <div class="tpl-frame" id="tplFrame">
-        <div class="tpl-live-wrap show" id="tplLiveWrap" data-demo-id="barber">
-          <div class="tpl-live-loading" id="tplLiveLoading">Loading live preview…</div>
-          <div class="tpl-live-scaler">
-            <iframe class="tpl-live-iframe" id="tplLiveIframe" title="Live demo website preview" loading="lazy"></iframe>
-          </div>
-          <a class="tpl-open-full" id="tplOpenFull" href="#" target="_blank" rel="noopener noreferrer">Open full site &rarr;</a>
-        </div>
+      <div class="tpl-teaser-cta">
+        <a href="templates.html" class="btn-secondary">View all templates &rarr;</a>
       </div>
-      <p class="tpl-link">Live preview of real demo sites — <a href="demos.html">explore all four &rarr;</a></p>
     </div>
   </section>
 
@@ -1057,62 +891,10 @@
     <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
-  <script src="demo-sites.js"></script>
-  <script>
-    (function () {
-      var useStaging = /[?&]staging=1/.test(location.search);
-      var demoIdByTab = ['barber', 'stylist', 'tattoo', 'nail'];
-      var iframe = document.getElementById('tplLiveIframe');
-      var wrap = document.getElementById('tplLiveWrap');
-      var loading = document.getElementById('tplLiveLoading');
-      var openFull = document.getElementById('tplOpenFull');
-      var loadedSlug = '';
-
-      function demoForId(id) {
-        return BookkingDemoSites.find(id);
-      }
-
-      function setLivePreview(demoId) {
-        var d = demoForId(demoId);
-        if (!d || !iframe) return;
-        wrap.setAttribute('data-demo-id', demoId);
-        var embedUrl = BookkingDemoSites.url(d.slug, useStaging, true);
-        var fullUrl = BookkingDemoSites.url(d.slug, useStaging, false);
-        openFull.href = fullUrl;
-        if (loadedSlug !== d.slug) {
-          loadedSlug = d.slug;
-          wrap.classList.remove('is-loaded');
-          loading.style.display = 'flex';
-          iframe.src = embedUrl;
-        }
-      }
-
-      window.showTpl = function (id, btn) {
-        document.querySelectorAll('.tpl-tab').forEach(function (t) {
-          t.classList.remove('active');
-        });
-        if (btn) btn.classList.add('active');
-        setLivePreview(id);
-      };
-
-      if (iframe) {
-        iframe.addEventListener('load', function () {
-          wrap.classList.add('is-loaded');
-          loading.style.display = 'none';
-        });
-      }
-
-      document.querySelectorAll('.tpl-tab').forEach(function (tab) {
-        var id = tab.getAttribute('data-demo-id');
-        if (!id) return;
-        tab.addEventListener('click', function () {
-          showTpl(id, tab);
-        });
-      });
-
-      setLivePreview('barber');
-    })();
-  </script>
-
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/nav.js"></script>
+  <script src="assets/nav-auth.js?v=3"></script>
 </body>
 </html>

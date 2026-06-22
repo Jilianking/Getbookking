@@ -19,6 +19,7 @@ const firebaseConfig = {
   appId: "1:729589639948:web:af6eb6c640f3364c6d7729",
   measurementId: "G-L01T86TY3K"
 };
+window.firebaseConfig = firebaseConfig;
 
 /**
  * Shared Adobe Fonts Web Project (one kit for all businesses on this site).

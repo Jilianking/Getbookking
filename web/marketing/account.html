@@ -8,205 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --brand-dark: #2C2018;
-      --brand-warm: #8B6F47;
-      --brand-cream: #F5EDD8;
-      --brand-offwhite: #FDFAF6;
-      --text-primary: #1A1410;
-      --text-secondary: #6B5E4A;
-      --border: #E8E0D4;
-      --success: #1a7f4b;
-    }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      color: var(--text-primary);
-      background: var(--brand-offwhite);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      -webkit-font-smoothing: antialiased;
-    }
-    .acct-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 40px;
-      height: 80px;
-      background: rgba(255,255,255,0.92);
-      border-bottom: 1px solid var(--border);
-    }
-    .acct-header a.brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 14px;
-      font-size: 22px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--text-primary);
-      text-decoration: none;
-    }
-    .acct-header a.brand img { width: 56px; height: 56px; border-radius: 50%; }
-    .acct-wrap {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 24px;
-    }
-    .acct-card {
-      width: 100%;
-      max-width: 480px;
-      background: #fff;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      padding: 40px 36px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    }
-    .acct-card h1 {
-      font-family: 'Instrument Serif', serif;
-      font-size: 28px;
-      font-weight: 400;
-      margin-bottom: 12px;
-    }
-    .acct-card p { font-size: 15px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px; }
-    .acct-card p.success { color: var(--success); font-weight: 500; }
-    .btn-primary {
-      display: inline-block;
-      padding: 14px 24px;
-      background: var(--brand-dark);
-      color: var(--brand-cream);
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-family: inherit;
-      font-weight: 500;
-      text-decoration: none;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-    .btn-primary:hover { opacity: 0.92; }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-secondary {
-      display: inline-block;
-      padding: 12px 20px;
-      background: transparent;
-      color: var(--brand-dark);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      font-size: 14px;
-      font-family: inherit;
-      font-weight: 500;
-      cursor: pointer;
-      margin-top: 8px;
-      margin-right: 8px;
-    }
-    .billing-box {
-      margin: 20px 0;
-      padding: 16px;
-      border-radius: 12px;
-      background: var(--brand-offwhite);
-      border: 1px solid var(--border);
-    }
-    .billing-box h2 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
-  .billing-status { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; }
-    .acct-error { color: #b42318; font-size: 14px; margin-top: 8px; }
-    .acct-danger-box {
-      margin-top: 28px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border, #e8e8e8);
-    }
-    .acct-danger-box h2 { font-size: 18px; margin: 0 0 8px; }
-    .acct-danger-box p { font-size: 14px; color: var(--text-secondary, #667085); margin: 0 0 12px; }
-    .btn-danger {
-      display: inline-block;
-      width: 100%;
-      box-sizing: border-box;
-      padding: 12px 16px;
-      border-radius: 10px;
-      border: 1px solid #fda29b;
-      background: #fff;
-      color: #b42318;
-      font-weight: 600;
-      font-size: 15px;
-      cursor: pointer;
-      text-align: center;
-    }
-    .btn-danger:hover { background: #fef3f2; }
-    .lifecycle-field {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border, #d0d5dd);
-      margin-top: 8px;
-      font-size: 15px;
-    }
-    .transfer-member-list { list-style: none; padding: 0; margin: 12px 0 0; }
-    .transfer-member-list li { margin-bottom: 8px; }
-    .transfer-member-list button {
-      width: 100%;
-      text-align: left;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border, #d0d5dd);
-      background: #fff;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .transfer-member-list button:hover { background: #f9fafb; }
-    .acct-delete-footer {
-      margin-top: 12px;
-      padding-top: 4px;
-      text-align: center;
-    }
-    .acct-delete-link {
-      background: none;
-      border: none;
-      font-size: 15px;
-      color: #667085;
-      cursor: pointer;
-      padding: 8px 12px;
-    }
-    .acct-delete-link:hover { color: #667085; text-decoration: underline; }
-    .acct-delete-panel {
-      margin-top: 12px;
-      padding: 16px;
-      border-radius: 12px;
-      border: 1px solid #eaecf0;
-      background: #fcfcfd;
-      text-align: left;
-    }
-    .acct-delete-panel h2 {
-      font-size: 14px;
-      font-weight: 600;
-      margin: 0 0 8px;
-      color: #344054;
-    }
-    .acct-delete-panel p {
-      font-size: 13px;
-      color: #667085;
-      margin: 0 0 12px;
-    }
-    .acct-delete-submit {
-      margin-top: 12px;
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid #fda29b;
-      background: #fff;
-      color: #b42318;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-    }
-    .footer-links { margin-top: 28px; font-size: 14px; }
-    .footer-links a { color: var(--brand-warm); text-decoration: none; font-weight: 500; }
-    .footer-links a:hover { text-decoration: underline; }
-    .hidden { display: none; }
-  </style>
+  <link rel="stylesheet" href="assets/account.css?v=4" />
 </head>
 <body>
   <header class="acct-header">
@@ -216,68 +18,136 @@
     </a>
   </header>
 
-  <div class="acct-wrap">
-    <div class="acct-card">
-      <div id="stripeSuccessPanel" class="hidden">
-        <h1>Stripe connected</h1>
-        <p class="success">Your payout account setup is complete (or in review).</p>
-        <p>Open the <strong>Bookking</strong> app again — your Stripe status refreshes automatically when you return. Deposits and Tap to Pay work once Stripe enables charges.</p>
-      </div>
-      <div id="stripeRefreshPanel" class="hidden">
-        <h1>Continue Stripe setup</h1>
-        <p>Your onboarding link expired or was interrupted. Open the Bookking app and tap <strong>Connect Stripe</strong> again to continue.</p>
-      </div>
-      <div id="accountDefaultPanel">
-        <h1>Your account</h1>
-        <p id="accountSubtitle">Manage your subscription and business settings.</p>
-        <p id="signedInEmail" class="hidden"></p>
-        <div id="billingBox" class="billing-box hidden">
-          <h2>Subscription</h2>
-          <p id="billingStatus" class="billing-status">Loading…</p>
-          <button type="button" id="startSubBtn" class="btn-primary hidden">Start subscription today</button>
-          <button type="button" id="billingPortalBtn" class="btn-secondary hidden">Manage billing</button>
-          <p id="billingNote" class="hidden" style="font-size:13px;margin-top:12px;">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
-          <p id="billingError" class="acct-error hidden"></p>
+  <main class="acct-page">
+    <div id="stripeSuccessPanel" class="acct-stripe-panel hidden">
+      <h1>Stripe connected</h1>
+      <p class="success">Your payout account setup is complete (or in review).</p>
+      <p>Open the <strong>Bookking</strong> app again — your Stripe status refreshes automatically when you return.</p>
+    </div>
+
+    <div id="stripeRefreshPanel" class="acct-stripe-panel hidden">
+      <h1>Continue Stripe setup</h1>
+      <p>Your onboarding link expired or was interrupted. Open the Bookking app and tap <strong>Connect Stripe</strong> again to continue.</p>
+    </div>
+
+    <div id="accountDefaultPanel">
+      <h1>Your account</h1>
+
+      <section class="acct-section">
+        <div class="acct-section-label">Profile</div>
+        <div class="acct-card">
+          <div class="acct-profile-row">
+            <span class="acct-profile-avatar" id="profileAvatar">?</span>
+            <div class="acct-profile-meta">
+              <div class="acct-profile-name" id="profileName">—</div>
+              <div class="acct-profile-email" id="profileEmail">—</div>
+            </div>
+            <a href="mailto:support@getbookking.com?subject=Update%20my%20profile" class="acct-edit-link">Edit &rsaquo;</a>
+          </div>
+          <button type="button" class="acct-row" id="changePasswordBtn">
+            <span class="acct-row-icon" aria-hidden="true">&#128274;</span>
+            <span class="acct-row-label">Change password</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </button>
         </div>
-        <a href="index.html" class="btn-primary">Back to home</a>
-        <div class="footer-links">
-          <a href="#" id="signOutLink">Sign out</a>
-          &nbsp;&middot;&nbsp;
-          <a href="login.html">Log in</a>
+      </section>
+
+      <section class="acct-section" id="billingBox">
+        <div class="acct-section-label">Plan &amp; billing</div>
+        <div class="acct-card">
+          <a href="billing.html" class="acct-row" id="billingManageLink">
+            <span class="acct-row-label" id="billingSummaryLine">Loading…</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+          <p class="acct-error hidden" id="billingError"></p>
         </div>
-        <div id="deleteAccountFooter" class="acct-delete-footer hidden">
-          <button type="button" id="showDeleteAccountLink" class="acct-delete-link">Delete account</button>
+      </section>
+
+      <section class="acct-section">
+        <div class="acct-section-label">Help</div>
+        <div class="acct-card">
+          <a href="mailto:support@getbookking.com" class="acct-row">
+            <span class="acct-row-icon" aria-hidden="true">?</span>
+            <span class="acct-row-label">Support</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+          <a href="privacy.html" class="acct-row">
+            <span class="acct-row-icon" aria-hidden="true">&#128196;</span>
+            <span class="acct-row-label">Privacy Policy</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+          <a href="terms.html" class="acct-row">
+            <span class="acct-row-icon" aria-hidden="true">&#128196;</span>
+            <span class="acct-row-label">Terms of Service</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="acct-section">
+        <div class="acct-section-label">Session</div>
+        <div class="acct-card">
+          <button type="button" class="acct-row acct-row--danger" id="signOutLink">
+            <span class="acct-row-label">Sign out</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="acct-section acct-danger-zone hidden" id="deleteAccountFooter">
+        <div class="acct-section-label">Account</div>
+        <div class="acct-card">
+          <button type="button" class="acct-delete-link" id="showDeleteAccountLink">Delete account</button>
           <div id="deleteAccountPanel" class="acct-delete-panel hidden">
-            <h2>Delete account</h2>
+            <h3>Delete account</h3>
             <p id="deleteAccountHelp">Loading…</p>
-            <p id="deleteTransferHint" class="hidden" style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">
-              To delete without shutting down the business, transfer ownership first.
-            </p>
+            <p id="deleteTransferHint" class="hidden" style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">To delete without shutting down the business, transfer ownership first.</p>
             <button type="button" id="showTransferOwnershipBtn" class="btn-secondary hidden">Transfer ownership</button>
             <div id="transferOwnershipBox" class="hidden">
-              <p id="transferOwnershipHelp" style="font-size:14px;color:var(--text-secondary);margin:0 0 12px;">
-                Choose a team member to become the new owner. They will manage billing and the business.
-              </p>
+              <p id="transferOwnershipHelp" style="font-size:14px;color:var(--text-secondary);margin:12px 0;">Choose a team member to become the new owner.</p>
               <ul id="transferMemberList" class="transfer-member-list"></ul>
               <p id="transferError" class="acct-error hidden"></p>
             </div>
             <p id="deleteOrDivider" class="hidden" style="font-size:13px;color:var(--text-secondary);text-align:center;margin:16px 0;">Or</p>
-            <p id="deleteShutdownHelp" class="hidden" style="font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 8px;">
-              Delete account and shut down the business for your team.
-            </p>
+            <p id="deleteShutdownHelp" class="hidden" style="font-size:14px;font-weight:500;margin:0 0 8px;">Delete account and shut down the business for your team.</p>
             <input id="deleteConfirmPhrase" class="lifecycle-field hidden" type="text" placeholder="Type DELETE" autocomplete="off" />
             <input id="deleteShutdownPhrase" class="lifecycle-field hidden" type="text" placeholder="Type SHUTDOWN" autocomplete="off" />
             <input id="deletePassword" class="lifecycle-field hidden" type="password" placeholder="Password" autocomplete="current-password" />
             <button type="button" id="deleteAccountBtn" class="acct-delete-submit hidden">Delete my account</button>
-            <p id="deleteStripeFootnote" class="hidden" style="font-size:12px;color:#667085;margin-top:12px;line-height:1.45;">
+            <p id="deleteStripeFootnote" class="hidden" style="font-size:12px;color:var(--text-secondary);margin-top:12px;line-height:1.45;">
               Your Stripe payout account stays active on Stripe.
               <a href="https://connect.stripe.com/express_login" target="_blank" rel="noopener noreferrer" style="color:var(--brand-warm);">Sign in at Stripe Express</a>
-              with the email you used for payouts — not your Bookking password.
+              with the email you used for payouts.
             </p>
             <p id="deleteAccountError" class="acct-error hidden"></p>
           </div>
         </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="acct-modal-backdrop hidden" id="passwordModalBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="passwordModal" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="passwordModalTitle">Change password</h2>
+        <button type="button" class="acct-modal-close" id="passwordModalClose" aria-label="Close">&times;</button>
       </div>
+      <form id="changePasswordForm" autocomplete="on">
+        <label for="currentPassword">Current password</label>
+        <input type="password" id="currentPassword" name="currentPassword" autocomplete="current-password" required />
+        <label for="newPassword">New password</label>
+        <input type="password" id="newPassword" name="newPassword" autocomplete="new-password" minlength="6" required />
+        <label for="confirmPassword">Confirm new password</label>
+        <input type="password" id="confirmPassword" name="confirmPassword" autocomplete="new-password" minlength="6" required />
+        <p class="acct-modal-msg acct-error hidden" id="passwordModalError"></p>
+        <p class="acct-modal-msg acct-success hidden" id="passwordModalSuccess"></p>
+        <div class="acct-modal-actions">
+          <button type="button" class="btn-secondary" id="passwordModalCancel">Cancel</button>
+          <button type="submit" class="btn-upgrade" id="passwordModalSubmit" style="width:auto;flex:1;">Update password</button>
+        </div>
+      </form>
+      <button type="button" class="acct-modal-forgot" id="passwordForgotBtn">Forgot current password? Email me a reset link</button>
     </div>
   </div>
 
@@ -307,23 +177,6 @@
       showPanel('accountDefaultPanel');
     }
 
-    function syncBillingAfterPortalReturn() {
-      var statusEl = document.getElementById('billingStatus');
-      var errEl = document.getElementById('billingError');
-      if (statusEl) statusEl.textContent = 'Syncing billing from Stripe…';
-      if (errEl) errEl.classList.add('hidden');
-      return fns.httpsCallable('syncTenantBillingFromStripe')({}).then(function() {
-        history.replaceState({}, '', 'account.html');
-        loadBilling();
-      }).catch(function(err) {
-        if (errEl) {
-          errEl.textContent = (err && err.message) ? err.message : String(err);
-          errEl.classList.remove('hidden');
-        }
-        loadBilling();
-      });
-    }
-
     document.getElementById('signOutLink').addEventListener('click', function(ev) {
       ev.preventDefault();
       auth.signOut().then(function() {
@@ -331,75 +184,153 @@
       });
     });
 
-    function loadBilling() {
-      var box = document.getElementById('billingBox');
-      var statusEl = document.getElementById('billingStatus');
-      var startBtn = document.getElementById('startSubBtn');
-      var portalBtn = document.getElementById('billingPortalBtn');
-      var noteEl = document.getElementById('billingNote');
+    function populateProfile(user) {
+      var nameEl = document.getElementById('profileName');
+      var emailEl = document.getElementById('profileEmail');
+      var avatarEl = document.getElementById('profileAvatar');
+      var email = user.email || '';
+      var name = user.displayName;
+      if (!name && email) {
+        var local = email.split('@')[0];
+        name = local.charAt(0).toUpperCase() + local.slice(1);
+      }
+      if (nameEl) nameEl.textContent = name || 'Account';
+      if (emailEl) emailEl.textContent = email;
+      if (avatarEl) {
+        var initial = name ? name.charAt(0).toUpperCase() : (email ? email.charAt(0).toUpperCase() : '?');
+        avatarEl.textContent = initial;
+      }
+    }
+
+    function openPasswordModal() {
+      document.getElementById('changePasswordForm').reset();
+      document.getElementById('passwordModalError').classList.add('hidden');
+      document.getElementById('passwordModalSuccess').classList.add('hidden');
+      document.getElementById('passwordModalBackdrop').classList.remove('hidden');
+      document.getElementById('passwordModal').classList.remove('hidden');
+      document.getElementById('passwordModal').setAttribute('aria-hidden', 'false');
+      document.getElementById('passwordModalBackdrop').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('acct-modal-open');
+      document.getElementById('currentPassword').focus();
+    }
+
+    function closePasswordModal() {
+      document.getElementById('passwordModalBackdrop').classList.add('hidden');
+      document.getElementById('passwordModal').classList.add('hidden');
+      document.getElementById('passwordModal').setAttribute('aria-hidden', 'true');
+      document.getElementById('passwordModalBackdrop').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('acct-modal-open');
+    }
+
+    document.getElementById('changePasswordBtn').addEventListener('click', openPasswordModal);
+    document.getElementById('passwordModalClose').addEventListener('click', closePasswordModal);
+    document.getElementById('passwordModalCancel').addEventListener('click', closePasswordModal);
+    document.getElementById('passwordModalBackdrop').addEventListener('click', closePasswordModal);
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && !document.getElementById('passwordModal').classList.contains('hidden')) {
+        closePasswordModal();
+      }
+    });
+
+    document.getElementById('changePasswordForm').addEventListener('submit', function(ev) {
+      ev.preventDefault();
+      var errEl = document.getElementById('passwordModalError');
+      var okEl = document.getElementById('passwordModalSuccess');
+      var submitBtn = document.getElementById('passwordModalSubmit');
+      var current = document.getElementById('currentPassword').value;
+      var next = document.getElementById('newPassword').value;
+      var confirm = document.getElementById('confirmPassword').value;
+      errEl.classList.add('hidden');
+      okEl.classList.add('hidden');
+      if (next.length < 6) {
+        errEl.textContent = 'New password must be at least 6 characters.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (next !== confirm) {
+        errEl.textContent = 'New passwords do not match.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      var user = auth.currentUser;
+      if (!user || !user.email) {
+        errEl.textContent = 'Not signed in.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      submitBtn.disabled = true;
+      var credential = firebase.auth.EmailAuthProvider.credential(user.email, current);
+      user.reauthenticateWithCredential(credential)
+        .then(function() { return user.updatePassword(next); })
+        .then(function() {
+          submitBtn.disabled = false;
+          okEl.textContent = 'Password updated.';
+          okEl.classList.remove('hidden');
+          document.getElementById('changePasswordForm').reset();
+          setTimeout(closePasswordModal, 1200);
+        })
+        .catch(function(e) {
+          submitBtn.disabled = false;
+          var code = e && e.code ? e.code : '';
+          if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+            errEl.textContent = 'Current password is incorrect.';
+          } else if (code === 'auth/weak-password') {
+            errEl.textContent = 'Choose a stronger password.';
+          } else {
+            errEl.textContent = (e && e.message) ? e.message : 'Could not update password.';
+          }
+          errEl.classList.remove('hidden');
+        });
+    });
+
+    document.getElementById('passwordForgotBtn').addEventListener('click', function() {
+      var user = auth.currentUser;
+      var errEl = document.getElementById('passwordModalError');
+      var okEl = document.getElementById('passwordModalSuccess');
+      if (!user || !user.email) return;
+      errEl.classList.add('hidden');
+      okEl.classList.add('hidden');
+      auth.sendPasswordResetEmail(user.email)
+        .then(function() {
+          okEl.textContent = 'Reset link sent to ' + user.email + '.';
+          okEl.classList.remove('hidden');
+        })
+        .catch(function(e) {
+          errEl.textContent = (e && e.message) ? e.message : 'Could not send reset email.';
+          errEl.classList.remove('hidden');
+        });
+    });
+
+    function loadBillingSummary() {
+      var summaryEl = document.getElementById('billingSummaryLine');
       var errEl = document.getElementById('billingError');
-      if (!box) return;
-      box.classList.remove('hidden');
+      if (!summaryEl) return;
       fns.httpsCallable('getBillingSummary')({}).then(function(res) {
         var d = res.data || {};
         errEl.classList.add('hidden');
         if (!d.hasStripeCustomer) {
-          statusEl.textContent = d.message || 'Billing not set up yet.';
-          startBtn.classList.add('hidden');
-          portalBtn.classList.add('hidden');
-          noteEl.classList.add('hidden');
+          summaryEl.textContent = 'Free plan';
           return;
         }
         var sub = d.subscription;
         var plan = (d.firestorePlan || 'solo').toString();
+        var planLabel = (sub && sub.planName) ? sub.planName : plan;
+        var displayPlan = planLabel.charAt(0).toUpperCase() + planLabel.slice(1);
         if (sub && sub.status === 'trialing') {
-          statusEl.textContent = 'Free trial (' + plan + ' plan). Your card will be charged when the trial ends unless you cancel.';
-          startBtn.classList.remove('hidden');
-          noteEl.classList.remove('hidden');
-          portalBtn.classList.remove('hidden');
+          summaryEl.textContent = 'Free plan · Trial';
         } else if (sub && sub.status === 'active') {
-          statusEl.textContent = 'Active — ' + (sub.planName || plan) + ' plan.';
-          startBtn.classList.add('hidden');
-          noteEl.classList.add('hidden');
-          portalBtn.classList.remove('hidden');
+          summaryEl.textContent = displayPlan + ' · Active';
+        } else if (sub) {
+          summaryEl.textContent = displayPlan + ' · ' + sub.status;
         } else {
-          statusEl.textContent = sub ? ('Status: ' + sub.status) : ('Plan: ' + plan);
-          portalBtn.classList.remove('hidden');
+          summaryEl.textContent = 'Manage billing';
         }
       }).catch(function(err) {
-        statusEl.textContent = 'Could not load billing.';
+        summaryEl.textContent = 'Manage billing';
         errEl.textContent = (err && err.message) ? err.message : String(err);
         errEl.classList.remove('hidden');
       });
     }
-
-    document.getElementById('startSubBtn').addEventListener('click', function() {
-      var btn = document.getElementById('startSubBtn');
-      var errEl = document.getElementById('billingError');
-      btn.disabled = true;
-      errEl.classList.add('hidden');
-      fns.httpsCallable('startSubscriptionToday')({}).then(function() {
-        loadBilling();
-        btn.disabled = false;
-      }).catch(function(err) {
-        errEl.textContent = (err && err.message) ? err.message : String(err);
-        errEl.classList.remove('hidden');
-        btn.disabled = false;
-      });
-    });
-
-    document.getElementById('billingPortalBtn').addEventListener('click', function() {
-      var errEl = document.getElementById('billingError');
-      errEl.classList.add('hidden');
-      fns.httpsCallable('createBillingPortalSession')({
-        marketingOrigin: window.location.origin
-      }).then(function(res) {
-        if (res.data && res.data.url) window.location.href = res.data.url;
-      }).catch(function(err) {
-        errEl.textContent = (err && err.message) ? err.message : String(err);
-        errEl.classList.remove('hidden');
-      });
-    });
 
     var deleteRequiresShutdown = false;
 
@@ -509,7 +440,7 @@
               if (transferBox) transferBox.classList.add('hidden');
               if (showTransferBtn) showTransferBtn.textContent = 'Transfer ownership';
               loadAccountLifecycle();
-              loadBilling();
+              loadBillingSummary();
               var panel = document.getElementById('deleteAccountPanel');
               if (panel) panel.classList.remove('hidden');
             }).catch(function(err) {
@@ -594,20 +525,17 @@
         window.location.replace('login.html');
         return;
       }
-      var emailEl = document.getElementById('signedInEmail');
-      if (emailEl && user.email) {
-        emailEl.textContent = 'Signed in as ' + user.email;
-        emailEl.classList.remove('hidden');
-      }
+      populateProfile(user);
       if (billingParam === 'portal') {
-        syncBillingAfterPortalReturn();
+        window.location.replace('billing.html?billing=portal');
         return;
       }
       if (stripeParam !== 'success' && stripeParam !== 'refresh') {
-        loadBilling();
+        loadBillingSummary();
         loadAccountLifecycle();
       }
     });
   </script>
+  <script src="assets/nav-auth.js?v=3"></script>
 </body>
 </html>

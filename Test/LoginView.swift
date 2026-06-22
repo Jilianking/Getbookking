@@ -120,8 +120,8 @@ struct LoginView: View {
                     .stroke(AppDesign.chipBorder, lineWidth: 1)
             )
 
-            Button(action: openMarketingDemos) {
-                Text("Explore demo websites")
+            Button(action: openMarketingTemplates) {
+                Text("Browse templates")
                     .font(.subheadline)
                     .foregroundStyle(AppDesign.textSecondary)
             }
@@ -137,8 +137,8 @@ struct LoginView: View {
         UIApplication.shared.open(url)
     }
 
-    private func openMarketingDemos() {
-        guard let url = URL(string: Constants.Hosting.marketingDemosURL) else { return }
+    private func openMarketingTemplates() {
+        guard let url = URL(string: Constants.Hosting.marketingTemplatesURL) else { return }
         UIApplication.shared.open(url)
     }
 

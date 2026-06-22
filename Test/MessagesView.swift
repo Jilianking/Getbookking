@@ -55,16 +55,26 @@ struct MessagesView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
-                            List(filteredSummaries) { summary in
-                                ThreadRow(summary: summary, viewModel: viewModel)
+                            List {
+                                ForEach(Array(filteredSummaries.enumerated()), id: \.element.id) { index, summary in
+                                    ThreadRow(
+                                        summary: summary,
+                                        viewModel: viewModel,
+                                        showsDivider: index < filteredSummaries.count - 1
+                                    )
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         selectedThreadId = summary.threadId
                                     }
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(AppDesign.cardBackground)
+                                }
                             }
                             .listStyle(.plain)
                             .scrollContentBackground(.hidden)
-                            .background(AppDesign.background)
+                            .background(AppDesign.cardBackground)
+                            .environment(\.defaultMinListRowHeight, 1)
                         }
                     }
                     .refreshable {
@@ -163,36 +173,44 @@ struct MessagesView: View {
 struct ThreadRow: View {
     let summary: SmsThreadSummary
     @ObservedObject var viewModel: MessagesViewModel
+    var showsDivider: Bool = true
 
     var body: some View {
-        HStack(spacing: 12) {
-            AppAvatarView(
-                tenantLogoURL: nil,
-                accountPhotoURL: nil,
-                displayNameFallback: summary.clientName,
-                size: 44
-            )
-            VStack(alignment: .leading, spacing: 4) {
-                Text(summary.clientName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppDesign.textPrimary)
-                if !summary.lastMessageBody.isEmpty {
-                    Text(summary.lastMessageBody)
-                        .font(.subheadline)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                AppAvatarView(
+                    tenantLogoURL: nil,
+                    accountPhotoURL: nil,
+                    displayNameFallback: summary.clientName,
+                    size: 44
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary.clientName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    if !summary.lastMessageBody.isEmpty {
+                        Text(summary.lastMessageBody)
+                            .font(.subheadline)
+                            .foregroundStyle(AppDesign.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer()
+                if let lastAt = summary.lastMessageAt {
+                    Text(lastAt, style: .time)
+                        .font(.caption)
                         .foregroundStyle(AppDesign.textSecondary)
-                        .lineLimit(2)
                 }
             }
-            Spacer()
-            if let lastAt = summary.lastMessageAt {
-                Text(lastAt, style: .time)
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            if showsDivider {
+                Divider()
+                    .overlay(AppDesign.chipBorder.opacity(0.5))
+                    .padding(.leading, 72)
             }
         }
-        .padding(14)
-        .appCard()
-        .padding(.vertical, 4)
     }
 }
 

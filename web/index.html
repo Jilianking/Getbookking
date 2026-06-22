@@ -33,6 +33,15 @@
     html.bk-marketing-embed .tattoo-sidebar { display: none !important; }
     html.bk-marketing-embed body > footer { display: none !important; }
     html.bk-marketing-embed { overflow-x: hidden; }
+    /* Figma / preview capture (`?bk_capture=1`) — hide drawer only, keep full home */
+    html.bk-capture-mode .tattoo-sidebar { display: none !important; }
+    html.bk-capture-mode { overflow-x: hidden; }
+    /* Scroll-reveal animations stay opacity:0 until IntersectionObserver fires — force visible for captures */
+    html.bk-capture-mode .blade-fade-up,
+    html.bk-capture-mode .studio12-page .s12-fade {
+      opacity: 1 !important;
+      transform: none !important;
+    }
 
     :root {
       /* UI: sidebar, body, forms, section titles (Inter). Hero headline uses --font-hero; template picks the stack. */
@@ -3733,10 +3742,27 @@
       padding: 96px 40px;
       background: var(--bh-charcoal);
       border-top: 1px solid var(--bh-line);
+    }
+    .blade-page .blade-book-panel-inner {
       display: grid;
       grid-template-columns: 1fr;
       gap: 56px;
-      align-items: center;
+      align-items: start;
+    }
+    .blade-page .blade-book-panel--with-reviews .blade-book-panel-inner {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 48px 56px;
+    }
+    .blade-page .blade-book-panel-reviews-title {
+      font-size: clamp(28px, 3vw, 48px);
+      margin: 0 0 24px;
+    }
+    .blade-page .blade-book-panel-reviews .blade-testimonials-grid {
+      grid-template-columns: 1fr;
+      margin-top: 0;
+    }
+    .blade-page .blade-book-panel-reviews .blade-testimonial-card {
+      padding: 28px 24px;
     }
     .blade-page .blade-book-title {
       font-family: 'Anton', sans-serif;
@@ -4028,7 +4054,7 @@
       .blade-page .blade-stat-item:nth-child(odd) { border-right: 1px solid var(--bh-line); }
       .blade-page .blade-services-grid { grid-template-columns: 1fr; }
       .blade-page .blade-testimonials-grid { grid-template-columns: 1fr; }
-      .blade-page .blade-book-panel { grid-template-columns: 1fr; }
+      .blade-page .blade-book-panel--with-reviews .blade-book-panel-inner { grid-template-columns: 1fr; }
       .blade-page .blade-info-section { grid-template-columns: 1fr; }
       .blade-page .blade-info-half:first-child { border-right: none; border-bottom: 1px solid var(--bh-line); }
       .blade-page .blade-topnav { padding: 18px 20px; }
@@ -4234,8 +4260,33 @@
     .stonecut-page .stonecut-service-card h3 { font-family: 'Unbounded', sans-serif; font-size: 18px; margin: 0 0 10px; }
     .stonecut-page .stonecut-service-card p { margin: 0 0 16px; color: var(--bk-fg-muted, #a09888); line-height: 1.7; font-size: 13px; }
     .stonecut-page .stonecut-price { color: var(--bk-accent, #c0221a); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; }
-    .stonecut-page .stonecut-about-inner { max-width: 720px; }
+    .stonecut-page .stonecut-about-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px 56px;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
     .stonecut-page .stonecut-about-bio { margin: 0; color: var(--bk-about-text, var(--bk-fg-muted, #a09888)); line-height: 1.85; font-size: 15px; }
+    .stonecut-page .stonecut-about-media { position: relative; min-width: 0; }
+    .stonecut-page .stonecut-about-photo {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(24%);
+    }
+    .stonecut-page .stonecut-about-photo--empty {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      display: block;
+      filter: none;
+      background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+      border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(192, 34, 26, 0.55)));
+      box-sizing: border-box;
+    }
     .stonecut-page .stonecut-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .stonecut-page .stonecut-info.stonecut-info--no-hours { grid-template-columns: 1fr; }
     .stonecut-page .stonecut-info-card { background: var(--bk-card, #0e0d0a); border: 1px solid rgba(232,224,208,.08); padding: 30px 24px; }
@@ -4390,6 +4441,7 @@
       .stonecut-page .stonecut-hero { grid-template-columns: 1fr; }
       .stonecut-page .stonecut-hero-right { min-height: 0; }
       .stonecut-page .stonecut-section { padding: 72px 20px; }
+      .stonecut-page .stonecut-about-inner { grid-template-columns: 1fr; gap: 36px; }
       .stonecut-page .stonecut-services { grid-template-columns: 1fr; }
       .stonecut-page .stonecut-info { grid-template-columns: 1fr; }
       .stonecut-page .tattoo-sidebar-panel {
@@ -4689,7 +4741,10 @@
       max-width: 100%;
       aspect-ratio: 4 / 5;
     }
-    .studio12-page .s12-philosophy .s12-aux-img-wrap { aspect-ratio: 4 / 5; }
+    .studio12-page .s12-philosophy .s12-aux-img-wrap {
+      aspect-ratio: 1 / 1;
+      max-width: 540px;
+    }
     .studio12-page .s12-book-cta .s12-aux-img-wrap { aspect-ratio: 4 / 3; }
     .studio12-page .s12-aux-img-wrap .s12-hero-img {
       width: 100%;
@@ -4861,11 +4916,17 @@
     }
 
     .studio12-page .s12-philosophy {
-      padding: 100px 40px;
+      padding: 88px 40px;
+    }
+
+    .studio12-page .s12-philosophy .bk-band-content {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 60px;
+      gap: 52px;
       align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
     }
 
     .studio12-page .s12-phil-label {
@@ -4873,7 +4934,7 @@
       letter-spacing: 0.38em;
       text-transform: uppercase;
       color: var(--s12-clay);
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       display: flex;
       align-items: center;
       gap: 14px;
@@ -4888,10 +4949,10 @@
 
     .studio12-page .s12-phil-title {
       font-family: "Cormorant Garamond", serif;
-      font-size: clamp(32px, 3.5vw, 52px);
+      font-size: clamp(32px, 3.5vw, 48px);
       font-weight: 300;
       line-height: 1.1;
-      margin: 0 0 20px;
+      margin: 0 0 18px;
     }
 
     .studio12-page .s12-phil-title em {
@@ -4900,8 +4961,8 @@
     }
 
     .studio12-page .s12-phil-body {
-      font-size: 14px;
-      line-height: 1.95;
+      font-size: 16px;
+      line-height: 1.85;
       color: var(--s12-taupe);
       margin-bottom: 12px;
     }
@@ -5305,7 +5366,7 @@
       font-family: "Cormorant Garamond", serif;
       font-size: 64px;
       font-weight: 300;
-      color: var(--bk-accent-12, rgba(176, 128, 96, 0.12));
+      color: var(--s12-clay);
       line-height: 1;
       margin-bottom: 12px;
     }
@@ -5658,11 +5719,19 @@
       background: color-mix(in srgb, var(--s12-line) 40%, transparent);
     }
 
-    .studio12-page .s12-map-embed iframe {
+    .studio12-page .s12-map-embed iframe,
+    .studio12-page .s12-map-embed img {
       width: 100%;
       height: 100%;
       border: 0;
       display: block;
+      object-fit: cover;
+    }
+
+    .studio12-page .s12-map-static-link {
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     .studio12-page [data-bk-color-surface="about"] .s12-map-embed {
@@ -5839,9 +5908,19 @@
       .studio12-page .s12-hero-img-col:has(> img.s12-hero-img) {
         min-height: 0;
       }
-      .studio12-page .s12-philosophy,
+      .studio12-page .s12-philosophy .bk-band-content,
       .studio12-page .s12-book-cta {
         grid-template-columns: 1fr;
+      }
+      .studio12-page .s12-philosophy .s12-phil-copy {
+        order: 1;
+        margin-bottom: 24px;
+      }
+      .studio12-page .s12-philosophy .s12-phil-media {
+        order: 2;
+      }
+      .studio12-page .s12-philosophy .s12-aux-img-wrap {
+        max-width: none;
       }
       .studio12-page .s12-svc-grid {
         grid-template-columns: 1fr;
@@ -5953,6 +6032,9 @@
     (function() {
       if (/(?:^|[?&])bk_embed=1(?:&|$)/.test(location.search || '')) {
         document.documentElement.classList.add('bk-marketing-embed');
+      }
+      if (/(?:^|[?&])bk_capture=1(?:&|$)/.test(location.search || '')) {
+        document.documentElement.classList.add('bk-capture-mode');
       }
       if (typeof firebase === 'undefined' || typeof firebaseConfig === 'undefined') {
         document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase failed to load.</p></div></div>';
@@ -6635,6 +6717,32 @@
         if (!q) return '';
         return 'https://www.google.com/maps?q=' + encodeURIComponent(q) + '&output=embed';
       }
+      function isBkCaptureMode() {
+        return document.documentElement.classList.contains('bk-capture-mode') ||
+          /(?:^|[?&])bk_capture=1(?:&|$)/.test(String(location.search || ''));
+      }
+      function studio12MapCaptureImageUrl(tenant) {
+        var captureSrc = tenant && tenant.mapCaptureImageUrl ? String(tenant.mapCaptureImageUrl).trim() : '';
+        if (!captureSrc) return '';
+        if (/^https?:\/\//i.test(captureSrc)) return captureSrc;
+        if (captureSrc.charAt(0) === '/') {
+          /* Tenant subdomains (*.getbookking.com) route /assets/* to the SPA; use hosting root. */
+          return 'https://test-app-96812.web.app' + captureSrc;
+        }
+        return captureSrc;
+      }
+      function studio12MapEmbedHtml(tenant, addrTrim) {
+        if (!addrTrim) return '';
+        var mapsLink = googleMapsSearchUrl(addrTrim);
+        if (isBkCaptureMode()) {
+          var captureSrc = studio12MapCaptureImageUrl(tenant);
+          if (captureSrc) {
+            return '<a class="s12-map-static-link" href="' + esc(mapsLink) + '" target="_blank" rel="noopener noreferrer">' +
+              '<img src="' + esc(captureSrc) + '" alt="Studio location map" loading="eager" /></a>';
+          }
+        }
+        return '<iframe src="' + esc(googleMapsEmbedUrl(addrTrim)) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Studio location"></iframe>';
+      }
       function telHrefFromPhone(phone) {
         if (!phone) return '';
         var digits = String(phone).replace(/\D/g, '');
@@ -7109,15 +7217,9 @@
           : '<div class="blade-hero-cta" style="margin-top:28px">' +
             '<a href="' + anchorHome + '#services" class="blade-btn-ghost">' + wcSpan(tenant, 'wc.blade.viewServices', 'View services') + '</a>' +
             '</div>';
-        var bookPanel = '<section class="blade-book-panel" id="blade-booking" data-bk-color-surface="card" data-bk-band-tappable>' +
-          bkColorBandInnerWrap('<div class="blade-fade-up">' +
-          '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.bookPanelSectionLabel', 'Reserve') + '</div>' +
-          '<h2 class="blade-book-title">' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine1', 'BOOK YOUR') + '<br><span>' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine2', 'APPOINTMENT') + '</span></h2>' +
-          hoursSnippet +
-          bookPanelCtas +
-          '</div>') + '</section>';
         var revs = tenant.reviews || [];
-        var testimonialSection = '';
+        var bookPanelReviews = '';
+        var bookPanelReviewsClass = '';
         if (revs.length) {
           var tCards = '';
           for (var ri = 0; ri < Math.min(revs.length, 3); ri++) {
@@ -7128,13 +7230,21 @@
               '<div class="blade-testimonial-author">— ' + esc(rv.name || 'Client') +
               (rv.service ? (' · ' + esc(rv.service)) : '') + '</div></div>';
           }
-          testimonialSection = '<section class="blade-testimonials" data-bk-color-surface="card" data-bk-band-tappable>' +
-            bkColorBandHitButtonHtml() +
-            '<div class="bk-band-content blade-band-content">' +
-            '<div class="blade-section-header blade-fade-up">' +
-            '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.reviewsEyebrow', 'Reviews') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.reviewsTitle', 'WHAT THEY SAY') + '</h2></div></div>' +
-            '<div class="blade-testimonials-grid">' + tCards + '</div></div></section>';
+          bookPanelReviews = '<div class="blade-book-panel-reviews blade-fade-up">' +
+            '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.reviewsEyebrow', 'Reviews') + '</div>' +
+            '<h2 class="blade-section-title blade-book-panel-reviews-title">' + wcSpan(tenant, 'wc.blade.reviewsTitle', 'WHAT THEY SAY') + '</h2>' +
+            '<div class="blade-testimonials-grid">' + tCards + '</div></div>';
+          bookPanelReviewsClass = ' blade-book-panel--with-reviews';
         }
+        var bookPanel = '<section class="blade-book-panel' + bookPanelReviewsClass + '" id="blade-booking" data-bk-color-surface="card" data-bk-band-tappable>' +
+          bkColorBandInnerWrap('<div class="blade-book-panel-inner">' +
+          '<div class="blade-book-panel-main blade-fade-up">' +
+          '<div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.bookPanelSectionLabel', 'Reserve') + '</div>' +
+          '<h2 class="blade-book-title">' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine1', 'BOOK YOUR') + '<br><span>' + wcSpan(tenant, 'wc.blade.bookPanelTitleLine2', 'APPOINTMENT') + '</span></h2>' +
+          hoursSnippet +
+          bookPanelCtas +
+          '</div>' + bookPanelReviews + '</div>') + '</section>';
+        var testimonialSection = '';
         var hoursInfo = '';
         if (tenantShowBusinessHours(tenant)) {
           hoursInfo = hoursTrimBlade
@@ -7304,9 +7414,12 @@
           var aboutBody = wcSpanMultiline(tenant, 'wc.stonecut.aboutBio', aboutBioPlain);
           return '<section class="stonecut-section stonecut-about-section" id="about" data-bk-color-surface="about" data-bk-band-tappable>' +
             bkColorBandInnerWrap('<div class="stonecut-about-inner">' +
+            '<div class="stonecut-about-copy">' +
             '<div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.aboutEyebrow', 'About') + '</div>' +
             '<h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.aboutTitle', displayName) + '</h2>' +
             '<p class="stonecut-about-bio">' + aboutBody + '</p>' +
+            '</div>' +
+            '<div class="stonecut-about-media">' + stonecutAboutPhotoHtml(tenant) + '</div>' +
             '</div>') + '</section>';
         })();
         return '<div class="stonecut-page">' +
@@ -7382,6 +7495,26 @@
         if (!urls || index < 0 || index >= urls.length) return '';
         var u = urls[index];
         return (u != null && String(u).trim() !== '') ? String(u).trim() : '';
+      }
+      /** Stonecut about column: featured → gallery → hero; matches quick-edit keys. */
+      function stonecutAboutPhotoMeta(tenant) {
+        var featured = featuredStripSlotUrl(featuredUrlsForHomeStrip(tenant, 1), 0);
+        if (featured) return { url: featured, editKey: 'featuredWork:0' };
+        var gallery = (tenant.galleryImages || [])[0];
+        if (gallery != null && String(gallery).trim() !== '') {
+          return { url: String(gallery).trim(), editKey: 'galleryImage:0' };
+        }
+        if (tenant.heroImageUrl && String(tenant.heroImageUrl).trim()) {
+          return { url: String(tenant.heroImageUrl).trim(), editKey: 'heroImage' };
+        }
+        return { url: '', editKey: 'featuredWork:0' };
+      }
+      function stonecutAboutPhotoHtml(tenant) {
+        var meta = stonecutAboutPhotoMeta(tenant);
+        if (meta.url) {
+          return '<img class="stonecut-about-photo" data-edit-key="' + esc(meta.editKey) + '" src="' + esc(meta.url) + '" alt="">';
+        }
+        return '<div class="stonecut-about-photo stonecut-about-photo--empty" data-edit-key="' + esc(meta.editKey) + '" role="button" aria-label="Add about photo"></div>';
       }
       /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
       function galleryPageImageUrls(tenant) {
@@ -8736,6 +8869,9 @@
               galleryLayoutStyle: data.galleryLayoutStyle,
               aboutText: data.aboutText || '',
               reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
+              mapEmbedLat: (typeof data.mapEmbedLat === 'number' && !isNaN(data.mapEmbedLat)) ? data.mapEmbedLat : null,
+              mapEmbedLng: (typeof data.mapEmbedLng === 'number' && !isNaN(data.mapEmbedLng)) ? data.mapEmbedLng : null,
+              mapCaptureImageUrl: data.mapCaptureImageUrl || '',
               sidebarLinks: data.sidebarLinks || [],
               sidebarIconColorHome: data.sidebarIconColorHome || '',
               sidebarIconColorBooking: data.sidebarIconColorBooking || '',
@@ -9770,9 +9906,7 @@
             phoneEl = '<div class="s12-phone">' + wcSpan(tenant, 'wc.contact.phone', phoneDispS12) + '</div>';
           }
         }
-        var mapEmbedHtml = addrTrim
-          ? ('<iframe src="' + esc(googleMapsEmbedUrl(addrTrim)) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Studio location"></iframe>')
-          : '';
+        var mapEmbedHtml = addrTrim ? studio12MapEmbedHtml(tenant, addrTrim) : '';
         var studioContactInner = '<div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.findUsLabel', 'Find us') + '</div>' +
           s12InfoTitleHtml(tenant, 'wc.s12.studioTitleLead', 'The', 'wc.s12.studioTitleEm', 'studio') +
           addrHtml + phoneEl;
@@ -9893,11 +10027,11 @@
           '</div></section>' +
           '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
           '<section class="s12-philosophy" data-bk-color-surface="card" data-bk-band-tappable>' +
-          bkColorBandInnerWrap('<div class="s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
+          bkColorBandInnerWrap('<div class="s12-fade s12-phil-media">' + philImgCol + '</div>' +
+          '<div class="s12-fade s12-phil-copy"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
           philTitleHtml +
           '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
-          '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>' +
-          '<div class="s12-fade">' + philImgCol + '</div>') + '</section>' +
+          '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>') + '</section>' +
           servicesSectionHtml +
           gallerySectionHtml +
           processSectionHtml +

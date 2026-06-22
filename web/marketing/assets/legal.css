@@ -31,7 +31,7 @@ a { color: var(--brand-warm); text-decoration: none; }
 a:hover { color: var(--brand-dark); text-decoration: underline; }
 
 /* ── NAV ── */
-nav {
+body > nav {
   position: sticky;
   top: 0;
   z-index: 100;
@@ -281,12 +281,6 @@ footer {
 }
 
 @media (max-width: 768px) {
-  nav {
-    display: flex;
-    justify-content: space-between;
-    padding: 0 20px;
-  }
-  .nav-links { display: none; }
   .legal-hero { padding: 56px 24px 44px; }
   .legal-body { padding: 44px 24px 64px; }
   footer {

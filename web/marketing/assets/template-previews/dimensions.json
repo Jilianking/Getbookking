@@ -1,0 +1,27 @@
+[
+  {
+    "file": "classic-desktop.png",
+    "width": 1440,
+    "height": 2473
+  },
+  {
+    "file": "blade-desktop.png",
+    "width": 1440,
+    "height": 3232
+  },
+  {
+    "file": "studio12-desktop.png",
+    "width": 1440,
+    "height": 4512
+  },
+  {
+    "file": "stonecut-desktop.png",
+    "width": 1440,
+    "height": 2526
+  },
+  {
+    "file": "luxe-desktop.png",
+    "width": 1440,
+    "height": 3002
+  }
+]

@@ -5,7 +5,7 @@
  *
  * Usage (from Test/):
  *   node scripts/seed-demo-accounts.js
- *   node scripts/seed-demo-accounts.js --only=coles-chair
+ *   node scripts/seed-demo-accounts.js --only=iron-district-gym
  *
  * Auth: firebase login OR GOOGLE_APPLICATION_CREDENTIALS
  */
@@ -17,13 +17,17 @@ const { GoogleAuth } = require(path.join(
   __dirname,
   "../functions/node_modules/google-auth-library"
 ));
-const { Firestore, FieldValue } = require(path.join(
+const { Firestore, FieldValue, Timestamp } = require(path.join(
   __dirname,
   "../functions/node_modules/@google-cloud/firestore"
 ));
 const { formSchemaForIndustry } = require(path.join(
   __dirname,
   "../functions/signupPayloads.js"
+));
+const { seedDemoActivity } = require(path.join(
+  __dirname,
+  "../functions/demoSeedActivityLib.js"
 ));
 
 const DEFAULT_PROJECT = "test-app-96812";
@@ -176,6 +180,16 @@ function paletteTokens(t) {
   };
 }
 
+/** Weekly schedule helper for demo tenants (minutes from midnight). */
+function openDayMinutes(openMin, closeMin) {
+  return { closed: false, ranges: [{ openMin, closeMin }] };
+}
+
+function weekSameHours(openMin, closeMin) {
+  const day = openDayMinutes(openMin, closeMin);
+  return { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day };
+}
+
 const PALETTES = {
   "blade:copper-ledger": paletteTokens({
     bg: "#18120C",
@@ -188,6 +202,18 @@ const PALETTES = {
     bookCard: "#261E14",
     aboutBg: "#261E14",
     aboutText: "#F5EDE4",
+  }),
+  "blade:original": paletteTokens({
+    bg: "#0A0A08",
+    card: "#141410",
+    text: "#F5F0E8",
+    accent: "#C9A84C",
+    accentHover: "#E5C97A",
+    featuredBg: "#0A0A08",
+    featuredText: "#F5F0E8",
+    bookCard: "#141410",
+    aboutBg: "#141410",
+    aboutText: "#F5F0E8",
   }),
   "studio12:rose-quartz": paletteTokens({
     bg: "#FAF6F7",
@@ -292,72 +318,6 @@ const DEMO_ACCOUNTS = [
     ],
   },
   {
-    slug: "coles-chair",
-    email: "demo-coles-chair@getbookking.com",
-    firstName: "Marcus",
-    lastName: "Cole",
-    business: "Cole's Chair",
-    industry: "barber",
-    webThemeId: "blade-v1",
-    webColorPaletteId: "original",
-    paletteKey: "blade:original",
-    subscriptionPlan: "solo",
-    tagline: "Sharp lines. Clean chair.",
-    serviceCity: "Austin",
-    serviceStateAbbr: "TX",
-    businessHours: "Tue–Sat 9am–7pm · Walk-ins until 2pm",
-    bladeHeroTagline: "Where every line is intentional",
-    bladeHeroDescription:
-      "A private grooming experience for men who care about the details. Precision fades, hot-towel shaves, and beard work — unhurried, by appointment.",
-    aboutText:
-      "Cole's Chair opened in 2016 with one belief: a great haircut should feel like a ritual, not a transaction. Our chair is unhurried — one client at a time, full attention, no walk-in chaos. From the first comb stroke to the final hot towel, every service is built around precision, calm, and craft.",
-    reviews: [
-      {
-        quote: "Best fade I've had in Austin. Marcus doesn't rush — you feel it.",
-        name: "James R.",
-        service: "Signature fade",
-      },
-      {
-        quote: "The hot-towel shave is unreal. Felt like a different person walking out.",
-        name: "David M.",
-        service: "Hot-towel shave",
-      },
-      {
-        quote: "Finally a barbershop that treats grooming like an art.",
-        name: "Andre T.",
-        service: "The Full Cole",
-      },
-    ],
-    instagramHandle: "coleschair",
-    /* hero + gallery: uploaded via scripts/upload-tenant-hero.js + upload-tenant-gallery.js */
-    services: [
-      {
-        name: "Signature fade",
-        description: "Hand-finished skin fade with razor-defined edges and custom texture.",
-        durationMinutes: 50,
-        price: 48,
-      },
-      {
-        name: "Beard sculpt",
-        description: "Shape, line, and finish with straight-razor detailing.",
-        durationMinutes: 25,
-        price: 32,
-      },
-      {
-        name: "Hot-towel shave",
-        description: "Traditional straight-razor shave with steamed towels and post-shave ritual.",
-        durationMinutes: 40,
-        price: 45,
-      },
-      {
-        name: "The Full Cole",
-        description: "Haircut, beard sculpt, hot towel, and scalp treatment. The complete experience.",
-        durationMinutes: 90,
-        price: 85,
-      },
-    ],
-  },
-  {
     slug: "studio-amara",
     email: "demo-studio-amara@getbookking.com",
     firstName: "Amara",
@@ -371,7 +331,20 @@ const DEMO_ACCOUNTS = [
     aboutText: "Clean, polished, and done right.",
     serviceCity: "Charleston",
     serviceStateAbbr: "SC",
-    businessHours: "Wed–Sat 10am–6pm · By appointment",
+    address: "75 Wentworth Street\nCharleston, SC 29401",
+    mapEmbedLat: 32.7795,
+    mapEmbedLng: -79.931,
+    mapCaptureImageUrl: "/assets/demo-maps/studio-amara-location.png",
+    businessHours: "Mon–Fri 10am–9pm · Sat–Sun 11am–7pm",
+    businessHoursWeekly: {
+      mon: openDayMinutes(600, 1260),
+      tue: openDayMinutes(600, 1260),
+      wed: openDayMinutes(600, 1260),
+      thu: openDayMinutes(600, 1260),
+      fri: openDayMinutes(600, 1260),
+      sat: openDayMinutes(660, 1140),
+      sun: openDayMinutes(660, 1140),
+    },
     studio12HeroEyebrow: "Color · Care · Finish",
     studio12HeroHeadline: "Nails that elevate",
     heroTagline: "every day.",
@@ -380,7 +353,7 @@ const DEMO_ACCOUNTS = [
     studio12BookCtaBody:
       "Book online in minutes. We'll confirm your slot and follow up with everything you need.",
     instagramHandle: "studioamara",
-    webColorPaletteId: "custom",
+    webColorPaletteId: "rose-quartz",
     paletteKey: "studio12:rose-quartz",
     /* hero + gallery: scripts/assets/studio-amara/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
     /* philosophy + book CTA: upload-tenant-studio12-images.js */
@@ -456,6 +429,18 @@ const DEMO_ACCOUNTS = [
         durationMinutes: 75,
         price: 82,
       },
+      {
+        name: "Kids cut (12 & under)",
+        description: "Clean, age-appropriate cuts in a calm chair — parents welcome.",
+        durationMinutes: 30,
+        price: 28,
+      },
+      {
+        name: "Buzz cut & shape",
+        description: "Even clipper work with crisp edges and a quick neck cleanup.",
+        durationMinutes: 25,
+        price: 35,
+      },
     ],
   },
   {
@@ -519,16 +504,36 @@ const DEMO_ACCOUNTS = [
     displayName: "Jordan Reyes",
     industry: "custom",
     industryCustomLabel: "Personal trainer",
-    webThemeId: "stonecut-v1",
+    webThemeId: "blade-v1",
     webColorPaletteId: "original",
-    paletteKey: "stonecut:original",
+    paletteKey: "blade:original",
     subscriptionPlan: "solo",
     tagline: "Strength coaching for real life.",
     serviceCity: "Denver",
     serviceStateAbbr: "CO",
     businessHours: "Mon–Fri 5am–9pm · Sat 7am–2pm",
+    bladeHeroTagline: "Strength. Form. Results.",
+    bladeHeroDescription:
+      "One-on-one coaching for beginners and experienced lifters — form-first programming, honest feedback, and room to grow at Iron District Gym.",
     aboutText:
       "I'm Jordan Reyes, head coach at Iron District Gym in Denver. I work with beginners learning barbell basics and experienced lifters chasing their next PR. Every session is form-first, progressive, and built around your schedule — not a one-size-fits-all program.\n\nI train in person at Iron District: a no-frills space for people who show up. Book a free strength assessment to get started, or jump into a personal training session when you're ready.",
+    reviews: [
+      {
+        quote: "Jordan fixed my deadlift form in one session. Finally training without back pain.",
+        name: "Chris M.",
+        service: "Personal training",
+      },
+      {
+        quote: "Clear programming, no fluff. Best coach I've worked with in Denver.",
+        name: "Sam T.",
+        service: "Strength assessment",
+      },
+      {
+        quote: "The gym is focused and professional. Jordan meets you where you are.",
+        name: "Alex R.",
+        service: "Coach-led class",
+      },
+    ],
     instagramHandle: "jordanreyes.coach",
     /* hero + gallery: scripts/assets/iron-district-gym/ — upload via upload-tenant-hero.js + upload-tenant-gallery.js */
     services: [
@@ -555,6 +560,18 @@ const DEMO_ACCOUNTS = [
         description: "Solo training time at Iron District with Jordan available for form checks.",
         durationMinutes: 60,
         price: 18,
+      },
+      {
+        name: "Nutrition check-in",
+        description: "Macro targets, meal timing, and habits that support your training — no fad diets.",
+        durationMinutes: 30,
+        price: 45,
+      },
+      {
+        name: "Intro session",
+        description: "First visit at Iron District: goals, movement basics, and what training here looks like.",
+        durationMinutes: 60,
+        price: 65,
       },
     ],
   },
@@ -590,11 +607,17 @@ function serviceArea(city, stateAbbr) {
 }
 
 function parseArgs(argv) {
-  const out = { project: DEFAULT_PROJECT, password: DEFAULT_PASSWORD, only: null };
+  const out = {
+    project: DEFAULT_PROJECT,
+    password: DEFAULT_PASSWORD,
+    only: null,
+    withActivity: false,
+  };
   for (const arg of argv) {
     if (arg.startsWith("--project=")) out.project = arg.slice(10).trim();
     else if (arg.startsWith("--password=")) out.password = arg.slice(11);
     else if (arg.startsWith("--only=")) out.only = arg.slice(7).trim().toLowerCase();
+    else if (arg === "--with-activity") out.withActivity = true;
     else if (arg === "--help" || arg === "-h") out.help = true;
   }
   return out;
@@ -668,7 +691,7 @@ async function upsertServices(db, tenantId, services) {
   }
 }
 
-async function seedOne(db, projectId, accessToken, demo, password) {
+async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
   const displayName = `${demo.firstName} ${demo.lastName}`;
   const area = serviceArea(demo.serviceCity, demo.serviceStateAbbr);
 
@@ -711,8 +734,14 @@ async function seedOne(db, projectId, accessToken, demo, password) {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
+  if (demo.businessHoursWeekly) tenantPatch.businessHoursWeekly = demo.businessHoursWeekly;
+
   if (demo.bladeHeroTagline) tenantPatch.bladeHeroTagline = demo.bladeHeroTagline;
   if (demo.bladeHeroDescription) tenantPatch.bladeHeroDescription = demo.bladeHeroDescription;
+  if (demo.address) tenantPatch.address = demo.address;
+  if (typeof demo.mapEmbedLat === "number") tenantPatch.mapEmbedLat = demo.mapEmbedLat;
+  if (typeof demo.mapEmbedLng === "number") tenantPatch.mapEmbedLng = demo.mapEmbedLng;
+  if (demo.mapCaptureImageUrl) tenantPatch.mapCaptureImageUrl = demo.mapCaptureImageUrl;
   if (demo.aboutText) tenantPatch.aboutText = demo.aboutText;
   if (demo.reviews && demo.reviews.length) tenantPatch.reviews = demo.reviews;
   if (demo.luxeHeroTagline) tenantPatch.luxeHeroTagline = demo.luxeHeroTagline;
@@ -784,6 +813,15 @@ async function seedOne(db, projectId, accessToken, demo, password) {
 
   await upsertServices(db, tenantId, demo.services);
 
+  if (opts.withActivity) {
+    const activity = await seedDemoActivity(db, tenantId, demo.slug, Timestamp, {
+      replace: true,
+    });
+    console.log(
+      `  Activity: ${activity.customers} clients, ${activity.bookings} bookings, ${activity.smsThreads} SMS threads, ${activity.paymentTransactions} payments`
+    );
+  }
+
   return {
     slug: demo.slug,
     tenantId,
@@ -799,7 +837,8 @@ async function main() {
 Seed marketing demo tenants (Auth owner + Firestore + services).
 
   node scripts/seed-demo-accounts.js
-  node scripts/seed-demo-accounts.js --only=coles-chair
+  node scripts/seed-demo-accounts.js --only=iron-district-gym
+  node scripts/seed-demo-accounts.js --with-activity   # also seed bookings, SMS, payments
 
 Password: DEMO_ACCOUNT_PASSWORD env or --password=
 `);
@@ -818,7 +857,9 @@ Password: DEMO_ACCOUNT_PASSWORD env or --password=
   console.log(`Project: ${projectId}\n`);
   const results = [];
   for (const demo of demos) {
-    const r = await seedOne(db, projectId, accessToken, demo, args.password);
+    const r = await seedOne(db, projectId, accessToken, demo, args.password, {
+      withActivity: args.withActivity,
+    });
     results.push(r);
   }
 

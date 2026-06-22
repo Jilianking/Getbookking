@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Billing — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/account.css?v=4" />
+  <link rel="stylesheet" href="assets/billing.css?v=1" />
+</head>
+<body>
+  <header class="acct-header">
+    <a class="brand" href="index.html" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-128.png?v=8" alt="" width="56" height="56" />
+      <span>Get Bookking</span>
+    </a>
+  </header>
+
+  <main class="acct-page bill-page">
+    <a href="account.html" class="bill-back">&larr; Back to account</a>
+    <h1>Billing</h1>
+
+    <div id="billingLoading">
+      <p class="bill-empty">Loading billing…</p>
+    </div>
+
+    <div id="billingContent" class="hidden">
+      <section class="bill-section">
+        <div class="bill-section-label">Current plan</div>
+        <div class="bill-card">
+          <div class="bill-plan-top">
+            <div class="bill-plan-name" id="planName">—</div>
+            <span class="bill-status-badge" id="planStatusBadge">—</span>
+          </div>
+          <p class="bill-plan-price hidden" id="planPrice">—</p>
+          <div class="bill-kv hidden" id="planRenewalRow">
+            <span class="bill-kv-label" id="planRenewalLabel">Renews</span>
+            <span class="bill-kv-value" id="planRenewal">—</span>
+          </div>
+          <div class="bill-kv" id="planIncludesRow">
+            <span class="bill-kv-label">Includes</span>
+            <span class="bill-kv-value bill-includes-value">Text messaging, reminders, priority support</span>
+          </div>
+          <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:16px;">Upgrade to Pro</button>
+          <div class="bill-plan-actions hidden" id="planActions">
+            <button type="button" class="btn-secondary" id="changePlanBtn">Change plan</button>
+            <button type="button" class="btn-outline-danger" id="cancelSubBtn">Cancel subscription</button>
+          </div>
+          <p class="bill-note hidden" id="billingNote">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
+        </div>
+      </section>
+
+      <section class="bill-section hidden" id="paymentSection">
+        <div class="bill-section-label">Payment method</div>
+        <div class="bill-card">
+          <div class="bill-payment-row">
+            <div class="bill-payment-info">
+              <span class="bill-payment-icon" aria-hidden="true"></span>
+              <div>
+                <div class="bill-payment-label" id="paymentMethodLabel">—</div>
+                <div class="bill-payment-sub hidden" id="paymentMethodSub"></div>
+              </div>
+            </div>
+            <button type="button" class="bill-btn-text" id="updatePaymentBtn">Update</button>
+          </div>
+          <p class="bill-stripe-note">Payments secured by Stripe</p>
+        </div>
+      </section>
+
+      <section class="bill-section">
+        <div class="bill-section-label">Billing history</div>
+        <div class="bill-card">
+          <ul class="bill-invoice-list hidden" id="invoiceList"></ul>
+          <p class="bill-empty hidden" id="invoiceEmpty">No invoices yet.</p>
+        </div>
+      </section>
+
+      <section class="bill-section">
+        <div class="bill-section-label">Billing email</div>
+        <div class="bill-card">
+          <div class="bill-payment-row">
+            <div>
+              <div class="bill-email-value" id="billingEmail">—</div>
+              <div class="bill-payment-sub">Invoices are sent here</div>
+            </div>
+            <button type="button" class="bill-btn-text" id="updateEmailBtn">Update</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <p class="bill-error hidden" id="billingError"></p>
+  </main>
+
+  <div class="acct-modal-backdrop hidden" id="cancelModalBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="cancelModal" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="cancelModalTitle">Cancel subscription?</h2>
+        <button type="button" class="acct-modal-close" id="cancelModalClose" aria-label="Close">&times;</button>
+      </div>
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">If you cancel, you will lose access to:</p>
+      <ul class="bill-cancel-list">
+        <li>Text messaging and appointment reminders</li>
+        <li>Client no-show protection</li>
+        <li>Priority support</li>
+      </ul>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-top:14px;line-height:1.5;">You can finish cancellation in Stripe. Your booking site stays available until the end of your billing period.</p>
+      <div class="acct-modal-actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="cancelModalKeep">Keep subscription</button>
+        <button type="button" class="btn-outline-danger" id="cancelModalConfirm" style="flex:1;">Continue in Stripe</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script>
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var fns = firebase.app().functions('us-central1');
+    var billingData = null;
+    var planLabelCache = 'Solo';
+
+    var params = new URLSearchParams(window.location.search);
+    var billingParam = params.get('billing');
+
+    function formatMoney(cents, currency) {
+      if (cents == null || cents === '') return '';
+      var cur = (currency || 'usd').toUpperCase();
+      try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(cents / 100);
+      } catch (_) {
+        return '$' + (cents / 100).toFixed(2);
+      }
+    }
+
+    function formatBillingDate(ts) {
+      if (!ts) return '—';
+      return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function statusBadgeLabel(status) {
+      var map = {
+        active: 'Active',
+        trialing: 'Trial',
+        past_due: 'Past due',
+        canceled: 'Canceled',
+        unpaid: 'Unpaid',
+        paused: 'Paused'
+      };
+      return map[status] || (status ? status.charAt(0).toUpperCase() + status.slice(1) : '—');
+    }
+
+    function invoiceLineTitle(inv, planName) {
+      if (inv.amountPaid === 0) return 'Trial';
+      return planName ? (planName + ' plan') : 'Subscription';
+    }
+
+    function invoicePill(inv) {
+      if (inv.amountPaid === 0) return { text: 'Free', cls: 'is-free' };
+      if (inv.status === 'paid') return { text: 'Paid', cls: 'is-paid' };
+      return { text: statusBadgeLabel(inv.status), cls: '' };
+    }
+
+    function openBillingPortal() {
+      var errEl = document.getElementById('billingError');
+      errEl.classList.add('hidden');
+      return fns.httpsCallable('createBillingPortalSession')({
+        marketingOrigin: window.location.origin
+      }).then(function(res) {
+        if (res.data && res.data.url) window.location.href = res.data.url;
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      });
+    }
+
+    function renderInvoices(invoices, planName) {
+      var listEl = document.getElementById('invoiceList');
+      var emptyEl = document.getElementById('invoiceEmpty');
+      listEl.innerHTML = '';
+      var items = invoices || [];
+      if (!items.length) {
+        listEl.classList.add('hidden');
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      listEl.classList.remove('hidden');
+      items.forEach(function(inv) {
+        var li = document.createElement('li');
+        li.className = 'bill-invoice-item';
+
+        var left = document.createElement('div');
+        var title = document.createElement('div');
+        title.className = 'bill-invoice-title';
+        title.textContent = formatBillingDate(inv.created) + ' — ' + invoiceLineTitle(inv, planName);
+        var id = document.createElement('div');
+        id.className = 'bill-invoice-id';
+        id.textContent = inv.number ? ('#' + inv.number) : '';
+        left.appendChild(title);
+        left.appendChild(id);
+
+        var right = document.createElement('div');
+        right.className = 'bill-invoice-right';
+        var amount = document.createElement('span');
+        amount.className = 'bill-invoice-amount';
+        amount.textContent = formatMoney(inv.amountPaid, inv.currency);
+        var pill = invoicePill(inv);
+        var badge = document.createElement('span');
+        badge.className = 'bill-pill ' + pill.cls;
+        badge.textContent = pill.text;
+        right.appendChild(amount);
+        right.appendChild(badge);
+        if (inv.hostedInvoiceUrl) {
+          var view = document.createElement('a');
+          view.className = 'bill-invoice-view';
+          view.href = inv.hostedInvoiceUrl;
+          view.target = '_blank';
+          view.rel = 'noopener noreferrer';
+          view.textContent = 'View ↗';
+          right.appendChild(view);
+        }
+
+        li.appendChild(left);
+        li.appendChild(right);
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderBilling(d, user) {
+      billingData = d;
+      document.getElementById('billingLoading').classList.add('hidden');
+      document.getElementById('billingContent').classList.remove('hidden');
+
+      var sub = d.subscription;
+      var plan = (d.firestorePlan || 'solo').toString();
+      var planName = (sub && sub.planName) ? sub.planName : plan;
+      planLabelCache = planName;
+      var displayPlan = planName.charAt(0).toUpperCase() + planName.slice(1);
+
+      document.getElementById('planName').textContent = displayPlan;
+      var badge = document.getElementById('planStatusBadge');
+      var status = sub ? sub.status : 'free';
+      if (!d.hasStripeCustomer) {
+        badge.textContent = 'Free';
+        badge.classList.remove('is-active');
+      } else if (status === 'active') {
+        badge.textContent = 'Active';
+        badge.classList.add('is-active');
+      } else {
+        badge.textContent = statusBadgeLabel(status);
+        badge.classList.toggle('is-active', status === 'trialing');
+      }
+
+      var priceEl = document.getElementById('planPrice');
+      if (sub && sub.unitAmount != null && sub.interval) {
+        var intervalLabel = sub.interval === 'year' ? 'year' : 'month';
+        priceEl.textContent = formatMoney(sub.unitAmount, sub.currency) + ' / ' + intervalLabel;
+        priceEl.classList.remove('hidden');
+      } else {
+        priceEl.classList.add('hidden');
+      }
+
+      var renewalRow = document.getElementById('planRenewalRow');
+      var renewalLabel = document.getElementById('planRenewalLabel');
+      var renewalEl = document.getElementById('planRenewal');
+      if (sub && sub.currentPeriodEnd) {
+        if (sub.cancelAtPeriodEnd) {
+          renewalLabel.textContent = 'Ends';
+        } else if (sub.status === 'trialing') {
+          renewalLabel.textContent = 'Trial ends';
+        } else {
+          renewalLabel.textContent = 'Renews';
+        }
+        renewalEl.textContent = formatBillingDate(sub.currentPeriodEnd);
+        renewalRow.classList.remove('hidden');
+      } else {
+        renewalRow.classList.add('hidden');
+      }
+
+      var startBtn = document.getElementById('startSubBtn');
+      var planActions = document.getElementById('planActions');
+      var noteEl = document.getElementById('billingNote');
+      startBtn.classList.add('hidden');
+      planActions.classList.add('hidden');
+      noteEl.classList.add('hidden');
+
+      if (d.hasStripeCustomer && sub && sub.status === 'trialing') {
+        startBtn.classList.remove('hidden');
+        noteEl.classList.remove('hidden');
+      } else if (d.hasStripeCustomer && sub && (sub.status === 'active' || sub.status === 'past_due')) {
+        planActions.classList.remove('hidden');
+      }
+
+      var paymentSection = document.getElementById('paymentSection');
+      var paymentLabel = document.getElementById('paymentMethodLabel');
+      var paymentSub = document.getElementById('paymentMethodSub');
+      if (d.paymentMethodLabel) {
+        paymentLabel.textContent = d.paymentMethodLabel.replace('····', 'ending in');
+        if (d.paymentMethodExpiry) {
+          paymentSub.textContent = 'Expires ' + d.paymentMethodExpiry;
+          paymentSub.classList.remove('hidden');
+        } else {
+          paymentSub.textContent = '';
+          paymentSub.classList.add('hidden');
+        }
+        paymentSection.classList.remove('hidden');
+      } else if (d.hasStripeCustomer) {
+        paymentLabel.textContent = 'No payment method on file';
+        paymentSection.classList.remove('hidden');
+      } else {
+        paymentSection.classList.add('hidden');
+      }
+
+      document.getElementById('billingEmail').textContent = (user && user.email) ? user.email : '—';
+      renderInvoices(d.invoices, displayPlan);
+    }
+
+    function loadBilling() {
+      var errEl = document.getElementById('billingError');
+      errEl.classList.add('hidden');
+      return fns.httpsCallable('getBillingSummary')({}).then(function(res) {
+        renderBilling(res.data || {}, auth.currentUser);
+      }).catch(function(err) {
+        document.getElementById('billingLoading').classList.add('hidden');
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      });
+    }
+
+    function syncBillingAfterPortalReturn() {
+      document.getElementById('billingLoading').classList.remove('hidden');
+      document.getElementById('billingContent').classList.add('hidden');
+      document.getElementById('billingLoading').querySelector('p').textContent = 'Syncing billing from Stripe…';
+      return fns.httpsCallable('syncTenantBillingFromStripe')({}).then(function() {
+        history.replaceState({}, '', 'billing.html');
+        document.getElementById('billingLoading').querySelector('p').textContent = 'Loading billing…';
+        return loadBilling();
+      }).catch(function(err) {
+        var errEl = document.getElementById('billingError');
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+        return loadBilling();
+      });
+    }
+
+    function openCancelModal() {
+      document.getElementById('cancelModalBackdrop').classList.remove('hidden');
+      document.getElementById('cancelModal').classList.remove('hidden');
+      document.getElementById('cancelModal').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('acct-modal-open');
+    }
+
+    function closeCancelModal() {
+      document.getElementById('cancelModalBackdrop').classList.add('hidden');
+      document.getElementById('cancelModal').classList.add('hidden');
+      document.getElementById('cancelModal').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('acct-modal-open');
+    }
+
+    document.getElementById('startSubBtn').addEventListener('click', function() {
+      var btn = document.getElementById('startSubBtn');
+      var errEl = document.getElementById('billingError');
+      btn.disabled = true;
+      errEl.classList.add('hidden');
+      fns.httpsCallable('startSubscriptionToday')({}).then(function() {
+        loadBilling();
+        btn.disabled = false;
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+      });
+    });
+
+    document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('updatePaymentBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('updateEmailBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('cancelSubBtn').addEventListener('click', openCancelModal);
+    document.getElementById('cancelModalClose').addEventListener('click', closeCancelModal);
+    document.getElementById('cancelModalKeep').addEventListener('click', closeCancelModal);
+    document.getElementById('cancelModalBackdrop').addEventListener('click', closeCancelModal);
+    document.getElementById('cancelModalConfirm').addEventListener('click', function() {
+      closeCancelModal();
+      openBillingPortal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && !document.getElementById('cancelModal').classList.contains('hidden')) {
+        closeCancelModal();
+      }
+    });
+
+    auth.onAuthStateChanged(function(user) {
+      if (!user) {
+        window.location.replace('login.html');
+        return;
+      }
+      if (billingParam === 'portal') {
+        syncBillingAfterPortalReturn();
+        return;
+      }
+      loadBilling();
+    });
+  </script>
+</body>
+</html>

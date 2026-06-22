@@ -1,0 +1,32 @@
+[
+  {
+    "file": "blade-panel-main.png",
+    "width": 560,
+    "height": 680
+  },
+  {
+    "file": "blade-panel-gallery.png",
+    "width": 560,
+    "height": 340
+  },
+  {
+    "file": "blade-panel-book.png",
+    "width": 560,
+    "height": 420
+  },
+  {
+    "file": "luxe-panel-main.png",
+    "width": 560,
+    "height": 680
+  },
+  {
+    "file": "luxe-panel-shop.png",
+    "width": 560,
+    "height": 460
+  },
+  {
+    "file": "luxe-panel-footer.png",
+    "width": 560,
+    "height": 316
+  }
+]

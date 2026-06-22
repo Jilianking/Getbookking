@@ -300,6 +300,41 @@ struct AppQuickActionCard: View {
     }
 }
 
+struct DashboardQuickTile: View {
+    let icon: String
+    let title: String
+    var value: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(AppDesign.textPrimary)
+                if let value {
+                    Text(value)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                }
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .appCard()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct AppStatusPill: View {
     let text: String
     var color: Color = AppDesign.accentBlue

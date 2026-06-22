@@ -56,10 +56,6 @@ class PaymentsViewModel: ObservableObject {
     @Published var isCreatingDepositLink = false
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
-    /// Restaurant-style card surcharge on top of service/deposit (default on, 3%).
-    @Published var cardSurchargeEnabled: Bool = true
-    @Published var cardSurchargeBps: Int = CardCheckoutPricing.defaultSurchargeBps
-    @Published var isSavingCardSurcharge = false
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -156,18 +152,8 @@ class PaymentsViewModel: ObservableObject {
                 } else {
                     isTenantOwner = false
                 }
-                cardSurchargeEnabled = tenant["cardSurchargeEnabled"] as? Bool ?? true
-                if let bps = tenant["cardSurchargeBps"] as? Int {
-                    cardSurchargeBps = min(500, max(0, bps))
-                } else if let bps = tenant["cardSurchargeBps"] as? Double {
-                    cardSurchargeBps = min(500, max(0, Int(bps)))
-                } else {
-                    cardSurchargeBps = CardCheckoutPricing.defaultSurchargeBps
-                }
             } else {
                 isTenantOwner = false
-                cardSurchargeEnabled = true
-                cardSurchargeBps = CardCheckoutPricing.defaultSurchargeBps
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
@@ -346,38 +332,11 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func checkoutBreakdown(serviceCents: Int) -> CardCheckoutBreakdown {
-        CardCheckoutPricing.breakdown(
-            serviceCents: serviceCents,
-            surchargeEnabled: cardSurchargeEnabled,
-            surchargeBps: cardSurchargeBps
-        )
+    func checkoutBreakdown(serviceCents: Int, channel: CardCheckoutChannel = .online) -> CardCheckoutBreakdown {
+        CardCheckoutPricing.breakdown(serviceCents: serviceCents, channel: channel)
     }
 
-    func saveCardSurchargeSettings(enabled: Bool) async {
-        guard isTenantOwner, tenantId != nil else { return }
-        isSavingCardSurcharge = true
-        errorMessage = nil
-        do {
-            let result = try await functions.httpsCallable("updateTenantCardSurcharge").call([
-                "cardSurchargeEnabled": enabled,
-                "cardSurchargeBps": cardSurchargeBps,
-            ])
-            if let data = result.data as? [String: Any] {
-                cardSurchargeEnabled = data["cardSurchargeEnabled"] as? Bool ?? enabled
-                if let bps = data["cardSurchargeBps"] as? Int {
-                    cardSurchargeBps = bps
-                }
-            } else {
-                cardSurchargeEnabled = enabled
-            }
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-        }
-        isSavingCardSurcharge = false
-    }
-
-    /// Creates a Stripe Payment Link for the service/deposit amount (surcharge added server-side if enabled).
+    /// Creates a Stripe Payment Link for the service/deposit amount (fees grossed up server-side).
     func createDepositLink(serviceAmountCents: Int, bookingRequestId: String? = nil) async {
         guard serviceAmountCents >= 50 else { return }
         isCreatingDepositLink = true
@@ -469,7 +428,7 @@ class PaymentsViewModel: ObservableObject {
         return resolvedTapToPayLocationId
     }
 
-    /// Creates a Stripe PaymentIntent for Tap to Pay (service amount; surcharge added server-side if enabled).
+    /// Creates a Stripe PaymentIntent for Tap to Pay (fees grossed up server-side).
     func createPaymentIntentForTapToPay(
         serviceAmountCents: Int,
         bookingRequestId: String? = nil
@@ -496,14 +455,16 @@ class PaymentsViewModel: ObservableObject {
         }
         let paymentIntentId = (data?["paymentIntentId"] as? String) ?? ""
         let service = (data?["serviceCents"] as? Int) ?? serviceAmountCents
-        let surcharge = (data?["surchargeCents"] as? Int) ?? 0
-        let total = (data?["totalCents"] as? Int) ?? (service + surcharge)
+        let passThrough = (data?["surchargeCents"] as? Int) ?? 0
+        let total = (data?["totalCents"] as? Int) ?? (service + passThrough)
+        let platformFee = (data?["platformFeeCents"] as? Int)
+            ?? CardCheckoutPricing.platformFeeCents(totalCents: total)
         let checkout = CardCheckoutBreakdown(
             serviceCents: service,
-            surchargeCents: surcharge,
+            passThroughFeeCents: passThrough,
+            platformFeeCents: platformFee,
             totalCents: total,
-            surchargeEnabled: surcharge > 0,
-            surchargeBps: cardSurchargeBps
+            channel: .tapToPay
         )
         return TapToPayPaymentIntent(
             clientSecret: clientSecret,

@@ -707,31 +707,83 @@ const DEMO_ACTIVITY_BY_SLUG = {
 };
 
 /**
- * Completed charges in the current calendar week (dashboard “this week” / chart Wk 8).
- * Merged onto the first roster customer at seed time.
+ * Target net revenue ($) per chart week, Wk 1 → Wk 8. Wk 8 must exceed Wk 7 for
+ * positive week-over-week; ascending curve supports positive month-over-month.
  */
-const THIS_WEEK_CHARGES_BY_SLUG = {
-  "northline-tattoo": [
-    { service: "Small piece", dayOffset: -2, price: 200 },
-    { service: "Touch-up", dayOffset: -1, price: 200 },
-  ],
-  "stone-cut-barbers": [
-    { service: "Signature fade", dayOffset: -2, price: 48 },
-    { service: "Beard sculpt & lineup", dayOffset: -1, price: 32 },
-  ],
-  "studio-amara": [
-    { service: "Gel manicure", dayOffset: -2, price: 58 },
-    { service: "Classic manicure", dayOffset: -1, price: 38 },
-  ],
-  "gilded-palm": [
-    { service: "Gloss & blowout", dayOffset: -2, price: 72 },
-    { service: "Signature cut & style", dayOffset: -1, price: 95 },
-  ],
-  "iron-district-gym": [
-    { service: "Personal training with Jordan", dayOffset: -2, price: 85 },
-    { service: "Coach-led class", dayOffset: -1, price: 28 },
-  ],
+const SHOWCASE_WEEKLY_NET_DOLLARS = {
+  "northline-tattoo": [820, 940, 880, 1020, 960, 1100, 1050, 1280],
+  "stone-cut-barbers": [220, 255, 240, 280, 265, 300, 275, 340],
+  "studio-amara": [180, 210, 195, 225, 215, 245, 230, 285],
+  "gilded-palm": [420, 480, 450, 520, 495, 560, 530, 640],
+  "iron-district-gym": [280, 320, 300, 350, 335, 380, 355, 430],
 };
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function weekRangeForWeeksAgo(now, weeksAgo) {
+  const weekStart = startOfWeek(now);
+  weekStart.setDate(weekStart.getDate() - weeksAgo * 7);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  return { weekStart, weekEnd };
+}
+
+function grossFromNetCents(netCents) {
+  let gross = Math.max(netCents + 30, Math.round((netCents + 30) / (1 - 0.029)));
+  for (let i = 0; i < 40; i++) {
+    const fee = estimateStripeFeeCents(gross);
+    const net = gross - fee;
+    if (net === netCents) return gross;
+    gross += net < netCents ? 1 : -1;
+  }
+  return gross;
+}
+
+/**
+ * Deterministic 8-week revenue for dashboard chart (positive WoW / MoM).
+ * Replaces booking-scattered charges in demoShowcase.payments.
+ */
+function buildShowcaseWeeklyTransactions(slug, now, Timestamp) {
+  const weekly = SHOWCASE_WEEKLY_NET_DOLLARS[slug];
+  if (!weekly || weekly.length !== 8) return [];
+
+  const charges = [];
+  for (let index = 0; index < 8; index++) {
+    const weeksAgo = 7 - index;
+    const { weekStart } = weekRangeForWeeksAgo(now, weeksAgo);
+    const when = new Date(weekStart);
+    when.setDate(weekStart.getDate() + 3);
+    when.setHours(11, 30, 0, 0);
+
+    const netCents = Math.round(weekly[index] * 100);
+    const amountCents = grossFromNetCents(netCents);
+    const fee = estimateStripeFeeCents(amountCents);
+    const weekNum = index + 1;
+
+    charges.push({
+      id: `demo_tx_wk${weekNum}`,
+      type: "charge",
+      amountCents,
+      fee,
+      netCents: amountCents - fee,
+      customerName: "Showcase",
+      description: `Week ${weekNum} revenue`,
+      createdAt: Timestamp.fromDate(when),
+      created: Math.floor(when.getTime() / 1000),
+      sourceId: `ch_demo_wk${weekNum}`,
+      reportingCategory: "charge",
+    });
+  }
+
+  charges.sort((a, b) => b.created - a.created);
+  return charges;
+}
 
 function cloneCustomersForSeed(customers) {
   return customers.map((c) => ({
@@ -739,20 +791,6 @@ function cloneCustomersForSeed(customers) {
     bookings: [...(c.bookings || [])],
     sms: c.sms ? [...c.sms] : undefined,
   }));
-}
-
-function injectThisWeekCharges(customers, slug) {
-  const specs = THIS_WEEK_CHARGES_BY_SLUG[slug];
-  if (!specs?.length || !customers?.length) return;
-  const host = customers[0];
-  for (const spec of specs) {
-    host.bookings.push({
-      service: spec.service,
-      status: "completed",
-      dayOffset: spec.dayOffset,
-      price: spec.price,
-    });
-  }
 }
 
 function estimateStripeFeeCents(amountCents) {
@@ -832,7 +870,6 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
 
   const ctx = await loadTenantSeedContext(db, tenantId);
   const customers = cloneCustomersForSeed(config.customers);
-  injectThisWeekCharges(customers, slug);
   let batch = db.batch();
   let ops = 0;
 
@@ -964,7 +1001,7 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
 
   if (ops > 0) await batch.commit();
 
-  const transactions = buildPaymentTransactions(customers, ctx.servicesByName, now, Timestamp);
+  const transactions = buildShowcaseWeeklyTransactions(slug, now, Timestamp);
   const preset = config.paymentPreset || {};
   const payments = {
     availableBalanceCents: preset.availableBalanceCents ?? 0,

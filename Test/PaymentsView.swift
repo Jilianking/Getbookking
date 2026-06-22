@@ -159,7 +159,7 @@ struct PaymentsView: View {
                 ? "Connect your Stripe account to enable in-person payments"
                 : "Set up Stripe to enable in-person payments"
         }
-        return "Accept contactless cards and wallets (1% platform fee)"
+        return "Accept contactless cards and wallets — processing fee paid by customer"
     }
 
     private func handleTapToPayTapped() {
@@ -202,24 +202,10 @@ struct PaymentsView: View {
             Text("Accept payments and manage your earnings")
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
-            if viewModel.isTenantOwner, viewModel.stripeConnected {
-                Toggle(isOn: Binding(
-                    get: { viewModel.cardSurchargeEnabled },
-                    set: { newValue in
-                        Task { await viewModel.saveCardSurchargeSettings(enabled: newValue) }
-                    }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Add card processing fee at checkout")
-                            .font(.subheadline)
-                        Text("Customer pays service amount plus \(viewModel.checkoutBreakdown(serviceCents: 10_000).surchargePercentLabel) when paying by card.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .disabled(viewModel.isSavingCardSurcharge)
-                .padding(16)
-                .appCard()
+            if viewModel.stripeConnected {
+                Text("Customers pay a processing fee at checkout so you receive the full service amount.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal)
@@ -483,7 +469,7 @@ struct DepositLinkSheet: View {
     }
 
     private var checkout: CardCheckoutBreakdown {
-        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents)
+        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents, channel: .online)
     }
 
     private var canCreate: Bool { serviceAmountCents >= 50 }
@@ -494,7 +480,7 @@ struct DepositLinkSheet: View {
                 Text("Enter deposit amount")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Text("Customer pays the deposit plus any card processing fee you have enabled. Bookking retains a 1% platform fee from your Connect balance.")
+                Text("Customers pay the deposit plus a processing fee at checkout. You receive the full deposit amount.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -545,7 +531,7 @@ struct DepositLinkSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text(checkout.surchargeCents > 0
+                                Text(checkout.hasPassThroughFees
                                     ? "Create link · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
                                     : "Create link")
                             }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Get Bookking — Your craft is the brand. We handle the rest.</title>
+  <title>Get Bookking — Your studio, fully booked.</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=8" />
   <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=8" />
@@ -123,21 +123,20 @@
 
     /* ── HERO ── */
     .hero {
-      padding: 100px 40px 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 48px 40px 80px;
       text-align: center;
       background: linear-gradient(180deg, var(--brand-offwhite) 0%, #ffffff 100%);
       border-bottom: 1px solid var(--border);
     }
 
-    .hero-tag {
-      display: inline-block;
-      font-size: 12px;
-      padding: 5px 14px;
-      border-radius: 20px;
-      background: #F0EDE6;
-      color: var(--text-secondary);
-      margin-bottom: 28px;
-      letter-spacing: 0.02em;
+    .hero-headline {
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 16px;
     }
 
     .hero h1 {
@@ -146,7 +145,7 @@
       font-weight: 400;
       line-height: 1.12;
       color: var(--text-primary);
-      margin-bottom: 24px;
+      margin-bottom: 0;
       max-width: 680px;
       margin-left: auto;
       margin-right: auto;
@@ -157,12 +156,56 @@
       color: var(--brand-warm);
     }
 
+    .hero-phones {
+      position: relative;
+      width: min(920px, 100%);
+      height: clamp(360px, 48vw, 500px);
+      margin: 0 auto 36px;
+      pointer-events: none;
+    }
+
+    .hero-phone {
+      position: absolute;
+      width: min(260px, 30vw);
+      height: auto;
+      border-radius: 32px;
+      box-shadow: 0 24px 56px rgba(26, 20, 16, 0.16);
+      border: 1px solid rgba(26, 20, 16, 0.06);
+    }
+
+    .hero-phone--messages {
+      left: 5%;
+      top: 20%;
+      z-index: 1;
+      transform: rotate(-14deg);
+    }
+
+    .hero-phone--dashboard {
+      left: 50%;
+      top: 0;
+      z-index: 3;
+      transform: translateX(-50%) rotate(0deg);
+    }
+
+    .hero-phone--design {
+      right: 5%;
+      left: auto;
+      top: 16%;
+      z-index: 2;
+      transform: rotate(14deg);
+    }
+
+    .hero-footer {
+      width: 100%;
+      max-width: 560px;
+    }
+
     .hero-sub {
       font-size: 18px;
       font-weight: 300;
       color: var(--text-secondary);
       max-width: 480px;
-      margin: 0 auto 44px;
+      margin: 0 auto 28px;
       line-height: 1.7;
     }
 
@@ -171,7 +214,7 @@
       gap: 12px;
       justify-content: center;
       flex-wrap: wrap;
-      margin-bottom: 36px;
+      margin-bottom: 0;
     }
 
     .btn-primary, a.btn-primary {
@@ -206,27 +249,6 @@
     }
 
     .btn-secondary:hover, a.btn-secondary:hover { border-color: var(--brand-dark); background: var(--brand-offwhite); }
-
-    .audience-pills {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 28px;
-    }
-
-    .pill {
-      font-size: 13px;
-      padding: 6px 16px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-    }
-
-    .hero-proof {
-      font-size: 13px;
-      color: var(--text-tertiary);
-    }
 
     /* ── SECTIONS ── */
     section { padding: 80px 40px; border-bottom: 1px solid var(--border); }
@@ -602,7 +624,13 @@
 
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
-      .hero { padding: 72px 24px 56px; }
+      .hero { padding: 40px 20px 56px; }
+      .hero-headline { margin-bottom: 12px; }
+      .hero-phones { height: 280px; margin-bottom: 28px; }
+      .hero-phone { width: min(150px, 28vw); border-radius: 22px; }
+      .hero-phone--messages { left: 0; top: 18%; transform: rotate(-12deg); }
+      .hero-phone--dashboard { left: 50%; top: 0; transform: translateX(-50%) rotate(0deg); }
+      .hero-phone--design { right: 0; left: auto; top: 14%; transform: rotate(12deg); }
       section { padding: 60px 24px; }
       .feat-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
@@ -668,19 +696,21 @@
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-tag">Free for your first month</div>
-    <h1>Your craft is the brand.<br><em>We handle the rest.</em></h1>
-    <p class="hero-sub">Get Bookking builds your website, takes your bookings, and manages your clients — so you can focus on the work.</p>
-    <div class="hero-ctas">
-      <a href="signup.html" class="btn-primary">Get started free</a>
+    <div class="hero-headline">
+      <h1>Your studio, <em>fully booked.</em></h1>
     </div>
-    <div class="audience-pills">
-      <span class="pill">Barbers</span>
-      <span class="pill">Hair stylists</span>
-      <span class="pill">Tattoo artists</span>
-      <span class="pill">Nail salons</span>
+    <div class="hero-phones">
+      <img src="assets/hero-phones/northline-messages.png" alt="Bookking Messages inbox" class="hero-phone hero-phone--messages" width="470" height="1024" decoding="async" />
+      <img src="assets/hero-phones/northline-dashboard.png" alt="Bookking provider dashboard" class="hero-phone hero-phone--dashboard" width="470" height="1024" decoding="async" />
+      <img src="assets/hero-phones/northline-design.png" alt="Artist website built with Bookking" class="hero-phone hero-phone--design" width="470" height="1024" decoding="async" />
     </div>
-    <p class="hero-proof">Your site live in minutes</p>
+    <div class="hero-footer">
+      <p class="hero-sub">Messages, bookings, payments, and your website — all in one place. Built for independent artists.</p>
+      <div class="hero-ctas">
+        <a href="signup.html" class="btn-primary">Get started free</a>
+        <a href="#features" class="btn-secondary">See how it works →</a>
+      </div>
+    </div>
   </section>
 
   <!-- FEATURES -->

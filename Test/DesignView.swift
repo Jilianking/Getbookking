@@ -49,7 +49,7 @@ struct DesignView: View {
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(isShowingManage ? "Manage" : "Design")
+            .navigationTitle(isShowingManage ? "Manage" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

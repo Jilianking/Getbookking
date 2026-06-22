@@ -31,7 +31,7 @@ struct TapToPaySheet: View {
     }
 
     private var checkout: CardCheckoutBreakdown {
-        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents)
+        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents, channel: .tapToPay)
     }
 
     private var canPay: Bool {
@@ -127,7 +127,7 @@ struct TapToPaySheet: View {
 
             Button(action: { Task { await pay() } }) {
                 HStack {
-                    Text(checkout.surchargeCents > 0
+                    Text(checkout.hasPassThroughFees
                         ? "Charge \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
                         : "Charge")
                         .fontWeight(.semibold)

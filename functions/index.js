@@ -16,7 +16,8 @@
  * Callable getBillingSummary: read-only Stripe subscription + invoices for account.html.
  *
  * Customer payments (Connect): 1% platform application fee on createDepositLink and
- * createPaymentIntentForTapToPay — not on subscription checkout.
+ * createPaymentIntentForTapToPay — grossed up to the customer at checkout (with estimated
+ * Stripe card fees). Not on subscription checkout.
  *
  * Client texting (Twilio): set secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
  * Paid subscription (active) required; free trial (trialing) cannot enable SMS.
@@ -704,43 +705,49 @@ exports.getConnectAccountStatus = functions
  */
 const PLATFORM_FEE_BPS = 100;
 
-/** Application fee in USD cents (min 1¢). Deducted from provider Connect balance, not grossed up to customer. */
+/** Application fee in USD cents (min 1¢). Collected via Connect; grossed up to customer at checkout. */
 function platformFeeCents(amountCents) {
   const n = Math.round(Number(amountCents));
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
 }
 
-/** Restaurant-style card surcharge on top of service/deposit (default 3%). */
-const DEFAULT_CARD_SURCHARGE_BPS = 300;
-
-function readTenantCardSurchargeSettings(tenant) {
-  const t = tenant && typeof tenant === "object" ? tenant : {};
-  const enabled = t.cardSurchargeEnabled !== false;
-  let bps = parseInt(t.cardSurchargeBps, 10);
-  if (Number.isNaN(bps)) bps = DEFAULT_CARD_SURCHARGE_BPS;
-  bps = Math.min(500, Math.max(0, bps));
-  return { enabled, bps };
-}
+/** Estimated Stripe card rates used to gross-up customer checkout (USD). */
+const STRIPE_ONLINE_BPS = 290;
+const STRIPE_ONLINE_FIXED_CENTS = 30;
+const STRIPE_CARD_PRESENT_BPS = 270;
+const STRIPE_CARD_PRESENT_FIXED_CENTS = 5;
 
 /**
- * Service/deposit amount + optional card surcharge → total charged to customer.
- * Platform fee is still deducted from the Connect balance on the total charge.
+ * Gross-up checkout so provider nets the quoted service/deposit after Stripe + platform fees.
+ * @param {number} serviceCents
+ * @param {"online"|"card_present"} channel
  */
-function computeCardCheckoutAmounts(serviceCents, tenant) {
+function computeCardCheckoutAmounts(serviceCents, channel = "online") {
   const service = Math.max(0, Math.round(Number(serviceCents)));
-  const { enabled, bps } = readTenantCardSurchargeSettings(tenant);
-  let surchargeCents = 0;
-  if (enabled && bps > 0 && service > 0) {
-    surchargeCents = Math.round((service * bps) / 10000);
-    if (surchargeCents < 1 && service >= 50) surchargeCents = 1;
+  if (service <= 0) {
+    return {
+      serviceCents: 0,
+      surchargeCents: 0,
+      totalCents: 0,
+      platformFeeCents: 0,
+    };
   }
+  const isCardPresent = channel === "card_present";
+  const stripeBps = isCardPresent ? STRIPE_CARD_PRESENT_BPS : STRIPE_ONLINE_BPS;
+  const stripeFixed = isCardPresent
+    ? STRIPE_CARD_PRESENT_FIXED_CENTS
+    : STRIPE_ONLINE_FIXED_CENTS;
+  const combinedBps = stripeBps + PLATFORM_FEE_BPS;
+  const totalCents = Math.ceil(
+    (service + stripeFixed) / (1 - combinedBps / 10000)
+  );
+  const surchargeCents = totalCents - service;
   return {
     serviceCents: service,
     surchargeCents,
-    totalCents: service + surchargeCents,
-    cardSurchargeEnabled: enabled,
-    cardSurchargeBps: bps,
+    totalCents,
+    platformFeeCents: platformFeeCents(totalCents),
   };
 }
 
@@ -1090,11 +1097,7 @@ exports.createDepositLink = functions
     const uid = context.auth.uid;
     await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
-    const tenantDoc = tenantId
-      ? await db.collection("tenants").doc(tenantId).get()
-      : null;
-    const tenant = tenantDoc && tenantDoc.exists ? tenantDoc.data() : {};
-    const checkout = computeCardCheckoutAmounts(serviceAmount, tenant);
+    const checkout = computeCardCheckoutAmounts(serviceAmount, "online");
     const productName = (data?.productName || "Deposit").toString().trim() || "Deposit";
     const productDescription = data?.productDescription
       ? data.productDescription.toString().trim()
@@ -1127,15 +1130,30 @@ exports.createDepositLink = functions
       },
     ];
     if (checkout.surchargeCents > 0) {
-      const pct = (checkout.cardSurchargeBps / 100).toFixed(1);
-      lineItems.push({
-        price_data: {
-          currency: "usd",
-          product_data: { name: `Card processing (${pct}%)` },
-          unit_amount: checkout.surchargeCents,
-        },
-        quantity: 1,
-      });
+      const cardProcessingCents = Math.max(
+        0,
+        checkout.surchargeCents - checkout.platformFeeCents
+      );
+      if (cardProcessingCents > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Card processing" },
+            unit_amount: cardProcessingCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (checkout.platformFeeCents > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Platform fee (1%)" },
+            unit_amount: checkout.platformFeeCents,
+          },
+          quantity: 1,
+        });
+      }
     }
     const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
     const link = await stripe.paymentLinks.create(
@@ -1584,11 +1602,7 @@ exports.createPaymentIntentForTapToPay = functions
     const uid = context.auth.uid;
     await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
-    const tenantDoc = tenantId
-      ? await db.collection("tenants").doc(tenantId).get()
-      : null;
-    const tenant = tenantDoc && tenantDoc.exists ? tenantDoc.data() : {};
-    const checkout = computeCardCheckoutAmounts(serviceAmount, tenant);
+    const checkout = computeCardCheckoutAmounts(serviceAmount, "card_present");
     const stripeAccountId = await getStripeAccountIdForUser(uid);
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
@@ -2275,7 +2289,7 @@ function paymentKindMatchesSplit(settings, paymentKind) {
   return applies === "service";
 }
 
-/** Split on service/deposit amount; card surcharge stays with studio. */
+/** Split on service/deposit amount; pass-through checkout fees stay with studio. */
 function computeTeamPaymentSplit({
   memberSettings,
   paymentKind,
@@ -2482,41 +2496,6 @@ exports.recordTenantPayment = functions
       studioServiceShareCents: split.studioServiceShareCents,
     };
   });
-
-/** Owner-only: toggle restaurant-style card surcharge at checkout. */
-exports.updateTenantCardSurcharge = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
-  }
-  const uid = context.auth.uid;
-  const tenantId = await getTenantIdForUser(uid);
-  if (!tenantId) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "No business linked to this account."
-    );
-  }
-  await assertTenantOwnerUid(uid, tenantId);
-  const patch = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-  if (data && data.cardSurchargeEnabled != null) {
-    patch.cardSurchargeEnabled = data.cardSurchargeEnabled === true;
-  }
-  if (data && data.cardSurchargeBps != null) {
-    let bps = parseInt(data.cardSurchargeBps, 10);
-    if (Number.isNaN(bps)) bps = DEFAULT_CARD_SURCHARGE_BPS;
-    patch.cardSurchargeBps = Math.min(500, Math.max(0, bps));
-  }
-  await db.collection("tenants").doc(tenantId).set(patch, { merge: true });
-  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
-  const settings = readTenantCardSurchargeSettings(
-    tenantSnap.exists ? tenantSnap.data() : {}
-  );
-  return {
-    ok: true,
-    cardSurchargeEnabled: settings.enabled,
-    cardSurchargeBps: settings.bps,
-  };
-});
 
 function defaultJobTitleForIndustry(industry) {
   const map = {

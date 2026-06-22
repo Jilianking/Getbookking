@@ -1,46 +1,84 @@
 //
 //  CardCheckoutPricing.swift
 //
-//  Restaurant-style checkout: service amount + card processing surcharge on top.
+//  Customer pays service + grossed-up processing fees; provider nets full service amount.
 //
 
 import Foundation
 import SwiftUI
 
+enum CardCheckoutChannel: Equatable {
+    case online
+    case tapToPay
+}
+
 struct CardCheckoutBreakdown: Equatable {
     let serviceCents: Int
-    let surchargeCents: Int
+    /// Total pass-through fees added to the customer bill (card processing + platform).
+    let passThroughFeeCents: Int
+    let platformFeeCents: Int
     let totalCents: Int
-    let surchargeEnabled: Bool
-    let surchargeBps: Int
+    let channel: CardCheckoutChannel
 
-    var surchargePercentLabel: String {
-        String(format: "%.1f%%", Double(surchargeBps) / 100.0)
+    var cardProcessingFeeCents: Int {
+        max(0, passThroughFeeCents - platformFeeCents)
     }
+
+    var hasPassThroughFees: Bool { passThroughFeeCents > 0 }
 }
 
 enum CardCheckoutPricing {
-    static let defaultSurchargeBps = 300
+    static let platformFeeBps = 100
+
+    private static let stripeOnlineBps = 290
+    private static let stripeOnlineFixedCents = 30
+    private static let stripeCardPresentBps = 270
+    private static let stripeCardPresentFixedCents = 5
 
     static func breakdown(
         serviceCents: Int,
-        surchargeEnabled: Bool,
-        surchargeBps: Int = defaultSurchargeBps
+        channel: CardCheckoutChannel = .online
     ) -> CardCheckoutBreakdown {
         let service = max(0, serviceCents)
-        let bps = min(500, max(0, surchargeBps))
-        var surcharge = 0
-        if surchargeEnabled, bps > 0, service > 0 {
-            surcharge = Int(round(Double(service * bps) / 10_000.0))
-            if surcharge < 1, service >= 50 { surcharge = 1 }
+        guard service > 0 else {
+            return CardCheckoutBreakdown(
+                serviceCents: 0,
+                passThroughFeeCents: 0,
+                platformFeeCents: 0,
+                totalCents: 0,
+                channel: channel
+            )
         }
+
+        let stripeBps: Int
+        let stripeFixed: Int
+        switch channel {
+        case .online:
+            stripeBps = stripeOnlineBps
+            stripeFixed = stripeOnlineFixedCents
+        case .tapToPay:
+            stripeBps = stripeCardPresentBps
+            stripeFixed = stripeCardPresentFixedCents
+        }
+
+        let combinedBps = stripeBps + platformFeeBps
+        let total = Int(ceil(Double(service + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
+        let passThrough = total - service
+        let platformFee = platformFeeCents(totalCents: total)
+
         return CardCheckoutBreakdown(
             serviceCents: service,
-            surchargeCents: surcharge,
-            totalCents: service + surcharge,
-            surchargeEnabled: surchargeEnabled,
-            surchargeBps: bps
+            passThroughFeeCents: passThrough,
+            platformFeeCents: platformFee,
+            totalCents: total,
+            channel: channel
         )
+    }
+
+    static func platformFeeCents(totalCents: Int) -> Int {
+        let total = max(0, totalCents)
+        guard total > 0 else { return 0 }
+        return max(1, Int(round(Double(total * platformFeeBps) / 10_000.0)))
     }
 
     static func formatUSD(cents: Int) -> String {
@@ -61,11 +99,18 @@ struct CardCheckoutBreakdownView: View {
                 Spacer()
                 Text(CardCheckoutPricing.formatUSD(cents: breakdown.serviceCents))
             }
-            if breakdown.surchargeCents > 0 {
+            if breakdown.cardProcessingFeeCents > 0 {
                 HStack {
-                    Text("Card processing (\(breakdown.surchargePercentLabel))")
+                    Text("Card processing")
                     Spacer()
-                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.surchargeCents))
+                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.cardProcessingFeeCents))
+                }
+            }
+            if breakdown.platformFeeCents > 0 {
+                HStack {
+                    Text("Platform fee (1%)")
+                    Spacer()
+                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.platformFeeCents))
                 }
             }
             Divider()
@@ -74,6 +119,13 @@ struct CardCheckoutBreakdownView: View {
                     .fontWeight(.semibold)
                 Spacer()
                 Text(CardCheckoutPricing.formatUSD(cents: breakdown.totalCents))
+                    .fontWeight(.semibold)
+            }
+            HStack {
+                Text("You receive")
+                    .fontWeight(.semibold)
+                Spacer()
+                Text(CardCheckoutPricing.formatUSD(cents: breakdown.serviceCents))
                     .fontWeight(.semibold)
             }
         }

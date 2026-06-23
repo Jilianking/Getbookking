@@ -60,3 +60,15 @@ firebase-debug.log
 # Firebase CLI local state (deploy cache, emulator data, etc.)
 .firebase/
 
+# Dependencies (install with npm install)
+node_modules/
+functions/node_modules/
+
+# Scratch Xcode project
+signingtest/
+
+# AI editor config (local tooling)
+.agents/
+.claude/
+skills-lock.json
+

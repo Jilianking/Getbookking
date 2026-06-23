@@ -123,32 +123,116 @@
 
     /* ── HERO ── */
     .hero {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0;
-      padding: 48px 40px 80px;
-      text-align: center;
+      padding: 56px 40px 80px;
       background: linear-gradient(180deg, var(--brand-offwhite) 0%, #ffffff 100%);
       border-bottom: 1px solid var(--border);
     }
 
-    .hero-headline {
+    .hero-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+
+    .hero-phones-panel {
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 500px;
+    }
+
+    .hero-phones {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
       width: 100%;
-      max-width: 720px;
+      min-height: clamp(360px, 40vw, 480px);
+      margin: 0;
+    }
+
+    .hero-phone-wrap {
+      position: relative;
+      flex-shrink: 0;
+      border-radius: 32px;
+      overflow: hidden;
+      box-shadow: 0 20px 44px rgba(26, 20, 16, 0.12);
+      transition: transform 0.3s ease, filter 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .hero-phone-wrap:hover {
+      z-index: 10 !important;
+      filter: brightness(1) !important;
+      box-shadow: 0 28px 52px rgba(26, 20, 16, 0.16);
+    }
+
+    .hero-phone-wrap--messages {
+      z-index: 1;
+      transform: rotate(-8deg) translateX(28px) translateY(24px);
+      filter: brightness(0.98);
+      margin-right: -56px;
+    }
+
+    .hero-phone-wrap--messages:hover {
+      transform: rotate(-8deg) translateX(28px) translateY(14px);
+    }
+
+    .hero-phone-wrap--dashboard {
+      z-index: 3;
+      transform: translateY(0);
+    }
+
+    .hero-phone-wrap--dashboard:hover {
+      transform: translateY(-10px);
+    }
+
+    .hero-phone-wrap--design {
+      z-index: 2;
+      transform: rotate(8deg) translateX(-28px) translateY(24px);
+      filter: brightness(0.98);
+      margin-left: -56px;
+    }
+
+    .hero-phone-wrap--design:hover {
+      transform: rotate(8deg) translateX(-28px) translateY(14px);
+    }
+
+    .hero-phone {
+      display: block;
+      width: min(250px, 22vw);
+      height: auto;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+      pointer-events: none;
+      vertical-align: top;
+    }
+
+    .hero-content {
+      text-align: left;
+    }
+
+    .hero-overline {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--brand-warm);
       margin-bottom: 16px;
     }
 
     .hero h1 {
       font-family: 'Instrument Serif', serif;
-      font-size: clamp(44px, 6vw, 64px);
+      font-size: clamp(48px, 5.5vw, 64px);
       font-weight: 400;
-      line-height: 1.12;
+      line-height: 1.1;
       color: var(--text-primary);
-      margin-bottom: 0;
-      max-width: 680px;
-      margin-left: auto;
-      margin-right: auto;
+      margin-bottom: 20px;
     }
 
     .hero h1 em {
@@ -156,65 +240,26 @@
       color: var(--brand-warm);
     }
 
-    .hero-phones {
-      position: relative;
-      width: min(920px, 100%);
-      height: clamp(360px, 48vw, 500px);
-      margin: 0 auto 36px;
-      pointer-events: none;
-    }
-
-    .hero-phone {
-      position: absolute;
-      width: min(260px, 30vw);
-      height: auto;
-      border-radius: 32px;
-      box-shadow: 0 24px 56px rgba(26, 20, 16, 0.16);
-      border: 1px solid rgba(26, 20, 16, 0.06);
-    }
-
-    .hero-phone--messages {
-      left: 5%;
-      top: 20%;
-      z-index: 1;
-      transform: rotate(-14deg);
-    }
-
-    .hero-phone--dashboard {
-      left: 50%;
-      top: 0;
-      z-index: 3;
-      transform: translateX(-50%) rotate(0deg);
-    }
-
-    .hero-phone--design {
-      right: 5%;
-      left: auto;
-      top: 16%;
-      z-index: 2;
-      transform: rotate(14deg);
-    }
-
-    .hero-footer {
-      width: 100%;
-      max-width: 560px;
-    }
-
     .hero-sub {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 300;
       color: var(--text-secondary);
       max-width: 480px;
-      margin: 0 auto 28px;
+      margin: 0 0 28px;
       line-height: 1.7;
     }
 
     .hero-ctas {
       display: flex;
       gap: 12px;
-      justify-content: center;
+      justify-content: flex-start;
       flex-wrap: wrap;
       margin-bottom: 0;
+    }
+
+    .hero-ctas .btn-primary,
+    .hero-ctas .btn-secondary {
+      font-size: 16px;
     }
 
     .btn-primary, a.btn-primary {
@@ -324,27 +369,6 @@
 
     .feat-card h3 { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
     .feat-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
-
-    /* ── TEMPLATES TEASER ── */
-    .tpl-teaser-preview {
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      margin-bottom: 28px;
-      box-shadow: 0 16px 48px rgba(44, 32, 24, 0.08);
-    }
-
-    .tpl-teaser-preview img {
-      width: 100%;
-      height: auto;
-      display: block;
-      object-fit: cover;
-      object-position: top center;
-      max-height: 420px;
-      background: #f0ebe4;
-    }
-
-    .tpl-teaser-cta { text-align: center; }
 
     /* ── HOW IT WORKS ── */
     .steps { display: flex; flex-direction: column; }
@@ -623,14 +647,81 @@
     .footer-links a:hover { color: #9A8A7A; }
 
     /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .hero { padding: 32px 16px 48px; overflow-x: hidden; }
+      .hero-inner {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+      .hero-content {
+        text-align: center;
+        order: -1;
+      }
+      .hero h1 { font-size: clamp(36px, 9vw, 44px); }
+      .hero-sub { font-size: 18px; margin-left: auto; margin-right: auto; }
+      .hero-ctas { justify-content: center; }
+      .hero-phones-panel {
+        min-height: 0;
+        padding: 14px 0 8px;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        overflow-y: visible;
+      }
+      .hero-phones {
+        transform: scale(0.95);
+        transform-origin: top center;
+        min-height: 300px;
+        padding-top: 12px;
+        margin: 0 auto;
+      }
+      .hero-phone-wrap { border-radius: 24px; }
+      .hero-phone { width: min(130px, 30vw); }
+      .hero-phone-wrap--messages {
+        margin-right: -32px;
+        transform: rotate(-6deg) translateX(10px) translateY(14px);
+      }
+      .hero-phone-wrap--messages:hover,
+      .hero-phone-wrap--messages:active {
+        transform: rotate(-6deg) translateX(10px) translateY(6px);
+      }
+      .hero-phone-wrap--dashboard:hover,
+      .hero-phone-wrap--dashboard:active {
+        transform: translateY(-10px);
+      }
+      .hero-phone-wrap--design {
+        margin-left: -32px;
+        transform: rotate(6deg) translateX(-10px) translateY(14px);
+      }
+      .hero-phone-wrap--design:hover,
+      .hero-phone-wrap--design:active {
+        transform: rotate(6deg) translateX(-10px) translateY(6px);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-phones {
+        transform: scale(0.92);
+        min-height: 280px;
+      }
+      .hero-phone { width: min(118px, 29vw); }
+      .hero-phone-wrap--messages { margin-right: -28px; }
+      .hero-phone-wrap--design { margin-left: -28px; }
+      .hero-ctas {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        max-width: 320px;
+        margin: 0 auto;
+      }
+      .hero-ctas .btn-primary,
+      .hero-ctas .btn-secondary {
+        width: 100%;
+        text-align: center;
+      }
+    }
+
     @media (max-width: 768px) {
-      .hero { padding: 40px 20px 56px; }
-      .hero-headline { margin-bottom: 12px; }
-      .hero-phones { height: 280px; margin-bottom: 28px; }
-      .hero-phone { width: min(150px, 28vw); border-radius: 22px; }
-      .hero-phone--messages { left: 0; top: 18%; transform: rotate(-12deg); }
-      .hero-phone--dashboard { left: 50%; top: 0; transform: translateX(-50%) rotate(0deg); }
-      .hero-phone--design { right: 0; left: auto; top: 14%; transform: rotate(12deg); }
       section { padding: 60px 24px; }
       .feat-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
@@ -696,19 +787,28 @@
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-headline">
-      <h1>Your studio, <em>fully booked.</em></h1>
-    </div>
-    <div class="hero-phones">
-      <img src="assets/hero-phones/northline-messages.png" alt="Bookking Messages inbox" class="hero-phone hero-phone--messages" width="470" height="1024" decoding="async" />
-      <img src="assets/hero-phones/northline-dashboard.png" alt="Bookking provider dashboard" class="hero-phone hero-phone--dashboard" width="470" height="1024" decoding="async" />
-      <img src="assets/hero-phones/northline-design.png" alt="Artist website built with Bookking" class="hero-phone hero-phone--design" width="470" height="1024" decoding="async" />
-    </div>
-    <div class="hero-footer">
-      <p class="hero-sub">Messages, bookings, payments, and your website — all in one place. Built for independent artists.</p>
-      <div class="hero-ctas">
-        <a href="signup.html" class="btn-primary">Get started free</a>
-        <a href="#features" class="btn-secondary">See how it works →</a>
+    <div class="hero-inner">
+      <div class="hero-phones-panel">
+        <div class="hero-phones">
+          <div class="hero-phone-wrap hero-phone-wrap--messages">
+            <img src="assets/hero-phones/northline-messages.png" alt="Bookking Messages inbox" class="hero-phone" width="470" height="1024" decoding="async" />
+          </div>
+          <div class="hero-phone-wrap hero-phone-wrap--dashboard">
+            <img src="assets/hero-phones/northline-dashboard.png" alt="Bookking provider dashboard" class="hero-phone" width="470" height="1024" decoding="async" />
+          </div>
+          <div class="hero-phone-wrap hero-phone-wrap--design">
+            <img src="assets/hero-phones/northline-design.png" alt="Bookking website builder" class="hero-phone" width="470" height="1024" decoding="async" />
+          </div>
+        </div>
+      </div>
+      <div class="hero-content">
+        <p class="hero-overline">Built for independent businesses</p>
+        <h1>Your studio, <em>fully booked.</em></h1>
+        <p class="hero-sub">Messages, bookings, payments, and your website — all in one place.</p>
+        <div class="hero-ctas">
+          <a href="signup.html" class="btn-primary">Get started free</a>
+          <a href="#features" class="btn-secondary">See how it works →</a>
+        </div>
       </div>
     </div>
   </section>
@@ -751,23 +851,6 @@
           <h3>Client messaging</h3>
           <p>Automated reminders, confirmations, and follow-ups. Reduce no-shows without lifting a finger.</p>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TEMPLATES -->
-  <section id="templates">
-    <div class="sec-inner">
-      <div class="sec-header">
-        <div class="sec-label">Templates</div>
-        <h2>Made for your industry</h2>
-        <p>Every template is purpose-built — not a generic theme with your logo swapped in.</p>
-      </div>
-      <div class="tpl-teaser-preview">
-        <img src="assets/template-previews/blade-desktop.png?v=2" alt="Blade template preview" width="1440" height="3232" />
-      </div>
-      <div class="tpl-teaser-cta">
-        <a href="templates.html" class="btn-secondary">View all templates &rarr;</a>
       </div>
     </div>
   </section>

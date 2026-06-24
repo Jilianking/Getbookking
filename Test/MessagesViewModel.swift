@@ -18,8 +18,15 @@ class MessagesViewModel: ObservableObject {
         threadSummaries.map(\.threadId)
     }
 
-    func loadThreads(isDemoMode: Bool = false) async {
+    func loadThreads(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                await MainActor.run {
+                    threadSummaries = sessionStore.demoSmsThreads
+                    lastError = nil
+                }
+                return
+            }
             await MainActor.run {
                 threadSummaries = []
             }
@@ -39,8 +46,12 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
-    func startThreadsListening(isDemoMode: Bool = false) {
+    func startThreadsListening(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) {
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                threadSummaries = sessionStore.demoSmsThreads
+                return
+            }
             threadSummaries = []
             return
         }
@@ -93,8 +104,14 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
-    func loadComposeClients(isDemoMode: Bool = false) async {
+    func loadComposeClients(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                await MainActor.run {
+                    composeClients = sessionStore.customers
+                }
+                return
+            }
             await MainActor.run {
                 composeClients = []
             }
@@ -113,8 +130,16 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
-    func loadMessages(for threadId: String, isDemoMode: Bool = false) async -> [Message] {
+    func loadMessages(for threadId: String, isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async -> [Message] {
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                let normalizedId = PhoneFormatting.smsThreadId(threadId)
+                let fetched = sessionStore.demoMessages(for: normalizedId)
+                await MainActor.run {
+                    messages[normalizedId] = fetched
+                }
+                return fetched
+            }
             return []
         }
         let normalizedId = PhoneFormatting.smsThreadId(threadId)
@@ -138,7 +163,9 @@ class MessagesViewModel: ObservableObject {
         threadId: String,
         content: String,
         clientName: String? = nil,
-        clientId: String? = nil
+        clientId: String? = nil,
+        isDemoMode: Bool = false,
+        sessionStore: TenantSessionStore? = nil
     ) async -> Bool {
         let normalizedThreadId = PhoneFormatting.smsThreadId(threadId)
         var finalClientId = clientId.map { PhoneFormatting.smsThreadId($0) }
@@ -180,6 +207,14 @@ class MessagesViewModel: ObservableObject {
         await MainActor.run {
             isSending = true
             lastError = nil
+        }
+
+        if isDemoMode, let sessionStore, sessionStore.isDemoSession {
+            sessionStore.appendDemoOutboundMessage(threadId: normalizedThreadId, message: message)
+            _ = await loadMessages(for: normalizedThreadId, isDemoMode: true, sessionStore: sessionStore)
+            await loadThreads(isDemoMode: true, sessionStore: sessionStore)
+            await MainActor.run { isSending = false }
+            return true
         }
 
         do {

@@ -111,13 +111,43 @@ final class InsightsViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
-    func loadData(isDemoMode: Bool = false) async {
+    func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run {
             isLoading = true
             loadError = nil
         }
 
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession, let tid = sessionStore.tenantId {
+                let reqs = sessionStore.bookingRequests
+                let custs = sessionStore.customers
+                let payments = sessionStore.demoPayments
+                let charges: [(Date, Double)] = (payments?.transactions ?? []).compactMap { item in
+                    let typeStr = (item["type"] as? String ?? "").lowercased()
+                    guard typeStr == "charge" else { return nil }
+                    let created = (item["created"] as? NSNumber)?.intValue ?? 0
+                    guard created > 0 else { return nil }
+                    let amountCents = (item["net"] as? NSNumber)?.intValue
+                        ?? (item["amountCents"] as? NSNumber)?.intValue
+                        ?? 0
+                    return (Date(timeIntervalSince1970: TimeInterval(created)), Double(abs(amountCents)) / 100)
+                }
+                await MainActor.run {
+                    useTenantData = true
+                    tenantId = tid
+                    cachedTenantBookings = reqs
+                    cachedLegacyRequests = []
+                    cachedCustomerDates = custs.map(\.createdAt)
+                    cachedStripeCharges = charges
+                    cachedLegacyRevenueEntries = []
+                    stripeConnected = true
+                    availableBalance = Double(payments?.availableBalanceCents ?? 0) / 100
+                    pendingBalance = Double(payments?.pendingBalanceCents ?? 0) / 100
+                    isLoading = false
+                    recomputeForSelectedRange()
+                }
+                return
+            }
             await MainActor.run {
                 applyDemoSnapshot()
                 isLoading = false

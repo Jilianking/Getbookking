@@ -24,6 +24,15 @@ final class TenantSessionStore: ObservableObject {
     @Published private(set) var smsQuickPresets: [String] = []
     @Published private(set) var ownerUid: String?
 
+    /// Active marketing sandbox persona (read-only; local mutations only).
+    @Published private(set) var demoPersona: DemoPersona?
+    @Published private(set) var demoSmsThreads: [SmsThreadSummary] = []
+    @Published private(set) var demoSmsMessages: [String: [Message]] = [:]
+    @Published private(set) var demoServices: [[String: Any]] = []
+    @Published private(set) var demoPayments: DemoPaymentsSnapshot?
+    @Published private(set) var isDemoSession = false
+    @Published private(set) var demoLoadError: String?
+
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
@@ -98,9 +107,20 @@ final class TenantSessionStore: ObservableObject {
         unreadRequestsCount = 0
         customerCountCache = nil
         loadedUid = nil
+        demoPersona = nil
+        demoSmsThreads = []
+        demoSmsMessages = [:]
+        demoServices = []
+        demoPayments = nil
+        isDemoSession = false
+        demoLoadError = nil
     }
 
-    func bootstrap(isDemoMode: Bool) async {
+    func bootstrap(isDemoMode: Bool, demoPersona persona: DemoPersona? = nil) async {
+        if isDemoMode, let persona {
+            await loadDemoSession(persona: persona)
+            return
+        }
         if isDemoMode {
             reset()
             return
@@ -112,7 +132,130 @@ final class TenantSessionStore: ObservableObject {
         _ = await (bookings, newBookings, members)
     }
 
+    func loadDemoSession(persona: DemoPersona) async {
+        reset()
+        demoLoadError = nil
+        do {
+            let result = try await functions.httpsCallable("getDemoAppSnapshot").call(["slug": persona.slug])
+            guard let payload = result.data as? [String: Any] else {
+                throw DemoSessionError.loadFailed("Demo data unavailable.")
+            }
+            applyDemoPayload(payload, persona: persona)
+        } catch {
+            let msg = FirebaseFunctionsErrorHelper.message(from: error)
+            demoLoadError = msg
+            print("TenantSessionStore demo load error: \(error)")
+        }
+    }
+
+    private func applyDemoPayload(_ payload: [String: Any], persona: DemoPersona) {
+        guard let tenantId = payload["tenantId"] as? String,
+              let tenant = payload["tenant"] as? [String: Any] else {
+            demoLoadError = "Demo data incomplete."
+            return
+        }
+        let owner = payload["owner"] as? [String: Any] ?? [:]
+        demoPersona = persona
+        isDemoSession = true
+        self.tenantId = tenantId
+        self.tenant = tenant
+        ownerUid = (owner["uid"] as? String) ?? "demo-owner"
+        profile = DemoSnapshotParser.providerProfile(
+            persona: persona,
+            tenantId: tenantId,
+            tenant: tenant,
+            owner: owner
+        )
+
+        let bookingRaw = payload["bookingRequests"] as? [[String: Any]] ?? []
+        bookingRequests = bookingRaw.compactMap { DemoSnapshotParser.bookingRequest(from: $0, tenantId: tenantId) }
+        newBookingRequests = Self.filterNewWorkflowRequests(bookingRequests)
+        syncUnreadRequestsCount()
+        bookingsLoadedAt = Date()
+        newBookingsLoadedAt = Date()
+
+        let customerRaw = payload["customers"] as? [[String: Any]] ?? []
+        customers = customerRaw.compactMap { DemoSnapshotParser.client(from: $0) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        customerCountCache = customers.count
+        customersLoadedAt = Date()
+
+        let threadRaw = payload["smsThreads"] as? [[String: Any]] ?? []
+        demoSmsThreads = threadRaw.compactMap { DemoSnapshotParser.smsThread(from: $0) }
+
+        var messagesByThread: [String: [Message]] = [:]
+        let messageRaw = payload["smsMessages"] as? [[String: Any]] ?? []
+        for item in messageRaw {
+            guard let msg = DemoSnapshotParser.smsMessage(from: item) else { continue }
+            let key = PhoneFormatting.smsThreadId(msg.threadId)
+            messagesByThread[key, default: []].append(msg)
+        }
+        for key in messagesByThread.keys {
+            messagesByThread[key]?.sort { $0.createdAt < $1.createdAt }
+        }
+        demoSmsMessages = messagesByThread
+
+        demoServices = payload["services"] as? [[String: Any]] ?? []
+        demoPayments = DemoSnapshotParser.payments(from: payload["payments"] as? [String: Any])
+
+        smsQuickPresets = ManagerSettingsViewModel.defaultQuickReplyPresets
+        teamMembers = []
+        sessionLoaded = true
+        loadedUid = "demo-\(persona.slug)"
+    }
+
+    func demoMessages(for threadId: String) -> [Message] {
+        let key = PhoneFormatting.smsThreadId(threadId)
+        return demoSmsMessages[key] ?? []
+    }
+
+    func appendDemoOutboundMessage(threadId: String, message: Message) {
+        let key = PhoneFormatting.smsThreadId(threadId)
+        var list = demoSmsMessages[key] ?? []
+        list.append(message)
+        demoSmsMessages[key] = list
+        if let idx = demoSmsThreads.firstIndex(where: {
+            PhoneFormatting.smsThreadId($0.threadId) == key
+        }) {
+            let thread = demoSmsThreads[idx]
+            demoSmsThreads[idx] = SmsThreadSummary(
+                threadId: thread.threadId,
+                clientName: thread.clientName,
+                lastMessageBody: message.content,
+                lastMessageAt: message.createdAt
+            )
+        }
+    }
+
+    func applyDemoBookingStatus(requestId: String, status: String) {
+        let matches: (BookingRequest) -> Bool = { req in
+            req.documentId == requestId || req.id == requestId
+        }
+        if let idx = bookingRequests.firstIndex(where: matches) {
+            var updated = bookingRequests[idx]
+            updated.status = status
+            bookingRequests[idx] = updated
+        }
+        if let idx = newBookingRequests.firstIndex(where: matches) {
+            if Self.isNewWorkflowStatus(status) {
+                var updated = newBookingRequests[idx]
+                updated.status = status
+                newBookingRequests[idx] = updated
+            } else {
+                newBookingRequests.remove(at: idx)
+            }
+        } else if Self.isNewWorkflowStatus(status),
+                  let updated = bookingRequests.first(where: matches) {
+            newBookingRequests.append(updated)
+        }
+        newBookingRequests.sort {
+            ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+        }
+        syncUnreadRequestsCount()
+    }
+
     func ensureSessionLoaded(isDemoMode: Bool) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode {
             reset()
             return
@@ -143,6 +286,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func loadBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
         guard let tid = tenantId else { return }
@@ -160,6 +304,7 @@ final class TenantSessionStore: ObservableObject {
 
     /// Lightweight fetch for dashboard stats and drawer badges.
     func loadDashboardBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
         guard let tid = tenantId else { return }
@@ -180,6 +325,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func loadNewBookingsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
         guard let tid = tenantId else { return }
@@ -208,6 +354,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func loadCustomersIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
         guard let tid = tenantId else { return }
@@ -226,6 +373,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func customerCount(isDemoMode: Bool = false) async -> Int {
+        if isDemoMode, isDemoSession { return customers.count }
         if isDemoMode { return 0 }
         await ensureSessionLoaded(isDemoMode: false)
         guard let tid = tenantId else { return 0 }
@@ -241,6 +389,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func loadTeamMembersIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
         guard tenantId != nil else { return }
@@ -313,6 +462,7 @@ final class TenantSessionStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let readAt = Date()
         markBookingRequestReadLocally(requestId: trimmed, readAt: readAt)
+        if isDemoSession { return }
         guard let tid = overrideTenantId ?? tenantId else { return }
         do {
             try await firebaseService.updateTenantBookingRequest(

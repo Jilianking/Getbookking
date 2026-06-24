@@ -107,6 +107,13 @@ struct AdminRootView: View {
 
     /// Solo owners use Business settings only; hide Team from the drawer.
     private var drawerSections: [AdminSection] {
+        if authViewModel.isDemoMode {
+            var sections = AdminSection.drawerOrder.filter { $0 != .team }
+            if sessionStore.tenant?["shopEnabled"] as? Bool != true {
+                sections = sections.filter { $0 != .shop }
+            }
+            return sections
+        }
         let hideTeam =
             !authViewModel.isDemoMode
             && authViewModel.teamAccess.isOwner
@@ -121,6 +128,9 @@ struct AdminRootView: View {
         ZStack(alignment: .leading) {
             // Main content
             VStack(spacing: 0) {
+                if authViewModel.isDemoMode {
+                    demoBanner
+                }
                 mainContent
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -150,7 +160,10 @@ struct AdminRootView: View {
         .task(id: authViewModel.currentUserUid) {
             if authViewModel.isAuthenticated, authViewModel.currentUserUid != nil {
                 sessionStore.reset()
-                await sessionStore.bootstrap(isDemoMode: authViewModel.isDemoMode)
+                await sessionStore.bootstrap(
+                    isDemoMode: authViewModel.isDemoMode,
+                    demoPersona: authViewModel.demoPersona
+                )
                 await dashboardMetrics.loadData(
                     sessionStore: sessionStore,
                     isDemoMode: authViewModel.isDemoMode
@@ -225,6 +238,39 @@ struct AdminRootView: View {
                 SettingsView(drawerState: drawerState, sectionTitle: AdminSection.settings.title)
                     .sectionVisible(drawerState.selectedSection == .settings)
             }
+        }
+    }
+
+    private var demoBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "play.circle.fill")
+                .foregroundStyle(AppDesign.linkAccent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Demo mode")
+                    .font(.caption.weight(.semibold))
+                if let err = sessionStore.demoLoadError, !err.isEmpty {
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                } else {
+                    Text("Nothing is saved · explore freely")
+                        .font(.caption2)
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+            Spacer()
+            Button("Exit") {
+                sessionStore.reset()
+                authViewModel.exitDemo()
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppDesign.linkAccent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(AppDesign.searchBackground)
+        .overlay(alignment: .bottom) {
+            Divider()
         }
     }
 

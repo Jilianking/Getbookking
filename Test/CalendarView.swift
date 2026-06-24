@@ -8,6 +8,7 @@ enum CalendarViewMode: String, CaseIterable {
 
 struct CalendarView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = CalendarViewModel()
     @State private var selectedDate = Date()
     @State private var viewMode: CalendarViewMode = .month
@@ -88,7 +89,8 @@ struct CalendarView: View {
                 .refreshable {
                     await viewModel.loadEvents(
                         forMonthAround: selectedDate,
-                        isDemoMode: authViewModel.isDemoMode
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
                     )
                 }
             }
@@ -107,14 +109,16 @@ struct CalendarView: View {
             .task {
                 await viewModel.loadEvents(
                     forMonthAround: selectedDate,
-                    isDemoMode: authViewModel.isDemoMode
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
                 )
             }
             .onChange(of: selectedDate) { _, newDate in
                 Task {
                     await viewModel.loadEventsIfMonthChanged(
                         forMonthAround: newDate,
-                        isDemoMode: authViewModel.isDemoMode
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
                     )
                 }
             }
@@ -125,7 +129,8 @@ struct CalendarView: View {
                         Task {
                             await viewModel.loadEvents(
                                 forMonthAround: selectedDate,
-                                isDemoMode: authViewModel.isDemoMode
+                                isDemoMode: authViewModel.isDemoMode,
+                                sessionStore: sessionStore
                             )
                         }
                     }

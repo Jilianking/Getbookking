@@ -126,10 +126,64 @@ struct LoginView: View {
                     .foregroundStyle(AppDesign.textSecondary)
             }
             .padding(.top, 4)
+
+            demoSection
         }
         .padding(24)
         .appCard()
         .padding(.horizontal, 24)
+    }
+
+    private var demoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Try a live demo")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppDesign.textPrimary)
+                .padding(.top, 8)
+
+            Text("Explore the full app with sample data. Nothing you do is saved.")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+
+            HStack(spacing: 10) {
+                ForEach(DemoPersona.allCases) { persona in
+                    Button {
+                        startDemo(persona)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Image(systemName: persona.iconSystemName)
+                                .font(.title3)
+                                .foregroundStyle(AppDesign.linkAccent)
+                            Text(persona == .salon ? "Salon" : "Gym")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
+                            Text(persona.businessName)
+                                .font(.caption2)
+                                .foregroundStyle(AppDesign.textSecondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(AppDesign.searchBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppDesign.chipBorder, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoading)
+                }
+            }
+        }
+    }
+
+    private func startDemo(_ persona: DemoPersona) {
+        isLoading = true
+        errorMessage = ""
+        authViewModel.demoLogin(persona: persona)
+        isLoading = false
     }
 
     private func openMarketingSignUp() {

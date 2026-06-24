@@ -48,6 +48,20 @@ class RequestsViewModel: ObservableObject {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                let availability = sessionStore.profile?.availability ?? .default
+                let industryRaw = sessionStore.tenantIndustry
+                await MainActor.run {
+                    tenantId = sessionStore.tenantId
+                    tenantIndustry = industryRaw.isEmpty ? nil : industryRaw
+                    bookingRequests = sessionStore.bookingRequests
+                    teamMembers = sessionStore.teamMembers
+                    studioAvailability = availability
+                    requests = []
+                    isLoading = false
+                }
+                return
+            }
             await MainActor.run {
                 requests = []
                 bookingRequests = []
@@ -144,6 +158,11 @@ class RequestsViewModel: ObservableObject {
     }
     
     func updateRequest(_ requestId: String, status: Request.RequestStatus, notes: String?) async {
+        if let store = sessionStore, store.isDemoSession {
+            store.applyDemoBookingStatus(requestId: requestId, status: status.rawValue)
+            await reloadAfterMutation(isDemoMode: true)
+            return
+        }
         var updates: [String: Any] = ["status": status.rawValue]
         if let notes = notes { updates["notes"] = notes }
         updates["reviewedAt"] = Date()
@@ -166,6 +185,17 @@ class RequestsViewModel: ObservableObject {
 
     /// Uses Cloud Function so manager `approveRejectRequests` is enforced server-side.
     func setBookingRequestStatus(requestId: String, status: String, notes: String?) async {
+        if let store = sessionStore, store.isDemoSession {
+            await markBookingRequestAsRead(requestId: requestId)
+            await MainActor.run {
+                isUpdatingStatus = true
+                actionError = nil
+            }
+            store.applyDemoBookingStatus(requestId: requestId, status: status)
+            await reloadAfterMutation(isDemoMode: true)
+            await MainActor.run { isUpdatingStatus = false }
+            return
+        }
         guard resolvedTenantId != nil else { return }
         await markBookingRequestAsRead(requestId: requestId)
         await MainActor.run {

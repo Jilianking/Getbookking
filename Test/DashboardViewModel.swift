@@ -31,6 +31,36 @@ class DashboardViewModel: ObservableObject {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
+            await MainActor.run { isLoading = true }
+            if sessionStore.isDemoSession {
+                let bookingReqs = sessionStore.bookingRequests
+                let upcoming = bookingReqs.filter { $0.status.lowercased() == "confirmed" }
+                let monthStart = Calendar.current.date(
+                    from: Calendar.current.dateComponents([.year, .month], from: Date())
+                ) ?? Date()
+                let confirmedMonth = bookingReqs.filter { req in
+                    guard req.status.lowercased() == "confirmed" else { return false }
+                    guard let created = req.createdAt else { return false }
+                    return created >= monthStart
+                }
+                let revenueSnapshot = Self.makeRevenueSnapshotFromDemoPayments(sessionStore.demoPayments)
+                await MainActor.run {
+                    useTenantData = true
+                    pendingRequestsCount = sessionStore.pendingRequestsCount
+                    unreadRequestsCount = sessionStore.unreadRequestsCount
+                    upcomingBookingsCount = upcoming.count
+                    confirmedThisMonthCount = confirmedMonth.count
+                    totalClientsCount = sessionStore.customers.count
+                    monthlyRevenue = revenueSnapshot.thisMonth
+                    businessDisplayName = sessionStore.businessDisplayName
+                    tenantIndustry = sessionStore.tenantIndustry
+                    recentBookingRequests = Array(bookingReqs.prefix(10))
+                    recentRequests = []
+                    applyRevenueSnapshot(revenueSnapshot)
+                    isLoading = false
+                }
+                return
+            }
             await MainActor.run {
                 pendingRequestsCount = 0
                 unreadRequestsCount = 0
@@ -178,6 +208,31 @@ class DashboardViewModel: ObservableObject {
                 avgPerWeek: demoAmounts.reduce(0, +) / Double(demoAmounts.count)
             )
         )
+    }
+
+    private static func makeRevenueSnapshotFromDemoPayments(_ payments: DemoPaymentsSnapshot?) -> RevenueSnapshot {
+        guard let payments else {
+            return RevenueSnapshot(
+                weekly: [],
+                thisWeek: 0,
+                weekOverWeekPct: nil,
+                thisMonth: 0,
+                monthOverMonthPct: nil,
+                avgPerWeek: 0
+            )
+        }
+        let entries: [(date: Date, amount: Double)] = payments.transactions.compactMap { item in
+            let typeStr = (item["type"] as? String ?? "").lowercased()
+            guard typeStr == "charge" else { return nil }
+            let created = (item["created"] as? NSNumber)?.intValue ?? 0
+            guard created > 0 else { return nil }
+            let amountCents = (item["net"] as? NSNumber)?.intValue
+                ?? (item["amountCents"] as? NSNumber)?.intValue
+                ?? (item["amount"] as? NSNumber)?.intValue
+                ?? 0
+            return (Date(timeIntervalSince1970: TimeInterval(created)), Double(abs(amountCents)) / 100)
+        }
+        return makeRevenueSnapshot(from: entries)
     }
 
     private func loadStripeRevenueEntries() async -> [(date: Date, amount: Double)] {

@@ -9,7 +9,7 @@ class CalendarViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private var loadedMonthKey: String?
 
-    func loadEvents(forMonthAround anchor: Date = Date(), isDemoMode: Bool = false) async {
+    func loadEvents(forMonthAround anchor: Date = Date(), isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         let calendar = Calendar.current
         let monthKey = Self.monthKey(for: anchor, calendar: calendar)
         let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: anchor))!
@@ -18,6 +18,19 @@ class CalendarViewModel: ObservableObject {
         await MainActor.run { isLoading = true }
 
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                let mapped = sessionStore.bookingRequests.compactMap { Self.event(from: $0) }
+                let inMonth = mapped.filter { event in
+                    event.start >= startOfMonth && event.start < endOfMonth
+                }
+                .sorted { $0.start < $1.start }
+                await MainActor.run {
+                    events = inMonth
+                    loadedMonthKey = monthKey
+                    isLoading = false
+                }
+                return
+            }
             await MainActor.run {
                 events = Self.demoEvents(calendar: calendar, anchor: anchor)
                 loadedMonthKey = monthKey
@@ -64,10 +77,10 @@ class CalendarViewModel: ObservableObject {
     }
 
     /// Skips reload when the visible month is unchanged (day taps within the same month).
-    func loadEventsIfMonthChanged(forMonthAround anchor: Date, isDemoMode: Bool) async {
+    func loadEventsIfMonthChanged(forMonthAround anchor: Date, isDemoMode: Bool, sessionStore: TenantSessionStore? = nil) async {
         let key = Self.monthKey(for: anchor)
         if key == loadedMonthKey, !events.isEmpty || isDemoMode { return }
-        await loadEvents(forMonthAround: anchor, isDemoMode: isDemoMode)
+        await loadEvents(forMonthAround: anchor, isDemoMode: isDemoMode, sessionStore: sessionStore)
     }
 
     // MARK: - BookingRequest → Event

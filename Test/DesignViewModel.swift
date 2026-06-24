@@ -46,6 +46,10 @@ class DesignViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var saveSuccess = false
+    /// True while browsing Design in a live demo (read-only; no Storage/Firestore writes).
+    @Published private(set) var isDemoReadOnly = false
+    /// Drives a friendly alert when the user tries to upload or save in demo mode.
+    @Published var showDemoBlockedAlert = false
     @Published private(set) var isApplyingBladeStarters = false
     @Published private(set) var isSavingBladeServices = false
     /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
@@ -222,6 +226,15 @@ class DesignViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
 
     var hasTenant: Bool { tenantId != nil }
+
+    @discardableResult
+    func blockIfDemoReadOnly(showAlert: Bool = true) -> Bool {
+        guard isDemoReadOnly else { return false }
+        if showAlert {
+            showDemoBlockedAlert = true
+        }
+        return true
+    }
 
     var serviceStateMenuLabel: String {
         let abbr = serviceStateAbbr.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -767,9 +780,32 @@ class DesignViewModel: ObservableObject {
         }
     }
 
-    func loadData(isDemoMode: Bool = false) async {
+    func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run { isLoading = true; errorMessage = nil }
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                let tenant = sessionStore.tenant ?? [:]
+                let slug = sessionStore.profile?.tenantSlug ?? sessionStore.demoPersona?.slug ?? ""
+                await MainActor.run {
+                    tenantId = sessionStore.tenantId
+                    tenantSlug = slug.isEmpty ? nil : slug
+                    bookingUrl = slug.isEmpty ? "" : PublicBookingSite.urlString(forSlug: slug)
+                    industry = tenant["industry"] as? String
+                    webThemeId = tenant["webThemeId"] as? String ?? ""
+                    serviceArea = tenant["serviceArea"] as? String ?? ""
+                    serviceCity = tenant["serviceCity"] as? String ?? ""
+                    serviceStateAbbr = tenant["serviceStateAbbr"] as? String ?? ""
+                    formFields = FormField.defaultFields
+                    services = []
+                    galleryImages = tenant["galleryImages"] as? [String] ?? []
+                    featuredWorkImages = tenant["featuredWorkImages"] as? [String] ?? []
+                    showGalleryPage = tenant["showGalleryPage"] as? Bool ?? true
+                    galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant["galleryLayoutStyle"] as? String)
+                    isDemoReadOnly = true
+                    isLoading = false
+                }
+                return
+            }
             await MainActor.run {
                 tenantId = nil
                 tenantSlug = nil
@@ -781,6 +817,7 @@ class DesignViewModel: ObservableObject {
                 serviceArea = ""
                 serviceCity = ""
                 serviceStateAbbr = ""
+                isDemoReadOnly = false
                 isLoading = false
             }
             return
@@ -811,6 +848,7 @@ class DesignViewModel: ObservableObject {
             let svc = try await firebaseService.fetchTenantServices(tenantId: tid)
             var persistSplit: (featured: [String], gallery: [String])?
             await MainActor.run {
+                isDemoReadOnly = false
                 tenantId = tid
                 tenantSlug = slug
                 bookingUrl = PublicBookingSite.urlString(forSlug: slug)

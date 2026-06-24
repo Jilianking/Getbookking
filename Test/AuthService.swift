@@ -72,6 +72,7 @@ class AuthViewModel: ObservableObject {
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
     @Published var isDemoMode = false
+    @Published private(set) var demoPersona: DemoPersona?
     /// Cached tenant logo (Web Page Design). Prefetched on sign-in; updated via notification after uploads.
     @Published var tenantLogoUrl: String?
     /// Firebase Auth profile photo (fallback when tenant logo is unset).
@@ -207,6 +208,7 @@ class AuthViewModel: ObservableObject {
     /// Call from UI (e.g. Settings); ignores errors.
     func logout() {
         isDemoMode = false
+        demoPersona = nil
         let uid = Auth.auth().currentUser?.uid
         Task {
             await PushNotificationManager.shared.clearTokenForSignOut(providerUid: uid)
@@ -214,23 +216,45 @@ class AuthViewModel: ObservableObject {
         try? Auth.auth().signOut()
     }
 
-    /// Demo mode: full app experience without Firebase sign-in.
-    func demoLogin() {
+    /// Demo mode: full app experience without Firebase sign-in (read-only seeded snapshot).
+    func demoLogin(persona: DemoPersona) {
+        if Auth.auth().currentUser != nil {
+            try? Auth.auth().signOut()
+        }
         isDemoMode = true
+        demoPersona = persona
         isAuthenticated = true
-        currentUserUid = "demo"
-        currentUserEmail = "demo@example.com"
-        currentUserDisplayName = "Demo Provider"
+        currentUserUid = "demo-\(persona.slug)"
+        currentUserEmail = persona.ownerEmail
+        currentUserDisplayName = persona.ownerDisplayName
         tenantLogoUrl = nil
         accountPhotoUrl = nil
         teamAccess = .ownerFullAccess
-        tenantSubscriptionPlan = .studio
+        tenantSubscriptionPlan = .solo
+    }
+
+    func exitDemo() {
+        isDemoMode = false
+        demoPersona = nil
+        isAuthenticated = false
+        currentUserUid = nil
+        currentUserEmail = nil
+        currentUserDisplayName = nil
+        tenantLogoUrl = nil
+        accountPhotoUrl = nil
+        teamAccess = EffectiveTeamAccess()
+        tenantSubscriptionPlan = .solo
+    }
+
+    /// Legacy entry point — prefer `demoLogin(persona:)`.
+    func demoLogin() {
+        demoLogin(persona: .salon)
     }
 
     func refreshTeamAccess() async {
         if isDemoMode {
             teamAccess = .ownerFullAccess
-            tenantSubscriptionPlan = .studio
+            tenantSubscriptionPlan = .solo
             return
         }
         guard let uid = Auth.auth().currentUser?.uid else {

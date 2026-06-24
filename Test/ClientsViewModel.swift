@@ -12,6 +12,13 @@ class ClientsViewModel: ObservableObject {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
+            if let sessionStore, sessionStore.isDemoSession {
+                await MainActor.run {
+                    clients = sessionStore.customers
+                    isLoading = false
+                }
+                return
+            }
             await MainActor.run {
                 clients = []
                 isLoading = false

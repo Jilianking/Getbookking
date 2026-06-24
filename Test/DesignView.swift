@@ -10,6 +10,7 @@ import UIKit
 
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .gallery
     @State private var isShowingManage = false
@@ -100,7 +101,10 @@ struct DesignView: View {
                 }
             }
             .task {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                 await authViewModel.refreshTeamAccess()
             }
             .onDisappear {
@@ -617,7 +621,10 @@ struct DesignView: View {
                         return
                     }
                     Task {
-                        await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                        await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                         await MainActor.run {
                             if let service = viewModel.services.first(where: { $0.id == serviceId }) {
                                 bladeServiceToEdit = service
@@ -729,7 +736,10 @@ struct DesignView: View {
                 .padding()
             }
             .refreshable {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
         }
         .alert("Replace all services?", isPresented: $showBladeStarterConfirm) {

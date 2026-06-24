@@ -43,6 +43,10 @@ const {
   demoConnectBalanceResponse,
   demoConnectTransactionsResponse,
 } = require("./demoShowcasePayments");
+const {
+  ALLOWED_DEMO_APP_SLUGS,
+  buildDemoAppSnapshot,
+} = require("./demoAppSnapshot");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -1320,6 +1324,29 @@ exports.createRefund = functions
   });
 
 /**
+ * Public read-only snapshot for iOS "Try demo" (salon / gym personas). No auth.
+ * Params: { slug: "gilded-palm" | "iron-district-gym" }
+ */
+exports.getDemoAppSnapshot = functions.https.onCall(async (data) => {
+  const slug = (data?.slug || "").toString().trim().toLowerCase();
+  if (!ALLOWED_DEMO_APP_SLUGS.has(slug)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Invalid demo slug"
+    );
+  }
+  try {
+    return await buildDemoAppSnapshot(db, slug);
+  } catch (err) {
+    const msg = (err && err.message) || "Demo unavailable";
+    if (msg.includes("No tenant")) {
+      throw new functions.https.HttpsError("not-found", msg);
+    }
+    throw new functions.https.HttpsError("internal", msg);
+  }
+});
+
+/**
  * Creates a booking request from the public web form. No auth required.
  * Params: { tenantSlug, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, preferredDays?, notes? }
  */
@@ -1351,6 +1378,12 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is not accepting bookings"
+    );
+  }
+  if (tenantData.isDemoAccount === true) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This demo site is read-only. Sign up for your own account to accept bookings."
     );
   }
 
@@ -1478,6 +1511,12 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is not accepting orders"
+    );
+  }
+  if (tenantData.isDemoAccount === true) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This demo site is read-only. Sign up for your own account to accept orders."
     );
   }
   if (tenantData.shopEnabled !== true) {

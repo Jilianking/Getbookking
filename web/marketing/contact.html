@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=8" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/contact.css" />
+  <link rel="stylesheet" href="assets/nav.css?v=6" />
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-128.png?v=8" alt="" class="nav-logo-mark" width="56" height="56" />
+      <span>Get Bookking</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="templates.html">Templates</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="account.html">Your account</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="index.html#pricing">Pricing</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="contact.html" class="is-active">Contact</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
+
+  <section class="contact-hero">
+    <div class="sec-inner">
+      <div class="sec-label">Contact</div>
+      <h1>We're here to help.</h1>
+      <p class="contact-hero-lead">Send us an email — we'll get back to you.</p>
+    </div>
+  </section>
+
+  <section class="contact-body">
+    <div class="sec-inner">
+      <div class="contact-card">
+        <div class="contact-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+        </div>
+        <h2>Email us</h2>
+        <p class="contact-card-desc">For account help, billing questions, website setup, or anything else.</p>
+        <a class="contact-email-link" href="mailto:support@getbookking.com">support@getbookking.com</a>
+      </div>
+      <p class="contact-note">
+        <span class="contact-note-dot" aria-hidden="true"></span>
+        We typically reply within a few hours — yes, even weekends.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">
+      <img src="assets/brand/logo-light-128.png?v=8" alt="" class="footer-logo-mark" width="48" height="48" />
+      <span>Get Bookking</span>
+    </div>
+    <div class="footer-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a>
+      <a href="contact.html" aria-current="page">Contact</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
+  </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/nav.js"></script>
+  <script src="assets/nav-auth.js?v=3"></script>
+</body>
+</html>

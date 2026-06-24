@@ -109,10 +109,48 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func loadData(isDemoMode: Bool = false) async {
+    func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         isLoading = true
         errorMessage = nil
         if isDemoMode {
+            if let payments = sessionStore?.demoPayments {
+                stripeConnected = true
+                stripeHasAccount = true
+                stripeDetailsSubmitted = true
+                needsStripeConnect = false
+                stripeStatusHint = nil
+                tenantId = sessionStore?.tenantId
+                isTenantOwner = true
+                canTakePayments = true
+                usesOwnPayments = true
+                availableBalance = Double(payments.availableBalanceCents) / 100
+                pendingBalance = Double(payments.pendingBalanceCents) / 100
+                transactions = payments.transactions.compactMap { t -> PaymentTransaction? in
+                    guard let id = t["id"] as? String else { return nil }
+                    let typeStr = t["type"] as? String ?? "unknown"
+                    let amountCents = (t["net"] as? NSNumber)?.intValue
+                        ?? (t["amountCents"] as? NSNumber)?.intValue
+                        ?? (t["amount"] as? NSNumber)?.intValue
+                        ?? 0
+                    let amount = Double(amountCents) / 100
+                    let description = t["description"] as? String
+                    let created = (t["created"] as? NSNumber)?.intValue ?? 0
+                    let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
+                    let sourceId = t["sourceId"] as? String
+                    let chargeId = (typeStr == "charge" && sourceId?.hasPrefix("ch_") == true) ? sourceId : nil
+                    return PaymentTransaction(
+                        id: id,
+                        type: typeStr,
+                        amount: abs(amount),
+                        customerName: description,
+                        createdAt: createdAt,
+                        status: "completed",
+                        chargeId: chargeId
+                    )
+                }
+                isLoading = false
+                return
+            }
             stripeConnected = false
             stripeHasAccount = false
             stripeDetailsSubmitted = false

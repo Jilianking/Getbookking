@@ -8,6 +8,7 @@ import SwiftUI
 
 struct InsightsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = InsightsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -96,7 +97,10 @@ struct InsightsView: View {
         }
         .navigationViewStyle(.stack)
         .task {
-            await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            await viewModel.loadData(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
         }
     }
 

@@ -10,6 +10,7 @@ import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
     @StateObject private var paymentsViewModel = PaymentsViewModel()
@@ -88,7 +89,10 @@ struct SettingsView: View {
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
-                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await paymentsViewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
@@ -96,7 +100,10 @@ struct SettingsView: View {
                 if viewModel.isTenantOwner {
                     await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
                 }
-                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await paymentsViewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                 await authViewModel.refreshTeamAccess()
             }
             .sheet(isPresented: $showingDeleteAccountSheet) {
@@ -117,14 +124,19 @@ struct SettingsView: View {
                     AppAvatarView(
                         tenantLogoURL: nil,
                         accountPhotoURL: nil,
-                        displayNameFallback: "Demo",
+                        displayNameFallback: authViewModel.currentUserDisplayName,
                         size: 56
                     )
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Demo mode")
+                        Text(sessionStore.businessDisplayName.isEmpty
+                            ? (authViewModel.demoPersona?.businessName ?? "Demo")
+                            : sessionStore.businessDisplayName)
                             .font(.headline)
                             .foregroundStyle(AppDesign.textPrimary)
-                        Text("Sign in to manage your business")
+                        Text(authViewModel.currentUserDisplayName ?? "Owner")
+                            .font(.subheadline)
+                            .foregroundStyle(AppDesign.textSecondary)
+                        Text("Demo · nothing is saved")
                             .font(.caption)
                             .foregroundStyle(AppDesign.textSecondary)
                     }
@@ -372,12 +384,24 @@ struct SettingsView: View {
 
                 Divider().padding(.leading, 52)
 
-                Button { showingLogoutAlert = true } label: {
-                    HStack {
-                        AppSettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: .red, title: "Log out")
+                if authViewModel.isDemoMode {
+                    Button {
+                        sessionStore.reset()
+                        authViewModel.exitDemo()
+                    } label: {
+                        HStack {
+                            AppSettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: .red, title: "Exit demo")
+                        }
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    Button { showingLogoutAlert = true } label: {
+                        HStack {
+                            AppSettingsRow(icon: "rectangle.portrait.and.arrow.right", iconColor: .red, title: "Log out")
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .appCard()
 

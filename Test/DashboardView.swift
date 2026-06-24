@@ -106,13 +106,19 @@ struct DashboardView: View {
             }
             .refreshable {
                 await viewModel.refresh(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
-                await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await paymentsViewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
         }
         .navigationViewStyle(.stack)
         .task {
             await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
-            await paymentsViewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+            await paymentsViewModel.loadData(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
         }
         .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
             Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }

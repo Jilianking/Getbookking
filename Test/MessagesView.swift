@@ -78,7 +78,10 @@ struct MessagesView: View {
                         }
                     }
                     .refreshable {
-                        await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
+                        await viewModel.loadThreads(
+                            isDemoMode: authViewModel.isDemoMode,
+                            sessionStore: sessionStore
+                        )
                     }
                 }
             }
@@ -125,6 +128,7 @@ struct MessagesView: View {
                     }
                 )
                 .environmentObject(authViewModel)
+                .environmentObject(sessionStore)
             }
             .onChange(of: viewModel.lastError) { _, err in
                 showErrorAlert = err != nil
@@ -147,8 +151,14 @@ struct MessagesView: View {
                 showingCompose = true
             }
             .task {
-                viewModel.startThreadsListening(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadThreads(isDemoMode: authViewModel.isDemoMode)
+                viewModel.startThreadsListening(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                await viewModel.loadThreads(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
                 await viewModel.loadSmsQuickPresets(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
@@ -216,6 +226,7 @@ struct ThreadRow: View {
 
 struct MessageThreadView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     let threadId: String
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
@@ -322,7 +333,11 @@ struct MessageThreadView: View {
     }
 
     private func loadMessages() async {
-        messages = await viewModel.loadMessages(for: threadId)
+        messages = await viewModel.loadMessages(
+            for: threadId,
+            isDemoMode: authViewModel.isDemoMode,
+            sessionStore: sessionStore
+        )
         if let first = messages.first {
             clientName = first.clientName
             clientPhone = PhoneFormatting.displayUS(first.clientId)
@@ -330,6 +345,7 @@ struct MessageThreadView: View {
     }
 
     private func startListening() {
+        if authViewModel.isDemoMode, sessionStore.isDemoSession { return }
         viewModel.listenToMessages(threadId: threadId) { newMessages in
             messages = newMessages
         }
@@ -340,7 +356,12 @@ struct MessageThreadView: View {
         guard !body.isEmpty else { return }
         isLoading = true
         Task {
-            let ok = await viewModel.sendMessage(threadId: threadId, content: body)
+            let ok = await viewModel.sendMessage(
+                threadId: threadId,
+                content: body,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
             await MainActor.run {
                 if ok {
                     newMessage = ""
@@ -413,6 +434,7 @@ private struct MessageBubbleText: View {
 
 struct ComposeMessageView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
     var prefillPhone: String = ""
@@ -562,8 +584,14 @@ struct ComposeMessageView: View {
                 messageFieldFocused = true
             }
             Task {
-                await viewModel.loadComposeClients(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadComposeClients(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                await viewModel.loadSmsQuickPresets(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
         }
         .onChange(of: viewModel.lastError) { _, err in
@@ -632,7 +660,9 @@ struct ComposeMessageView: View {
                 threadId: e164Phone,
                 content: trimmedMessage,
                 clientName: name.isEmpty ? nil : name,
-                clientId: e164Phone
+                clientId: e164Phone,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
             )
             if ok {
                 onSent?(e164Phone)

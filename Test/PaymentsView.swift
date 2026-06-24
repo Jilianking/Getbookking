@@ -8,6 +8,7 @@ import SwiftUI
 
 struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
     #if TAP_TO_PAY_ENABLED
@@ -118,7 +119,10 @@ struct PaymentsView: View {
                 await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
             }
             .task {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }

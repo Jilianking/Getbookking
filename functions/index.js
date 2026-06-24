@@ -2558,12 +2558,12 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
   };
 }
 
-/** Seat caps: Solo 1 employee, Studio 2–5 employees, Shop 6+ (large cap). */
+/** Seat caps: Solo 1, Studio 2–5, Shop 6–10. */
 function maxSeatsForPlanNormalized(plan) {
   const p = normalizeSubscriptionPlan(plan);
   if (p === "solo") return 1;
   if (p === "studio") return 5;
-  return 500;
+  return 10;
 }
 
 async function countUsersForTenant(tenantId) {

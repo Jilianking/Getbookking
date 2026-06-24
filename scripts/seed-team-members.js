@@ -242,7 +242,7 @@ function normalizePlan(raw) {
 function maxSeats(plan) {
   if (plan === "solo") return 1;
   if (plan === "studio") return 5;
-  return 500;
+  return 10;
 }
 
 function buildUserPatch(tenant, member) {

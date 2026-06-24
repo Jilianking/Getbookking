@@ -25,9 +25,9 @@ enum SubscriptionPlan: String, CaseIterable {
 
     var shortDescription: String {
         switch self {
-        case .solo: return "1 employee"
-        case .studio: return "2–5 employees"
-        case .shop: return "6+ employees"
+        case .solo: return "Just you"
+        case .studio: return "2–5 people"
+        case .shop: return "6–10 people"
         }
     }
 
@@ -46,7 +46,7 @@ enum SubscriptionPlan: String, CaseIterable {
         switch self {
         case .solo: return 1
         case .studio: return 5
-        case .shop: return 500
+        case .shop: return 10
         }
     }
 

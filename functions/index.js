@@ -315,6 +315,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     aboutText: "",
     contactEmail: email || "",
     contactAddress: "",
+    contactAddressSuite: "",
     heroTagline: "",
     heroSubtitle: "",
     managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
@@ -336,6 +337,8 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     tenantData.industryCustomLabel = industryCustomLabel;
   }
 
+  const ownerMemberSlug = slugFromPersonName(firstName, lastName) || "owner";
+
   const userDoc = {
     email: email || "",
     firstName,
@@ -345,6 +348,8 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     tenantId,
     tenantSlug: slug,
     role: "owner",
+    memberSlug: ownerMemberSlug,
+    isBookable: true,
     business: businessName,
     industry,
     profilePhotoUrl: "",
@@ -843,6 +848,195 @@ async function assertCanTakePayments(uid) {
   return ctx;
 }
 
+function memberDisplayNameFromUserData(userData, fallback) {
+  if (!userData) return fallback || "Team member";
+  const fn = (userData.firstName || "").toString().trim();
+  const ln = (userData.lastName || "").toString().trim();
+  const composed = `${fn} ${ln}`.trim();
+  return (
+    (userData.displayName || userData.name || composed || fallback || "Team member")
+      .toString()
+      .trim()
+  );
+}
+
+/**
+ * Stripe account for a charge/deposit, optionally routed to the booking's assigned provider.
+ * Independent members receive customer payments on their Connect account; studio payroll uses the tenant account.
+ */
+async function resolveEffectivePaymentContext(uid, options = {}) {
+  const callerCtx = await resolvePaymentStripeContext(uid);
+  if (!callerCtx) return null;
+
+  const bookingRequestId = (options.bookingRequestId || "").toString().trim();
+  const tenantId =
+    (options.tenantId || callerCtx.tenantId || "").toString().trim() || null;
+  if (!bookingRequestId || !tenantId) {
+    return { ...callerCtx, attributedMemberUid: null, chargeOnBehalfOfMemberUid: null };
+  }
+
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    return { ...callerCtx, attributedMemberUid: null, chargeOnBehalfOfMemberUid: null };
+  }
+  const tenant = tenantSnap.data();
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
+  if (!booking) {
+    return { ...callerCtx, attributedMemberUid: null, chargeOnBehalfOfMemberUid: null };
+  }
+
+  const attributedMemberUid = resolveAttributedMemberUid(tenant, booking, uid);
+
+  if (!attributedMemberUid || attributedMemberUid === ownerUid) {
+    const stripeAccountId = (tenant.stripeAccountId || "").toString().trim() || null;
+    const terminalLocationId =
+      (tenant.stripeTerminalLocationId || "").toString().trim() || null;
+    return {
+      scope: "tenant",
+      tenantId,
+      stripeAccountId,
+      terminalLocationId,
+      canConnect: callerCtx.isOwner,
+      canTakePayments: callerCtx.isOwner || callerCtx.canTakePayments,
+      payoutMode: null,
+      isOwner: callerCtx.isOwner,
+      attributedMemberUid: ownerUid,
+      chargeOnBehalfOfMemberUid: null,
+    };
+  }
+
+  const memberSnap = await db.collection("users").doc(attributedMemberUid).get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== tenantId) {
+    return { ...callerCtx, attributedMemberUid, chargeOnBehalfOfMemberUid: null };
+  }
+  const memberData = memberSnap.data();
+  const memberSettings = normalizeMemberSettings(memberData.memberSettings);
+  const memberName = memberDisplayNameFromUserData(memberData, "This provider");
+
+  if (memberSettings.payoutMode === "independent") {
+    const stripeAccountId = (memberData.stripeAccountId || "").toString().trim() || null;
+    const terminalLocationId =
+      (memberData.stripeTerminalLocationId || "").toString().trim() || null;
+    return {
+      scope: "user",
+      tenantId,
+      stripeAccountId,
+      terminalLocationId,
+      canConnect: uid === attributedMemberUid,
+      canTakePayments: true,
+      payoutMode: "independent",
+      isOwner: false,
+      attributedMemberUid,
+      chargeOnBehalfOfMemberUid: attributedMemberUid,
+      attributedMemberName: memberName,
+    };
+  }
+
+  const stripeAccountId = (tenant.stripeAccountId || "").toString().trim() || null;
+  const terminalLocationId =
+    (tenant.stripeTerminalLocationId || "").toString().trim() || null;
+  return {
+    scope: "tenant",
+    tenantId,
+    stripeAccountId,
+    terminalLocationId,
+    canConnect: callerCtx.isOwner,
+    canTakePayments: callerCtx.isOwner,
+    payoutMode: "studio_payroll",
+    isOwner: callerCtx.isOwner,
+    attributedMemberUid,
+    chargeOnBehalfOfMemberUid: null,
+  };
+}
+
+async function assertCanInitiateBookingPayment(uid, payCtx) {
+  if (!payCtx) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No business linked to this account."
+    );
+  }
+  if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
+    const ctx = await getMemberAccessContext(uid);
+    const isOwner = ctx.isOwner || ctx.tenant.ownerUid === uid;
+    const isManager = ctx.accessRole === "manager";
+    if (!isOwner && !isManager) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the studio owner or a manager can collect payment for this provider."
+      );
+    }
+  } else if (!payCtx.canTakePayments) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+    );
+  }
+  if (!payCtx.stripeAccountId) {
+    const who =
+      payCtx.chargeOnBehalfOfMemberUid && payCtx.attributedMemberName
+        ? payCtx.attributedMemberName
+        : payCtx.chargeOnBehalfOfMemberUid
+          ? "assigned provider"
+          : "business";
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      payCtx.chargeOnBehalfOfMemberUid
+        ? `${who} must connect Stripe before you can collect payment for this booking.`
+        : "Connect your studio Stripe account before collecting payment."
+    );
+  }
+  return payCtx;
+}
+
+async function assertCanTapToPayForBooking(uid, payCtx) {
+  if (!payCtx) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No business linked to this account."
+    );
+  }
+  if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
+    const name = payCtx.attributedMemberName || "The assigned provider";
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `${name} must use Tap to Pay on their device for this booking.`
+    );
+  }
+  if (!payCtx.canTakePayments) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+    );
+  }
+  if (!payCtx.stripeAccountId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No Stripe account linked"
+    );
+  }
+  return payCtx;
+}
+
+async function retrievePaymentIntentOnConnectAccounts(stripe, paymentIntentId, accountIds) {
+  const tried = [];
+  for (const accountId of accountIds) {
+    const acct = (accountId || "").toString().trim();
+    if (!acct || tried.includes(acct)) continue;
+    tried.push(acct);
+    try {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+        stripeAccount: acct,
+      });
+      return { pi, stripeAccountId: acct };
+    } catch (e) {
+      /* try next connected account */
+    }
+  }
+  return null;
+}
+
 async function getTenantIdForUser(uid) {
   const userDoc = await db.collection("users").doc(uid).get();
   if (!userDoc.exists) return null;
@@ -1099,14 +1293,17 @@ exports.createDepositLink = functions
       );
     }
     const uid = context.auth.uid;
-    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const payCtx = await assertCanInitiateBookingPayment(
+      uid,
+      await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
+    );
     const checkout = computeCardCheckoutAmounts(serviceAmount, "online");
     const productName = (data?.productName || "Deposit").toString().trim() || "Deposit";
     const productDescription = data?.productDescription
       ? data.productDescription.toString().trim()
       : undefined;
-    const payCtx = await assertCanTakePayments(uid);
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
@@ -1159,7 +1356,7 @@ exports.createDepositLink = functions
         });
       }
     }
-    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const link = await stripe.paymentLinks.create(
       {
         line_items: lineItems,
@@ -1171,6 +1368,9 @@ exports.createDepositLink = functions
           surchargeCents: String(checkout.surchargeCents),
           bookingRequestId,
           initiatedByUid: uid,
+          attributedMemberUid,
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: payCtx.scope || "tenant",
         },
       },
       { stripeAccount: stripeAccountId }
@@ -1181,6 +1381,8 @@ exports.createDepositLink = functions
       serviceCents: checkout.serviceCents,
       surchargeCents: checkout.surchargeCents,
       totalCents: checkout.totalCents,
+      attributedMemberUid,
+      chargeStripeScope: payCtx.scope || "tenant",
     };
   });
 
@@ -1348,7 +1550,7 @@ exports.getDemoAppSnapshot = functions.https.onCall(async (data) => {
 
 /**
  * Creates a booking request from the public web form. No auth required.
- * Params: { tenantSlug, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, preferredDays?, notes? }
+ * Params: { tenantSlug, memberSlug?, customerName, customerEmail, customerPhone?, serviceId?, serviceSlug?, serviceName?, preferredTime?, preferredDays?, notes? }
  */
 exports.createBookingRequestFromWeb = functions.https.onCall(async (data, context) => {
   const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
@@ -1436,6 +1638,45 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   if (preferredTime) bookingData.preferredTime = preferredTime;
   if (preferredDays) bookingData.preferredDays = preferredDays;
   if (notes) bookingData.notes = notes;
+
+  const memberSlug = normalizeMemberSlugInput(data?.memberSlug);
+  if (memberSlug) {
+    const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
+    if (plan === "solo") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Provider booking links are not available on this plan."
+      );
+    }
+    const memberSnap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .where("memberSlug", "==", memberSlug)
+      .limit(1)
+      .get();
+    if (memberSnap.empty) {
+      throw new functions.https.HttpsError("not-found", "Provider not found.");
+    }
+    const memberDoc = memberSnap.docs[0];
+    const memberData = memberDoc.data();
+    if (memberData.isBookable === false) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This provider is not accepting bookings online."
+      );
+    }
+    const mFn = (memberData.firstName || "").toString().trim();
+    const mLn = (memberData.lastName || "").toString().trim();
+    const memberName =
+      (memberData.displayName || memberData.name || `${mFn} ${mLn}`.trim() || "Provider")
+        .toString()
+        .slice(0, 120);
+    bookingData.assignedMemberUid = memberDoc.id;
+    bookingData.assignedMemberName = memberName;
+    const memberEmail = (memberData.email || "").toString().trim().toLowerCase();
+    if (memberEmail) bookingData.assignedMemberEmail = memberEmail;
+  }
+
   if (data?.formResponses && typeof data.formResponses === "object") {
     const fr = { ...data.formResponses };
     if (fr.phone != null) {
@@ -1639,10 +1880,14 @@ exports.createPaymentIntentForTapToPay = functions
       );
     }
     const uid = context.auth.uid;
-    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const payCtx = await assertCanTapToPayForBooking(
+      uid,
+      await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
+    );
     const checkout = computeCardCheckoutAmounts(serviceAmount, "card_present");
-    const stripeAccountId = await getStripeAccountIdForUser(uid);
+    const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -1658,7 +1903,7 @@ exports.createPaymentIntentForTapToPay = functions
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const feeCents = platformFeeCents(checkout.totalCents);
-    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const pi = await stripe.paymentIntents.create(
       {
         amount: checkout.totalCents,
@@ -1673,6 +1918,9 @@ exports.createPaymentIntentForTapToPay = functions
           surchargeCents: String(checkout.surchargeCents),
           bookingRequestId,
           initiatedByUid: uid,
+          attributedMemberUid,
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: payCtx.scope || "tenant",
         },
       },
       { stripeAccount: stripeAccountId }
@@ -1684,6 +1932,8 @@ exports.createPaymentIntentForTapToPay = functions
       serviceCents: checkout.serviceCents,
       surchargeCents: checkout.surchargeCents,
       totalCents: checkout.totalCents,
+      attributedMemberUid,
+      chargeStripeScope: payCtx.scope || "tenant",
     };
   });
 
@@ -2395,7 +2645,6 @@ exports.recordTenantPayment = functions
       );
     }
     const uid = context.auth.uid;
-    await assertCanTakePayments(uid);
     const tenantId = await getTenantIdForUser(uid);
     if (!tenantId) {
       throw new functions.https.HttpsError(
@@ -2408,14 +2657,18 @@ exports.recordTenantPayment = functions
       throw new functions.https.HttpsError("not-found", "Business not found.");
     }
     const tenant = tenantSnap.data();
-    const chargeCtx = await resolvePaymentStripeContext(uid);
-    const stripeAccountId = (chargeCtx && chargeCtx.stripeAccountId) || "";
-    if (!stripeAccountId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "No Stripe account linked for this payment"
-      );
-    }
+    const callerCtx = await resolvePaymentStripeContext(uid);
+    const bookingRequestIdHint = (data?.bookingRequestId || "").toString().trim();
+    const effectiveCtx = await resolveEffectivePaymentContext(uid, {
+      bookingRequestId: bookingRequestIdHint,
+      tenantId,
+    });
+    const accountCandidates = [];
+    if (effectiveCtx?.stripeAccountId) accountCandidates.push(effectiveCtx.stripeAccountId);
+    if (callerCtx?.stripeAccountId) accountCandidates.push(callerCtx.stripeAccountId);
+    const tenantStripeId = (tenant.stripeAccountId || "").toString().trim();
+    if (tenantStripeId) accountCandidates.push(tenantStripeId);
+
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError(
@@ -2424,16 +2677,39 @@ exports.recordTenantPayment = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
-      stripeAccount: stripeAccountId,
-    });
+    let retrieved = await retrievePaymentIntentOnConnectAccounts(
+      stripe,
+      paymentIntentId,
+      accountCandidates
+    );
+    if (!retrieved) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "Payment not found on this business or provider account."
+      );
+    }
+    const pi = retrieved.pi;
+    const stripeAccountId = retrieved.stripeAccountId;
+    const meta = pi.metadata || {};
+    const metaBookingId = (meta.bookingRequestId || bookingRequestIdHint || "").toString().trim();
+    const chargeCtx = metaBookingId
+      ? await resolveEffectivePaymentContext(uid, {
+          bookingRequestId: metaBookingId,
+          tenantId,
+        })
+      : callerCtx;
+    if (chargeCtx?.stripeAccountId && chargeCtx.stripeAccountId !== stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Payment account does not match this booking."
+      );
+    }
     if (pi.status !== "succeeded") {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Payment is not complete yet."
       );
     }
-    const meta = pi.metadata || {};
     if ((meta.tenantId || "").toString() !== tenantId) {
       throw new functions.https.HttpsError(
         "permission-denied",
@@ -2563,6 +2839,125 @@ async function assertTenantOwnerUid(uid, tenantId) {
   return tenant;
 }
 
+const RESERVED_PROVIDER_SLUGS = new Set([
+  "book",
+  "gallery",
+  "shop",
+  "about",
+  "home",
+  "join",
+  "checkout",
+]);
+
+function slugFromPersonName(firstName, lastName) {
+  const parts = [
+    (firstName || "").toString().trim(),
+    (lastName || "").toString().trim(),
+  ].filter(Boolean);
+  const base = parts.join(" ") || "member";
+  return base
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join("-")
+    .slice(0, 48);
+}
+
+function normalizeMemberSlugInput(raw) {
+  const s = (raw || "").toString().trim().toLowerCase();
+  if (!s) return "";
+  const slug = s
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  if (!slug || RESERVED_PROVIDER_SLUGS.has(slug)) return "";
+  return slug;
+}
+
+async function allocateMemberSlug(tenantId, firstName, lastName, excludeUid) {
+  let base = slugFromPersonName(firstName, lastName);
+  if (!base || RESERVED_PROVIDER_SLUGS.has(base)) base = "member";
+  let candidate = base;
+  let n = 0;
+  while (n < 100) {
+    const snap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .where("memberSlug", "==", candidate)
+      .limit(2)
+      .get();
+    const taken = snap.docs.some((doc) => doc.id !== (excludeUid || ""));
+    if (!taken) return candidate;
+    n += 1;
+    candidate = `${base}-${n}`;
+  }
+  return `${base}-${crypto.randomBytes(3).toString("hex")}`;
+}
+
+async function ensureUserMemberSlug(uid, userData, tenantId) {
+  const existing = normalizeMemberSlugInput(userData.memberSlug);
+  if (existing) return existing;
+  const slug = await allocateMemberSlug(
+    tenantId,
+    userData.firstName,
+    userData.lastName,
+    uid
+  );
+  await db.collection("users").doc(uid).set({ memberSlug: slug }, { merge: true });
+  return slug;
+}
+
+function resolveMemberIsBookable(d, ownerUid, uid) {
+  if (d.isBookable === true) return true;
+  if (d.isBookable === false) return false;
+  if (uid === ownerUid) return true;
+  const accessRole = parseAccessRole(d.role || d.accessRole);
+  return accessRole === "member";
+}
+
+function defaultMemberSettingsForInvite(accessRole) {
+  const role = parseAccessRole(accessRole);
+  if (role === "manager") {
+    return normalizeMemberSettings({
+      payoutMode: "studio_payroll",
+      useStudioBookingPolicy: true,
+    });
+  }
+  return normalizeMemberSettings({
+    payoutMode: "independent",
+    useStudioBookingPolicy: false,
+  });
+}
+
+function serializePublicProvider(doc, tenant) {
+  const d = doc.data();
+  const uid = doc.id;
+  const ownerUid = (tenant.ownerUid || "").toString();
+  const memberSlug = normalizeMemberSlugInput(d.memberSlug);
+  const isBookable = resolveMemberIsBookable(d, ownerUid, uid);
+  if (!memberSlug || !isBookable) return null;
+  const fn = (d.firstName || "").toString().trim();
+  const ln = (d.lastName || "").toString().trim();
+  return {
+    uid,
+    memberSlug,
+    displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Provider").toString(),
+    jobTitle: (d.jobTitle || "").toString(),
+    profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
+    providerAboutText: (d.providerAboutText || "").toString(),
+    isOwner: uid === ownerUid,
+  };
+}
+
+async function resolveTenantBySlug(tenantSlug) {
+  const slug = (tenantSlug || "").toString().trim().toLowerCase();
+  if (!slug) return null;
+  const snap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, data: snap.docs[0].data() };
+}
+
 function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
   const d = doc.data();
   const uid = doc.id;
@@ -2591,6 +2986,9 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     accessRole,
     role: accessRole,
     jobTitle: (d.jobTitle || "").toString(),
+    memberSlug: normalizeMemberSlugInput(d.memberSlug),
+    isBookable: resolveMemberIsBookable(d, ownerUid, uid),
+    providerAboutText: (d.providerAboutText || "").toString(),
     memberSettings: normalizeMemberSettings(d.memberSettings),
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
@@ -2841,6 +3239,9 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
   const inviteJobTitle = normalizeJobTitle(
     inv.jobTitle || defaultJobTitleForIndustry(industry)
   );
+  const memberSlug = await allocateMemberSlug(tenantId, firstName, lastName, uid);
+  const isBookable = inviteAccessRole !== "manager";
+  const inviteMemberSettings = defaultMemberSettingsForInvite(inviteAccessRole);
 
   await db.runTransaction(async (tx) => {
     const invFresh = await tx.get(inviteRef);
@@ -2875,6 +3276,9 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
       name: personName,
       phone: rawJoinPhone,
       profilePhotoUrl: userData.profilePhotoUrl || "",
+      memberSlug,
+      isBookable,
+      memberSettings: inviteMemberSettings,
       availability: userData.availability || defaultAvailability,
       workflow: userData.workflow || defaultWorkflow,
       createdAt: userData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
@@ -2883,6 +3287,108 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
   });
 
   return { ok: true, tenantId };
+});
+
+/** Public: bookable providers for a studio/shop site (team cards + provider pages). */
+exports.listPublicProviders = functions.https.onCall(async (data) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  if (!tenantSlug) {
+    throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required.");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = resolved.data;
+  const tenantId = resolved.id;
+  const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  if (plan === "solo") {
+    return { providers: [], subscriptionPlan: plan, tenantSlug };
+  }
+  if (tenant.isActive === false || tenant.isDemoAccount === true) {
+    return { providers: [], subscriptionPlan: plan, tenantSlug };
+  }
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const providers = [];
+  for (const doc of snap.docs) {
+    const userData = doc.data();
+    if (!normalizeMemberSlugInput(userData.memberSlug)) {
+      await ensureUserMemberSlug(doc.id, userData, tenantId);
+      const fresh = await doc.ref.get();
+      const pub = serializePublicProvider(fresh, tenant);
+      if (pub) providers.push(pub);
+    } else {
+      const pub = serializePublicProvider(doc, tenant);
+      if (pub) providers.push(pub);
+    }
+  }
+  providers.sort((a, b) => {
+    if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+    return (a.displayName || "").localeCompare(b.displayName || "");
+  });
+  return { providers, subscriptionPlan: plan, tenantSlug };
+});
+
+/** Public: one provider profile for /{studio}/{member} pages. */
+exports.getPublicProvider = functions.https.onCall(async (data) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  const memberSlug = normalizeMemberSlugInput(data?.memberSlug);
+  if (!tenantSlug || !memberSlug) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "tenantSlug and memberSlug are required."
+    );
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = resolved.data;
+  const tenantId = resolved.id;
+  const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  if (plan === "solo") {
+    throw new functions.https.HttpsError("not-found", "Provider not found.");
+  }
+  if (tenant.isActive === false) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting bookings right now."
+    );
+  }
+  const snap = await db
+    .collection("users")
+    .where("tenantId", "==", tenantId)
+    .where("memberSlug", "==", memberSlug)
+    .limit(1)
+    .get();
+  if (snap.empty) {
+    throw new functions.https.HttpsError("not-found", "Provider not found.");
+  }
+  const doc = snap.docs[0];
+  let provider = serializePublicProvider(doc, tenant);
+  if (!provider) {
+    const userData = doc.data();
+    if (!normalizeMemberSlugInput(userData.memberSlug)) {
+      await ensureUserMemberSlug(doc.id, userData, tenantId);
+      const fresh = await doc.ref.get();
+      provider = serializePublicProvider(fresh, tenant);
+    }
+  }
+  if (!provider) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This provider is not available for online booking."
+    );
+  }
+  return {
+    provider,
+    tenant: {
+      slug: tenant.slug || tenantSlug,
+      displayName: tenant.displayName || tenant.businessName || "",
+      businessName: tenant.businessName || "",
+      subscriptionPlan: plan,
+    },
+  };
 });
 
 /** Signed-in member: role, effective manager toggles, tenant booking workflow. */
@@ -3221,6 +3727,38 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
   }
   if (data && data.memberSettings != null) {
     patch.memberSettings = normalizeMemberSettings(data.memberSettings);
+  }
+  if (data && data.isBookable != null) {
+    patch.isBookable = Boolean(data.isBookable);
+  }
+  if (data && data.providerAboutText != null) {
+    patch.providerAboutText = (data.providerAboutText || "")
+      .toString()
+      .trim()
+      .slice(0, 2000);
+  }
+  if (data && data.memberSlug != null) {
+    const nextSlug = normalizeMemberSlugInput(data.memberSlug);
+    if (!nextSlug) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Provider URL must use letters, numbers, and hyphens only."
+      );
+    }
+    const clashSnap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .where("memberSlug", "==", nextSlug)
+      .limit(2)
+      .get();
+    const taken = clashSnap.docs.some((doc) => doc.id !== memberUid);
+    if (taken) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "That provider URL is already in use on your team."
+      );
+    }
+    patch.memberSlug = nextSlug;
   }
   if (!Object.keys(patch).length) {
     throw new functions.https.HttpsError("invalid-argument", "Nothing to update.");

@@ -248,6 +248,11 @@ struct DesignView: View {
             } message: {
                 Text("Try again or choose different images from your library.")
             }
+            .alert("Demo mode", isPresented: $viewModel.showDemoBlockedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Photo uploads and site changes aren't saved in the demo. Sign up to build your real site.")
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -684,7 +689,7 @@ struct DesignView: View {
             .appCard()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let msg = viewModel.errorMessage {
+                    if let msg = viewModel.errorMessage, !viewModel.isDemoReadOnly {
                         Text(msg)
                             .font(.caption)
                             .foregroundColor(.red)
@@ -721,10 +726,7 @@ struct DesignView: View {
                         case .about:
                             ManageAboutTabContent(
                                 viewModel: viewModel,
-                                isClassicTemplate: isClassicTemplate,
-                                isLuxeTemplate: isLuxeTemplate,
-                                isBladeTemplate: isBladeTemplate,
-                                isStudio12Template: isStudio12Template
+                                isClassicTemplate: isClassicTemplate
                             )
                         case .shop:
                             ManageShopTabContent(viewModel: viewModel)
@@ -1037,7 +1039,7 @@ struct DesignView: View {
                 )
                 .textFieldStyle(.roundedBorder)
 
-                Text("About story and contact (Meet block, footer, /about) are edited on the About tab—Save changes there.")
+                Text("Tap your story on the live preview to edit it. Contact is on the About tab—save changes there.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.top, 8)
@@ -1248,7 +1250,7 @@ struct DesignView: View {
             }
             Text(viewModel.galleryLayoutStyle.detail)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(AppDesign.textSecondary)
 
             Text("Tip: Upload your best healed work here.")
                 .font(.caption)
@@ -1509,6 +1511,8 @@ struct DesignView: View {
                 Text("Address")
                 TextField("123 Main St", text: $viewModel.contactAddress)
                     .textFieldStyle(.roundedBorder)
+                TextField("Suite / apt (optional)", text: $viewModel.contactAddressSuite)
+                    .textFieldStyle(.roundedBorder)
                 ServiceAreaCityStateFields(viewModel: viewModel)
                 Toggle("Show contact on page", isOn: $viewModel.showContactOnPage)
             }
@@ -1557,9 +1561,6 @@ struct ServiceAreaCityStateFields: View {
             .padding(12)
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
-            Text("Short city and state for your public site (Classic, Luxe, Blade, Stonecut, or Studio 12). Use the field above for street address.")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
     }
 }

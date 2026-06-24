@@ -37,7 +37,7 @@ struct TeamView: View {
                     )
                     .environmentObject(authViewModel)
                 } else {
-                    TeamMemberOverviewContent(viewModel: teamViewModel)
+                    TeamMemberOverviewContent(viewModel: teamViewModel, drawerState: drawerState)
                         .environmentObject(authViewModel)
                 }
             }
@@ -108,6 +108,7 @@ private struct SoloOwnerTeamPlaceholderView: View {
 private struct TeamMemberOverviewContent: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
+    var drawerState: DrawerState
 
     private var currentMember: TenantTeamMember? {
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
@@ -116,6 +117,32 @@ private struct TeamMemberOverviewContent: View {
 
     var body: some View {
         List {
+            if authViewModel.teamAccess.usesOwnPayments {
+                Section {
+                    NavigationLink {
+                        PaymentsView(drawerState: drawerState, sectionTitle: "Payments")
+                            .environmentObject(authViewModel)
+                    } label: {
+                        Label(
+                            authViewModel.teamAccess.canTakePayments ? "My payments" : "Set up payments",
+                            systemImage: "creditcard"
+                        )
+                    }
+                } footer: {
+                    Text("You take your own payments. Connect Stripe to accept deposits and Tap to Pay for your bookings.")
+                        .font(.caption2)
+                }
+            }
+
+            if let me = currentMember, me.isBookable, !me.memberSlug.isEmpty {
+                Section(header: Text("Your booking page")) {
+                    LabeledContent("Share link", value: "/\(me.memberSlug)")
+                    Text("Clients can book you directly from your studio website.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 DisclosureGroup {
                     agreementDetails

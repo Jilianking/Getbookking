@@ -397,12 +397,14 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func recordTenantPayment(paymentIntentId: String) async {
+    func recordTenantPayment(paymentIntentId: String, bookingRequestId: String? = nil) async {
         guard !paymentIntentId.isEmpty else { return }
         do {
-            _ = try await functions.httpsCallable("recordTenantPayment").call([
-                "paymentIntentId": paymentIntentId,
-            ])
+            var payload: [String: Any] = ["paymentIntentId": paymentIntentId]
+            if let bookingRequestId, !bookingRequestId.isEmpty {
+                payload["bookingRequestId"] = bookingRequestId
+            }
+            _ = try await functions.httpsCallable("recordTenantPayment").call(payload)
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }

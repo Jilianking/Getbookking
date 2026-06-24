@@ -353,18 +353,26 @@ final class ManagerSettingsViewModel: ObservableObject {
         memberUid: String,
         accessRole: TeamAccessRole,
         jobTitle: String,
-        memberSettings: TeamMemberSettings
+        memberSettings: TeamMemberSettings,
+        isBookable: Bool? = nil,
+        providerAboutText: String? = nil
     ) async -> Bool {
         guard isTenantOwner else { return false }
         isUpdatingMember = true
         errorMessage = nil
         saveSuccess = false
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "memberUid": memberUid,
             "accessRole": accessRole == .manager ? "manager" : "member",
             "jobTitle": jobTitle,
             "memberSettings": memberSettings.firestoreDictionary,
         ]
+        if let isBookable {
+            payload["isBookable"] = isBookable
+        }
+        if let providerAboutText {
+            payload["providerAboutText"] = providerAboutText
+        }
         do {
             _ = try await functions.httpsCallable("updateTenantMember").call(payload)
             await load(isDemoMode: false)
@@ -400,6 +408,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                     profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                     accessRole: .owner,
                     jobTitle: "",
+                    memberSlug: (row["memberSlug"] as? String) ?? "",
+                    isBookable: row["isBookable"] as? Bool ?? true,
+                    providerAboutText: (row["providerAboutText"] as? String) ?? "",
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
                     effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -413,6 +424,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                 accessRole: role,
                 jobTitle: (row["jobTitle"] as? String) ?? "",
+                memberSlug: (row["memberSlug"] as? String) ?? "",
+                isBookable: row["isBookable"] as? Bool ?? (role == .member),
+                providerAboutText: (row["providerAboutText"] as? String) ?? "",
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
                 effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -434,9 +448,9 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

@@ -279,6 +279,9 @@ struct TenantTeamMember: Identifiable, Equatable {
     let profilePhotoUrl: String
     let accessRole: TeamAccessRole
     let jobTitle: String
+    let memberSlug: String
+    let isBookable: Bool
+    let providerAboutText: String
     let memberSettings: TeamMemberSettings
     /// From `users/{uid}.workflow.confirmationType` when self-managed.
     let personalConfirmationType: String?

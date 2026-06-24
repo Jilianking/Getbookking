@@ -1104,6 +1104,24 @@
     .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
     .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
     .about-artist p { margin: 0; line-height: 1.6; color: #444; }
+    /* Studio/Shop provider pages */
+    .bk-team-section { padding: 56px 24px; max-width: 960px; margin: 0 auto; text-align: center; }
+    .bk-team-section h2 { font-size: 1.5rem; margin: 0 0 28px; font-weight: 600; }
+    .bk-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; text-align: center; }
+    .bk-team-card { display: block; text-decoration: none; color: inherit; padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.04); transition: transform 0.15s ease; }
+    .bk-team-card:hover { transform: translateY(-3px); }
+    .bk-team-card img, .bk-team-card .bk-team-initial { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.08); font-size: 1.5rem; font-weight: 600; }
+    .bk-team-card strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+    .bk-team-card span { display: block; font-size: 0.85rem; color: #666; }
+    .bk-provider-page { max-width: 520px; margin: 48px auto; padding: 32px 28px; text-align: center; }
+    .bk-provider-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; margin: 0 auto 16px; display: block; }
+    .bk-provider-photo-placeholder { width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.08); font-size: 2rem; font-weight: 600; }
+    .bk-provider-page h1 { font-size: 1.75rem; margin: 0 0 8px; }
+    .bk-provider-title { color: #666; margin: 0 0 16px; font-size: 1rem; }
+    .bk-provider-about { line-height: 1.6; color: #444; margin: 0 0 24px; text-align: left; }
+    .bk-provider-studio-link { margin-top: 20px; font-size: 0.9rem; }
+    .bk-provider-studio-link a { color: inherit; opacity: 0.7; }
+    .bk-provider-book-cta { display: inline-block; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 8px; }
     /* Tattoo layout: Inter for UI/sidebar; template hero stack on .tattoo-hero-title via --font-hero */
     .tattoo-page { min-height: 100vh; background: #fff; color: #111; font-family: var(--font-display); }
     /* Booking /book: .booking-shell was #000 — let themed .tattoo-page bg show; card stays white */
@@ -6056,7 +6074,9 @@
         return firebase.auth().signInAnonymously();
       }
 
-      /** Supports both subdomain routes (`{tenant}.getbookking.com/home`) and legacy path routes (`/tenant/home`). */
+      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), and provider paths (`/tenant/maya/book`). */
+      var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, home: 1, join: 1 };
+
       function parsePath() {
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
         var parts = path ? path.split('/') : [];
@@ -6067,28 +6087,41 @@
         }
 
         var tenantSlug = '';
+        var memberSlug = '';
         var page = 'home';
+        var segIdx = hostTenant ? 0 : 1;
+
         if (hostTenant) {
           tenantSlug = hostTenant.toLowerCase();
-          page = (parts[0] || 'home').toLowerCase();
         } else {
           tenantSlug = (parts[0] || '').toLowerCase();
-          page = (parts[1] || 'home').toLowerCase();
         }
-        if (!page) page = 'home';
-        if (page === tenantSlug) page = 'home';
+
+        var firstSeg = (parts[segIdx] || '').toLowerCase();
+        if (firstSeg && !RESERVED_TENANT_PAGES[firstSeg] && firstSeg !== tenantSlug) {
+          memberSlug = firstSeg;
+          page = (parts[segIdx + 1] || 'provider').toLowerCase();
+          if (!page) page = 'provider';
+        } else {
+          page = hostTenant ? (parts[0] || 'home').toLowerCase() : (parts[1] || 'home').toLowerCase();
+          if (!page) page = 'home';
+          if (page === tenantSlug) page = 'home';
+        }
 
         var isBookPath = page === 'book';
         var isGalleryPath = page === 'gallery';
         var isShopPath = page === 'shop';
         var isAboutPath = page === 'about';
-        var serviceSlugIndex = hostTenant ? 1 : 2;
+        var serviceSlugIndex = memberSlug
+          ? segIdx + (isBookPath ? 2 : 1)
+          : (hostTenant ? 1 : 2);
         var shopSubPath = isShopPath ? (parts[serviceSlugIndex] || '').toLowerCase() : '';
         var isShopCheckoutPath = isShopPath && shopSubPath === 'checkout';
         var serviceSlug = isBookPath && parts[serviceSlugIndex] ? String(parts[serviceSlugIndex]).toLowerCase() : '';
         var sectionTarget = isShopPath ? 'shop' : (isAboutPath ? 'about' : '');
         return {
           tenantSlug: tenantSlug,
+          memberSlug: memberSlug,
           page: page,
           serviceSlug: serviceSlug,
           isBookPath: isBookPath,
@@ -6096,9 +6129,77 @@
           isShopPath: isShopPath,
           isShopCheckoutPath: isShopCheckoutPath,
           isAboutPath: isAboutPath,
+          isProviderPath: !!memberSlug,
           sectionTarget: sectionTarget,
           isSubdomainRoute: !!hostTenant
         };
+      }
+      function isTeamPlan(tenant) {
+        var p = String((tenant && tenant.subscriptionPlan) || '').toLowerCase();
+        return p === 'studio' || p === 'shop' || p === 'growth' || p === 'pro' || p === 'enterprise';
+      }
+      function memberProfileUrl(tenant, memberSlug) {
+        var base = tenantBaseUrl(tenant).replace(/\/$/, '');
+        var ms = String(memberSlug || '').toLowerCase();
+        if (!ms) return base + '/home';
+        return base + '/' + ms;
+      }
+      function memberBookUrl(tenant, memberSlug) {
+        return memberProfileUrl(tenant, memberSlug) + '/book';
+      }
+      function loadPublicProviders(tenantSlug) {
+        return functions.httpsCallable('listPublicProviders')({ tenantSlug: tenantSlug })
+          .then(function(res) { return (res && res.data && res.data.providers) || []; })
+          .catch(function() { return []; });
+      }
+      function loadPublicProvider(tenantSlug, memberSlug) {
+        return functions.httpsCallable('getPublicProvider')({
+          tenantSlug: tenantSlug,
+          memberSlug: memberSlug
+        }).then(function(res) { return (res && res.data && res.data.provider) || null; });
+      }
+      function teamProvidersSectionHtml(tenant, providers) {
+        if (!providers || !providers.length) return '';
+        var cards = providers.map(function(p) {
+          var url = memberProfileUrl(tenant, p.memberSlug);
+          var img = p.profilePhotoUrl
+            ? '<img src="' + esc(p.profilePhotoUrl) + '" alt="">'
+            : '<div class="bk-team-initial">' + esc((p.displayName || 'P').charAt(0)) + '</div>';
+          return '<a class="bk-team-card" href="' + esc(url) + '">' + img +
+            '<strong>' + esc(p.displayName || '') + '</strong>' +
+            (p.jobTitle ? '<span>' + esc(p.jobTitle) + '</span>' : '') + '</a>';
+        }).join('');
+        return '<section id="team" class="bk-team-section" data-bk-color-surface="featured">' +
+          '<h2>Meet the team</h2><div class="bk-team-grid">' + cards + '</div></section>';
+      }
+      function providerProfilePageHtml(tenant, provider) {
+        var bookUrl = memberBookUrl(tenant, provider.memberSlug);
+        var studioUrl = tenantBaseUrl(tenant) + '/home';
+        var tc = tenantColors(tenant);
+        var photo = provider.profilePhotoUrl
+          ? '<img class="bk-provider-photo" src="' + esc(provider.profilePhotoUrl) + '" alt="">'
+          : '<div class="bk-provider-photo-placeholder">' + esc((provider.displayName || 'P').charAt(0)) + '</div>';
+        var about = provider.providerAboutText
+          ? '<p class="bk-provider-about">' + esc(provider.providerAboutText) + '</p>'
+          : '';
+        var firstName = String(provider.displayName || 'them').split(' ')[0];
+        return '<div class="container"><div class="bk-provider-page card">' +
+          photo +
+          '<h1>' + esc(provider.displayName || '') + '</h1>' +
+          (provider.jobTitle ? '<p class="bk-provider-title">' + esc(provider.jobTitle) + '</p>' : '') +
+          about +
+          '<a class="bk-provider-book-cta" style="background:' + esc(tc.accent) + ';color:' + esc(tc.accentFg) + '" href="' + esc(bookUrl) + '">Book with ' + esc(firstName) + '</a>' +
+          '<p class="bk-provider-studio-link"><a href="' + esc(studioUrl) + '">← ' + esc(siteName(tenant)) + '</a></p>' +
+          '</div></div>';
+      }
+      function mountTeamProvidersSection(tenant) {
+        if (!isTeamPlan(tenant)) return Promise.resolve();
+        return loadPublicProviders(tenant.slug).then(function(providers) {
+          if (!providers || providers.length < 2) return;
+          var root = document.getElementById('root');
+          if (!root) return;
+          root.insertAdjacentHTML('beforeend', teamProvidersSectionHtml(tenant, providers));
+        });
       }
       function tenantBaseUrl(tenant) {
         var slug = (tenant && tenant.slug ? String(tenant.slug) : '').toLowerCase();
@@ -6717,6 +6818,16 @@
         if (!q) return '';
         return 'https://www.google.com/maps?q=' + encodeURIComponent(q) + '&output=embed';
       }
+      /** Street line + optional suite; falls back to legacy multiline `address`. */
+      function tenantStreetAddressText(tenant) {
+        if (!tenant) return '';
+        var street = tenant.contactAddress && String(tenant.contactAddress).trim() ? String(tenant.contactAddress).trim() : '';
+        var suite = tenant.contactAddressSuite && String(tenant.contactAddressSuite).trim() ? String(tenant.contactAddressSuite).trim() : '';
+        if (street || suite) {
+          return suite ? (street ? (street + '\n' + suite) : suite) : street;
+        }
+        return tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
+      }
       function isBkCaptureMode() {
         return document.documentElement.classList.contains('bk-capture-mode') ||
           /(?:^|[?&])bk_capture=1(?:&|$)/.test(String(location.search || ''));
@@ -7254,7 +7365,7 @@
         var phoneHref = telHrefFromPhone(tenant.contactPhone);
         var phoneDisplay = contactPhoneDisplayEscaped(tenant);
         var saWhere = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
-        var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
+        var addrRaw = tenantStreetAddressText(tenant);
         var addrLines = addrRaw ? addrRaw.split(/\n/).map(function(l){ return String(l).trim(); }).filter(function(x){ return x.length; }) : [];
         var whereHeadline = saWhere || addrLines[0] || 'Location';
         var whereHeadHtml = '<h3 class="blade-section-title blade-where-city" style="font-size:38px">' + wcSpan(tenant, 'wc.contact.whereHead', whereHeadline) + '</h3>';
@@ -7379,7 +7490,7 @@
         if (!serviceCards) {
           serviceCards = '<div class="stonecut-service-card"><h3>Add services</h3><p>Add active services in the app to populate this section.</p><div class="stonecut-price">Setup needed</div></div>';
         }
-        var addrRaw = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
+        var addrRaw = tenantStreetAddressText(tenant);
         var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
         var whereHeadline = sa || (addrRaw ? addrRaw.split('\n')[0] : 'Location');
         var mapQuery = addrRaw ? googleMapsSearchUrl(addrRaw) : (sa ? googleMapsSearchUrl(sa) : '');
@@ -8618,7 +8729,7 @@
           })(pillGroups[gi]);
         }
       }
-      function form(tenant, services, presel) {
+      function form(tenant, services, presel, provider) {
         var schema = tenant.formSchema || [];
         var useSchema = Array.isArray(schema) && schema.length > 0;
         var fields = useSchema ? schema : [
@@ -8652,11 +8763,14 @@
 
         var bookingPageHeaderHtml = '';
         if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
+          var bookingTitle = provider && provider.displayName
+            ? ('Book with ' + esc(provider.displayName))
+            : siteNameSpan(tenant, 'Appointment');
           bookingPageHeaderHtml =
             '<div class="booking-page-header">' +
               (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
-              '<h1 class="booking-page-title">' + siteNameSpan(tenant, 'Appointment') + '</h1>' +
-              (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '') +
+              '<h1 class="booking-page-title">' + bookingTitle + '</h1>' +
+              (provider && provider.jobTitle ? '<p class="booking-page-subtitle">' + esc(provider.jobTitle) + '</p>' : (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '')) +
             '</div>';
         }
 
@@ -8868,7 +8982,7 @@
               galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
               galleryLayoutStyle: data.galleryLayoutStyle,
               aboutText: data.aboutText || '',
-              reviews: data.reviews || [], address: data.address || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
+              reviews: data.reviews || [], address: data.address || '', contactAddress: data.contactAddress || '', contactAddressSuite: data.contactAddressSuite || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
               mapEmbedLat: (typeof data.mapEmbedLat === 'number' && !isNaN(data.mapEmbedLat)) ? data.mapEmbedLat : null,
               mapEmbedLng: (typeof data.mapEmbedLng === 'number' && !isNaN(data.mapEmbedLng)) ? data.mapEmbedLng : null,
               mapCaptureImageUrl: data.mapCaptureImageUrl || '',
@@ -8918,6 +9032,7 @@
               showBookPage: data.showBookPage !== false,
               showAboutPage: data.showAboutPage !== false,
               shopEnabled: data.shopEnabled || false,
+              subscriptionPlan: (data.subscriptionPlan || 'solo').toString(),
               classicFeaturedWorkEyebrow: data.classicFeaturedWorkEyebrow || '',
               classicFeaturedWorkHeading: data.classicFeaturedWorkHeading || '',
               classicFeaturedWorkSub: data.classicFeaturedWorkSub || '',
@@ -9093,8 +9208,7 @@
         var footerLinks = '';
         if (igHandle) footerLinks += '<a href="' + esc(igUrl) + '" target="_blank" rel="noopener">Instagram</a>';
         var footAbout = tenantShowAboutPage(tenant) ? (base + '/home#about') : (base + '/home#services');
-        var footAddr = (tenant.address && String(tenant.address).trim())
-          || (tenant.contactAddress && String(tenant.contactAddress).trim())
+        var footAddr = tenantStreetAddressText(tenant)
           || (tenant.serviceArea && String(tenant.serviceArea).trim())
           || '';
         var footMaps = footAddr ? googleMapsSearchUrl(footAddr) : '';
@@ -9186,10 +9300,9 @@
           luxeHoursBlock = '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactHours', 'Hours') + '</h3><p style="white-space:pre-line">' +
             (luxeHoursTrim ? wcSpanMultiline(tenant, 'wc.contact.hours', luxeHoursTrim) : wcSpan(tenant, 'wc.contact.hours', 'Add in app')) + '</p></div>';
         }
-        var addrTrim = tenant.address && String(tenant.address).trim() ? String(tenant.address).trim() : '';
-        var caTrim = tenant.contactAddress && String(tenant.contactAddress).trim() ? String(tenant.contactAddress).trim() : '';
+        var addrTrim = tenantStreetAddressText(tenant);
         var saTrim = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
-        var luxeLocRaw = addrTrim || caTrim || saTrim || '';
+        var luxeLocRaw = addrTrim || saTrim || '';
         var luxeLocMaps = luxeLocRaw ? googleMapsSearchUrl(luxeLocRaw) : '';
         var luxeLocationInner;
         if (luxeLocRaw && luxeLocMaps) {
@@ -9476,8 +9589,7 @@
         var aboutBioDisplay = wcSpanMultiline(tenant, 'wc.classic.aboutBio', aboutBioPlain || 'Tell clients about your work and experience.');
         var classicContactLines = '';
         if (tenant.showContactOnPage !== false) {
-          var clAddr = (tenant.address && String(tenant.address).trim())
-            || (tenant.contactAddress && String(tenant.contactAddress).trim())
+          var clAddr = tenantStreetAddressText(tenant)
             || (tenant.serviceArea && String(tenant.serviceArea).trim())
             || '';
           var clLines = [];
@@ -9888,8 +10000,8 @@
           ? ('<div class="s12-info-half s12-info-hours s12-fade"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.hoursLabel', 'Studio hours') + '</div>' +
             s12InfoTitleHtml(tenant, 'wc.s12.hoursTitleLead', 'When to', 'wc.s12.hoursTitleEm', 'visit') + hoursHtml + '</div>')
           : '';
-        var addr = tenant.address || tenant.contactAddress || tenant.serviceArea || '';
-        var addrTrim = addr ? String(addr).trim() : '';
+        var addrTrim = tenantStreetAddressText(tenant)
+          || (tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '');
         var addrMapsS12 = addrTrim ? googleMapsSearchUrl(addrTrim) : '';
         var addrHtml = addrTrim
           ? (addrMapsS12
@@ -11164,6 +11276,16 @@
           return Promise.all([loadServices(tenant.id), loadProducts(tenant.id)]).then(function(results){
             var services = results[0];
             tenant._products = results[1];
+
+            function renderTenantSite() {
+            if (p.memberSlug && !isTeamPlan(tenant)) {
+              p.memberSlug = '';
+              p.page = 'home';
+              p.isBookPath = false;
+              p.isGalleryPath = false;
+              p.isShopPath = false;
+              p.isAboutPath = false;
+            }
             var isShop = p.isShopPath;
             if (p.isShopCheckoutPath) {
               if (!tenant.shopEnabled) {
@@ -11301,7 +11423,7 @@
                         ? classicPortfolioHomePage(tenant, services)
                         : classicPortfolioHomePage(tenant, services);
             if (showForm) {
-              document.getElementById('root').innerHTML = form(tenant, services, presel);
+              document.getElementById('root').innerHTML = form(tenant, services, presel, tenant._activeProvider || null);
               if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
               if (isStudio12Theme(tenant)) bindStudio12Page();
               if (isBladeTheme(tenant)) bindBladeChrome();
@@ -11325,6 +11447,7 @@
               if (tenantShouldBindShopCart(tenant)) {
                 bindShopPage(tenant);
               }
+              mountTeamProvidersSection(tenant);
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }
@@ -11632,6 +11755,7 @@
                   }
                   return functions.httpsCallable('createBookingRequestFromWeb')({
                     tenantSlug: tenant.slug,
+                    memberSlug: (tenant._activeProvider && tenant._activeProvider.memberSlug) || null,
                     customerName: customerName,
                     customerEmail: customerEmail,
                     customerPhone: customerPhone,
@@ -11664,6 +11788,25 @@
               });
               }
             }
+            }
+
+            if (p.memberSlug && isTeamPlan(tenant)) {
+              return loadPublicProvider(tenant.slug, p.memberSlug).then(function(provider) {
+                if (!provider) {
+                  document.getElementById('root').innerHTML = '<div class="container">' + err('Provider not found') + '</div>';
+                  applyBranding(tenant);
+                  return;
+                }
+                if (!p.isBookPath) {
+                  document.getElementById('root').innerHTML = providerProfilePageHtml(tenant, provider);
+                  applyBranding(tenant);
+                  return;
+                }
+                tenant._activeProvider = provider;
+                renderTenantSite();
+              });
+            }
+            renderTenantSite();
           });
         }).catch(function(e){
           console.error(e);

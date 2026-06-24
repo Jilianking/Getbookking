@@ -43,13 +43,23 @@ class RequestsViewModel: ObservableObject {
         guard let raw = tenantIndustry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
         return BookingTemplate(rawValue: raw)
     }
+
+    private func resolvedStudioAvailability(
+        profileAvailability: ProviderAvailability,
+        tenant: [String: Any]?
+    ) -> ProviderAvailability {
+        ProviderAvailability.mergingTenantBusinessHours(tenant, into: profileAvailability)
+    }
     
     func loadRequests(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
             if let sessionStore, sessionStore.isDemoSession {
-                let availability = sessionStore.profile?.availability ?? .default
+                let availability = resolvedStudioAvailability(
+                    profileAvailability: sessionStore.profile?.availability ?? .default,
+                    tenant: sessionStore.tenant
+                )
                 let industryRaw = sessionStore.tenantIndustry
                 await MainActor.run {
                     tenantId = sessionStore.tenantId
@@ -86,7 +96,10 @@ class RequestsViewModel: ObservableObject {
                 async let newBookings: () = sessionStore.loadNewBookingsIfNeeded(force: false, isDemoMode: false)
                 async let members: () = sessionStore.loadTeamMembersIfNeeded(force: false, isDemoMode: false)
                 _ = await (bookings, newBookings, members)
-                let availability = sessionStore.profile?.availability ?? .default
+                let availability = resolvedStudioAvailability(
+                    profileAvailability: sessionStore.profile?.availability ?? .default,
+                    tenant: sessionStore.tenant
+                )
                 let industryRaw = sessionStore.tenantIndustry
                 await MainActor.run {
                     tenantId = sessionStore.tenantId
@@ -102,13 +115,17 @@ class RequestsViewModel: ObservableObject {
 
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             let tid = profile?.tenantId
-            let availability = profile?.availability ?? .default
+            let baseAvailability = profile?.availability ?? .default
             
             if let tid = tid {
                 async let fetched = firebaseService.fetchTenantBookingRequests(tenantId: tid)
                 async let tenantDoc = firebaseService.fetchTenant(tenantId: tid)
                 async let membersPayload = functions.httpsCallable("listTenantMembers").call([:])
                 let (bookingList, tenant, membersResult) = try await (fetched, tenantDoc, membersPayload)
+                let availability = resolvedStudioAvailability(
+                    profileAvailability: baseAvailability,
+                    tenant: tenant
+                )
                 let industryRaw = (tenant?["industry"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let membersData = membersResult.data as? [String: Any]
@@ -131,7 +148,7 @@ class RequestsViewModel: ObservableObject {
                     tenantId = nil
                     tenantIndustry = nil
                     teamMembers = []
-                    studioAvailability = availability
+                    studioAvailability = baseAvailability
                     requests = fetched
                     bookingRequests = []
                     isLoading = false

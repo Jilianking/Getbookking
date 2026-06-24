@@ -9,7 +9,7 @@ import Combine
 import FirebaseAuth
 import FirebaseFunctions
 
-class SettingsViewModel: ObservableObject {
+class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     /// Studio-wide booking policy (owner edits in Business → Booking settings).
     @Published var confirmationType: BookingConfirmationType = .requestApprove
     @Published var managersApproveAppointments: Bool = true
@@ -20,7 +20,10 @@ class SettingsViewModel: ObservableObject {
     /// When true, personal flow follows studio policy instead of `personalConfirmationType`.
     @Published var usesStudioBookingPolicy: Bool = false
     @Published var personalSaveSuccess = false
-    @Published var timeSlots: [TimeSlot] = [TimeSlot(open: 9, close: 18)]
+    @Published var businessHours: String = ""
+    @Published var businessHoursWeekly: BusinessHoursWeekly = .defaultOfficeHours
+    @Published var businessHoursExceptions: [BusinessHoursException] = []
+    @Published var showBusinessHoursOnPage: Bool = true
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
     @Published var timeZoneId: String = TimeZone.current.identifier
     @Published var blockedDates: Set<String> = []
@@ -98,8 +101,11 @@ class SettingsViewModel: ObservableObject {
         )
     }
 
-    func hasInvalidSlot(_ slot: TimeSlot) -> Bool {
-        slot.close <= slot.open
+    func formatHour(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour == 12 { return "12 PM" }
+        if hour < 12 { return "\(hour) AM" }
+        return "\(hour - 12) PM"
     }
 
     var effectiveBookingConfirmationType: BookingConfirmationType {
@@ -112,11 +118,113 @@ class SettingsViewModel: ObservableObject {
         managersApproveAppointments
     }
 
-    func formatHour(_ hour: Int) -> String {
-        if hour == 0 { return "12 AM" }
-        if hour == 12 { return "12 PM" }
-        if hour < 12 { return "\(hour) AM" }
-        return "\(hour - 12) PM"
+    var businessHoursSummary: String {
+        let lines = businessHoursWeekly.formattedDisplayString()
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard let first = lines.first else { return "Set your weekly hours" }
+        if lines.count == 1 { return first }
+        return first + " · " + "\(lines.count) day groups"
+    }
+
+    private func applyTenantBusinessHours(from tenant: [String: Any]?) {
+        guard let tenant else { return }
+        businessHours = tenant["businessHours"] as? String ?? ""
+        businessHoursExceptions = BusinessHoursException.parseList(tenant["businessHoursExceptions"])
+        if let weeklyRaw = tenant["businessHoursWeekly"] as? [String: Any],
+           let parsed = BusinessHoursWeekly.fromFirestore(weeklyRaw) {
+            businessHoursWeekly = parsed
+            businessHours = DesignViewModel.businessHoursDisplayString(weekly: parsed, exceptions: businessHoursExceptions)
+        } else if businessHours.isEmpty {
+            businessHoursWeekly = .defaultOfficeHours
+            businessHours = DesignViewModel.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
+        }
+        showBusinessHoursOnPage = tenant["showBusinessHoursOnPage"] as? Bool ?? true
+        daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
+    }
+
+    func syncBusinessHoursStringFromWeekly() {
+        businessHours = DesignViewModel.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
+    }
+
+    func replaceBusinessHoursDay(index: Int, schedule: DaySchedule) {
+        guard businessHoursWeekly.days.indices.contains(index) else { return }
+        var w = businessHoursWeekly
+        w.days[index] = schedule
+        w.normalizeDay(at: index)
+        businessHoursWeekly = w
+        syncBusinessHoursStringFromWeekly()
+        daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
+    }
+
+    func upsertBusinessHoursException(_ item: BusinessHoursException) {
+        var list = businessHoursExceptions
+        if let i = list.firstIndex(where: { $0.id == item.id }) {
+            list[i] = item
+        } else {
+            list.append(item)
+        }
+        businessHoursExceptions = list.sorted { $0.dateYmd < $1.dateYmd }
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    func removeBusinessHoursException(id: String) {
+        businessHoursExceptions.removeAll { $0.id == id }
+        syncBusinessHoursStringFromWeekly()
+    }
+
+    func applySchedule(_ schedule: DaySchedule, toIndices indices: Set<Int>) {
+        var w = businessHoursWeekly
+        for i in indices where w.days.indices.contains(i) {
+            w.days[i] = schedule
+            w.normalizeDay(at: i)
+        }
+        businessHoursWeekly = w
+        syncBusinessHoursStringFromWeekly()
+        daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
+    }
+
+    func saveBusinessHours() async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil; saveSuccess = false }
+        let hoursString = DesignViewModel.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
+        var updates: [String: Any] = [
+            "businessHours": hoursString,
+            "showBusinessHoursOnPage": showBusinessHoursOnPage,
+            "businessHoursWeekly": businessHoursWeekly.firestoreDayMap(),
+            "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() },
+        ]
+        if let doc = try? await firebaseService.fetchTenant(tenantId: tid),
+           let clearedOverrides = Self.webCopyOverridesWithoutContactHours(doc) {
+            updates["webCopyOverrides"] = clearedOverrides
+        }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: updates)
+            await MainActor.run {
+                businessHours = hoursString
+                daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
+                saveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    saveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private static func webCopyOverridesWithoutContactHours(_ doc: [String: Any]?) -> [String: String]? {
+        var map: [String: String] = [:]
+        if let overrides = doc?["webCopyOverrides"] as? [String: String] {
+            map = overrides
+        } else if let overrides = doc?["webCopyOverrides"] as? [String: Any] {
+            for (k, v) in overrides {
+                if let s = v as? String { map[k] = s }
+            }
+        }
+        guard map.removeValue(forKey: "wc.contact.hours") != nil else { return nil }
+        return map
     }
 
     func loadData(isDemoMode: Bool = false) async {
@@ -128,7 +236,10 @@ class SettingsViewModel: ObservableObject {
                 usesStudioBookingPolicy = false
                 managersApproveAppointments = true
                 depositAmount = nil
-                timeSlots = [TimeSlot(open: 9, close: 18)]
+                businessHoursWeekly = .defaultOfficeHours
+                businessHoursExceptions = []
+                businessHours = DesignViewModel.businessHoursDisplayString(weekly: .defaultOfficeHours, exceptions: [])
+                showBusinessHoursOnPage = true
                 daysOpen = [1, 2, 3, 4, 5]
                 timeZoneId = TimeZone.current.identifier
                 blockedDates = []
@@ -166,10 +277,12 @@ class SettingsViewModel: ObservableObject {
             var tenantManagersApprove = true
             var memberSettings = TeamMemberSettings()
             var resolvedBusinessName = profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            var loadedTenant: [String: Any]?
             if let p = profile, let tenantIdFromProfile = p.tenantId {
                 tid = tenantIdFromProfile
                 memberSettings = (try? await firebaseService.fetchUserMemberSettings(uid: uid)) ?? TeamMemberSettings()
                 if let tenant = try? await firebaseService.fetchTenant(tenantId: tenantIdFromProfile) {
+                    loadedTenant = tenant
                     industry = tenant["industry"] as? String
                     industryLabel = tenant["industryCustomLabel"] as? String
                     planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
@@ -219,10 +332,7 @@ class SettingsViewModel: ObservableObject {
                     } else {
                         managersApproveAppointments = tenantManagersApprove
                     }
-                    timeSlots = p.availability.timeSlots.isEmpty
-                        ? [TimeSlot(open: 9, close: 18)]
-                        : p.availability.timeSlots
-                    daysOpen = Set(p.availability.daysOpen)
+                    applyTenantBusinessHours(from: loadedTenant)
                     timeZoneId = Self.normalizedTimeZoneId(
                         p.availability.timeZone.isEmpty ? TimeZone.current.identifier : p.availability.timeZone
                     )
@@ -440,16 +550,9 @@ class SettingsViewModel: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
-            let slotsData = timeSlots.map { slot -> [String: Any] in
-                var d: [String: Any] = ["open": slot.open, "close": slot.close, "type": slot.type.rawValue]
-                if let label = slot.customLabel { d["customLabel"] = label }
-                if let days = slot.recurringDays { d["recurringDays"] = days }
-                return d
-            }
             let resolvedTimeZone = Self.normalizedTimeZoneId(timeZoneId)
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "availability": [
-                    "timeSlots": slotsData,
                     "daysOpen": Array(daysOpen).sorted(),
                     "timeZone": resolvedTimeZone,
                     "blockedDates": Array(blockedDates).sorted(),
@@ -511,55 +614,6 @@ class SettingsViewModel: ObservableObject {
         } else {
             availableDates.insert(key)
         }
-    }
-
-    func addTimeSlot() {
-        let last = timeSlots.last ?? TimeSlot(open: 9, close: 18)
-        timeSlots.append(TimeSlot(open: last.open, close: last.close, type: last.type, customLabel: last.type == .custom ? last.customLabel : nil, recurringDays: last.type == .recurring ? last.recurringDays : nil))
-    }
-
-    func removeTimeSlot(at index: Int) {
-        guard timeSlots.count > 1 else { return }
-        timeSlots.remove(at: index)
-    }
-
-    func updateTimeSlot(at index: Int, open: Int, close: Int) {
-        guard index >= 0, index < timeSlots.count else { return }
-        let s = timeSlots[index]
-        timeSlots[index] = TimeSlot(id: s.id, open: open, close: close, type: s.type, customLabel: s.customLabel, recurringDays: s.recurringDays)
-    }
-
-    func updateTimeSlot(id: String, open: Int? = nil, close: Int? = nil, type: SlotType? = nil, customLabel: String? = nil, recurringDays: [Int]? = nil) {
-        guard let idx = timeSlots.firstIndex(where: { $0.id == id }) else { return }
-        let s = timeSlots[idx]
-        let newType = type ?? s.type
-        let newCustomLabel = newType == .custom ? (customLabel ?? s.customLabel) : nil
-        let newRecurringDays = newType == .recurring ? (recurringDays ?? s.recurringDays ?? [1, 2, 3, 4, 5]) : nil
-        timeSlots[idx] = TimeSlot(
-            id: id,
-            open: open ?? s.open,
-            close: close ?? s.close,
-            type: newType,
-            customLabel: newCustomLabel,
-            recurringDays: newRecurringDays
-        )
-    }
-
-    func toggleRecurringDay(slotId: String, day: Int) {
-        guard let idx = timeSlots.firstIndex(where: { $0.id == slotId }) else { return }
-        var days = Set(timeSlots[idx].recurringDays ?? [1, 2, 3, 4, 5])
-        if days.contains(day) {
-            days.remove(day)
-        } else {
-            days.insert(day)
-        }
-        timeSlots[idx].recurringDays = Array(days).sorted()
-    }
-
-    func setSlotCustomLabel(id: String, _ label: String) {
-        guard let idx = timeSlots.firstIndex(where: { $0.id == id }) else { return }
-        let s = timeSlots[idx]
-        timeSlots[idx] = TimeSlot(id: s.id, open: s.open, close: s.close, type: s.type, customLabel: label.isEmpty ? nil : label, recurringDays: s.recurringDays)
     }
 
     /// Applies the selected service template: form schema + default services + industry. Website Design stays editable after.

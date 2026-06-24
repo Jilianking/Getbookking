@@ -14,6 +14,8 @@ struct TeamMemberDetailView: View {
     @State private var jobTitlePresetId: String = ""
     @State private var customJobTitle: String = ""
     @State private var memberSettings: TeamMemberSettings
+    @State private var isBookable: Bool
+    @State private var providerAboutText: String
     @State private var showRemoveConfirm = false
     @State private var showDemoteConfirm = false
     @State private var showPromoteConfirm = false
@@ -22,6 +24,8 @@ struct TeamMemberDetailView: View {
         self.viewModel = viewModel
         self.member = member
         _memberSettings = State(initialValue: member.memberSettings)
+        _isBookable = State(initialValue: member.isBookable)
+        _providerAboutText = State(initialValue: member.providerAboutText)
         let title = member.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let industry = viewModel.tenantIndustry
         let options = TeamJobTitleCatalog.options(for: industry)
@@ -174,6 +178,20 @@ struct TeamMemberDetailView: View {
 
     @ViewBuilder
     private var bookingSection: some View {
+        if viewModel.tenantSubscriptionPlan.allowsTeamInvites {
+            Section(
+                header: Text("Online booking page"),
+                footer: Text("When enabled, this person gets a bookable page on your studio site.")
+                    .font(.caption2)
+            ) {
+                Toggle("Bookable on website", isOn: $isBookable)
+                if isBookable, !member.memberSlug.isEmpty {
+                    LabeledContent("Page path", value: "/\(member.memberSlug)")
+                }
+                TextField("Short bio (optional)", text: $providerAboutText, axis: .vertical)
+                    .lineLimit(3...6)
+            }
+        }
         Section(
             header: Text("Booking"),
             footer: Text(bookingSectionFooter)
@@ -239,7 +257,7 @@ struct TeamMemberDetailView: View {
     private var paymentSectionFooter: String {
         switch memberSettings.payoutMode {
         case .independent:
-            return "They connect their own Stripe and can use Tap to Pay. Studio split is tracked in reports."
+            return "They connect their own Stripe and can use Tap to Pay. Deposits for their assigned bookings go to their account."
         case .studioPayroll:
             return "Charges go to the studio Connect account. Use payment split for revenue reporting."
         }
@@ -276,7 +294,9 @@ struct TeamMemberDetailView: View {
             memberUid: member.uid,
             accessRole: member.accessRole,
             jobTitle: title,
-            memberSettings: memberSettings
+            memberSettings: memberSettings,
+            isBookable: isBookable,
+            providerAboutText: providerAboutText.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         if ok { dismiss() }
     }

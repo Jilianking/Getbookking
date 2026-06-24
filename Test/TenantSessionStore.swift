@@ -522,6 +522,9 @@ final class TenantSessionStore: ObservableObject {
                     profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                     accessRole: .owner,
                     jobTitle: "",
+                    memberSlug: (row["memberSlug"] as? String) ?? "",
+                    isBookable: row["isBookable"] as? Bool ?? true,
+                    providerAboutText: (row["providerAboutText"] as? String) ?? "",
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
                     effectiveConfirmationType: parseEffectiveConfirmationType(row)
@@ -535,6 +538,9 @@ final class TenantSessionStore: ObservableObject {
                 profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                 accessRole: role,
                 jobTitle: (row["jobTitle"] as? String) ?? "",
+                memberSlug: (row["memberSlug"] as? String) ?? "",
+                isBookable: row["isBookable"] as? Bool ?? (role == .member),
+                providerAboutText: (row["providerAboutText"] as? String) ?? "",
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
                 effectiveConfirmationType: parseEffectiveConfirmationType(row)

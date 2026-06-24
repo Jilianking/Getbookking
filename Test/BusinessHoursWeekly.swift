@@ -314,3 +314,14 @@ struct BusinessHoursException: Identifiable, Equatable {
         return arr.compactMap { fromFirestore($0) }.sorted { $0.dateYmd < $1.dateYmd }
     }
 }
+
+// MARK: - Shared editor (Design + Settings)
+
+protocol BusinessHoursEditing: ObservableObject {
+    var businessHoursWeekly: BusinessHoursWeekly { get set }
+    var businessHoursExceptions: [BusinessHoursException] { get set }
+    func replaceBusinessHoursDay(index: Int, schedule: DaySchedule)
+    func applySchedule(_ schedule: DaySchedule, toIndices indices: Set<Int>)
+    func upsertBusinessHoursException(_ item: BusinessHoursException)
+    func removeBusinessHoursException(id: String)
+}

@@ -135,7 +135,11 @@ struct ManageGalleryPhotosBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ManageGalleryUploadZone(selectedItems: $selectedItems)
+            ManageGalleryUploadZone(
+                selectedItems: $selectedItems,
+                isDemoReadOnly: viewModel.isDemoReadOnly,
+                onDemoBlocked: { viewModel.showDemoBlockedAlert = true }
+            )
                 .onChange(of: selectedItems) { _, newItems in
                     Task { await processPickerItems(newItems) }
                 }
@@ -168,6 +172,14 @@ struct ManageGalleryPhotosBlock: View {
 
     private func processPickerItems(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
+
+        if viewModel.isDemoReadOnly {
+            await MainActor.run {
+                selectedItems.removeAll()
+                viewModel.showDemoBlockedAlert = true
+            }
+            return
+        }
 
         guard viewModel.hasTenant else {
             await MainActor.run {
@@ -210,37 +222,54 @@ struct ManageGalleryPhotosBlock: View {
 
 private struct ManageGalleryUploadZone: View {
     @Binding var selectedItems: [PhotosPickerItem]
+    var isDemoReadOnly: Bool = false
+    var onDemoBlocked: (() -> Void)? = nil
 
     var body: some View {
-        PhotosPicker(
-            selection: $selectedItems,
-            matching: .images,
-            photoLibrary: .shared()
-        ) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(
-                    Color(.systemGray3),
-                    style: StrokeStyle(lineWidth: 1.5, dash: [8, 6])
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
-                .frame(height: 132)
-                .overlay {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("Add photos")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
+        Group {
+            if isDemoReadOnly {
+                Button {
+                    onDemoBlocked?()
+                } label: {
+                    uploadZoneChrome
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } else {
+                PhotosPicker(
+                    selection: $selectedItems,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    uploadZoneChrome
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
         .appCard()
+    }
+
+    private var uploadZoneChrome: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(
+                Color(.systemGray3),
+                style: StrokeStyle(lineWidth: 1.5, dash: [8, 6])
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+            .frame(height: 132)
+            .overlay {
+                VStack(spacing: 10) {
+                    Image(systemName: isDemoReadOnly ? "eye" : "photo.on.rectangle.angled")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text(isDemoReadOnly ? "Preview only in demo" : "Add photos")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
     }
 }
 
@@ -431,7 +460,7 @@ struct ManageGalleryTabContent: View {
     @State private var showGalleryStylePicker = false
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     var body: some View {
@@ -486,7 +515,7 @@ private struct ManageGalleryStylePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     var body: some View {
@@ -507,7 +536,7 @@ private struct ManageGalleryStylePickerSheet: View {
                                     .foregroundStyle(Color.primary)
                                 Text(style.detail)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(AppDesign.textSecondary)
                             }
                             Spacer()
                             if viewModel.galleryLayoutStyle == style {
@@ -517,6 +546,7 @@ private struct ManageGalleryStylePickerSheet: View {
                             }
                         }
                     }
+                    .buttonStyle(.plain)
                     .disabled(controlsDisabled)
                 }
             }
@@ -539,7 +569,7 @@ struct ManageBusinessHoursBlock: View {
     @State private var showManageSheet = false
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     private var hoursSummary: String {
@@ -574,7 +604,7 @@ struct ManageBusinessHoursBlock: View {
                 }
             }
 
-            Text("For appointment availability, use Settings → Scheduling & hours.")
+            Text("Also editable in Settings → Scheduling & hours.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -611,45 +641,13 @@ private struct ManageBusinessHoursSheet: View {
 struct ManageAboutTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
     let isClassicTemplate: Bool
-    let isLuxeTemplate: Bool
-    let isBladeTemplate: Bool
-    let isStudio12Template: Bool
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
-    }
-
-    private var storyHint: String {
-        if isClassicTemplate {
-            return "Appears in the Meet section on your site and on /about."
-        }
-        if isLuxeTemplate {
-            return "Story and contact appear on /about and on Luxe home (Meet and footer)."
-        }
-        if isBladeTemplate {
-            return "Story on /about. Contact, hours, and address power Blade and Stonecut home sections."
-        }
-        if isStudio12Template {
-            return "Feeds the Our approach section on Studio 12 home and your /about page."
-        }
-        return "Appears on your About page and contact sections on the site."
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            ManageSectionHeader("Your story")
-            ManageCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(storyHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("Tell clients about you and your business", text: $viewModel.aboutText, axis: .vertical)
-                        .lineLimit(3...8)
-                        .disabled(controlsDisabled)
-                }
-                .padding(14)
-            }
-
             if isClassicTemplate {
                 ManageSectionHeader("About stats")
                 ManageCard {
@@ -692,9 +690,24 @@ struct ManageAboutTabContent: View {
                     IconFieldRow(icon: "mappin.circle", placeholder: "Street address", text: $viewModel.contactAddress)
                         .disabled(controlsDisabled)
 
+                    IconFieldRow(
+                        icon: "number",
+                        placeholder: "Suite / apt (optional)",
+                        text: $viewModel.contactAddressSuite
+                    )
+                    .disabled(controlsDisabled)
+
                     ServiceAreaCityStateFields(viewModel: viewModel)
 
-                    IconFieldRow(icon: "camera", placeholder: "@yourstudio", text: $viewModel.instagramHandle)
+                    Text("Add your Instagram username to show a link on your site footer and contact sections.")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+
+                    IconFieldRow(
+                        icon: "camera",
+                        placeholder: "Instagram username",
+                        text: $viewModel.instagramHandle
+                    )
                         .textInputAutocapitalization(.never)
                         .disabled(controlsDisabled)
                 }
@@ -770,7 +783,7 @@ struct ManageBookTabContent: View {
     @State private var showFormFieldsSheet = false
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     private var resolvedFormStyle: BookingFormStyle {
@@ -937,7 +950,7 @@ private struct ManageBookingFormStylePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     var body: some View {
@@ -1042,7 +1055,7 @@ struct ManageShopTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
 
     private var controlsDisabled: Bool {
-        !viewModel.hasTenant || viewModel.isLoading
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
     }
 
     var body: some View {

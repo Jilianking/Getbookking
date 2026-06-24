@@ -39,7 +39,7 @@ struct Studio12ProcessStep: Identifiable, Equatable {
     var body: String
 }
 
-class DesignViewModel: ObservableObject {
+class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var tenantId: String?
     @Published var tenantSlug: String?
     @Published var bookingUrl: String = ""
@@ -211,6 +211,7 @@ class DesignViewModel: ObservableObject {
     @Published var contactPhone: String = ""
     @Published var contactEmail: String = ""
     @Published var contactAddress: String = ""
+    @Published var contactAddressSuite: String = ""
     /// Short line for marketing (e.g. city, state) — Blade hero eyebrow; full street stays in `contactAddress`.
     @Published var serviceArea: String = ""
     /// Parsed/edited with US state picker; composed into `serviceArea` on save.
@@ -248,6 +249,50 @@ class DesignViewModel: ObservableObject {
 
     func composeServiceAreaForPersistence() {
         serviceArea = USStateServiceAreaFormatting.composedServiceArea(city: serviceCity, stateAbbr: serviceStateAbbr)
+    }
+
+    static func composedStreetAddress(street: String, suite: String) -> String {
+        let s = street.trimmingCharacters(in: .whitespacesAndNewlines)
+        let u = suite.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return u }
+        guard !u.isEmpty else { return s }
+        return s + "\n" + u
+    }
+
+    static func parsedStreetAndSuite(from tenant: [String: Any]?) -> (street: String, suite: String) {
+        let storedSuite = (tenant?["contactAddressSuite"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let contactStreet = (tenant?["contactAddress"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !contactStreet.isEmpty {
+            return (contactStreet, storedSuite)
+        }
+        let legacy = (tenant?["address"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !legacy.isEmpty else { return ("", storedSuite) }
+        if !storedSuite.isEmpty {
+            return (legacy.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? legacy, storedSuite)
+        }
+        let parts = legacy.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+        let street = parts.first.map(String.init) ?? legacy
+        let suite = parts.count > 1 ? String(parts[1]) : ""
+        return (street, suite)
+    }
+
+    static func normalizedInstagramHandle(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+    }
+
+    private func contactAddressFirestoreUpdates() -> [String: Any] {
+        let street = contactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suite = contactAddressSuite.trimmingCharacters(in: .whitespacesAndNewlines)
+        let composed = Self.composedStreetAddress(street: street, suite: suite)
+        return [
+            "contactAddress": street,
+            "contactAddressSuite": suite,
+            "address": composed,
+        ]
     }
 
     func invalidateWebPreview() {
@@ -801,6 +846,12 @@ class DesignViewModel: ObservableObject {
                     featuredWorkImages = tenant["featuredWorkImages"] as? [String] ?? []
                     showGalleryPage = tenant["showGalleryPage"] as? Bool ?? true
                     galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant["galleryLayoutStyle"] as? String)
+                    let parsedAddress = Self.parsedStreetAndSuite(from: tenant)
+                    contactAddress = parsedAddress.street
+                    contactAddressSuite = parsedAddress.suite
+                    contactPhone = tenant["contactPhone"] as? String ?? ""
+                    contactEmail = tenant["contactEmail"] as? String ?? ""
+                    instagramHandle = tenant["instagramHandle"] as? String ?? ""
                     isDemoReadOnly = true
                     isLoading = false
                 }
@@ -995,7 +1046,9 @@ class DesignViewModel: ObservableObject {
                 aboutText = tenant?["aboutText"] as? String ?? ""
                 contactPhone = tenant?["contactPhone"] as? String ?? ""
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
-                contactAddress = (tenant?["address"] as? String) ?? (tenant?["contactAddress"] as? String) ?? ""
+                let parsedAddress = Self.parsedStreetAndSuite(from: tenant)
+                contactAddress = parsedAddress.street
+                contactAddressSuite = parsedAddress.suite
                 serviceArea = (tenant?["serviceArea"] as? String) ?? ""
                 let parsedServiceArea = USStateServiceAreaFormatting.parseStoredServiceArea(serviceArea)
                 serviceCity = parsedServiceArea.city
@@ -1235,11 +1288,9 @@ class DesignViewModel: ObservableObject {
             "aboutText": aboutText,
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
-            "contactAddress": contactAddress,
-            "address": contactAddress,
             "serviceArea": serviceArea,
             "businessHours": hoursString,
-            "instagramHandle": instagramHandle,
+            "instagramHandle": Self.normalizedInstagramHandle(instagramHandle),
             "showContactOnPage": showContactOnPage,
             "showBusinessHoursOnPage": showBusinessHoursOnPage,
             "aboutSectionBackgroundColor": aboutSectionBackgroundColorHex,
@@ -1247,6 +1298,7 @@ class DesignViewModel: ObservableObject {
             "businessHoursWeekly": businessHoursWeekly.firestoreDayMap(),
             "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() }
         ]
+        updates.merge(contactAddressFirestoreUpdates()) { _, new in new }
         if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic {
             updates["classicShowAboutStats"] = classicShowAboutStats
             updates["classicStatYearsValue"] = classicStatYearsValue
@@ -1331,6 +1383,7 @@ class DesignViewModel: ObservableObject {
 
     func uploadHeroImage(imageData: Data) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingHero = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantHeroImage(tenantId: tid, imageData: imageData)
@@ -1373,6 +1426,7 @@ class DesignViewModel: ObservableObject {
 
     func uploadStudio12PhilosophyImage(imageData: Data) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingStudio12Philosophy = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
@@ -1399,6 +1453,7 @@ class DesignViewModel: ObservableObject {
 
     func uploadStudio12BookCtaImage(imageData: Data) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingStudio12BookCta = true; errorMessage = nil }
         do {
             let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
@@ -1455,6 +1510,7 @@ class DesignViewModel: ObservableObject {
 
     func addGalleryImages(imageDataList: [Data]) async {
         guard let tid = tenantId, !imageDataList.isEmpty else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingGallery = true; errorMessage = nil }
         do {
             let urls = try await uploadGalleryBatch(tenantId: tid, items: imageDataList)
@@ -1484,6 +1540,7 @@ class DesignViewModel: ObservableObject {
     /// Replaces the image at `index`, or appends when uploading beyond the end. Used by Quick edit taps on `galleryImage:<n>`.
     func replaceOrAppendGalleryImage(at index: Int, imageData: Data) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         guard index >= 0, index < 256 else {
             await MainActor.run {
                 errorMessage = "That gallery slot is not available."
@@ -1525,6 +1582,7 @@ class DesignViewModel: ObservableObject {
 
     func removeGalleryImage(at index: Int) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         guard index >= 0, index < galleryImages.count else { return }
         var updated = galleryImages
         updated.remove(at: index)
@@ -1544,6 +1602,7 @@ class DesignViewModel: ObservableObject {
 
     func addFeaturedWorkImages(imageDataList: [Data]) async {
         guard let tid = tenantId, !imageDataList.isEmpty else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingFeaturedWork = true; errorMessage = nil }
         do {
             let urls = try await uploadGalleryBatch(tenantId: tid, items: imageDataList)
@@ -1570,6 +1629,7 @@ class DesignViewModel: ObservableObject {
     /// Replaces the image at `index`, or pads sparse slots when uploading out of order. Used by Quick edit taps on `featuredWork:<n>`.
     func replaceOrAppendFeaturedWorkImage(at index: Int, imageData: Data) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         let slots = featuredWorkImageSlotCount
         guard index >= 0, index < slots else {
             await MainActor.run {
@@ -1612,6 +1672,7 @@ class DesignViewModel: ObservableObject {
 
     func removeFeaturedWorkImage(at index: Int) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         guard index >= 0, index < featuredWorkImages.count else { return }
         var updated = featuredWorkImages
         updated.remove(at: index)
@@ -1649,11 +1710,9 @@ class DesignViewModel: ObservableObject {
         let updates: [String: Any] = [
             "contactPhone": contactPhone,
             "contactEmail": contactEmail,
-            "contactAddress": contactAddress,
-            "address": contactAddress,
             "serviceArea": serviceArea,
             "showContactOnPage": showContactOnPage
-        ]
+        ].merging(contactAddressFirestoreUpdates()) { _, new in new }
         await saveTenantUpdates(tid, updates)
     }
 
@@ -1662,6 +1721,7 @@ class DesignViewModel: ObservableObject {
         _ updates: [String: Any],
         invalidatePreview: Bool = true
     ) async {
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
@@ -2079,6 +2139,7 @@ class DesignViewModel: ObservableObject {
         isActive: Bool
     ) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingProduct = true }
         do {
             var imageUrl = ""
@@ -2123,6 +2184,7 @@ class DesignViewModel: ObservableObject {
         isActive: Bool
     ) async {
         guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
         await MainActor.run { isUploadingProduct = true }
         do {
             var imageUrl: String? = nil

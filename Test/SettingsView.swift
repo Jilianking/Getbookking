@@ -440,14 +440,49 @@ struct SettingsView: View {
 struct PersonalSchedulingSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var showBusinessHoursSheet = false
 
     var body: some View {
         List {
             Section(
                 footer: Text(
+                    "Weekly hours are shared with Design → About and shown on your public site. Use the calendar below for days off or fixed appointment dates."
+                )
+                .font(.caption2)
+            ) {
+                Button {
+                    showBusinessHoursSheet = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Weekly business hours")
+                                .foregroundStyle(.primary)
+                            Text(viewModel.businessHoursSummary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer()
+                        Text("Edit")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.tenantId == nil || viewModel.isLoading)
+
+                Toggle("Show hours on site", isOn: $viewModel.showBusinessHoursOnPage)
+                    .disabled(viewModel.tenantId == nil || viewModel.isLoading)
+                    .onChange(of: viewModel.showBusinessHoursOnPage) { _, _ in
+                        Task { await viewModel.saveBusinessHours() }
+                    }
+            }
+
+            Section(
+                footer: Text(
                     viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                        ? "Your personal hours and time zone. Studio default is in Business settings → Booking settings. Your booking type is in My booking type above."
-                        : "Your personal hours and time zone. Studio booking policy is in Team settings → Booking settings when you use studio policy."
+                        ? "Your time zone and calendar. Studio default booking policy is in Business settings → Booking settings."
+                        : "Your time zone and calendar. Studio booking policy is in Team settings → Booking settings when you use studio policy."
                 )
                 .font(.caption2)
             ) {
@@ -456,10 +491,10 @@ struct PersonalSchedulingSettingsView: View {
                         Text(zoneId).tag(zoneId)
                     }
                 }
-                NavigationLink("Edit availability & calendar") {
+                NavigationLink("Edit availability calendar") {
                     DaysOpenCalendarSheet(viewModel: viewModel)
                 }
-                Button("Save") {
+                Button("Save calendar & time zone") {
                     Task {
                         await viewModel.saveAvailability()
                         await authViewModel.refreshTeamAccess()
@@ -475,6 +510,33 @@ struct PersonalSchedulingSettingsView: View {
         .appListSurface()
         .navigationTitle("Scheduling & hours")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showBusinessHoursSheet) {
+            SettingsBusinessHoursSheet(viewModel: viewModel)
+        }
+    }
+}
+
+private struct SettingsBusinessHoursSheet: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                BusinessHoursWeeklyEditor(viewModel: viewModel) {
+                    await viewModel.saveBusinessHours()
+                }
+                .padding(16)
+            }
+            .appScreenBackground()
+            .navigationTitle("Business hours")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 
@@ -904,8 +966,14 @@ private struct AccountSettingsDetailView: View {
 struct DaysOpenCalendarSheet: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var displayDate = Date()
-    @State private var editingSlot: TimeSlot?
     @Environment(\.dismiss) var dismiss
+
+    private var calendarModeHint: String {
+        if viewModel.effectiveBookingConfirmationType.usesFixedSlots {
+            return "Tap dates when you accept appointments. Weekly hours still apply on those days."
+        }
+        return "Tap dates to block time off. Clients can book on open days during your weekly hours."
+    }
 
     private var monthYearText: String {
         let formatter = DateFormatter()
@@ -933,10 +1001,12 @@ struct DaysOpenCalendarSheet: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text(viewModel.effectiveBookingConfirmationType.usesFixedSlots ? "Fixed time slots" : "Open booking")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.primary)
+                    Text(calendarModeHint)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24)
                         .padding(.top, 8)
                     HStack {
                         Button(action: previousMonth) {
@@ -974,82 +1044,10 @@ struct DaysOpenCalendarSheet: View {
                         }
                     }
                     .padding(.horizontal, 24)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Slots available")
-                            .font(.subheadline.weight(.medium))
-                        ForEach(Array(viewModel.timeSlots.enumerated()), id: \.element.id) { index, slot in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 12) {
-                                    Button(action: { editingSlot = slot }) {
-                                        HStack {
-                                            Text("\(viewModel.formatHour(slot.open)) – \(viewModel.formatHour(slot.close))")
-                                                .font(.subheadline.weight(.medium))
-                                                .foregroundColor(.primary)
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption2.weight(.semibold))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(12)
-                                        .background(viewModel.hasInvalidSlot(slot) ? AppDesign.declineBackground : AppDesign.searchBackground)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    }
-                                    .buttonStyle(.plain)
-                                    Picker("", selection: Binding(
-                                        get: { slot.type },
-                                        set: { viewModel.updateTimeSlot(id: slot.id, type: $0) }
-                                    )) {
-                                        ForEach(SlotType.allCases, id: \.self) { type in
-                                            Text(type.displayName).tag(type)
-                                        }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .labelsHidden()
-                                    .frame(minWidth: 130)
-                                    if viewModel.timeSlots.count > 1 {
-                                        Button(action: { viewModel.removeTimeSlot(at: index) }) {
-                                            Image(systemName: "trash")
-                                                .font(.body)
-                                                .foregroundColor(.red)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                if slot.type == .custom {
-                                    TextField("Custom label", text: Binding(
-                                        get: { slot.customLabel ?? "" },
-                                        set: { viewModel.setSlotCustomLabel(id: slot.id, $0) }
-                                    ))
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.subheadline)
-                                }
-                                if slot.type == .recurring {
-                                    recurringDaysRow(slot: slot)
-                                }
-                                if viewModel.hasInvalidSlot(slot) {
-                                    Text("End must be after start")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
-                                }
-                            }
-                        }
-                        Button(action: { viewModel.addTimeSlot() }) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Add time slot")
-                            }
-                            .font(.subheadline.weight(.medium))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .appCard()
-                    .padding(.horizontal, 24)
                 }
             }
             .appScreenBackground()
-            .navigationTitle("Scheduling")
+            .navigationTitle("Availability calendar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -1061,11 +1059,6 @@ struct DaysOpenCalendarSheet: View {
         }
         .onAppear {
             displayDate = Date()
-        }
-        .sheet(item: $editingSlot) { slot in
-            TimeSlotEditSheet(slot: slot, viewModel: viewModel) {
-                editingSlot = nil
-            }
         }
     }
 
@@ -1081,97 +1074,6 @@ struct DaysOpenCalendarSheet: View {
         }
     }
 
-    private func formatHour(_ hour: Int) -> String {
-        if hour == 0 { return "12 AM" }
-        if hour == 12 { return "12 PM" }
-        if hour < 12 { return "\(hour) AM" }
-        return "\(hour - 12) PM"
-    }
-
-    @ViewBuilder
-    private func recurringDaysRow(slot: TimeSlot) -> some View {
-        let days = viewModel.dayLabels
-        Text("Repeat on")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
-            ForEach(days, id: \.0) { day, label in
-                Button(action: { viewModel.toggleRecurringDay(slotId: slot.id, day: day) }) {
-                    Text(label)
-                        .font(.caption2.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background((slot.recurringDays ?? []).contains(day) ? AppDesign.brandDark : AppDesign.searchBackground)
-                        .foregroundStyle((slot.recurringDays ?? []).contains(day) ? Color.white : AppDesign.textPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-// MARK: - Time slot edit sheet
-struct TimeSlotEditSheet: View {
-    let slot: TimeSlot
-    @ObservedObject var viewModel: SettingsViewModel
-    let onDismiss: () -> Void
-
-    @State private var openHour: Int
-    @State private var closeHour: Int
-
-    init(slot: TimeSlot, viewModel: SettingsViewModel, onDismiss: @escaping () -> Void) {
-        self.slot = slot
-        self.viewModel = viewModel
-        self.onDismiss = onDismiss
-        _openHour = State(initialValue: slot.open)
-        _closeHour = State(initialValue: slot.close)
-    }
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("From")) {
-                    Picker("From", selection: $openHour) {
-                        ForEach(0..<24, id: \.self) { hour in
-                            Text(viewModel.formatHour(hour)).tag(hour)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-                }
-                Section(header: Text("To")) {
-                    Picker("To", selection: $closeHour) {
-                        ForEach(0..<24, id: \.self) { hour in
-                            Text(viewModel.formatHour(hour)).tag(hour)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-                }
-                if closeHour <= openHour {
-                    Section {
-                        Text("End must be after start")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                    }
-                }
-            }
-            .appListSurface()
-            .navigationTitle("Edit time slot")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { onDismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        viewModel.updateTimeSlot(id: slot.id, open: openHour, close: closeHour)
-                        onDismiss()
-                    }
-                    .disabled(closeHour <= openHour)
-                }
-            }
-        }
-    }
 }
 
 struct CalendarDateCell: View {

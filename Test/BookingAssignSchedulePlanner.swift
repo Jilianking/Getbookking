@@ -108,8 +108,7 @@ enum BookingAssignSchedulePlanner {
         availability: ProviderAvailability,
         calendar: Calendar
     ) -> String {
-        let weekday = calendar.component(.weekday, from: dayStart) - 1
-        guard availability.daysOpen.contains(weekday) else { return "Day off" }
+        guard availability.isBookableDay(on: dayStart, calendar: calendar) else { return "Day off" }
         let key = dateKey(dayStart, calendar: calendar)
         if availability.blockedDates.contains(key) { return "Day off" }
         return "Available"
@@ -143,15 +142,14 @@ enum BookingAssignSchedulePlanner {
         guard staffStatus(on: dayStart, availability: availability, calendar: calendar) != "Day off" else {
             return []
         }
-        let ranges = availability.timeSlots.isEmpty
-            ? [TimeSlot(open: 9, close: 18)]
-            : availability.timeSlots.filter { $0.close > $0.open }
+        let schedule = availability.daySchedule(on: dayStart, calendar: calendar)
+        guard !schedule.isClosed else { return [] }
         var merged: [Date] = []
-        for range in ranges {
+        for range in schedule.ranges where range.endMinutes > range.startMinutes {
             merged.append(contentsOf: steppedSlots(
                 dayStart: dayStart,
-                openHour: range.open,
-                closeHour: range.close,
+                startMinutes: range.startMinutes,
+                endMinutes: range.endMinutes,
                 calendar: calendar
             ))
         }
@@ -166,13 +164,17 @@ enum BookingAssignSchedulePlanner {
 
     private static func steppedSlots(
         dayStart: Date,
-        openHour: Int,
-        closeHour: Int,
+        startMinutes: Int,
+        endMinutes: Int,
         calendar: Calendar
     ) -> [Date] {
         var out: [Date] = []
-        var cursor = calendar.date(bySettingHour: openHour, minute: 0, second: 0, of: dayStart) ?? dayStart
-        let end = calendar.date(bySettingHour: closeHour, minute: 0, second: 0, of: dayStart) ?? dayStart
+        let openHour = startMinutes / 60
+        let openMinute = startMinutes % 60
+        let closeHour = endMinutes / 60
+        let closeMinute = endMinutes % 60
+        var cursor = calendar.date(bySettingHour: openHour, minute: openMinute, second: 0, of: dayStart) ?? dayStart
+        let end = calendar.date(bySettingHour: closeHour, minute: closeMinute, second: 0, of: dayStart) ?? dayStart
         while cursor < end {
             out.append(cursor)
             guard let next = calendar.date(byAdding: .minute, value: slotIntervalMinutes, to: cursor) else { break }

@@ -1102,15 +1102,10 @@ class FirebaseService: ObservableObject {
         if let avail = data["availability"] as? [String: Any] {
             if let slots = avail["timeSlots"] as? [[String: Any]], !slots.isEmpty {
                 availability.timeSlots = slots.enumerated().map { i, s in
-                    let typeRaw = s["type"] as? String ?? "open_booking"
-                    let type = SlotType(rawValue: typeRaw) ?? .openBooking
-                    return TimeSlot(
+                    TimeSlot(
                         id: "\(i)",
                         open: s["open"] as? Int ?? 9,
-                        close: s["close"] as? Int ?? 18,
-                        type: type,
-                        customLabel: s["customLabel"] as? String,
-                        recurringDays: s["recurringDays"] as? [Int]
+                        close: s["close"] as? Int ?? 18
                     )
                 }
             } else if let open = avail["openHour"] as? Int, let close = avail["closeHour"] as? Int {

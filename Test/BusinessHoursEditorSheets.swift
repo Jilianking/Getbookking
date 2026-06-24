@@ -1,13 +1,32 @@
 //
 //  BusinessHoursEditorSheets.swift
 //
-//  Weekly business hours editor (website display) shared by Manage and About.
+//  Weekly business hours editor shared by Design (About) and Settings (Scheduling).
 //
 
 import SwiftUI
 
-struct BusinessHoursWeeklyEditor: View {
-    @ObservedObject var viewModel: DesignViewModel
+private enum BusinessHoursEditorDates {
+    static let ymdFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar.current
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Calendar.current.timeZone
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static func localDate(fromYmd ymd: String) -> Date {
+        ymdFormatter.date(from: ymd) ?? Date()
+    }
+
+    static func ymd(from date: Date) -> String {
+        ymdFormatter.string(from: date)
+    }
+}
+
+struct BusinessHoursWeeklyEditor<ViewModel: BusinessHoursEditing>: View {
+    @ObservedObject var viewModel: ViewModel
     var onCommitted: (() async -> Void)? = nil
 
     @State private var businessHoursDaySheet: BusinessHoursDaySheetToken?
@@ -121,14 +140,14 @@ struct BusinessHoursDaySheetToken: Identifiable {
     let dayIndex: Int
 }
 
-struct BusinessHoursDayEditSheet: View {
+struct BusinessHoursDayEditSheet<ViewModel: BusinessHoursEditing>: View {
     let dayIndex: Int
-    @ObservedObject var viewModel: DesignViewModel
+    @ObservedObject var viewModel: ViewModel
     var onCommitted: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var draft: DaySchedule
 
-    init(dayIndex: Int, viewModel: DesignViewModel, onCommitted: (() -> Void)? = nil) {
+    init(dayIndex: Int, viewModel: ViewModel, onCommitted: (() -> Void)? = nil) {
         self.dayIndex = dayIndex
         self.viewModel = viewModel
         self.onCommitted = onCommitted
@@ -232,13 +251,13 @@ struct BusinessHoursDayEditSheet: View {
     }
 }
 
-struct BusinessHoursExceptionEditSheet: View {
-    @ObservedObject var viewModel: DesignViewModel
+struct BusinessHoursExceptionEditSheet<ViewModel: BusinessHoursEditing>: View {
+    @ObservedObject var viewModel: ViewModel
     var onCommitted: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var draft: BusinessHoursException
 
-    init(exception: BusinessHoursException, viewModel: DesignViewModel, onCommitted: (() -> Void)? = nil) {
+    init(exception: BusinessHoursException, viewModel: ViewModel, onCommitted: (() -> Void)? = nil) {
         self.viewModel = viewModel
         self.onCommitted = onCommitted
         _draft = State(initialValue: exception)
@@ -251,8 +270,8 @@ struct BusinessHoursExceptionEditSheet: View {
                     DatePicker(
                         "Date",
                         selection: Binding(
-                            get: { Self.localDate(fromYmd: draft.dateYmd) },
-                            set: { draft.dateYmd = Self.ymd(from: $0) }
+                            get: { BusinessHoursEditorDates.localDate(fromYmd: draft.dateYmd) },
+                            set: { draft.dateYmd = BusinessHoursEditorDates.ymd(from: $0) }
                         ),
                         displayedComponents: [.date]
                     )
@@ -334,22 +353,5 @@ struct BusinessHoursExceptionEditSheet: View {
                 draft.normalize()
             }
         }
-    }
-
-    private static let ymdFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar.current
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = Calendar.current.timeZone
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private static func localDate(fromYmd ymd: String) -> Date {
-        ymdFormatter.date(from: ymd) ?? Date()
-    }
-
-    private static func ymd(from date: Date) -> String {
-        ymdFormatter.string(from: date)
     }
 }

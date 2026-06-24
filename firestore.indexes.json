@@ -7,6 +7,14 @@
         { "fieldPath": "threadId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "memberSlug", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

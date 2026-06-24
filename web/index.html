@@ -1122,6 +1122,15 @@
     .bk-provider-studio-link { margin-top: 20px; font-size: 0.9rem; }
     .bk-provider-studio-link a { color: inherit; opacity: 0.7; }
     .bk-provider-book-cta { display: inline-block; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 8px; }
+    .bk-provider-gallery-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 20px 0 8px; text-align: left; }
+    .bk-provider-gallery-strip a { display: block; border-radius: 8px; overflow: hidden; }
+    .bk-provider-gallery-strip img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .bk-provider-gallery-link { display: inline-block; margin: 8px 0 16px; font-size: 0.9rem; }
+    .bk-provider-gallery-page { padding: 40px 24px 56px; max-width: 960px; margin: 0 auto; }
+    .bk-provider-gallery-page h1 { font-size: 1.75rem; margin: 0 0 8px; }
+    .bk-provider-gallery-page .bk-provider-gallery-sub { color: #666; margin: 0 0 24px; }
+    .bk-provider-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .bk-provider-gallery-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
     /* Tattoo layout: Inter for UI/sidebar; template hero stack on .tattoo-hero-title via --font-hero */
     .tattoo-page { min-height: 100vh; background: #fff; color: #111; font-family: var(--font-display); }
     /* Booking /book: .booking-shell was #000 — let themed .tattoo-page bg show; card stays white */
@@ -6158,12 +6167,20 @@
           memberSlug: memberSlug
         }).then(function(res) { return (res && res.data && res.data.provider) || null; });
       }
+      function memberGalleryUrl(tenant, memberSlug) {
+        return memberProfileUrl(tenant, memberSlug) + '/gallery';
+      }
+      function providerGalleryUrls(provider) {
+        if (!provider || !provider.providerGalleryImages) return [];
+        return provider.providerGalleryImages.filter(function(u) { return u && String(u).trim(); });
+      }
       function teamProvidersSectionHtml(tenant, providers) {
         if (!providers || !providers.length) return '';
         var cards = providers.map(function(p) {
           var url = memberProfileUrl(tenant, p.memberSlug);
-          var img = p.profilePhotoUrl
-            ? '<img src="' + esc(p.profilePhotoUrl) + '" alt="">'
+          var thumb = p.profilePhotoUrl || (providerGalleryUrls(p)[0] || '');
+          var img = thumb
+            ? '<img src="' + esc(thumb) + '" alt="">'
             : '<div class="bk-team-initial">' + esc((p.displayName || 'P').charAt(0)) + '</div>';
           return '<a class="bk-team-card" href="' + esc(url) + '">' + img +
             '<strong>' + esc(p.displayName || '') + '</strong>' +
@@ -6174,6 +6191,7 @@
       }
       function providerProfilePageHtml(tenant, provider) {
         var bookUrl = memberBookUrl(tenant, provider.memberSlug);
+        var galleryUrl = memberGalleryUrl(tenant, provider.memberSlug);
         var studioUrl = tenantBaseUrl(tenant) + '/home';
         var tc = tenantColors(tenant);
         var photo = provider.profilePhotoUrl
@@ -6182,14 +6200,41 @@
         var about = provider.providerAboutText
           ? '<p class="bk-provider-about">' + esc(provider.providerAboutText) + '</p>'
           : '';
+        var gUrls = providerGalleryUrls(provider);
+        var galleryStrip = '';
+        if (gUrls.length) {
+          var stripItems = gUrls.slice(0, 6).map(function(u, i) {
+            return '<a href="' + esc(galleryUrl) + '" class="gallery-grid-link"><img src="' + esc(u) + '" alt="" loading="lazy"></a>';
+          }).join('');
+          galleryStrip = '<div class="bk-provider-gallery-strip">' + stripItems + '</div>' +
+            '<a class="bk-provider-gallery-link" href="' + esc(galleryUrl) + '">View full portfolio</a>';
+        }
         var firstName = String(provider.displayName || 'them').split(' ')[0];
         return '<div class="container"><div class="bk-provider-page card">' +
           photo +
           '<h1>' + esc(provider.displayName || '') + '</h1>' +
           (provider.jobTitle ? '<p class="bk-provider-title">' + esc(provider.jobTitle) + '</p>' : '') +
           about +
+          galleryStrip +
           '<a class="bk-provider-book-cta" style="background:' + esc(tc.accent) + ';color:' + esc(tc.accentFg) + '" href="' + esc(bookUrl) + '">Book with ' + esc(firstName) + '</a>' +
           '<p class="bk-provider-studio-link"><a href="' + esc(studioUrl) + '">← ' + esc(siteName(tenant)) + '</a></p>' +
+          '</div></div>';
+      }
+      function providerGalleryPageHtml(tenant, provider) {
+        var profileUrl = memberProfileUrl(tenant, provider.memberSlug);
+        var bookUrl = memberBookUrl(tenant, provider.memberSlug);
+        var gUrls = providerGalleryUrls(provider);
+        var grid = gUrls.length
+          ? '<div class="bk-provider-gallery-grid">' + gUrls.map(function(u) {
+              return '<div class="gallery-grid-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+            }).join('') + '</div>'
+          : '<p class="gallery-empty-hint">No portfolio images yet.</p>';
+        return '<div class="container"><div class="bk-provider-gallery-page card">' +
+          '<p class="bk-provider-studio-link"><a href="' + esc(profileUrl) + '">← ' + esc(provider.displayName || 'Provider') + '</a></p>' +
+          '<h1>' + esc(provider.displayName || '') + '</h1>' +
+          '<p class="bk-provider-gallery-sub">' + esc(provider.jobTitle || 'Portfolio') + '</p>' +
+          grid +
+          '<p style="margin-top:28px;text-align:center"><a class="bk-provider-book-cta" style="background:' + esc(tenantColors(tenant).accent) + ';color:' + esc(tenantColors(tenant).accentFg) + '" href="' + esc(bookUrl) + '">Book now</a></p>' +
           '</div></div>';
       }
       function mountTeamProvidersSection(tenant) {
@@ -11797,8 +11842,15 @@
                   applyBranding(tenant);
                   return;
                 }
+                if (p.isGalleryPath) {
+                  document.getElementById('root').innerHTML = providerGalleryPageHtml(tenant, provider);
+                  bindGalleryLightbox(document.getElementById('root'));
+                  applyBranding(tenant);
+                  return;
+                }
                 if (!p.isBookPath) {
                   document.getElementById('root').innerHTML = providerProfilePageHtml(tenant, provider);
+                  bindGalleryLightbox(document.getElementById('root'));
                   applyBranding(tenant);
                   return;
                 }

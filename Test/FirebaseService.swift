@@ -1035,6 +1035,28 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
+    func uploadProviderGalleryImage(tenantId: String, providerUid: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/providers/\(providerUid)/gallery/\(name)")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
+    func updateProviderGallery(memberUid: String?, imageURLs: [String]) async throws -> [String] {
+        var payload: [String: Any] = ["providerGalleryImages": imageURLs]
+        if let memberUid, !memberUid.isEmpty {
+            payload["memberUid"] = memberUid
+        }
+        let result = try await functions.httpsCallable("updateProviderGallery").call(payload)
+        let data = result.data as? [String: Any]
+        return data?["providerGalleryImages"] as? [String] ?? imageURLs
+    }
+
     private func createTenant(
         displayName: String,
         slug: String,

@@ -2849,6 +2849,21 @@ const RESERVED_PROVIDER_SLUGS = new Set([
   "checkout",
 ]);
 
+const MAX_PROVIDER_GALLERY_IMAGES = 24;
+
+function normalizeProviderGalleryImages(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const url = (item || "").toString().trim();
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    if (out.includes(url)) continue;
+    out.push(url);
+    if (out.length >= MAX_PROVIDER_GALLERY_IMAGES) break;
+  }
+  return out;
+}
+
 function slugFromPersonName(firstName, lastName) {
   const parts = [
     (firstName || "").toString().trim(),
@@ -2946,6 +2961,7 @@ function serializePublicProvider(doc, tenant) {
     jobTitle: (d.jobTitle || "").toString(),
     profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
     providerAboutText: (d.providerAboutText || "").toString(),
+    providerGalleryImages: normalizeProviderGalleryImages(d.providerGalleryImages),
     isOwner: uid === ownerUid,
   };
 }
@@ -2989,6 +3005,7 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     memberSlug: normalizeMemberSlugInput(d.memberSlug),
     isBookable: resolveMemberIsBookable(d, ownerUid, uid),
     providerAboutText: (d.providerAboutText || "").toString(),
+    providerGalleryImages: normalizeProviderGalleryImages(d.providerGalleryImages),
     memberSettings: normalizeMemberSettings(d.memberSettings),
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
@@ -3391,6 +3408,43 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
   };
 });
 
+/** Member (or owner for a member): save portfolio image URLs for a provider page. */
+exports.updateProviderGallery = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const targetUid = ((data && data.memberUid) || uid).toString().trim();
+  const images = normalizeProviderGalleryImages(data && data.providerGalleryImages);
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.tenantId) {
+    throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+  }
+  const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+  if (plan === "solo" && targetUid !== ctx.tenant.ownerUid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Provider portfolios are for Studio and Shop teams."
+    );
+  }
+  if (targetUid !== uid && !ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can edit another member's portfolio."
+    );
+  }
+  if (targetUid !== uid) {
+    await assertTenantOwnerUid(uid, ctx.tenantId);
+  }
+  const memberRef = db.collection("users").doc(targetUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  await memberRef.set({ providerGalleryImages: images }, { merge: true });
+  return { ok: true, providerGalleryImages: images };
+});
+
 /** Signed-in member: role, effective manager toggles, tenant booking workflow. */
 exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -3759,6 +3813,9 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
       );
     }
     patch.memberSlug = nextSlug;
+  }
+  if (data && data.providerGalleryImages != null) {
+    patch.providerGalleryImages = normalizeProviderGalleryImages(data.providerGalleryImages);
   }
   if (!Object.keys(patch).length) {
     throw new functions.https.HttpsError("invalid-argument", "Nothing to update.");

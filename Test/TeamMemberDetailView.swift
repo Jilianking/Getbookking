@@ -5,9 +5,11 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 
 struct TeamMemberDetailView: View {
     @ObservedObject var viewModel: ManagerSettingsViewModel
+    @EnvironmentObject var authViewModel: AuthViewModel
     let member: TenantTeamMember
 
     @Environment(\.dismiss) private var dismiss
@@ -176,6 +178,15 @@ struct TeamMemberDetailView: View {
         }
     }
 
+    private var liveMember: TenantTeamMember {
+        viewModel.member(byUid: member.uid) ?? member
+    }
+
+    private var ownerEditingMemberPortfolio: Bool {
+        guard let currentUid = Auth.auth().currentUser?.uid else { return false }
+        return viewModel.isTenantOwner && member.uid != currentUid
+    }
+
     @ViewBuilder
     private var bookingSection: some View {
         if viewModel.tenantSubscriptionPlan.allowsTeamInvites {
@@ -190,6 +201,25 @@ struct TeamMemberDetailView: View {
                 }
                 TextField("Short bio (optional)", text: $providerAboutText, axis: .vertical)
                     .lineLimit(3...6)
+                if isBookable {
+                    NavigationLink {
+                        ProviderPortfolioView(
+                            teamViewModel: viewModel,
+                            member: liveMember,
+                            tenantId: viewModel.tenantId,
+                            isDemoMode: authViewModel.isDemoMode,
+                            ownerEditingMember: ownerEditingMemberPortfolio
+                        )
+                        .environmentObject(authViewModel)
+                    } label: {
+                        Label("Portfolio photos", systemImage: "photo.stack")
+                    }
+                    if !liveMember.providerGalleryImages.isEmpty {
+                        Text("\(liveMember.providerGalleryImages.count) photo\(liveMember.providerGalleryImages.count == 1 ? "" : "s") on their booking page")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         Section(

@@ -525,6 +525,7 @@ final class TenantSessionStore: ObservableObject {
                     memberSlug: (row["memberSlug"] as? String) ?? "",
                     isBookable: row["isBookable"] as? Bool ?? true,
                     providerAboutText: (row["providerAboutText"] as? String) ?? "",
+                    providerGalleryImages: Self.parseProviderGalleryImages(row),
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
                     effectiveConfirmationType: parseEffectiveConfirmationType(row)
@@ -541,6 +542,7 @@ final class TenantSessionStore: ObservableObject {
                 memberSlug: (row["memberSlug"] as? String) ?? "",
                 isBookable: row["isBookable"] as? Bool ?? (role == .member),
                 providerAboutText: (row["providerAboutText"] as? String) ?? "",
+                providerGalleryImages: Self.parseProviderGalleryImages(row),
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
                 effectiveConfirmationType: parseEffectiveConfirmationType(row)
@@ -558,5 +560,13 @@ final class TenantSessionStore: ObservableObject {
         let raw = (row["effectiveConfirmationType"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return raw.isEmpty ? nil : raw
+    }
+
+    private static func parseProviderGalleryImages(_ row: [String: Any]) -> [String] {
+        guard let raw = row["providerGalleryImages"] as? [Any] else { return [] }
+        return raw.compactMap { item -> String? in
+            let s = (item as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return s.isEmpty ? nil : s
+        }
     }
 }

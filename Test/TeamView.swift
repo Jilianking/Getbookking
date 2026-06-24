@@ -140,6 +140,23 @@ private struct TeamMemberOverviewContent: View {
                     Text("Clients can book you directly from your studio website.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    NavigationLink {
+                        ProviderPortfolioView(
+                            teamViewModel: viewModel,
+                            member: me,
+                            tenantId: viewModel.tenantId,
+                            isDemoMode: authViewModel.isDemoMode,
+                            ownerEditingMember: false
+                        )
+                        .environmentObject(authViewModel)
+                    } label: {
+                        Label("Portfolio photos", systemImage: "photo.stack")
+                    }
+                    if !me.providerGalleryImages.isEmpty {
+                        Text("\(me.providerGalleryImages.count) photo\(me.providerGalleryImages.count == 1 ? "" : "s") on your booking page")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

@@ -282,6 +282,7 @@ struct TenantTeamMember: Identifiable, Equatable {
     let memberSlug: String
     let isBookable: Bool
     let providerAboutText: String
+    let providerGalleryImages: [String]
     let memberSettings: TeamMemberSettings
     /// From `users/{uid}.workflow.confirmationType` when self-managed.
     let personalConfirmationType: String?

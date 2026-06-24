@@ -337,6 +337,28 @@ final class ManagerSettingsViewModel: ObservableObject {
         members.first { $0.uid == uid }
     }
 
+    func patchMemberGallery(uid: String, imageURLs: [String]) {
+        members = members.map { member in
+            guard member.uid == uid else { return member }
+            return TenantTeamMember(
+                uid: member.uid,
+                displayName: member.displayName,
+                email: member.email,
+                phone: member.phone,
+                profilePhotoUrl: member.profilePhotoUrl,
+                accessRole: member.accessRole,
+                jobTitle: member.jobTitle,
+                memberSlug: member.memberSlug,
+                isBookable: member.isBookable,
+                providerAboutText: member.providerAboutText,
+                providerGalleryImages: imageURLs,
+                memberSettings: member.memberSettings,
+                personalConfirmationType: member.personalConfirmationType,
+                effectiveConfirmationType: member.effectiveConfirmationType
+            )
+        }
+    }
+
     func removeFromTeam(uid: String) async {
         isUpdatingMember = true
         errorMessage = nil
@@ -411,6 +433,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                     memberSlug: (row["memberSlug"] as? String) ?? "",
                     isBookable: row["isBookable"] as? Bool ?? true,
                     providerAboutText: (row["providerAboutText"] as? String) ?? "",
+                    providerGalleryImages: Self.parseProviderGalleryImages(row),
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
                     effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -427,6 +450,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 memberSlug: (row["memberSlug"] as? String) ?? "",
                 isBookable: row["isBookable"] as? Bool ?? (role == .member),
                 providerAboutText: (row["providerAboutText"] as? String) ?? "",
+                providerGalleryImages: Self.parseProviderGalleryImages(row),
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
                 effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -446,11 +470,19 @@ final class ManagerSettingsViewModel: ObservableObject {
         return raw.isEmpty ? nil : raw
     }
 
+    private static func parseProviderGalleryImages(_ row: [String: Any]) -> [String] {
+        guard let raw = row["providerGalleryImages"] as? [Any] else { return [] }
+        return raw.compactMap { item -> String? in
+            let s = (item as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return s.isEmpty ? nil : s
+        }
+    }
+
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

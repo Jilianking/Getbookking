@@ -1,7 +1,7 @@
 //
 //  LoginView.swift
 //
-//  Provider sign-in; new accounts open the marketing sign-up wizard in Safari.
+//  Business sign-in; new accounts open the marketing sign-up wizard in Safari.
 //
 
 import SwiftUI

@@ -1,7 +1,7 @@
 //
 //  PaymentsViewModel.swift
 //
-//  Manages payments, balance, and Stripe Connect for providers.
+//  Manages payments, balance, and Stripe Connect for the business and team members.
 //
 
 import Foundation

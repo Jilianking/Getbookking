@@ -52,6 +52,18 @@ struct TeamMemberDetailView: View {
             ?? TeamJobTitleCatalog.defaultTitle(for: viewModel.tenantIndustry)
     }
 
+    private var removeFromTeamMessage: String {
+        var lines = ["\(member.displayName) will lose access to this business."]
+        if member.isBookable, !member.memberSlug.isEmpty {
+            lines.append("Their public booking page will be removed.")
+        }
+        if member.smsEnabled || member.smsStatus == "active" || !member.smsPhoneNumber.isEmpty {
+            lines.append("Their personal texting line will be released.")
+        }
+        lines.append("Open bookings assigned to them will return to unassigned.")
+        return lines.joined(separator: " ")
+    }
+
     var body: some View {
         Form {
             Section {
@@ -133,7 +145,7 @@ struct TeamMemberDetailView: View {
                 }
             }
         } message: {
-            Text("\(member.displayName) will lose access to this business.")
+            Text(removeFromTeamMessage)
         }
         .alert("Make manager?", isPresented: $showPromoteConfirm) {
             Button("Cancel", role: .cancel) {}

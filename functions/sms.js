@@ -250,6 +250,43 @@ async function attachNumberToMasterMessagingService(master, messagingServiceSid,
   }
 }
 
+async function detachNumberFromMasterMessagingService(master, messagingServiceSid, phoneNumberSid) {
+  if (!messagingServiceSid || !phoneNumberSid) return;
+  try {
+    await master.messaging.v1
+      .services(messagingServiceSid)
+      .phoneNumbers(phoneNumberSid)
+      .remove();
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (!msg.includes("not found") && !msg.includes("404")) {
+      console.warn("detachNumberFromMasterMessagingService", msg);
+    }
+  }
+}
+
+/**
+ * Release a team member's personal Twilio number (best effort). Caller clears Firestore SMS fields.
+ */
+async function releaseMemberSms(memberData) {
+  const phoneSid = (memberData.smsPhoneNumberSid || "").toString().trim();
+  if (!phoneSid) return { released: false };
+  try {
+    const master = getMasterTwilioClient();
+    const messagingServiceSid = getMasterMessagingServiceSid();
+    await detachNumberFromMasterMessagingService(master, messagingServiceSid, phoneSid);
+    try {
+      await master.incomingPhoneNumbers(phoneSid).remove();
+    } catch (e) {
+      console.warn("releaseMemberSms: remove incoming number", phoneSid, e.message || e);
+    }
+    return { released: true };
+  } catch (e) {
+    console.warn("releaseMemberSms: twilio release failed", e.message || e);
+    return { released: false };
+  }
+}
+
 async function ensureMasterIncomingNumber(master, tenant, webhook) {
   const hadSubaccount = !!(tenant.twilioSubaccountSid || "").toString().trim();
   if (hadSubaccount) {
@@ -905,6 +942,7 @@ module.exports = {
   resolveSubscriptionStatus,
   provisionTenantSms,
   provisionMemberSms,
+  releaseMemberSms,
   sendTenantSms,
   sendOutboundClientSms,
   recordInboundTenantSms,

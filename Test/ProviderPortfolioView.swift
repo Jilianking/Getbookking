@@ -1,7 +1,7 @@
 //
 //  ProviderPortfolioView.swift
 //
-//  Per-provider gallery for bookable team members (Studio/Shop).
+//  Per-member gallery for bookable team members (Studio/Shop).
 //
 
 import SwiftUI

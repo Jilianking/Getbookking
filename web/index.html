@@ -1104,7 +1104,7 @@
     .about-artist { padding: 48px 24px; max-width: 560px; margin: 0 auto; }
     .about-artist h2 { font-size: 1.5rem; margin: 0 0 16px; }
     .about-artist p { margin: 0; line-height: 1.6; color: #444; }
-    /* Studio/Shop provider pages */
+    /* Studio/Shop team member pages */
     .bk-team-section { padding: 56px 24px; max-width: 960px; margin: 0 auto; text-align: center; }
     .bk-team-section h2 { font-size: 1.5rem; margin: 0 0 28px; font-weight: 600; }
     .bk-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; text-align: center; }
@@ -1113,6 +1113,11 @@
     .bk-team-card img, .bk-team-card .bk-team-initial { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.08); font-size: 1.5rem; font-weight: 600; }
     .bk-team-card strong { display: block; font-size: 1rem; margin-bottom: 4px; }
     .bk-team-card span { display: block; font-size: 0.85rem; color: #666; }
+    .bk-team-picker-section { padding-top: 24px; padding-bottom: 64px; }
+    button.bk-team-card.bk-team-picker-card { border: none; cursor: pointer; font: inherit; width: 100%; text-align: center; }
+    button.bk-team-card.bk-team-picker-card:focus-visible { outline: 2px solid rgba(0,0,0,0.35); outline-offset: 2px; }
+    .bk-team-picker-any { display: inline-block; margin-top: 28px; padding: 12px 28px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: transparent; cursor: pointer; font-size: 0.95rem; color: inherit; }
+    .bk-team-picker-any:hover { background: rgba(0,0,0,0.04); }
     .bk-provider-page { max-width: 520px; margin: 48px auto; padding: 32px 28px; text-align: center; }
     .bk-provider-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; margin: 0 auto 16px; display: block; }
     .bk-provider-photo-placeholder { width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.08); font-size: 2rem; font-weight: 600; }
@@ -6083,7 +6088,7 @@
         return firebase.auth().signInAnonymously();
       }
 
-      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), and provider paths (`/tenant/maya/book`). */
+      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), and member paths (`/tenant/maya/book`). */
       var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, home: 1, join: 1 };
 
       function parsePath() {
@@ -6189,6 +6194,155 @@
         return '<section id="team" class="bk-team-section" data-bk-color-surface="featured">' +
           '<h2>Meet the team</h2><div class="bk-team-grid">' + cards + '</div></section>';
       }
+      function parseBookMemberQuery() {
+        try {
+          var params = new URLSearchParams(location.search || '');
+          var raw = (params.get('member') || params.get('memberSlug') || '').toString().trim().toLowerCase();
+          return raw || null;
+        } catch (e) {
+          return null;
+        }
+      }
+      function teamMemberPickerCardInner(provider) {
+        var thumb = provider.profilePhotoUrl || (providerGalleryUrls(provider)[0] || '');
+        var img = thumb
+          ? '<img src="' + esc(thumb) + '" alt="">'
+          : '<div class="bk-team-initial">' + esc((provider.displayName || 'P').charAt(0)) + '</div>';
+        return img +
+          '<strong>' + esc(provider.displayName || '') + '</strong>' +
+          (provider.jobTitle ? '<span>' + esc(provider.jobTitle) + '</span>' : '');
+      }
+      function teamMemberBookPickerPageHtml(tenant, providers) {
+        var cards = providers.map(function(p) {
+          return '<button type="button" class="bk-team-card bk-team-picker-card" data-member-slug="' + esc(p.memberSlug || '') + '">' +
+            teamMemberPickerCardInner(p) + '</button>';
+        }).join('');
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var nav = isStudio12Theme(tenant)
+          ? studio12NavHtml(tenant)
+          : (isBladeTheme(tenant)
+            ? bladeNavHtml(tenant, base + '/home')
+            : (isLuxeTheme(tenant)
+              ? luxeChromeNavHtml(tenant, 'light')
+              : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant))));
+        var sidebar = isStudio12Theme(tenant)
+          ? studio12SidebarHtml(tenant)
+          : ('<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          tattooSidebarPanelOpenTag(tenant) +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
+          '</div></div>');
+        var bookPageStyle = (isStudio12Theme(tenant) || isBladeTheme(tenant) || isLuxeTheme(tenant) || isStonecutTheme(tenant) || isPortfolioIndustry(tenant.industry))
+          ? tenantPageStyle(tenant, 'page')
+          : tattooSiteThemeInlineStyle(tenant);
+        var wrapClass = isStonecutTheme(tenant)
+          ? 'stonecut-page'
+          : ('tattoo-page' + (isStudio12Theme(tenant) ? ' studio12-page studio12-sub' : '') + (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') + (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') + (isClassicTheme(tenant) && !isStudio12Theme(tenant) ? ' classic-home' : ''));
+        var bookSiteFooter = '';
+        if (isStudio12Theme(tenant)) bookSiteFooter = studio12SiteFooterHtml(tenant);
+        else if (isStonecutTheme(tenant)) bookSiteFooter = stonecutSiteFooterHtml(tenant);
+        else if (isBladeTheme(tenant)) bookSiteFooter = bladeSiteFooterHtml(tenant);
+        else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
+        else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
+        if (!bookSiteFooter) bookSiteFooter = minimalBookLegalFooterHtml(tenant);
+        var headerHtml = '';
+        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
+          headerHtml =
+            '<div class="booking-page-header">' +
+              (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
+              '<h1 class="booking-page-title">Who would you like to book with?</h1>' +
+              '<p class="booking-page-subtitle">Choose a team member, or continue with no preference.</p>' +
+            '</div>';
+        }
+        var pickerInner =
+          headerHtml +
+          '<section class="bk-team-section bk-team-picker-section" data-bk-color-surface="featured">' +
+            (isLuxeTheme(tenant) || isBladeTheme(tenant) || isClassicTheme(tenant) || isStonecutTheme(tenant)
+              ? '<h2 style="text-align:center;margin-bottom:28px">Who would you like to book with?</h2>'
+              : '') +
+            '<div class="bk-team-grid">' + cards + '</div>' +
+            '<p style="text-align:center"><button type="button" class="bk-team-picker-any" data-member-pick-any>No preference</button></p>' +
+          '</section>';
+        return '' +
+          '<div class="' + wrapClass + '">' +
+            nav +
+            '<div class="booking-page-band" data-bk-color-surface="page" data-bk-band-tappable' + (bookPageStyle ? ' style="' + bookPageStyle + '"' : '') + '>' +
+            bkColorBandInnerWrap('<div class="booking-shell">' +
+              '<div class="booking-card" data-bk-color-surface="card" data-bk-band-tappable">' +
+              bkColorBandInnerWrap(pickerInner) +
+              '</div>' +
+            '</div>') +
+            '</div>' +
+            bookSiteFooter +
+            sidebar +
+          '</div>';
+      }
+      function bindTeamMemberBookPicker(tenant, providers, onContinue) {
+        var root = document.getElementById('root');
+        if (!root) return;
+        var bySlug = {};
+        for (var i = 0; i < providers.length; i++) {
+          bySlug[String(providers[i].memberSlug || '').toLowerCase()] = providers[i];
+        }
+        var pickButtons = root.querySelectorAll('[data-member-slug]');
+        for (var bi = 0; bi < pickButtons.length; bi++) {
+          (function(btn) {
+            btn.addEventListener('click', function() {
+              var slug = String(btn.getAttribute('data-member-slug') || '').toLowerCase();
+              tenant._activeProvider = bySlug[slug] || null;
+              tenant._memberPickerResolved = true;
+              onContinue();
+            });
+          })(pickButtons[bi]);
+        }
+        var anyBtn = root.querySelector('[data-member-pick-any]');
+        if (anyBtn) {
+          anyBtn.addEventListener('click', function() {
+            tenant._activeProvider = null;
+            tenant._memberPickerResolved = true;
+            onContinue();
+          });
+        }
+      }
+      function mountTeamBookChrome(tenant) {
+        if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
+        if (isStudio12Theme(tenant)) bindStudio12Page();
+        if (isBladeTheme(tenant)) bindBladeChrome();
+        if (isStonecutTheme(tenant)) bindStonecutNavChrome();
+        if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
+        applyBranding(tenant);
+        applySidebarIconColor(tenant, true, false);
+      }
+      function resolveTeamBookMemberPicker(tenant, renderTenantSite) {
+        return loadPublicProviders(tenant.slug).then(function(providers) {
+          if (!providers || !providers.length) {
+            tenant._memberPickerResolved = true;
+            renderTenantSite();
+            return;
+          }
+          var qSlug = parseBookMemberQuery();
+          if (qSlug) {
+            for (var qi = 0; qi < providers.length; qi++) {
+              if (String(providers[qi].memberSlug || '').toLowerCase() === qSlug) {
+                tenant._activeProvider = providers[qi];
+                tenant._memberPickerResolved = true;
+                renderTenantSite();
+                return;
+              }
+            }
+          }
+          if (providers.length === 1) {
+            tenant._activeProvider = providers[0];
+            tenant._memberPickerResolved = true;
+            renderTenantSite();
+            return;
+          }
+          document.getElementById('root').innerHTML = teamMemberBookPickerPageHtml(tenant, providers);
+          bindTeamMemberBookPicker(tenant, providers, renderTenantSite);
+          mountTeamBookChrome(tenant);
+        });
+      }
       function providerProfilePageHtml(tenant, provider) {
         var bookUrl = memberBookUrl(tenant, provider.memberSlug);
         var galleryUrl = memberGalleryUrl(tenant, provider.memberSlug);
@@ -6230,7 +6384,7 @@
             }).join('') + '</div>'
           : '<p class="gallery-empty-hint">No portfolio images yet.</p>';
         return '<div class="container"><div class="bk-provider-gallery-page card">' +
-          '<p class="bk-provider-studio-link"><a href="' + esc(profileUrl) + '">← ' + esc(provider.displayName || 'Provider') + '</a></p>' +
+          '<p class="bk-provider-studio-link"><a href="' + esc(profileUrl) + '">← ' + esc(provider.displayName || 'Team member') + '</a></p>' +
           '<h1>' + esc(provider.displayName || '') + '</h1>' +
           '<p class="bk-provider-gallery-sub">' + esc(provider.jobTitle || 'Portfolio') + '</p>' +
           grid +
@@ -11422,6 +11576,7 @@
             }
             var presel = p.serviceSlug ? services.filter(function(s){ return s.slug === p.serviceSlug; })[0] : null;
             var showForm = p.isBookPath && services.length > 0;
+            var runBookFormBind = false;
             var isGallery = p.isGalleryPath;
             var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
             var isBladeHome = (isBladeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
@@ -11468,14 +11623,20 @@
                         ? classicPortfolioHomePage(tenant, services)
                         : classicPortfolioHomePage(tenant, services);
             if (showForm) {
-              document.getElementById('root').innerHTML = form(tenant, services, presel, tenant._activeProvider || null);
-              if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
-              if (isStudio12Theme(tenant)) bindStudio12Page();
-              if (isBladeTheme(tenant)) bindBladeChrome();
-              if (isStonecutTheme(tenant)) {
-                bindStonecutNavChrome();
+              var needsMemberPicker = p.isBookPath && !p.memberSlug && isTeamPlan(tenant) && !tenant._memberPickerResolved;
+              runBookFormBind = !needsMemberPicker;
+              if (needsMemberPicker) {
+                resolveTeamBookMemberPicker(tenant, renderTenantSite);
+              } else {
+                document.getElementById('root').innerHTML = form(tenant, services, presel, tenant._activeProvider || null);
+                if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
+                if (isStudio12Theme(tenant)) bindStudio12Page();
+                if (isBladeTheme(tenant)) bindBladeChrome();
+                if (isStonecutTheme(tenant)) {
+                  bindStonecutNavChrome();
+                }
+                if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
               }
-              if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
             } else if (isThemedHome) {
               document.getElementById('root').innerHTML = homeContent;
               bindGalleryLightbox(document.getElementById('root'));
@@ -11517,7 +11678,7 @@
             if (!showForm && isStudio12Home && studio12HashTargetsServices()) {
               setTimeout(studio12ScrollToServices, 80);
             }
-            if (showForm) {
+            if (showForm && runBookFormBind) {
               function uploadId() {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                   var r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
@@ -11838,7 +11999,7 @@
             if (p.memberSlug && isTeamPlan(tenant)) {
               return loadPublicProvider(tenant.slug, p.memberSlug).then(function(provider) {
                 if (!provider) {
-                  document.getElementById('root').innerHTML = '<div class="container">' + err('Provider not found') + '</div>';
+                  document.getElementById('root').innerHTML = '<div class="container">' + err('Team member not found') + '</div>';
                   applyBranding(tenant);
                   return;
                 }
@@ -11855,6 +12016,7 @@
                   return;
                 }
                 tenant._activeProvider = provider;
+                tenant._memberPickerResolved = true;
                 renderTenantSite();
               });
             }

@@ -535,7 +535,7 @@ exports.createConnectAccountLink = functions
     try {
       const userDoc = await db.collection("users").doc(uid).get();
       if (!userDoc.exists) {
-        throw new functions.https.HttpsError("not-found", "Provider profile not found");
+        throw new functions.https.HttpsError("not-found", "Account not found");
       }
       const userData = userDoc.data();
       const tenantId = userData.tenantId;
@@ -543,7 +543,7 @@ exports.createConnectAccountLink = functions
       if (!tenantId) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          "No tenant linked to this provider. Finish signup first."
+          "No business linked to this account. Finish signup first."
         );
       }
 
@@ -912,7 +912,7 @@ async function resolveEffectivePaymentContext(uid, options = {}) {
   }
   const memberData = memberSnap.data();
   const memberSettings = normalizeMemberSettings(memberData.memberSettings);
-  const memberName = memberDisplayNameFromUserData(memberData, "This provider");
+  const memberName = memberDisplayNameFromUserData(memberData, "This team member");
 
   if (memberSettings.payoutMode === "independent") {
     const stripeAccountId = (memberData.stripeAccountId || "").toString().trim() || null;
@@ -964,7 +964,7 @@ async function assertCanInitiateBookingPayment(uid, payCtx) {
     if (!isOwner && !isManager) {
       throw new functions.https.HttpsError(
         "permission-denied",
-        "Only the studio owner or a manager can collect payment for this provider."
+        "Only the studio owner or a manager can collect payment for this team member."
       );
     }
   } else if (!payCtx.canTakePayments) {
@@ -978,7 +978,7 @@ async function assertCanInitiateBookingPayment(uid, payCtx) {
       payCtx.chargeOnBehalfOfMemberUid && payCtx.attributedMemberName
         ? payCtx.attributedMemberName
         : payCtx.chargeOnBehalfOfMemberUid
-          ? "assigned provider"
+          ? "assigned team member"
           : "business";
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -998,7 +998,7 @@ async function assertCanTapToPayForBooking(uid, payCtx) {
     );
   }
   if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
-    const name = payCtx.attributedMemberName || "The assigned provider";
+    const name = payCtx.attributedMemberName || "The assigned team member";
     throw new functions.https.HttpsError(
       "failed-precondition",
       `${name} must use Tap to Pay on their device for this booking.`
@@ -1114,7 +1114,7 @@ async function ensureStripeTerminalLocationForUser(uid, stripe, stripeAccountId,
     return existing;
   }
   const displayName =
-    (userData.displayName || userData.name || "Provider").toString().trim() || "Provider";
+    (userData.displayName || userData.name || "Team member").toString().trim() || "Team member";
   const address = terminalAddressFromTenant(tenantData);
   const location = await stripe.terminal.locations.create(
     {
@@ -1645,7 +1645,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     if (plan === "solo") {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "Provider booking links are not available on this plan."
+        "Team member booking pages are not available on this plan."
       );
     }
     const memberSnap = await db
@@ -1655,20 +1655,20 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
       .limit(1)
       .get();
     if (memberSnap.empty) {
-      throw new functions.https.HttpsError("not-found", "Provider not found.");
+      throw new functions.https.HttpsError("not-found", "Team member not found.");
     }
     const memberDoc = memberSnap.docs[0];
     const memberData = memberDoc.data();
     if (memberData.isBookable === false) {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "This provider is not accepting bookings online."
+        "This team member is not accepting bookings online."
       );
     }
     const mFn = (memberData.firstName || "").toString().trim();
     const mLn = (memberData.lastName || "").toString().trim();
     const memberName =
-      (memberData.displayName || memberData.name || `${mFn} ${mLn}`.trim() || "Provider")
+      (memberData.displayName || memberData.name || `${mFn} ${mLn}`.trim() || "Team member")
         .toString()
         .slice(0, 120);
     bookingData.assignedMemberUid = memberDoc.id;
@@ -2685,7 +2685,7 @@ exports.recordTenantPayment = functions
     if (!retrieved) {
       throw new functions.https.HttpsError(
         "not-found",
-        "Payment not found on this business or provider account."
+        "Payment not found on this business or team member account."
       );
     }
     const pi = retrieved.pi;
@@ -2957,7 +2957,7 @@ function serializePublicProvider(doc, tenant) {
   return {
     uid,
     memberSlug,
-    displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Provider").toString(),
+    displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Team member").toString(),
     jobTitle: (d.jobTitle || "").toString(),
     profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
     providerAboutText: (d.providerAboutText || "").toString(),
@@ -3367,7 +3367,7 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
   if (plan === "solo") {
-    throw new functions.https.HttpsError("not-found", "Provider not found.");
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
   if (tenant.isActive === false) {
     throw new functions.https.HttpsError(
@@ -3382,7 +3382,7 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
     .limit(1)
     .get();
   if (snap.empty) {
-    throw new functions.https.HttpsError("not-found", "Provider not found.");
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
   const doc = snap.docs[0];
   let provider = serializePublicProvider(doc, tenant);
@@ -3397,7 +3397,7 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
   if (!provider) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "This provider is not available for online booking."
+      "This team member is not available for online booking."
     );
   }
   return {
@@ -3427,7 +3427,7 @@ exports.updateProviderGallery = functions.https.onCall(async (data, context) => 
   if (plan === "solo" && targetUid !== ctx.tenant.ownerUid) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Provider portfolios are for Studio and Shop teams."
+      "Member portfolios are for Studio and Shop teams."
     );
   }
   if (targetUid !== uid && !ctx.isOwner) {
@@ -3815,7 +3815,7 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
     if (!nextSlug) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Provider URL must use letters, numbers, and hyphens only."
+        "Page URL must use letters, numbers, and hyphens only."
       );
     }
     const clashSnap = await db
@@ -3828,7 +3828,7 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
     if (taken) {
       throw new functions.https.HttpsError(
         "already-exists",
-        "That provider URL is already in use on your team."
+        "That page URL is already in use on your team."
       );
     }
     patch.memberSlug = nextSlug;
@@ -3842,6 +3842,68 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
   await memberRef.set(patch, { merge: true });
   return { ok: true };
 });
+
+const TERMINAL_BOOKING_STATUSES = new Set([
+  "declined",
+  "rejected",
+  "cancelled",
+  "canceled",
+  "completed",
+  "done",
+]);
+
+async function unassignMemberFromTenantRecords(tenantId, memberUid) {
+  let unassignedBookings = 0;
+  let clearedThreads = 0;
+
+  const bookingsSnap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .where("assignedMemberUid", "==", memberUid)
+    .get();
+
+  let batch = db.batch();
+  let batchCount = 0;
+  const commitBatch = async () => {
+    if (batchCount === 0) return;
+    await batch.commit();
+    batch = db.batch();
+    batchCount = 0;
+  };
+
+  for (const doc of bookingsSnap.docs) {
+    const status = (doc.data().status || "").toString().trim().toLowerCase();
+    if (TERMINAL_BOOKING_STATUSES.has(status)) continue;
+    batch.update(doc.ref, {
+      assignedMemberUid: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    unassignedBookings += 1;
+    batchCount += 1;
+    if (batchCount >= 400) await commitBatch();
+  }
+
+  const threadsSnap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsThreads")
+    .where("assignedMemberUid", "==", memberUid)
+    .get();
+
+  for (const doc of threadsSnap.docs) {
+    batch.update(doc.ref, {
+      assignedMemberUid: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    clearedThreads += 1;
+    batchCount += 1;
+    if (batchCount >= 400) await commitBatch();
+  }
+
+  await commitBatch();
+  return { unassignedBookings, clearedThreads };
+}
 
 /** Owner-only: remove a team member from the business. */
 exports.removeTenantMember = functions.https.onCall(async (data, context) => {
@@ -3873,6 +3935,18 @@ exports.removeTenantMember = functions.https.onCall(async (data, context) => {
   if (!memberSnap.exists || memberSnap.data().tenantId !== tenantId) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
+  const memberData = memberSnap.data();
+  const hadPersonalSms =
+    memberData.smsEnabled === true ||
+    (memberData.smsStatus || "").toString() === "active" ||
+    !!(memberData.smsPhoneNumber || "").toString().trim();
+
+  const smsRelease = await sms.releaseMemberSms(memberData);
+  const { unassignedBookings, clearedThreads } = await unassignMemberFromTenantRecords(
+    tenantId,
+    memberUid
+  );
+
   await memberRef.set(
     {
       tenantId: admin.firestore.FieldValue.delete(),
@@ -3880,10 +3954,30 @@ exports.removeTenantMember = functions.https.onCall(async (data, context) => {
       role: admin.firestore.FieldValue.delete(),
       accessRole: admin.firestore.FieldValue.delete(),
       jobTitle: admin.firestore.FieldValue.delete(),
+      memberSlug: admin.firestore.FieldValue.delete(),
+      isBookable: false,
+      providerAboutText: admin.firestore.FieldValue.delete(),
+      providerGalleryImages: admin.firestore.FieldValue.delete(),
+      memberSettings: admin.firestore.FieldValue.delete(),
+      workflow: admin.firestore.FieldValue.delete(),
+      smsPhoneNumber: admin.firestore.FieldValue.delete(),
+      smsPhoneNumberSid: admin.firestore.FieldValue.delete(),
+      smsStatus: "off",
+      smsEnabled: false,
+      smsEnabledAt: admin.firestore.FieldValue.delete(),
+      smsProvisionError: admin.firestore.FieldValue.delete(),
+      smsSuspendedAt: admin.firestore.FieldValue.delete(),
+      smsSuspendReason: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
-  return { ok: true };
+  return {
+    ok: true,
+    releasedPersonalSms: hadPersonalSms && smsRelease.released,
+    unassignedBookings,
+    clearedThreads,
+  };
 });
 
 const TENANT_SUBCOLLECTIONS = [

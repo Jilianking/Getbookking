@@ -61,6 +61,7 @@ struct MessageComposerBar: View {
     var onSend: () -> Void
     var clientName: String
     var clientPhone: String
+    var bookingRequestId: String?
     var drawerState: DrawerState
     var isDemoMode: Bool
     @FocusState.Binding var fieldFocused: Bool
@@ -117,6 +118,7 @@ struct MessageComposerBar: View {
             MessageInsertPaymentLinkSheet(
                 viewModel: paymentsViewModel,
                 kind: kind,
+                bookingRequestId: bookingRequestId,
                 onInsert: { text in
                     insertIntoMessage(text)
                     paymentSheetKind = nil
@@ -460,6 +462,7 @@ enum MessagePaymentSheetKind: Identifiable {
 struct MessageInsertPaymentLinkSheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let kind: MessagePaymentSheetKind
+    var bookingRequestId: String?
     let onInsert: (String) -> Void
     let onDismiss: () -> Void
 
@@ -517,7 +520,10 @@ struct MessageInsertPaymentLinkSheet: View {
                     Button {
                         Task {
                             viewModel.depositLinkUrl = nil
-                            await viewModel.createDepositLink(serviceAmountCents: amountCents)
+                            await viewModel.createDepositLink(
+                                serviceAmountCents: amountCents,
+                                bookingRequestId: bookingRequestId
+                            )
                         }
                     } label: {
                         HStack {

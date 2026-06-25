@@ -95,6 +95,7 @@ final class DrawerState {
     /// Prefill Messages compose from customer profile.
     var messagesComposePhone: String?
     var messagesComposeClientName: String?
+    var messagesComposeBookingRequestId: String?
     var messagesShouldOpenCompose = false
 }
 

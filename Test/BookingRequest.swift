@@ -71,3 +71,46 @@ enum BookingAssigneeFilter {
     static let allKey = "__all__"
     static let unassignedKey = "__unassigned__"
 }
+
+enum BookingRequestPaymentLookup {
+    private static let terminalStatuses: Set<String> = [
+        "declined", "rejected", "cancelled", "canceled", "completed", "done",
+    ]
+
+    /// Best open booking for deposit/payment routing from a client phone thread.
+    static func bookingRequestId(forClientPhone phone: String, in requests: [BookingRequest]) -> String? {
+        guard let threadPhone = normalizedPhone(phone) else { return nil }
+        let candidates = requests
+            .filter { matches(phone: threadPhone, request: $0) && !isTerminal($0.status) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        if let assigned = candidates.first(where: { hasAssignedMember($0) }) {
+            return assigned.documentId
+        }
+        return candidates.first?.documentId
+    }
+
+    private static func normalizedPhone(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return PhoneFormatting.e164US(trimmed) ?? PhoneFormatting.e164US(PhoneFormatting.smsThreadId(trimmed))
+    }
+
+    private static func phone(for request: BookingRequest) -> String? {
+        if let customer = request.customerPhone, let e164 = normalizedPhone(customer) { return e164 }
+        if let form = request.formResponses?["phone"] as? String, let e164 = normalizedPhone(form) { return e164 }
+        return nil
+    }
+
+    private static func matches(phone threadPhone: String, request: BookingRequest) -> Bool {
+        guard let requestPhone = phone(for: request) else { return false }
+        return requestPhone == threadPhone
+    }
+
+    private static func isTerminal(_ status: String) -> Bool {
+        terminalStatuses.contains(status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    private static func hasAssignedMember(_ request: BookingRequest) -> Bool {
+        !(request.assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}

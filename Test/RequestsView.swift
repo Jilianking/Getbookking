@@ -606,6 +606,24 @@ struct BookingRequestDetailView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(Rectangle())
                             }
+                            Divider()
+                            Button(action: openMessagesForClient) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "message.fill")
+                                        .font(.body)
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24, alignment: .center)
+                                    Text("Message client")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
                             if let em = request.customerEmail, !em.isEmpty { Divider() }
                         }
                         if let email = request.customerEmail, !email.isEmpty,
@@ -895,6 +913,17 @@ struct BookingRequestDetailView: View {
         guard let customerId = RequestsViewModel.customerDocumentId(for: currentRequest) else { return }
         drawerState.customersDetailClientId = customerId
         drawerState.selectedSection = .clients
+        drawerState.isOpen = false
+        dismiss()
+    }
+
+    private func openMessagesForClient() {
+        guard let phone = currentRequest.customerPhone, !phone.isEmpty else { return }
+        drawerState.messagesComposePhone = phone
+        drawerState.messagesComposeClientName = currentRequest.customerName ?? ""
+        drawerState.messagesComposeBookingRequestId = currentRequest.documentId
+        drawerState.messagesShouldOpenCompose = true
+        drawerState.selectedSection = .messages
         drawerState.isOpen = false
         dismiss()
     }

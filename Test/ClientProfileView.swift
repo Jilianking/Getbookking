@@ -528,6 +528,10 @@ struct ClientProfileView: View {
         guard let phone = viewModel.client.phone else { return }
         drawerState.messagesComposePhone = phone
         drawerState.messagesComposeClientName = viewModel.client.name
+        drawerState.messagesComposeBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
+            forClientPhone: phone,
+            in: viewModel.bookings
+        )
         drawerState.messagesShouldOpenCompose = true
         drawerState.selectedSection = .messages
     }

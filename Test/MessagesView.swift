@@ -8,6 +8,7 @@ struct MessagesView: View {
     @State private var showingCompose = false
     @State private var composePrefillPhone = ""
     @State private var composePrefillName = ""
+    @State private var composePrefillBookingRequestId: String?
     @State private var searchText = ""
     @State private var showErrorAlert = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
@@ -138,6 +139,7 @@ struct MessagesView: View {
                     drawerState: drawerState,
                     prefillPhone: composePrefillPhone,
                     prefillClientName: composePrefillName,
+                    prefillBookingRequestId: composePrefillBookingRequestId,
                     onSent: { threadId in
                         selectedThreadId = threadId
                     }
@@ -159,8 +161,10 @@ struct MessagesView: View {
                 guard shouldOpen else { return }
                 composePrefillPhone = drawerState.messagesComposePhone ?? ""
                 composePrefillName = drawerState.messagesComposeClientName ?? ""
+                composePrefillBookingRequestId = drawerState.messagesComposeBookingRequestId
                 drawerState.messagesComposePhone = nil
                 drawerState.messagesComposeClientName = nil
+                drawerState.messagesComposeBookingRequestId = nil
                 drawerState.messagesShouldOpenCompose = false
                 selectedThreadId = nil
                 showingCompose = true
@@ -181,8 +185,10 @@ struct MessagesView: View {
                 if drawerState.messagesShouldOpenCompose {
                     composePrefillPhone = drawerState.messagesComposePhone ?? ""
                     composePrefillName = drawerState.messagesComposeClientName ?? ""
+                    composePrefillBookingRequestId = drawerState.messagesComposeBookingRequestId
                     drawerState.messagesComposePhone = nil
                     drawerState.messagesComposeClientName = nil
+                    drawerState.messagesComposeBookingRequestId = nil
                     drawerState.messagesShouldOpenCompose = false
                     showingCompose = true
                 }
@@ -251,6 +257,7 @@ struct MessageThreadView: View {
     @State private var isLoading = false
     @State private var clientName = "Customer"
     @State private var clientPhone = ""
+    @State private var linkedBookingRequestId: String?
     @State private var showThreadError = false
     @FocusState private var isComposerFocused: Bool
 
@@ -318,6 +325,7 @@ struct MessageThreadView: View {
                 onSend: sendMessage,
                 clientName: clientName,
                 clientPhone: clientPhone,
+                bookingRequestId: linkedBookingRequestId,
                 drawerState: drawerState,
                 isDemoMode: authViewModel.isDemoMode,
                 fieldFocused: $isComposerFocused
@@ -328,6 +336,12 @@ struct MessageThreadView: View {
                 clientName = summary.clientName
                 clientPhone = PhoneFormatting.displayUS(summary.threadId)
             }
+            await sessionStore.loadBookingsIfNeeded(isDemoMode: authViewModel.isDemoMode)
+            let phoneForLookup = clientPhone.isEmpty ? threadId : clientPhone
+            linkedBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
+                forClientPhone: phoneForLookup,
+                in: sessionStore.bookingRequests
+            )
             await loadMessages()
             await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
         }
@@ -454,10 +468,12 @@ struct ComposeMessageView: View {
     var drawerState: DrawerState
     var prefillPhone: String = ""
     var prefillClientName: String = ""
+    var prefillBookingRequestId: String?
     var onSent: ((String) -> Void)?
     @Environment(\.dismiss) var dismiss
     @State private var showSendError = false
     @State private var clientPhone = ""
+    @State private var linkedBookingRequestId: String?
     @State private var message = ""
     @State private var selectedClientName = ""
     @State private var showingClientPicker = false
@@ -581,6 +597,7 @@ struct ComposeMessageView: View {
                     onSend: sendMessage,
                     clientName: selectedClientName,
                     clientPhone: clientPhone,
+                    bookingRequestId: linkedBookingRequestId,
                     drawerState: drawerState,
                     isDemoMode: authViewModel.isDemoMode,
                     fieldFocused: $messageFieldFocused
@@ -593,12 +610,15 @@ struct ComposeMessageView: View {
             if selectedClientName.isEmpty, !prefillClientName.isEmpty {
                 selectedClientName = prefillClientName
             }
-            if clientPhone.isEmpty {
-                toFieldFocused = true
-            } else {
-                messageFieldFocused = true
-            }
+            linkedBookingRequestId = prefillBookingRequestId
             Task {
+                await sessionStore.loadBookingsIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                if linkedBookingRequestId == nil {
+                    linkedBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
+                        forClientPhone: clientPhone,
+                        in: sessionStore.bookingRequests
+                    )
+                }
                 await viewModel.loadComposeClients(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
@@ -608,6 +628,18 @@ struct ComposeMessageView: View {
                     sessionStore: sessionStore
                 )
             }
+            if clientPhone.isEmpty {
+                toFieldFocused = true
+            } else {
+                messageFieldFocused = true
+            }
+        }
+        .onChange(of: clientPhone) { _, _ in
+            guard prefillBookingRequestId == nil else { return }
+            linkedBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
+                forClientPhone: clientPhone,
+                in: sessionStore.bookingRequests
+            )
         }
         .onChange(of: viewModel.lastError) { _, err in
             showSendError = err != nil

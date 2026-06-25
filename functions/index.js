@@ -3007,6 +3007,9 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     providerAboutText: (d.providerAboutText || "").toString(),
     providerGalleryImages: normalizeProviderGalleryImages(d.providerGalleryImages),
     memberSettings: normalizeMemberSettings(d.memberSettings),
+    smsEnabled: d.smsEnabled === true,
+    smsStatus: (d.smsStatus || "off").toString(),
+    smsPhoneNumber: (d.smsPhoneNumber || "").toString(),
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
@@ -3454,6 +3457,17 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
   const isOwner = ctx.isOwner || ctx.tenant.ownerUid === context.auth.uid;
   const memberSettings = normalizeMemberSettings(ctx.userData.memberSettings);
   const usesOwnPayments = !isOwner && memberSettings.payoutMode === "independent";
+  const studioSmsActive = sms.tenantStudioSmsActive(ctx.tenant);
+  const memberSmsStatus = (ctx.userData.smsStatus || "off").toString();
+  const memberSmsPhone = (ctx.userData.smsPhoneNumber || "").toString().trim();
+  const usesOwnSms =
+    usesOwnPayments && memberSmsStatus === "active" && !!memberSmsPhone;
+  const canSendClientSms = sms.canSendClientSms({
+    isOwner,
+    accessRole: isOwner ? "owner" : ctx.accessRole,
+    managerPermissions: ctx.managerPermissions,
+    senderUserData: ctx.userData,
+  });
   return {
     tenantId: ctx.tenantId,
     isOwner,
@@ -3469,6 +3483,11 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     payoutMode: isOwner ? null : memberSettings.payoutMode,
     usesOwnPayments,
     canTakePayments: isOwner || usesOwnPayments,
+    studioSmsActive,
+    usesOwnSms,
+    canSendClientSms,
+    memberSmsStatus: isOwner ? null : memberSmsStatus,
+    memberSmsPhoneNumber: isOwner ? null : memberSmsPhone,
   };
 });
 
@@ -5051,6 +5070,121 @@ exports.requestTenantSmsProvisioning = functions
     return { ok: true, smsStatus: "pending" };
   });
 
+/** Independent member (or owner on their behalf): opt in to a personal texting line. */
+exports.requestMemberSmsProvisioning = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    const targetUid = ((data && data.memberUid) || context.auth.uid).toString().trim();
+    if (!targetUid) {
+      throw new functions.https.HttpsError("invalid-argument", "memberUid is required.");
+    }
+    if (targetUid !== context.auth.uid && !ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can enable texting for another member."
+      );
+    }
+    const tenant = ctx.tenant;
+    const ownerData = ctx.ownerUserData || ctx.userData;
+    const paidBlock = sms.paidSubscriptionBlockReason(tenant, ownerData);
+    if (paidBlock) {
+      throw new functions.https.HttpsError("failed-precondition", paidBlock);
+    }
+    if (!sms.tenantStudioSmsActive(tenant)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Your studio must enable client texting before members can set up personal lines."
+      );
+    }
+    const memberRef = db.collection("users").doc(targetUid);
+    const memberSnap = await memberRef.get();
+    if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+      throw new functions.https.HttpsError("not-found", "Team member not found.");
+    }
+    const memberData = memberSnap.data();
+    if (targetUid === tenant.ownerUid) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Owners use the studio texting line under Notifications."
+      );
+    }
+    if (sms.memberPayoutMode(memberData) !== "independent") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Personal texting lines are for independent team members."
+      );
+    }
+    const forceReprovision = !!(data && data.forceReprovision);
+    if (
+      memberData.smsStatus === "active" &&
+      memberData.smsPhoneNumber &&
+      !forceReprovision
+    ) {
+      return {
+        ok: true,
+        smsStatus: "active",
+        smsPhoneNumber: memberData.smsPhoneNumber,
+        alreadyActive: true,
+      };
+    }
+    const consent = data && data.smsConsentAccepted === true;
+    const hadPriorConsent = !!memberData.smsConsentAt;
+    if (!consent && !(forceReprovision && hadPriorConsent)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Accept the client texting terms to continue."
+      );
+    }
+    const wasPending = (memberData.smsStatus || "").toString() === "pending";
+    await memberRef.set(
+      {
+        smsEnabled: true,
+        smsStatus: "pending",
+        smsConsentAt:
+          memberData.smsConsentAt || admin.firestore.FieldValue.serverTimestamp(),
+        smsProvisionError: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    if (forceReprovision && wasPending) {
+      try {
+        const fresh = (await memberRef.get()).data() || memberData;
+        const result = await provisionMemberSms(
+          ctx.tenantId,
+          tenant,
+          targetUid,
+          fresh
+        );
+        return {
+          ok: true,
+          smsStatus: "active",
+          smsPhoneNumber: result.phoneNumber,
+          reprovisioned: true,
+        };
+      } catch (e) {
+        console.error("requestMemberSmsProvisioning forceReprovision", targetUid, e);
+        await memberRef.set(
+          {
+            smsStatus: "failed",
+            smsProvisionError: (e.message || String(e)).slice(0, 400),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          (e.message || String(e)).slice(0, 400)
+        );
+      }
+    }
+    return { ok: true, smsStatus: "pending" };
+  });
+
 /** Team: send an appointment-related SMS from the tenant number. */
 exports.sendClientSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
@@ -5061,9 +5195,15 @@ exports.sendClientSms = functions
     const ctx = await getMemberAccessContext(context.auth.uid);
     const tenantId = ctx.tenantId;
     const tenant = ctx.tenant;
-    const roleCanSend =
-      ctx.isOwner || (ctx.accessRole === "manager" && ctx.managerPermissions.sendClientNotifications);
-    if (!roleCanSend) {
+    const isOwner = ctx.isOwner;
+    if (
+      !sms.canSendClientSms({
+        isOwner,
+        accessRole: ctx.accessRole,
+        managerPermissions: ctx.managerPermissions,
+        senderUserData: ctx.userData,
+      })
+    ) {
       throw new functions.https.HttpsError(
         "permission-denied",
         "You do not have permission to send client texts."
@@ -5085,17 +5225,22 @@ exports.sendClientSms = functions
 
     const ownerData = ctx.ownerUserData || ctx.userData;
     try {
-      const sent = await sms.sendTenantSms(
+      const sent = await sms.sendOutboundClientSms({
         tenantId,
         tenant,
-        to,
+        toE164: to,
         body,
-        {
+        meta: {
           threadId: sms.threadIdFromPhone(to),
           clientName,
         },
-        ownerData
-      );
+        ownerUserData: ownerData,
+        senderUid: context.auth.uid,
+        senderUserData: ctx.userData,
+        isOwner,
+        accessRole: ctx.accessRole,
+        managerPermissions: ctx.managerPermissions,
+      });
       return { ok: true, sid: sent.sid, status: sent.status || "" };
     } catch (e) {
       const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
@@ -5155,6 +5300,83 @@ exports.onTenantSmsProvisionRequested = functions
 async function provisionTenantSms(tenantId, tenant) {
   return sms.provisionTenantSms(tenantId, tenant);
 }
+
+async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
+  return sms.provisionMemberSms(tenantId, tenant, memberUid, memberData);
+}
+
+/** Firestore: provision personal line when member smsStatus becomes pending. */
+exports.onUserMemberSmsProvisionRequested = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .firestore.document("users/{memberUid}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    if (before.smsStatus === after.smsStatus) return null;
+    if ((after.smsStatus || "").toString() !== "pending") return null;
+    if (after.smsEnabled !== true) return null;
+
+    const memberUid = context.params.memberUid;
+    const tenantId = (after.tenantId || "").toString().trim();
+    if (!tenantId) return null;
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) return null;
+    const tenant = tenantSnap.data();
+    const ownerUid = tenant.ownerUid;
+    let ownerData = null;
+    if (ownerUid) {
+      const o = await db.collection("users").doc(ownerUid).get();
+      if (o.exists) ownerData = o.data();
+    }
+    if (!sms.tenantHasPaidSubscription(tenant, ownerData)) {
+      await db.collection("users").doc(memberUid).set(
+        {
+          smsStatus: "off",
+          smsProvisionError: "Paid subscription required.",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
+    if (!sms.tenantStudioSmsActive(tenant)) {
+      await db.collection("users").doc(memberUid).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: "Studio client texting must be enabled first.",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
+    if (sms.memberPayoutMode(after) !== "independent") {
+      await db.collection("users").doc(memberUid).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: "Personal lines are for independent members.",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
+
+    try {
+      await provisionMemberSms(tenantId, tenant, memberUid, after);
+    } catch (e) {
+      console.error("onUserMemberSmsProvisionRequested", memberUid, e);
+      await db.collection("users").doc(memberUid).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: (e.message || String(e)).slice(0, 400),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    return null;
+  });
 
 /** Booking status → client SMS (confirmed / declined). */
 exports.onTenantBookingRequestSms = functions
@@ -5243,17 +5465,34 @@ exports.twilioInboundSms = functions
     const to = (params.To || "").toString();
     const body = (params.Body || "").toString().trim().toUpperCase();
 
+    let tenantId = null;
+    let assignedMemberUid = null;
+    let smsLineScope = "tenant";
+
     const tenantSnap = await db
       .collection("tenants")
       .where("smsPhoneNumber", "==", to)
       .limit(1)
       .get();
-    if (tenantSnap.empty) {
+    if (!tenantSnap.empty) {
+      tenantId = tenantSnap.docs[0].id;
+    } else {
+      const memberSnap = await db
+        .collection("users")
+        .where("smsPhoneNumber", "==", to)
+        .limit(1)
+        .get();
+      if (!memberSnap.empty) {
+        const memberDoc = memberSnap.docs[0];
+        assignedMemberUid = memberDoc.id;
+        tenantId = (memberDoc.data().tenantId || "").toString().trim() || null;
+        smsLineScope = "member";
+      }
+    }
+    if (!tenantId) {
       res.type("text/xml").send("<Response></Response>");
       return;
     }
-    const tenantDoc = tenantSnap.docs[0];
-    const tenantId = tenantDoc.id;
 
     if (body === "STOP" || body === "UNSUBSCRIBE" || body === "CANCEL") {
       await db
@@ -5303,6 +5542,8 @@ exports.twilioInboundSms = functions
       to,
       body: (params.Body || "").toString(),
       threadId: sms.threadIdFromPhone(from),
+      assignedMemberUid,
+      smsLineScope,
     });
 
     res.type("text/xml").send("<Response></Response>");

@@ -14,11 +14,26 @@ struct MessagesView: View {
     var drawerState: DrawerState
     let sectionTitle: String
 
+    private var visibleSummaries: [SmsThreadSummary] {
+        let access = authViewModel.teamAccess
+        if access.isOwner || access.accessRole == .manager {
+            return viewModel.threadSummaries
+        }
+        if access.usesOwnSms, let uid = authViewModel.currentUserUid {
+            return viewModel.threadSummaries.filter { summary in
+                guard let assigned = summary.assignedMemberUid else { return false }
+                return assigned == uid
+            }
+        }
+        return viewModel.threadSummaries
+    }
+
     private var filteredSummaries: [SmsThreadSummary] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return viewModel.threadSummaries }
+        let base = visibleSummaries
+        guard !q.isEmpty else { return base }
         let qDigits = PhoneFormatting.digits(from: searchText)
-        return viewModel.threadSummaries.filter { summary in
+        return base.filter { summary in
             summary.clientName.lowercased().contains(q)
                 || summary.lastMessageBody.lowercased().contains(q)
                 || (!qDigits.isEmpty && PhoneFormatting.digits(from: summary.threadId).contains(qDigits))

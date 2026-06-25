@@ -57,6 +57,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// Set before opening Stripe Customer Portal; triggers sync when app becomes active again.
     @Published var shouldSyncBillingAfterPortal = false
     @Published var isProvisioningSms = false
+    @Published var isProvisioningMemberSms = false
 
     @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
     @Published var smsPresetDeclined: String = ManagerSettingsViewModel.defaultPresetDeclined
@@ -239,6 +240,38 @@ final class ManagerSettingsViewModel: ObservableObject {
         isProvisioningSms = false
     }
 
+    func requestMemberSmsProvisioning(memberUid: String?, consentAccepted: Bool, forceReprovision: Bool = false) async {
+        guard consentAccepted || forceReprovision else {
+            errorMessage = "Accept the client texting terms to continue."
+            return
+        }
+        isProvisioningMemberSms = true
+        errorMessage = nil
+        do {
+            var payload: [String: Any] = ["smsConsentAccepted": true]
+            if let memberUid, !memberUid.isEmpty {
+                payload["memberUid"] = memberUid
+            }
+            if forceReprovision {
+                payload["forceReprovision"] = true
+            }
+            _ = try await functions.httpsCallable("requestMemberSmsProvisioning").call(payload)
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await load(isDemoMode: false)
+                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                   let member = members.first(where: { $0.uid == uid }),
+                   member.smsStatus == "active" { break }
+                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                   let member = members.first(where: { $0.uid == uid }),
+                   member.smsStatus == "failed" { break }
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isProvisioningMemberSms = false
+    }
+
     func saveMessagingPresets() async {
         guard isTenantOwner else { return }
         isSavingPolicy = true
@@ -352,6 +385,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 isBookable: member.isBookable,
                 providerAboutText: member.providerAboutText,
                 providerGalleryImages: imageURLs,
+                smsEnabled: member.smsEnabled,
+                smsStatus: member.smsStatus,
+                smsPhoneNumber: member.smsPhoneNumber,
                 memberSettings: member.memberSettings,
                 personalConfirmationType: member.personalConfirmationType,
                 effectiveConfirmationType: member.effectiveConfirmationType
@@ -434,6 +470,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                     isBookable: row["isBookable"] as? Bool ?? true,
                     providerAboutText: (row["providerAboutText"] as? String) ?? "",
                     providerGalleryImages: Self.parseProviderGalleryImages(row),
+                    smsEnabled: row["smsEnabled"] as? Bool ?? false,
+                    smsStatus: (row["smsStatus"] as? String) ?? "off",
+                    smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
                     effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -451,6 +490,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 isBookable: row["isBookable"] as? Bool ?? (role == .member),
                 providerAboutText: (row["providerAboutText"] as? String) ?? "",
                 providerGalleryImages: Self.parseProviderGalleryImages(row),
+                smsEnabled: row["smsEnabled"] as? Bool ?? false,
+                smsStatus: (row["smsStatus"] as? String) ?? "off",
+                smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
                 effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -480,9 +522,9 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

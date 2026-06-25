@@ -165,11 +165,14 @@ enum DemoSnapshotParser {
         let clientName = storedName.isEmpty
             ? PhoneFormatting.displayUS(counterpart)
             : storedName
+        let assignedRaw = (dict["assignedMemberUid"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return SmsThreadSummary(
             threadId: threadId,
             clientName: clientName,
             lastMessageBody: (dict["lastMessageBody"] as? String) ?? "",
-            lastMessageAt: parseDate(dict["lastMessageAt"])
+            lastMessageAt: parseDate(dict["lastMessageAt"]),
+            assignedMemberUid: assignedRaw?.isEmpty == false ? assignedRaw : nil
         )
     }
 

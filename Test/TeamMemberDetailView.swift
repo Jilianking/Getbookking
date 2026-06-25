@@ -87,6 +87,7 @@ struct TeamMemberDetailView: View {
                 jobTitleSection
                 bookingSection
                 paymentSection
+                personalSmsSection
                 actionsSection
             } else {
                 Section(header: Text("Role")) {
@@ -290,6 +291,27 @@ struct TeamMemberDetailView: View {
             return "They connect their own Stripe and can use Tap to Pay. Deposits for their assigned bookings go to their account."
         case .studioPayroll:
             return "Charges go to the studio Connect account. Use payment split for revenue reporting."
+        }
+    }
+
+    @ViewBuilder
+    private var personalSmsSection: some View {
+        if memberSettings.payoutMode == .independent, viewModel.smsCanUse {
+            Section(header: Text("Personal texting")) {
+                NavigationLink {
+                    MemberPersonalSmsView(
+                        viewModel: viewModel,
+                        member: liveMember,
+                        ownerEditingMember: true
+                    )
+                    .environmentObject(authViewModel)
+                } label: {
+                    Label("Texting line", systemImage: "message.fill")
+                }
+                if liveMember.smsStatus == "active", !liveMember.smsPhoneNumber.isEmpty {
+                    LabeledContent("Number", value: PhoneFormatting.displayUS(liveMember.smsPhoneNumber))
+                }
+            }
         }
     }
 

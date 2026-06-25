@@ -345,6 +345,287 @@ async function provisionTenantSms(tenantId, tenant) {
   return { phoneNumber: e164, messagingServiceSid };
 }
 
+function memberPayoutMode(memberData) {
+  const raw = memberData && memberData.memberSettings;
+  const d = raw && typeof raw === "object" ? raw : {};
+  const mode = (d.payoutMode || "independent").toString().trim().toLowerCase();
+  return mode === "studio_payroll" ? "studio_payroll" : "independent";
+}
+
+function tenantStudioSmsActive(tenant) {
+  return (
+    tenant &&
+    tenant.smsEnabled === true &&
+    (tenant.smsStatus || "").toString() === "active" &&
+    !!(tenant.smsPhoneNumber || "").toString().trim()
+  );
+}
+
+/** Studio must have texting on before members can provision personal lines. */
+function tenantSmsMustBeActiveForMemberLine(tenant) {
+  if (!tenantStudioSmsActive(tenant)) {
+    return (
+      "Your studio must enable client texting before you can set up a personal line."
+    );
+  }
+  return null;
+}
+
+function memberPersonalSmsBlockReason(tenant, ownerUserData, memberData) {
+  const billingBlock = paidSubscriptionBlockReason(tenant, ownerUserData);
+  if (billingBlock) return billingBlock;
+  const studioBlock = tenantSmsMustBeActiveForMemberLine(tenant);
+  if (studioBlock) return studioBlock;
+  if (memberPayoutMode(memberData) !== "independent") {
+    return "Personal texting lines are for independent team members.";
+  }
+  if (memberData.smsEnabled !== true) {
+    return "Enable your personal texting line under Team.";
+  }
+  const smsStatus = (memberData.smsStatus || "off").toString();
+  if (smsStatus === "pending") {
+    return "Your texting number is still being set up. Try again in a minute.";
+  }
+  if (smsStatus === "failed") {
+    const err = (memberData.smsProvisionError || "").toString().trim();
+    return err || "Personal texting setup failed. Try again under Team.";
+  }
+  if (smsStatus !== "active") {
+    return "Set up your personal texting line under Team.";
+  }
+  if (!(memberData.smsPhoneNumber || "").toString().trim()) {
+    return "No personal texting number on file. Set up your line under Team.";
+  }
+  return null;
+}
+
+async function ensureMemberIncomingNumber(master, memberData, webhook) {
+  const existingSid = (memberData.smsPhoneNumberSid || "").toString().trim();
+  if (!existingSid) return null;
+  try {
+    const resource = await master.incomingPhoneNumbers(existingSid).fetch();
+    if (webhook) {
+      await master.incomingPhoneNumbers(existingSid).update({
+        smsUrl: webhook,
+        smsMethod: "POST",
+      });
+    }
+    return resource;
+  } catch (e) {
+    console.warn(
+      "ensureMemberIncomingNumber: existing sid not on master, buying new",
+      existingSid,
+      e.message || e
+    );
+    return null;
+  }
+}
+
+/**
+ * Provision a personal SMS number for an independent team member.
+ */
+async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
+  const studioBlock = tenantSmsMustBeActiveForMemberLine(tenant);
+  if (studioBlock) {
+    throw new Error(studioBlock);
+  }
+  if (memberPayoutMode(memberData) !== "independent") {
+    throw new Error("Personal texting lines are for independent team members.");
+  }
+  const master = getMasterTwilioClient();
+  const messagingServiceSid = getMasterMessagingServiceSid();
+  const areaCode = pickAreaCode(tenant);
+  const webhook = inboundWebhookUrl();
+
+  let numberResource = await ensureMemberIncomingNumber(master, memberData, webhook);
+  if (!numberResource) {
+    numberResource = await buyMasterLocalNumber(master, areaCode);
+    if (webhook) {
+      await master.incomingPhoneNumbers(numberResource.sid).update({
+        smsUrl: webhook,
+        smsMethod: "POST",
+      });
+    }
+  }
+
+  await attachNumberToMasterMessagingService(master, messagingServiceSid, numberResource.sid);
+
+  const e164 = numberResource.phoneNumber;
+  await getDb().collection("users").doc(memberUid).set(
+    {
+      smsPhoneNumber: e164,
+      smsPhoneNumberSid: numberResource.sid,
+      smsStatus: "active",
+      smsEnabled: true,
+      smsEnabledAt: admin.firestore.FieldValue.serverTimestamp(),
+      smsProvisionError: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return { phoneNumber: e164, messagingServiceSid };
+}
+
+function resolveOutboundSmsRoute({
+  tenant,
+  senderUid,
+  senderUserData,
+  isOwner,
+  accessRole,
+  managerPermissions,
+}) {
+  if (isOwner || accessRole === "manager") {
+    return {
+      lineType: "tenant",
+      from: (tenant.smsPhoneNumber || "").toString().trim(),
+      phoneSid: (tenant.smsPhoneNumberSid || "").toString().trim(),
+      memberUid: null,
+    };
+  }
+  if (
+    memberPayoutMode(senderUserData) === "independent" &&
+    senderUserData &&
+    senderUserData.smsStatus === "active" &&
+    (senderUserData.smsPhoneNumber || "").toString().trim()
+  ) {
+    return {
+      lineType: "member",
+      from: (senderUserData.smsPhoneNumber || "").toString().trim(),
+      phoneSid: (senderUserData.smsPhoneNumberSid || "").toString().trim(),
+      memberUid: senderUid,
+    };
+  }
+  return null;
+}
+
+function canSendClientSms({
+  isOwner,
+  accessRole,
+  managerPermissions,
+  senderUserData,
+}) {
+  if (isOwner) return true;
+  if (accessRole === "manager" && managerPermissions.sendClientNotifications !== false) {
+    return true;
+  }
+  if (
+    memberPayoutMode(senderUserData) === "independent" &&
+    senderUserData &&
+    senderUserData.smsStatus === "active" &&
+    (senderUserData.smsPhoneNumber || "").toString().trim()
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function sendOutboundClientSms({
+  tenantId,
+  tenant,
+  toE164,
+  body,
+  meta,
+  ownerUserData,
+  senderUid,
+  senderUserData,
+  isOwner,
+  accessRole,
+  managerPermissions,
+}) {
+  const route = resolveOutboundSmsRoute({
+    tenant,
+    senderUid,
+    senderUserData,
+    isOwner,
+    accessRole,
+    managerPermissions,
+  });
+  if (!route || !route.from) {
+    throw new Error("You do not have permission to send client texts.");
+  }
+  if (route.lineType === "tenant") {
+    const blockReason = smsEligibilityBlockReason(
+      tenant,
+      ownerUserData,
+      managerPermissions
+    );
+    if (blockReason) throw new Error(blockReason);
+  } else {
+    const blockReason = memberPersonalSmsBlockReason(
+      tenant,
+      ownerUserData,
+      senderUserData
+    );
+    if (blockReason) throw new Error(blockReason);
+  }
+
+  const optId = toE164.replace(/\W/g, "_");
+  const optSnap = await getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsOptOuts")
+    .doc(optId)
+    .get();
+  if (optSnap.exists) {
+    throw new Error("Recipient opted out of SMS.");
+  }
+
+  const master = getMasterTwilioClient();
+  const phoneSid = route.phoneSid;
+  if (phoneSid) {
+    try {
+      await master.incomingPhoneNumbers(phoneSid).fetch();
+    } catch (e) {
+      throw new Error(
+        "Your texting number must be refreshed for delivery. Try again in Team settings."
+      );
+    }
+  }
+
+  await consumeSmsMonthlySlot(tenantId);
+  const messagingServiceSid = getMasterMessagingServiceSid();
+  const msg = await master.messages.create({
+    to: toE164,
+    body: body.slice(0, 1600),
+    messagingServiceSid,
+    from: route.from,
+  });
+
+  const threadId = (meta && meta.threadId) || threadIdFromPhone(toE164);
+  const logRef = getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsLog")
+    .doc(msg.sid);
+  await logRef.set({
+    direction: "outbound",
+    to: toE164,
+    from: route.from,
+    threadId,
+    clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
+    body: body.slice(0, 500),
+    status: msg.status,
+    bookingRequestId: (meta && meta.bookingRequestId) || null,
+    assignedMemberUid: route.memberUid || null,
+    smsLineScope: route.lineType,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await upsertSmsThread(tenantId, threadId, {
+    counterpartPhone: toE164,
+    clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
+    lastDirection: "outbound",
+    lastMessageBody: body.slice(0, 500),
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageStatus: (msg.status || "").toString(),
+    assignedMemberUid: route.memberUid || null,
+    smsLineScope: route.lineType,
+  });
+
+  return msg;
+}
+
 async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData) {
   const blockReason = smsEligibilityBlockReason(
     tenant,
@@ -438,6 +719,8 @@ async function recordInboundTenantSms(tenantId, inbound) {
   const to = (inbound && inbound.to) || "";
   const body = ((inbound && inbound.body) || "").toString();
   const threadId = (inbound && inbound.threadId) || threadIdFromPhone(from);
+  const assignedMemberUid = (inbound && inbound.assignedMemberUid) || null;
+  const smsLineScope = (inbound && inbound.smsLineScope) || "tenant";
   if (!tenantId || !from || !to) return false;
 
   try {
@@ -460,6 +743,8 @@ async function recordInboundTenantSms(tenantId, inbound) {
       to,
       threadId,
       body: body.slice(0, 500),
+      assignedMemberUid,
+      smsLineScope,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   await upsertSmsThread(tenantId, threadId, {
@@ -468,6 +753,8 @@ async function recordInboundTenantSms(tenantId, inbound) {
     lastDirection: "inbound",
     lastMessageBody: body.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    assignedMemberUid,
+    smsLineScope,
   });
   return true;
 }
@@ -617,8 +904,15 @@ module.exports = {
   smsEligibilityBlockReason,
   resolveSubscriptionStatus,
   provisionTenantSms,
+  provisionMemberSms,
   sendTenantSms,
+  sendOutboundClientSms,
   recordInboundTenantSms,
+  memberPersonalSmsBlockReason,
+  memberPayoutMode,
+  tenantStudioSmsActive,
+  resolveOutboundSmsRoute,
+  canSendClientSms,
   suspendTenantSms,
   syncSubscriptionStatusForTenant,
   extractCustomerPhone,

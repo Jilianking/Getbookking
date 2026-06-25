@@ -222,7 +222,8 @@ final class TenantSessionStore: ObservableObject {
                 threadId: thread.threadId,
                 clientName: thread.clientName,
                 lastMessageBody: message.content,
-                lastMessageAt: message.createdAt
+                lastMessageAt: message.createdAt,
+                assignedMemberUid: thread.assignedMemberUid
             )
         }
     }
@@ -526,6 +527,9 @@ final class TenantSessionStore: ObservableObject {
                     isBookable: row["isBookable"] as? Bool ?? true,
                     providerAboutText: (row["providerAboutText"] as? String) ?? "",
                     providerGalleryImages: Self.parseProviderGalleryImages(row),
+                    smsEnabled: row["smsEnabled"] as? Bool ?? false,
+                    smsStatus: (row["smsStatus"] as? String) ?? "off",
+                    smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
                     effectiveConfirmationType: parseEffectiveConfirmationType(row)
@@ -543,6 +547,9 @@ final class TenantSessionStore: ObservableObject {
                 isBookable: row["isBookable"] as? Bool ?? (role == .member),
                 providerAboutText: (row["providerAboutText"] as? String) ?? "",
                 providerGalleryImages: Self.parseProviderGalleryImages(row),
+                smsEnabled: row["smsEnabled"] as? Bool ?? false,
+                smsStatus: (row["smsStatus"] as? String) ?? "off",
+                smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
                 effectiveConfirmationType: parseEffectiveConfirmationType(row)

@@ -22,6 +22,13 @@ struct EffectiveTeamAccess: Equatable {
     var payoutMode: MemberPayoutMode = .independent
     var usesOwnPayments: Bool = false
     var canTakePayments: Bool = true
+    /// Studio has an active shared texting line (prerequisite for personal lines).
+    var studioSmsActive: Bool = false
+    /// Independent member with an active personal texting line.
+    var usesOwnSms: Bool = false
+    var canSendClientSms: Bool = false
+    var memberSmsStatus: String = "off"
+    var memberSmsPhoneNumber: String = ""
 
     static let ownerFullAccess = EffectiveTeamAccess(
         isOwner: true,
@@ -162,6 +169,11 @@ enum TenantTeamAccessService {
         let payoutMode = MemberPayoutMode(rawValue: payoutRaw) ?? .independent
         let usesOwnPayments = data["usesOwnPayments"] as? Bool ?? false
         let canTakePayments = data["canTakePayments"] as? Bool ?? true
+        let studioSmsActive = data["studioSmsActive"] as? Bool ?? false
+        let usesOwnSms = data["usesOwnSms"] as? Bool ?? false
+        let canSendClientSms = data["canSendClientSms"] as? Bool ?? false
+        let memberSmsStatus = (data["memberSmsStatus"] as? String) ?? "off"
+        let memberSmsPhoneNumber = (data["memberSmsPhoneNumber"] as? String) ?? ""
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
@@ -173,7 +185,12 @@ enum TenantTeamAccessService {
             subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: data["subscriptionPlan"] as? String),
             payoutMode: payoutMode,
             usesOwnPayments: usesOwnPayments,
-            canTakePayments: canTakePayments
+            canTakePayments: canTakePayments,
+            studioSmsActive: studioSmsActive,
+            usesOwnSms: usesOwnSms,
+            canSendClientSms: canSendClientSms,
+            memberSmsStatus: memberSmsStatus,
+            memberSmsPhoneNumber: memberSmsPhoneNumber
         )
     }
 }

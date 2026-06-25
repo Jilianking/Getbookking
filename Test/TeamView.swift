@@ -134,6 +134,35 @@ private struct TeamMemberOverviewContent: View {
                 }
             }
 
+            if authViewModel.teamAccess.usesOwnPayments, authViewModel.teamAccess.studioSmsActive {
+                Section {
+                    NavigationLink {
+                        if let me = currentMember {
+                            MemberPersonalSmsView(
+                                viewModel: viewModel,
+                                member: me,
+                                ownerEditingMember: false
+                            )
+                            .environmentObject(authViewModel)
+                        }
+                    } label: {
+                        Label(
+                            authViewModel.teamAccess.usesOwnSms ? "My texting line" : "Set up texting line",
+                            systemImage: "message.fill"
+                        )
+                    }
+                    if authViewModel.teamAccess.usesOwnSms {
+                        LabeledContent(
+                            "Your number",
+                            value: PhoneFormatting.displayUS(authViewModel.teamAccess.memberSmsPhoneNumber)
+                        )
+                    }
+                } footer: {
+                    Text("Text clients from your own number. Counts toward your studio’s monthly SMS limit.")
+                        .font(.caption2)
+                }
+            }
+
             if let me = currentMember, me.isBookable, !me.memberSlug.isEmpty {
                 Section(header: Text("Your booking page")) {
                     LabeledContent("Share link", value: "/\(me.memberSlug)")

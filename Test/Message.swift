@@ -7,6 +7,7 @@ struct SmsThreadSummary: Identifiable, Equatable {
     let clientName: String
     let lastMessageBody: String
     let lastMessageAt: Date?
+    let assignedMemberUid: String?
 
     static func fromFirestore(document: QueryDocumentSnapshot) -> SmsThreadSummary? {
         let data = document.data()
@@ -21,11 +22,14 @@ struct SmsThreadSummary: Identifiable, Equatable {
             : storedName
         let lastMessageBody = (data["lastMessageBody"] as? String) ?? ""
         let lastMessageAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+        let assignedMemberUid = (data["assignedMemberUid"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return SmsThreadSummary(
             threadId: threadId,
             clientName: clientName,
             lastMessageBody: lastMessageBody,
-            lastMessageAt: lastMessageAt
+            lastMessageAt: lastMessageAt,
+            assignedMemberUid: assignedMemberUid?.isEmpty == false ? assignedMemberUid : nil
         )
     }
 }

@@ -40,10 +40,9 @@ struct MonthCalendarGrid: View {
 
             Spacer()
 
-            Text("Calendar")
+            Text(monthTitle)
                 .font(.headline.weight(.bold))
                 .foregroundStyle(AppDesign.textPrimary)
-                .accessibilityLabel("Calendar, \(monthTitle)")
 
             Spacer()
 

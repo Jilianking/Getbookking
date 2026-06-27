@@ -19,8 +19,8 @@ struct LoginView: View {
         NavigationStack {
             VStack(spacing: 32) {
                 Text("Get Bookking")
-                    .font(AppDesign.brandWordmarkFont(size: 26))
-                    .tracking(AppDesign.brandWordmarkTracking(forSize: 26))
+                    .font(AppDesign.brandWordmarkFont(size: 30))
+                    .tracking(AppDesign.brandWordmarkTracking(forSize: 30))
                     .textCase(.uppercase)
                     .foregroundStyle(AppDesign.textPrimary)
                     .padding(.top, 80)

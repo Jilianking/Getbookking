@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>Test.Test</string>
+	<string>com.jilianking.getbooking</string>
 	<key>PROJECT_ID</key>
 	<string>test-app-96812</string>
 	<key>STORAGE_BUCKET</key>
@@ -24,9 +24,7 @@
 	<true/>
 	<key>IS_SIGNIN_ENABLED</key>
 	<true/>
-	<key>CFBundleIdentifier</key>
-	<string></string>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:729589639948:ios:a5538d03d11c8aa46d7729</string>
+	<string>1:729589639948:ios:04814aa559858beb6d7729</string>
 </dict>
 </plist>

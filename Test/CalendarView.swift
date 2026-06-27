@@ -25,6 +25,7 @@ struct CalendarView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 0) {
+                    AppScreenTitle(title: sectionTitle)
                     Button(action: { showingBookingForm = true }) {
                         HStack {
                             Image(systemName: "plus")
@@ -119,8 +120,7 @@ struct CalendarView: View {
             }
             .appScreenBackground()
             .appNavigationChrome()
-            .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {

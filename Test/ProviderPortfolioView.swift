@@ -128,12 +128,6 @@ struct ProviderPortfolioView: View {
     @State private var batchCropItem: MultiImageCropSheetItem?
     @State private var showGalleryError = false
 
-    private let gridColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-    ]
-
     init(
         teamViewModel: ManagerSettingsViewModel,
         member: TenantTeamMember,
@@ -151,25 +145,61 @@ struct ProviderPortfolioView: View {
     }
 
     var body: some View {
-        let pickerLimit = max(0, providerPortfolioMaxImages - viewModel.imageURLs.count)
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                uploadSection(pickerLimit: pickerLimit, photoCount: viewModel.imageURLs.count)
-                if viewModel.isUploading {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Saving portfolio…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                galleryGrid
-            }
+            ProviderPortfolioEditorContent(
+                teamViewModel: teamViewModel,
+                viewModel: viewModel,
+                selectedItems: $selectedItems,
+                batchCropItem: $batchCropItem,
+                showGalleryError: $showGalleryError,
+                manageStyle: false
+            )
             .padding(16)
         }
         .appScreenBackground()
         .navigationTitle("Portfolio")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Inline portfolio editor for Website profile (Gallery tab) and standalone Portfolio screen.
+struct ProviderPortfolioEditorContent: View {
+    @ObservedObject var teamViewModel: ManagerSettingsViewModel
+    @ObservedObject var viewModel: ProviderPortfolioViewModel
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @Binding var selectedItems: [PhotosPickerItem]
+    @Binding var batchCropItem: MultiImageCropSheetItem?
+    @Binding var showGalleryError: Bool
+    var manageStyle: Bool = false
+
+    private let gridColumns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+    ]
+
+    var body: some View {
+        let pickerLimit = max(0, providerPortfolioMaxImages - viewModel.imageURLs.count)
+        VStack(alignment: .leading, spacing: manageStyle ? 20 : 16) {
+            if manageStyle {
+                ManageSectionHeader("Gallery photos")
+            }
+            uploadSection(pickerLimit: pickerLimit, photoCount: viewModel.imageURLs.count)
+            if viewModel.isUploading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(manageStyle ? "Uploading…" : "Saving portfolio…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            galleryGrid
+            if manageStyle {
+                Text("Photos appear on your profile and the studio gallery.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
         .onChange(of: selectedItems) { _, newItems in
             Task { await processPickerItems(newItems) }
         }
@@ -205,9 +235,18 @@ struct ProviderPortfolioView: View {
     @ViewBuilder
     private func uploadSection(pickerLimit: Int, photoCount: Int) -> some View {
         if authViewModel.isDemoMode {
-            Text("Preview only in demo mode.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if manageStyle {
+                ManageCard {
+                    Text("Preview only in demo mode.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(14)
+                }
+            } else {
+                Text("Preview only in demo mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } else if pickerLimit > 0 {
             PhotosPicker(
                 selection: $selectedItems,
@@ -215,41 +254,50 @@ struct ProviderPortfolioView: View {
                 matching: .images,
                 photoLibrary: .shared()
             ) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(
-                        Color(.systemGray3),
-                        style: StrokeStyle(lineWidth: 1.5, dash: [8, 6])
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .frame(height: 120)
-                    .overlay {
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                            Text("Add portfolio photos")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            Text("\(photoCount)/\(providerPortfolioMaxImages)")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
+                uploadZoneChrome(photoCount: photoCount)
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canAddPhotos)
+            .appCard()
+            if !manageStyle {
+                Text("Shown on \(viewModel.providerName)'s team profile and the studio gallery. Square or portrait shots work best.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         } else {
             Text("Portfolio is full (\(providerPortfolioMaxImages) photos). Remove one to add another.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
 
-        Text("Shown on \(viewModel.providerName)'s team profile and the studio gallery. Square or portrait shots work best.")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+    private func uploadZoneChrome(photoCount: Int) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(
+                Color(.systemGray3),
+                style: StrokeStyle(lineWidth: 1.5, dash: [8, 6])
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+            .frame(height: manageStyle ? 132 : 120)
+            .overlay {
+                VStack(spacing: manageStyle ? 10 : 8) {
+                    Image(systemName: authViewModel.isDemoMode ? "eye" : "photo.on.rectangle.angled")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text(manageStyle ? "Add photos" : "Add portfolio photos")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    if !manageStyle {
+                        Text("\(photoCount)/\(providerPortfolioMaxImages)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder

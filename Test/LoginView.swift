@@ -16,17 +16,19 @@ struct LoginView: View {
     @State private var isPasswordVisible = false
 
     var body: some View {
-        VStack(spacing: 32) {
-            Text("Get Bookking")
-                .font(.system(size: 36, weight: .bold, design: .serif))
-                .foregroundStyle(AppDesign.textPrimary)
-                .padding(.top, 80)
+        NavigationStack {
+            VStack(spacing: 32) {
+                Text("Get Bookking")
+                    .font(.system(size: 36, weight: .bold, design: .serif))
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .padding(.top, 80)
 
-            signInCard
+                signInCard
 
-            Spacer()
+                Spacer()
+            }
+            .appScreenBackground()
         }
-        .appScreenBackground()
     }
 
     private var signInCard: some View {
@@ -120,79 +122,30 @@ struct LoginView: View {
                     .stroke(AppDesign.chipBorder, lineWidth: 1)
             )
 
-            Button(action: openMarketingTemplates) {
-                Text("Browse templates")
-                    .font(.subheadline)
-                    .foregroundStyle(AppDesign.textSecondary)
+            NavigationLink {
+                DemoPersonaPickerView()
+                    .environmentObject(authViewModel)
+            } label: {
+                Text("Try a live demo")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
             }
+            .foregroundStyle(AppDesign.textPrimary)
+            .padding(.vertical, 14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppDesign.chipBorder, lineWidth: 1)
+            )
+            .disabled(isLoading)
             .padding(.top, 4)
-
-            demoSection
         }
         .padding(24)
         .appCard()
         .padding(.horizontal, 24)
     }
 
-    private var demoSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Try a live demo")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppDesign.textPrimary)
-                .padding(.top, 8)
-
-            Text("Explore the full app with sample data. Nothing you do is saved.")
-                .font(.caption)
-                .foregroundStyle(AppDesign.textSecondary)
-
-            HStack(spacing: 10) {
-                ForEach(DemoPersona.allCases) { persona in
-                    Button {
-                        startDemo(persona)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Image(systemName: persona.iconSystemName)
-                                .font(.title3)
-                                .foregroundStyle(AppDesign.linkAccent)
-                            Text(persona == .salon ? "Salon" : "Gym")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppDesign.textPrimary)
-                            Text(persona.businessName)
-                                .font(.caption2)
-                                .foregroundStyle(AppDesign.textSecondary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(AppDesign.searchBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(AppDesign.chipBorder, lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isLoading)
-                }
-            }
-        }
-    }
-
-    private func startDemo(_ persona: DemoPersona) {
-        isLoading = true
-        errorMessage = ""
-        authViewModel.demoLogin(persona: persona)
-        isLoading = false
-    }
-
     private func openMarketingSignUp() {
         guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
-        UIApplication.shared.open(url)
-    }
-
-    private func openMarketingTemplates() {
-        guard let url = URL(string: Constants.Hosting.marketingTemplatesURL) else { return }
         UIApplication.shared.open(url)
     }
 

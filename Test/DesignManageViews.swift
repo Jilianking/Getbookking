@@ -40,6 +40,91 @@ struct ManageCard<Content: View>: View {
     }
 }
 
+/// Segmented tab bar matching Web design → Manage mode.
+struct ManageSegmentTabs<Tab: Hashable>: View {
+    let tabs: [Tab]
+    @Binding var selectedTab: Tab
+    let title: (Tab) -> String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(tabs, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    Text(title(tab))
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedTab == tab ? Color.accentColor : Color.clear)
+                        .foregroundColor(selectedTab == tab ? .white : .primary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color(.systemGray5))
+        .cornerRadius(8)
+        .padding()
+        .appCard()
+    }
+}
+
+/// Read-only theme bar for team members (matches owner preview chrome; no editing).
+struct DesignThemeDisplayBar: View {
+    let paletteName: String
+    let templateFamily: TemplateFamily
+    let accentHex: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            displayPill(title: paletteName) {
+                Circle()
+                    .fill(Color(hex: accentHex))
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .stroke(Color(.separator).opacity(0.4), lineWidth: 0.5)
+                    )
+            }
+            displayPill(title: templateFamily.displayName) {
+                Image(systemName: templateFamily.icon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, height: 14)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .appCard()
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private func displayPill<Leading: View>(title: String, @ViewBuilder leading: () -> Leading) -> some View {
+        HStack(spacing: 8) {
+            leading()
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            Capsule()
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+        )
+    }
+}
+
 struct ManageNavigationRow: View {
     let title: String
     var subtitle: String? = nil
@@ -126,7 +211,7 @@ struct ManageToggleRow: View {
     }
 }
 
-private struct ManageCardDivider: View {
+struct ManageCardDivider: View {
     var leadingInset: CGFloat = 14
 
     var body: some View {
@@ -479,23 +564,15 @@ struct ManageGalleryTabContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ManageSectionHeader("Gallery photos")
+            ManageGalleryPhotosBlock(
+                viewModel: viewModel,
+                galleryBatchCrop: $galleryBatchCrop,
+                showPickerLoadError: $showGalleryPickerLoadError
+            )
             if isTeamPlan {
-                ManageCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Portfolio is per artist")
-                            .font(.body.weight(.medium))
-                        Text("Add photos for each team member in the Team tab. Turn on “Artist can edit portfolio” or “Artist can edit bio” so they can update their slice in Website profile.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(14)
-                }
-            } else {
-                ManageGalleryPhotosBlock(
-                    viewModel: viewModel,
-                    galleryBatchCrop: $galleryBatchCrop,
-                    showPickerLoadError: $showGalleryPickerLoadError
-                )
+                Text("Per-artist portfolios (team & booking pages) are managed under the Team tab. Photos here appear on /gallery alongside artist work.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             ManageSectionHeader("Layout")
@@ -1191,9 +1268,40 @@ private struct ManageTeamMemberVisibilityCard: View {
         portfolioTeamVM.member(byUid: member.uid)
     }
 
+    /// Owner upload works even before roster finishes loading or when toggles are off.
+    private var uploadablePortfolioMember: TenantTeamMember? {
+        if let live = portfolioMember { return live }
+        guard authViewModel.teamAccess.isOwner else { return nil }
+        var settings = TeamMemberSettings()
+        settings.canEditPortfolio = member.canEditPortfolio
+        settings.canEditPublicBio = member.canEditPublicBio
+        return TenantTeamMember(
+            uid: member.uid,
+            displayName: member.displayName,
+            email: "",
+            phone: "",
+            profilePhotoUrl: member.profilePhotoUrl,
+            accessRole: member.accessRole,
+            jobTitle: member.jobTitle,
+            memberSlug: member.memberSlug,
+            isBookable: member.isBookable,
+            showOnTeamPage: member.showOnTeamPage,
+            showOnTeamHome: member.showOnTeamHome,
+            providerAboutText: member.providerAboutText,
+            providerGalleryImages: [],
+            smsEnabled: false,
+            smsStatus: "off",
+            smsPhoneNumber: "",
+            memberSettings: settings,
+            personalConfirmationType: nil,
+            effectiveConfirmationType: nil
+        )
+    }
+
     private var ownerEditingMemberPortfolio: Bool {
         guard let currentUid = Auth.auth().currentUser?.uid else { return false }
-        return portfolioTeamVM.isTenantOwner && member.uid != currentUid
+        let isOwner = portfolioTeamVM.isTenantOwner || authViewModel.teamAccess.isOwner
+        return isOwner && member.uid != currentUid
     }
 
     private var isUploadingPhoto: Bool {
@@ -1275,25 +1383,7 @@ private struct ManageTeamMemberVisibilityCard: View {
                         )
                         .padding(.bottom, 4)
                     }
-                    if member.accessRole != .owner {
-                        ManageCardDivider(leadingInset: 46)
-                        ManageToggleRow(
-                            title: "Artist can edit portfolio",
-                            subtitle: "Shows portfolio in their Website profile tab",
-                            systemImage: "photo.stack",
-                            isOn: $member.canEditPortfolio,
-                            disabled: disabled
-                        )
-                        ManageCardDivider(leadingInset: 46)
-                        ManageToggleRow(
-                            title: "Artist can edit bio",
-                            subtitle: "Lets them edit their public bio in the app",
-                            systemImage: "text.quote",
-                            isOn: $member.canEditPublicBio,
-                            disabled: disabled
-                        )
-                    }
-                    if let liveMember = portfolioMember {
+                    if authViewModel.teamAccess.isOwner, let liveMember = uploadablePortfolioMember {
                         ManageCardDivider(leadingInset: 46)
                         NavigationLink {
                             ProviderPortfolioView(
@@ -1314,7 +1404,7 @@ private struct ManageTeamMemberVisibilityCard: View {
                                     Text("Portfolio photos")
                                         .font(.body)
                                         .foregroundStyle(.primary)
-                                    Text(portfolioSubtitle(for: liveMember))
+                                    Text(ownerPortfolioSubtitle(for: liveMember))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -1329,6 +1419,31 @@ private struct ManageTeamMemberVisibilityCard: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(disabled)
+                    }
+                    if member.accessRole != .owner {
+                        Text("Artist self-service")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 14)
+                            .padding(.bottom, 4)
+                        ManageCardDivider(leadingInset: 46)
+                        ManageToggleRow(
+                            title: "Artist can edit portfolio",
+                            subtitle: "They upload in Website profile — you can always upload above",
+                            systemImage: "photo.stack",
+                            isOn: $member.canEditPortfolio,
+                            disabled: disabled
+                        )
+                        ManageCardDivider(leadingInset: 46)
+                        ManageToggleRow(
+                            title: "Artist can edit bio",
+                            subtitle: "They edit bio in Website profile — you can always edit above",
+                            systemImage: "text.quote",
+                            isOn: $member.canEditPublicBio,
+                            disabled: disabled
+                        )
                     }
                 }
             }
@@ -1394,6 +1509,14 @@ private struct ManageTeamMemberVisibilityCard: View {
         .disabled(disabled || isUploadingPhoto)
     }
 
+    private func ownerPortfolioSubtitle(for liveMember: TenantTeamMember) -> String {
+        let count = liveMember.providerGalleryImages.count
+        if count == 0 {
+            return "Upload for this artist — shown on their page & /gallery"
+        }
+        return "\(count) photo\(count == 1 ? "" : "s") on site — tap to manage"
+    }
+
     private func portfolioSubtitle(for liveMember: TenantTeamMember) -> String {
         let count = liveMember.providerGalleryImages.count
         if count == 0 { return "None yet — shown on their page & /gallery" }
@@ -1421,7 +1544,7 @@ private struct ManageTeamMemberVisibilityCard: View {
     }
 }
 
-private struct ManageMemberBookingLinkRow: View {
+struct ManageMemberBookingLinkRow: View {
     let displayURL: String
     let copyURL: String
     var disabled: Bool

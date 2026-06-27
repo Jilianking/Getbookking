@@ -680,25 +680,11 @@ struct DesignView: View {
 
     private var manageContent: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                ForEach(visibleManageTabs, id: \.self) { tab in
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        Text(tab.manageSegmentTitle)
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(selectedTab == tab ? Color.accentColor : Color.clear)
-                            .foregroundColor(selectedTab == tab ? .white : .primary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .background(Color(.systemGray5))
-            .cornerRadius(8)
-            .padding()
-            .appCard()
+            ManageSegmentTabs(
+                tabs: visibleManageTabs,
+                selectedTab: $selectedTab,
+                title: { $0.manageSegmentTitle }
+            )
             .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
                 if !visibleManageTabs.contains(selectedTab) {
                     selectedTab = visibleManageTabs.first ?? .gallery

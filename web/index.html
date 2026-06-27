@@ -241,12 +241,16 @@
     .booking-shell {
       min-height: 100vh;
       background: #000;
-      padding: 84px 16px 48px;
+      padding: 72px 16px 48px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       color: #fff;
+    }
+    .booking-shell:has(.booking-page-header--branded) {
+      min-height: 0;
+      justify-content: flex-start;
     }
     .booking-card {
       width: 100%;
@@ -287,6 +291,36 @@
       line-height: 1.5;
       color: rgba(255,255,255,0.65);
     }
+    .booking-page-header--branded {
+      width: 100%;
+      text-align: center;
+      margin: 0 0 20px;
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
+    .booking-page-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin: 0 0 12px;
+      line-height: 1.45;
+    }
+    .booking-page-subtitle--tagline {
+      font-size: 1rem;
+      line-height: 1.55;
+      max-width: 520px;
+      margin: 12px auto 0;
+    }
+    .booking-page-subtitle--tagline em {
+      font-style: italic;
+    }
+    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page) .booking-page-eyebrow {
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page) .booking-page-subtitle--tagline {
+      color: rgba(255, 255, 255, 0.65);
+    }
     .booking-tagline {
       font-size: 0.95rem;
       color: #4b5563;
@@ -317,6 +351,7 @@
       padding: 12px 14px;
       border-radius: 10px;
       border: 2px solid #e5e7eb;
+      font-family: inherit;
       font-size: 0.95rem;
       margin-bottom: 14px;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -1767,9 +1802,19 @@
       font-family: var(--font-display);
       min-height: 100vh;
     }
-    .classic-home .booking-shell {
+    .tattoo-page.classic-home .booking-shell {
       padding-top: 24px;
       justify-content: flex-start;
+    }
+    .tattoo-page.classic-home .booking-page-eyebrow {
+      color: var(--bk-accent, #8B6F47);
+    }
+    .tattoo-page.classic-home .booking-page-title {
+      color: var(--bk-fg, #1a1a1a);
+    }
+    .tattoo-page.classic-home .booking-page-subtitle--tagline {
+      color: color-mix(in srgb, var(--bk-fg, #1a1a1a) 55%, transparent);
+      font-family: var(--font-hero);
     }
     .classic-home .tattoo-nav {
       position: relative;
@@ -3690,11 +3735,11 @@
       color: var(--bk-fg, #1a1a1a);
     }
     .luxe-page--sub .booking-shell {
-      padding-top: 96px;
+      padding-top: 72px;
     }
     @media (max-width: 640px) {
       .luxe-page--sub .booking-shell {
-        padding-top: 88px;
+        padding-top: 64px;
       }
     }
     .luxe-page .booking-page-title {
@@ -3702,6 +3747,18 @@
       font-family: var(--font-hero);
     }
     .luxe-page .booking-page-subtitle {
+      color: #555;
+    }
+    .luxe-page .booking-page-eyebrow {
+      color: var(--bk-accent, #C9A96E);
+    }
+    .luxe-page .booking-page-header--branded .booking-page-title {
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      line-height: 1.15;
+      margin: 0;
+    }
+    .luxe-page .booking-page-subtitle--tagline {
+      font-family: var(--font-hero);
       color: #555;
     }
     .luxe-page .booking-card {
@@ -4421,6 +4478,10 @@
       min-height: 0;
       justify-content: flex-start;
     }
+    /* Blade subpages offset fixed nav on the page root — shell only needs a small gap. */
+    .tattoo-page.blade-page.blade-page--sub .booking-shell {
+      padding-top: 24px;
+    }
     .blade-page.blade-page--sub .blade-shop-page-shell {
       flex: 1 1 auto;
       min-height: 0;
@@ -4435,6 +4496,8 @@
     }
     .blade-page .booking-page-title { color: var(--bh-cream) !important; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
     .blade-page .booking-page-subtitle { color: var(--bh-grey) !important; }
+    .blade-page .booking-page-eyebrow { color: var(--bh-gold); letter-spacing: 0.14em; }
+    .blade-page .booking-page-header--branded .booking-page-title { font-size: clamp(2rem, 5.5vw, 3rem); }
     .blade-page .booking-card {
       background: var(--bh-charcoal) !important;
       color: var(--bh-cream) !important;
@@ -4796,6 +4859,16 @@
     .stonecut-page .booking-page-subtitle {
       color: var(--bk-fg-muted, #a09888);
       opacity: 1;
+    }
+    .stonecut-page .booking-page-eyebrow {
+      color: var(--bk-accent, #c8a882);
+      font-family: 'Unbounded', sans-serif;
+      letter-spacing: 0.12em;
+      font-size: 11px;
+    }
+    .stonecut-page .booking-page-subtitle--tagline em {
+      font-style: normal;
+      opacity: 0.92;
     }
     .stonecut-page .booking-card {
       color: #e8e0d0;
@@ -6312,6 +6385,16 @@
     .studio12-page.studio12-sub .booking-page-title {
       font-family: "Cormorant Garamond", serif !important;
       font-weight: 300 !important;
+    }
+    .studio12-page.studio12-sub .booking-page-eyebrow {
+      color: var(--s12-clay, var(--bk-accent));
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      font-family: "Jost", system-ui, sans-serif;
+    }
+    .studio12-page.studio12-sub .booking-page-subtitle--tagline {
+      font-family: "Cormorant Garamond", serif;
+      color: var(--s12-taupe);
     }
 
     .studio12-page .upload-drop {
@@ -8469,6 +8552,36 @@
       function tattooHeadlineLogoHtml(tenant) {
         return '';
       }
+      /** Default /book tagline when tenant.tagline is empty (theme-aware). */
+      function bookingPageTaglineInnerHtml(tenant) {
+        var raw = tenant.tagline && String(tenant.tagline).trim();
+        if (raw) return wcSpan(tenant, 'wc.generic.tagline', raw);
+        if (isLuxeTheme(tenant)) return esc(defaultLuxeHeroTaglineForIndustry(tenant.industry));
+        if (isBladeTheme(tenant)) return esc(defaultBladeHeroDescriptionForIndustry(tenant.industry));
+        if (isStonecutTheme(tenant)) {
+          var about = (tenant.aboutText && String(tenant.aboutText).trim()) || '';
+          if (about) return esc(about.split('\n')[0].slice(0, 160));
+        }
+        return esc(defaultLuxeHeroTaglineForIndustry(tenant.industry));
+      }
+      function bookingPageEyebrowInnerHtml(tenant) {
+        var sa = (tenant.serviceArea && String(tenant.serviceArea).trim()) || '';
+        var inner = siteNameSpan(tenant, 'Studio');
+        if (sa) inner += ' \u00b7 ' + wcSpan(tenant, 'wc.contact.serviceArea', sa);
+        return inner;
+      }
+      /** Branded /book hero: name · city, title, tagline — all templates. */
+      function brandedBookingPageHeaderHtml(tenant, provider) {
+        var taglineInner = bookingPageTaglineInnerHtml(tenant);
+        var subtitleHtml = taglineInner
+          ? '<p class="booking-page-subtitle booking-page-subtitle--tagline"><em>' + taglineInner + '</em></p>'
+          : '';
+        return '<div class="booking-page-header booking-page-header--branded">' +
+          '<p class="booking-page-eyebrow">' + bookingPageEyebrowInnerHtml(tenant) + '</p>' +
+          '<h1 class="booking-page-title">Book an appointment</h1>' +
+          subtitleHtml +
+        '</div>';
+      }
       function list(tenant, services) {
         var base = tenantBaseUrl(tenant);
         var items = services.map(function(s){ return '<a href="'+base+'/book/'+s.slug+'" class="service-item">'+esc(s.name)+'</a>'; }).join('');
@@ -8526,10 +8639,20 @@
         }
         return '<div class="stonecut-about-photo stonecut-about-photo--empty" data-edit-key="' + esc(meta.editKey) + '" role="button" aria-label="Add about photo"></div>';
       }
-      /** /gallery page items: solo uses tenant.galleryImages; Studio/Shop aggregates per-artist portfolios. */
+      /** /gallery page items: solo uses tenant.galleryImages; Studio/Shop merges gallery tab + per-artist portfolios. */
       function galleryPageItems(tenant) {
-        if (isTeamPlan(tenant) && tenant._teamProviders) {
+        if (isTeamPlan(tenant)) {
           var items = [];
+          (tenant.galleryImages || []).forEach(function(u, index) {
+            if (u && String(u).trim()) {
+              items.push({
+                url: String(u).trim(),
+                memberSlug: '',
+                displayName: '',
+                index: index
+              });
+            }
+          });
           (tenant._teamProviders || []).forEach(function(p) {
             var slug = String(p.memberSlug || '').toLowerCase();
             providerGalleryUrls(p).forEach(function(url) {
@@ -8562,7 +8685,7 @@
       }
       function galleryPageEmptyHint(tenant) {
         return isTeamPlan(tenant)
-          ? 'No portfolio photos yet. Add them for each artist in Design \u2192 Team.'
+          ? 'No gallery photos yet. Add studio photos in Design \u2192 Gallery, or artist portfolios in Design \u2192 Team.'
           : 'No gallery images yet. Add them in the app.';
       }
       function galleryTeamFilterHtml(tenant) {
@@ -9748,18 +9871,7 @@
           }
         }
 
-        var bookingPageHeaderHtml = '';
-        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
-          var bookingTitle = provider && provider.displayName
-            ? ('Book with ' + esc(provider.displayName))
-            : siteNameSpan(tenant, 'Appointment');
-          bookingPageHeaderHtml =
-            '<div class="booking-page-header">' +
-              (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
-              '<h1 class="booking-page-title">' + bookingTitle + '</h1>' +
-              (provider && provider.jobTitle ? '<p class="booking-page-subtitle">' + esc(provider.jobTitle) + '</p>' : (tenant.tagline ? '<p class="booking-page-subtitle">'+esc(tenant.tagline)+'</p>' : '')) +
-            '</div>';
-        }
+        var bookingPageHeaderHtml = brandedBookingPageHeaderHtml(tenant, provider);
 
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
@@ -9807,6 +9919,7 @@
             : '';
           var guidedFormSchemaAttr = ' data-guided-form-schema-encoded="' + formSchemaEnc + '"';
           var guidedInner =
+            bookingPageHeaderHtml +
             (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
             '<div class="booking-guided booking-guided--wizard booking-guided--steps-first">' +
               guidedWizardPhaseChromeHtml() +

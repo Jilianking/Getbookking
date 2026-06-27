@@ -2568,3 +2568,27 @@ extension FormField {
         FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false)
     ]
 }
+
+extension DesignViewModel {
+    var activePaletteDisplayName: String {
+        let family = activeTemplateFamily
+        let resolvedId = WebColorPalettes.resolvedPaletteId(stored: webColorPaletteId, family: family)
+        let hintTone: WebColorPalettePickerTone = WebColorPalettes.isPaletteLight(
+            backgroundHex: backgroundColorHex
+        ) ? .light : .dark
+        if let palette = WebColorPalettes.palette(family: family, id: resolvedId, pickerTone: hintTone) {
+            return palette.name
+        }
+        if let match = WebColorPalettes.palettes(for: family, tone: hintTone).first(where: {
+            WebColorPalettes.pickerPaletteIsActive(
+                storedPaletteId: webColorPaletteId,
+                storedPrimaryHex: primaryColorHex,
+                storedBackgroundHex: backgroundColorHex,
+                palette: $0
+            )
+        }) {
+            return match.name
+        }
+        return WebColorPalettes.original(for: family).name
+    }
+}

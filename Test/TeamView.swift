@@ -120,7 +120,7 @@ private struct TeamMemberOverviewContent: View {
             if authViewModel.teamAccess.canAccessWebsiteProfile {
                 Section {
                     Label("Website profile", systemImage: "globe")
-                    Text("Your owner enabled editing for your public page. Open Website profile in the menu to update your bio and portfolio.")
+                    Text("Your owner enabled editing for your public page. Preview your team page, then tap Manage to update Gallery or Bio.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

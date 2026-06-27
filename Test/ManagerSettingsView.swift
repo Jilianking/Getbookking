@@ -47,32 +47,6 @@ struct ManagerSettingsView: View {
                 }
             }
 
-            if let ownerMember = viewModel.members.first(where: { $0.accessRole == .owner }),
-               ownerMember.isBookable,
-               !ownerMember.memberSlug.isEmpty,
-               viewModel.tenantSubscriptionPlan.allowsTeamInvites {
-                Section(header: Text("Your booking page")) {
-                    LabeledContent("Page path", value: PublicBookingSite.memberPagePath(memberSlug: ownerMember.memberSlug))
-                    NavigationLink {
-                        ProviderPortfolioView(
-                            teamViewModel: viewModel,
-                            member: ownerMember,
-                            tenantId: viewModel.tenantId,
-                            isDemoMode: authViewModel.isDemoMode,
-                            ownerEditingMember: false
-                        )
-                        .environmentObject(authViewModel)
-                    } label: {
-                        Label("Portfolio photos", systemImage: "photo.stack")
-                    }
-                    if !ownerMember.providerGalleryImages.isEmpty {
-                        Text("\(ownerMember.providerGalleryImages.count) photo\(ownerMember.providerGalleryImages.count == 1 ? "" : "s") on your booking page")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
             Section(
                 header: Text("Team members"),
                 footer: viewModel.isTenantOwner

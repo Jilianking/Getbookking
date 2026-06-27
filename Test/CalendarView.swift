@@ -3,7 +3,6 @@ import SwiftUI
 enum CalendarViewMode: String, CaseIterable {
     case month = "Month"
     case week = "Week"
-    case day = "Day"
 }
 
 struct CalendarView: View {
@@ -71,44 +70,26 @@ struct CalendarView: View {
                             eventsByDay: eventsByDay
                         )
                         .padding(.bottom, 16)
-                    } else {
-                        DatePicker("Select Date", selection: $selectedDate, displayedComponents: .date)
-                            .datePickerStyle(.graphical)
-                            .padding(.horizontal)
-                            .padding(.bottom, 16)
-                    }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Appointments")
-                            .font(.headline)
-                            .padding(.horizontal)
+                        appointmentsSection
+                    } else if viewMode == .week {
+                        CalendarWeekStrip(
+                            displayedMonth: $displayedMonth,
+                            selectedDate: $selectedDate,
+                            eventsByDay: eventsByDay
+                        )
+                        .padding(.bottom, 12)
 
-                        if viewModel.isLoading && viewModel.events.isEmpty {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 24)
-                        } else if filteredEvents.isEmpty {
-                            Text("No confirmed appointments on this day.")
-                                .font(.subheadline)
-                                .foregroundStyle(AppDesign.textSecondary)
-                                .padding(.horizontal)
-                                .padding(.vertical, 12)
-                        } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(filteredEvents) { event in
-                                    Button {
-                                        Task { await openBookingDetail(for: event) }
-                                    } label: {
-                                        EventRow(event: event)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(viewModel.bookingRequest(for: event) == nil)
-                                }
+                        DayCalendarTimelineView(
+                            selectedDate: selectedDate,
+                            events: filteredEvents,
+                            isLoading: viewModel.isLoading,
+                            canOpenEvent: { viewModel.bookingRequest(for: $0) != nil },
+                            onEventTap: { event in
+                                Task { await openBookingDetail(for: event) }
                             }
-                            .padding(.horizontal, 16)
-                        }
+                        )
                     }
-                    .padding(.bottom, 24)
                 }
             }
             .refreshable {
@@ -195,6 +176,40 @@ struct CalendarView: View {
         return viewModel.events
             .filter { calendar.isDate($0.start, inSameDayAs: selectedDate) }
             .sorted { $0.start < $1.start }
+    }
+
+    private var appointmentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Appointments")
+                .font(.headline)
+                .padding(.horizontal)
+
+            if viewModel.isLoading && viewModel.events.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else if filteredEvents.isEmpty {
+                Text("No confirmed appointments on this day.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredEvents) { event in
+                        Button {
+                            Task { await openBookingDetail(for: event) }
+                        } label: {
+                            EventRow(event: event)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.bookingRequest(for: event) == nil)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+        .padding(.bottom, 24)
     }
 
     private func openBookingDetail(for event: Event) async {

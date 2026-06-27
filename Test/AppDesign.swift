@@ -49,6 +49,9 @@ enum AppDesign {
     )
 
     /// Legacy iOS accents — prefer brandWarm / brandDark in new UI.
+    static let calendarAppointmentFill = Color(hex: 0xE8F5F3)
+    static let calendarAppointmentAccent = Color(hex: 0x3D9B8F)
+
     static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
     static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
     static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)

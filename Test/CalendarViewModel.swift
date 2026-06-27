@@ -109,11 +109,13 @@ class CalendarViewModel: ObservableObject {
         let service = (booking.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let client = (booking.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let end = start.addingTimeInterval(3600)
+
         return Event(
             id: booking.documentId ?? booking.id,
             title: service.isEmpty ? "Appointment" : service,
             start: start,
-            end: nil,
+            end: end,
             type: .appointment,
             status: .confirmed,
             clientId: booking.customerId ?? booking.id,
@@ -147,38 +149,41 @@ class CalendarViewModel: ObservableObject {
 
     private static func demoEvents(calendar: Calendar, anchor: Date) -> [Event] {
         let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: anchor))!
-        let day = calendar.startOfDay(for: anchor)
-        func at(dayOffset: Int, hour: Int, minute: Int) -> Date {
-            let d = calendar.date(byAdding: .day, value: dayOffset, to: day) ?? day
-            return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: d) ?? d
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        let today = calendar.startOfDay(for: Date())
+        let demoDay = (today >= startOfMonth && today < endOfMonth) ? today : startOfMonth
+
+        func at(hour: Int, minute: Int) -> Date {
+            calendar.date(bySettingHour: hour, minute: minute, second: 0, of: demoDay) ?? demoDay
         }
+
         return [
             Event(
                 id: "demo-1",
-                title: "Consultation",
-                start: at(dayOffset: 1, hour: 10, minute: 0),
-                end: nil,
+                title: "Custom piece",
+                start: at(hour: 9, minute: 0),
+                end: at(hour: 10, minute: 0),
                 type: .appointment,
                 status: .confirmed,
                 clientId: "demo-client-1",
-                clientName: "Alex M.",
+                clientName: "Blake Brooks",
                 notes: nil,
                 color: nil,
                 documents: nil
             ),
             Event(
                 id: "demo-2",
-                title: "Full session",
-                start: at(dayOffset: 3, hour: 14, minute: 30),
-                end: nil,
+                title: "Custom piece",
+                start: at(hour: 10, minute: 30),
+                end: at(hour: 11, minute: 30),
                 type: .appointment,
                 status: .confirmed,
                 clientId: "demo-client-2",
-                clientName: "Jordan K.",
+                clientName: "Phoenix Wilson",
                 notes: nil,
                 color: nil,
                 documents: nil
             ),
-        ].filter { $0.start >= startOfMonth && $0.start < calendar.date(byAdding: .month, value: 1, to: startOfMonth)! }
+        ].filter { $0.start >= startOfMonth && $0.start < endOfMonth }
     }
 }

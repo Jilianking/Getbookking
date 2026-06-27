@@ -7,6 +7,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import FirebaseAuth
 
 // MARK: - Shared chrome
 
@@ -90,19 +91,28 @@ struct ManageNavigationRow: View {
 struct ManageToggleRow: View {
     let title: String
     var subtitle: String? = nil
+    var systemImage: String? = nil
     @Binding var isOn: Bool
     var disabled: Bool = false
     var onChange: (() -> Void)? = nil
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
+            HStack(spacing: 10) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.body)
                         .foregroundStyle(.secondary)
+                        .frame(width: 22, alignment: .center)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -117,8 +127,10 @@ struct ManageToggleRow: View {
 }
 
 private struct ManageCardDivider: View {
+    var leadingInset: CGFloat = 14
+
     var body: some View {
-        Divider().padding(.leading, 14)
+        Divider().padding(.leading, leadingInset)
     }
 }
 
@@ -454,6 +466,7 @@ private struct ManageGallerySquareFrame: ViewModifier {
 
 struct ManageGalleryTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
+    let isTeamPlan: Bool
     let isStudio12Template: Bool
     @Binding var galleryBatchCrop: MultiImageCropSheetItem?
     @Binding var showGalleryPickerLoadError: Bool
@@ -466,11 +479,24 @@ struct ManageGalleryTabContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ManageSectionHeader("Gallery photos")
-            ManageGalleryPhotosBlock(
-                viewModel: viewModel,
-                galleryBatchCrop: $galleryBatchCrop,
-                showPickerLoadError: $showGalleryPickerLoadError
-            )
+            if isTeamPlan {
+                ManageCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Portfolio is per artist")
+                            .font(.body.weight(.medium))
+                        Text("Add photos for each team member in the Team tab. Turn on “Artist can edit portfolio” or “Artist can edit bio” so they can update their slice in Website profile.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                }
+            } else {
+                ManageGalleryPhotosBlock(
+                    viewModel: viewModel,
+                    galleryBatchCrop: $galleryBatchCrop,
+                    showPickerLoadError: $showGalleryPickerLoadError
+                )
+            }
 
             ManageSectionHeader("Layout")
             ManageCard {
@@ -1045,6 +1071,486 @@ private struct ManageFormFieldsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Team (Studio / Shop)
+
+struct ManageTeamTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @EnvironmentObject private var authViewModel: AuthViewModel
+    @StateObject private var portfolioTeamVM = ManagerSettingsViewModel()
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
+    }
+
+    private var teamPageURL: String? {
+        let slug = viewModel.tenantSlug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !slug.isEmpty else { return nil }
+        return "\(slug).getbookking.com/team"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ManageSectionHeader("Visibility")
+            ManageCard {
+                ManageToggleRow(
+                    title: "Team page enabled",
+                    subtitle: "Full roster at /team",
+                    isOn: $viewModel.showTeamPage,
+                    disabled: controlsDisabled
+                )
+                ManageCardDivider()
+                ManageToggleRow(
+                    title: "Show on home",
+                    subtitle: "Team strip above footer",
+                    isOn: $viewModel.showMeetTheTeamOnHome,
+                    disabled: controlsDisabled
+                )
+            }
+
+            ManageSectionHeader("Team members")
+            if viewModel.teamMemberVisibility.isEmpty {
+                ManageCard {
+                    Text(viewModel.isLoading ? "Loading team…" : "No team members yet. Invite people from Team in the main menu.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(14)
+                }
+            } else {
+                ForEach($viewModel.teamMemberVisibility) { $member in
+                    ManageTeamMemberVisibilityCard(
+                        viewModel: viewModel,
+                        portfolioTeamVM: portfolioTeamVM,
+                        isDemoMode: authViewModel.isDemoMode,
+                        member: $member,
+                        disabled: controlsDisabled,
+                        startsExpanded: member.id == viewModel.teamMemberVisibility.first?.id
+                    )
+                }
+            }
+            if let url = teamPageURL, viewModel.showTeamPage {
+                Text(url)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            HStack(spacing: 12) {
+                Button("Discard") {
+                    Task { await viewModel.loadData() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(controlsDisabled)
+                Button("Save changes") {
+                    Task { await viewModel.saveTeamPageSettings() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(controlsDisabled)
+            }
+        }
+        .task {
+            await portfolioTeamVM.load(isDemoMode: authViewModel.isDemoMode)
+        }
+    }
+}
+
+private struct ManageTeamMemberVisibilityCard: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @ObservedObject var portfolioTeamVM: ManagerSettingsViewModel
+    @EnvironmentObject private var authViewModel: AuthViewModel
+    let isDemoMode: Bool
+    @Binding var member: TeamMemberVisibilityDraft
+    var disabled: Bool
+    var startsExpanded: Bool
+
+    @State private var isExpanded: Bool
+    @State private var photoPickerItem: PhotosPickerItem?
+    @State private var cropItem: SingleImageCropSheetItem?
+
+    init(
+        viewModel: DesignViewModel,
+        portfolioTeamVM: ManagerSettingsViewModel,
+        isDemoMode: Bool,
+        member: Binding<TeamMemberVisibilityDraft>,
+        disabled: Bool,
+        startsExpanded: Bool = false
+    ) {
+        self.viewModel = viewModel
+        self.portfolioTeamVM = portfolioTeamVM
+        self.isDemoMode = isDemoMode
+        _member = member
+        self.disabled = disabled
+        self.startsExpanded = startsExpanded
+        _isExpanded = State(initialValue: startsExpanded)
+    }
+
+    private var portfolioMember: TenantTeamMember? {
+        portfolioTeamVM.member(byUid: member.uid)
+    }
+
+    private var ownerEditingMemberPortfolio: Bool {
+        guard let currentUid = Auth.auth().currentUser?.uid else { return false }
+        return portfolioTeamVM.isTenantOwner && member.uid != currentUid
+    }
+
+    private var isUploadingPhoto: Bool {
+        viewModel.uploadingTeamMemberPhotoUid == member.uid
+    }
+
+    var body: some View {
+        ManageCard {
+            HStack(alignment: .top, spacing: 12) {
+                photoPicker
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(member.displayName)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            TeamMemberRoleBadge(label: member.badgeLabel, accessRole: member.accessRole)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(disabled)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    TeamMemberBioTextEditor(
+                        placeholder: "Short bio (optional)...",
+                        text: $member.providerAboutText
+                    )
+                    .padding(10)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .disabled(disabled)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+
+                    ManageToggleRow(
+                        title: "Show on team page",
+                        systemImage: "person.fill",
+                        isOn: $member.showOnTeamPage,
+                        disabled: disabled
+                    )
+                    ManageCardDivider(leadingInset: 46)
+                    ManageToggleRow(
+                        title: "Show on home",
+                        subtitle: "Team strip above footer",
+                        systemImage: "house.fill",
+                        isOn: $member.showOnTeamHome,
+                        disabled: disabled
+                    )
+                    ManageCardDivider(leadingInset: 46)
+                    ManageToggleRow(
+                        title: "Bookable",
+                        subtitle: "Clients can book this artist",
+                        systemImage: "calendar",
+                        isOn: $member.isBookable,
+                        disabled: disabled
+                    )
+                    if member.isBookable, let linkDisplay = memberBookingLinkDisplay {
+                        ManageCardDivider(leadingInset: 46)
+                        ManageMemberBookingLinkRow(
+                            displayURL: linkDisplay,
+                            copyURL: memberBookingLinkCopyString ?? linkDisplay,
+                            disabled: disabled
+                        )
+                        .padding(.bottom, 4)
+                    }
+                    if member.accessRole != .owner {
+                        ManageCardDivider(leadingInset: 46)
+                        ManageToggleRow(
+                            title: "Artist can edit portfolio",
+                            subtitle: "Shows portfolio in their Website profile tab",
+                            systemImage: "photo.stack",
+                            isOn: $member.canEditPortfolio,
+                            disabled: disabled
+                        )
+                        ManageCardDivider(leadingInset: 46)
+                        ManageToggleRow(
+                            title: "Artist can edit bio",
+                            subtitle: "Lets them edit their public bio in the app",
+                            systemImage: "text.quote",
+                            isOn: $member.canEditPublicBio,
+                            disabled: disabled
+                        )
+                    }
+                    if let liveMember = portfolioMember {
+                        ManageCardDivider(leadingInset: 46)
+                        NavigationLink {
+                            ProviderPortfolioView(
+                                teamViewModel: portfolioTeamVM,
+                                member: liveMember,
+                                tenantId: viewModel.tenantId,
+                                isDemoMode: isDemoMode,
+                                ownerEditingMember: ownerEditingMemberPortfolio
+                            )
+                            .environmentObject(authViewModel)
+                        } label: {
+                            HStack(alignment: .center, spacing: 10) {
+                                Image(systemName: "photo.stack")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 22, alignment: .center)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Portfolio photos")
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                    Text(portfolioSubtitle(for: liveMember))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(disabled)
+                    }
+                }
+            }
+        }
+        .onChange(of: photoPickerItem) { _, newItem in
+            guard let newItem, !disabled else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self),
+                      let uiImage = UIImage(data: data) else {
+                    await MainActor.run { photoPickerItem = nil }
+                    return
+                }
+                await MainActor.run {
+                    cropItem = SingleImageCropSheetItem(image: uiImage)
+                    photoPickerItem = nil
+                }
+            }
+        }
+        .sheet(item: $cropItem, onDismiss: { cropItem = nil }) { item in
+            UploadImagePreparationSheet(
+                images: [item.image],
+                advice: UploadImageAdvice.teamMember,
+                navigationTitle: "Team photo",
+                allowedChoices: UploadCropPresetMenu.teamMember,
+                defaultChoice: .portrait4_5,
+                onUseJPEGData: { dataList in
+                    cropItem = nil
+                    guard let data = dataList.first else { return }
+                    let uid = member.uid
+                    Task {
+                        _ = await viewModel.uploadTeamMemberProfilePhoto(memberUid: uid, imageData: data)
+                    }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var photoPicker: some View {
+        PhotosPicker(
+            selection: $photoPickerItem,
+            matching: .images,
+            photoLibrary: .shared()
+        ) {
+            ZStack {
+                ManageTeamMemberAvatar(member: member)
+                if isUploadingPhoto {
+                    Circle()
+                        .fill(Color.black.opacity(0.35))
+                    ProgressView()
+                        .tint(.white)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(Circle().fill(Color.accentColor))
+                    .offset(x: 2, y: 2)
+            }
+        }
+        .disabled(disabled || isUploadingPhoto)
+    }
+
+    private func portfolioSubtitle(for liveMember: TenantTeamMember) -> String {
+        let count = liveMember.providerGalleryImages.count
+        if count == 0 { return "None yet — shown on their page & /gallery" }
+        return "\(count) photo\(count == 1 ? "" : "s") on site"
+    }
+
+    private var memberBookingLinkDisplay: String? {
+        let tenant = viewModel.tenantSlug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        let memberSlug = member.memberSlug
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !tenant.isEmpty, !memberSlug.isEmpty else { return nil }
+        let path = PublicBookingSite.memberBookPath(memberSlug: memberSlug)
+        return "\(tenant).\(PublicBookingSite.host)\(path)"
+    }
+
+    private var memberBookingLinkCopyString: String? {
+        let tenant = viewModel.tenantSlug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        let url = PublicBookingSite.memberBookURLString(tenantSlug: tenant, memberSlug: member.memberSlug)
+        return url.isEmpty ? nil : url
+    }
+}
+
+private struct ManageMemberBookingLinkRow: View {
+    let displayURL: String
+    let copyURL: String
+    var disabled: Bool
+
+    @State private var didCopy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "link")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, alignment: .center)
+
+                HStack(spacing: 10) {
+                    Text(displayURL)
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 0)
+                    Button {
+                        copyLink()
+                    } label: {
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                            .font(.body)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(didCopy ? AppDesign.brandWarm : AppDesign.textSecondary)
+                    .disabled(disabled)
+                    .accessibilityLabel(didCopy ? "Copied" : "Copy link")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(AppDesign.searchBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppDesign.chipBorder.opacity(0.6), lineWidth: 1)
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            if didCopy {
+                HStack(spacing: 10) {
+                    Color.clear.frame(width: 22, height: 1)
+                    Text("Copied")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+            }
+        }
+    }
+
+    private func copyLink() {
+        let pasteboard = UIPasteboard.general
+        pasteboard.items = []
+        pasteboard.string = copyURL
+        didCopy = true
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run { didCopy = false }
+        }
+    }
+}
+
+private struct TeamMemberRoleBadge: View {
+    let label: String
+    let accessRole: TeamAccessRole
+
+    private var tint: Color {
+        switch accessRole {
+        case .owner: return .blue
+        case .manager: return .orange
+        case .member: return .purple
+        }
+    }
+
+    var body: some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.15))
+            .foregroundStyle(tint)
+            .clipShape(Capsule())
+    }
+}
+
+private struct ManageTeamMemberAvatar: View {
+    let member: TeamMemberVisibilityDraft
+
+    var body: some View {
+        Group {
+            if let url = URL(string: member.profilePhotoUrl),
+               !member.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        avatarPlaceholder
+                    }
+                }
+            } else {
+                avatarPlaceholder
+            }
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(Circle())
+    }
+
+    private var avatarPlaceholder: some View {
+        ZStack {
+            Circle().fill(placeholderTint.opacity(0.22))
+            Text(member.initials)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(placeholderTint)
+        }
+    }
+
+    private var placeholderTint: Color {
+        switch member.accessRole {
+        case .owner: return .blue
+        case .manager: return .orange
+        case .member: return .purple
         }
     }
 }

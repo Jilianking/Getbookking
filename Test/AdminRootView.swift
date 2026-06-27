@@ -15,6 +15,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     case clients
     case team
     case design
+    case websiteProfile
     case shop
     case insights
     case payments
@@ -26,7 +27,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     static var drawerOrder: [AdminSection] {
         [
             .dashboard, .requests, .calendar, .messages, .clients,
-            .team, .design, .shop, .insights, .payments, .settings,
+            .team, .design, .websiteProfile, .shop, .insights, .payments, .settings,
         ]
     }
 
@@ -40,6 +41,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .clients: return "Clients"
         case .team: return "Team"
         case .design: return "Design"
+        case .websiteProfile: return "Website profile"
         case .shop: return "Shop"
         case .insights: return "Insights"
         case .payments: return "Payments"
@@ -58,7 +60,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     var drawerGroup: DrawerGroup {
         switch self {
         case .dashboard, .requests, .calendar, .messages: return .main
-        case .clients, .team, .design, .insights, .payments: return .business
+        case .clients, .team, .design, .websiteProfile, .insights, .payments: return .business
         case .shop, .settings: return .more
         }
     }
@@ -78,6 +80,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .clients: return "person.2.fill"
         case .team: return "person.3.fill"
         case .design: return "paintbrush.fill"
+        case .websiteProfile: return "globe"
         case .shop: return "bag.fill"
         case .insights: return "chart.bar.fill"
         case .payments: return "dollarsign.circle.fill"
@@ -108,21 +111,32 @@ struct AdminRootView: View {
 
     /// Solo owners use Business settings only; hide Team from the drawer.
     private var drawerSections: [AdminSection] {
+        var sections: [AdminSection]
         if authViewModel.isDemoMode {
-            var sections = AdminSection.drawerOrder.filter { $0 != .team }
+            sections = AdminSection.drawerOrder.filter { $0 != .team }
             if sessionStore.tenant?["shopEnabled"] as? Bool != true {
                 sections = sections.filter { $0 != .shop }
             }
-            return sections
+        } else {
+            let hideTeam =
+                authViewModel.teamAccess.isOwner
+                && authViewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+            if hideTeam {
+                sections = AdminSection.drawerOrder.filter { $0 != .team }
+            } else {
+                sections = AdminSection.drawerOrder
+            }
         }
-        let hideTeam =
-            !authViewModel.isDemoMode
-            && authViewModel.teamAccess.isOwner
-            && authViewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-        if hideTeam {
-            return AdminSection.drawerOrder.filter { $0 != .team }
+
+        if authViewModel.teamAccess.isOwner || authViewModel.isDemoMode {
+            sections = sections.filter { $0 != .websiteProfile }
+        } else {
+            sections = sections.filter { $0 != .design }
+            if !authViewModel.teamAccess.canAccessWebsiteProfile {
+                sections = sections.filter { $0 != .websiteProfile }
+            }
         }
-        return AdminSection.drawerOrder
+        return sections
     }
 
     var body: some View {
@@ -156,6 +170,11 @@ struct AdminRootView: View {
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
                 drawerState.selectedSection = .dashboard
+            }
+        }
+        .onChange(of: authViewModel.teamAccess) { _, _ in
+            if !drawerSections.contains(drawerState.selectedSection) {
+                drawerState.selectedSection = drawerSections.first ?? .dashboard
             }
         }
         .task(id: authViewModel.currentUserUid) {
@@ -222,6 +241,13 @@ struct AdminRootView: View {
             if visitedSections.contains(.design) {
                 DesignView(drawerState: drawerState, sectionTitle: AdminSection.design.title)
                     .sectionVisible(drawerState.selectedSection == .design)
+            }
+            if visitedSections.contains(.websiteProfile) {
+                ArtistWebsiteProfileView(
+                    drawerState: drawerState,
+                    sectionTitle: AdminSection.websiteProfile.title
+                )
+                .sectionVisible(drawerState.selectedSection == .websiteProfile)
             }
             if visitedSections.contains(.shop) {
                 ShopManagerView(drawerState: drawerState, sectionTitle: AdminSection.shop.title)

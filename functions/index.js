@@ -1665,16 +1665,20 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
         "This team member is not accepting bookings online."
       );
     }
-    const mFn = (memberData.firstName || "").toString().trim();
-    const mLn = (memberData.lastName || "").toString().trim();
-    const memberName =
-      (memberData.displayName || memberData.name || `${mFn} ${mLn}`.trim() || "Team member")
-        .toString()
-        .slice(0, 120);
-    bookingData.assignedMemberUid = memberDoc.id;
-    bookingData.assignedMemberName = memberName;
-    const memberEmail = (memberData.email || "").toString().trim().toLowerCase();
-    if (memberEmail) bookingData.assignedMemberEmail = memberEmail;
+    attachAssignedMemberToBookingData(bookingData, memberDoc);
+  } else {
+    const assignmentPreference = (data?.assignmentPreference || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
+    if (assignmentPreference === "first_available" && plan !== "solo") {
+      const picked = await pickMemberForFirstAvailable(tenantId, tenantData);
+      if (picked) {
+        attachAssignedMemberToBookingData(bookingData, picked);
+        bookingData.assignmentPreference = "first_available";
+      }
+    }
   }
 
   if (data?.formResponses && typeof data.formResponses === "object") {
@@ -2553,12 +2557,16 @@ function normalizeMemberSettings(raw) {
   }
   let payoutMode = (d.payoutMode || "independent").toString().trim().toLowerCase();
   if (!PAYOUT_MODES.has(payoutMode)) payoutMode = "independent";
+  const canEditPortfolio = d.canEditPortfolio === true;
+  const canEditPublicBio = d.canEditPublicBio === true;
   const out = {
     useStudioBookingPolicy: useStudio,
     paymentSplitEnabled,
     paymentSplitPercent,
     paymentSplitAppliesTo,
     payoutMode,
+    canEditPortfolio,
+    canEditPublicBio,
   };
   if (!useStudio && bookingConfirmationOverride) {
     out.bookingConfirmationOverride = bookingConfirmationOverride;
@@ -2931,6 +2939,87 @@ function resolveMemberIsBookable(d, ownerUid, uid) {
   return accessRole === "member";
 }
 
+function resolveShowOnTeamPage(d, ownerUid, uid) {
+  if (d.showOnTeamPage === true) return true;
+  if (d.showOnTeamPage === false) return false;
+  return resolveMemberIsBookable(d, ownerUid, uid);
+}
+
+function resolveShowOnTeamHome(d, ownerUid, uid) {
+  if (d.showOnTeamHome === true) return true;
+  if (d.showOnTeamHome === false) return false;
+  return resolveMemberIsBookable(d, ownerUid, uid);
+}
+
+const TERMINAL_BOOKING_STATUSES = new Set([
+  "declined",
+  "rejected",
+  "cancelled",
+  "canceled",
+  "completed",
+  "done",
+]);
+
+function isTerminalBookingStatus(status) {
+  return TERMINAL_BOOKING_STATUSES.has(
+    (status || "").toString().trim().toLowerCase()
+  );
+}
+
+function attachAssignedMemberToBookingData(bookingData, memberDoc) {
+  const memberData = memberDoc.data();
+  const mFn = (memberData.firstName || "").toString().trim();
+  const mLn = (memberData.lastName || "").toString().trim();
+  const memberName =
+    (memberData.displayName || memberData.name || `${mFn} ${mLn}`.trim() || "Team member")
+      .toString()
+      .slice(0, 120);
+  bookingData.assignedMemberUid = memberDoc.id;
+  bookingData.assignedMemberName = memberName;
+  const memberEmail = (memberData.email || "").toString().trim().toLowerCase();
+  if (memberEmail) bookingData.assignedMemberEmail = memberEmail;
+}
+
+/** Pick the bookable member with the fewest open bookings (studio "first available"). */
+async function pickMemberForFirstAvailable(tenantId, tenant) {
+  const usersSnap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const candidates = [];
+  for (const doc of usersSnap.docs) {
+    if (!serializePublicProvider(doc, tenant)) continue;
+    candidates.push(doc);
+  }
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const bookingsSnap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .get();
+  const openCounts = {};
+  for (const doc of candidates) openCounts[doc.id] = 0;
+  for (const bookingDoc of bookingsSnap.docs) {
+    const d = bookingDoc.data();
+    if (isTerminalBookingStatus(d.status)) continue;
+    const assigned = (d.assignedMemberUid || "").toString().trim();
+    if (assigned && openCounts[assigned] !== undefined) {
+      openCounts[assigned] += 1;
+    }
+  }
+
+  let bestDoc = candidates[0];
+  let bestCount = openCounts[bestDoc.id] ?? 0;
+  for (let i = 1; i < candidates.length; i++) {
+    const doc = candidates[i];
+    const count = openCounts[doc.id] ?? 0;
+    if (count < bestCount) {
+      bestDoc = doc;
+      bestCount = count;
+    }
+  }
+  return bestDoc;
+}
+
 function defaultMemberSettingsForInvite(accessRole) {
   const role = parseAccessRole(accessRole);
   if (role === "manager") {
@@ -2963,6 +3052,31 @@ function serializePublicProvider(doc, tenant) {
     providerAboutText: (d.providerAboutText || "").toString(),
     providerGalleryImages: normalizeProviderGalleryImages(d.providerGalleryImages),
     isOwner: uid === ownerUid,
+  };
+}
+
+function serializeTeamRosterMember(doc, tenant) {
+  const d = doc.data();
+  const uid = doc.id;
+  const ownerUid = (tenant.ownerUid || "").toString();
+  const memberSlug = normalizeMemberSlugInput(d.memberSlug);
+  if (!memberSlug) return null;
+  const showOnTeamPage = resolveShowOnTeamPage(d, ownerUid, uid);
+  const showOnTeamHome = resolveShowOnTeamHome(d, ownerUid, uid);
+  if (!showOnTeamPage && !showOnTeamHome) return null;
+  const fn = (d.firstName || "").toString().trim();
+  const ln = (d.lastName || "").toString().trim();
+  return {
+    uid,
+    memberSlug,
+    displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Team member").toString(),
+    jobTitle: (d.jobTitle || "").toString(),
+    profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
+    providerAboutText: (d.providerAboutText || "").toString(),
+    isOwner: uid === ownerUid,
+    isBookable: resolveMemberIsBookable(d, ownerUid, uid),
+    showOnTeamPage,
+    showOnTeamHome,
   };
 }
 
@@ -3004,6 +3118,8 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     jobTitle: (d.jobTitle || "").toString(),
     memberSlug: normalizeMemberSlugInput(d.memberSlug),
     isBookable: resolveMemberIsBookable(d, ownerUid, uid),
+    showOnTeamPage: resolveShowOnTeamPage(d, ownerUid, uid),
+    showOnTeamHome: resolveShowOnTeamHome(d, ownerUid, uid),
     providerAboutText: (d.providerAboutText || "").toString(),
     providerGalleryImages: normalizeProviderGalleryImages(d.providerGalleryImages),
     memberSettings: normalizeMemberSettings(d.memberSettings),
@@ -3349,6 +3465,46 @@ exports.listPublicProviders = functions.https.onCall(async (data) => {
   return { providers, subscriptionPlan: plan, tenantSlug };
 });
 
+/** Public: team roster cards for /team and home strip (visibility flags, not bookable-only). */
+exports.listTeamRoster = functions.https.onCall(async (data) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  if (!tenantSlug) {
+    throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required.");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) {
+    throw new functions.https.HttpsError("not-found", "Business not found.");
+  }
+  const tenant = resolved.data;
+  const tenantId = resolved.id;
+  const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+  if (plan === "solo") {
+    return { members: [], subscriptionPlan: plan, tenantSlug };
+  }
+  if (tenant.isActive === false || tenant.isDemoAccount === true) {
+    return { members: [], subscriptionPlan: plan, tenantSlug };
+  }
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
+  const members = [];
+  for (const doc of snap.docs) {
+    const userData = doc.data();
+    if (!normalizeMemberSlugInput(userData.memberSlug)) {
+      await ensureUserMemberSlug(doc.id, userData, tenantId);
+      const fresh = await doc.ref.get();
+      const row = serializeTeamRosterMember(fresh, tenant);
+      if (row) members.push(row);
+    } else {
+      const row = serializeTeamRosterMember(doc, tenant);
+      if (row) members.push(row);
+    }
+  }
+  members.sort((a, b) => {
+    if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+    return (a.displayName || "").localeCompare(b.displayName || "");
+  });
+  return { members, subscriptionPlan: plan, tenantSlug };
+});
+
 /** Public: one provider profile for /{studio}/{member} pages. */
 exports.getPublicProvider = functions.https.onCall(async (data) => {
   const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
@@ -3444,8 +3600,45 @@ exports.updateProviderGallery = functions.https.onCall(async (data, context) => 
   if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
+  if (targetUid === uid && !ctx.isOwner) {
+    const selfSettings = normalizeMemberSettings(memberSnap.data().memberSettings);
+    if (!selfSettings.canEditPortfolio) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Your studio owner has not enabled portfolio editing for your account."
+      );
+    }
+  }
   await memberRef.set({ providerGalleryImages: images }, { merge: true });
   return { ok: true, providerGalleryImages: images };
+});
+
+/** Member: save own public bio when owner enabled self-edit in Design → Team. */
+exports.updateMyPublicProfile = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.tenantId) {
+    throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
+  }
+  const settings = normalizeMemberSettings(ctx.userData.memberSettings);
+  if (!ctx.isOwner && !settings.canEditPublicBio) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your studio owner has not enabled bio editing for your account."
+    );
+  }
+  if (data && data.providerAboutText == null) {
+    throw new functions.https.HttpsError("invalid-argument", "providerAboutText is required.");
+  }
+  const providerAboutText = (data.providerAboutText || "")
+    .toString()
+    .trim()
+    .slice(0, 2000);
+  await db.collection("users").doc(uid).set({ providerAboutText }, { merge: true });
+  return { ok: true, providerAboutText };
 });
 
 /** Signed-in member: role, effective manager toggles, tenant booking workflow. */
@@ -3468,6 +3661,9 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     managerPermissions: ctx.managerPermissions,
     senderUserData: ctx.userData,
   });
+  const memberWebsiteSettings = normalizeMemberSettings(ctx.userData.memberSettings);
+  const canEditPortfolio = isOwner || memberWebsiteSettings.canEditPortfolio === true;
+  const canEditPublicBio = isOwner || memberWebsiteSettings.canEditPublicBio === true;
   return {
     tenantId: ctx.tenantId,
     isOwner,
@@ -3488,6 +3684,8 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     canSendClientSms,
     memberSmsStatus: isOwner ? null : memberSmsStatus,
     memberSmsPhoneNumber: isOwner ? null : memberSmsPhone,
+    canEditPortfolio,
+    canEditPublicBio,
   };
 });
 
@@ -3772,16 +3970,55 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
   }
   const tenant = await assertTenantOwnerUid(uid, tenantId);
-  if (memberUid === tenant.ownerUid) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "Cannot change the owner's role."
-    );
-  }
   const memberRef = db.collection("users").doc(memberUid);
   const memberSnap = await memberRef.get();
   if (!memberSnap.exists || memberSnap.data().tenantId !== tenantId) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  const isOwnerMember = memberUid === tenant.ownerUid;
+  if (isOwnerMember && uid !== memberUid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Cannot change the owner's profile from another account."
+    );
+  }
+  if (isOwnerMember && uid === memberUid) {
+    const patch = {};
+    if (data && data.jobTitle != null) {
+      patch.jobTitle = normalizeJobTitle(data.jobTitle);
+    }
+    if (data && data.isBookable != null) {
+      patch.isBookable = Boolean(data.isBookable);
+    }
+    if (data && data.showOnTeamPage != null) {
+      patch.showOnTeamPage = Boolean(data.showOnTeamPage);
+    }
+    if (data && data.showOnTeamHome != null) {
+      patch.showOnTeamHome = Boolean(data.showOnTeamHome);
+    }
+    if (data && data.providerAboutText != null) {
+      patch.providerAboutText = (data.providerAboutText || "")
+        .toString()
+        .trim()
+        .slice(0, 2000);
+    }
+    if (data && data.profilePhotoUrl != null) {
+      patch.profilePhotoUrl = (data.profilePhotoUrl || "")
+        .toString()
+        .trim()
+        .slice(0, 2000);
+    }
+    if (!Object.keys(patch).length) {
+      throw new functions.https.HttpsError("invalid-argument", "Nothing to update.");
+    }
+    await memberRef.set(patch, { merge: true });
+    return { ok: true };
+  }
+  if (isOwnerMember) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Cannot change the owner's role."
+    );
   }
   const patch = {};
   if (data && data.accessRole != null) {
@@ -3799,13 +4036,30 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
     patch.jobTitle = normalizeJobTitle(data.jobTitle);
   }
   if (data && data.memberSettings != null) {
-    patch.memberSettings = normalizeMemberSettings(data.memberSettings);
+    const existing = normalizeMemberSettings(memberSnap.data().memberSettings);
+    const incoming =
+      data.memberSettings && typeof data.memberSettings === "object"
+        ? data.memberSettings
+        : {};
+    patch.memberSettings = normalizeMemberSettings({ ...existing, ...incoming });
   }
   if (data && data.isBookable != null) {
     patch.isBookable = Boolean(data.isBookable);
   }
+  if (data && data.showOnTeamPage != null) {
+    patch.showOnTeamPage = Boolean(data.showOnTeamPage);
+  }
+  if (data && data.showOnTeamHome != null) {
+    patch.showOnTeamHome = Boolean(data.showOnTeamHome);
+  }
   if (data && data.providerAboutText != null) {
     patch.providerAboutText = (data.providerAboutText || "")
+      .toString()
+      .trim()
+      .slice(0, 2000);
+  }
+  if (data && data.profilePhotoUrl != null) {
+    patch.profilePhotoUrl = (data.profilePhotoUrl || "")
       .toString()
       .trim()
       .slice(0, 2000);
@@ -3842,15 +4096,6 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
   await memberRef.set(patch, { merge: true });
   return { ok: true };
 });
-
-const TERMINAL_BOOKING_STATUSES = new Set([
-  "declined",
-  "rejected",
-  "cancelled",
-  "canceled",
-  "completed",
-  "done",
-]);
 
 async function unassignMemberFromTenantRecords(tenantId, memberUid) {
   let unassignedBookings = 0;

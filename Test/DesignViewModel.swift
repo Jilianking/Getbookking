@@ -10,6 +10,7 @@ import SwiftUI
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 
 enum DesignTab: String, CaseIterable {
     case template
@@ -17,15 +18,25 @@ enum DesignTab: String, CaseIterable {
     case gallery
     case book
     case about
+    case team
     case shop
 
-    static let manageTabs: [DesignTab] = [.gallery, .book, .about, .shop]
+    static let manageTabs: [DesignTab] = [.gallery, .book, .about, .team, .shop]
+
+    /// Manage segment tabs; omit `.team` when the tenant is Solo (no public team pages).
+    static func manageTabs(showTeam: Bool) -> [DesignTab] {
+        var tabs: [DesignTab] = [.gallery, .book, .about]
+        if showTeam { tabs.append(.team) }
+        tabs.append(.shop)
+        return tabs
+    }
 
     var manageSegmentTitle: String {
         switch self {
         case .gallery: return "Gallery"
         case .book: return "Book"
         case .about: return "About"
+        case .team: return "Team"
         case .shop: return "Shop"
         default: return rawValue.capitalized
         }
@@ -54,6 +65,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published private(set) var isSavingBladeServices = false
     /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
     @Published private(set) var webPreviewReloadToken: UInt64 = 0
+    /// Bumped when site colors change in-app — Design patches WKWebView instead of full reload.
+    @Published private(set) var webPreviewColorPatchToken: UInt64 = 0
     /// Set while Quick edit is active; flushed when the session ends (toggle off or leave Design).
     private(set) var pendingWebPreviewReload = false
 
@@ -185,6 +198,12 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var showBookPage: Bool = true
     /// Public `/about` route and About nav link to that URL (default on).
     @Published var showAboutPage: Bool = true
+    /// Public `/team` roster page for Studio/Shop (default on).
+    @Published var showTeamPage: Bool = true
+    /// “Meet the team” strip on home before the footer (default on).
+    @Published var showMeetTheTeamOnHome: Bool = true
+    @Published var teamMemberVisibility: [TeamMemberVisibilityDraft] = []
+    @Published var uploadingTeamMemberPhotoUid: String?
     @Published var products: [Product] = []
     @Published var shopOrders: [ShopOrder] = []
     @Published var isUploadingProduct = false
@@ -225,6 +244,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var showBusinessHoursOnPage: Bool = true
 
     private let firebaseService = FirebaseService()
+    private let functions = Functions.functions()
 
     var hasTenant: Bool { tenantId != nil }
 
@@ -297,6 +317,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     func invalidateWebPreview() {
         webPreviewReloadToken &+= 1
+    }
+
+    func bumpWebPreviewColorPatch() {
+        webPreviewColorPatchToken &+= 1
     }
 
     func deferWebPreviewReload() {
@@ -1074,6 +1098,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 showGalleryPage = tenant?["showGalleryPage"] as? Bool ?? true
                 showBookPage = tenant?["showBookPage"] as? Bool ?? true
                 showAboutPage = tenant?["showAboutPage"] as? Bool ?? true
+                showTeamPage = tenant?["showTeamPage"] as? Bool ?? true
+                showMeetTheTeamOnHome = tenant?["showMeetTheTeamOnHome"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
                 industryCustomLabel = (tenant?["industryCustomLabel"] as? String ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1120,6 +1146,12 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 } catch {
                     await MainActor.run { errorMessage = error.localizedDescription }
                 }
+            }
+            let plan = SubscriptionPlan.normalized(fromFirestore: tenant?["subscriptionPlan"] as? String)
+            if plan.allowsTeamInvites {
+                await loadTeamMemberVisibility(ownerUid: tenant?["ownerUid"] as? String)
+            } else {
+                await MainActor.run { teamMemberVisibility = [] }
             }
         } catch {
             await MainActor.run {
@@ -2080,8 +2112,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             errorMessage = nil
             webColorPaletteId = palette.id
             applyColorTokensLocally(palette.tokens)
+            bumpWebPreviewColorPatch()
         }
-        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens))
+        await saveTenantUpdates(
+            tid,
+            WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens),
+            invalidatePreview: false
+        )
     }
 
     /// Applies a **web layout** only. Business type stays in Settings (`industry` unchanged).
@@ -2114,19 +2151,109 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     }
 
     // MARK: - Shop / Products
-    /// Persists gallery, book, about, and shop visibility for the public site (nav + direct URLs).
+    /// Persists gallery, book, about, team, and shop visibility for the public site (nav + direct URLs).
     func savePublicPageVisibility() async {
         guard let tid = tenantId else { return }
         await saveTenantUpdates(tid, [
             "showGalleryPage": showGalleryPage,
             "showBookPage": showBookPage,
             "showAboutPage": showAboutPage,
+            "showTeamPage": showTeamPage,
+            "showMeetTheTeamOnHome": showMeetTheTeamOnHome,
             "shopEnabled": shopEnabled
         ])
     }
 
     func saveShopEnabled() async {
         await savePublicPageVisibility()
+    }
+
+    /// Persists team page visibility toggles and per-member roster fields.
+    func saveTeamPageSettings() async {
+        guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
+        await saveTenantUpdates(tid, [
+            "showTeamPage": showTeamPage,
+            "showMeetTheTeamOnHome": showMeetTheTeamOnHome,
+        ])
+        await saveTeamMemberVisibility()
+        await MainActor.run { invalidateWebPreview() }
+    }
+
+    func uploadTeamMemberProfilePhoto(memberUid: String, imageData: Data) async -> String? {
+        guard let tid = tenantId else { return nil }
+        if blockIfDemoReadOnly() { return nil }
+        await MainActor.run {
+            uploadingTeamMemberPhotoUid = memberUid
+            errorMessage = nil
+        }
+        do {
+            let url = try await firebaseService.uploadTeamMemberProfilePhoto(
+                tenantId: tid,
+                memberUid: memberUid,
+                imageData: imageData
+            )
+            await MainActor.run {
+                if let idx = teamMemberVisibility.firstIndex(where: { $0.uid == memberUid }) {
+                    teamMemberVisibility[idx].profilePhotoUrl = url
+                }
+            }
+            _ = try await functions.httpsCallable("updateTenantMember").call([
+                "memberUid": memberUid,
+                "profilePhotoUrl": url,
+            ])
+            await MainActor.run {
+                uploadingTeamMemberPhotoUid = nil
+                invalidateWebPreview()
+            }
+            return url
+        } catch {
+            await MainActor.run {
+                uploadingTeamMemberPhotoUid = nil
+                errorMessage = error.localizedDescription
+            }
+            return nil
+        }
+    }
+
+    private func loadTeamMemberVisibility(ownerUid: String?) async {
+        do {
+            let result = try await functions.httpsCallable("listTenantMembers").call([:])
+            let data = result.data as? [String: Any]
+            let raw = data?["members"] as? [[String: Any]]
+            let members = TenantSessionStore.parseTeamMembers(raw, ownerUid: ownerUid)
+            await MainActor.run {
+                teamMemberVisibility = members.map(TeamMemberVisibilityDraft.init(member:))
+            }
+        } catch {
+            await MainActor.run {
+                teamMemberVisibility = []
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveTeamMemberVisibility() async {
+        for member in teamMemberVisibility {
+            let payload: [String: Any] = [
+                "memberUid": member.uid,
+                "showOnTeamPage": member.showOnTeamPage,
+                "showOnTeamHome": member.showOnTeamHome,
+                "isBookable": member.isBookable,
+                "providerAboutText": member.providerAboutText.trimmingCharacters(in: .whitespacesAndNewlines),
+                "profilePhotoUrl": member.profilePhotoUrl.trimmingCharacters(in: .whitespacesAndNewlines),
+                "memberSettings": [
+                    "canEditPortfolio": member.canEditPortfolio,
+                    "canEditPublicBio": member.canEditPublicBio,
+                ],
+            ]
+            do {
+                _ = try await functions.httpsCallable("updateTenantMember").call(payload)
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+                return
+            }
+        }
     }
 
     func addProduct(

@@ -42,7 +42,13 @@ struct DesignView: View {
     var body: some View {
         NavigationView {
             Group {
-                if isShowingManage {
+                if !authViewModel.teamAccess.isOwner && !authViewModel.isDemoMode {
+                    ContentUnavailableView {
+                        Label("Owner only", systemImage: "paintbrush")
+                    } description: {
+                        Text("Full website design is managed by your studio owner. Use Website profile if your owner enabled bio or portfolio editing for you.")
+                    }
+                } else if isShowingManage {
                     manageContent
                 } else {
                     previewContent
@@ -664,12 +670,18 @@ struct DesignView: View {
                 isQuickEditChromeCollapsed = false
             }
         }
+        .onChange(of: viewModel.webPreviewColorPatchToken) { _, _ in
+            quickEditBridge.schedulePreviewColorPatch(
+                viewModel.previewColorPatchPayload(),
+                full: true
+            )
+        }
     }
 
     private var manageContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ForEach(DesignTab.manageTabs, id: \.self) { tab in
+                ForEach(visibleManageTabs, id: \.self) { tab in
                     Button {
                         selectedTab = tab
                     } label: {
@@ -687,6 +699,11 @@ struct DesignView: View {
             .cornerRadius(8)
             .padding()
             .appCard()
+            .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
+                if !visibleManageTabs.contains(selectedTab) {
+                    selectedTab = visibleManageTabs.first ?? .gallery
+                }
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let msg = viewModel.errorMessage, !viewModel.isDemoReadOnly {
@@ -712,6 +729,7 @@ struct DesignView: View {
                         case .gallery:
                             ManageGalleryTabContent(
                                 viewModel: viewModel,
+                                isTeamPlan: authViewModel.tenantSubscriptionPlan.allowsTeamInvites,
                                 isStudio12Template: isStudio12Template,
                                 galleryBatchCrop: $manageGalleryBatchCrop,
                                 showGalleryPickerLoadError: $showGalleryPickerLoadError
@@ -728,6 +746,8 @@ struct DesignView: View {
                                 viewModel: viewModel,
                                 isClassicTemplate: isClassicTemplate
                             )
+                        case .team:
+                            ManageTeamTabContent(viewModel: viewModel)
                         case .shop:
                             ManageShopTabContent(viewModel: viewModel)
                         default:
@@ -800,8 +820,8 @@ struct DesignView: View {
         Studio12IndustryCopy.template(from: viewModel.industry)
     }
 
-    private var visibleDesignTabs: [DesignTab] {
-        DesignTab.manageTabs
+    private var visibleManageTabs: [DesignTab] {
+        DesignTab.manageTabs(showTeam: authViewModel.tenantSubscriptionPlan.allowsTeamInvites)
     }
 
     /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.

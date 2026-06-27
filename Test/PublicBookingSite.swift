@@ -20,4 +20,26 @@ enum PublicBookingSite {
     static func url(forSlug slug: String) -> URL? {
         URL(string: urlString(forSlug: slug))
     }
+
+    /// Artist page path: `/team/{memberSlug}`
+    static func memberPagePath(memberSlug: String) -> String {
+        let ms = memberSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !ms.isEmpty else { return "" }
+        return "/team/\(ms)"
+    }
+
+    /// Studio book with artist pre-selected: `/book?member={memberSlug}`
+    static func memberBookPath(memberSlug: String) -> String {
+        let ms = memberSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !ms.isEmpty else { return "/book" }
+        return "/book?member=\(ms)"
+    }
+
+    /// `https://{tenant}.getbookking.com/book?member={memberSlug}`
+    static func memberBookURLString(tenantSlug: String, memberSlug: String) -> String {
+        let tenant = tenantSlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let bookPath = memberBookPath(memberSlug: memberSlug)
+        guard !tenant.isEmpty else { return "" }
+        return "https://\(tenant).\(host)\(bookPath)"
+    }
 }

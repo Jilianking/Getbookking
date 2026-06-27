@@ -89,6 +89,16 @@ enum TeamJobTitleCatalog {
     }
 
     static let customOptionId = "__custom__"
+
+    /// Titles for the owner's public booking page (picker + profile).
+    static func ownerPublicTitleOptions(for industry: String?) -> [TeamJobTitleOption] {
+        var opts: [TeamJobTitleOption] = [
+            TeamJobTitleOption(id: "owner_artist", label: "Owner & artist"),
+            TeamJobTitleOption(id: "lead", label: "Lead artist"),
+        ]
+        opts.append(contentsOf: primaryOptions(for: industry))
+        return opts
+    }
 }
 
 // MARK: - Per-member settings (owner edits on Team → member detail)
@@ -136,6 +146,10 @@ struct TeamMemberSettings: Equatable {
     var paymentSplitAppliesTo: PaymentSplitAppliesTo = .service
     /// Independent members connect their own Stripe; studio_payroll uses the studio account.
     var payoutMode: MemberPayoutMode = .independent
+    /// Owner enables self-service portfolio upload in the app (Design → Team).
+    var canEditPortfolio: Bool = false
+    /// Owner enables self-service bio editing in the app (Design → Team).
+    var canEditPublicBio: Bool = false
 
     init() {}
 
@@ -165,6 +179,8 @@ struct TeamMemberSettings: Equatable {
            let parsed = MemberPayoutMode(rawValue: raw) {
             payoutMode = parsed
         }
+        canEditPortfolio = d["canEditPortfolio"] as? Bool ?? false
+        canEditPublicBio = d["canEditPublicBio"] as? Bool ?? false
     }
 
     var firestoreDictionary: [String: Any] {
@@ -174,6 +190,8 @@ struct TeamMemberSettings: Equatable {
             "paymentSplitPercent": paymentSplitPercent,
             "paymentSplitAppliesTo": paymentSplitAppliesTo.rawValue,
             "payoutMode": payoutMode.rawValue,
+            "canEditPortfolio": canEditPortfolio,
+            "canEditPublicBio": canEditPublicBio,
         ]
         if let override = bookingConfirmationOverride, !useStudioBookingPolicy {
             d["bookingConfirmationOverride"] = override
@@ -281,6 +299,8 @@ struct TenantTeamMember: Identifiable, Equatable {
     let jobTitle: String
     let memberSlug: String
     let isBookable: Bool
+    let showOnTeamPage: Bool
+    let showOnTeamHome: Bool
     let providerAboutText: String
     let providerGalleryImages: [String]
     let smsEnabled: Bool
@@ -307,7 +327,10 @@ struct TenantTeamMember: Identifiable, Equatable {
 
     var badgeLabel: String {
         switch accessRole {
-        case .owner: return "Owner"
+        case .owner:
+            let t = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty { return "Owner" }
+            return "Owner · \(t)"
         case .manager: return "Manager"
         case .member:
             let t = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -323,6 +346,14 @@ struct TenantTeamMember: Identifiable, Equatable {
         return String(displayName.prefix(2)).uppercased()
     }
 
+    /// Subtitle shown on the public team booking picker.
+    var publicPickerSubtitle: String {
+        let t = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        if accessRole == .owner { return "Studio owner" }
+        return ""
+    }
+
     var paymentSplitSummary: String? {
         guard memberSettings.paymentSplitEnabled, memberSettings.paymentSplitPercent > 0 else { return nil }
         return "\(memberSettings.paymentSplitPercent)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
@@ -331,5 +362,69 @@ struct TenantTeamMember: Identifiable, Equatable {
     var payoutModeSummary: String? {
         guard accessRole != .owner else { return nil }
         return memberSettings.payoutMode.displayName
+    }
+}
+
+/// Editable per-member website visibility in Design → Manage → Team.
+struct TeamMemberVisibilityDraft: Identifiable, Equatable {
+    let uid: String
+    let displayName: String
+    let jobTitle: String
+    var profilePhotoUrl: String
+    let memberSlug: String
+    let accessRole: TeamAccessRole
+    var showOnTeamPage: Bool
+    var showOnTeamHome: Bool
+    var isBookable: Bool
+    var providerAboutText: String
+    var canEditPortfolio: Bool
+    var canEditPublicBio: Bool
+
+    var id: String { uid }
+
+    var initials: String {
+        let parts = displayName.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if parts.count >= 2 {
+            return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
+        }
+        return String(displayName.prefix(2)).uppercased()
+    }
+
+    var roleSubtitle: String {
+        let t = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        switch accessRole {
+        case .owner: return "Owner"
+        case .manager: return "Manager"
+        case .member: return TeamJobTitleCatalog.defaultTitle(for: nil)
+        }
+    }
+
+    /// Pill label beside the name on Design → Team (matches Team roster badges).
+    var badgeLabel: String {
+        switch accessRole {
+        case .owner:
+            return "Owner"
+        case .manager:
+            return "Manager"
+        case .member:
+            let t = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? TeamJobTitleCatalog.defaultTitle(for: nil) : t
+        }
+    }
+
+    init(member: TenantTeamMember) {
+        uid = member.uid
+        displayName = member.displayName
+        jobTitle = member.jobTitle
+        profilePhotoUrl = member.profilePhotoUrl
+        memberSlug = member.memberSlug
+        accessRole = member.accessRole
+        showOnTeamPage = member.showOnTeamPage
+        showOnTeamHome = member.showOnTeamHome
+        isBookable = member.isBookable
+        providerAboutText = member.providerAboutText
+        canEditPortfolio = member.memberSettings.canEditPortfolio
+        canEditPublicBio = member.memberSettings.canEditPublicBio
     }
 }

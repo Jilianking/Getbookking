@@ -383,6 +383,8 @@ final class ManagerSettingsViewModel: ObservableObject {
                 jobTitle: member.jobTitle,
                 memberSlug: member.memberSlug,
                 isBookable: member.isBookable,
+                showOnTeamPage: member.showOnTeamPage,
+                showOnTeamHome: member.showOnTeamHome,
                 providerAboutText: member.providerAboutText,
                 providerGalleryImages: imageURLs,
                 smsEnabled: member.smsEnabled,
@@ -413,6 +415,8 @@ final class ManagerSettingsViewModel: ObservableObject {
         jobTitle: String,
         memberSettings: TeamMemberSettings,
         isBookable: Bool? = nil,
+        showOnTeamPage: Bool? = nil,
+        showOnTeamHome: Bool? = nil,
         providerAboutText: String? = nil
     ) async -> Bool {
         guard isTenantOwner else { return false }
@@ -428,9 +432,48 @@ final class ManagerSettingsViewModel: ObservableObject {
         if let isBookable {
             payload["isBookable"] = isBookable
         }
+        if let showOnTeamPage {
+            payload["showOnTeamPage"] = showOnTeamPage
+        }
+        if let showOnTeamHome {
+            payload["showOnTeamHome"] = showOnTeamHome
+        }
         if let providerAboutText {
             payload["providerAboutText"] = providerAboutText
         }
+        do {
+            _ = try await functions.httpsCallable("updateTenantMember").call(payload)
+            await load(isDemoMode: false)
+            saveSuccess = true
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await MainActor.run { saveSuccess = false }
+            }
+            isUpdatingMember = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            isUpdatingMember = false
+            return false
+        }
+    }
+
+    func saveOwnerPublicProfile(
+        memberUid: String,
+        jobTitle: String,
+        isBookable: Bool,
+        providerAboutText: String
+    ) async -> Bool {
+        guard isTenantOwner else { return false }
+        isUpdatingMember = true
+        errorMessage = nil
+        saveSuccess = false
+        let payload: [String: Any] = [
+            "memberUid": memberUid,
+            "jobTitle": jobTitle,
+            "isBookable": isBookable,
+            "providerAboutText": providerAboutText,
+        ]
         do {
             _ = try await functions.httpsCallable("updateTenantMember").call(payload)
             await load(isDemoMode: false)
@@ -465,9 +508,11 @@ final class ManagerSettingsViewModel: ObservableObject {
                     phone: (row["phone"] as? String) ?? "",
                     profilePhotoUrl: (row["profilePhotoUrl"] as? String) ?? "",
                     accessRole: .owner,
-                    jobTitle: "",
+                    jobTitle: (row["jobTitle"] as? String) ?? "",
                     memberSlug: (row["memberSlug"] as? String) ?? "",
                     isBookable: row["isBookable"] as? Bool ?? true,
+                    showOnTeamPage: row["showOnTeamPage"] as? Bool ?? (row["isBookable"] as? Bool ?? true),
+                    showOnTeamHome: row["showOnTeamHome"] as? Bool ?? (row["isBookable"] as? Bool ?? true),
                     providerAboutText: (row["providerAboutText"] as? String) ?? "",
                     providerGalleryImages: Self.parseProviderGalleryImages(row),
                     smsEnabled: row["smsEnabled"] as? Bool ?? false,
@@ -488,6 +533,8 @@ final class ManagerSettingsViewModel: ObservableObject {
                 jobTitle: (row["jobTitle"] as? String) ?? "",
                 memberSlug: (row["memberSlug"] as? String) ?? "",
                 isBookable: row["isBookable"] as? Bool ?? (role == .member),
+                showOnTeamPage: row["showOnTeamPage"] as? Bool ?? (row["isBookable"] as? Bool ?? (role == .member)),
+                showOnTeamHome: row["showOnTeamHome"] as? Bool ?? (row["isBookable"] as? Bool ?? (role == .member)),
                 providerAboutText: (row["providerAboutText"] as? String) ?? "",
                 providerGalleryImages: Self.parseProviderGalleryImages(row),
                 smsEnabled: row["smsEnabled"] as? Bool ?? false,
@@ -522,9 +569,9 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, showOnTeamPage: false, showOnTeamHome: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

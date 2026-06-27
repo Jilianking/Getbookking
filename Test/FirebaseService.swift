@@ -881,6 +881,18 @@ class FirebaseService: ObservableObject {
         try await ref.delete()
     }
 
+    /// Owner-uploaded team roster portrait (public read via tenant storage path).
+    func uploadTeamMemberProfilePhoto(tenantId: String, memberUid: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let ref = storage.reference().child("tenants/\(tenantId)/team/\(memberUid)/profile.jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1200, compressionQuality: 0.85)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
     // MARK: - Tenant Products
     func fetchTenantProducts(tenantId: String) async throws -> [Product] {
         let snapshot = try await db.collection("tenants").document(tenantId).collection("products").getDocuments()

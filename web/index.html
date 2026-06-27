@@ -299,6 +299,17 @@
       margin-bottom: 6px;
       color: #111827;
     }
+    .bk-book-artist-field {
+      margin-bottom: 20px;
+    }
+    .bk-book-artist-wrap {
+      margin-bottom: 8px;
+    }
+    .bk-book-artist-field select,
+    #bk-book-artist {
+      width: 100%;
+      box-sizing: border-box;
+    }
     .booking-form input,
     .booking-form textarea,
     .booking-form select {
@@ -1118,6 +1129,384 @@
     button.bk-team-card.bk-team-picker-card:focus-visible { outline: 2px solid rgba(0,0,0,0.35); outline-offset: 2px; }
     .bk-team-picker-any { display: inline-block; margin-top: 28px; padding: 12px 28px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: transparent; cursor: pointer; font-size: 0.95rem; color: inherit; }
     .bk-team-picker-any:hover { background: rgba(0,0,0,0.04); }
+    .bk-team-picker-first { display: block; width: 100%; max-width: 420px; margin: 0 auto 24px; padding: 16px 20px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.12); background: rgba(0,0,0,0.03); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+    .bk-team-picker-first:hover { background: rgba(0,0,0,0.06); }
+    .bk-team-picker-first strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+    .bk-team-picker-first span { display: block; font-size: 0.85rem; color: #666; }
+    .stonecut-page .bk-team-picker-first { border-color: rgba(232, 224, 208, 0.15); background: rgba(6, 6, 4, 0.5); }
+    .stonecut-page .bk-team-picker-first span,
+    .stonecut-page .bk-team-card span { color: var(--bk-fg-muted, #a09888); }
+    .stonecut-page .bk-team-card { background: rgba(6, 6, 4, 0.55); border: 1px solid rgba(232, 224, 208, 0.1); }
+    .stonecut-page .bk-team-picker-any { border-color: rgba(232, 224, 208, 0.2); color: var(--bk-fg, #e8e0d0); }
+    .stonecut-page .bk-team-section h2 { color: var(--bk-fg, #e8e0d0); font-family: 'Unbounded', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; font-size: 1.1rem; }
+    /* Studio/Shop roster: /team page + home “Meet the team” strip (editorial template) */
+    .bk-team-roster-section {
+      --bk-team-roster-bg: #e8dcc8;
+      --bk-team-roster-fg: #2c241c;
+      --bk-team-roster-photo-bg: #f5efe6;
+      --bk-team-roster-initials: #3d3530;
+      --bk-team-roster-name: #a89e96;
+      --bk-team-roster-role: #2c241c;
+      --bk-team-roster-bio: #4a423c;
+      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+      padding: 72px 24px 56px;
+      background: var(--bk-team-roster-bg) !important;
+      color: var(--bk-team-roster-fg) !important;
+      font-family: var(--bk-team-roster-font);
+    }
+    .bk-team-page-band[data-bk-color-surface="about"],
+    .bk-team-page-band .bk-team-roster-section[data-bk-color-surface="about"] {
+      background: var(--bk-team-roster-bg, #e8dcc8) !important;
+      color: var(--bk-team-roster-fg, #2c241c) !important;
+    }
+    .bk-team-roster-section--home { padding: 64px 24px 48px; }
+    .bk-team-roster-section--page { padding-bottom: 40px; }
+    .bk-team-roster-head {
+      text-align: center;
+      max-width: 720px;
+      margin: 0 auto 52px;
+    }
+    .bk-team-roster-title {
+      font-family: var(--bk-team-roster-font);
+      font-size: clamp(2.25rem, 4.5vw, 3rem);
+      font-weight: 400;
+      margin: 0 0 14px;
+      letter-spacing: 0.01em;
+      color: var(--bk-team-roster-fg);
+    }
+    .bk-team-roster-subtitle {
+      font-family: var(--bk-team-roster-font);
+      font-style: italic;
+      font-size: clamp(1.05rem, 2vw, 1.2rem);
+      font-weight: 400;
+      margin: 0;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 78%, transparent);
+    }
+    .bk-team-roster-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+    .bk-team-roster-card {
+      margin: 0;
+      background: #fff;
+      box-shadow: 0 2px 16px rgba(44, 36, 28, 0.06);
+    }
+    .bk-team-roster-card-link {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+    .bk-team-roster-card-link:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 28px rgba(44, 36, 28, 0.1);
+    }
+    .bk-team-roster-card-inner { display: block; }
+    .bk-team-roster-card--static { cursor: default; }
+    .bk-team-roster-photo {
+      aspect-ratio: 4 / 5;
+      background: var(--bk-team-roster-photo-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .bk-team-roster-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .bk-team-roster-initials {
+      font-family: var(--bk-team-roster-font);
+      font-size: clamp(2.75rem, 7vw, 4rem);
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      color: color-mix(in srgb, var(--bk-team-roster-initials) 55%, transparent);
+    }
+    .bk-team-roster-body {
+      background: #fff;
+      padding: 22px 20px 26px;
+      text-align: center;
+      color: var(--bk-team-roster-role);
+    }
+    .bk-team-roster-name {
+      font-family: var(--bk-team-roster-font);
+      font-size: 0.95rem;
+      margin: 0 0 10px;
+      font-weight: 400;
+      color: var(--bk-team-roster-name);
+      letter-spacing: 0.02em;
+    }
+    .bk-team-roster-role {
+      font-family: var(--bk-team-roster-font);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin: 0 0 16px;
+      color: var(--bk-team-roster-role);
+      line-height: 1.35;
+    }
+    .bk-team-roster-bio {
+      font-family: var(--bk-team-roster-font);
+      font-style: italic;
+      font-size: 0.92rem;
+      line-height: 1.7;
+      margin: 0 auto;
+      max-width: 280px;
+      color: var(--bk-team-roster-bio);
+      text-align: center;
+    }
+    .bk-team-roster-view-all {
+      text-align: center;
+      margin: 40px 0 0;
+    }
+    .bk-team-roster-view-all a {
+      font-family: var(--bk-team-roster-font);
+      color: var(--bk-team-roster-fg);
+      text-decoration: none;
+      font-size: 1rem;
+      border-bottom: 1px solid currentColor;
+      opacity: 0.85;
+    }
+    .bk-team-roster-scroll-hint {
+      display: flex;
+      justify-content: center;
+      margin-top: 48px;
+    }
+    .bk-team-roster-scroll-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 0;
+      background: #2c241c;
+      color: #f7f5f0;
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(44, 36, 28, 0.22);
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .bk-team-roster-scroll-btn:hover {
+      transform: translateY(2px);
+      opacity: 0.92;
+    }
+    .bk-team-roster-empty {
+      text-align: center;
+      padding: 48px 24px;
+      opacity: 0.7;
+      max-width: 480px;
+      margin: 0 auto;
+      font-family: var(--bk-team-roster-font);
+    }
+    .bk-team-page {
+      min-height: 100vh;
+      background: var(--bk-team-roster-bg, #e8dcc8);
+      color: var(--bk-team-roster-fg, #2c241c);
+      font-family: var(--font-display);
+    }
+    .bk-team-page-band {
+      padding-top: 88px;
+      background: var(--bk-team-roster-bg, #e8dcc8) !important;
+    }
+    .bk-team-page.luxe-page--sub .bk-team-page-band,
+    .bk-team-page.classic-home .bk-team-page-band { padding-top: 72px; }
+    .bk-team-page--stonecut .bk-team-roster-section,
+    .bk-team-page.blade-page .bk-team-roster-section {
+      --bk-team-roster-bg: #e8dcc8;
+      --bk-team-roster-fg: #2c241c;
+      background: var(--bk-team-roster-bg) !important;
+      color: var(--bk-team-roster-fg) !important;
+    }
+    .bk-team-page--stonecut .bk-team-roster-body,
+    .bk-team-page.blade-page .bk-team-roster-body {
+      background: #fff;
+      border: none;
+    }
+    .bk-team-page.blade-page .bk-team-roster-role { color: var(--bk-team-roster-role); opacity: 1; }
+    @media (max-width: 900px) {
+      .bk-team-roster-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .bk-team-roster-grid { grid-template-columns: 1fr; max-width: 340px; }
+      .bk-team-page-band { padding-top: 72px; }
+    }
+    /* /team/{member} artist profile (editorial split layout) */
+    .bk-team-member-page .tattoo-nav-links a[href$="/team"],
+    .bk-team-member-page .luxe-nav-links a[href$="/team"],
+    .bk-team-page .tattoo-nav-links a[href$="/team"],
+    .bk-team-page .luxe-nav-links a[href$="/team"] {
+      text-decoration: underline;
+      text-underline-offset: 6px;
+    }
+    .bk-team-member-section {
+      --bk-team-roster-bg: #e8dcc8;
+      --bk-team-roster-fg: #2c241c;
+      --bk-team-roster-photo-bg: #ddd0bc;
+      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 24px 72px;
+      font-family: var(--bk-team-roster-font);
+      color: var(--bk-team-roster-fg);
+    }
+    .bk-team-member-hero {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(280px, 1.05fr);
+      gap: clamp(32px, 5vw, 56px);
+      align-items: start;
+      margin-bottom: clamp(48px, 8vw, 72px);
+    }
+    .bk-team-member-photo-col { position: relative; }
+    .bk-team-member-photo {
+      aspect-ratio: 1;
+      background: var(--bk-team-roster-photo-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .bk-team-member-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .bk-team-member-initials {
+      font-family: var(--bk-team-roster-font);
+      font-size: clamp(3rem, 10vw, 5rem);
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 35%, transparent);
+    }
+    .bk-team-member-badge {
+      position: absolute;
+      left: 0;
+      bottom: 20px;
+      background: #fff;
+      padding: 9px 14px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #6b6258;
+      box-shadow: 0 2px 12px rgba(44, 36, 28, 0.08);
+    }
+    .bk-team-member-copy { padding-top: 8px; }
+    .bk-team-member-name {
+      font-family: var(--bk-team-roster-font);
+      font-size: clamp(2.5rem, 5.5vw, 3.75rem);
+      font-weight: 400;
+      line-height: 1.05;
+      margin: 0 0 12px;
+      color: var(--bk-team-roster-fg);
+    }
+    .bk-team-member-role {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 72%, transparent);
+      margin: 0 0 24px;
+    }
+    .bk-team-member-bio {
+      font-family: var(--bk-team-roster-font);
+      font-size: clamp(1.05rem, 2vw, 1.2rem);
+      line-height: 1.65;
+      font-weight: 400;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 88%, transparent);
+      margin: 0 0 32px;
+      max-width: 38em;
+    }
+    .bk-team-member-book {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 65%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--bk-team-roster-fg) 35%, transparent);
+      padding-bottom: 4px;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .bk-team-member-book:hover {
+      color: var(--bk-team-roster-fg);
+      border-color: var(--bk-team-roster-fg);
+    }
+    .bk-team-member-work-title {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 55%, transparent);
+      margin: 0 0 24px;
+      text-align: center;
+    }
+    .bk-team-member-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .bk-team-member-grid-item {
+      display: block;
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      background: var(--bk-team-roster-photo-bg);
+      aspect-ratio: 1;
+      overflow: hidden;
+      border-radius: 0;
+    }
+    .bk-team-member-grid-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.25s ease;
+    }
+    .bk-team-member-grid-item:hover img { transform: scale(1.03); }
+    .bk-team-member-work-empty {
+      text-align: center;
+      font-style: italic;
+      color: color-mix(in srgb, var(--bk-team-roster-fg) 60%, transparent);
+      margin: 0;
+    }
+    .bk-team-member-scroll-hint {
+      display: flex;
+      justify-content: center;
+      margin-top: 28px;
+    }
+    @media (max-width: 820px) {
+      .bk-team-member-hero {
+        grid-template-columns: 1fr;
+        max-width: 420px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .bk-team-member-copy { text-align: center; }
+      .bk-team-member-bio { margin-left: auto; margin-right: auto; }
+      .bk-team-member-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 480px) {
+      .bk-team-member-grid { grid-template-columns: 1fr; max-width: 280px; }
+    }
     .bk-provider-page { max-width: 520px; margin: 48px auto; padding: 32px 28px; text-align: center; }
     .bk-provider-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; margin: 0 auto 16px; display: block; }
     .bk-provider-photo-placeholder { width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.08); font-size: 2rem; font-weight: 600; }
@@ -2339,6 +2728,35 @@
       }
     }
     .gallery-empty-hint { text-align: center; padding: 48px 0; color: inherit; opacity: 0.5; }
+    .gallery-team-filter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      justify-content: center;
+      margin: 0 0 28px;
+    }
+    .gallery-team-filter-btn {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+      background: transparent;
+      color: inherit;
+      opacity: 0.72;
+      cursor: pointer;
+      transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .gallery-team-filter-btn:hover { opacity: 1; }
+    .gallery-team-filter-btn.is-active {
+      opacity: 1;
+      background: color-mix(in srgb, currentColor 10%, transparent);
+      border-color: color-mix(in srgb, currentColor 45%, transparent);
+    }
+    .gallery-item--hidden { display: none !important; }
     @media (max-width: 640px) {
       .gallery-grid { grid-template-columns: repeat(2, 1fr); }
       .gallery-grid img { height: 180px; }
@@ -6088,8 +6506,8 @@
         return firebase.auth().signInAnonymously();
       }
 
-      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), and member paths (`/tenant/maya/book`). */
-      var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, home: 1, join: 1 };
+      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
+      var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1 };
 
       function parsePath() {
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
@@ -6103,6 +6521,8 @@
         var tenantSlug = '';
         var memberSlug = '';
         var page = 'home';
+        var legacyMemberPath = false;
+        var teamMemberRoute = false;
         var segIdx = hostTenant ? 0 : 1;
 
         if (hostTenant) {
@@ -6112,8 +6532,19 @@
         }
 
         var firstSeg = (parts[segIdx] || '').toLowerCase();
-        if (firstSeg && !RESERVED_TENANT_PAGES[firstSeg] && firstSeg !== tenantSlug) {
+        if (firstSeg === 'team') {
+          var teamSub = (parts[segIdx + 1] || '').toLowerCase();
+          if (teamSub && !RESERVED_TENANT_PAGES[teamSub]) {
+            memberSlug = teamSub;
+            teamMemberRoute = true;
+            page = (parts[segIdx + 2] || 'provider').toLowerCase();
+            if (!page) page = 'provider';
+          } else {
+            page = 'team';
+          }
+        } else if (firstSeg && !RESERVED_TENANT_PAGES[firstSeg] && firstSeg !== tenantSlug) {
           memberSlug = firstSeg;
+          legacyMemberPath = true;
           page = (parts[segIdx + 1] || 'provider').toLowerCase();
           if (!page) page = 'provider';
         } else {
@@ -6126,9 +6557,15 @@
         var isGalleryPath = page === 'gallery';
         var isShopPath = page === 'shop';
         var isAboutPath = page === 'about';
-        var serviceSlugIndex = memberSlug
-          ? segIdx + (isBookPath ? 2 : 1)
-          : (hostTenant ? 1 : 2);
+        var isTeamPath = page === 'team' && !memberSlug;
+        var serviceSlugIndex;
+        if (memberSlug && teamMemberRoute) {
+          serviceSlugIndex = segIdx + (isBookPath ? 3 : 2);
+        } else if (memberSlug) {
+          serviceSlugIndex = segIdx + (isBookPath ? 2 : 1);
+        } else {
+          serviceSlugIndex = hostTenant ? 1 : 2;
+        }
         var shopSubPath = isShopPath ? (parts[serviceSlugIndex] || '').toLowerCase() : '';
         var isShopCheckoutPath = isShopPath && shopSubPath === 'checkout';
         var serviceSlug = isBookPath && parts[serviceSlugIndex] ? String(parts[serviceSlugIndex]).toLowerCase() : '';
@@ -6143,7 +6580,9 @@
           isShopPath: isShopPath,
           isShopCheckoutPath: isShopCheckoutPath,
           isAboutPath: isAboutPath,
+          isTeamPath: isTeamPath,
           isProviderPath: !!memberSlug,
+          legacyMemberPath: legacyMemberPath,
           sectionTarget: sectionTarget,
           isSubdomainRoute: !!hostTenant
         };
@@ -6156,14 +6595,22 @@
         var base = tenantBaseUrl(tenant).replace(/\/$/, '');
         var ms = String(memberSlug || '').toLowerCase();
         if (!ms) return base + '/home';
-        return base + '/' + ms;
+        return base + '/team/' + ms;
       }
       function memberBookUrl(tenant, memberSlug) {
-        return memberProfileUrl(tenant, memberSlug) + '/book';
+        var base = tenantBaseUrl(tenant).replace(/\/$/, '');
+        var ms = String(memberSlug || '').toLowerCase();
+        if (!ms) return base + '/book';
+        return base + '/book?member=' + encodeURIComponent(ms);
       }
       function loadPublicProviders(tenantSlug) {
         return functions.httpsCallable('listPublicProviders')({ tenantSlug: tenantSlug })
           .then(function(res) { return (res && res.data && res.data.providers) || []; })
+          .catch(function() { return []; });
+      }
+      function loadTeamRoster(tenantSlug) {
+        return functions.httpsCallable('listTeamRoster')({ tenantSlug: tenantSlug })
+          .then(function(res) { return (res && res.data && res.data.members) || []; })
           .catch(function() { return []; });
       }
       function loadPublicProvider(tenantSlug, memberSlug) {
@@ -6179,20 +6626,153 @@
         if (!provider || !provider.providerGalleryImages) return [];
         return provider.providerGalleryImages.filter(function(u) { return u && String(u).trim(); });
       }
-      function teamProvidersSectionHtml(tenant, providers) {
+      function teamRosterInitials(displayName) {
+        var parts = String(displayName || 'P').trim().split(/\s+/);
+        if (parts.length >= 2) {
+          return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+        }
+        return String(displayName || 'P').charAt(0).toUpperCase();
+      }
+      function teamRosterRoleLabel(provider) {
+        var title = (provider.jobTitle || '').toString().trim();
+        if (title) return title.toUpperCase();
+        if (provider.isOwner) return 'STUDIO OWNER';
+        return 'TEAM MEMBER';
+      }
+      function teamRosterCardHtml(tenant, provider) {
+        var profileUrl = memberProfileUrl(tenant, provider.memberSlug);
+        var thumb = provider.profilePhotoUrl || '';
+        var photoInner = thumb
+          ? '<img src="' + esc(thumb) + '" alt="">'
+          : '<span class="bk-team-roster-initials">' + esc(teamRosterInitials(provider.displayName)) + '</span>';
+        var bio = (provider.providerAboutText || '').toString().trim();
+        var bioHtml = bio ? '<p class="bk-team-roster-bio">' + esc(bio) + '</p>' : '';
+        var bodyInner =
+          '<div class="bk-team-roster-photo">' + photoInner + '</div>' +
+          '<div class="bk-team-roster-body">' +
+          '<h3 class="bk-team-roster-name">' + esc(provider.displayName || '') + '</h3>' +
+          '<p class="bk-team-roster-role">' + esc(teamRosterRoleLabel(provider)) + '</p>' +
+          bioHtml +
+          '</div>';
+        var bookable = provider.isBookable !== false && provider.memberSlug;
+        if (bookable) {
+          return '<article class="bk-team-roster-card">' +
+            '<a href="' + esc(profileUrl) + '" class="bk-team-roster-card-link">' + bodyInner + '</a></article>';
+        }
+        return '<article class="bk-team-roster-card bk-team-roster-card--static">' +
+          '<div class="bk-team-roster-card-inner">' + bodyInner + '</div></article>';
+      }
+      function teamRosterSectionHtml(tenant, providers, opts) {
+        opts = opts || {};
         if (!providers || !providers.length) return '';
-        var cards = providers.map(function(p) {
-          var url = memberProfileUrl(tenant, p.memberSlug);
-          var thumb = p.profilePhotoUrl || (providerGalleryUrls(p)[0] || '');
-          var img = thumb
-            ? '<img src="' + esc(thumb) + '" alt="">'
-            : '<div class="bk-team-initial">' + esc((p.displayName || 'P').charAt(0)) + '</div>';
-          return '<a class="bk-team-card" href="' + esc(url) + '">' + img +
-            '<strong>' + esc(p.displayName || '') + '</strong>' +
-            (p.jobTitle ? '<span>' + esc(p.jobTitle) + '</span>' : '') + '</a>';
-        }).join('');
-        return '<section id="team" class="bk-team-section" data-bk-color-surface="featured">' +
-          '<h2>Meet the team</h2><div class="bk-team-grid">' + cards + '</div></section>';
+        var isHome = opts.mode === 'home';
+        var list = providers.filter(function(p) {
+          if (isHome) return p.showOnTeamHome !== false;
+          return p.showOnTeamPage !== false;
+        });
+        if (!list.length) return '';
+        var limit = isHome ? 3 : list.length;
+        if (isHome && list.length > limit) list = list.slice(0, limit);
+        var cards = list.map(function(p) { return teamRosterCardHtml(tenant, p); }).join('');
+        var teamUrl = tenantBaseUrl(tenant) + '/team';
+        var viewAll = '';
+        var homeEligible = providers.filter(function(p) { return p.showOnTeamHome !== false; });
+        if (isHome && homeEligible.length > limit && tenantShowTeamPage(tenant)) {
+          viewAll = '<p class="bk-team-roster-view-all"><a href="' + esc(teamUrl) + '">View full team \u2192</a></p>';
+        }
+        var title = isHome
+          ? wcSpan(tenant, 'wc.generic.teamHomeTitle', 'Meet the team')
+          : wcSpan(tenant, 'wc.generic.teamPageTitle', 'Meet the team');
+        var subtitle = isHome
+          ? wcSpan(tenant, 'wc.generic.teamHomeSubtitle', 'The artists behind the work')
+          : wcSpan(tenant, 'wc.generic.teamPageSubtitle', 'The artists behind the work');
+        var sectionId = isHome ? ' id="team"' : '';
+        var sectionClass = 'bk-team-roster-section bk-team-roster-section--editorial' +
+          (isHome ? ' bk-team-roster-section--home' : ' bk-team-roster-section--page');
+        var scrollHint = '';
+        if (!isHome) {
+          scrollHint =
+            '<div class="bk-team-roster-scroll-hint">' +
+            '<button type="button" class="bk-team-roster-scroll-btn" aria-label="Scroll down" ' +
+            'onclick="window.scrollBy({top:Math.min(window.innerHeight*0.85,document.body.scrollHeight),behavior:\'smooth\'})">' +
+            '<span aria-hidden="true">\u2193</span></button></div>';
+        }
+        return '<section' + sectionId + ' class="' + sectionClass + '" data-bk-color-surface="about" data-bk-band-tappable>' +
+          bkColorBandInnerWrap(
+            '<div class="bk-team-roster-head">' +
+            '<h2 class="bk-team-roster-title">' + title + '</h2>' +
+            '<p class="bk-team-roster-subtitle">' + subtitle + '</p>' +
+            '</div>' +
+            '<div class="bk-team-roster-grid">' + cards + '</div>' +
+            viewAll +
+            scrollHint
+          ) +
+        '</section>';
+      }
+      function teamHomeSectionHtml(tenant) {
+        if (!isTeamPlan(tenant) || !tenantShowMeetTheTeamOnHome(tenant)) return '';
+        var providers = tenant._teamProviders;
+        if (!providers || !providers.length) return '';
+        return teamRosterSectionHtml(tenant, providers, { mode: 'home' });
+      }
+      function ensureTeamProvidersLoaded(tenant, callback) {
+        var need = isTeamPlan(tenant) && (
+          tenantShowMeetTheTeamOnHome(tenant) ||
+          tenantShowTeamPage(tenant) ||
+          tenantShowGalleryPage(tenant)
+        );
+        if (!need) {
+          tenant._teamProviders = tenant._teamProviders || [];
+          callback();
+          return;
+        }
+        if (tenant._teamProviders) {
+          callback();
+          return;
+        }
+        loadTeamRoster(tenant.slug).then(function(members) {
+          tenant._teamProviders = members || [];
+          callback();
+        }).catch(function() {
+          tenant._teamProviders = [];
+          callback();
+        });
+      }
+      function teamPage(tenant, providers) {
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        var list = providers || [];
+        var content = teamRosterSectionHtml(tenant, list, { mode: 'page' })
+          || '<p class="bk-team-roster-empty">No team members visible yet. Turn on visibility in Design \u2192 Team.</p>';
+        if (isStudio12Theme(tenant)) {
+          return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
+            '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable>' +
+            bkColorBandInnerWrap(content) + '</div>' +
+            studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
+        }
+        var nav = isBladeTheme(tenant)
+          ? bladeNavHtml(tenant, base + '/home')
+          : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant)));
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          tattooSidebarPanelOpenTag(tenant) +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
+          '</div></div>';
+        var wrapClass = 'bk-team-page' +
+          (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
+          (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
+          (isClassicTheme(tenant) ? ' classic-home' : '') +
+          (isStonecutTheme(tenant) ? ' bk-team-page--stonecut stonecut-page stonecut-page--sub' : '');
+        var teamSiteFooter = '';
+        if (isBladeTheme(tenant)) teamSiteFooter = bladeSiteFooterHtml(tenant);
+        else if (isLuxeTheme(tenant)) teamSiteFooter = luxeContactSectionHtml(tenant);
+        else if (isStonecutTheme(tenant)) teamSiteFooter = stonecutSiteFooterHtml(tenant);
+        else if (isClassicTheme(tenant)) teamSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
+        var teamPageStyle = tenantPageStyle(tenant, 'page');
+        return '<div class="' + wrapClass + '">' + nav +
+          '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable style="' + teamPageStyle + '">' +
+          bkColorBandInnerWrap(content) + '</div>' +
+          teamSiteFooter + galleryLightboxShellHtml() + sidebar + '</div>';
       }
       function parseBookMemberQuery() {
         try {
@@ -6203,14 +6783,21 @@
           return null;
         }
       }
+      function teamMemberPickerSubtitle(provider) {
+        var title = (provider.jobTitle || '').toString().trim();
+        if (title) return title;
+        if (provider.isOwner) return 'Studio owner';
+        return '';
+      }
       function teamMemberPickerCardInner(provider) {
         var thumb = provider.profilePhotoUrl || (providerGalleryUrls(provider)[0] || '');
         var img = thumb
           ? '<img src="' + esc(thumb) + '" alt="">'
           : '<div class="bk-team-initial">' + esc((provider.displayName || 'P').charAt(0)) + '</div>';
+        var subtitle = teamMemberPickerSubtitle(provider);
         return img +
           '<strong>' + esc(provider.displayName || '') + '</strong>' +
-          (provider.jobTitle ? '<span>' + esc(provider.jobTitle) + '</span>' : '');
+          (subtitle ? '<span>' + esc(subtitle) + '</span>' : '');
       }
       function teamMemberBookPickerPageHtml(tenant, providers) {
         var cards = providers.map(function(p) {
@@ -6246,23 +6833,30 @@
         else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
         else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
         if (!bookSiteFooter) bookSiteFooter = minimalBookLegalFooterHtml(tenant);
-        var headerHtml = '';
-        if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant) && !isStonecutTheme(tenant)) {
+        if (isStonecutTheme(tenant)) {
+          headerHtml =
+            '<div class="booking-page-header">' +
+              '<h1 class="booking-page-title">Who would you like to book with?</h1>' +
+            '</div>';
+        } else if (!isLuxeTheme(tenant) && !isBladeTheme(tenant) && !isClassicTheme(tenant)) {
           headerHtml =
             '<div class="booking-page-header">' +
               (usesThemedChrome(tenant) ? tattooHeadlineLogoHtml(tenant) : '') +
               '<h1 class="booking-page-title">Who would you like to book with?</h1>' +
-              '<p class="booking-page-subtitle">Choose a team member, or continue with no preference.</p>' +
+              '<p class="booking-page-subtitle">Choose a team member, or pick first available.</p>' +
             '</div>';
         }
         var pickerInner =
           headerHtml +
+          '<button type="button" class="bk-team-picker-first" data-member-pick-first>' +
+            '<strong>First available</strong>' +
+            '<span>We\u2019ll match you with the artist who can take you soonest.</span>' +
+          '</button>' +
           '<section class="bk-team-section bk-team-picker-section" data-bk-color-surface="featured">' +
             (isLuxeTheme(tenant) || isBladeTheme(tenant) || isClassicTheme(tenant) || isStonecutTheme(tenant)
-              ? '<h2 style="text-align:center;margin-bottom:28px">Who would you like to book with?</h2>'
-              : '') +
+              ? '<h2 style="text-align:center;margin-bottom:28px">Or choose someone</h2>'
+              : '<p class="booking-page-subtitle" style="text-align:center;margin-bottom:20px">Or choose someone</p>') +
             '<div class="bk-team-grid">' + cards + '</div>' +
-            '<p style="text-align:center"><button type="button" class="bk-team-picker-any" data-member-pick-any>No preference</button></p>' +
           '</section>';
         return '' +
           '<div class="' + wrapClass + '">' +
@@ -6291,15 +6885,17 @@
             btn.addEventListener('click', function() {
               var slug = String(btn.getAttribute('data-member-slug') || '').toLowerCase();
               tenant._activeProvider = bySlug[slug] || null;
+              tenant._assignmentPreference = null;
               tenant._memberPickerResolved = true;
               onContinue();
             });
           })(pickButtons[bi]);
         }
-        var anyBtn = root.querySelector('[data-member-pick-any]');
-        if (anyBtn) {
-          anyBtn.addEventListener('click', function() {
+        var firstBtn = root.querySelector('[data-member-pick-first]');
+        if (firstBtn) {
+          firstBtn.addEventListener('click', function() {
             tenant._activeProvider = null;
+            tenant._assignmentPreference = 'first_available';
             tenant._memberPickerResolved = true;
             onContinue();
           });
@@ -6314,65 +6910,162 @@
         applyBranding(tenant);
         applySidebarIconColor(tenant, true, false);
       }
-      function resolveTeamBookMemberPicker(tenant, renderTenantSite) {
+      function resolveTeamBookProviders(tenant, renderTenantSite) {
         return loadPublicProviders(tenant.slug).then(function(providers) {
-          if (!providers || !providers.length) {
-            tenant._memberPickerResolved = true;
-            renderTenantSite();
-            return;
-          }
+          tenant._bookProviders = providers || [];
+          tenant._assignmentPreference = null;
+          tenant._activeProvider = null;
           var qSlug = parseBookMemberQuery();
           if (qSlug) {
-            for (var qi = 0; qi < providers.length; qi++) {
-              if (String(providers[qi].memberSlug || '').toLowerCase() === qSlug) {
-                tenant._activeProvider = providers[qi];
-                tenant._memberPickerResolved = true;
-                renderTenantSite();
-                return;
+            for (var qi = 0; qi < tenant._bookProviders.length; qi++) {
+              if (String(tenant._bookProviders[qi].memberSlug || '').toLowerCase() === qSlug) {
+                tenant._activeProvider = tenant._bookProviders[qi];
+                break;
               }
             }
+          } else if (tenant._bookProviders.length === 1) {
+            tenant._activeProvider = tenant._bookProviders[0];
           }
-          if (providers.length === 1) {
-            tenant._activeProvider = providers[0];
-            tenant._memberPickerResolved = true;
-            renderTenantSite();
-            return;
-          }
-          document.getElementById('root').innerHTML = teamMemberBookPickerPageHtml(tenant, providers);
-          bindTeamMemberBookPicker(tenant, providers, renderTenantSite);
-          mountTeamBookChrome(tenant);
+          tenant._memberPickerResolved = true;
+          renderTenantSite();
         });
       }
-      function providerProfilePageHtml(tenant, provider) {
-        var bookUrl = memberBookUrl(tenant, provider.memberSlug);
-        var galleryUrl = memberGalleryUrl(tenant, provider.memberSlug);
-        var studioUrl = tenantBaseUrl(tenant) + '/home';
-        var tc = tenantColors(tenant);
-        var photo = provider.profilePhotoUrl
-          ? '<img class="bk-provider-photo" src="' + esc(provider.profilePhotoUrl) + '" alt="">'
-          : '<div class="bk-provider-photo-placeholder">' + esc((provider.displayName || 'P').charAt(0)) + '</div>';
-        var about = provider.providerAboutText
-          ? '<p class="bk-provider-about">' + esc(provider.providerAboutText) + '</p>'
-          : '';
-        var gUrls = providerGalleryUrls(provider);
-        var galleryStrip = '';
-        if (gUrls.length) {
-          var stripItems = gUrls.slice(0, 6).map(function(u, i) {
-            return '<a href="' + esc(galleryUrl) + '" class="gallery-grid-link"><img src="' + esc(u) + '" alt="" loading="lazy"></a>';
-          }).join('');
-          galleryStrip = '<div class="bk-provider-gallery-strip">' + stripItems + '</div>' +
-            '<a class="bk-provider-gallery-link" href="' + esc(galleryUrl) + '">View full portfolio</a>';
+      function bookingArtistFieldHtml(providers, selectedProvider, assignmentPreference) {
+        if (!providers || !providers.length) return '';
+        var selectedSlug = selectedProvider && selectedProvider.memberSlug
+          ? String(selectedProvider.memberSlug).toLowerCase() : '';
+        var isFirst = assignmentPreference === 'first_available' ||
+          (!selectedSlug && !selectedProvider);
+        var opts = '<option value=""' + (isFirst ? ' selected' : '') + '>First available</option>';
+        for (var i = 0; i < providers.length; i++) {
+          var prov = providers[i];
+          var slug = String(prov.memberSlug || '').toLowerCase();
+          if (!slug) continue;
+          var sel = (!isFirst && slug === selectedSlug) ? ' selected' : '';
+          opts += '<option value="' + esc(slug) + '"' + sel + '>' + esc(prov.displayName || slug) + '</option>';
         }
-        var firstName = String(provider.displayName || 'them').split(' ')[0];
-        return '<div class="container"><div class="bk-provider-page card">' +
-          photo +
-          '<h1>' + esc(provider.displayName || '') + '</h1>' +
-          (provider.jobTitle ? '<p class="bk-provider-title">' + esc(provider.jobTitle) + '</p>' : '') +
-          about +
-          galleryStrip +
-          '<a class="bk-provider-book-cta" style="background:' + esc(tc.accent) + ';color:' + esc(tc.accentFg) + '" href="' + esc(bookUrl) + '">Book with ' + esc(firstName) + '</a>' +
-          '<p class="bk-provider-studio-link"><a href="' + esc(studioUrl) + '">← ' + esc(siteName(tenant)) + '</a></p>' +
+        return '<div class="bk-book-artist-field">' +
+          '<label for="bk-book-artist">Artist</label>' +
+          '<select id="bk-book-artist" name="bk_book_artist" data-bk-artist-select>' + opts + '</select>' +
+        '</div>';
+      }
+      function bindBookingArtistSelect(tenant, providers) {
+        var sel = document.getElementById('bk-book-artist');
+        if (!sel || !providers || !providers.length) return;
+        var bySlug = {};
+        for (var i = 0; i < providers.length; i++) {
+          bySlug[String(providers[i].memberSlug || '').toLowerCase()] = providers[i];
+        }
+        function applySelection() {
+          var v = String(sel.value || '').toLowerCase();
+          if (!v) {
+            tenant._activeProvider = null;
+            tenant._assignmentPreference = 'first_available';
+          } else {
+            tenant._activeProvider = bySlug[v] || null;
+            tenant._assignmentPreference = null;
+          }
+        }
+        sel.addEventListener('change', applySelection);
+        applySelection();
+      }
+      function teamMemberProfileContentHtml(tenant, provider) {
+        var bookUrl = memberBookUrl(tenant, provider.memberSlug);
+        var roleLabel = teamRosterRoleLabel(provider);
+        var thumb = provider.profilePhotoUrl || '';
+        var photoInner = thumb
+          ? '<img src="' + esc(thumb) + '" alt="">'
+          : '<span class="bk-team-member-initials">' + esc(teamRosterInitials(provider.displayName)) + '</span>';
+        var bio = (provider.providerAboutText || '').toString().trim();
+        var bioHtml = bio ? '<p class="bk-team-member-bio">' + esc(bio) + '</p>' : '';
+        var firstName = String(provider.displayName || 'them').split(' ')[0].toUpperCase();
+        var gUrls = providerGalleryUrls(provider);
+        var workGrid = '';
+        if (gUrls.length) {
+          workGrid = '<div class="bk-team-member-grid">' + gUrls.map(function(u) {
+            return '<button type="button" class="gallery-lightbox-trigger bk-team-member-grid-item" data-gallery-full="' + esc(u) + '">' +
+              '<img src="' + esc(u) + '" alt="" loading="lazy">' +
+            '</button>';
+          }).join('') + '</div>';
+        } else {
+          workGrid = '<p class="bk-team-member-work-empty">Portfolio coming soon.</p>';
+        }
+        var workFirst = String(provider.displayName || 'Artist').split(' ')[0].toUpperCase();
+        var scrollHint = gUrls.length > 3
+          ? '<div class="bk-team-member-scroll-hint">' +
+            '<button type="button" class="bk-team-roster-scroll-btn" aria-label="Scroll down" ' +
+            'onclick="window.scrollBy({top:Math.min(window.innerHeight*0.85,document.body.scrollHeight),behavior:\'smooth\'})">' +
+            '<span aria-hidden="true">\u2193</span></button></div>'
+          : '';
+        return '<section class="bk-team-member-section">' +
+          '<div class="bk-team-member-hero">' +
+            '<div class="bk-team-member-photo-col">' +
+              '<div class="bk-team-member-photo">' + photoInner + '</div>' +
+              '<span class="bk-team-member-badge">' + esc(roleLabel) + '</span>' +
+            '</div>' +
+            '<div class="bk-team-member-copy">' +
+              '<h1 class="bk-team-member-name">' + esc(provider.displayName || '') + '</h1>' +
+              '<p class="bk-team-member-role">' + esc(roleLabel) + '</p>' +
+              bioHtml +
+              '<a class="bk-team-member-book" href="' + esc(bookUrl) + '">BOOK WITH ' + esc(firstName) + ' <span aria-hidden="true">\u2192</span></a>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bk-team-member-work">' +
+            '<h2 class="bk-team-member-work-title">' + esc(workFirst) + '\'S WORK</h2>' +
+            workGrid +
+            scrollHint +
+          '</div>' +
+        '</section>';
+      }
+      function teamMemberProfilePageHtml(tenant, provider) {
+        var content = teamMemberProfileContentHtml(tenant, provider);
+        var base = tenantBaseUrl(tenant);
+        var bookUrl = base + '/book';
+        if (isStudio12Theme(tenant)) {
+          return '<div class="studio12-page studio12-sub bk-team-member-page">' + studio12NavHtml(tenant) +
+            '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable>' +
+            bkColorBandInnerWrap(content) + '</div>' +
+            studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + galleryLightboxShellHtml() + '</div>';
+        }
+        var nav = isBladeTheme(tenant)
+          ? bladeNavHtml(tenant, base + '/home')
+          : (isLuxeTheme(tenant) ? luxeChromeNavHtml(tenant, 'light') : (isStonecutTheme(tenant) ? stonecutNavHtml(tenant) : tattooNavHtml(tenant)));
+        var sidebar = '<div class="tattoo-sidebar" id="tattoo-sidebar">' +
+          '<div class="tattoo-sidebar-backdrop"></div>' +
+          tattooSidebarPanelOpenTag(tenant) +
+          tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
+        var wrapClass = 'bk-team-member-page bk-team-page' +
+          (isBladeTheme(tenant) ? ' blade-page blade-page--sub' : '') +
+          (isLuxeTheme(tenant) ? ' luxe-page luxe-page--sub' : '') +
+          (isClassicTheme(tenant) ? ' classic-home' : '') +
+          (isStonecutTheme(tenant) ? ' bk-team-page--stonecut stonecut-page stonecut-page--sub' : '');
+        var teamSiteFooter = '';
+        if (isBladeTheme(tenant)) teamSiteFooter = bladeSiteFooterHtml(tenant);
+        else if (isLuxeTheme(tenant)) teamSiteFooter = luxeContactSectionHtml(tenant);
+        else if (isStonecutTheme(tenant)) teamSiteFooter = stonecutSiteFooterHtml(tenant);
+        else if (isClassicTheme(tenant)) teamSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
+        var teamPageStyle = tenantPageStyle(tenant, 'page');
+        return '<div class="' + wrapClass + '">' + nav +
+          '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable style="' + teamPageStyle + '">' +
+          bkColorBandInnerWrap(content) + '</div>' +
+          teamSiteFooter + galleryLightboxShellHtml() + sidebar + '</div>';
+      }
+      function bindTeamSubpageChrome(tenant) {
+        bindGalleryLightbox(document.getElementById('root'));
+        if (isStudio12Theme(tenant)) {
+          bindStudio12Page();
+          bindTattooSidebar();
+        } else {
+          bindTattooSidebar();
+        }
+        applyTenantColorVars(tenant);
+        applyBodyPageColors(tenant, 'page');
+        applyTenantTypography(tenant);
+        if (isBladeTheme(tenant)) bindBladeChrome();
+        if (isStonecutTheme(tenant)) bindStonecutNavChrome();
+        applySidebarIconColor(tenant, false, true);
+        if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
       }
       function providerGalleryPageHtml(tenant, provider) {
         var profileUrl = memberProfileUrl(tenant, provider.memberSlug);
@@ -6392,13 +7085,8 @@
           '</div></div>';
       }
       function mountTeamProvidersSection(tenant) {
-        if (!isTeamPlan(tenant)) return Promise.resolve();
-        return loadPublicProviders(tenant.slug).then(function(providers) {
-          if (!providers || providers.length < 2) return;
-          var root = document.getElementById('root');
-          if (!root) return;
-          root.insertAdjacentHTML('beforeend', teamProvidersSectionHtml(tenant, providers));
-        });
+        /* Legacy no-op: home team strip is embedded via teamHomeSectionHtml() before footers. */
+        return Promise.resolve();
       }
       function tenantBaseUrl(tenant) {
         var slug = (tenant && tenant.slug ? String(tenant.slug) : '').toLowerCase();
@@ -7111,6 +7799,12 @@
       function tenantShowAboutPage(tenant) {
         return tenant.showAboutPage !== false;
       }
+      function tenantShowTeamPage(tenant) {
+        return isTeamPlan(tenant) && tenant.showTeamPage !== false;
+      }
+      function tenantShowMeetTheTeamOnHome(tenant) {
+        return isTeamPlan(tenant) && tenant.showMeetTheTeamOnHome !== false;
+      }
       /** Public site name: explicit `displayName` override, else app `businessName` from signup/settings. */
       function tenantSiteDisplayName(tenant, fallback) {
         var explicit = (tenant && tenant.displayName != null) ? String(tenant.displayName).trim() : '';
@@ -7221,6 +7915,7 @@
           if (l.target === 'gallery') return tenantShowGalleryPage(tenant);
           if (l.target === 'book') return tenantShowBookPage(tenant);
           if (l.target === 'about') return tenantShowAboutPage(tenant);
+          if (l.target === 'team') return tenantShowTeamPage(tenant);
           if (l.target === 'shop') return tenantShowShopPage(tenant);
           return true;
         });
@@ -7256,6 +7951,7 @@
         var displayName = tenantSiteDisplayName(tenant, 'Welcome');
         var inner = '<a href="' + base + '/home">Home</a>';
         if (tenantShowGalleryPage(tenant)) inner += '<a href="' + galleryUrl + '">Gallery</a>';
+        if (tenantShowTeamPage(tenant)) inner += '<a href="' + base + '/team">Team</a>';
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
         if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '">Booking</a>';
@@ -7278,6 +7974,7 @@
           : 'luxe-nav luxe-nav--light luxe-nav--topbar';
         var inner = '<a href="' + base + '/home">Home</a>';
         if (tenantShowGalleryPage(tenant)) inner += '<a href="' + galleryUrl + '">Gallery</a>';
+        if (tenantShowTeamPage(tenant)) inner += '<a href="' + base + '/team">Team</a>';
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
         if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '">Booking</a>';
@@ -7298,6 +7995,7 @@
         var h = anchorHome || (base + '/home');
         var lis = '<li><a href="' + h + '#services">Services</a></li>';
         if (tenantShowAboutPage(tenant)) lis += '<li><a href="' + h + '#about">About</a></li>';
+        if (tenantShowTeamPage(tenant)) lis += '<li><a href="' + base + '/team">Team</a></li>';
         if (tenantShowGalleryPage(tenant)) lis += '<li><a href="' + galleryUrl + '">Gallery</a></li>';
         if (tenantShowShopPage(tenant)) lis += '<li><a href="' + shopUrl + '">Shop</a></li>';
         lis += '<li><a href="' + h + '#location">Location</a></li>';
@@ -7629,7 +8327,7 @@
           '</div></div>' +
           '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
           '<div class="blade-hero-vertical"><span data-edit-key="bladeHeroTagline">' + esc(vertical) + '</span></div></section>';
-        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + footer + galleryLightboxShellHtml() + sidebar + '</div>';
+        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
       /** Stonecut top bar (fixed); same markup on home, shop, /book, and post-submit. */
       function stonecutNavHtml(tenant) {
@@ -7654,6 +8352,7 @@
           '<ul class="stonecut-links">' +
           '<li><a href="' + base + '/home#services">Services</a></li>' +
           (tenantShowGalleryPage(tenant) ? '<li><a href="' + galleryUrl + '">Portfolio</a></li>' : '') +
+          (tenantShowTeamPage(tenant) ? '<li><a href="' + base + '/team">Team</a></li>' : '') +
           (tenantShowAboutPage(tenant) ? '<li><a href="' + base + '/about">About</a></li>' : '') +
           (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
           '<li><a href="' + base + '/home#location">Location</a></li>' +
@@ -7761,6 +8460,7 @@
           (mapQuery ? '<a href="' + esc(mapQuery) + '" class="stonecut-address-link" target="_blank" rel="noopener noreferrer">' + addrBodyWrappedSc + '</a>' : '<div class="stonecut-address-link">' + addrBodyWrappedSc + '</div>') +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="stonecut-phone">' + wcSpan(tenant, 'wc.contact.phone', tenant.contactPhone ? displayPhoneUS(tenant.contactPhone) : '') + '</a>' : '') +
           '</div></div>') + '</section>' +
+          teamHomeSectionHtml(tenant) +
           stonecutSiteFooterHtml(tenant) +
           sidebar +
           '</div>';
@@ -7826,9 +8526,89 @@
         }
         return '<div class="stonecut-about-photo stonecut-about-photo--empty" data-edit-key="' + esc(meta.editKey) + '" role="button" aria-label="Add about photo"></div>';
       }
-      /** /gallery page: always `galleryImages` (Gallery tab). Home uses `featuredWorkImages` via featuredUrlsForHomeStrip. */
+      /** /gallery page items: solo uses tenant.galleryImages; Studio/Shop aggregates per-artist portfolios. */
+      function galleryPageItems(tenant) {
+        if (isTeamPlan(tenant) && tenant._teamProviders) {
+          var items = [];
+          (tenant._teamProviders || []).forEach(function(p) {
+            var slug = String(p.memberSlug || '').toLowerCase();
+            providerGalleryUrls(p).forEach(function(url) {
+              items.push({
+                url: url,
+                memberSlug: slug,
+                displayName: p.displayName || ''
+              });
+            });
+          });
+          return items;
+        }
+        return (tenant.galleryImages || []).map(function(u, index) {
+          return { url: u, memberSlug: '', displayName: '', index: index };
+        });
+      }
+      /** /gallery page: always aggregated items (Gallery tab for solo; team portfolios for Studio/Shop). */
       function galleryPageImageUrls(tenant) {
-        return tenant.galleryImages || [];
+        return galleryPageItems(tenant).map(function(it) { return it.url; });
+      }
+      function galleryMemberAttr(item) {
+        return item && item.memberSlug
+          ? ' data-gallery-member="' + esc(item.memberSlug) + '"'
+          : '';
+      }
+      function galleryItemEditAttr(item, gi) {
+        if (item && item.memberSlug) return '';
+        var idx = item && item.index != null ? item.index : gi;
+        return galleryImageEditKeyAttr(idx);
+      }
+      function galleryPageEmptyHint(tenant) {
+        return isTeamPlan(tenant)
+          ? 'No portfolio photos yet. Add them for each artist in Design \u2192 Team.'
+          : 'No gallery images yet. Add them in the app.';
+      }
+      function galleryTeamFilterHtml(tenant) {
+        if (!isTeamPlan(tenant) || !tenant._teamProviders) return '';
+        var bySlug = {};
+        galleryPageItems(tenant).forEach(function(it) {
+          if (it.memberSlug) bySlug[it.memberSlug] = it.displayName || it.memberSlug;
+        });
+        var slugs = Object.keys(bySlug);
+        if (slugs.length < 2) return '';
+        slugs.sort(function(a, b) {
+          return String(bySlug[a]).localeCompare(String(bySlug[b]));
+        });
+        var btns = '<button type="button" class="gallery-team-filter-btn is-active" data-gallery-filter="all" role="tab" aria-selected="true">All</button>';
+        slugs.forEach(function(slug) {
+          btns += '<button type="button" class="gallery-team-filter-btn" data-gallery-filter="' + esc(slug) + '" role="tab" aria-selected="false">' + esc(bySlug[slug]) + '</button>';
+        });
+        return '<div class="gallery-team-filter" data-gallery-team-filter role="tablist" aria-label="Filter by artist">' + btns + '</div>';
+      }
+      function galleryPageGridHtml(items) {
+        var imgsHtml = items.map(function(item, gi) {
+          return '<div class="gallery-grid-link"' + galleryMemberAttr(item) + '><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div>';
+        }).join('');
+        return '<div class="gallery-grid">' + imgsHtml + '</div>';
+      }
+      function galleryAltLayoutItemsHtml(items, mode) {
+        if (mode === 'masonry') {
+          return '<div class="gallery-alt gallery-alt--masonry">' + items.map(function(item, gi) {
+            return '<div class="gallery-alt-masonry-cell"' + galleryMemberAttr(item) + '>' +
+              '<div class="gallery-grid-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
+          }).join('') + '</div>';
+        }
+        if (mode === 'horizontal_strip') {
+          return '<div class="gallery-alt gallery-alt--strip">' + items.map(function(item, gi) {
+            return '<div class="gallery-alt-strip-item"' + galleryMemberAttr(item) + '>' +
+              '<div class="gallery-grid-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
+          }).join('') + '</div>';
+        }
+        return '';
+      }
+      function galleryPageBodyHtml(tenant, items, layoutMode) {
+        if (!items.length) {
+          return '<p class="gallery-empty-hint">' + galleryPageEmptyHint(tenant) + '</p>';
+        }
+        if (layoutMode === 'classic_grid') return galleryPageGridHtml(items);
+        return galleryAltLayoutItemsHtml(items, layoutMode);
       }
       /** Quick edit: tap opens native gallery upload for slot `index`. */
       function galleryImageEditKeyAttr(index) {
@@ -8929,6 +9709,14 @@
         }
       }
       function form(tenant, services, presel, provider) {
+        var artistHtml = '';
+        if (isTeamPlan(tenant) && tenant._bookProviders && tenant._bookProviders.length) {
+          artistHtml = bookingArtistFieldHtml(
+            tenant._bookProviders,
+            provider,
+            tenant._assignmentPreference
+          );
+        }
         var schema = tenant.formSchema || [];
         var useSchema = Array.isArray(schema) && schema.length > 0;
         var fields = useSchema ? schema : [
@@ -9019,6 +9807,7 @@
             : '';
           var guidedFormSchemaAttr = ' data-guided-form-schema-encoded="' + formSchemaEnc + '"';
           var guidedInner =
+            (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
             '<div class="booking-guided booking-guided--wizard booking-guided--steps-first">' +
               guidedWizardPhaseChromeHtml() +
               '<form id="book-form" class="booking-form booking-form--guided" data-guided-wizard-form data-guided-confirm-step="' + guidedWizard.confirmStep + '"' + mobileFormAttrs + guidedFormSchemaAttr + '>' +
@@ -9048,7 +9837,7 @@
               sidebar +
             '</div>';
         }
-        var bookCardInner = contact +
+        var bookCardInner = contact + artistHtml +
                 '<form id="book-form" class="booking-form">' + html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
                   '<button type="submit" class="booking-submit" data-accent>Request booking</button>' +
@@ -9230,6 +10019,8 @@
               showGalleryPage: data.showGalleryPage !== false,
               showBookPage: data.showBookPage !== false,
               showAboutPage: data.showAboutPage !== false,
+              showTeamPage: data.showTeamPage !== false,
+              showMeetTheTeamOnHome: data.showMeetTheTeamOnHome !== false,
               shopEnabled: data.shopEnabled || false,
               subscriptionPlan: (data.subscriptionPlan || 'solo').toString(),
               classicFeaturedWorkEyebrow: data.classicFeaturedWorkEyebrow || '',
@@ -9304,6 +10095,7 @@
         if (!links.length) {
           links = [{ label: 'Home', type: 'internal', target: 'home' }];
           if (tenantShowGalleryPage(tenant)) links.push({ label: 'Gallery', type: 'internal', target: 'gallery' });
+          if (tenantShowTeamPage(tenant)) links.push({ label: 'Team', type: 'internal', target: 'team' });
           if (tenantShowBookPage(tenant)) links.push({ label: 'Book', type: 'internal', target: 'book' });
           if (tenantShowShopPage(tenant)) links.push({ label: 'Shop', type: 'internal', target: 'shop' });
           if (tenantShowAboutPage(tenant)) links.push({ label: 'About', type: 'internal', target: 'about' });
@@ -9330,6 +10122,8 @@
             href = base + '/shop';
           } else if (l.target === 'about') {
             href = base + '/about';
+          } else if (l.target === 'team') {
+            href = base + '/team';
           } else {
             href = base + '/home';
           }
@@ -9523,23 +10317,24 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
+        var gItems = galleryPageItems(tenant);
+        var filterHtml = galleryTeamFilterHtml(tenant);
 
         if (isStudio12Theme(tenant)) {
-          var u12 = galleryPageImageUrls(tenant);
           var gLay = effectiveGalleryLayoutStyle(tenant);
           var galleryBody;
-          if (!u12.length) {
-            galleryBody = '<div class="s12-gallery-empty-state"><p class="s12-phil-body">No gallery images yet. Add them in the app.</p></div>';
+          if (!gItems.length) {
+            galleryBody = '<div class="s12-gallery-empty-state"><p class="s12-phil-body">' + esc(galleryPageEmptyHint(tenant)) + '</p></div>';
           } else if (gLay === 'classic_grid') {
-            var imgs12 = u12.map(function(u, gi) {
-              return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
+            var imgs12 = gItems.map(function(item, gi) {
+              return '<div class="s12-g-item s12-fade"' + galleryMemberAttr(item) + '><div class="s12-gallery-full-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
             }).join('');
-            galleryBody = '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(u12.length, 24) + '">' + imgs12 + '</div>';
+            galleryBody = '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(gItems.length, 24) + '">' + imgs12 + '</div>';
           } else {
-            galleryBody = galleryAltLayoutInnerHtml(u12, gLay);
+            galleryBody = galleryAltLayoutItemsHtml(gItems, gLay);
           }
           var s12GalleryInner = '<div class="s12-gallery-head"><h2 class="s12-gallery-title"><a href="' + esc(galleryUrl) + '" class="s12-gallery-title-link">Gallery</a></h2></div>' +
-            galleryBody;
+            filterHtml + galleryBody;
           var s12LightClasses = 's12-gallery-light s12-gallery-light--fullpage';
           if (gLay === 'horizontal_strip') {
             s12GalleryInner = '<div class="gallery-page-strip-main s12-gallery-strip-main">' + s12GalleryInner + '</div>';
@@ -9560,20 +10355,9 @@
           tattooSidebarPanelContentHtml(tenant, base, bookUrl) +
           '</div></div>';
 
-        var gUrlsAll = galleryPageImageUrls(tenant);
         var gLayStd = effectiveGalleryLayoutStyle(tenant);
         var stripPage = gLayStd === 'horizontal_strip';
-        var content;
-        if (!gUrlsAll.length) {
-          content = '<p class="gallery-empty-hint">No gallery images yet. Add them in the app.</p>';
-        } else if (gLayStd === 'classic_grid') {
-          var imgsHtml = gUrlsAll.map(function(url, gi) {
-            return '<div class="gallery-grid-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(url) + '" alt="" loading="lazy"></div>';
-          }).join('');
-          content = '<div class="gallery-grid">' + imgsHtml + '</div>';
-        } else {
-          content = galleryAltLayoutInnerHtml(gUrlsAll, gLayStd);
-        }
+        var content = galleryPageBodyHtml(tenant, gItems, gLayStd);
         var galleryPageStyle = tenantPageStyle(tenant, 'gallery');
 
         var galleryWrapClass = 'gallery-page' +
@@ -9582,22 +10366,14 @@
           (isClassicTheme(tenant) ? ' classic-home' : '') +
           (isStonecutTheme(tenant) ? ' gallery-page--stonecut' : '') +
           (stripPage ? ' gallery-page--horizontal-strip' : '');
-        var displayName = tenantSiteDisplayName(tenant, 'Gallery');
-        var galleryHeadline = (isStonecutTheme(tenant) || stripPage) ? 'Gallery' : displayName;
-        var galleryTitleHtml = '';
-        if (isLuxeTheme(tenant) || isClassicTheme(tenant)) {
-          if (stripPage) {
-            galleryTitleHtml = '<h1 class="gallery-title gallery-title--strip-standard"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
-          }
-        } else {
-          galleryTitleHtml = '<h1 class="gallery-title' + (stripPage ? ' gallery-title--strip-standard' : '') + '"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + esc(galleryHeadline) + '</a></h1>';
-        }
+        var galleryHeadline = wcSpan(tenant, 'wc.generic.galleryPageTitle', 'Gallery');
+        var galleryTitleHtml = '<h1 class="gallery-title' + (stripPage ? ' gallery-title--strip-standard' : '') + '"><a href="' + esc(galleryUrl) + '" class="gallery-title-link">' + galleryHeadline + '</a></h1>';
         var gallerySiteFooter = '';
         if (isBladeTheme(tenant)) gallerySiteFooter = bladeSiteFooterHtml(tenant);
         else if (isLuxeTheme(tenant)) gallerySiteFooter = luxeContactSectionHtml(tenant);
         else if (isStonecutTheme(tenant)) gallerySiteFooter = stonecutSiteFooterHtml(tenant);
         else if (isClassicTheme(tenant)) gallerySiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
-        var galleryHeaderBlock = '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + galleryTitleHtml + '</div>';
+        var galleryHeaderBlock = '<div class="gallery-header">' + tattooHeadlineLogoHtml(tenant) + galleryTitleHtml + filterHtml + '</div>';
         var galleryShellBlock = '<div class="gallery-shell">' + content + '</div>';
         var galleryMainBlock = stripPage
           ? ('<div class="gallery-page-strip-main">' + galleryHeaderBlock + galleryShellBlock + '</div>')
@@ -9847,9 +10623,10 @@
           : '';
 
         var footerHtml = classicSiteFooterHtml(tenant, opts.defaultName);
+        var teamHtml = teamHomeSectionHtml(tenant);
 
         return '<div class="tattoo-page classic-home classic-home-page">' +
-          nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
+          nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + teamHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
           '</div>';
       }
 
@@ -9888,6 +10665,7 @@
         var displayName = tenantSiteDisplayName(tenant, 'Studio');
         var navLis = '<li><a href="' + homeUrl + '">' + wcSpan(tenant, 'wc.s12.navHome', 'Home') + '</a></li>';
         if (tenantShowGalleryPage(tenant)) navLis += '<li><a href="' + galleryUrl + '">' + wcSpan(tenant, 'wc.s12.navGallery', 'Gallery') + '</a></li>';
+        if (tenantShowTeamPage(tenant)) navLis += '<li><a href="' + base + '/team">' + wcSpan(tenant, 'wc.s12.navTeam', 'Team') + '</a></li>';
         if (tenantShowShopPage(tenant)) navLis += '<li><a href="' + base + '/shop">' + wcSpan(tenant, 'wc.s12.navShop', 'Shop') + '</a></li>';
         var navBookLbl = webCopyOverrideText(tenant, 'wc.s12.navBook', 'Book now');
         var bookCorner = tenantShowBookPage(tenant)
@@ -10348,6 +11126,7 @@
           processSectionHtml +
           testSection +
           studio12HomeShopSectionHtml(tenant) +
+          teamHomeSectionHtml(tenant) +
           '<div class="' + s12InfoClass + '" data-bk-color-surface="about" data-bk-band-tappable>' +
           bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' +
           studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
@@ -10663,8 +11442,9 @@
           : '';
 
         var contact = luxeContactSectionHtml(tenant);
+        var teamHome = teamHomeSectionHtml(tenant);
 
-        return '<div class="luxe-page">' + nav + hero + servicesSection + homeServicesSection + promo + teamSection + contact + galleryLightboxShellHtml() + sidebar + '</div>';
+        return '<div class="luxe-page">' + nav + hero + servicesSection + homeServicesSection + promo + teamSection + teamHome + contact + galleryLightboxShellHtml() + sidebar + '</div>';
       }
 
       function bindTattooSidebar() {
@@ -10703,6 +11483,28 @@
         });
         document.addEventListener('keydown', function(ev){
           if (ev.key === 'Escape') closeSidebar();
+        });
+      }
+      function bindGalleryTeamFilter(root) {
+        if (!root || !root.querySelector) return;
+        var bar = root.querySelector('[data-gallery-team-filter]');
+        if (!bar) return;
+        bar.addEventListener('click', function(e) {
+          var btn = e.target && e.target.closest ? e.target.closest('[data-gallery-filter]') : null;
+          if (!btn || !bar.contains(btn)) return;
+          var filter = btn.getAttribute('data-gallery-filter') || 'all';
+          var buttons = bar.querySelectorAll('[data-gallery-filter]');
+          for (var i = 0; i < buttons.length; i++) {
+            var active = buttons[i] === btn;
+            buttons[i].classList.toggle('is-active', active);
+            buttons[i].setAttribute('aria-selected', active ? 'true' : 'false');
+          }
+          var cells = root.querySelectorAll('[data-gallery-member]');
+          for (var j = 0; j < cells.length; j++) {
+            var slug = cells[j].getAttribute('data-gallery-member') || '';
+            var show = filter === 'all' || slug === filter;
+            cells[j].classList.toggle('gallery-item--hidden', !show);
+          }
         });
       }
       function bindGalleryLightbox(root) {
@@ -11456,8 +12258,37 @@
           });
       }
 
+      function memberBookPathRedirectTarget(p) {
+        if (!p.memberSlug || !p.isBookPath) return null;
+        var q = '?member=' + encodeURIComponent(p.memberSlug);
+        if (p.isSubdomainRoute) return '/book' + q;
+        if (!p.tenantSlug) return null;
+        return '/' + encodeURIComponent(p.tenantSlug) + '/book' + q;
+      }
+
+      function legacyMemberPathRedirectTarget(p) {
+        if (!p.legacyMemberPath || !p.memberSlug) return null;
+        if (p.isBookPath) return memberBookPathRedirectTarget(p);
+        var suffix = '/team/' + encodeURIComponent(p.memberSlug);
+        if (p.isGalleryPath) suffix += '/gallery';
+        if (p.serviceSlug) suffix += '/' + encodeURIComponent(p.serviceSlug);
+        if (p.isSubdomainRoute) return suffix;
+        if (!p.tenantSlug) return null;
+        return '/' + encodeURIComponent(p.tenantSlug) + suffix;
+      }
+
       function init() {
         var p = parsePath();
+        var bookRedirect = memberBookPathRedirectTarget(p);
+        if (bookRedirect) {
+          location.replace(bookRedirect + location.hash);
+          return;
+        }
+        var legacyTarget = legacyMemberPathRedirectTarget(p);
+        if (legacyTarget && location.pathname !== legacyTarget) {
+          location.replace(legacyTarget + location.search + location.hash);
+          return;
+        }
         if (!p.tenantSlug) {
           document.getElementById('root').innerHTML = '<div class="container"><div class="card"><h1>Get Bookking</h1><p>Enter your booking link to get started.</p></div></div>';
           return;
@@ -11484,6 +12315,7 @@
               p.isGalleryPath = false;
               p.isShopPath = false;
               p.isAboutPath = false;
+              p.isTeamPath = false;
             }
             var isShop = p.isShopPath;
             if (p.isShopCheckoutPath) {
@@ -11564,6 +12396,11 @@
               applyBranding(tenant);
               return;
             }
+            if (p.isTeamPath && !tenantShowTeamPage(tenant)) {
+              document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
+              applyBranding(tenant);
+              return;
+            }
             if (p.isBookPath && !tenantShowBookPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
@@ -11578,55 +12415,74 @@
             var showForm = p.isBookPath && services.length > 0;
             var runBookFormBind = false;
             var isGallery = p.isGalleryPath;
-            var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isBladeHome = (isBladeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isStonecutHome = (isStonecutTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isStudio12Home = (isStudio12Theme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath);
-            var isHairHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'hair' && !isStudio12Theme(tenant) && !p.isBookPath && !isGallery);
-            var isBarberHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery);
-            var isTattooHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery);
-            var isNailsHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'nails' && !p.isBookPath && !isGallery);
-            var isCustomHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'custom' && !p.isBookPath && !isGallery);
+            var isTeam = p.isTeamPath;
+            var isLuxeHome = (isLuxeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath && !isTeam);
+            var isBladeHome = (isBladeTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath && !isTeam);
+            var isStonecutHome = (isStonecutTheme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath && !isTeam);
+            var isStudio12Home = (isStudio12Theme(tenant) && !p.isBookPath && !isGallery && !p.isShopPath && !isTeam);
+            var isHairHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'hair' && !isStudio12Theme(tenant) && !p.isBookPath && !isGallery && !isTeam);
+            var isBarberHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery && !isTeam);
+            var isTattooHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery && !isTeam);
+            var isNailsHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'nails' && !p.isBookPath && !isGallery && !isTeam);
+            var isCustomHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'custom' && !p.isBookPath && !isGallery && !isTeam);
             var isThemedHome = isStudio12Home || isTattooHome || isHairHome || isBarberHome || isNailsHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
-            if (isGallery) {
-              document.getElementById('root').innerHTML = galleryPage(tenant);
-              bindGalleryLightbox(document.getElementById('root'));
-              if (isStudio12Theme(tenant)) {
-                bindStudio12Page();
-                bindTattooSidebar();
-              } else {
-                bindTattooSidebar();
-              }
-              applyTenantColorVars(tenant);
-              applyBodyPageColors(tenant, 'gallery');
-              applyTenantTypography(tenant);
-              if (isBladeTheme(tenant)) bindBladeChrome();
-              applySidebarIconColor(tenant, false, true);
-              if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
+            function bindTeamPageChrome(tenant) {
+              bindTeamSubpageChrome(tenant);
+            }
+            function buildThemedHomeContent() {
+              return isBladeHome
+                ? bladeHomePage(tenant, services)
+                : isStonecutHome
+                  ? stonecutHomePage(tenant, services)
+                : isLuxeHome
+                  ? luxeHomePage(tenant, services)
+                  : isStudio12Home
+                    ? studio12HomePage(tenant, services)
+                  : isTattooHome
+                    ? tattooHeroPage(tenant, services)
+                    : isHairHome
+                      ? hairTattooStyleHomePage(tenant, services)
+                      : isBarberHome
+                        ? barberPortfolioHomePage(tenant, services)
+                        : (isNailsHome || isCustomHome)
+                          ? classicPortfolioHomePage(tenant, services)
+                          : classicPortfolioHomePage(tenant, services);
+            }
+            if (isTeam) {
+              ensureTeamProvidersLoaded(tenant, function() {
+                document.getElementById('root').innerHTML = teamPage(tenant, tenant._teamProviders);
+                bindTeamPageChrome(tenant);
+                applyBranding(tenant);
+              });
               return;
             }
-            var homeContent = isBladeHome
-              ? bladeHomePage(tenant, services)
-              : isStonecutHome
-                ? stonecutHomePage(tenant, services)
-              : isLuxeHome
-                ? luxeHomePage(tenant, services)
-                : isStudio12Home
-                  ? studio12HomePage(tenant, services)
-                : isTattooHome
-                  ? tattooHeroPage(tenant, services)
-                  : isHairHome
-                    ? hairTattooStyleHomePage(tenant, services)
-                    : isBarberHome
-                      ? barberPortfolioHomePage(tenant, services)
-                      : (isNailsHome || isCustomHome)
-                        ? classicPortfolioHomePage(tenant, services)
-                        : classicPortfolioHomePage(tenant, services);
+            if (isGallery) {
+              ensureTeamProvidersLoaded(tenant, function() {
+                document.getElementById('root').innerHTML = galleryPage(tenant);
+                var galleryRoot = document.getElementById('root');
+                bindGalleryLightbox(galleryRoot);
+                bindGalleryTeamFilter(galleryRoot);
+                if (isStudio12Theme(tenant)) {
+                  bindStudio12Page();
+                  bindTattooSidebar();
+                } else {
+                  bindTattooSidebar();
+                }
+                applyTenantColorVars(tenant);
+                applyBodyPageColors(tenant, 'gallery');
+                applyTenantTypography(tenant);
+                if (isBladeTheme(tenant)) bindBladeChrome();
+                applySidebarIconColor(tenant, false, true);
+                if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
+              });
+              return;
+            }
+            var homeContent = buildThemedHomeContent();
             if (showForm) {
-              var needsMemberPicker = p.isBookPath && !p.memberSlug && isTeamPlan(tenant) && !tenant._memberPickerResolved;
-              runBookFormBind = !needsMemberPicker;
-              if (needsMemberPicker) {
-                resolveTeamBookMemberPicker(tenant, renderTenantSite);
+              var needsTeamBookProviders = p.isBookPath && isTeamPlan(tenant) && !tenant._memberPickerResolved;
+              runBookFormBind = !needsTeamBookProviders;
+              if (needsTeamBookProviders) {
+                resolveTeamBookProviders(tenant, renderTenantSite);
               } else {
                 document.getElementById('root').innerHTML = form(tenant, services, presel, tenant._activeProvider || null);
                 if (usesThemedChrome(tenant) || isStudio12Theme(tenant)) bindTattooSidebar();
@@ -11638,22 +12494,45 @@
                 if (tenantShouldBindShopCart(tenant)) bindShopPage(tenant);
               }
             } else if (isThemedHome) {
-              document.getElementById('root').innerHTML = homeContent;
-              bindGalleryLightbox(document.getElementById('root'));
-              if (isStudio12Home) {
-                bindStudio12Page();
-                bindTattooSidebar();
-              } else {
-                bindTattooSidebar();
-              }
-              if (isBladeHome) bindBladeChrome();
-              if (isStonecutHome) {
-                bindStonecutNavChrome();
-              }
-              if (tenantShouldBindShopCart(tenant)) {
-                bindShopPage(tenant);
-              }
-              mountTeamProvidersSection(tenant);
+              ensureTeamProvidersLoaded(tenant, function() {
+                document.getElementById('root').innerHTML = buildThemedHomeContent();
+                bindGalleryLightbox(document.getElementById('root'));
+                if (isStudio12Home) {
+                  bindStudio12Page();
+                  bindTattooSidebar();
+                } else {
+                  bindTattooSidebar();
+                }
+                if (isBladeHome) bindBladeChrome();
+                if (isStonecutHome) {
+                  bindStonecutNavChrome();
+                }
+                if (tenantShouldBindShopCart(tenant)) {
+                  bindShopPage(tenant);
+                }
+                applyBranding(tenant);
+                applySidebarIconColor(tenant, p.isBookPath, false);
+                if (p.sectionTarget) {
+                  setTimeout(function() {
+                    var target = document.getElementById(p.sectionTarget);
+                    if (target && target.scrollIntoView) {
+                      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 0);
+                }
+                if (isBladeHome && (location.hash || '').toLowerCase() === '#services') {
+                  setTimeout(function() {
+                    var sec = document.getElementById('services');
+                    if (sec && sec.scrollIntoView) {
+                      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 0);
+                }
+                if (isStudio12Home && studio12HashTargetsServices()) {
+                  setTimeout(studio12ScrollToServices, 80);
+                }
+              });
+              return;
             } else {
               document.getElementById('root').innerHTML = '<div class="container">' + homeContent + '</div>';
             }
@@ -11679,6 +12558,9 @@
               setTimeout(studio12ScrollToServices, 80);
             }
             if (showForm && runBookFormBind) {
+              if (tenant._bookProviders && tenant._bookProviders.length) {
+                bindBookingArtistSelect(tenant, tenant._bookProviders);
+              }
               function uploadId() {
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                   var r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
@@ -11962,6 +12844,7 @@
                   return functions.httpsCallable('createBookingRequestFromWeb')({
                     tenantSlug: tenant.slug,
                     memberSlug: (tenant._activeProvider && tenant._activeProvider.memberSlug) || null,
+                    assignmentPreference: tenant._assignmentPreference || null,
                     customerName: customerName,
                     customerEmail: customerEmail,
                     customerPhone: customerPhone,
@@ -12010,14 +12893,11 @@
                   return;
                 }
                 if (!p.isBookPath) {
-                  document.getElementById('root').innerHTML = providerProfilePageHtml(tenant, provider);
-                  bindGalleryLightbox(document.getElementById('root'));
+                  document.getElementById('root').innerHTML = teamMemberProfilePageHtml(tenant, provider);
+                  bindTeamSubpageChrome(tenant);
                   applyBranding(tenant);
                   return;
                 }
-                tenant._activeProvider = provider;
-                tenant._memberPickerResolved = true;
-                renderTenantSite();
               });
             }
             renderTenantSite();

@@ -35,6 +35,7 @@ enum UploadImageAdvice {
     static let featured = "Strong single shots for the home strip. Move and zoom inside the border; multi-select uses center crop on each with the same framing."
     static let product = "Clear product on a simple background; square or centered framing reads best in the shop grid."
     static let profile = "Face-forward or logo-style image; square framing matches the round avatar on your account."
+    static let teamMember = "Portrait 4:5 matches team cards on /team and your home page. Center face and shoulders inside the frame."
 }
 
 // MARK: - Aspect choice
@@ -92,6 +93,7 @@ enum UploadCropPresetMenu {
     static let product: [UploadCropAspectChoice] = [.square, .portrait4_5, .landscape4_3, .original]
     /// Account avatar
     static let profile: [UploadCropAspectChoice] = [.square, .original]
+    static let teamMember: [UploadCropAspectChoice] = [.portrait4_5, .portrait3_4, .square, .original]
 }
 
 // MARK: - Single-image crop for export (fixed mask → pixel rect on working image)

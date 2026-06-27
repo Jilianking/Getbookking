@@ -52,7 +52,7 @@ struct ManagerSettingsView: View {
                !ownerMember.memberSlug.isEmpty,
                viewModel.tenantSubscriptionPlan.allowsTeamInvites {
                 Section(header: Text("Your booking page")) {
-                    LabeledContent("Page path", value: "/\(ownerMember.memberSlug)")
+                    LabeledContent("Page path", value: PublicBookingSite.memberPagePath(memberSlug: ownerMember.memberSlug))
                     NavigationLink {
                         ProviderPortfolioView(
                             teamViewModel: viewModel,
@@ -76,13 +76,20 @@ struct ManagerSettingsView: View {
             Section(
                 header: Text("Team members"),
                 footer: viewModel.isTenantOwner
-                    ? Text("Tap a member for job title and payment split. Manager capabilities are set in Settings.")
+                    ? Text("Tap a member for job title and payment split. Tap your name to edit your public booking profile.")
                         .font(.caption2)
                     : Text("Your access is based on roles & permissions in Settings.")
                         .font(.caption2)
             ) {
                 ForEach(viewModel.members) { member in
-                    if viewModel.isTenantOwner && member.isEditable {
+                    if viewModel.isTenantOwner && member.accessRole == .owner && viewModel.tenantSubscriptionPlan.allowsTeamInvites {
+                        NavigationLink {
+                            OwnerPublicBookingProfileView(viewModel: viewModel, member: member)
+                                .environmentObject(authViewModel)
+                        } label: {
+                            TeamMemberRow(member: member)
+                        }
+                    } else if viewModel.isTenantOwner && member.isEditable {
                         NavigationLink {
                             TeamMemberDetailView(viewModel: viewModel, member: member)
                                 .environmentObject(authViewModel)

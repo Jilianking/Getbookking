@@ -247,7 +247,7 @@ struct ProviderPortfolioView: View {
                 .foregroundStyle(.secondary)
         }
 
-        Text("Shown on \(viewModel.providerName)'s booking page. Square or portrait shots work best.")
+        Text("Shown on \(viewModel.providerName)'s team profile and the studio gallery. Square or portrait shots work best.")
             .font(.caption2)
             .foregroundStyle(.secondary)
     }

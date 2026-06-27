@@ -259,6 +259,29 @@ struct SettingsView: View {
                     Divider().padding(.leading, 52)
                 }
 
+                if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.allowsTeamInvites,
+                   let ownerMember = teamPolicyViewModel.members.first(where: { $0.accessRole == .owner }) {
+                    NavigationLink {
+                        OwnerPublicBookingProfileView(
+                            viewModel: teamPolicyViewModel,
+                            member: ownerMember
+                        )
+                        .environmentObject(authViewModel)
+                    } label: {
+                        AppSettingsRow(
+                            icon: "person.crop.circle.badge.checkmark",
+                            iconColor: AppDesign.accentBlue,
+                            title: "Your booking profile",
+                            value: ownerMember.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? nil
+                                : ownerMember.jobTitle
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().padding(.leading, 52)
+                }
+
                 NavigationLink {
                     PersonalBookingSettingsView(viewModel: viewModel)
                         .environmentObject(authViewModel)

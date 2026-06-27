@@ -29,6 +29,14 @@ struct EffectiveTeamAccess: Equatable {
     var canSendClientSms: Bool = false
     var memberSmsStatus: String = "off"
     var memberSmsPhoneNumber: String = ""
+    /// Owner-enabled self-edit of portfolio photos on the public site.
+    var canEditPortfolio: Bool = false
+    /// Owner-enabled self-edit of public bio on team/booking pages.
+    var canEditPublicBio: Bool = false
+
+    var canAccessWebsiteProfile: Bool {
+        canEditPortfolio || canEditPublicBio
+    }
 
     static let ownerFullAccess = EffectiveTeamAccess(
         isOwner: true,
@@ -50,7 +58,9 @@ struct EffectiveTeamAccess: Equatable {
         subscriptionPlan: .studio,
         payoutMode: .independent,
         usesOwnPayments: false,
-        canTakePayments: true
+        canTakePayments: true,
+        canEditPortfolio: true,
+        canEditPublicBio: true
     )
 
     var canManageBookingPolicy: Bool { isOwner }
@@ -149,7 +159,9 @@ enum TenantTeamAccessService {
                 subscriptionPlan: SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String),
                 payoutMode: current.payoutMode,
                 usesOwnPayments: current.usesOwnPayments,
-                canTakePayments: true
+                canTakePayments: true,
+                canEditPortfolio: true,
+                canEditPublicBio: true
             )
         } catch {
             return current
@@ -174,6 +186,8 @@ enum TenantTeamAccessService {
         let canSendClientSms = data["canSendClientSms"] as? Bool ?? false
         let memberSmsStatus = (data["memberSmsStatus"] as? String) ?? "off"
         let memberSmsPhoneNumber = (data["memberSmsPhoneNumber"] as? String) ?? ""
+        let canEditPortfolio = data["canEditPortfolio"] as? Bool ?? false
+        let canEditPublicBio = data["canEditPublicBio"] as? Bool ?? false
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
@@ -190,7 +204,9 @@ enum TenantTeamAccessService {
             usesOwnSms: usesOwnSms,
             canSendClientSms: canSendClientSms,
             memberSmsStatus: memberSmsStatus,
-            memberSmsPhoneNumber: memberSmsPhoneNumber
+            memberSmsPhoneNumber: memberSmsPhoneNumber,
+            canEditPortfolio: isOwner ? true : canEditPortfolio,
+            canEditPublicBio: isOwner ? true : canEditPublicBio
         )
     }
 }

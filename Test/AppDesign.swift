@@ -363,6 +363,29 @@ struct AppStatusPill: View {
     }
 }
 
+/// Multiline bio editor with reliable copy/paste (prefer over `TextField(axis: .vertical)` in Forms).
+struct TeamMemberBioTextEditor: View {
+    let placeholder: String
+    @Binding var text: String
+    var minHeight: CGFloat = 88
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .frame(minHeight: minHeight)
+                .scrollContentBackground(.hidden)
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .font(.body)
+                    .foregroundStyle(Color(.placeholderText))
+                    .padding(.top, 8)
+                    .padding(.horizontal, 4)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
 struct AppSearchField: View {
     let placeholder: String
     @Binding var text: String

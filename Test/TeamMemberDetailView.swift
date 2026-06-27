@@ -210,10 +210,12 @@ struct TeamMemberDetailView: View {
             ) {
                 Toggle("Bookable on website", isOn: $isBookable)
                 if isBookable, !member.memberSlug.isEmpty {
-                    LabeledContent("Page path", value: "/\(member.memberSlug)")
+                    LabeledContent("Page path", value: PublicBookingSite.memberPagePath(memberSlug: member.memberSlug))
                 }
-                TextField("Short bio (optional)", text: $providerAboutText, axis: .vertical)
-                    .lineLimit(3...6)
+                TeamMemberBioTextEditor(
+                    placeholder: "Short bio (optional)",
+                    text: $providerAboutText
+                )
                 if isBookable {
                     NavigationLink {
                         ProviderPortfolioView(

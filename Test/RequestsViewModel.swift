@@ -387,6 +387,73 @@ class RequestsViewModel: ObservableObject {
     }
 
     /// Stable `tenants/{id}/customers/{docId}` key (phone digits, then email slug).
+    /// Stable `tenants/{id}/customers/{docId}` key (phone digits, then email slug).
+    static func matchingClient(for booking: BookingRequest, in customers: [Client]) -> Client? {
+        let email = (booking.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = PhoneFormatting.normalizedForStorage(booking.customerPhone) ?? ""
+        let digits = PhoneFormatting.digits(from: phone)
+        let targetPhoneId = digits.count >= 10 ? String(digits.suffix(10)) : ""
+        let targetEmailId = email.isEmpty
+            ? ""
+            : String(email.replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression).prefix(120))
+        let customerDocId = customerDocumentId(for: booking)
+
+        return customers.first { customer in
+            if let customerDocId,
+               let id = customer.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !id.isEmpty,
+               id == customerDocId {
+                return true
+            }
+            let existingPhoneDigits = PhoneFormatting.digits(from: customer.phone ?? "")
+            let existingPhoneId = existingPhoneDigits.count >= 10 ? String(existingPhoneDigits.suffix(10)) : ""
+            let existingEmailId = customer.email
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            if !targetPhoneId.isEmpty && existingPhoneId == targetPhoneId { return true }
+            if !targetEmailId.isEmpty && String(existingEmailId.prefix(120)) == targetEmailId { return true }
+            return false
+        }
+    }
+
+    static func enrichBookingRequestWithClientContact(_ booking: BookingRequest, client: Client?) -> BookingRequest {
+        guard let client else { return booking }
+        var enriched = booking
+        let bookingName = (enriched.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientName = client.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if bookingName.isEmpty, !clientName.isEmpty {
+            enriched.customerName = clientName
+        }
+        let bookingEmail = (enriched.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientEmail = client.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if bookingEmail.isEmpty, !clientEmail.isEmpty {
+            enriched.customerEmail = clientEmail
+        }
+        let bookingPhone = (enriched.customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientPhone = (client.phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if bookingPhone.isEmpty, !clientPhone.isEmpty {
+            enriched.customerPhone = clientPhone
+        }
+        if (enriched.customerId ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let clientId = client.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !clientId.isEmpty {
+            enriched.customerId = clientId
+        }
+        return enriched
+    }
+
+    func enrichedBookingRequestWithClientContact(_ booking: BookingRequest) async -> BookingRequest {
+        guard let tid = tenantId else { return booking }
+        do {
+            let customers = try await firebaseService.fetchTenantCustomers(tenantId: tid)
+            let match = Self.matchingClient(for: booking, in: customers)
+            return Self.enrichBookingRequestWithClientContact(booking, client: match)
+        } catch {
+            return booking
+        }
+    }
+
     static func customerDocumentId(for booking: BookingRequest) -> String? {
         let email = (booking.customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let phone = PhoneFormatting.normalizedForStorage(booking.customerPhone)

@@ -214,8 +214,14 @@ struct BookingRequestFormMediaGalleryView: View {
     let title: String
     let value: Any
 
+    @State private var previewSelection: BookingRequestMediaPreviewSelection?
+
     private var urls: [URL] {
         BookingRequestDetailModel.normalizedURLs(from: value)
+    }
+
+    private var imageURLs: [URL] {
+        urls.filter { !BookingRequestDetailModel.isPDFURL($0) }
     }
 
     private var columns: [GridItem] {
@@ -233,58 +239,97 @@ struct BookingRequestFormMediaGalleryView: View {
                         ForEach(urls, id: \.absoluteString) { url in
                             if BookingRequestDetailModel.isPDFURL(url) {
                                 Link(destination: url) {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: "doc.richtext.fill")
-                                            .font(.title2)
-                                            .foregroundColor(.secondary)
-                                        Text("Open PDF")
-                                            .font(.caption.weight(.medium))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .frame(minHeight: 112)
-                                    .background(AppDesign.searchBackground)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    pdfThumbnail
                                 }
                             } else {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        ProgressView()
-                                            .frame(maxWidth: .infinity, minHeight: 120)
-                                            .background(AppDesign.searchBackground)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(maxWidth: .infinity, minHeight: 120)
-                                            .frame(maxHeight: 220)
-                                            .clipped()
-                                            .cornerRadius(12)
-                                    case .failure:
-                                        Link(destination: url) {
-                                            VStack(spacing: 6) {
-                                                Image(systemName: "arrow.up.right.square")
-                                                    .font(.title2)
-                                                Text("Open")
-                                                    .font(.caption)
-                                            }
-                                            .foregroundColor(.primary)
-                                            .frame(maxWidth: .infinity, minHeight: 120)
-                                            .background(AppDesign.searchBackground)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                        }
-                                    @unknown default:
-                                        EmptyView()
-                                    }
+                                Button {
+                                    openPreview(for: url)
+                                } label: {
+                                    imageThumbnail(url: url)
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("View reference photo")
                             }
                         }
                     }
                 }
+                .fullScreenCover(item: $previewSelection) { selection in
+                    BookingRequestMediaFullScreenPreview(
+                        urls: selection.urls,
+                        initialIndex: selection.initialIndex
+                    )
+                }
             }
         }
     }
+
+    private var pdfThumbnail: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "doc.richtext.fill")
+                .font(.title2)
+                .foregroundColor(.secondary)
+            Text("Open PDF")
+                .font(.caption.weight(.medium))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 112)
+        .background(AppDesign.searchBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func imageThumbnail(url: URL) -> some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .empty:
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .background(AppDesign.searchBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .frame(maxHeight: 220)
+                    .clipped()
+                    .cornerRadius(12)
+            case .failure:
+                VStack(spacing: 6) {
+                    Image(systemName: "photo")
+                        .font(.title2)
+                    Text("Tap to view")
+                        .font(.caption)
+                }
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .background(AppDesign.searchBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            @unknown default:
+                EmptyView()
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(6)
+                .background(.black.opacity(0.45))
+                .clipShape(Circle())
+                .padding(8)
+        }
+    }
+
+    private func openPreview(for url: URL) {
+        guard let index = imageURLs.firstIndex(of: url) else { return }
+        previewSelection = BookingRequestMediaPreviewSelection(urls: imageURLs, initialIndex: index)
+    }
+}
+
+private struct BookingRequestMediaPreviewSelection: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let initialIndex: Int
 }
 
 struct BookingRequestFormSectionsView: View {

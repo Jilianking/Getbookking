@@ -37,7 +37,7 @@ struct DashboardView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    AppScreenTitle(title: dashboardHeadline)
+                    AppBrandScreenTitle(title: dashboardHeadline)
                     LazyVGrid(columns: statColumns, spacing: 12) {
                         AppStatCard(
                             title: "New requests",

@@ -10,6 +10,32 @@ import UIKit
 enum AppDesign {
     static let drawerWidth: CGFloat = 300
 
+    /// Option B wordmark: Tenor Sans, uppercase, wide tracking (login + brand chrome).
+    static let brandWordmarkFontPostScriptName = "TenorSans"
+    static let brandWordmarkTrackingEm: CGFloat = 0.22
+
+    static func brandWordmarkFont(size: CGFloat = 26) -> Font {
+        .custom(brandWordmarkFontPostScriptName, size: size)
+    }
+
+    static func brandWordmarkTracking(forSize size: CGFloat) -> CGFloat {
+        size * brandWordmarkTrackingEm
+    }
+
+    /// Screen titles (nav large titles, login card headers) — Tenor Sans, lighter tracking than wordmark.
+    static func screenHeaderFont(size: CGFloat = 34) -> Font {
+        brandWordmarkFont(size: size)
+    }
+
+    static func screenHeaderTracking(forSize size: CGFloat) -> CGFloat {
+        size * 0.06
+    }
+
+    static func brandUIFont(size: CGFloat) -> UIFont {
+        UIFont(name: brandWordmarkFontPostScriptName, size: size)
+            ?? .systemFont(ofSize: size, weight: .bold)
+    }
+
     // Marketing site tokens (https://marketing — light mode)
     static let brandDark = Color(hex: 0x2C2018)
     static let brandWarm = Color(hex: 0x8B6F47)
@@ -138,13 +164,65 @@ extension View {
     }
 }
 
-/// Visible screen title when using inline navigation bar (marketing-style headline).
+enum AppNavigationAppearance {
+    static func configure() {
+        let largeFont = UIFont.systemFont(ofSize: 34, weight: .bold)
+        let inlineFont = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        let titleColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.96, green: 0.94, blue: 0.91, alpha: 1)
+                : UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 1)
+        }
+        let backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.09, green: 0.08, blue: 0.07, alpha: 1)
+                : UIColor(red: 0.992, green: 0.980, blue: 0.965, alpha: 1)
+        }
+
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = backgroundColor
+        appearance.shadowColor = .clear
+        appearance.largeTitleTextAttributes = [
+            .font: largeFont,
+            .foregroundColor: titleColor,
+        ]
+        appearance.titleTextAttributes = [
+            .font: inlineFont,
+            .foregroundColor: titleColor,
+        ]
+
+        let navBar = UINavigationBar.appearance()
+        navBar.standardAppearance = appearance
+        navBar.scrollEdgeAppearance = appearance
+        navBar.compactAppearance = appearance
+        navBar.compactScrollEdgeAppearance = appearance
+    }
+}
+
+/// In-content screen title (system bold) for Settings, Insights, etc.
 struct AppScreenTitle: View {
     let title: String
 
     var body: some View {
         Text(title)
             .font(.largeTitle.bold())
+            .foregroundStyle(AppDesign.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
+    }
+}
+
+/// Brand screen title (Tenor Sans) — Dashboard only.
+struct AppBrandScreenTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppDesign.screenHeaderFont(size: 34))
+            .tracking(AppDesign.screenHeaderTracking(forSize: 34))
             .foregroundStyle(AppDesign.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)

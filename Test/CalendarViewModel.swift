@@ -4,10 +4,16 @@ import FirebaseAuth
 
 class CalendarViewModel: ObservableObject {
     @Published var events: [Event] = []
+    @Published private(set) var bookingRequestsById: [String: BookingRequest] = [:]
     @Published var isLoading = false
 
     private let firebaseService = FirebaseService()
     private var loadedMonthKey: String?
+
+    func bookingRequest(for event: Event) -> BookingRequest? {
+        guard let id = event.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else { return nil }
+        return bookingRequestsById[id]
+    }
 
     func loadEvents(forMonthAround anchor: Date = Date(), isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         let calendar = Calendar.current
@@ -19,20 +25,15 @@ class CalendarViewModel: ObservableObject {
 
         if isDemoMode {
             if let sessionStore, sessionStore.isDemoSession {
-                let mapped = sessionStore.bookingRequests.compactMap { Self.event(from: $0) }
-                let inMonth = mapped.filter { event in
-                    event.start >= startOfMonth && event.start < endOfMonth
-                }
-                .sorted { $0.start < $1.start }
+                let bookings = sessionStore.bookingRequests
                 await MainActor.run {
-                    events = inMonth
-                    loadedMonthKey = monthKey
-                    isLoading = false
+                    applyMonthEvents(from: bookings, startOfMonth: startOfMonth, endOfMonth: endOfMonth, monthKey: monthKey)
                 }
                 return
             }
             await MainActor.run {
                 events = Self.demoEvents(calendar: calendar, anchor: anchor)
+                bookingRequestsById = [:]
                 loadedMonthKey = monthKey
                 isLoading = false
             }
@@ -43,6 +44,7 @@ class CalendarViewModel: ObservableObject {
             guard let uid = Auth.auth().currentUser?.uid else {
                 await MainActor.run {
                     events = []
+                    bookingRequestsById = [:]
                     loadedMonthKey = monthKey
                     isLoading = false
                 }
@@ -52,6 +54,7 @@ class CalendarViewModel: ObservableObject {
             guard let tenantId = profile?.tenantId, !tenantId.isEmpty else {
                 await MainActor.run {
                     events = []
+                    bookingRequestsById = [:]
                     loadedMonthKey = monthKey
                     isLoading = false
                 }
@@ -59,21 +62,34 @@ class CalendarViewModel: ObservableObject {
             }
 
             let bookings = try await firebaseService.fetchTenantBookingRequests(tenantId: tenantId)
-            let mapped = bookings.compactMap { Self.event(from: $0) }
-            let inMonth = mapped.filter { event in
-                event.start >= startOfMonth && event.start < endOfMonth
-            }
-            .sorted { $0.start < $1.start }
-
             await MainActor.run {
-                events = inMonth
-                loadedMonthKey = monthKey
-                isLoading = false
+                applyMonthEvents(from: bookings, startOfMonth: startOfMonth, endOfMonth: endOfMonth, monthKey: monthKey)
             }
         } catch {
             await MainActor.run { isLoading = false }
             print("Error loading calendar appointments: \(error)")
         }
+    }
+
+    private func applyMonthEvents(
+        from bookings: [BookingRequest],
+        startOfMonth: Date,
+        endOfMonth: Date,
+        monthKey: String
+    ) {
+        var byId: [String: BookingRequest] = [:]
+        for booking in bookings {
+            if let docId = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines), !docId.isEmpty {
+                byId[docId] = booking
+            }
+        }
+        let inMonth = bookings.compactMap { Self.event(from: $0) }
+            .filter { $0.start >= startOfMonth && $0.start < endOfMonth }
+            .sorted { $0.start < $1.start }
+        events = inMonth
+        bookingRequestsById = byId
+        loadedMonthKey = monthKey
+        isLoading = false
     }
 
     /// Skips reload when the visible month is unchanged (day taps within the same month).
@@ -87,10 +103,9 @@ class CalendarViewModel: ObservableObject {
 
     static func event(from booking: BookingRequest) -> Event? {
         let statusRaw = booking.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard statusRaw == "confirmed" || statusRaw == "new" else { return nil }
+        guard statusRaw == "confirmed" else { return nil }
         guard let start = appointmentStart(for: booking) else { return nil }
 
-        let eventStatus: Event.EventStatus = statusRaw == "confirmed" ? .confirmed : .pending
         let service = (booking.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let client = (booking.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -100,7 +115,7 @@ class CalendarViewModel: ObservableObject {
             start: start,
             end: nil,
             type: .appointment,
-            status: eventStatus,
+            status: .confirmed,
             clientId: booking.customerId ?? booking.id,
             clientName: client.isEmpty ? "Client" : client,
             notes: booking.notes,
@@ -157,7 +172,7 @@ class CalendarViewModel: ObservableObject {
                 start: at(dayOffset: 3, hour: 14, minute: 30),
                 end: nil,
                 type: .appointment,
-                status: .pending,
+                status: .confirmed,
                 clientId: "demo-client-2",
                 clientName: "Jordan K.",
                 notes: nil,

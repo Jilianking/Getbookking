@@ -19,7 +19,9 @@ struct LoginView: View {
         NavigationStack {
             VStack(spacing: 32) {
                 Text("Get Bookking")
-                    .font(.system(size: 36, weight: .bold, design: .serif))
+                    .font(AppDesign.brandWordmarkFont(size: 26))
+                    .tracking(AppDesign.brandWordmarkTracking(forSize: 26))
+                    .textCase(.uppercase)
                     .foregroundStyle(AppDesign.textPrimary)
                     .padding(.top, 80)
 
@@ -34,7 +36,8 @@ struct LoginView: View {
     private var signInCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Sign in")
-                .font(.system(size: 28, weight: .bold))
+                .font(AppDesign.screenHeaderFont(size: 28))
+                .tracking(AppDesign.screenHeaderTracking(forSize: 28))
                 .foregroundStyle(AppDesign.textPrimary)
             Text("Use your account to manage bookings")
                 .font(.subheadline)

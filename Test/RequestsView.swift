@@ -550,15 +550,15 @@ struct BookingRequestDetailView: View {
 
                     // Appointment scheduling
                     VStack(alignment: .leading, spacing: 12) {
-                        BookingRequestSectionHeader(title: "Appointment")
+                        BookingRequestSectionHeader(title: "Appointment request")
                         if let start = request.requestedStartTime {
                             BookingRequestDetailRow(
-                                label: "Date",
+                                label: "Requested date",
                                 value: start.formatted(.dateTime.month(.abbreviated).day().year()),
                                 systemImage: "calendar"
                             )
                             BookingRequestDetailRow(
-                                label: "Time",
+                                label: "Requested time",
                                 value: start.formatted(date: .omitted, time: .shortened),
                                 systemImage: "clock"
                             )
@@ -570,7 +570,7 @@ struct BookingRequestDetailView: View {
                             )
                         }
                         if let pt = request.preferredTime, !pt.isEmpty {
-                            BookingRequestDetailRow(label: "Preferred", value: pt, systemImage: "clock")
+                            BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
                         }
                         if let days = request.preferredDays, !days.isEmpty {
                             BookingRequestDetailRow(
@@ -582,6 +582,25 @@ struct BookingRequestDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .appCard()
+
+                    // Custom form fields (placement, style, reference images, etc.)
+                    BookingRequestFormSectionsView(
+                        responses: currentRequest.formResponses,
+                        bookingTemplate: viewModel.tenantBookingTemplate
+                    )
+
+                    // Notes
+                    if let notes = request.notes, !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            BookingRequestSectionHeader(title: "Notes")
+                            Text(notes)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .appCard()
+                    }
 
                     // Contact
                     VStack(alignment: .leading, spacing: 0) {
@@ -692,25 +711,6 @@ struct BookingRequestDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .appCard()
-
-                    // Notes
-                    if let notes = request.notes, !notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            BookingRequestSectionHeader(title: "Notes")
-                            Text(notes)
-                                .font(.subheadline)
-                                .foregroundColor(.primary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .appCard()
-                    }
-
-                    // Custom form fields (web / admin)
-                    BookingRequestFormSectionsView(
-                        responses: request.formResponses,
-                        bookingTemplate: viewModel.tenantBookingTemplate
-                    )
 
                     if canShowApprovalActions {
                         VStack(spacing: 12) {

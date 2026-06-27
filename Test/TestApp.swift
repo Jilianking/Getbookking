@@ -26,6 +26,7 @@ struct TestApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        AppNavigationAppearance.configure()
         FirebaseApp.configure()
         PushNotificationManager.shared.configure(application: application)
         #if TAP_TO_PAY_ENABLED

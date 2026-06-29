@@ -14,6 +14,7 @@ struct EffectiveTeamAccess: Equatable {
     var accessRole: TeamAccessRole = .owner
     var permissions: ManagerPermissions = .defaults
     var confirmationType: BookingConfirmationType = .requestApprove
+    var depositAmount: Double?
     var bookingRequiresApproval: Bool = true
     var managersApproveAppointments: Bool = true
     var usesStudioBookingPolicy: Bool = false
@@ -102,6 +103,11 @@ struct EffectiveTeamAccess: Equatable {
         if accessRole == .manager { return permissions.manageArtistSchedules }
         return false
     }
+
+    /// Studio/Shop with more than one bookable team member — show assignee pickers and filters.
+    func showsStaffAssignmentUI(rosterCount: Int) -> Bool {
+        subscriptionPlan.allowsTeamInvites && rosterCount > 1
+    }
 }
 
 enum TenantTeamAccessService {
@@ -153,6 +159,7 @@ enum TenantTeamAccessService {
                     sendClientNotifications: true
                 ),
                 confirmationType: current.confirmationType,
+                depositAmount: current.depositAmount,
                 bookingRequiresApproval: current.bookingRequiresApproval,
                 managersApproveAppointments: current.managersApproveAppointments,
                 usesStudioBookingPolicy: current.usesStudioBookingPolicy,
@@ -188,11 +195,19 @@ enum TenantTeamAccessService {
         let memberSmsPhoneNumber = (data["memberSmsPhoneNumber"] as? String) ?? ""
         let canEditPortfolio = data["canEditPortfolio"] as? Bool ?? false
         let canEditPublicBio = data["canEditPublicBio"] as? Bool ?? false
+        let depositRaw = data["depositAmount"]
+        let depositAmount: Double? = {
+            if let d = depositRaw as? Double { return d > 0 ? d : nil }
+            if let n = depositRaw as? NSNumber { return n.doubleValue > 0 ? n.doubleValue : nil }
+            if let i = depositRaw as? Int { return i > 0 ? Double(i) : nil }
+            return nil
+        }()
         return EffectiveTeamAccess(
             isOwner: isOwner,
             accessRole: isOwner ? .owner : role,
             permissions: perms,
             confirmationType: confirmation,
+            depositAmount: depositAmount,
             bookingRequiresApproval: requiresApproval,
             managersApproveAppointments: managersApprove,
             usesStudioBookingPolicy: usesStudio,

@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 // MARK: - Booking request list filter (tenant + legacy)
 
@@ -25,8 +26,8 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
         let s = br.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch self {
         case .all: return true
-        case .unread: return s == "new" && br.readAt == nil
-        case .newOnly: return s == "new"
+        case .unread: return (s == "new" || s == "pending") && br.readAt == nil
+        case .newOnly: return s == "new" || s == "pending"
         case .confirmed: return s == "confirmed"
         case .cancelledOrDeclined: return s == "cancelled" || s == "declined"
         }
@@ -47,7 +48,7 @@ struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = RequestsViewModel()
-    @State private var requestFilter: BookingRequestFilter = .all
+    @State private var requestFilter: BookingRequestFilter = .newOnly
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
@@ -274,7 +275,11 @@ struct RequestsView: View {
     }
 
     private var showsTeamFilter: Bool {
-        viewModel.useTenantData && authViewModel.teamAccess.canViewAllBookings
+        viewModel.useTenantData
+            && authViewModel.teamAccess.canViewAllBookings
+            && authViewModel.teamAccess.showsStaffAssignmentUI(
+                rosterCount: viewModel.teamFilterRoster.count
+            )
     }
 
     @ViewBuilder
@@ -437,35 +442,19 @@ struct BookingRequestListRow: View {
             }
 
             if canShowApprovalActions, let docId = request.documentId, !docId.isEmpty {
-                HStack(spacing: 10) {
-                    Button {
-                        onMarkRead?(docId)
-                        Task {
-                            await viewModel.setBookingRequestStatus(
-                                requestId: docId,
-                                status: "declined",
-                                notes: request.notes
-                            )
-                        }
-                    } label: {
-                        Text("Decline")
+                Button {
+                    onMarkRead?(docId)
+                    Task {
+                        await viewModel.setBookingRequestStatus(
+                            requestId: docId,
+                            status: "declined",
+                            notes: request.notes
+                        )
                     }
-                    .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
-
-                    Button {
-                        onMarkRead?(docId)
-                        Task {
-                            await viewModel.setBookingRequestStatus(
-                                requestId: docId,
-                                status: "confirmed",
-                                notes: request.notes
-                            )
-                        }
-                    } label: {
-                        Text("Confirm")
-                    }
-                    .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus))
+                } label: {
+                    Text("Decline")
                 }
+                .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
             }
         }
         .padding(16)
@@ -483,6 +472,8 @@ struct BookingRequestDetailView: View {
     @State private var assigneePickerKey: String = BookingAssigneeFilter.unassignedKey
     @State private var assigneePickerReady = false
     @State private var showAssignScheduleSheet = false
+    @State private var showConfirmAppointmentSheet = false
+    @State private var confirmAppointmentSheetIsReschedule = false
     @State private var contactAlreadyExists = false
 
     private var currentRequest: BookingRequest {
@@ -501,287 +492,85 @@ struct BookingRequestDetailView: View {
         teamAccess.isOwner || teamAccess.canViewAllBookings
     }
 
+    private var showsStaffAssignmentUI: Bool {
+        teamAccess.showsStaffAssignmentUI(rosterCount: viewModel.teamFilterRoster.count)
+    }
+
+    private var canPickArtistOnConfirm: Bool {
+        canManageAssignment && showsStaffAssignmentUI
+    }
+
     private var canShowApprovalActions: Bool {
         teamAccess.canApproveRejectRequests &&
             (statusLower == "new" || statusLower == "pending")
     }
 
+    private var canConfirmPendingAppointment: Bool {
+        canManageAssignment && isPendingConfirmation
+    }
+
+    private var canShowDeclineAction: Bool {
+        canShowApprovalActions
+    }
+
+    private var confirmedTimeLabel: String {
+        if statusLower == "confirmed", let start = currentRequest.requestedStartTime {
+            return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        }
+        return "Not set yet"
+    }
+
+    private var isPendingConfirmation: Bool {
+        statusLower == "new" || statusLower == "pending"
+    }
+
+    private var canEditConfirmedTime: Bool {
+        if isPendingConfirmation { return canConfirmPendingAppointment }
+        if statusLower == "confirmed" { return canManageAssignment }
+        return false
+    }
+
+    private var canSendDepositSmsForRequest: Bool {
+        guard teamAccess.canSendClientSms else { return false }
+        let phone = (currentRequest.customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !PhoneFormatting.digits(from: phone).isEmpty
+    }
+
+    private var confirmedTimeSystemImage: String {
+        statusLower == "confirmed" && currentRequest.requestedStartTime != nil
+            ? "checkmark.circle.fill"
+            : "clock.badge.questionmark"
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Header: avatar, name (no status pill — read state uses `readAt` only)
-                    VStack(spacing: 12) {
-                        AppAvatarView(
-                            tenantLogoURL: nil,
-                            accountPhotoURL: nil,
-                            displayNameFallback: request.customerName ?? "?",
-                            size: 64
-                        )
-                        Text(request.customerName ?? "Unknown")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(AppDesign.textPrimary)
-                        AppStatusPill(text: currentRequest.status, soft: true)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .padding(.horizontal, 16)
-                    .appCard()
-
-                    // Service / appointment type
-                    VStack(alignment: .leading, spacing: 12) {
-                        BookingRequestSectionHeader(title: "Service")
-                        BookingRequestDetailRow(
-                            label: "Appointment type",
-                            value: currentRequest.serviceName ?? currentRequest.serviceSlug ?? "—"
-                        )
-                        if canManageAssignment {
-                            assignFromScheduleSection
-                        } else if let staff = currentRequest.assignedMemberDisplayLabel {
-                            BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
-                        }
-                        if let mode = currentRequest.bookingModeUsed, !mode.isEmpty {
-                            BookingRequestDetailRow(label: "Booking mode", value: mode)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                detailScrollContent
                     .padding(16)
-                    .appCard()
-
-                    // Appointment scheduling
-                    VStack(alignment: .leading, spacing: 12) {
-                        BookingRequestSectionHeader(title: "Appointment request")
-                        if let start = request.requestedStartTime {
-                            BookingRequestDetailRow(
-                                label: "Requested date",
-                                value: start.formatted(.dateTime.month(.abbreviated).day().year()),
-                                systemImage: "calendar"
-                            )
-                            BookingRequestDetailRow(
-                                label: "Requested time",
-                                value: start.formatted(date: .omitted, time: .shortened),
-                                systemImage: "clock"
-                            )
-                        } else if let created = request.createdAt {
-                            BookingRequestDetailRow(
-                                label: "Submitted",
-                                value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
-                                systemImage: "calendar"
-                            )
-                        }
-                        if let pt = request.preferredTime, !pt.isEmpty {
-                            BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
-                        }
-                        if let days = request.preferredDays, !days.isEmpty {
-                            BookingRequestDetailRow(
-                                label: "Preferred days",
-                                value: days.joined(separator: ", ")
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .appCard()
-
-                    // Custom form fields (placement, style, reference images, etc.)
-                    BookingRequestFormSectionsView(
-                        responses: currentRequest.formResponses,
-                        bookingTemplate: viewModel.tenantBookingTemplate
-                    )
-
-                    // Notes
-                    if let notes = request.notes, !notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            BookingRequestSectionHeader(title: "Notes")
-                            Text(notes)
-                                .font(.subheadline)
-                                .foregroundColor(.primary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .appCard()
-                    }
-
-                    // Contact
-                    VStack(alignment: .leading, spacing: 0) {
-                        BookingRequestSectionHeader(title: "Contact")
-                            .padding(.bottom, 8)
-                        if let phone = request.customerPhone, !phone.isEmpty,
-                           let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })"), !phone.filter(\.isNumber).isEmpty {
-                            Link(destination: telURL) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "phone.fill")
-                                        .font(.body)
-                                        .foregroundColor(.green)
-                                        .frame(width: 24, alignment: .center)
-                                    Text(PhoneFormatting.displayUS(phone))
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                            }
-                            Divider()
-                            Button(action: openMessagesForClient) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "message.fill")
-                                        .font(.body)
-                                        .foregroundColor(.blue)
-                                        .frame(width: 24, alignment: .center)
-                                    Text("Message client")
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                            }
-                            if let em = request.customerEmail, !em.isEmpty { Divider() }
-                        }
-                        if let email = request.customerEmail, !email.isEmpty,
-                           let mailURL = URL(string: "mailto:\(email)") {
-                            Link(destination: mailURL) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "envelope.fill")
-                                        .font(.body)
-                                        .foregroundColor(.blue)
-                                        .frame(width: 24, alignment: .center)
-                                    Text(email)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundColor(.primary)
-                                        .lineLimit(2)
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                            }
-                        }
-                        Divider()
-                            .padding(.vertical, 8)
-                        if contactAlreadyExists {
-                            Button(action: openCustomerInCustomersList) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "person.2.fill")
-                                        .font(.body)
-                                        .foregroundColor(.blue)
-                                        .frame(width: 24, alignment: .center)
-                                    Text("View in Customers")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 8)
-                            }
-                        } else {
-                            Button {
-                                Task {
-                                    let saved = await viewModel.addBookingRequestCustomerToContacts(currentRequest)
-                                    if saved {
-                                        await MainActor.run { contactAlreadyExists = true }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "person.crop.circle.badge.plus")
-                                        .font(.body)
-                                        .foregroundColor(.green)
-                                        .frame(width: 24, alignment: .center)
-                                    Text("Add to contacts")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                }
-                                .padding(.vertical, 8)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .appCard()
-
-                    if canShowApprovalActions {
-                        VStack(spacing: 12) {
-                            if let err = viewModel.actionError {
-                                Text(err)
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            HStack(spacing: 12) {
-                                Button {
-                                    Task {
-                                        await viewModel.setBookingRequestStatus(
-                                            requestId: request.documentId ?? "",
-                                            status: "declined",
-                                            notes: request.notes
-                                        )
-                                    }
-                                } label: {
-                                    Text("Decline")
-                                }
-                                .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
-                                .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
-
-                                Button {
-                                    Task {
-                                        await viewModel.setBookingRequestStatus(
-                                            requestId: request.documentId ?? "",
-                                            status: "confirmed",
-                                            notes: request.notes
-                                        )
-                                    }
-                                } label: {
-                                    Text("Confirm")
-                                }
-                                .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
-                                .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
-                            }
-                        }
-                        .padding(16)
-                        .appCard()
-                    } else if teamAccess.bookingRequiresApproval && !teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending") {
-                        Text("You can view this request but cannot approve or decline it.")
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .appCard()
-                    }
-                }
-                .padding(16)
             }
             .appScreenBackground()
             .navigationTitle(request.customerName ?? "Request")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        dismiss()
-                        drawerState.isOpen = true
-                    }) {
-                        Image(systemName: "line.3.horizontal")
-                    }
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .toolbar { detailToolbar }
         }
         .navigationViewStyle(.stack)
         .sheet(isPresented: $showAssignScheduleSheet) {
-            AssignBookingScheduleSheet(request: currentRequest, viewModel: viewModel)
+            AssignBookingScheduleSheet(
+                request: currentRequest,
+                viewModel: viewModel,
+                showsStaffPicker: showsStaffAssignmentUI
+            )
+        }
+        .sheet(isPresented: $showConfirmAppointmentSheet) {
+            ConfirmBookingAppointmentSheet(
+                request: currentRequest,
+                viewModel: viewModel,
+                canPickArtist: canPickArtistOnConfirm,
+                currentMemberUid: Auth.auth().currentUser?.uid,
+                isReschedule: confirmAppointmentSheetIsReschedule,
+                requiresDeposit: teamAccess.confirmationType.requiresDeposit,
+                depositAmount: teamAccess.depositAmount ?? viewModel.workflowDepositAmount,
+                canSendDepositSms: canSendDepositSmsForRequest
+            )
         }
         .task(id: request.documentId) {
             markReadLocallyIfNeeded()
@@ -802,6 +591,321 @@ struct BookingRequestDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private var detailScrollContent: some View {
+        VStack(spacing: 16) {
+            detailHeaderCard
+            serviceCard
+            appointmentCard
+            BookingRequestFormSectionsView(
+                responses: currentRequest.formResponses,
+                bookingTemplate: viewModel.tenantBookingTemplate
+            )
+            if let notes = request.notes, !notes.isEmpty {
+                notesCard(notes)
+            }
+            contactCard
+            approvalActionsCard
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button(action: {
+                dismiss()
+                drawerState.isOpen = true
+            }) {
+                Image(systemName: "line.3.horizontal")
+            }
+        }
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Done") { dismiss() }
+        }
+    }
+
+    private var detailHeaderCard: some View {
+        VStack(spacing: 12) {
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: nil,
+                displayNameFallback: request.customerName ?? "?",
+                size: 64
+            )
+            Text(request.customerName ?? "Unknown")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(AppDesign.textPrimary)
+            AppStatusPill(text: currentRequest.status, soft: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 16)
+        .appCard()
+    }
+
+    private var serviceCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            BookingRequestSectionHeader(title: "Service")
+            BookingRequestDetailRow(
+                label: "Appointment type",
+                value: currentRequest.serviceName ?? currentRequest.serviceSlug ?? "—"
+            )
+            if canManageAssignment, !isPendingConfirmation, showsStaffAssignmentUI {
+                assignFromScheduleSection
+            } else if let staff = currentRequest.assignedMemberDisplayLabel {
+                BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
+            }
+            if let mode = currentRequest.bookingModeUsed, !mode.isEmpty {
+                BookingRequestDetailRow(label: "Booking mode", value: mode)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .appCard()
+    }
+
+    private var appointmentCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            BookingRequestSectionHeader(title: "Appointment request")
+            if let start = request.requestedStartTime {
+                BookingRequestDetailRow(
+                    label: "Requested date",
+                    value: start.formatted(.dateTime.month(.abbreviated).day().year()),
+                    systemImage: "calendar"
+                )
+                BookingRequestDetailRow(
+                    label: "Requested time",
+                    value: start.formatted(date: .omitted, time: .shortened),
+                    systemImage: "clock"
+                )
+            } else if let created = request.createdAt {
+                BookingRequestDetailRow(
+                    label: "Submitted",
+                    value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
+                    systemImage: "calendar"
+                )
+            }
+            if let pt = request.preferredTime, !pt.isEmpty {
+                BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
+            }
+            if let days = request.preferredDays, !days.isEmpty {
+                BookingRequestDetailRow(
+                    label: "Preferred days",
+                    value: days.joined(separator: ", ")
+                )
+            }
+            confirmedTimeSection
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .appCard()
+    }
+
+    @ViewBuilder
+    private var confirmedTimeSection: some View {
+        if canEditConfirmedTime {
+            Button(action: openConfirmedTimeEditor) {
+                BookingRequestDetailRow(
+                    label: "Confirmed time",
+                    value: confirmedTimeLabel,
+                    systemImage: confirmedTimeSystemImage,
+                    showsChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+        } else {
+            BookingRequestDetailRow(
+                label: "Confirmed time",
+                value: confirmedTimeLabel,
+                systemImage: confirmedTimeSystemImage
+            )
+        }
+    }
+
+    private func openConfirmedTimeEditor() {
+        confirmAppointmentSheetIsReschedule = !isPendingConfirmation
+        showConfirmAppointmentSheet = true
+    }
+
+    private func notesCard(_ notes: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            BookingRequestSectionHeader(title: "Notes")
+            Text(notes)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .appCard()
+    }
+
+    private var contactCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BookingRequestSectionHeader(title: "Contact")
+                .padding(.bottom, 8)
+            contactPhoneSection
+            contactEmailSection
+            Divider()
+                .padding(.vertical, 8)
+            contactCustomerSection
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .appCard()
+    }
+
+    @ViewBuilder
+    private var contactPhoneSection: some View {
+        if let phone = request.customerPhone, !phone.isEmpty,
+           let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })"),
+           !phone.filter(\.isNumber).isEmpty {
+            Link(destination: telURL) {
+                contactRow(
+                    icon: "phone.fill",
+                    iconColor: .green,
+                    title: PhoneFormatting.displayUS(phone),
+                    trailing: "arrow.up.right"
+                )
+            }
+            Divider()
+            Button(action: openMessagesForClient) {
+                contactRow(
+                    icon: "message.fill",
+                    iconColor: .blue,
+                    title: "Message client",
+                    trailing: "chevron.right"
+                )
+            }
+            if let em = request.customerEmail, !em.isEmpty { Divider() }
+        }
+    }
+
+    @ViewBuilder
+    private var contactEmailSection: some View {
+        if let email = request.customerEmail, !email.isEmpty,
+           let mailURL = URL(string: "mailto:\(email)") {
+            Link(destination: mailURL) {
+                contactRow(
+                    icon: "envelope.fill",
+                    iconColor: .blue,
+                    title: email,
+                    trailing: "arrow.up.right",
+                    titleLineLimit: 2
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contactCustomerSection: some View {
+        if contactAlreadyExists {
+            Button(action: openCustomerInCustomersList) {
+                contactRow(
+                    icon: "person.2.fill",
+                    iconColor: .blue,
+                    title: "View in Customers",
+                    trailing: "chevron.right",
+                    titleSemibold: true
+                )
+            }
+        } else {
+            Button {
+                Task {
+                    let saved = await viewModel.addBookingRequestCustomerToContacts(currentRequest)
+                    if saved {
+                        await MainActor.run { contactAlreadyExists = true }
+                    }
+                }
+            } label: {
+                contactRow(
+                    icon: "person.crop.circle.badge.plus",
+                    iconColor: .green,
+                    title: "Add to contacts",
+                    titleSemibold: true
+                )
+            }
+        }
+    }
+
+    private func contactRow(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        trailing: String? = nil,
+        titleLineLimit: Int? = nil,
+        titleSemibold: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(iconColor)
+                .frame(width: 24, alignment: .center)
+            Text(title)
+                .font(titleSemibold ? .subheadline.weight(.semibold) : .subheadline.weight(.medium))
+                .foregroundColor(.primary)
+                .lineLimit(titleLineLimit)
+            Spacer()
+            if let trailing {
+                Image(systemName: trailing)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, trailing == nil ? 8 : 12)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var approvalActionsCard: some View {
+        if canConfirmPendingAppointment || canShowDeclineAction {
+            VStack(spacing: 12) {
+                if let err = viewModel.actionError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack(spacing: 12) {
+                    if canShowDeclineAction {
+                        Button {
+                            Task {
+                                await viewModel.setBookingRequestStatus(
+                                    requestId: request.documentId ?? "",
+                                    status: "declined",
+                                    notes: request.notes
+                                )
+                            }
+                        } label: {
+                            Text("Decline")
+                        }
+                        .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
+                        .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
+                    }
+
+                    if canConfirmPendingAppointment {
+                        Button {
+                            confirmAppointmentSheetIsReschedule = false
+                            showConfirmAppointmentSheet = true
+                        } label: {
+                            Text("Confirm Appointment")
+                        }
+                        .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
+                        .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
+                    }
+                }
+            }
+            .padding(16)
+            .appCard()
+        } else if teamAccess.bookingRequiresApproval && !teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending") {
+            Text("You can view this request but cannot approve or decline it.")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .appCard()
+        }
+    }
+
     private var assignFromScheduleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let staff = currentRequest.assignedMemberDisplayLabel,
@@ -818,18 +922,27 @@ struct BookingRequestDetailView: View {
                 showAssignScheduleSheet = true
             } label: {
                 Label(
-                    currentRequest.hasAssignedMember ? "Change time & assignee" : "Pick time & assign",
+                    assignScheduleButtonTitle,
                     systemImage: "calendar.badge.clock"
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.bordered)
-            DisclosureGroup("Quick assign") {
-                quickAssignPicker
+            if showsStaffAssignmentUI {
+                DisclosureGroup("Quick assign") {
+                    quickAssignPicker
+                }
+                .font(.caption)
             }
-            .font(.caption)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var assignScheduleButtonTitle: String {
+        if showsStaffAssignmentUI {
+            return currentRequest.hasAssignedMember ? "Change time & assignee" : "Pick time & assign"
+        }
+        return currentRequest.requestedStartTime != nil ? "Change time" : "Pick time"
     }
 
     private var quickAssignPicker: some View {

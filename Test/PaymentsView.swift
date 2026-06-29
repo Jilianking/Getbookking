@@ -383,10 +383,9 @@ struct PaymentTransactionRow: View {
     @ObservedObject var viewModel: PaymentsViewModel
     @State private var showRefundConfirm = false
 
-    private var isCredit: Bool { transaction.type == "charge" }
     private var typeLabel: String {
         switch transaction.type {
-        case "charge": return "Payment"
+        case "charge", "payment": return "Payment"
         case "payout": return "Payout"
         case "refund": return "Refund"
         default: return transaction.type.capitalized
@@ -395,27 +394,41 @@ struct PaymentTransactionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-            Circle()
-                .fill(isCredit ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: isCredit ? "arrow.down" : "arrow.up")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(isCredit ? .green : .orange)
-                )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.customerName ?? typeLabel)
-                    .font(.subheadline.weight(.medium))
-                Text(transaction.createdAt?.formatted(.dateTime) ?? "")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            Button {
+                guard let chargeId = transaction.chargeId else { return }
+                Task { await viewModel.openReceipt(chargeId: chargeId) }
+            } label: {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(transaction.isCredit ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Image(systemName: transaction.isCredit ? "arrow.down" : "arrow.up")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(transaction.isCredit ? .green : .orange)
+                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(transaction.customerName ?? typeLabel)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text(transaction.createdAt?.formatted(.dateTime) ?? "")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text("\(transaction.isCredit ? "+" : "-")\(formatAmount(transaction.amount))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(transaction.isCredit ? .green : .primary)
+                    if transaction.chargeId != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
-            Spacer()
-            Text("\(isCredit ? "+" : "-")\(formatAmount(transaction.amount))")
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(isCredit ? .green : .primary)
-            }
+            .buttonStyle(.plain)
+            .disabled(transaction.chargeId == nil)
+
             if let chargeId = transaction.chargeId {
                 HStack(spacing: 12) {
                     Button(action: { Task { await viewModel.openReceipt(chargeId: chargeId) } }) {

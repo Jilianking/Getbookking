@@ -376,8 +376,11 @@ struct SettingsView: View {
                     if viewModel.isTenantOwner {
                         Divider().padding(.leading, 52)
                         NavigationLink {
-                            TeamNotificationsSettingsView(viewModel: teamPolicyViewModel)
-                                .environmentObject(authViewModel)
+                            TeamNotificationsSettingsView(
+                                viewModel: teamPolicyViewModel,
+                                isSoloBusinessSettings: viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
+                            )
+                            .environmentObject(authViewModel)
                         } label: {
                             AppSettingsRow(icon: "bell.fill", iconColor: AppDesign.accentBlue, title: "Notifications")
                         }
@@ -504,7 +507,7 @@ struct PersonalSchedulingSettingsView: View {
             Section(
                 footer: Text(
                     viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                        ? "Your time zone and calendar. Studio default booking policy is in Business settings → Booking settings."
+                        ? "Your time zone and calendar. Booking type is in Business settings → Booking settings."
                         : "Your time zone and calendar. Studio booking policy is in Team settings → Booking settings when you use studio policy."
                 )
                 .font(.caption2)

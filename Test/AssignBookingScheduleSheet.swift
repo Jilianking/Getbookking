@@ -9,15 +9,17 @@ import SwiftUI
 struct AssignBookingScheduleSheet: View {
     let request: BookingRequest
     @ObservedObject var viewModel: RequestsViewModel
+    var showsStaffPicker: Bool = true
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedDay: Date
     @State private var selectedMemberUid: String?
     @State private var selectedSlotStart: Date?
 
-    init(request: BookingRequest, viewModel: RequestsViewModel) {
+    init(request: BookingRequest, viewModel: RequestsViewModel, showsStaffPicker: Bool = true) {
         self.request = request
         self.viewModel = viewModel
+        self.showsStaffPicker = showsStaffPicker
         let initial = request.requestedStartTime ?? request.createdAt ?? Date()
         _selectedDay = State(initialValue: Calendar.current.startOfDay(for: initial))
         if let uid = request.assignedMemberUid?.trimmingCharacters(in: .whitespacesAndNewlines), !uid.isEmpty {
@@ -105,7 +107,14 @@ struct AssignBookingScheduleSheet: View {
                     selectedSlotStart = nil
                 }
             }
+            .onAppear { ensureSoleMemberSelectedIfNeeded() }
         }
+    }
+
+    private func ensureSoleMemberSelectedIfNeeded() {
+        guard !showsStaffPicker, selectedMemberUid == nil,
+              let only = viewModel.teamFilterRoster.first else { return }
+        selectedMemberUid = only.uid
     }
 
     private var requestHeader: some View {
@@ -157,13 +166,15 @@ struct AssignBookingScheduleSheet: View {
 
     private func staffRowView(_ row: AssignScheduleStaffRow) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(row.member.accessRole == .owner ? "Owner" : row.member.displayName)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text(row.statusText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(row.statusText == "Available" ? .green : .secondary)
+            if showsStaffPicker {
+                HStack {
+                    Text(row.member.accessRole == .owner ? "Owner" : row.member.displayName)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(row.statusText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(row.statusText == "Available" ? .green : .secondary)
+                }
             }
             if row.slots.isEmpty {
                 Text("No availability")
@@ -189,8 +200,10 @@ struct AssignBookingScheduleSheet: View {
         return Button {
             guard selectable else { return }
             if slot.state == .selected {
-                selectedMemberUid = nil
                 selectedSlotStart = nil
+                if showsStaffPicker {
+                    selectedMemberUid = nil
+                }
             } else {
                 selectedMemberUid = memberUid
                 selectedSlotStart = slot.start
@@ -307,9 +320,14 @@ struct AssignBookingScheduleSheet: View {
         if selectedMemberUid == nil || selectedSlotStart == nil {
             return "Select a time above"
         }
-        if let member = viewModel.teamFilterRoster.first(where: { $0.uid == selectedMemberUid }),
-           let slot = selectedSlotStart {
-            return "Assign \(member.accessRole == .owner ? "Owner" : member.displayName) · \(BookingAssignSchedulePlanner.formatSlotLabel(slot))"
+        if let slot = selectedSlotStart {
+            let timeLabel = BookingAssignSchedulePlanner.formatSlotLabel(slot)
+            if showsStaffPicker,
+               let member = viewModel.teamFilterRoster.first(where: { $0.uid == selectedMemberUid }) {
+                let name = member.accessRole == .owner ? "Owner" : member.displayName
+                return "Assign \(name) · \(timeLabel)"
+            }
+            return "Set time · \(timeLabel)"
         }
         return "Done"
     }

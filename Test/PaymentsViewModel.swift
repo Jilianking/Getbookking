@@ -12,13 +12,48 @@ import FirebaseFunctions
 
 struct PaymentTransaction: Identifiable {
     let id: String
-    let type: String // charge, payout, refund, etc.
+    let type: String // charge, payment, payout, refund, etc.
     let amount: Double
+    let isCredit: Bool
     let customerName: String?
     let createdAt: Date?
     let status: String
-    /// Stripe charge ID when type is "charge"; used for receipt and refund.
+    /// Stripe charge ID when available; used for receipt and refund.
     let chargeId: String?
+
+    static func fromFirestoreDict(_ t: [String: Any]) -> PaymentTransaction? {
+        guard let id = t["id"] as? String else { return nil }
+        let typeStr = t["type"] as? String ?? "unknown"
+        let netCents = (t["net"] as? NSNumber)?.intValue
+            ?? (t["netCents"] as? NSNumber)?.intValue
+        let amountCents = (t["amount"] as? NSNumber)?.intValue
+            ?? (t["amountCents"] as? NSNumber)?.intValue
+        let resolvedNet = netCents ?? amountCents ?? 0
+        let isCredit = (t["isCredit"] as? Bool) ?? (resolvedNet > 0)
+        let displayCents = abs(netCents ?? amountCents ?? 0)
+        let amount = Double(displayCents) / 100
+        let description = t["description"] as? String
+        let created = (t["created"] as? NSNumber)?.intValue ?? 0
+        let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
+        let chargeIdRaw = (t["chargeId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceId = (t["sourceId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chargeId: String? = {
+            if let chargeIdRaw, chargeIdRaw.hasPrefix("ch_") { return chargeIdRaw }
+            if let sourceId, sourceId.hasPrefix("ch_") { return sourceId }
+            if typeStr == "charge", let sourceId, !sourceId.isEmpty { return sourceId }
+            return nil
+        }()
+        return PaymentTransaction(
+            id: id,
+            type: typeStr,
+            amount: amount,
+            isCredit: isCredit,
+            customerName: description,
+            createdAt: createdAt,
+            status: "completed",
+            chargeId: chargeId
+        )
+    }
 }
 
 #if TAP_TO_PAY_ENABLED
@@ -125,29 +160,7 @@ class PaymentsViewModel: ObservableObject {
                 usesOwnPayments = true
                 availableBalance = Double(payments.availableBalanceCents) / 100
                 pendingBalance = Double(payments.pendingBalanceCents) / 100
-                transactions = payments.transactions.compactMap { t -> PaymentTransaction? in
-                    guard let id = t["id"] as? String else { return nil }
-                    let typeStr = t["type"] as? String ?? "unknown"
-                    let amountCents = (t["net"] as? NSNumber)?.intValue
-                        ?? (t["amountCents"] as? NSNumber)?.intValue
-                        ?? (t["amount"] as? NSNumber)?.intValue
-                        ?? 0
-                    let amount = Double(amountCents) / 100
-                    let description = t["description"] as? String
-                    let created = (t["created"] as? NSNumber)?.intValue ?? 0
-                    let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
-                    let sourceId = t["sourceId"] as? String
-                    let chargeId = (typeStr == "charge" && sourceId?.hasPrefix("ch_") == true) ? sourceId : nil
-                    return PaymentTransaction(
-                        id: id,
-                        type: typeStr,
-                        amount: abs(amount),
-                        customerName: description,
-                        createdAt: createdAt,
-                        status: "completed",
-                        chargeId: chargeId
-                    )
-                }
+                transactions = payments.transactions.compactMap { PaymentTransaction.fromFirestoreDict($0) }
                 isLoading = false
                 return
             }
@@ -286,27 +299,7 @@ class PaymentsViewModel: ObservableObject {
             let result = try await functions.httpsCallable("getConnectBalanceTransactions").call()
             let data = result.data as? [String: Any]
             let list = data?["transactions"] as? [[String: Any]] ?? []
-            let txns = list.compactMap { t -> PaymentTransaction? in
-                guard let id = t["id"] as? String else { return nil }
-                let typeStr = t["type"] as? String ?? "unknown"
-                let amountCents = (t["net"] as? NSNumber)?.intValue ?? (t["amount"] as? NSNumber)?.intValue ?? 0
-                let amount = Double(amountCents) / 100
-                let description = t["description"] as? String
-                let created = (t["created"] as? NSNumber)?.intValue ?? 0
-                let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
-                let sourceId = t["sourceId"] as? String
-                let chargeId = (typeStr == "charge" && sourceId?.hasPrefix("ch_") == true) ? sourceId : nil
-                return PaymentTransaction(
-                    id: id,
-                    type: typeStr,
-                    amount: abs(amount),
-                    customerName: description,
-                    createdAt: createdAt,
-                    status: "completed",
-                    chargeId: chargeId
-                )
-            }
-            transactions = txns
+            transactions = list.compactMap { PaymentTransaction.fromFirestoreDict($0) }
         } catch {
             transactions = []
         }

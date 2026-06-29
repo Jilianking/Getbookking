@@ -56,7 +56,11 @@ class DashboardViewModel: ObservableObject {
                     tenantIndustry = sessionStore.tenantIndustry
                     recentBookingRequests = Array(bookingReqs.prefix(10))
                     recentRequests = []
-                    applyRevenueSnapshot(revenueSnapshot)
+                    if Self.shouldUseDemoRevenueFallback(revenueSnapshot, payments: sessionStore.demoPayments) {
+                        applyDemoRevenueChart()
+                    } else {
+                        applyRevenueSnapshot(revenueSnapshot)
+                    }
                     isLoading = false
                 }
                 return
@@ -117,7 +121,12 @@ class DashboardViewModel: ObservableObject {
                     tenantIndustry = sessionStore.tenantIndustry
                     recentBookingRequests = Array(bookingReqs.prefix(10))
                     recentRequests = []
-                    applyRevenueSnapshot(revenueSnapshot)
+                    if sessionStore.tenant?["isDemoAccount"] as? Bool == true,
+                       Self.shouldUseDemoRevenueFallback(revenueSnapshot, payments: nil) {
+                        applyDemoRevenueChart()
+                    } else {
+                        applyRevenueSnapshot(revenueSnapshot)
+                    }
                     isLoading = false
                 }
             } else {
@@ -194,20 +203,57 @@ class DashboardViewModel: ObservableObject {
 
     @MainActor
     private func applyDemoRevenueChart() {
-        let demoAmounts = [720.0, 840, 780, 960, 920, 1050, 1020, 1240]
+        let demoAmounts = [820.0, 940, 880, 1020, 960, 1100, 1050, 1280]
+        let thisWeek = demoAmounts.last ?? 0
+        let lastWeek = demoAmounts.count >= 2 ? demoAmounts[demoAmounts.count - 2] : 0
+        let weekOverWeekPct = Self.percentChange(current: thisWeek, prior: lastWeek)
         let points = demoAmounts.enumerated().map { index, amount in
             WeeklyRevenuePoint(id: index + 1, label: "Wk \(index + 1)", amount: amount)
         }
         applyRevenueSnapshot(
             RevenueSnapshot(
                 weekly: points,
-                thisWeek: 1240,
-                weekOverWeekPct: 21,
-                thisMonth: 4820,
+                thisWeek: thisWeek,
+                weekOverWeekPct: weekOverWeekPct,
+                thisMonth: demoAmounts.reduce(0, +),
                 monthOverMonthPct: 12,
                 avgPerWeek: demoAmounts.reduce(0, +) / Double(demoAmounts.count)
             )
         )
+    }
+
+    /// Use baked-in positive chart when seeded payments bucket poorly (stale session or week boundary drift).
+    private static func shouldUseDemoRevenueFallback(
+        _ snapshot: RevenueSnapshot,
+        payments: DemoPaymentsSnapshot?
+    ) -> Bool {
+        if let payments, !payments.transactions.isEmpty, snapshot.weekly.isEmpty {
+            return true
+        }
+        if snapshot.thisWeek <= 0 {
+            let priorWeek = snapshot.weekly.count >= 2
+                ? snapshot.weekly[snapshot.weekly.count - 2].amount
+                : 0
+            if priorWeek > 0 { return true }
+        }
+        if let pct = snapshot.weekOverWeekPct, pct < 0 { return true }
+        return false
+    }
+
+    private static func chargeAmountCents(from item: [String: Any]) -> Int {
+        (item["netCents"] as? NSNumber)?.intValue
+            ?? (item["net"] as? NSNumber)?.intValue
+            ?? (item["amountCents"] as? NSNumber)?.intValue
+            ?? (item["amount"] as? NSNumber)?.intValue
+            ?? 0
+    }
+
+    private static func chargeCreatedDate(from item: [String: Any]) -> Date? {
+        let created = (item["created"] as? NSNumber)?.intValue ?? 0
+        if created > 0 {
+            return Date(timeIntervalSince1970: TimeInterval(created))
+        }
+        return DemoSnapshotParser.parseDate(item["createdAt"])
     }
 
     private static func makeRevenueSnapshotFromDemoPayments(_ payments: DemoPaymentsSnapshot?) -> RevenueSnapshot {
@@ -224,13 +270,10 @@ class DashboardViewModel: ObservableObject {
         let entries: [(date: Date, amount: Double)] = payments.transactions.compactMap { item in
             let typeStr = (item["type"] as? String ?? "").lowercased()
             guard typeStr == "charge" else { return nil }
-            let created = (item["created"] as? NSNumber)?.intValue ?? 0
-            guard created > 0 else { return nil }
-            let amountCents = (item["net"] as? NSNumber)?.intValue
-                ?? (item["amountCents"] as? NSNumber)?.intValue
-                ?? (item["amount"] as? NSNumber)?.intValue
-                ?? 0
-            return (Date(timeIntervalSince1970: TimeInterval(created)), Double(abs(amountCents)) / 100)
+            guard let date = chargeCreatedDate(from: item) else { return nil }
+            let amountCents = chargeAmountCents(from: item)
+            guard amountCents > 0 else { return nil }
+            return (date, Double(amountCents) / 100)
         }
         return makeRevenueSnapshot(from: entries)
     }

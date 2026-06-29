@@ -520,6 +520,59 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
+    /// Solo owner: tenant + personal workflow (no manager policy).
+    func saveSoloBusinessBookingWorkflow() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard isTenantOwner, tenantId != nil else {
+            await MainActor.run {
+                errorMessage = "Only the business owner can update booking settings."
+            }
+            return
+        }
+        await MainActor.run { errorMessage = nil; saveSuccess = false }
+        do {
+            var callable: [String: Any] = [
+                "managersApproveAppointments": true,
+                "confirmationType": confirmationType.rawValue,
+            ]
+            if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
+                callable["depositAmount"] = amount
+            }
+            let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
+            if let data = result.data as? [String: Any] {
+                await MainActor.run {
+                    if let requires = data["bookingRequiresApproval"] as? Bool {
+                        tenantBookingRequiresApproval = requires
+                    }
+                    managersApproveAppointments = true
+                    tenantConfirmationType = confirmationType
+                    personalConfirmationType = confirmationType
+                    personalDepositAmount = depositAmount
+                }
+            }
+            var workflowData: [String: Any] = [
+                "confirmationType": confirmationType.rawValue,
+                "responseTimeHours": ProviderWorkflow.default.responseTimeHours,
+                "managersApproveAppointments": true,
+            ]
+            if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
+                workflowData["depositAmount"] = amount
+            }
+            try await firebaseService.updateProviderProfile(uid: uid, updates: [
+                "workflow": workflowData
+            ])
+            await MainActor.run {
+                saveSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    saveSuccess = false
+                }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
     func savePersonalWorkflow() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         await MainActor.run { errorMessage = nil; personalSaveSuccess = false }

@@ -7,12 +7,13 @@ import SwiftUI
 struct TeamNotificationsSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
+    var isSoloBusinessSettings: Bool = false
 
     var body: some View {
         List {
             Section(
-                header: Text("Manager notifications"),
-                footer: Text("Booking alerts are under Booking settings. Client texting and message presets are under Messaging.")
+                header: Text(isSoloBusinessSettings ? "Notifications" : "Manager notifications"),
+                footer: Text(notificationsFooter)
                     .font(.caption2)
             ) {
                 if viewModel.smsCanUse {
@@ -48,5 +49,12 @@ struct TeamNotificationsSettingsView: View {
         .refreshable {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)
         }
+    }
+
+    private var notificationsFooter: String {
+        if isSoloBusinessSettings {
+            return "Client texting and message presets are under Business settings → Messaging."
+        }
+        return "Booking alerts are under Booking settings. Client texting and message presets are under Messaging."
     }
 }

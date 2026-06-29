@@ -1386,6 +1386,69 @@ exports.createDepositLink = functions
     };
   });
 
+function chargeIdFromExpandedBalanceSource(source) {
+  if (!source) return null;
+  if (typeof source === "string") {
+    return source.startsWith("ch_") ? source : null;
+  }
+  if (source.object === "charge" && source.id) {
+    return source.id;
+  }
+  if (source.latest_charge) {
+    return typeof source.latest_charge === "string"
+      ? source.latest_charge
+      : source.latest_charge.id || null;
+  }
+  if (source.charge) {
+    return typeof source.charge === "string" ? source.charge : source.charge.id || null;
+  }
+  return null;
+}
+
+async function resolveChargeIdForBalanceSourceId(stripe, sourceId, stripeAccountId) {
+  const src = (sourceId || "").toString().trim();
+  if (!src) return null;
+  if (src.startsWith("ch_")) return src;
+  const opts = { stripeAccount: stripeAccountId };
+  try {
+    if (src.startsWith("pi_")) {
+      const pi = await stripe.paymentIntents.retrieve(src, opts);
+      const lc = pi.latest_charge;
+      return typeof lc === "string" ? lc : lc?.id || null;
+    }
+  } catch (e) {
+    console.warn("resolveChargeIdForBalanceSourceId", src, e.message);
+  }
+  return null;
+}
+
+async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
+  const net = t.net ?? 0;
+  let chargeId = chargeIdFromExpandedBalanceSource(t.source);
+  const sourceId =
+    typeof t.source === "string" ? t.source : t.source?.id || null;
+  if (!chargeId && sourceId) {
+    chargeId = await resolveChargeIdForBalanceSourceId(
+      stripe,
+      sourceId,
+      stripeAccountId
+    );
+  }
+  return {
+    id: t.id,
+    type: t.type || "unknown",
+    amount: t.amount ?? 0,
+    fee: t.fee ?? 0,
+    net,
+    isCredit: net > 0,
+    created: t.created ?? 0,
+    description: t.description || null,
+    reportingCategory: t.reporting_category || null,
+    sourceId,
+    chargeId,
+  };
+}
+
 /**
  * Returns balance transactions for the Connect account within a date range.
  * Params: { startTimestampSeconds?: number, endTimestampSeconds?: number, limit?: number }
@@ -1433,21 +1496,16 @@ exports.getConnectBalanceTransactions = functions
       params.created = params.created || {};
       params.created.lte = endTs;
     }
+    params.expand = ["data.source"];
     const list = await stripe.balanceTransactions.list(
       params,
       { stripeAccount: stripeAccountId }
     );
-    const transactions = (list.data || []).map((t) => ({
-      id: t.id,
-      type: t.type || "unknown",
-      amount: t.amount ?? 0,
-      fee: t.fee ?? 0,
-      net: t.net ?? 0,
-      created: t.created ?? 0,
-      description: t.description || null,
-      reportingCategory: t.reporting_category || null,
-      sourceId: t.source || null,
-    }));
+    const transactions = await Promise.all(
+      (list.data || []).map((t) =>
+        enrichConnectBalanceTransaction(stripe, t, stripeAccountId)
+      )
+    );
     return { transactions };
   });
 
@@ -1721,6 +1779,134 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   );
 
   return { requestId: ref.id };
+});
+
+const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop"]);
+
+const BETA_WAITLIST_BUSINESS_TYPES = new Set([
+  "barber",
+  "hair",
+  "tattoos",
+  "nails",
+  "fitness",
+  "other",
+]);
+
+function parseBetaWaitlistTeamSize(raw) {
+  const n = parseInt(String(raw ?? ""), 10);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function validateBetaWaitlistPlanAndTeamSize(plan, teamSize) {
+  if (!BETA_WAITLIST_PLANS.has(plan)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Select a plan."
+    );
+  }
+  if (!Number.isFinite(teamSize) || teamSize < 1) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Enter the number of users on your team."
+    );
+  }
+  if (plan === "solo" && teamSize !== 1) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Solo is for one user. Choose Studio or Shop for teams."
+    );
+  }
+  if (plan === "studio" && (teamSize < 2 || teamSize > 5)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Studio supports 2–5 users."
+    );
+  }
+  if (plan === "shop" && (teamSize < 6 || teamSize > 10)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Shop supports 6–10 users."
+    );
+  }
+}
+
+/**
+ * Public marketing: iOS beta waitlist (TestFlight signup page). No auth required.
+ * Params: { firstName, lastName, email, plan, teamSize, businessName, businessType, website? (honeypot) }
+ */
+exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
+  if ((data?.website || "").toString().trim()) {
+    return { ok: true, duplicate: false };
+  }
+
+  const firstName = (data?.firstName || "").toString().trim();
+  const lastName = (data?.lastName || "").toString().trim();
+  const email = (data?.email || "").toString().trim().toLowerCase();
+  const plan = (data?.plan || "").toString().trim().toLowerCase();
+  const teamSize = parseBetaWaitlistTeamSize(data?.teamSize);
+  const businessName = (data?.businessName || "").toString().trim();
+  const businessType = (data?.businessType || "").toString().trim().toLowerCase();
+
+  if (!firstName || !lastName || !email || !plan || !businessName || !businessType) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "First name, last name, email, plan, business name, and business type are required."
+    );
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Enter a valid email address."
+    );
+  }
+
+  if (!BETA_WAITLIST_BUSINESS_TYPES.has(businessType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Select a business type."
+    );
+  }
+
+  validateBetaWaitlistPlanAndTeamSize(plan, teamSize);
+
+  const existing = await db
+    .collection("betaWaitlist")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    await existing.docs[0].ref.set(
+      {
+        firstName,
+        lastName,
+        plan,
+        teamSize,
+        businessName,
+        businessType,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return { ok: true, duplicate: true };
+  }
+
+  const ref = await db.collection("betaWaitlist").add({
+    firstName,
+    lastName,
+    email,
+    plan,
+    teamSize,
+    businessName,
+    businessType,
+    source: "testflight-page",
+    status: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, duplicate: false, id: ref.id };
 });
 
 /**
@@ -2387,6 +2573,26 @@ function bookingRequiresApproval(confirmationType) {
     t === "request_approve" ||
     t === "approve_and_deposit" ||
     t === "consultation_first"
+  );
+}
+
+function canManageAppointmentTime(ctx) {
+  if (ctx.isOwner) return true;
+  return (
+    ctx.accessRole === "manager" &&
+    ctx.managerPermissions &&
+    ctx.managerPermissions.viewAllBookings === true
+  );
+}
+
+function canApproveRejectBookingRequests(ctx) {
+  if (!ctx.bookingRequiresApproval) return false;
+  if (ctx.isOwner) return true;
+  if (!ctx.managersApproveAppointments) return false;
+  return (
+    ctx.accessRole === "manager" &&
+    ctx.managerPermissions &&
+    ctx.managerPermissions.approveRejectRequests === true
   );
 }
 
@@ -3672,6 +3878,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     managerPermissions: ctx.managerPermissions,
     confirmationType: ctx.workflow.confirmationType,
     responseTimeHours: ctx.workflow.responseTimeHours,
+    depositAmount: ctx.workflow.depositAmount ?? null,
     bookingRequiresApproval: ctx.bookingRequiresApproval,
     managersApproveAppointments: ctx.managersApproveAppointments,
     usesStudioBookingPolicy: ctx.usesStudioBookingPolicy === true,
@@ -3771,22 +3978,28 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
     );
   }
   const ctx = await getMemberAccessContext(context.auth.uid);
-  const approvalStatuses = new Set(["confirmed", "declined", "approved", "rejected"]);
-  const isApprovalAction = approvalStatuses.has(status);
+  let normalized = status.toLowerCase();
+  if (normalized === "approved") normalized = "confirmed";
+  if (normalized === "rejected") normalized = "declined";
 
-  if (isApprovalAction) {
+  const isConfirm = normalized === "confirmed";
+  const isDecline = normalized === "declined";
+
+  if (isConfirm) {
+    if (!canManageAppointmentTime(ctx)) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "You do not have permission to confirm booking requests."
+      );
+    }
+  } else if (isDecline) {
     if (!ctx.bookingRequiresApproval) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "This business does not use request approval for bookings."
       );
     }
-    const canApprove =
-      ctx.isOwner ||
-      (ctx.managersApproveAppointments &&
-        ctx.accessRole === "manager" &&
-        ctx.managerPermissions.approveRejectRequests);
-    if (!canApprove) {
+    if (!canApproveRejectBookingRequests(ctx)) {
       throw new functions.https.HttpsError(
         "permission-denied",
         "You do not have permission to approve or reject booking requests."
@@ -3818,9 +4031,6 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
     throw new functions.https.HttpsError("not-found", "Booking request not found.");
   }
 
-  let normalized = status.toLowerCase();
-  if (normalized === "approved") normalized = "confirmed";
-  if (normalized === "rejected") normalized = "declined";
   const patch = {
     status: normalized,
     reviewedAt: admin.firestore.FieldValue.serverTimestamp(),

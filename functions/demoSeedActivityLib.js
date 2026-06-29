@@ -756,10 +756,21 @@ function buildShowcaseWeeklyTransactions(slug, now, Timestamp) {
   const charges = [];
   for (let index = 0; index < 8; index++) {
     const weeksAgo = 7 - index;
-    const { weekStart } = weekRangeForWeeksAgo(now, weeksAgo);
-    const when = new Date(weekStart);
-    when.setDate(weekStart.getDate() + 3);
-    when.setHours(11, 30, 0, 0);
+    let when;
+    if (weeksAgo === 0) {
+      // Anchor current-week revenue to today so charts stay positive after re-seed.
+      when = new Date(now);
+      when.setHours(11, 30, 0, 0);
+      if (when > now) {
+        when.setDate(when.getDate() - 1);
+        when.setHours(11, 30, 0, 0);
+      }
+    } else {
+      const { weekStart } = weekRangeForWeeksAgo(now, weeksAgo);
+      when = new Date(weekStart);
+      when.setDate(weekStart.getDate() + 3);
+      when.setHours(11, 30, 0, 0);
+    }
 
     const netCents = Math.round(weekly[index] * 100);
     const amountCents = grossFromNetCents(netCents);

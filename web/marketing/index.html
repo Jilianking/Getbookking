@@ -295,6 +295,31 @@
 
     .btn-secondary:hover, a.btn-secondary:hover { border-color: var(--brand-dark); background: var(--brand-offwhite); }
 
+    .hero-early-access {
+      max-width: 1120px;
+      margin: 28px auto 0;
+      text-align: center;
+    }
+
+    .btn-early-access, a.btn-early-access {
+      display: inline-block;
+      padding: 12px 28px;
+      background: transparent;
+      color: var(--brand-warm);
+      border: 1px solid var(--brand-warm);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-early-access:hover, a.btn-early-access:hover {
+      background: var(--brand-warm);
+      color: var(--brand-cream);
+    }
+
     /* ── SECTIONS ── */
     section { padding: 80px 40px; border-bottom: 1px solid var(--border); }
     section:last-of-type { border-bottom: none; }
@@ -660,6 +685,7 @@
       .hero h1 { font-size: clamp(36px, 9vw, 44px); }
       .hero-sub { font-size: 18px; margin-left: auto; margin-right: auto; }
       .hero-ctas { justify-content: center; }
+      .hero-early-access { text-align: center; }
       .hero-phones-panel {
         min-height: 0;
         padding: 14px 0 8px;
@@ -718,6 +744,14 @@
       .hero-ctas .btn-secondary {
         width: 100%;
         text-align: center;
+      }
+      .hero-early-access {
+        margin-top: 20px;
+        padding: 0 16px;
+      }
+      .hero-early-access .btn-early-access {
+        width: 100%;
+        max-width: 320px;
       }
     }
 
@@ -810,6 +844,9 @@
           <a href="#features" class="btn-secondary">See how it works →</a>
         </div>
       </div>
+    </div>
+    <div class="hero-early-access">
+      <a href="testflight.html" class="btn-early-access">Get early access</a>
     </div>
   </section>
 

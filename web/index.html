@@ -412,6 +412,68 @@
       color: #6b7280;
       word-break: break-all;
     }
+    .upload-drop-filelist:empty { margin-top: 0; }
+    .upload-preview-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .upload-preview-item {
+      position: relative;
+      width: 76px;
+      flex-shrink: 0;
+    }
+    .upload-preview-thumb {
+      display: block;
+      width: 76px;
+      height: 76px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .upload-preview-pdf {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 76px;
+      height: 76px;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(17, 24, 39, 0.06);
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #6b7280;
+    }
+    .upload-preview-name {
+      display: block;
+      margin-top: 4px;
+      max-width: 76px;
+      font-size: 0.65rem;
+      line-height: 1.2;
+      color: inherit;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .upload-preview-remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: none;
+      border-radius: 999px;
+      background: #111827;
+      color: #fff;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    }
+    .upload-preview-remove:hover { background: #ef4444; }
     /* Preferred days dropdown (multi-select) */
     .pref-days-dropdown {
       width: 100%;
@@ -4537,6 +4599,9 @@
     .blade-page .upload-drop-title { color: var(--bh-cream); }
     .blade-page .upload-drop-sub { color: var(--bk-fg-muted, rgba(255, 255, 255, 0.75)); }
     .blade-page .upload-drop-filelist { color: var(--bk-fg-muted-light, rgba(255, 255, 255, 0.65)); }
+    .blade-page .upload-preview-thumb { border-color: rgba(245, 240, 232, 0.2); background: rgba(245, 240, 232, 0.06); }
+    .blade-page .upload-preview-pdf { border-color: rgba(245, 240, 232, 0.2); background: rgba(245, 240, 232, 0.06); color: var(--bk-fg-muted-light, rgba(255, 255, 255, 0.65)); }
+    .blade-page .upload-preview-remove { background: rgba(245, 240, 232, 0.92); color: #111827; }
     .blade-page .pref-days-button {
       background: transparent;
       border: 2px solid var(--bh-line);
@@ -4914,6 +4979,9 @@
     .stonecut-page .upload-drop-title { color: #e8e0d0; }
     .stonecut-page .upload-drop-sub { color: var(--bk-fg-muted, #a09888); }
     .stonecut-page .upload-drop-filelist { color: var(--bk-fg-muted, #a09888); }
+    .stonecut-page .upload-preview-thumb { border-color: rgba(232, 224, 208, 0.2); background: rgba(232, 224, 208, 0.06); }
+    .stonecut-page .upload-preview-pdf { border-color: rgba(232, 224, 208, 0.2); background: rgba(232, 224, 208, 0.06); color: var(--bk-fg-muted, #a09888); }
+    .stonecut-page .upload-preview-remove { background: #e8e0d0; color: #1a1a1a; }
     .stonecut-page .pref-days-button {
       background: #060604;
       border-color: rgba(232, 224, 208, 0.15);
@@ -6422,6 +6490,8 @@
     .studio12-page .upload-drop-filelist {
       color: var(--s12-taupe-light);
     }
+    .studio12-page .upload-preview-thumb { border-color: rgba(0, 0, 0, 0.12); }
+    .studio12-page .upload-preview-pdf { color: var(--s12-taupe-light); }
 
     @media (max-width: 900px) {
       .studio12-page .s12-hero {
@@ -8813,7 +8883,7 @@
             +     '<p class="upload-drop-title">Drop photos or PDFs here</p>'
             +     '<p class="upload-drop-sub">or click to choose files (multiple allowed)</p>'
             +   '</div>'
-            +   '<p class="upload-drop-filelist" data-upload-filelist></p>'
+            +   '<div class="upload-drop-filelist" data-upload-filelist></div>'
             +   '<input type="file" accept="image/*,application/pdf" multiple id="'+name+'" name="'+name+'" data-key="'+esc(f.key)+'" data-type="file" class="upload-drop-input">'
             + '</div>';
         } else if (f.type === 'file') {
@@ -8959,7 +9029,7 @@
               '<div class="booking-guided-upload-icon" aria-hidden="true">↑</div>' +
               '<p class="booking-guided-upload-text">Drop photos or PDFs here</p>' +
               '<p class="booking-guided-upload-sub">or tap to choose files</p>' +
-              '<p class="upload-drop-filelist" data-upload-filelist style="font-size:11px;margin-top:6px"></p>' +
+              '<div class="upload-drop-filelist" data-upload-filelist style="font-size:11px;margin-top:6px"></div>' +
               '<input type="file" accept="image/*,application/pdf" multiple id="' + name + '" name="' + name + '" data-key="referenceImages" data-type="file" class="upload-drop-input">' +
             '</div>';
         }
@@ -9124,6 +9194,7 @@
         if (f.type === 'file') {
           return '<div class="booking-guided-upload upload-drop" data-reference-images-drop tabindex="0" role="button">' +
             '<p class="booking-guided-upload-text">Tap to choose photos or PDFs</p>' +
+            '<div class="upload-drop-filelist" data-upload-filelist style="font-size:11px;margin-top:6px"></div>' +
             '<input type="file" accept="image/*,application/pdf" multiple id="' + name + '_sheet" data-sheet-file data-key="' + esc(key) + '" data-type="file" class="upload-drop-input">' +
           '</div>';
         }
@@ -12708,12 +12779,6 @@
                 return ensureAnonymousAuth().then(runUploads);
               }
               function setupDropzones(fm) {
-                function fileListText(files) {
-                  if (!files || !files.length) return '';
-                  var names = [];
-                  for (var i = 0; i < files.length; i++) names.push(files[i].name || ('file' + (i + 1)));
-                  return names.join(', ');
-                }
                 function isAllowedFile(file) {
                   var t = (file && file.type) || '';
                   if (t.indexOf('image/') === 0) return true;
@@ -12721,18 +12786,102 @@
                   var n = (file && file.name) || '';
                   return /\.pdf$/i.test(n);
                 }
+                function isImageFile(file) {
+                  var t = (file && file.type) || '';
+                  if (t.indexOf('image/') === 0) return true;
+                  var n = (file && file.name) || '';
+                  return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(n);
+                }
+                function fileFingerprint(file) {
+                  return (file.name || '') + '|' + (file.size || 0) + '|' + (file.lastModified || 0);
+                }
+                function syncInputFiles(input, files) {
+                  var dt = new DataTransfer();
+                  for (var si = 0; si < files.length; si++) dt.items.add(files[si]);
+                  input.files = dt.files;
+                }
                 var dropzones = fm.querySelectorAll('.upload-drop[data-reference-images-drop]');
                 for (var i = 0; i < dropzones.length; i++) {
                   (function(dz){
                     var input = dz.querySelector('input[type="file"]');
                     var listEl = dz.querySelector('[data-upload-filelist]');
                     if (!input) return;
-                    function refreshList() {
-                      if (listEl) listEl.textContent = fileListText(input.files) ? ('Selected: ' + fileListText(input.files)) : '';
+                    var selectedFiles = [];
+                    var previewUrls = {};
+
+                    function revokePreviewUrl(fp) {
+                      if (previewUrls[fp]) {
+                        URL.revokeObjectURL(previewUrls[fp]);
+                        delete previewUrls[fp];
+                      }
                     }
-                    input.addEventListener('change', refreshList);
+
+                    function addFiles(fileList) {
+                      if (!fileList || !fileList.length) return;
+                      var seen = {};
+                      for (var si = 0; si < selectedFiles.length; si++) seen[fileFingerprint(selectedFiles[si])] = true;
+                      for (var j = 0; j < fileList.length; j++) {
+                        var file = fileList[j];
+                        if (!isAllowedFile(file)) continue;
+                        var fp = fileFingerprint(file);
+                        if (seen[fp]) continue;
+                        seen[fp] = true;
+                        selectedFiles.push(file);
+                        if (isImageFile(file)) previewUrls[fp] = URL.createObjectURL(file);
+                      }
+                      refreshList();
+                    }
+
+                    function removeFile(index) {
+                      var file = selectedFiles[index];
+                      if (!file) return;
+                      revokePreviewUrl(fileFingerprint(file));
+                      selectedFiles.splice(index, 1);
+                      refreshList();
+                    }
+
+                    function refreshList() {
+                      syncInputFiles(input, selectedFiles);
+                      if (!listEl) return;
+                      if (!selectedFiles.length) {
+                        listEl.innerHTML = '';
+                        return;
+                      }
+                      var html = '<div class="upload-preview-grid" role="list">';
+                      for (var k = 0; k < selectedFiles.length; k++) {
+                        var f = selectedFiles[k];
+                        var fp = fileFingerprint(f);
+                        var name = f.name || ('file ' + (k + 1));
+                        html += '<div class="upload-preview-item" role="listitem">';
+                        if (isImageFile(f) && previewUrls[fp]) {
+                          html += '<img class="upload-preview-thumb" src="' + previewUrls[fp] + '" alt="' + esc(name) + '">';
+                        } else {
+                          html += '<div class="upload-preview-pdf" aria-hidden="true">PDF</div>';
+                        }
+                        html += '<span class="upload-preview-name" title="' + esc(name) + '">' + esc(name) + '</span>';
+                        html += '<button type="button" class="upload-preview-remove" data-remove-index="' + k + '" aria-label="Remove ' + esc(name) + '">&times;</button>';
+                        html += '</div>';
+                      }
+                      html += '</div>';
+                      listEl.innerHTML = html;
+                      var removeBtns = listEl.querySelectorAll('[data-remove-index]');
+                      for (var r = 0; r < removeBtns.length; r++) {
+                        (function(btn){
+                          btn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeFile(parseInt(btn.getAttribute('data-remove-index'), 10));
+                          });
+                        })(removeBtns[r]);
+                      }
+                    }
+
+                    input.addEventListener('change', function() {
+                      addFiles(input.files);
+                    });
                     dz.addEventListener('click', function(e){
                       if (e.target === input) return;
+                      if (e.target.closest && (e.target.closest('.upload-preview-remove') || e.target.closest('.upload-preview-item'))) return;
                       input.click();
                     });
                     dz.addEventListener('keydown', function(e){
@@ -12755,14 +12904,7 @@
                     dz.addEventListener('drop', function(e){
                       var files = e.dataTransfer && e.dataTransfer.files;
                       if (!files || !files.length) return;
-                      var dt = new DataTransfer();
-                      for (var j = 0; j < files.length; j++) {
-                        if (isAllowedFile(files[j])) dt.items.add(files[j]);
-                      }
-                      if (dt.files.length) {
-                        input.files = dt.files;
-                        refreshList();
-                      }
+                      addFiles(files);
                     });
                   })(dropzones[i]);
                 }

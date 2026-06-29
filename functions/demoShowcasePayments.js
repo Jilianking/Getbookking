@@ -91,10 +91,15 @@ function demoConnectTransactionsResponse(payments, opts = {}) {
       amount,
       fee,
       net,
+      isCredit: net > 0,
       created,
       description: description || null,
       reportingCategory: (t.reportingCategory || "charge").toString(),
       sourceId: (t.sourceId || t.chargeId || "").toString() || null,
+      chargeId: (() => {
+        const raw = (t.chargeId || t.sourceId || "").toString().trim();
+        return raw.startsWith("ch_") ? raw : null;
+      })(),
     };
   });
 

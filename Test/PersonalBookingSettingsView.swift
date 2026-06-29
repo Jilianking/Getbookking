@@ -9,6 +9,8 @@ import SwiftUI
 struct PersonalBookingSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var depositAmountText = ""
+    @FocusState private var isDepositAmountFocused: Bool
 
     private var ownerControlsTeam: Bool {
         viewModel.managersApproveAppointments && !viewModel.isTenantOwner
@@ -31,18 +33,7 @@ struct PersonalBookingSettingsView: View {
                         }
                     }
                     if viewModel.personalConfirmationType.requiresDeposit {
-                        HStack {
-                            Text("Deposit amount")
-                            TextField("0", value: Binding(
-                                get: { viewModel.personalDepositAmount ?? 0 },
-                                set: { viewModel.personalDepositAmount = $0 > 0 ? $0 : nil }
-                            ), format: .number)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                            Text("USD")
-                                .foregroundStyle(.secondary)
-                        }
+                        depositAmountField
                     }
                 } footer: {
                     Text("Choose how clients book with you. Only applies to your calendar and requests.")
@@ -51,6 +42,7 @@ struct PersonalBookingSettingsView: View {
 
                 Section {
                     Button {
+                        applyDepositAmountFromText()
                         Task {
                             await viewModel.savePersonalWorkflow()
                             await authViewModel.refreshTeamAccess()
@@ -83,5 +75,53 @@ struct PersonalBookingSettingsView: View {
         .appListSurface()
         .navigationTitle("My booking type")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { syncDepositAmountTextFromModel() }
+        .onChange(of: viewModel.personalConfirmationType) { _, _ in
+            syncDepositAmountTextFromModel()
+        }
+        .onChange(of: viewModel.personalDepositAmount) { _, _ in
+            guard !isDepositAmountFocused else { return }
+            syncDepositAmountTextFromModel()
+        }
+    }
+
+    private var depositAmountField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Deposit amount")
+                .font(.subheadline)
+            HStack(spacing: 8) {
+                TextField("0.00", text: $depositAmountText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isDepositAmountFocused)
+                    .onChange(of: depositAmountText) { _, newValue in
+                        viewModel.personalDepositAmount = Self.parseDepositAmount(newValue)
+                    }
+                Text("USD")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func syncDepositAmountTextFromModel() {
+        guard !isDepositAmountFocused else { return }
+        if let amount = viewModel.personalDepositAmount, amount > 0 {
+            depositAmountText = String(format: "%.2f", amount)
+        } else {
+            depositAmountText = ""
+        }
+    }
+
+    private func applyDepositAmountFromText() {
+        viewModel.personalDepositAmount = Self.parseDepositAmount(depositAmountText)
+    }
+
+    private static func parseDepositAmount(_ raw: String) -> Double? {
+        let cleaned = raw
+            .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, let value = Double(cleaned), value > 0 else { return nil }
+        return value
     }
 }

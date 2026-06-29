@@ -35,3 +35,9 @@ window.adobeFontsKitId = "";
  * When set, account.html and signup success "Download the app" use this link.
  */
 window.appStoreUrl = "";
+
+/**
+ * TestFlight public join URL (optional). Example: https://testflight.apple.com/join/AbCdEfGh
+ * When set, testflight.html thank-you screen shows a "Join the beta" button.
+ */
+window.testflightPublicJoinUrl = "";

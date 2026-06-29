@@ -34,6 +34,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /betaWaitlist/{entryId} {
+      allow read, write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if true;
 

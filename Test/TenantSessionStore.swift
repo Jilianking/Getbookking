@@ -228,6 +228,49 @@ final class TenantSessionStore: ObservableObject {
         }
     }
 
+    func applyDemoBookingConfirmation(
+        requestId: String,
+        memberUid: String,
+        memberName: String,
+        memberEmail: String,
+        scheduledStart: Date,
+        preferredTimeLabel: String,
+        status: String
+    ) {
+        let matches: (BookingRequest) -> Bool = { req in
+            req.documentId == requestId || req.id == requestId
+        }
+        func apply(to request: inout BookingRequest) {
+            request.status = status
+            request.assignedMemberUid = memberUid
+            request.assignedMemberName = memberName
+            request.assignedMemberEmail = memberEmail
+            request.requestedStartTime = scheduledStart
+            request.preferredTime = preferredTimeLabel
+        }
+        if let idx = bookingRequests.firstIndex(where: matches) {
+            var updated = bookingRequests[idx]
+            apply(to: &updated)
+            bookingRequests[idx] = updated
+        }
+        if let idx = newBookingRequests.firstIndex(where: matches) {
+            if Self.isNewWorkflowStatus(status) {
+                var updated = newBookingRequests[idx]
+                apply(to: &updated)
+                newBookingRequests[idx] = updated
+            } else {
+                newBookingRequests.remove(at: idx)
+            }
+        } else if Self.isNewWorkflowStatus(status),
+                  let updated = bookingRequests.first(where: matches) {
+            newBookingRequests.append(updated)
+        }
+        newBookingRequests.sort {
+            ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+        }
+        syncUnreadRequestsCount()
+    }
+
     func applyDemoBookingStatus(requestId: String, status: String) {
         let matches: (BookingRequest) -> Bool = { req in
             req.documentId == requestId || req.id == requestId

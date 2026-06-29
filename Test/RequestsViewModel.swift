@@ -12,6 +12,7 @@ class RequestsViewModel: ObservableObject {
     @Published var tenantIndustry: String?
     @Published var teamMembers: [TenantTeamMember] = []
     @Published var studioAvailability: ProviderAvailability = .default
+    @Published var workflowDepositAmount: Double?
     @Published var isLoading = false
     @Published var actionError: String?
     @Published var isUpdatingStatus = false
@@ -67,6 +68,7 @@ class RequestsViewModel: ObservableObject {
                     bookingRequests = sessionStore.bookingRequests
                     teamMembers = sessionStore.teamMembers
                     studioAvailability = availability
+                    workflowDepositAmount = sessionStore.profile?.workflow.depositAmount
                     requests = []
                     isLoading = false
                 }
@@ -79,6 +81,7 @@ class RequestsViewModel: ObservableObject {
                 tenantIndustry = nil
                 teamMembers = []
                 studioAvailability = .default
+                workflowDepositAmount = nil
                 isLoading = false
             }
             return
@@ -107,6 +110,7 @@ class RequestsViewModel: ObservableObject {
                     bookingRequests = sessionStore.bookingRequests
                     teamMembers = sessionStore.teamMembers
                     studioAvailability = availability
+                    workflowDepositAmount = sessionStore.profile?.workflow.depositAmount
                     requests = []
                     isLoading = false
                 }
@@ -139,6 +143,7 @@ class RequestsViewModel: ObservableObject {
                     bookingRequests = bookingList
                     teamMembers = roster
                     studioAvailability = availability
+                    workflowDepositAmount = profile?.workflow.depositAmount
                     requests = []
                     isLoading = false
                 }
@@ -201,23 +206,34 @@ class RequestsViewModel: ObservableObject {
     }
 
     /// Uses Cloud Function so manager `approveRejectRequests` is enforced server-side.
-    func setBookingRequestStatus(requestId: String, status: String, notes: String?) async {
+    func setBookingRequestStatus(
+        requestId: String,
+        status: String,
+        notes: String?,
+        managesLoadingState: Bool = true
+    ) async {
         if let store = sessionStore, store.isDemoSession {
             await markBookingRequestAsRead(requestId: requestId)
-            await MainActor.run {
-                isUpdatingStatus = true
-                actionError = nil
+            if managesLoadingState {
+                await MainActor.run {
+                    isUpdatingStatus = true
+                    actionError = nil
+                }
             }
             store.applyDemoBookingStatus(requestId: requestId, status: status)
             await reloadAfterMutation(isDemoMode: true)
-            await MainActor.run { isUpdatingStatus = false }
+            if managesLoadingState {
+                await MainActor.run { isUpdatingStatus = false }
+            }
             return
         }
         guard resolvedTenantId != nil else { return }
         await markBookingRequestAsRead(requestId: requestId)
-        await MainActor.run {
-            isUpdatingStatus = true
-            actionError = nil
+        if managesLoadingState {
+            await MainActor.run {
+                isUpdatingStatus = true
+                actionError = nil
+            }
         }
         var payload: [String: Any] = [
             "requestId": requestId,
@@ -232,7 +248,143 @@ class RequestsViewModel: ObservableObject {
                 actionError = error.localizedDescription
             }
         }
+        if managesLoadingState {
+            await MainActor.run { isUpdatingStatus = false }
+        }
+    }
+
+    /// Assigns time + artist and marks the request confirmed (single confirm flow).
+    func confirmBookingAppointment(
+        requestId: String,
+        member: TenantTeamMember,
+        scheduledStart: Date,
+        preferredTimeLabel: String,
+        notes: String?
+    ) async {
+        if let store = sessionStore, store.isDemoSession {
+            await markBookingRequestAsRead(requestId: requestId)
+            await MainActor.run {
+                isUpdatingStatus = true
+                actionError = nil
+            }
+            store.applyDemoBookingConfirmation(
+                requestId: requestId,
+                memberUid: member.uid,
+                memberName: member.displayName,
+                memberEmail: member.email,
+                scheduledStart: scheduledStart,
+                preferredTimeLabel: preferredTimeLabel,
+                status: "confirmed"
+            )
+            await reloadAfterMutation(isDemoMode: true)
+            await MainActor.run { isUpdatingStatus = false }
+            return
+        }
+        guard resolvedTenantId != nil else { return }
+        await markBookingRequestAsRead(requestId: requestId)
+        await MainActor.run {
+            isUpdatingStatus = true
+            actionError = nil
+        }
+        await assignBookingRequest(
+            requestId: requestId,
+            member: member,
+            scheduledStart: scheduledStart,
+            preferredTimeLabel: preferredTimeLabel,
+            managesLoadingState: false
+        )
+        if actionError != nil {
+            await MainActor.run { isUpdatingStatus = false }
+            return
+        }
+        await setBookingRequestStatus(
+            requestId: requestId,
+            status: "confirmed",
+            notes: notes,
+            managesLoadingState: false
+        )
         await MainActor.run { isUpdatingStatus = false }
+    }
+
+    /// Updates time + artist on an already-confirmed booking (no status change).
+    func rescheduleBookingAppointment(
+        requestId: String,
+        member: TenantTeamMember,
+        scheduledStart: Date,
+        preferredTimeLabel: String
+    ) async {
+        if let store = sessionStore, store.isDemoSession {
+            await MainActor.run {
+                isUpdatingAssignment = true
+                actionError = nil
+            }
+            store.applyDemoBookingConfirmation(
+                requestId: requestId,
+                memberUid: member.uid,
+                memberName: member.displayName,
+                memberEmail: member.email,
+                scheduledStart: scheduledStart,
+                preferredTimeLabel: preferredTimeLabel,
+                status: "confirmed"
+            )
+            await reloadAfterMutation(isDemoMode: true)
+            await MainActor.run { isUpdatingAssignment = false }
+            return
+        }
+        await assignBookingRequest(
+            requestId: requestId,
+            member: member,
+            scheduledStart: scheduledStart,
+            preferredTimeLabel: preferredTimeLabel
+        )
+    }
+
+    /// Creates a Stripe deposit link and texts it to the client (after confirm).
+    func sendDepositLinkViaSms(for booking: BookingRequest, depositAmount: Double) async {
+        if let store = sessionStore, store.isDemoSession { return }
+        let cents = Int(round(depositAmount * 100))
+        guard cents >= 50 else {
+            await MainActor.run {
+                actionError = "Deposit must be at least $0.50 to send a payment link."
+            }
+            return
+        }
+        let phoneRaw = (booking.customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !PhoneFormatting.digits(from: phoneRaw).isEmpty else {
+            await MainActor.run {
+                actionError = "Client has no phone number — deposit link was not sent."
+            }
+            return
+        }
+        do {
+            var payload: [String: Any] = ["serviceAmountCents": cents]
+            if let rid = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines), !rid.isEmpty {
+                payload["bookingRequestId"] = rid
+            }
+            let result = try await functions.httpsCallable("createDepositLink").call(payload)
+            guard let data = result.data as? [String: Any],
+                  let urlString = data["url"] as? String,
+                  !urlString.isEmpty else {
+                await MainActor.run { actionError = "Could not create deposit link." }
+                return
+            }
+            let e164 = PhoneFormatting.e164US(phoneRaw) ?? phoneRaw
+            let message = Message(
+                id: nil,
+                clientId: e164,
+                clientName: booking.customerName ?? "Client",
+                content: "Pay your deposit here: \(urlString)",
+                sender: .admin,
+                createdAt: Date(),
+                read: true,
+                threadId: PhoneFormatting.smsThreadId(e164)
+            )
+            try await firebaseService.sendMessage(message)
+        } catch {
+            await MainActor.run {
+                actionError = FirebaseFunctionsErrorHelper.message(from: error)
+            }
+        }
     }
 
     /// Owner / managers with view-all: set or clear staff on a booking request.
@@ -240,12 +392,15 @@ class RequestsViewModel: ObservableObject {
         requestId: String,
         member: TenantTeamMember?,
         scheduledStart: Date? = nil,
-        preferredTimeLabel: String? = nil
+        preferredTimeLabel: String? = nil,
+        managesLoadingState: Bool = true
     ) async {
         guard let tid = tenantId, !requestId.isEmpty else { return }
-        await MainActor.run {
-            isUpdatingAssignment = true
-            actionError = nil
+        if managesLoadingState {
+            await MainActor.run {
+                isUpdatingAssignment = true
+                actionError = nil
+            }
         }
         var updates: [String: Any]
         if let member {
@@ -279,7 +434,9 @@ class RequestsViewModel: ObservableObject {
                 actionError = error.localizedDescription
             }
         }
-        await MainActor.run { isUpdatingAssignment = false }
+        if managesLoadingState {
+            await MainActor.run { isUpdatingAssignment = false }
+        }
     }
 
     /// Marks opened if still unread (`readAt` nil). Safe to call on list tap and detail open.

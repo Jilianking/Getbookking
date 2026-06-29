@@ -14,6 +14,8 @@ struct TeamSettingsHubView: View {
     /// When false (Solo), hide manager-only sections and team-oriented copy.
     var includeTeamManagementSections: Bool = true
 
+    private var isSoloBusinessSettings: Bool { !includeTeamManagementSections }
+
     var body: some View {
         List {
             if includeTeamManagementSections {
@@ -44,23 +46,31 @@ struct TeamSettingsHubView: View {
                 NavigationLink {
                     TeamBookingSettingsView(
                         settingsViewModel: settingsViewModel,
-                        teamPolicyViewModel: teamPolicyViewModel
+                        teamPolicyViewModel: teamPolicyViewModel,
+                        isSoloBusinessSettings: isSoloBusinessSettings
                     )
                     .environmentObject(authViewModel)
                 } label: {
                     settingsRow(
                         title: "Booking settings",
-                        subtitle: "Client flow, manager access, booking alerts"
+                        subtitle: isSoloBusinessSettings
+                            ? "Booking type, deposits, and client flow"
+                            : "Client flow, manager access, booking alerts"
                     )
                 }
 
                 NavigationLink {
-                    TeamDesignServicesSettingsView(viewModel: teamPolicyViewModel)
-                        .environmentObject(authViewModel)
+                    TeamDesignServicesSettingsView(
+                        viewModel: teamPolicyViewModel,
+                        isSoloBusinessSettings: isSoloBusinessSettings
+                    )
+                    .environmentObject(authViewModel)
                 } label: {
                     settingsRow(
                         title: "Design & services",
-                        subtitle: "Services and pricing on Design"
+                        subtitle: isSoloBusinessSettings
+                            ? "Services and pricing on Design"
+                            : "Manager access to services and pricing"
                     )
                 }
 
@@ -87,12 +97,17 @@ struct TeamSettingsHubView: View {
                 }
 
                 NavigationLink {
-                    TeamNotificationsSettingsView(viewModel: teamPolicyViewModel)
-                        .environmentObject(authViewModel)
+                    TeamNotificationsSettingsView(
+                        viewModel: teamPolicyViewModel,
+                        isSoloBusinessSettings: isSoloBusinessSettings
+                    )
+                    .environmentObject(authViewModel)
                 } label: {
                     settingsRow(
                         title: "Notifications",
-                        subtitle: "Client SMS toggles and summary email"
+                        subtitle: isSoloBusinessSettings
+                            ? "Client texts and summary email"
+                            : "Client SMS toggles and summary email"
                     )
                 }
             }

@@ -186,6 +186,7 @@ struct BookingRequestDetailRow: View {
     let label: String
     let value: String
     var systemImage: String?
+    var showsChevron: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -203,9 +204,16 @@ struct BookingRequestDetailRow: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(.primary)
                     .fixedSize(horizontal: false, vertical: true)
+                if showsChevron {
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 

@@ -941,7 +941,7 @@ struct DesignView: View {
                 .font(.headline)
             Text("Name on website")
                 .font(.subheadline.weight(.medium))
-            Text("Shown on your public site. Leave blank to use your app business name from Settings.")
+            Text("Shown on your public site. Leave blank to use your app business name from Settings. Does not change Tap to Pay.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             TextField(
@@ -1075,7 +1075,7 @@ struct DesignView: View {
                 .padding(.top, 4)
             Text("Name on website")
                 .font(.subheadline.weight(.medium))
-            Text("Shown on your public site. Leave blank to use your app business name from Settings.")
+            Text("Shown on your public site. Leave blank to use your app business name from Settings. Does not change Tap to Pay.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             TextField(

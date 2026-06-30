@@ -17,6 +17,8 @@ final class TapToPayTerminalManager {
     private var activeDiscoveryDelegate: TapToPayDiscoveryDelegate?
     private var activeReaderDelegate: TapToPayReaderDelegateAnnouncer?
     private var connectedReader: Reader?
+    private var connectedLocationId: String = ""
+    private var connectedMerchantDisplayName: String = ""
 
     private init() {}
 
@@ -30,7 +32,7 @@ final class TapToPayTerminalManager {
     }
 
     /// Discover + connect reader (launch / foreground / before checkout).
-    func warmUpReader(locationId: String) async {
+    func warmUpReader(locationId: String, merchantDisplayName: String? = nil) async {
         guard !locationId.isEmpty else {
             await MainActor.run {
                 TapToPayReaderSession.shared.markFailed("Tap to Pay location is not configured.")
@@ -49,32 +51,57 @@ final class TapToPayTerminalManager {
             return
         }
 
-        if connectedReader != nil {
+        let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
+
+        if connectedReader != nil,
+           connectedLocationId == locationId,
+           connectedMerchantDisplayName == resolvedName {
             await MainActor.run { TapToPayReaderSession.shared.markReady() }
             return
+        }
+
+        if connectedReader != nil {
+            await disconnectReaderIfConnected()
         }
 
         await MainActor.run { TapToPayReaderSession.shared.resetForWarmUp() }
 
         do {
             let reader = try await discoverTapToPayReader()
-            try await connectTapToPayReader(reader: reader, locationId: locationId)
+            try await connectTapToPayReader(
+                reader: reader,
+                locationId: locationId,
+                merchantDisplayName: resolvedName
+            )
             connectedReader = reader
+            connectedLocationId = locationId
+            connectedMerchantDisplayName = resolvedName
             await MainActor.run { TapToPayReaderSession.shared.markReady() }
         } catch {
             connectedReader = nil
+            connectedLocationId = ""
+            connectedMerchantDisplayName = ""
             await MainActor.run {
                 TapToPayReaderSession.shared.markFailed(TapToPayErrorMapper.userMessage(for: error))
             }
         }
     }
 
-    func processPayment(clientSecret: String, locationId: String) async throws {
+    /// Disconnect and reconnect so Stripe Terminal picks up a new merchant display name.
+    func reconnectReader(locationId: String, merchantDisplayName: String) async {
+        await disconnectReaderIfConnected()
+        await warmUpReader(locationId: locationId, merchantDisplayName: merchantDisplayName)
+    }
+
+    func processPayment(clientSecret: String, locationId: String, merchantDisplayName: String? = nil) async throws {
         ensureInitialized()
         guard !locationId.isEmpty else { throw TapToPayError.missingLocationId }
 
-        if connectedReader == nil {
-            try await warmUpReaderThrowing(locationId: locationId)
+        let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
+        if connectedReader == nil
+            || connectedLocationId != locationId
+            || connectedMerchantDisplayName != resolvedName {
+            try await warmUpReaderThrowing(locationId: locationId, merchantDisplayName: resolvedName)
         }
 
         let paymentIntent = try await Terminal.shared.retrievePaymentIntent(clientSecret: clientSecret)
@@ -82,13 +109,41 @@ final class TapToPayTerminalManager {
         _ = try await confirmPaymentIntent(paymentIntent: collectedIntent)
     }
 
-    private func warmUpReaderThrowing(locationId: String) async throws {
+    private func warmUpReaderThrowing(locationId: String, merchantDisplayName: String) async throws {
         if let blocking = TapToPayEligibility.blockingMessage() { throw TapToPayError.message(blocking) }
         if let deviceBlock = TapToPayEligibility.deviceSupportsTapToPay() { throw TapToPayError.message(deviceBlock) }
+        if connectedReader != nil {
+            await disconnectReaderIfConnected()
+        }
         let reader = try await discoverTapToPayReader()
-        try await connectTapToPayReader(reader: reader, locationId: locationId)
+        try await connectTapToPayReader(
+            reader: reader,
+            locationId: locationId,
+            merchantDisplayName: merchantDisplayName
+        )
         connectedReader = reader
+        connectedLocationId = locationId
+        connectedMerchantDisplayName = merchantDisplayName
         await MainActor.run { TapToPayReaderSession.shared.markReady() }
+    }
+
+    private func normalizedMerchantDisplayName(_ override: String?) -> String {
+        let raw = (override ?? TapToPayLocationStore.shared.merchantDisplayName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw
+    }
+
+    private func disconnectReaderIfConnected() async {
+        guard connectedReader != nil else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            Terminal.shared.disconnectReader { _ in
+                continuation.resume()
+            }
+        }
+        connectedReader = nil
+        connectedLocationId = ""
+        connectedMerchantDisplayName = ""
+        await MainActor.run { TapToPayReaderSession.shared.markDisconnected() }
     }
 
     private final class TapToPayDiscoveryDelegate: NSObject, DiscoveryDelegate {
@@ -144,6 +199,8 @@ final class TapToPayTerminalManager {
 
         func reader(_ reader: Reader, didDisconnect reason: DisconnectReason) {
             TapToPayTerminalManager.shared.connectedReader = nil
+            TapToPayTerminalManager.shared.connectedLocationId = ""
+            TapToPayTerminalManager.shared.connectedMerchantDisplayName = ""
             Task { @MainActor in
                 TapToPayReaderSession.shared.markDisconnected()
             }
@@ -205,15 +262,22 @@ final class TapToPayTerminalManager {
         }
     }
 
-    private func connectTapToPayReader(reader: Reader, locationId: String) async throws {
+    private func connectTapToPayReader(
+        reader: Reader,
+        locationId: String,
+        merchantDisplayName: String
+    ) async throws {
         let readerDelegate = TapToPayReaderDelegateAnnouncer()
         activeReaderDelegate = readerDelegate
-        let connectionConfig = try TapToPayConnectionConfigurationBuilder(
+        var builder = TapToPayConnectionConfigurationBuilder(
             delegate: readerDelegate,
             locationId: locationId
         )
         .setAutoReconnectOnUnexpectedDisconnect(true)
-        .build()
+        if !merchantDisplayName.isEmpty {
+            builder = builder.setMerchantDisplayName(merchantDisplayName)
+        }
+        let connectionConfig = try builder.build()
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             Terminal.shared.connectReader(reader, connectionConfig: connectionConfig) { connectedReader, error in

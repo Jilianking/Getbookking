@@ -709,6 +709,13 @@ class FirebaseService: ObservableObject {
         return parseProviderProfile(data: data)
     }
 
+    func fetchUserDocument(uid: String) async throws -> [String: Any]? {
+        guard let safeUid = sanitizedFirestoreId(uid) else { return nil }
+        let doc = try await db.collection("users").document(safeUid).getDocument()
+        guard doc.exists, let data = doc.data() else { return nil }
+        return data
+    }
+
     func fetchUserMemberSettings(uid: String) async throws -> TeamMemberSettings {
         guard let safeUid = sanitizedFirestoreId(uid) else { return TeamMemberSettings() }
         let doc = try await db.collection("users").document(safeUid).getDocument()

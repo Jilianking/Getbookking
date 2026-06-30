@@ -694,6 +694,19 @@ exports.getConnectAccountStatus = functions
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
     const terminalLocationId = payCtx.terminalLocationId || null;
+    const tenantDoc = await db.collection("tenants").doc(payCtx.tenantId).get();
+    const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    const tapToPayDisplayName =
+      payCtx.scope === "user"
+        ? tapToPayTerminalDisplayNameForUser(userData, tenantData)
+        : tapToPayTerminalDisplayNameForTenant(tenantData);
+    const tapToPaySettings = tapToPayPaymentSettingsForScope(
+      payCtx.scope,
+      tenantData,
+      userData
+    );
 
     return {
       hasAccount: true,
@@ -701,6 +714,14 @@ exports.getConnectAccountStatus = functions
       chargesEnabled: account.charges_enabled ?? false,
       payoutsEnabled: account.payouts_enabled ?? false,
       terminalLocationId,
+      tapToPayDisplayName,
+      tapToPayRequireSignature: tapToPaySettings.tapToPayRequireSignature,
+      tapToPayAutoOfferReceipt: tapToPaySettings.tapToPayAutoOfferReceipt,
+      tapToPayReceiptDelivery: tapToPaySettings.tapToPayReceiptDelivery,
+      tapToPayReceiptShowBusinessName: tapToPaySettings.tapToPayReceiptShowBusinessName,
+      tapToPayReceiptItemized: tapToPaySettings.tapToPayReceiptItemized,
+      tapToPayReceiptCustomFooter: tapToPaySettings.tapToPayReceiptCustomFooter,
+      tapToPayReceiptFooterMessage: tapToPaySettings.tapToPayReceiptFooterMessage,
       canTakePayments: true,
       usesOwnPayments: payCtx.scope === "user",
       payoutMode: payCtx.payoutMode,
@@ -1078,21 +1099,185 @@ function terminalAddressFromTenant(tenant) {
   return { line1, city, state, postal_code, country: "US" };
 }
 
+/** Tap to Pay customer-facing name (Settings). Never uses website `displayName`. */
+function tapToPayTerminalDisplayNameForTenant(tenantData) {
+  const custom = (tenantData?.tapToPayDisplayName ?? "").toString().trim();
+  if (custom) return custom.slice(0, 100);
+  const biz = (tenantData?.businessName ?? "").toString().trim();
+  if (biz) return biz.slice(0, 100);
+  return "Studio";
+}
+
+/** Independent member Tap to Pay name; falls back to tenant business name, not website brand. */
+function tapToPayTerminalDisplayNameForUser(userData, tenantData) {
+  const custom = (userData?.tapToPayDisplayName ?? "").toString().trim();
+  if (custom) return custom.slice(0, 100);
+  const personal = (userData?.displayName || userData?.name || "").toString().trim();
+  if (personal) return personal.slice(0, 100);
+  return tapToPayTerminalDisplayNameForTenant(tenantData);
+}
+
+function tapToPayRequireSignatureForTenant(tenantData) {
+  return tenantData?.tapToPayRequireSignature === true;
+}
+
+function tapToPayRequireSignatureForUser(userData) {
+  return userData?.tapToPayRequireSignature === true;
+}
+
+/** Default true — offer receipt share after Tap to Pay approval. */
+function tapToPayAutoOfferReceiptForTenant(tenantData) {
+  return tenantData?.tapToPayAutoOfferReceipt !== false;
+}
+
+function tapToPayAutoOfferReceiptForUser(userData) {
+  return userData?.tapToPayAutoOfferReceipt !== false;
+}
+
+const TAP_TO_PAY_RECEIPT_DELIVERY = new Set(["prompt", "text", "none"]);
+
+function tapToPayReceiptDeliveryForTenant(tenantData) {
+  const raw = (tenantData?.tapToPayReceiptDelivery ?? "").toString().trim();
+  if (TAP_TO_PAY_RECEIPT_DELIVERY.has(raw)) return raw;
+  if (tenantData?.tapToPayAutoOfferReceipt === false) return "none";
+  return "prompt";
+}
+
+function tapToPayReceiptDeliveryForUser(userData) {
+  const raw = (userData?.tapToPayReceiptDelivery ?? "").toString().trim();
+  if (TAP_TO_PAY_RECEIPT_DELIVERY.has(raw)) return raw;
+  if (userData?.tapToPayAutoOfferReceipt === false) return "none";
+  return "prompt";
+}
+
+function tapToPayReceiptPreferencesForScope(scope, tenantData, userData) {
+  const source = scope === "user" ? userData : tenantData;
+  const delivery =
+    scope === "user"
+      ? tapToPayReceiptDeliveryForUser(userData)
+      : tapToPayReceiptDeliveryForTenant(tenantData);
+  return {
+    tapToPayReceiptDelivery: delivery,
+    tapToPayReceiptShowBusinessName: source?.tapToPayReceiptShowBusinessName !== false,
+    tapToPayReceiptItemized: source?.tapToPayReceiptItemized === true,
+    tapToPayReceiptCustomFooter: source?.tapToPayReceiptCustomFooter === true,
+    tapToPayReceiptFooterMessage: (source?.tapToPayReceiptFooterMessage ?? "")
+      .toString()
+      .trim()
+      .slice(0, 200),
+    tapToPayAutoOfferReceipt: delivery !== "none",
+  };
+}
+
+function parseTapToPayReceiptPreferencesInput(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const delivery = (raw.delivery ?? "").toString().trim();
+  if (delivery && !TAP_TO_PAY_RECEIPT_DELIVERY.has(delivery)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Receipt delivery must be prompt, text, or none"
+    );
+  }
+  const footerMessage = (raw.footerMessage ?? "").toString().trim();
+  if (footerMessage.length > 200) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Footer message must be 200 characters or fewer"
+    );
+  }
+  const patch = {};
+  if (delivery) {
+    patch.tapToPayReceiptDelivery = delivery;
+    patch.tapToPayAutoOfferReceipt = delivery !== "none";
+  }
+  if (raw.showBusinessName !== undefined) {
+    patch.tapToPayReceiptShowBusinessName = raw.showBusinessName === true;
+  }
+  if (raw.itemized !== undefined) {
+    patch.tapToPayReceiptItemized = raw.itemized === true;
+  }
+  if (raw.customFooter !== undefined) {
+    patch.tapToPayReceiptCustomFooter = raw.customFooter === true;
+  }
+  if (raw.footerMessage !== undefined) {
+    patch.tapToPayReceiptFooterMessage = footerMessage.slice(0, 200);
+  }
+  return Object.keys(patch).length ? patch : null;
+}
+
+function receiptPreferencesResponse(scope, tenantData, userData) {
+  const prefs = tapToPayReceiptPreferencesForScope(scope, tenantData, userData);
+  return {
+    receiptDelivery: prefs.tapToPayReceiptDelivery,
+    receiptShowBusinessName: prefs.tapToPayReceiptShowBusinessName,
+    receiptItemized: prefs.tapToPayReceiptItemized,
+    receiptCustomFooter: prefs.tapToPayReceiptCustomFooter,
+    receiptFooterMessage: prefs.tapToPayReceiptFooterMessage,
+    autoOfferReceipt: prefs.tapToPayAutoOfferReceipt,
+  };
+}
+
+function tapToPayPaymentSettingsForScope(scope, tenantData, userData) {
+  const receipt = tapToPayReceiptPreferencesForScope(scope, tenantData, userData);
+  if (scope === "user") {
+    return {
+      tapToPayRequireSignature: tapToPayRequireSignatureForUser(userData),
+      tapToPayAutoOfferReceipt: receipt.tapToPayAutoOfferReceipt,
+      ...receipt,
+    };
+  }
+  return {
+    tapToPayRequireSignature: tapToPayRequireSignatureForTenant(tenantData),
+    tapToPayAutoOfferReceipt: receipt.tapToPayAutoOfferReceipt,
+    ...receipt,
+  };
+}
+
+async function syncTerminalLocationDisplayNameIfNeeded(
+  stripe,
+  stripeAccountId,
+  locationId,
+  displayName
+) {
+  const locId = (locationId || "").toString().trim();
+  const next = (displayName || "").toString().trim().slice(0, 100);
+  if (!locId || !next) return;
+  try {
+    const loc = await stripe.terminal.locations.retrieve(locId, {
+      stripeAccount: stripeAccountId,
+    });
+    const current = (loc.display_name || "").toString().trim();
+    if (current !== next) {
+      await stripe.terminal.locations.update(
+        locId,
+        { display_name: next },
+        { stripeAccount: stripeAccountId }
+      );
+    }
+  } catch (err) {
+    console.warn("syncTerminalLocationDisplayNameIfNeeded", locId, err?.message || err);
+  }
+}
+
 /**
  * Ensures tenants/{tenantId}.stripeTerminalLocationId exists (Stripe Terminal Location on Connect account).
  */
 async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAccountId, tenantData) {
+  const displayName = tapToPayTerminalDisplayNameForTenant(tenantData);
   const existing = (tenantData.stripeTerminalLocationId || "").toString().trim();
   if (existing) {
+    await syncTerminalLocationDisplayNameIfNeeded(
+      stripe,
+      stripeAccountId,
+      existing,
+      displayName
+    );
     return existing;
   }
-  const displayName =
-    (tenantData.displayName || tenantData.businessName || "Studio").toString().trim() ||
-    "Studio";
   const address = terminalAddressFromTenant(tenantData);
   const location = await stripe.terminal.locations.create(
     {
-      display_name: displayName.slice(0, 100),
+      display_name: displayName,
       address,
     },
     { stripeAccount: stripeAccountId }
@@ -1109,16 +1294,21 @@ async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAcc
  * Ensures users/{uid}.stripeTerminalLocationId exists (Terminal Location on member Connect account).
  */
 async function ensureStripeTerminalLocationForUser(uid, stripe, stripeAccountId, userData, tenantData) {
+  const displayName = tapToPayTerminalDisplayNameForUser(userData, tenantData);
   const existing = (userData.stripeTerminalLocationId || "").toString().trim();
   if (existing) {
+    await syncTerminalLocationDisplayNameIfNeeded(
+      stripe,
+      stripeAccountId,
+      existing,
+      displayName
+    );
     return existing;
   }
-  const displayName =
-    (userData.displayName || userData.name || "Team member").toString().trim() || "Team member";
   const address = terminalAddressFromTenant(tenantData);
   const location = await stripe.terminal.locations.create(
     {
-      display_name: displayName.slice(0, 100),
+      display_name: displayName,
       address,
     },
     { stripeAccount: stripeAccountId }
@@ -1304,6 +1494,7 @@ exports.createDepositLink = functions
     const productDescription = data?.productDescription
       ? data.productDescription.toString().trim()
       : undefined;
+    const paymentKind = (data?.paymentKind || "deposit").toString().trim() || "deposit";
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
@@ -1363,7 +1554,7 @@ exports.createDepositLink = functions
         application_fee_amount: feeCents,
         metadata: {
           tenantId: tenantId || "",
-          paymentKind: "deposit",
+          paymentKind,
           serviceAmountCents: String(checkout.serviceCents),
           surchargeCents: String(checkout.surchargeCents),
           bookingRequestId,
@@ -2719,7 +2910,11 @@ exports.ensureTapToPayTerminalLocation = functions
               stripeAccountId,
               tenantData
             );
-      return { locationId, paymentScope: payCtx.scope };
+      const displayName =
+        payCtx.scope === "user"
+          ? tapToPayTerminalDisplayNameForUser(userData, tenantData)
+          : tapToPayTerminalDisplayNameForTenant(tenantData);
+      return { locationId, displayName, paymentScope: payCtx.scope };
     } catch (err) {
       console.error("ensureTapToPayTerminalLocation", err);
       const msg =
@@ -2728,6 +2923,174 @@ exports.ensureTapToPayTerminalLocation = functions
           : "Could not create a Terminal location. Check your business address in Website Design.";
       throw new functions.https.HttpsError("failed-precondition", msg);
     }
+  });
+
+/**
+ * Updates Tap to Pay settings (customer-facing name, signature, receipt prefs).
+ * Params: { displayName?, requireSignature?, autoOfferReceipt? } — at least one field required.
+ * Owner → tenants.*; independent member → users.*.
+ */
+exports.updateTapToPayDisplayName = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const uid = context.auth.uid;
+    const payCtx = await assertCanTakePayments(uid);
+    const hasDisplayName = data?.displayName !== undefined;
+    const hasRequireSignature = data?.requireSignature !== undefined;
+    const hasAutoOfferReceipt = data?.autoOfferReceipt !== undefined;
+    const receiptPrefsInput = parseTapToPayReceiptPreferencesInput(data?.receiptPreferences);
+    const hasReceiptPreferences = receiptPrefsInput != null;
+    if (!hasDisplayName && !hasRequireSignature && !hasAutoOfferReceipt && !hasReceiptPreferences) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Provide displayName, requireSignature, autoOfferReceipt, and/or receiptPreferences"
+      );
+    }
+
+    const rawName = hasDisplayName ? (data.displayName ?? "").toString().trim() : null;
+    if (rawName !== null && rawName.length > 100) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Name must be 100 characters or fewer"
+      );
+    }
+
+    const tenantId = payCtx.tenantId;
+    const tenantRef = db.collection("tenants").doc(tenantId);
+    const tenantDoc = await tenantRef.get();
+    if (!tenantDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Business not found.");
+    }
+    let tenantData = tenantDoc.data() || {};
+
+    const userRef = db.collection("users").doc(uid);
+    const userPatch = {};
+    const tenantPatch = {};
+
+    if (hasDisplayName && rawName !== null) {
+      if (payCtx.scope === "user") {
+        userPatch.tapToPayDisplayName = rawName;
+      } else {
+        await assertTenantOwner(uid, tenantId);
+        tenantPatch.tapToPayDisplayName = rawName;
+      }
+    } else if (payCtx.scope !== "user") {
+      await assertTenantOwner(uid, tenantId);
+    }
+
+    if (hasRequireSignature) {
+      const val = data.requireSignature === true;
+      if (payCtx.scope === "user") {
+        userPatch.tapToPayRequireSignature = val;
+      } else {
+        tenantPatch.tapToPayRequireSignature = val;
+      }
+    }
+
+    if (hasAutoOfferReceipt) {
+      const val = data.autoOfferReceipt !== false;
+      const delivery = val ? "prompt" : "none";
+      if (payCtx.scope === "user") {
+        userPatch.tapToPayAutoOfferReceipt = val;
+        userPatch.tapToPayReceiptDelivery = delivery;
+      } else {
+        tenantPatch.tapToPayAutoOfferReceipt = val;
+        tenantPatch.tapToPayReceiptDelivery = delivery;
+      }
+    }
+
+    if (receiptPrefsInput) {
+      if (payCtx.scope === "user") {
+        Object.assign(userPatch, receiptPrefsInput);
+      } else {
+        Object.assign(tenantPatch, receiptPrefsInput);
+      }
+    }
+
+    if (Object.keys(userPatch).length) {
+      await userRef.set(userPatch, { merge: true });
+    }
+    if (Object.keys(tenantPatch).length) {
+      await tenantRef.set(tenantPatch, { merge: true });
+      tenantData = { ...tenantData, ...tenantPatch };
+    }
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    if (payCtx.scope !== "user") {
+      const freshTenant = await tenantRef.get();
+      tenantData = freshTenant.exists ? freshTenant.data() || {} : tenantData;
+    }
+
+    const paymentSettings = tapToPayPaymentSettingsForScope(
+      payCtx.scope,
+      tenantData,
+      userData
+    );
+    const resolvedName =
+      payCtx.scope === "user"
+        ? tapToPayTerminalDisplayNameForUser(userData, tenantData)
+        : tapToPayTerminalDisplayNameForTenant(tenantData);
+
+    if (!hasDisplayName) {
+      return {
+        locationId: payCtx.terminalLocationId || null,
+        displayName: resolvedName,
+        paymentScope: payCtx.scope,
+        requireSignature: paymentSettings.tapToPayRequireSignature,
+        ...receiptPreferencesResponse(payCtx.scope, tenantData, userData),
+      };
+    }
+
+    const stripeAccountId = (payCtx.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Connect Stripe before setting a Tap to Pay name."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account.charges_enabled) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Finish Stripe setup before using Tap to Pay."
+      );
+    }
+
+    const locationId =
+      payCtx.scope === "user"
+        ? await ensureStripeTerminalLocationForUser(
+            uid,
+            stripe,
+            stripeAccountId,
+            userData,
+            tenantData
+          )
+        : await ensureStripeTerminalLocationForTenant(
+            tenantId,
+            stripe,
+            stripeAccountId,
+            tenantData
+          );
+
+    return {
+      locationId,
+      displayName: resolvedName,
+      paymentScope: payCtx.scope,
+      requireSignature: paymentSettings.tapToPayRequireSignature,
+      ...receiptPreferencesResponse(payCtx.scope, tenantData, userData),
+    };
   });
 
 /**

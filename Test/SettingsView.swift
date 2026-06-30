@@ -708,7 +708,7 @@ private struct AccountSettingsDetailView: View {
                 if viewModel.hasProfile, viewModel.isTenantOwner, viewModel.tenantId != nil {
                     Section(
                         header: Text("Business name"),
-                        footer: Text("Shown in the app sidebar. Your website can use a different name in Website Design.")
+                        footer: Text("Shown in the app sidebar. Your website and Tap to Pay customer name can use different names.")
                             .font(.caption2)
                     ) {
                         TextField("Business name", text: $viewModel.businessNameDraft)

@@ -11,17 +11,19 @@ struct PaymentsView: View {
     @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
+    @State private var showManualPaymentSheet = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
     @State private var tapToPayAlertMessage: String?
     #endif
     @State private var showWithdrawSheet = false
     @State private var showAllTransactions = false
+    @State private var balanceDetailsExpanded = false
     var drawerState: DrawerState
     let sectionTitle: String
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if viewModel.isStudioPayroll {
@@ -61,6 +63,18 @@ struct PaymentsView: View {
                             .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
+                #if TAP_TO_PAY_ENABLED
+                if viewModel.stripeConnected && viewModel.canEditTapToPayDisplayName {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        NavigationLink {
+                            PaymentsSettingsView(viewModel: viewModel)
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .foregroundStyle(AppDesign.textPrimary)
+                        }
+                    }
+                }
+                #endif
             }
             .refreshable {
                 await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
@@ -77,6 +91,11 @@ struct PaymentsView: View {
             .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
                 DepositLinkSheet(viewModel: viewModel) {
                     showDepositLinkSheet = false
+                }
+            }
+            .sheet(isPresented: $showManualPaymentSheet) {
+                ManualPaymentSheet(viewModel: viewModel) {
+                    showManualPaymentSheet = false
                 }
             }
             #if TAP_TO_PAY_ENABLED
@@ -110,7 +129,6 @@ struct PaymentsView: View {
                 PaymentsAllTransactionsSheet(viewModel: viewModel)
             }
         }
-        .navigationViewStyle(.stack)
     }
 
     #if TAP_TO_PAY_ENABLED
@@ -159,51 +177,73 @@ struct PaymentsView: View {
     #endif
 
     private var paymentsBalanceHero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("AVAILABLE BALANCE")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.65))
-                Text(PaymentsViewModel.formatUSD(viewModel.availableBalance))
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-
-            HStack(spacing: 0) {
-                balanceStatItem(
-                    title: "This month",
-                    value: "+\(PaymentsViewModel.formatUSD(viewModel.monthEarnings))",
-                    valueColor: .green
-                )
-                balanceStatItem(
-                    title: "Pending",
-                    value: PaymentsViewModel.formatUSD(viewModel.pendingBalance),
-                    valueColor: .white
-                )
-                balanceStatItem(
-                    title: "Avg/week",
-                    value: PaymentsViewModel.formatUSD(viewModel.averageWeeklyEarnings),
-                    valueColor: .white
-                )
-            }
-
-            Button {
-                showWithdrawSheet = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "building.columns.fill")
-                    Text("Withdraw to bank")
-                        .font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Available balance")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.65))
+                    Text(PaymentsViewModel.formatUSD(viewModel.availableBalance))
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.white.opacity(0.14))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Spacer(minLength: 12)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        balanceDetailsExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("View details")
+                            .font(.subheadline.weight(.medium))
+                        Image(systemName: balanceDetailsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Color.white.opacity(0.85))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.availableBalance <= 0)
-            .opacity(viewModel.availableBalance > 0 ? 1 : 0.55)
+
+            if balanceDetailsExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 0) {
+                        balanceStatItem(
+                            title: "Pending",
+                            value: PaymentsViewModel.formatUSD(viewModel.pendingBalance),
+                            valueColor: .white
+                        )
+                        balanceStatItem(
+                            title: "This month",
+                            value: "+\(PaymentsViewModel.formatUSD(viewModel.monthEarnings))",
+                            valueColor: .green
+                        )
+                        balanceStatItem(
+                            title: "Avg/week",
+                            value: PaymentsViewModel.formatUSD(viewModel.averageWeeklyEarnings),
+                            valueColor: .white
+                        )
+                    }
+
+                    Button {
+                        showWithdrawSheet = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "building.columns.fill")
+                            Text("Withdraw to bank")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.14))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.availableBalance <= 0)
+                    .opacity(viewModel.availableBalance > 0 ? 1 : 0.55)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(20)
         .background(
@@ -259,6 +299,16 @@ struct PaymentsView: View {
                 }
                 .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
                 #endif
+
+                PaymentCompactActionRow(
+                    icon: "creditcard.fill",
+                    iconColor: .purple,
+                    title: "Manual payment",
+                    subtitle: "",
+                    action: { showManualPaymentSheet = true },
+                    disabled: !viewModel.stripeConnected,
+                    showsDivider: true
+                )
 
                 PaymentCompactActionRow(
                     icon: "link",
@@ -464,9 +514,11 @@ struct PaymentCompactActionRow: View {
                         Text(title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(AppDesign.textPrimary)
-                        Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
+                        if !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                        }
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -571,6 +623,121 @@ struct PaymentsAllTransactionsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Manual Payment Sheet
+struct ManualPaymentSheet: View {
+    @ObservedObject var viewModel: PaymentsViewModel
+    var onDismiss: () -> Void
+    @State private var amountText = ""
+    @State private var localError: String?
+    @FocusState private var isAmountFocused: Bool
+
+    private static let suggestionAmounts: [(label: String, cents: Int)] = [
+        ("$25", 2500),
+        ("$50", 5000),
+        ("$100", 10_000),
+        ("$200", 20_000),
+    ]
+
+    private var serviceAmountCents: Int {
+        let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        return Int(round(value * 100))
+    }
+
+    private var checkout: CardCheckoutBreakdown {
+        viewModel.checkoutBreakdown(serviceCents: serviceAmountCents, channel: .online)
+    }
+
+    private var canOpen: Bool { serviceAmountCents >= 50 }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Text("Enter amount")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+
+                TextField("0.00", text: $amountText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title2.monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .focused($isAmountFocused)
+                    .padding(.horizontal, 24)
+
+                CardCheckoutBreakdownView(breakdown: checkout, alwaysShowFeeLines: true)
+                    .padding(.horizontal, 24)
+
+                if let localError, !localError.isEmpty {
+                    Text(localError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+
+                Button {
+                    Task { await openCheckout() }
+                } label: {
+                    HStack {
+                        if viewModel.isCreatingManualCheckoutLink {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Open checkout · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canOpen ? AppDesign.brandDark : Color.gray)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .disabled(!canOpen || viewModel.isCreatingManualCheckoutLink)
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 24)
+            .navigationTitle("Manual payment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { onDismiss() }
+                }
+                ToolbarItem(placement: .keyboard) {
+                    HStack(spacing: 12) {
+                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
+                            Button(item.label) {
+                                amountText = String(format: "%.2f", Double(item.cents) / 100)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .onAppear {
+                localError = nil
+                viewModel.errorMessage = nil
+            }
+        }
+    }
+
+    private func openCheckout() async {
+        localError = nil
+        do {
+            let url = try await viewModel.createManualCheckoutLink(serviceAmountCents: serviceAmountCents)
+            let opened = await UIApplication.shared.open(url)
+            if opened {
+                onDismiss()
+            } else {
+                localError = "Could not open checkout."
+            }
+        } catch {
+            localError = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 }

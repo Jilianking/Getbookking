@@ -172,12 +172,22 @@ class PaymentsViewModel: ObservableObject {
     @Published var isStudioPayroll = false
     @Published var paymentStripeScope = "tenant"
     @Published var isEnsuringTapToPayLocation = false
+    @Published var tapToPayDisplayNameDraft: String = ""
+    @Published var tapToPayDisplayNamePlaceholder: String = "Studio"
+    @Published var canEditTapToPayDisplayName = false
+    @Published var isSavingTapToPayDisplayName = false
+    @Published var tapToPayDisplayNameSaveSuccess = false
+    @Published var tapToPayRequireSignature = false
+    @Published var tapToPayReceiptPreferences = TapToPayReceiptPreferences()
+    @Published var isSavingTapToPaySettings = false
+    @Published var tapToPaySettingsSaveSuccess = false
     @Published var isLoading = false
     @Published var isConnectingStripe = false
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
     @Published var depositLinkUrl: String?
     @Published var isCreatingDepositLink = false
+    @Published var isCreatingManualCheckoutLink = false
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
     @Published var selectedTransaction: PaymentTransaction?
@@ -349,6 +359,7 @@ class PaymentsViewModel: ObservableObject {
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
+            await loadTapToPaySettings(uid: uid)
             if stripeConnected {
                 await loadBalance()
                 await loadTransactions()
@@ -386,6 +397,15 @@ class PaymentsViewModel: ObservableObject {
             if let scope = data?["paymentScope"] as? String, !scope.isEmpty {
                 paymentStripeScope = scope
             }
+            if let tapName = data?["tapToPayDisplayName"] as? String, !tapName.isEmpty {
+                TapToPayLocationStore.shared.updateMerchantDisplayName(tapName)
+            } else {
+                applyTapToPayMerchantDisplayNameToStore()
+            }
+            if let requireSig = data?["tapToPayRequireSignature"] as? Bool {
+                tapToPayRequireSignature = requireSig
+            }
+            applyTapToPayReceiptPreferences(from: data)
             if data?["studioPayroll"] as? Bool == true {
                 isStudioPayroll = true
                 canTakePayments = false
@@ -532,6 +552,41 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Stripe Payment Link for online card entry when Tap to Pay fails (PCI handled by Stripe checkout).
+    func createManualCheckoutLink(
+        serviceAmountCents: Int,
+        bookingRequestId: String? = nil
+    ) async throws -> URL {
+        guard serviceAmountCents >= 50 else {
+            throw NSError(
+                domain: "Payments",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Amount must be at least $0.50"]
+            )
+        }
+        isCreatingManualCheckoutLink = true
+        defer { isCreatingManualCheckoutLink = false }
+        var payload: [String: Any] = [
+            "serviceAmountCents": serviceAmountCents,
+            "productName": "Payment",
+            "productDescription": "Secure online card entry",
+            "paymentKind": "service",
+        ]
+        if let bookingRequestId, !bookingRequestId.isEmpty {
+            payload["bookingRequestId"] = bookingRequestId
+        }
+        let result = try await functions.httpsCallable("createDepositLink").call(payload)
+        let data = result.data as? [String: Any]
+        guard let urlString = data?["url"] as? String, let url = URL(string: urlString) else {
+            throw NSError(
+                domain: "Payments",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
+            )
+        }
+        return url
+    }
+
     func recordTenantPayment(paymentIntentId: String, bookingRequestId: String? = nil) async {
         guard !paymentIntentId.isEmpty else { return }
         do {
@@ -575,6 +630,197 @@ class PaymentsViewModel: ObservableObject {
         TapToPayLocationStore.shared.updateTenantLocationId(loc)
     }
 
+    /// Resolved customer-facing Tap to Pay label (draft or business-name fallback).
+    var effectiveTapToPayDisplayName: String {
+        let trimmed = tapToPayDisplayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        let fallback = tapToPayDisplayNamePlaceholder.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? "Studio" : fallback
+    }
+
+    private func loadTapToPaySettings(uid: String) async {
+        guard canTakePayments else {
+            canEditTapToPayDisplayName = false
+            tapToPayDisplayNameDraft = ""
+            tapToPayRequireSignature = false
+            tapToPayReceiptPreferences = TapToPayReceiptPreferences()
+            return
+        }
+        guard let tid = tenantId else {
+            canEditTapToPayDisplayName = false
+            return
+        }
+        let tenant = try? await firebaseService.fetchTenant(tenantId: tid)
+        let businessName = (tenant?["businessName"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        tapToPayDisplayNamePlaceholder = businessName.isEmpty ? "Studio" : businessName
+
+        if paymentStripeScope == "user" {
+            canEditTapToPayDisplayName = usesOwnPayments
+            guard usesOwnPayments else {
+                tapToPayDisplayNameDraft = ""
+                return
+            }
+            let userData = try? await firebaseService.fetchUserDocument(uid: uid)
+            tapToPayDisplayNameDraft = (userData?["tapToPayDisplayName"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            tapToPayRequireSignature = userData?["tapToPayRequireSignature"] as? Bool ?? false
+            tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(userData)
+        } else {
+            canEditTapToPayDisplayName = isTenantOwner
+            guard isTenantOwner else {
+                tapToPayDisplayNameDraft = ""
+                return
+            }
+            tapToPayDisplayNameDraft = (tenant?["tapToPayDisplayName"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            tapToPayRequireSignature = tenant?["tapToPayRequireSignature"] as? Bool ?? false
+            tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(tenant)
+        }
+        applyTapToPayMerchantDisplayNameToStore()
+    }
+
+    private func applyTapToPayReceiptPreferences(from data: [String: Any]?) {
+        if let parsed = TapToPayReceiptPreferences.fromCallableResponse(data) {
+            tapToPayReceiptPreferences = parsed
+            return
+        }
+        tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(data)
+    }
+
+    func saveTapToPayReceiptPreferences(_ preferences: TapToPayReceiptPreferences) async {
+        guard canEditTapToPayDisplayName else { return }
+        isSavingTapToPaySettings = true
+        tapToPaySettingsSaveSuccess = false
+        errorMessage = nil
+        defer { isSavingTapToPaySettings = false }
+        do {
+            let result = try await functions.httpsCallable("updateTapToPayDisplayName").call([
+                "receiptPreferences": [
+                    "delivery": preferences.delivery.rawValue,
+                    "showBusinessName": preferences.showBusinessName,
+                    "itemized": preferences.itemized,
+                    "customFooter": preferences.customFooter,
+                    "footerMessage": preferences.footerMessage,
+                ] as [String: Any]
+            ])
+            let data = result.data as? [String: Any]
+            applyTapToPayReceiptPreferences(from: data)
+            tapToPaySettingsSaveSuccess = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                tapToPaySettingsSaveSuccess = false
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+    }
+
+    func tapToPayReceiptBody(
+        amountCents: Int,
+        includesSignature: Bool = false,
+        clientName: String? = nil,
+        note: String? = nil
+    ) -> String {
+        let amount = Self.formatUSD(Double(amountCents) / 100)
+        var lines: [String] = []
+        if tapToPayReceiptPreferences.showBusinessName {
+            let name = effectiveTapToPayDisplayName
+            if !name.isEmpty { lines.append(name) }
+        }
+        lines.append("Payment receipt — \(amount)")
+        lines.append("Paid via Tap to Pay on iPhone.")
+        if tapToPayReceiptPreferences.itemized {
+            lines.append("Amount: \(amount)")
+        }
+        let trimmedClient = (clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedClient.isEmpty {
+            lines.append("Client: \(trimmedClient)")
+        }
+        let trimmedNote = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedNote.isEmpty {
+            lines.append(trimmedNote)
+        }
+        if includesSignature {
+            lines.append("Customer signature: on file")
+        }
+        if tapToPayReceiptPreferences.customFooter {
+            let footer = tapToPayReceiptPreferences.footerMessage
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !footer.isEmpty { lines.append(footer) }
+        }
+        lines.append("Thank you for your business.")
+        return lines.joined(separator: "\n")
+    }
+
+    private func applyTapToPayMerchantDisplayNameToStore(forceReconnect: Bool = false) {
+        TapToPayLocationStore.shared.updateMerchantDisplayName(
+            effectiveTapToPayDisplayName,
+            forceReconnect: forceReconnect
+        )
+    }
+
+    func saveTapToPayDisplayName() async {
+        guard canEditTapToPayDisplayName else { return }
+        let trimmed = tapToPayDisplayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSavingTapToPayDisplayName = true
+        tapToPayDisplayNameSaveSuccess = false
+        errorMessage = nil
+        defer { isSavingTapToPayDisplayName = false }
+        do {
+            let result = try await functions.httpsCallable("updateTapToPayDisplayName").call([
+                "displayName": trimmed
+            ])
+            let data = result.data as? [String: Any]
+            if let loc = data?["locationId"] as? String, !loc.isEmpty {
+                TapToPayLocationStore.shared.applyConnectStatus(
+                    terminalLocationId: loc,
+                    paymentScope: data?["paymentScope"] as? String ?? paymentStripeScope
+                )
+            }
+            if let resolved = data?["displayName"] as? String, !resolved.isEmpty {
+                TapToPayLocationStore.shared.updateMerchantDisplayName(resolved, forceReconnect: true)
+            } else {
+                applyTapToPayMerchantDisplayNameToStore(forceReconnect: true)
+            }
+            tapToPayDisplayNameSaveSuccess = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                tapToPayDisplayNameSaveSuccess = false
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+    }
+
+    func saveTapToPayPaymentSettings(requireSignature: Bool? = nil) async {
+        guard canEditTapToPayDisplayName else { return }
+        isSavingTapToPaySettings = true
+        tapToPaySettingsSaveSuccess = false
+        errorMessage = nil
+        defer { isSavingTapToPaySettings = false }
+        var payload: [String: Any] = [:]
+        if let requireSignature {
+            payload["requireSignature"] = requireSignature
+        }
+        guard !payload.isEmpty else { return }
+        do {
+            let result = try await functions.httpsCallable("updateTapToPayDisplayName").call(payload)
+            let data = result.data as? [String: Any]
+            if let sig = data?["requireSignature"] as? Bool {
+                tapToPayRequireSignature = sig
+            }
+            applyTapToPayReceiptPreferences(from: data)
+            tapToPaySettingsSaveSuccess = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                tapToPaySettingsSaveSuccess = false
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+    }
+
     #if TAP_TO_PAY_ENABLED
     /// Creates Stripe Terminal Location on the connected account if missing; returns `tml_…` id.
     @discardableResult
@@ -592,6 +838,9 @@ class PaymentsViewModel: ObservableObject {
                 terminalLocationId: locationId,
                 paymentScope: data?["paymentScope"] as? String ?? paymentStripeScope
             )
+        }
+        if let resolved = data?["displayName"] as? String, !resolved.isEmpty {
+            TapToPayLocationStore.shared.updateMerchantDisplayName(resolved)
         }
         guard !resolvedTapToPayLocationId.isEmpty else {
             throw NSError(

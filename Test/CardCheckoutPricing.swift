@@ -91,6 +91,7 @@ enum CardCheckoutPricing {
 
 struct CardCheckoutBreakdownView: View {
     let breakdown: CardCheckoutBreakdown
+    var alwaysShowFeeLines: Bool = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -99,14 +100,14 @@ struct CardCheckoutBreakdownView: View {
                 Spacer()
                 Text(CardCheckoutPricing.formatUSD(cents: breakdown.serviceCents))
             }
-            if breakdown.cardProcessingFeeCents > 0 {
+            if alwaysShowFeeLines || breakdown.cardProcessingFeeCents > 0 {
                 HStack {
                     Text("Card processing")
                     Spacer()
                     Text(CardCheckoutPricing.formatUSD(cents: breakdown.cardProcessingFeeCents))
                 }
             }
-            if breakdown.platformFeeCents > 0 {
+            if alwaysShowFeeLines || breakdown.platformFeeCents > 0 {
                 HStack {
                     Text("Platform fee (1%)")
                     Spacer()

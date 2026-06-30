@@ -10,31 +10,92 @@ import UIKit
 import FirebaseAuth
 import FirebaseFunctions
 
-struct PaymentTransaction: Identifiable {
+struct PaymentTransaction: Identifiable, Hashable {
     let id: String
-    let type: String // charge, payment, payout, refund, etc.
+    let type: String // charge, payment, payout, refund, adjustment, etc.
     let amount: Double
+    let grossAmount: Double
+    let feeAmount: Double
     let isCredit: Bool
     let customerName: String?
     let createdAt: Date?
     let status: String
+    let reportingCategory: String?
     /// Stripe charge ID when available; used for receipt and refund.
     let chargeId: String?
+
+    /// Platform fee credits from partial/full refunds — not customer-facing activity.
+    var isApplicationFeeRefundLine: Bool {
+        let desc = (customerName ?? "").lowercased()
+        if desc.contains("application fee refund") { return true }
+        let category = (reportingCategory ?? "").lowercased()
+        return type == "adjustment" && isCredit && category == "fee"
+    }
+
+    var showsInActivityFeed: Bool { !isApplicationFeeRefundLine }
+
+    var displayTitle: String {
+        if type == "refund" || isCustomerRefundLine {
+            return "Refund"
+        }
+        let trimmed = (customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
+        return channelLabel
+    }
+
+    private var isCustomerRefundLine: Bool {
+        !isCredit && (type == "refund" || (customerName ?? "").lowercased().contains("refund"))
+    }
+
+    var channelLabel: String {
+        if type == "refund" || isCustomerRefundLine {
+            return "Refund"
+        }
+        let desc = (customerName ?? "").lowercased()
+        if desc.contains("deposit") { return "Deposit" }
+        if desc.contains("tap to pay") || desc.contains("terminal") { return "Tap to Pay" }
+        switch type {
+        case "charge", "payment": return "Payment"
+        case "payout": return "Payout"
+        default:
+            if type == "adjustment" { return "Adjustment" }
+            return type.capitalized
+        }
+    }
+
+    var subtitleText: String {
+        guard let createdAt else { return channelLabel }
+        let datePart = Self.relativeDateString(for: createdAt)
+        return "\(channelLabel) · \(datePart)"
+    }
+
+    var initials: String {
+        Self.initials(from: displayTitle)
+    }
+
+    var isPaid: Bool { isCredit && status != "pending" }
 
     static func fromFirestoreDict(_ t: [String: Any]) -> PaymentTransaction? {
         guard let id = t["id"] as? String else { return nil }
         let typeStr = t["type"] as? String ?? "unknown"
         let netCents = (t["net"] as? NSNumber)?.intValue
             ?? (t["netCents"] as? NSNumber)?.intValue
-        let amountCents = (t["amount"] as? NSNumber)?.intValue
+        let grossCents = (t["amount"] as? NSNumber)?.intValue
             ?? (t["amountCents"] as? NSNumber)?.intValue
-        let resolvedNet = netCents ?? amountCents ?? 0
+        let feeCents = (t["fee"] as? NSNumber)?.intValue
+            ?? (t["feeCents"] as? NSNumber)?.intValue
+            ?? 0
+        let resolvedNet = netCents ?? grossCents ?? 0
         let isCredit = (t["isCredit"] as? Bool) ?? (resolvedNet > 0)
-        let displayCents = abs(netCents ?? amountCents ?? 0)
+        let displayCents = abs(netCents ?? grossCents ?? 0)
         let amount = Double(displayCents) / 100
+        let grossAmount = Double(abs(grossCents ?? displayCents)) / 100
+        let feeAmount = Double(abs(feeCents)) / 100
         let description = t["description"] as? String
+        let reportingCategory = (t["reportingCategory"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let created = (t["created"] as? NSNumber)?.intValue ?? 0
         let createdAt = created > 0 ? Date(timeIntervalSince1970: TimeInterval(created)) : nil
+        let statusRaw = (t["status"] as? String)?.lowercased() ?? "completed"
         let chargeIdRaw = (t["chargeId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let sourceId = (t["sourceId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let chargeId: String? = {
@@ -47,12 +108,38 @@ struct PaymentTransaction: Identifiable {
             id: id,
             type: typeStr,
             amount: amount,
+            grossAmount: grossAmount,
+            feeAmount: feeAmount,
             isCredit: isCredit,
             customerName: description,
             createdAt: createdAt,
-            status: "completed",
+            status: statusRaw,
+            reportingCategory: reportingCategory?.isEmpty == false ? reportingCategory : nil,
             chargeId: chargeId
         )
+    }
+
+    private static func relativeDateString(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "Today, \(date.formatted(date: .omitted, time: .shortened))"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday, \(date.formatted(date: .omitted, time: .shortened))"
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+
+    private static func initials(from name: String) -> String {
+        let parts = name.split(whereSeparator: { $0.isWhitespace || $0 == "·" || $0 == "-" })
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        if parts.isEmpty { return "?" }
+        if parts.count == 1 {
+            let word = parts[0]
+            return String(word.prefix(2)).uppercased()
+        }
+        return parts.prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
 }
 
@@ -74,7 +161,9 @@ class PaymentsViewModel: ObservableObject {
     @Published var stripeHasAccount: Bool = false
     @Published var stripeDetailsSubmitted: Bool = false
     /// Show Connect / complete-setup banner when onboarding isn't finished.
-    @Published var needsStripeConnect: Bool = true
+    @Published var needsStripeConnect: Bool = false
+    /// False until the first Stripe Connect status fetch completes (avoids connect banner flash while loading).
+    @Published var hasLoadedStripeStatus: Bool = false
     @Published var stripeStatusHint: String?
     @Published var tenantId: String?
     @Published var isTenantOwner = false
@@ -91,6 +180,54 @@ class PaymentsViewModel: ObservableObject {
     @Published var isCreatingDepositLink = false
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
+    @Published var selectedTransaction: PaymentTransaction?
+
+    var monthEarnings: Double {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) else {
+            return 0
+        }
+        return transactions
+            .filter {
+                $0.isCredit
+                    && $0.showsInActivityFeed
+                    && ($0.createdAt ?? .distantPast) >= monthStart
+            }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    var averageWeeklyEarnings: Double {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) else {
+            return 0
+        }
+        let days = max(1, calendar.dateComponents([.day], from: monthStart, to: now).day ?? 1)
+        let weeks = max(1.0, Double(days) / 7.0)
+        return monthEarnings / weeks
+    }
+
+    var displayTransactions: [PaymentTransaction] {
+        transactions.filter { $0.showsInActivityFeed }
+    }
+
+    var recentDisplayTransactions: [PaymentTransaction] {
+        Array(displayTransactions.prefix(5))
+    }
+
+    /// Kept for callers that only want inbound payments.
+    var recentCreditTransactions: [PaymentTransaction] {
+        Array(transactions.filter { $0.isCredit && $0.showsInActivityFeed }.prefix(5))
+    }
+
+    static func formatUSD(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.maximumFractionDigits = value.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 2
+        return formatter.string(from: NSNumber(value: value)) ?? "$0"
+    }
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -161,6 +298,7 @@ class PaymentsViewModel: ObservableObject {
                 availableBalance = Double(payments.availableBalanceCents) / 100
                 pendingBalance = Double(payments.pendingBalanceCents) / 100
                 transactions = payments.transactions.compactMap { PaymentTransaction.fromFirestoreDict($0) }
+                hasLoadedStripeStatus = true
                 isLoading = false
                 return
             }
@@ -169,6 +307,7 @@ class PaymentsViewModel: ObservableObject {
             stripeDetailsSubmitted = false
             needsStripeConnect = true
             stripeStatusHint = "Sign in with a real account to connect Stripe."
+            hasLoadedStripeStatus = true
             isLoading = false
             return
         }
@@ -177,6 +316,7 @@ class PaymentsViewModel: ObservableObject {
             stripeHasAccount = false
             stripeDetailsSubmitted = false
             needsStripeConnect = true
+            hasLoadedStripeStatus = true
             isLoading = false
             return
         }
@@ -189,6 +329,7 @@ class PaymentsViewModel: ObservableObject {
                 stripeDetailsSubmitted = false
                 needsStripeConnect = true
                 stripeStatusHint = "Complete business setup before connecting payments."
+                hasLoadedStripeStatus = true
                 isLoading = false
                 return
             }
@@ -278,6 +419,7 @@ class PaymentsViewModel: ObservableObject {
             needsStripeConnect = true
             stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
         }
+        hasLoadedStripeStatus = true
     }
 
     private func loadBalance() async {
@@ -509,31 +651,69 @@ class PaymentsViewModel: ObservableObject {
 
     /// Opens Stripe receipt for a charge in Safari.
     func openReceipt(chargeId: String) async {
+        guard let url = await fetchReceiptUrl(chargeId: chargeId) else { return }
+        await UIApplication.shared.open(url)
+    }
+
+    func fetchReceiptDetail(
+        chargeId: String,
+        fallbackTransaction: PaymentTransaction? = nil,
+        businessName: String = "Receipt"
+    ) async -> PaymentReceiptDetail? {
+        errorMessage = nil
+        do {
+            let result = try await functions.httpsCallable("getPaymentReceiptDetail").call(["chargeId": chargeId])
+            guard let data = result.data as? [String: Any],
+                  let detail = PaymentReceiptDetail.fromFirestoreDict(data) else {
+                if let txn = fallbackTransaction {
+                    return PaymentReceiptDetail.fallback(from: txn, businessName: businessName)
+                }
+                return nil
+            }
+            return detail
+        } catch {
+            if let txn = fallbackTransaction {
+                return PaymentReceiptDetail.fallback(from: txn, businessName: businessName)
+            }
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return nil
+        }
+    }
+
+    @MainActor
+    func receiptPDFURL(for detail: PaymentReceiptDetail) -> URL? {
+        PaymentReceiptPDFExporter.writePDF(detail: detail)
+    }
+
+    func fetchReceiptUrl(chargeId: String) async -> URL? {
         errorMessage = nil
         do {
             let result = try await functions.httpsCallable("getReceiptUrl").call(["chargeId": chargeId])
             let data = result.data as? [String: Any]
-            guard let urlString = data?["url"] as? String, let url = URL(string: urlString) else { return }
-            await UIApplication.shared.open(url)
+            guard let urlString = data?["url"] as? String, let url = URL(string: urlString) else { return nil }
+            return url
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return nil
         }
     }
 
-    /// Refund a charge. Pass nil amountCents for full refund.
-    func createRefund(chargeId: String, amountCents: Int? = nil, reason: String = "requested_by_customer") async {
+    /// Refund a charge. Pass nil amountCents for full refund. Returns true on success.
+    @discardableResult
+    func createRefund(chargeId: String, amountCents: Int? = nil, reason: String = "requested_by_customer") async -> Bool {
         isRefunding = true
         errorMessage = nil
+        defer { isRefunding = false }
         do {
             var params: [String: Any] = ["chargeId": chargeId, "reason": reason]
             if let amount = amountCents, amount > 0 { params["amountCents"] = amount }
             _ = try await functions.httpsCallable("createRefund").call(params)
-            isRefunding = false
             await loadBalance()
             await loadTransactions()
+            return true
         } catch {
-            isRefunding = false
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
         }
     }
 }

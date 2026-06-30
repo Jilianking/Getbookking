@@ -9,6 +9,7 @@ struct MessagesView: View {
     @State private var composePrefillPhone = ""
     @State private var composePrefillName = ""
     @State private var composePrefillBookingRequestId: String?
+    @State private var composePrefillMessage = ""
     @State private var searchText = ""
     @State private var showErrorAlert = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
@@ -66,7 +67,10 @@ struct MessagesView: View {
                                     : "No conversations match your search.")
                             } actions: {
                                 if searchText.isEmpty {
-                                    Button("New message") { showingCompose = true }
+                                    Button("New message") {
+                                        resetComposePrefill()
+                                        showingCompose = true
+                                    }
                                 }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,7 +128,10 @@ struct MessagesView: View {
                             }
                             .accessibilityLabel("Messaging settings")
 
-                            Button(action: { showingCompose = true }) {
+                            Button(action: {
+                                resetComposePrefill()
+                                showingCompose = true
+                            }) {
                                 Image(systemName: "square.and.pencil")
                                     .font(.body)
                             }
@@ -140,6 +147,7 @@ struct MessagesView: View {
                     prefillPhone: composePrefillPhone,
                     prefillClientName: composePrefillName,
                     prefillBookingRequestId: composePrefillBookingRequestId,
+                    prefillMessage: composePrefillMessage,
                     onSent: { threadId in
                         selectedThreadId = threadId
                     }
@@ -159,13 +167,7 @@ struct MessagesView: View {
             }
             .onChange(of: drawerState.messagesShouldOpenCompose) { _, shouldOpen in
                 guard shouldOpen else { return }
-                composePrefillPhone = drawerState.messagesComposePhone ?? ""
-                composePrefillName = drawerState.messagesComposeClientName ?? ""
-                composePrefillBookingRequestId = drawerState.messagesComposeBookingRequestId
-                drawerState.messagesComposePhone = nil
-                drawerState.messagesComposeClientName = nil
-                drawerState.messagesComposeBookingRequestId = nil
-                drawerState.messagesShouldOpenCompose = false
+                applyMessagesComposePrefill(from: drawerState)
                 selectedThreadId = nil
                 showingCompose = true
             }
@@ -183,13 +185,7 @@ struct MessagesView: View {
                     sessionStore: sessionStore
                 )
                 if drawerState.messagesShouldOpenCompose {
-                    composePrefillPhone = drawerState.messagesComposePhone ?? ""
-                    composePrefillName = drawerState.messagesComposeClientName ?? ""
-                    composePrefillBookingRequestId = drawerState.messagesComposeBookingRequestId
-                    drawerState.messagesComposePhone = nil
-                    drawerState.messagesComposeClientName = nil
-                    drawerState.messagesComposeBookingRequestId = nil
-                    drawerState.messagesShouldOpenCompose = false
+                    applyMessagesComposePrefill(from: drawerState)
                     showingCompose = true
                 }
             }
@@ -198,6 +194,25 @@ struct MessagesView: View {
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private func applyMessagesComposePrefill(from drawerState: DrawerState) {
+        composePrefillPhone = drawerState.messagesComposePhone ?? ""
+        composePrefillName = drawerState.messagesComposeClientName ?? ""
+        composePrefillBookingRequestId = drawerState.messagesComposeBookingRequestId
+        composePrefillMessage = drawerState.messagesComposeBody ?? ""
+        drawerState.messagesComposePhone = nil
+        drawerState.messagesComposeClientName = nil
+        drawerState.messagesComposeBookingRequestId = nil
+        drawerState.messagesComposeBody = nil
+        drawerState.messagesShouldOpenCompose = false
+    }
+
+    private func resetComposePrefill() {
+        composePrefillPhone = ""
+        composePrefillName = ""
+        composePrefillBookingRequestId = nil
+        composePrefillMessage = ""
     }
 }
 
@@ -469,6 +484,7 @@ struct ComposeMessageView: View {
     var prefillPhone: String = ""
     var prefillClientName: String = ""
     var prefillBookingRequestId: String?
+    var prefillMessage: String = ""
     var onSent: ((String) -> Void)?
     @Environment(\.dismiss) var dismiss
     @State private var showSendError = false
@@ -611,6 +627,9 @@ struct ComposeMessageView: View {
                 selectedClientName = prefillClientName
             }
             linkedBookingRequestId = prefillBookingRequestId
+            if message.isEmpty, !prefillMessage.isEmpty {
+                message = prefillMessage
+            }
             Task {
                 await sessionStore.loadBookingsIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 if linkedBookingRequestId == nil {
@@ -628,7 +647,9 @@ struct ComposeMessageView: View {
                     sessionStore: sessionStore
                 )
             }
-            if clientPhone.isEmpty {
+            if !prefillMessage.isEmpty {
+                toFieldFocused = true
+            } else if clientPhone.isEmpty {
                 toFieldFocused = true
             } else {
                 messageFieldFocused = true

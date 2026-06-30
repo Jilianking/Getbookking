@@ -1544,6 +1544,198 @@ exports.getReceiptUrl = functions
     return { url };
   });
 
+function receiptServiceLabel(paymentKind) {
+  const kind = (paymentKind || "deposit").toString().trim().toLowerCase();
+  if (kind === "deposit") return "Deposit";
+  if (kind === "service") return "Service";
+  return "Payment";
+}
+
+function receiptLineItemsFromAmounts({
+  serviceCents,
+  surchargeCents,
+  paymentKind,
+  grossCents,
+}) {
+  const service = Math.max(0, Math.round(Number(serviceCents) || 0));
+  const gross = Math.max(
+    service,
+    Math.round(Number(grossCents) || 0)
+  );
+  const surcharge = Math.max(
+    0,
+    Math.round(Number(surchargeCents) || 0) || gross - service
+  );
+  const items = [
+    {
+      name: receiptServiceLabel(paymentKind),
+      quantity: 1,
+      amountCents: service,
+    },
+  ];
+  if (surcharge > 0) {
+    const platform = platformFeeCents(gross);
+    const cardProcessing = Math.max(0, surcharge - platform);
+    if (cardProcessing > 0) {
+      items.push({
+        name: "Card processing",
+        quantity: 1,
+        amountCents: cardProcessing,
+      });
+    }
+    if (platform > 0) {
+      items.push({
+        name: "Platform fee (1%)",
+        quantity: 1,
+        amountCents: platform,
+      });
+    }
+  }
+  return items;
+}
+
+async function findPaymentLedgerEntry(tenantId, { paymentIntentId, chargeId }) {
+  const tid = (tenantId || "").toString().trim();
+  if (!tid) return null;
+  const piId = (paymentIntentId || "").toString().trim();
+  if (piId) {
+    const direct = await db
+      .collection("tenants")
+      .doc(tid)
+      .collection("paymentLedger")
+      .doc(piId)
+      .get();
+    if (direct.exists) return direct.data();
+  }
+  const chId = (chargeId || "").toString().trim();
+  if (chId) {
+    const snap = await db
+      .collection("tenants")
+      .doc(tid)
+      .collection("paymentLedger")
+      .where("chargeId", "==", chId)
+      .limit(1)
+      .get();
+    if (!snap.empty) return snap.docs[0].data();
+  }
+  return null;
+}
+
+/**
+ * Returns structured receipt data for in-app display, PDF export, and sharing.
+ * Params: { chargeId: string }
+ */
+exports.getPaymentReceiptDetail = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const chargeId = (data?.chargeId || "").toString().trim();
+    if (!chargeId || !chargeId.startsWith("ch_")) {
+      throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
+    }
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const charge = await stripe.charges.retrieve(
+      chargeId,
+      { expand: ["payment_intent"] },
+      { stripeAccount: stripeAccountId }
+    );
+    const pi =
+      charge.payment_intent && typeof charge.payment_intent === "object"
+        ? charge.payment_intent
+        : null;
+    const meta = {
+      ...(pi?.metadata || {}),
+      ...(charge.metadata || {}),
+    };
+    const tenantId = (meta.tenantId || payCtx.tenantId || "").toString().trim();
+    if (!tenantId) {
+      throw new functions.https.HttpsError("failed-precondition", "No business linked to this payment.");
+    }
+
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const tenant = tenantSnap.exists ? tenantSnap.data() : {};
+    const businessName =
+      (tenant.businessName || tenant.displayName || "Receipt").toString().trim() ||
+      "Receipt";
+
+    const paymentIntentId =
+      pi?.id ||
+      (typeof charge.payment_intent === "string" ? charge.payment_intent : null);
+    const ledger = await findPaymentLedgerEntry(tenantId, {
+      paymentIntentId,
+      chargeId,
+    });
+
+    const bookingRequestId = (meta.bookingRequestId || "").toString().trim();
+    let customerName =
+      (charge.billing_details?.name || "").toString().trim() || null;
+    let customerEmail =
+      (charge.billing_details?.email || "").toString().trim() || null;
+    let serviceName = null;
+    if (bookingRequestId) {
+      const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
+      if (booking) {
+        customerName =
+          (booking.customerName || customerName || "").toString().trim() || customerName;
+        customerEmail =
+          (booking.customerEmail || customerEmail || "").toString().trim() || customerEmail;
+        serviceName = (booking.serviceName || "").toString().trim() || null;
+      }
+    }
+
+    const paymentKind = (meta.paymentKind || ledger?.paymentKind || "deposit").toString();
+    let serviceCents = parseInt(meta.serviceAmountCents, 10);
+    let surchargeCents = parseInt(meta.surchargeCents, 10);
+    let grossCents = charge.amount || 0;
+
+    if (ledger) {
+      if (ledger.serviceCents > 0) serviceCents = ledger.serviceCents;
+      if (ledger.surchargeCents >= 0) surchargeCents = ledger.surchargeCents;
+      if (ledger.grossCents > 0) grossCents = ledger.grossCents;
+    }
+    if (Number.isNaN(serviceCents) || serviceCents <= 0) {
+      serviceCents = Math.max(0, grossCents - (Number.isNaN(surchargeCents) ? 0 : surchargeCents));
+    }
+    if (Number.isNaN(surchargeCents)) {
+      surchargeCents = Math.max(0, grossCents - serviceCents);
+    }
+
+    const lineItems = receiptLineItemsFromAmounts({
+      serviceCents,
+      surchargeCents,
+      paymentKind,
+      grossCents,
+    });
+
+    const serviceLabel = serviceName || receiptServiceLabel(paymentKind);
+
+    return {
+      businessName,
+      receiptNumber: charge.receipt_number || null,
+      paidAt: charge.created || null,
+      customerName,
+      customerEmail,
+      serviceLabel,
+      paymentKind,
+      lineItems,
+      totalPaidCents: grossCents,
+      serviceCents,
+      providerReceivedCents: serviceCents,
+      stripeReceiptUrl: charge.receipt_url || null,
+    };
+  });
+
 /**
  * Creates a refund for a charge on the Connect account.
  * Params: { chargeId: string, amountCents?: number, reason?: string }.

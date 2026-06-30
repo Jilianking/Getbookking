@@ -16,17 +16,17 @@ struct PaymentsView: View {
     @State private var tapToPayAlertMessage: String?
     #endif
     @State private var showWithdrawSheet = false
+    @State private var showAllTransactions = false
     var drawerState: DrawerState
     let sectionTitle: String
 
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    paymentsIntro
+                VStack(alignment: .leading, spacing: 24) {
                     if viewModel.isStudioPayroll {
                         studioPayrollBanner
-                    } else if viewModel.needsStripeConnect {
+                    } else if viewModel.needsStripeConnect && viewModel.hasLoadedStripeStatus {
                         StripeConnectBanner(
                             viewModel: viewModel,
                             isDemoMode: authViewModel.isDemoMode
@@ -38,70 +38,17 @@ struct PaymentsView: View {
                             .padding(.horizontal)
                     }
 
-                    #if TAP_TO_PAY_ENABLED
-                    if viewModel.canTakePayments {
-                        PaymentActionCard(
-                            icon: "wave.3.right.circle.fill",
-                            iconColor: .blue,
-                            title: "Tap to Pay on iPhone",
-                            subtitle: tapToPayCardSubtitle,
-                            action: { handleTapToPayTapped() }
-                        )
-                        .overlay {
-                            if viewModel.isEnsuringTapToPayLocation {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(AppDesign.cardBackground.opacity(0.85))
-                                ProgressView()
-                            }
-                        }
-                        .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
+                    if viewModel.hasLoadedStripeStatus && viewModel.stripeConnected && viewModel.canTakePayments {
+                        paymentsBalanceHero
                     }
-                    #endif
 
                     if viewModel.canTakePayments {
-                    // Deposit Link
-                    PaymentActionCard(
-                        icon: "link",
-                        iconColor: .green,
-                        title: "Deposit Link",
-                        subtitle: "Generate a link to request a deposit from customers",
-                        action: { showDepositLinkSheet = true },
-                        disabled: !viewModel.stripeConnected
-                    )
-
-                    // Withdraw to Bank
-                    Button(action: { showWithdrawSheet = true }) {
-                        HStack(spacing: 16) {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.green.opacity(0.2))
-                                .frame(width: 48, height: 48)
-                                .overlay(Image(systemName: "arrow.down.to.line").foregroundColor(.green))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Withdraw to bank")
-                                    .font(.subheadline.weight(.semibold))
-                                Text(formatCurrency(viewModel.availableBalance))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("Transfer to your connected account")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(16)
-                        .appCard()
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!viewModel.stripeConnected || viewModel.availableBalance <= 0)
-                    .opacity((viewModel.stripeConnected && viewModel.availableBalance > 0) ? 1 : 0.6)
-                    .padding(.horizontal)
+                        acceptPaymentsSection
                     }
 
-                    paymentsRecentActivity
+                    paymentsRecentTransactions
                 }
-                .padding(.vertical, 20)
+                .padding(.vertical, 16)
             }
             .appScreenBackground()
             .appNavigationChrome()
@@ -152,6 +99,16 @@ struct PaymentsView: View {
                     showWithdrawSheet = false
                 }
             }
+            .sheet(item: $viewModel.selectedTransaction) { transaction in
+                PaymentTransactionDetailSheet(
+                    transaction: transaction,
+                    viewModel: viewModel,
+                    drawerState: drawerState
+                )
+            }
+            .sheet(isPresented: $showAllTransactions) {
+                PaymentsAllTransactionsSheet(viewModel: viewModel)
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -201,18 +158,173 @@ struct PaymentsView: View {
     }
     #endif
 
-    private var paymentsIntro: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Accept payments and manage your earnings")
-                .font(.subheadline)
+    private var paymentsBalanceHero: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("AVAILABLE BALANCE")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.65))
+                Text(PaymentsViewModel.formatUSD(viewModel.availableBalance))
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+
+            HStack(spacing: 0) {
+                balanceStatItem(
+                    title: "This month",
+                    value: "+\(PaymentsViewModel.formatUSD(viewModel.monthEarnings))",
+                    valueColor: .green
+                )
+                balanceStatItem(
+                    title: "Pending",
+                    value: PaymentsViewModel.formatUSD(viewModel.pendingBalance),
+                    valueColor: .white
+                )
+                balanceStatItem(
+                    title: "Avg/week",
+                    value: PaymentsViewModel.formatUSD(viewModel.averageWeeklyEarnings),
+                    valueColor: .white
+                )
+            }
+
+            Button {
+                showWithdrawSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "building.columns.fill")
+                    Text("Withdraw to bank")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.white.opacity(0.14))
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.availableBalance <= 0)
+            .opacity(viewModel.availableBalance > 0 ? 1 : 0.55)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.12, green: 0.12, blue: 0.14), Color(red: 0.08, green: 0.08, blue: 0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .padding(.horizontal)
+    }
+
+    private func balanceStatItem(title: String, value: String, valueColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(Color.white.opacity(0.55))
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var acceptPaymentsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Accept payments")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppDesign.textSecondary)
-            if viewModel.stripeConnected {
-                Text("Customers pay a processing fee at checkout so you receive the full service amount.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal)
+
+            VStack(spacing: 0) {
+                #if TAP_TO_PAY_ENABLED
+                PaymentCompactActionRow(
+                    icon: "wave.3.right.circle.fill",
+                    iconColor: .blue,
+                    title: "Tap to Pay on iPhone",
+                    subtitle: "Contactless cards & wallets",
+                    action: { handleTapToPayTapped() },
+                    disabled: !viewModel.stripeConnected,
+                    showsDivider: true
+                )
+                .overlay {
+                    if viewModel.isEnsuringTapToPayLocation {
+                        ProgressView()
+                    }
+                }
+                .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
+                #endif
+
+                PaymentCompactActionRow(
+                    icon: "link",
+                    iconColor: .green,
+                    title: "Deposit link",
+                    subtitle: "Request a deposit via text",
+                    action: { showDepositLinkSheet = true },
+                    disabled: !viewModel.stripeConnected,
+                    showsDivider: false
+                )
+            }
+            .appCard()
+            .padding(.horizontal)
+        }
+    }
+
+    private var paymentsRecentTransactions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Recent transactions")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                if viewModel.displayTransactions.count > 5 {
+                    Button("See all") { showAllTransactions = true }
+                        .font(.subheadline.weight(.medium))
+                }
+            }
+            .padding(.horizontal)
+
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .appCard()
+                    .padding(.horizontal)
+            } else if viewModel.displayTransactions.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text("No transactions yet")
+                        .font(.subheadline.weight(.medium))
+                    Text("When customers pay deposits or for services, they'll appear here")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(32)
+                .appCard()
+                .padding(.horizontal)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(viewModel.recentDisplayTransactions.enumerated()), id: \.element.id) { index, txn in
+                        PaymentTransactionRow(transaction: txn) {
+                            viewModel.selectedTransaction = txn
+                        }
+                        if index < viewModel.recentDisplayTransactions.count - 1 {
+                            Divider().padding(.leading, 68)
+                        }
+                    }
+                }
+                .appCard()
+                .padding(.horizontal)
             }
         }
-        .padding(.horizontal)
     }
 
     private var studioPayrollBanner: some View {
@@ -233,53 +345,6 @@ struct PaymentsView: View {
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(12)
         .padding(.horizontal)
-    }
-
-    private var paymentsRecentActivity: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recent activity")
-                .font(.title3.weight(.bold))
-                .padding(.horizontal)
-
-            if viewModel.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(24)
-                    .appCard()
-                    .padding(.horizontal)
-            } else if viewModel.transactions.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                    Text("No transactions yet")
-                        .font(.subheadline.weight(.medium))
-                    Text("When customers pay deposits or for services, they'll appear here")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(32)
-                .appCard()
-                .padding(.horizontal)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(viewModel.transactions) { txn in
-                        PaymentTransactionRow(transaction: txn, viewModel: viewModel)
-                    }
-                }
-                .appCard()
-                .padding(.horizontal)
-            }
-        }
-    }
-
-    private func formatCurrency(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 }
 
@@ -378,91 +443,135 @@ struct PaymentActionCard: View {
     }
 }
 
+struct PaymentCompactActionRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+    var disabled: Bool = false
+    var showsDivider: Bool = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 14) {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(iconColor.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                        .overlay(Image(systemName: icon).foregroundStyle(iconColor))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.plain)
+            .disabled(disabled)
+            .opacity(disabled ? 0.55 : 1)
+
+            if showsDivider {
+                Divider().padding(.leading, 74)
+            }
+        }
+    }
+}
+
 struct PaymentTransactionRow: View {
     let transaction: PaymentTransaction
-    @ObservedObject var viewModel: PaymentsViewModel
-    @State private var showRefundConfirm = false
+    var onTap: () -> Void
 
-    private var typeLabel: String {
-        switch transaction.type {
-        case "charge", "payment": return "Payment"
-        case "payout": return "Payout"
-        case "refund": return "Refund"
-        default: return transaction.type.capitalized
-        }
+    private var avatarFill: Color {
+        if !transaction.isCredit { return Color.orange.opacity(0.15) }
+        return Color.orange.opacity(0.15)
+    }
+
+    private var amountColor: Color {
+        if transaction.isCredit { return .green }
+        return Color.orange
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                guard let chargeId = transaction.chargeId else { return }
-                Task { await viewModel.openReceipt(chargeId: chargeId) }
-            } label: {
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(transaction.isCredit ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Image(systemName: transaction.isCredit ? "arrow.down" : "arrow.up")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(transaction.isCredit ? .green : .orange)
-                        )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(transaction.customerName ?? typeLabel)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Text(transaction.createdAt?.formatted(.dateTime) ?? "")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+        Button(action: onTap) {
+            HStack(spacing: 14) {
+                Circle()
+                    .fill(avatarFill)
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        if transaction.type == "refund" || (!transaction.isCredit && transaction.channelLabel == "Refund") {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.orange)
+                        } else {
+                            Text(transaction.initials)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.orange)
+                        }
                     }
-                    Spacer()
-                    Text("\(transaction.isCredit ? "+" : "-")\(formatAmount(transaction.amount))")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(transaction.displayTitle)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundColor(transaction.isCredit ? .green : .primary)
-                    if transaction.chargeId != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .lineLimit(1)
+                    Text(transaction.subtitleText)
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 8)
+                Text("\(transaction.isCredit ? "+" : "-")\(PaymentsViewModel.formatUSD(transaction.amount))")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(amountColor)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .buttonStyle(.plain)
-            .disabled(transaction.chargeId == nil)
-
-            if let chargeId = transaction.chargeId {
-                HStack(spacing: 12) {
-                    Button(action: { Task { await viewModel.openReceipt(chargeId: chargeId) } }) {
-                        Label("Receipt", systemImage: "doc.text")
-                            .font(.caption)
-                    }
-                    .disabled(viewModel.isRefunding)
-                    Button(action: { showRefundConfirm = true }) {
-                        Label("Refund", systemImage: "arrow.uturn.backward")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                    .disabled(viewModel.isRefunding)
-                    Spacer()
-                }
-                .padding(.leading, 52)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .padding()
-        .confirmationDialog("Refund", isPresented: $showRefundConfirm) {
-            Button("Full refund", role: .destructive) {
-                Task { await viewModel.createRefund(chargeId: transaction.chargeId!) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Refund this payment?")
-        }
+        .buttonStyle(.plain)
     }
+}
 
-    private func formatAmount(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return formatter.string(from: NSNumber(value: value)) ?? "$0"
+struct PaymentsAllTransactionsSheet: View {
+    @ObservedObject var viewModel: PaymentsViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(viewModel.displayTransactions.enumerated()), id: \.element.id) { index, txn in
+                        PaymentTransactionRow(transaction: txn) {
+                            viewModel.selectedTransaction = txn
+                        }
+                        if index < viewModel.displayTransactions.count - 1 {
+                            Divider().padding(.leading, 68)
+                        }
+                    }
+                }
+                .appCard()
+                .padding(16)
+            }
+            .appScreenBackground()
+            .navigationTitle("All transactions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 

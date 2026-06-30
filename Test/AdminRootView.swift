@@ -95,10 +95,11 @@ final class DrawerState {
     var selectedSection: AdminSection = .dashboard
     /// Opens a specific customer profile in Clients (Firestore doc id).
     var customersDetailClientId: String?
-    /// Prefill Messages compose from customer profile.
+    /// Prefill Messages compose from customer profile or receipt share.
     var messagesComposePhone: String?
     var messagesComposeClientName: String?
     var messagesComposeBookingRequestId: String?
+    var messagesComposeBody: String?
     var messagesShouldOpenCompose = false
 }
 

@@ -16,6 +16,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
+  <script src="https://js.stripe.com/v3/"></script>
   <style>
     @font-face {
       font-family: 'Foglihten No06';
@@ -1236,28 +1237,24 @@
     .stonecut-page .bk-team-card { background: rgba(6, 6, 4, 0.55); border: 1px solid rgba(232, 224, 208, 0.1); }
     .stonecut-page .bk-team-picker-any { border-color: rgba(232, 224, 208, 0.2); color: var(--bk-fg, #e8e0d0); }
     .stonecut-page .bk-team-section h2 { color: var(--bk-fg, #e8e0d0); font-family: 'Unbounded', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; font-size: 1.1rem; }
-    /* Studio/Shop roster: /team page + home “Meet the team” strip (editorial template) */
+    /* Studio/Shop roster: /team page + home “Meet the team” strip (theme-aware) */
     .bk-team-roster-section {
-      --bk-team-roster-bg: #e8dcc8;
-      --bk-team-roster-fg: #2c241c;
-      --bk-team-roster-photo-bg: #f5efe6;
-      --bk-team-roster-initials: #3d3530;
-      --bk-team-roster-name: #a89e96;
-      --bk-team-roster-role: #2c241c;
-      --bk-team-roster-bio: #4a423c;
-      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+      --bk-team-roster-font: var(--font-display);
+      --bk-team-roster-card-bg: #fff;
+      --bk-team-roster-card-fg: var(--bk-fg);
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 6%, var(--bk-card) 94%);
+      --bk-team-roster-initials: var(--bk-fg);
+      --bk-team-roster-name: color-mix(in srgb, var(--bk-fg) 58%, transparent);
+      --bk-team-roster-role: var(--bk-fg);
+      --bk-team-roster-bio: color-mix(in srgb, var(--bk-fg) 72%, transparent);
+      --bk-team-roster-scroll-bg: var(--bk-fg);
+      --bk-team-roster-scroll-fg: var(--bk-bg);
       padding: 72px 24px 56px;
-      background: var(--bk-team-roster-bg) !important;
-      color: var(--bk-team-roster-fg) !important;
       font-family: var(--bk-team-roster-font);
-    }
-    .bk-team-page-band[data-bk-color-surface="about"],
-    .bk-team-page-band .bk-team-roster-section[data-bk-color-surface="about"] {
-      background: var(--bk-team-roster-bg, #e8dcc8) !important;
-      color: var(--bk-team-roster-fg, #2c241c) !important;
     }
     .bk-team-roster-section--home { padding: 64px 24px 48px; }
     .bk-team-roster-section--page { padding-bottom: 40px; }
+    .bk-team-page-band .bk-team-roster-section--page { padding-top: 0; }
     .bk-team-roster-head {
       text-align: center;
       max-width: 720px;
@@ -1269,7 +1266,7 @@
       font-weight: 400;
       margin: 0 0 14px;
       letter-spacing: 0.01em;
-      color: var(--bk-team-roster-fg);
+      color: inherit;
     }
     .bk-team-roster-subtitle {
       font-family: var(--bk-team-roster-font);
@@ -1277,7 +1274,7 @@
       font-size: clamp(1.05rem, 2vw, 1.2rem);
       font-weight: 400;
       margin: 0;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 78%, transparent);
+      color: color-mix(in srgb, currentColor 78%, transparent);
     }
     .bk-team-roster-grid {
       display: grid;
@@ -1288,8 +1285,8 @@
     }
     .bk-team-roster-card {
       margin: 0;
-      background: #fff;
-      box-shadow: 0 2px 16px rgba(44, 36, 28, 0.06);
+      background: var(--bk-team-roster-card-bg, #fff);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
     }
     .bk-team-roster-card-link {
       display: block;
@@ -1325,10 +1322,10 @@
       color: color-mix(in srgb, var(--bk-team-roster-initials) 55%, transparent);
     }
     .bk-team-roster-body {
-      background: #fff;
+      background: var(--bk-team-roster-card-bg, #fff);
       padding: 22px 20px 26px;
       text-align: center;
-      color: var(--bk-team-roster-role);
+      color: var(--bk-team-roster-card-fg, var(--bk-fg));
     }
     .bk-team-roster-name {
       font-family: var(--bk-team-roster-font);
@@ -1364,7 +1361,7 @@
     }
     .bk-team-roster-view-all a {
       font-family: var(--bk-team-roster-font);
-      color: var(--bk-team-roster-fg);
+      color: inherit;
       text-decoration: none;
       font-size: 1rem;
       border-bottom: 1px solid currentColor;
@@ -1380,8 +1377,8 @@
       height: 44px;
       border-radius: 50%;
       border: 0;
-      background: #2c241c;
-      color: #f7f5f0;
+      background: var(--bk-team-roster-scroll-bg, var(--bk-fg));
+      color: var(--bk-team-roster-scroll-fg, var(--bk-bg));
       font-size: 1.15rem;
       line-height: 1;
       cursor: pointer;
@@ -1405,29 +1402,154 @@
     }
     .bk-team-page {
       min-height: 100vh;
-      background: var(--bk-team-roster-bg, #e8dcc8);
-      color: var(--bk-team-roster-fg, #2c241c);
+      background: var(--bk-bg);
+      color: var(--bk-fg);
       font-family: var(--font-display);
     }
     .bk-team-page-band {
       padding-top: 88px;
-      background: var(--bk-team-roster-bg, #e8dcc8) !important;
     }
     .bk-team-page.luxe-page--sub .bk-team-page-band,
     .bk-team-page.classic-home .bk-team-page-band { padding-top: 72px; }
-    .bk-team-page--stonecut .bk-team-roster-section,
-    .bk-team-page.blade-page .bk-team-roster-section {
-      --bk-team-roster-bg: #e8dcc8;
-      --bk-team-roster-fg: #2c241c;
-      background: var(--bk-team-roster-bg) !important;
-      color: var(--bk-team-roster-fg) !important;
+    /* Blade */
+    .bk-team-roster-section--blade {
+      --bk-team-roster-card-bg: var(--bk-bg);
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 5%, var(--bk-bg));
+      --bk-team-roster-name: var(--bk-fg-muted);
+      padding: 80px 40px 64px;
     }
-    .bk-team-page--stonecut .bk-team-roster-body,
-    .bk-team-page.blade-page .bk-team-roster-body {
-      background: #fff;
-      border: none;
+    .bk-team-roster-section--blade .bk-team-roster-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 4.5vw, 64px);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 400;
+      line-height: 1;
+      margin-bottom: 12px;
     }
-    .bk-team-page.blade-page .bk-team-roster-role { color: var(--bk-team-roster-role); opacity: 1; }
+    .bk-team-roster-section--blade .bk-team-roster-subtitle {
+      font-style: normal;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+      color: var(--bk-fg-muted);
+    }
+    .bk-team-roster-section--blade .bk-team-roster-card {
+      border: 1px solid rgba(245, 240, 232, 0.08);
+      box-shadow: none;
+    }
+    .bk-team-roster-section--blade .bk-team-roster-scroll-btn {
+      --bk-team-roster-scroll-bg: var(--bk-accent);
+      --bk-team-roster-scroll-fg: var(--bk-accent-fg);
+    }
+    /* Stonecut */
+    .bk-team-roster-section--stonecut {
+      --bk-team-roster-card-bg: var(--bk-card);
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 6%, var(--bk-card));
+      --bk-team-roster-name: var(--bk-fg-muted);
+      padding: 96px 40px 72px;
+    }
+    .bk-team-roster-section--stonecut .bk-team-roster-title {
+      font-family: var(--sc-display-font);
+      font-weight: var(--sc-display-weight);
+      letter-spacing: var(--sc-display-tracking);
+      line-height: var(--sc-display-lh);
+      font-size: clamp(30px, 4.2vw, 58px);
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .bk-team-roster-section--stonecut .bk-team-roster-subtitle {
+      font-style: normal;
+      font-size: 9px;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: var(--bk-accent);
+      font-weight: 400;
+      margin-bottom: 18px;
+    }
+    .bk-team-roster-section--stonecut .bk-team-roster-card {
+      border: 1px solid rgba(232, 224, 208, 0.08);
+      box-shadow: none;
+    }
+    .bk-team-roster-section--stonecut .bk-team-roster-scroll-btn {
+      --bk-team-roster-scroll-bg: var(--bk-accent);
+      --bk-team-roster-scroll-fg: var(--bk-accent-fg);
+    }
+    /* Luxe */
+    .bk-team-roster-section--luxe {
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-accent) 10%, var(--bk-card));
+      padding: 80px 40px 64px;
+    }
+    .bk-team-roster-section--luxe .bk-team-roster-title {
+      font-family: var(--font-hero);
+      font-size: clamp(1.75rem, 3.5vw, 2rem);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .bk-team-roster-section--luxe .bk-team-roster-subtitle {
+      font-style: normal;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--bk-accent);
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    .bk-team-roster-section--luxe .bk-team-roster-name {
+      font-weight: 600;
+      color: var(--bk-fg);
+    }
+    .bk-team-roster-section--luxe .bk-team-roster-role {
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--bk-fg-muted);
+    }
+    .bk-team-roster-section--luxe .bk-team-roster-bio {
+      font-style: normal;
+      color: var(--bk-fg-muted);
+    }
+    /* Studio 12 */
+    .bk-team-roster-section--studio12 {
+      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 5%, var(--bk-card));
+      padding: 96px 40px 72px;
+    }
+    .bk-team-roster-section--studio12 .bk-team-roster-subtitle {
+      font-size: 9px;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      font-style: normal;
+      color: var(--s12-clay, var(--bk-accent));
+      margin-bottom: 16px;
+    }
+    .bk-team-roster-section--studio12 .bk-team-roster-title {
+      font-size: clamp(36px, 4vw, 56px);
+      font-weight: 300;
+      line-height: 1.05;
+      margin-bottom: 52px;
+    }
+    /* Classic / portfolio */
+    .bk-team-roster-section--classic {
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 5%, var(--bk-card));
+      padding: 64px 24px 56px;
+    }
+    .bk-team-roster-section--classic .bk-team-roster-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.75rem, 3.5vw, 2.2rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .bk-team-roster-section--classic .bk-team-roster-subtitle {
+      font-style: normal;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--bk-accent);
+      font-weight: 600;
+      margin: 0 0 10px;
+    }
+    .bk-team-roster-section--classic .bk-team-roster-bio {
+      font-style: normal;
+    }
     @media (max-width: 900px) {
       .bk-team-roster-grid { grid-template-columns: repeat(2, 1fr); }
     }
@@ -1444,15 +1566,34 @@
       text-underline-offset: 6px;
     }
     .bk-team-member-section {
-      --bk-team-roster-bg: #e8dcc8;
-      --bk-team-roster-fg: #2c241c;
-      --bk-team-roster-photo-bg: #ddd0bc;
-      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+      --bk-team-roster-font: var(--font-display);
+      --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 6%, var(--bk-card) 94%);
       max-width: 1080px;
       margin: 0 auto;
       padding: 40px 24px 72px;
       font-family: var(--bk-team-roster-font);
-      color: var(--bk-team-roster-fg);
+      color: inherit;
+    }
+    .bk-team-member-section--studio12 {
+      --bk-team-roster-font: 'Cormorant Garamond', 'Libre Baskerville', Georgia, serif;
+    }
+    .bk-team-member-section--blade .bk-team-member-name {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .bk-team-member-section--stonecut .bk-team-member-name {
+      font-family: var(--sc-display-font);
+      text-transform: uppercase;
+      letter-spacing: var(--sc-display-tracking);
+    }
+    .bk-team-member-section--luxe .bk-team-member-name {
+      font-family: var(--font-hero);
+      font-weight: 700;
+    }
+    .bk-team-member-section--studio12 .bk-team-member-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
     }
     .bk-team-member-hero {
       display: grid;
@@ -1481,7 +1622,7 @@
       font-size: clamp(3rem, 10vw, 5rem);
       font-weight: 400;
       letter-spacing: 0.08em;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 35%, transparent);
+      color: color-mix(in srgb, currentColor 35%, transparent);
     }
     .bk-team-member-badge {
       position: absolute;
@@ -1504,7 +1645,7 @@
       font-weight: 400;
       line-height: 1.05;
       margin: 0 0 12px;
-      color: var(--bk-team-roster-fg);
+      color: inherit;
     }
     .bk-team-member-role {
       font-family: system-ui, -apple-system, sans-serif;
@@ -1512,7 +1653,7 @@
       font-weight: 500;
       letter-spacing: 0.16em;
       text-transform: uppercase;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 72%, transparent);
+      color: color-mix(in srgb, currentColor 72%, transparent);
       margin: 0 0 24px;
     }
     .bk-team-member-bio {
@@ -1520,7 +1661,7 @@
       font-size: clamp(1.05rem, 2vw, 1.2rem);
       line-height: 1.65;
       font-weight: 400;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 88%, transparent);
+      color: color-mix(in srgb, currentColor 88%, transparent);
       margin: 0 0 32px;
       max-width: 38em;
     }
@@ -1534,14 +1675,14 @@
       letter-spacing: 0.14em;
       text-transform: uppercase;
       text-decoration: none;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 65%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--bk-team-roster-fg) 35%, transparent);
+      color: color-mix(in srgb, currentColor 65%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, currentColor 35%, transparent);
       padding-bottom: 4px;
       transition: color 0.15s ease, border-color 0.15s ease;
     }
     .bk-team-member-book:hover {
-      color: var(--bk-team-roster-fg);
-      border-color: var(--bk-team-roster-fg);
+      color: inherit;
+      border-color: currentColor;
     }
     .bk-team-member-work-title {
       font-family: system-ui, -apple-system, sans-serif;
@@ -1549,7 +1690,7 @@
       font-weight: 500;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 55%, transparent);
+      color: color-mix(in srgb, currentColor 55%, transparent);
       margin: 0 0 24px;
       text-align: center;
     }
@@ -1582,7 +1723,7 @@
     .bk-team-member-work-empty {
       text-align: center;
       font-style: italic;
-      color: color-mix(in srgb, var(--bk-team-roster-fg) 60%, transparent);
+      color: color-mix(in srgb, currentColor 60%, transparent);
       margin: 0;
     }
     .bk-team-member-scroll-hint {
@@ -2253,6 +2394,15 @@
       padding: 48px clamp(20px, 5vw, 40px) 32px;
       text-align: center;
     }
+    /* Classic: match nav wordmark `.classic-home .tattoo-nav .tattoo-brand` (Unbounded). */
+    .gallery-page.classic-home .gallery-title {
+      font-family: 'Unbounded', sans-serif;
+      font-size: clamp(22px, 5vw, 34px);
+      font-weight: normal;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
     @media (max-width: 768px) {
       /* Menu lives in `.classic-hero-title-row` with the headline; hide duplicate overlay nav. */
       .classic-home-page .tattoo-nav {
@@ -2328,13 +2478,98 @@
     /* Gallery page */
     .gallery-page { min-height: 100vh; background: #000; color: #fff; font-family: var(--font-display); }
     .gallery-header { text-align: center; padding: 80px 24px 24px; }
-    .gallery-title { font-family: var(--font-display); font-size: 3rem; font-weight: 700; letter-spacing: 0.02em; margin: 0; color: inherit; }
+    .gallery-title {
+      font-family: var(--font-hero);
+      font-size: clamp(1.75rem, 4.5vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+      margin: 0;
+      color: inherit;
+    }
     .gallery-title .gallery-title-link { color: inherit; text-decoration: none; font: inherit; }
     .gallery-title .gallery-title-link:hover { opacity: 0.85; }
+    /* Luxe: same stack as `.luxe-nav-brand` (Cormorant via --font-hero). */
+    .gallery-page.luxe-page.luxe-page--sub .gallery-title {
+      font-family: var(--font-hero);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    /* Luxe /gallery: in-flow nav (Classic pattern) — do not add overlay clearance padding. */
+    .gallery-page.luxe-page.luxe-page--sub .luxe-nav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bk-bg, #FFFDF9);
+      border-bottom: 1px solid var(--bk-fg-10, rgba(26, 26, 26, 0.1));
+    }
+    .gallery-page.luxe-page.luxe-page--sub .gallery-header {
+      padding: clamp(24px, 4vw, 32px) clamp(20px, 5vw, 40px) 16px;
+      text-align: center;
+    }
+    .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-header {
+      padding-top: clamp(24px, 4vw, 32px);
+      padding-left: 40px;
+      padding-right: 40px;
+      padding-bottom: 0;
+      margin-bottom: 28px;
+    }
+    /* Blade /gallery: in-flow nav (Classic pattern) — do not add overlay clearance padding. */
+    .gallery-page.blade-page.blade-page--sub {
+      padding-top: 0;
+    }
+    .gallery-page.blade-page.blade-page--sub .blade-topnav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bh-black, var(--bk-bg, #0a0a08));
+    }
+    .gallery-page.blade-page.blade-page--sub .gallery-header {
+      padding: clamp(24px, 4vw, 32px) clamp(20px, 5vw, 40px) 16px;
+      text-align: center;
+    }
+    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
+      padding-top: clamp(24px, 4vw, 32px);
+      padding-left: 40px;
+      padding-right: 40px;
+      padding-bottom: 0;
+      margin-bottom: 28px;
+    }
+    /* Stonecut /gallery: in-flow nav — do not add overlay clearance padding. */
+    .gallery-page.gallery-page--stonecut .tattoo-nav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bk-bg, #060604);
+      border-bottom: 1px solid color-mix(in srgb, var(--bk-fg, #e8e0d0) 8%, transparent);
+    }
+    .gallery-page.gallery-page--stonecut .tattoo-nav-links a {
+      color: color-mix(in srgb, var(--bk-fg, #e8e0d0) 70%, transparent);
+    }
+    .gallery-page.gallery-page--stonecut .tattoo-nav-links a:hover {
+      color: var(--bk-fg, #e8e0d0);
+    }
+    .gallery-page.gallery-page--stonecut .tattoo-nav .tattoo-nav-menu {
+      color: var(--bk-fg, #e8e0d0);
+    }
+    .gallery-page.gallery-page--stonecut .gallery-header {
+      padding: clamp(24px, 4vw, 32px) clamp(20px, 5vw, 40px) 16px;
+      text-align: center;
+    }
+    .gallery-page.gallery-page--stonecut.gallery-page--horizontal-strip .gallery-header {
+      padding-top: clamp(24px, 4vw, 32px);
+      padding-left: 40px;
+      padding-right: 40px;
+      padding-bottom: 0;
+      margin-bottom: 28px;
+    }
     .gallery-page.gallery-page--stonecut .gallery-title {
       font-family: 'Unbounded', sans-serif;
       font-size: clamp(22px, 5vw, 34px);
-      font-weight: 500;
+      font-weight: normal;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
@@ -2366,7 +2601,8 @@
     }
     .gallery-page.classic-home .gallery-shell,
     .gallery-page.blade-page.blade-page--sub .gallery-shell,
-    .gallery-page.luxe-page.luxe-page--sub .gallery-shell {
+    .gallery-page.luxe-page.luxe-page--sub .gallery-shell,
+    .gallery-page.gallery-page--stonecut .gallery-shell {
       flex: 1 1 auto;
       min-height: 0;
     }
@@ -2532,26 +2768,10 @@
       margin-bottom: 28px;
     }
     .gallery-page--horizontal-strip .gallery-title--strip-standard {
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(36px, 4vw, 48px);
-      font-weight: 300;
-      letter-spacing: 0.02em;
-      line-height: 1;
+      line-height: 1.15;
       margin: 0 auto;
       max-width: 100%;
       text-align: center;
-    }
-    .gallery-page.gallery-page--stonecut.gallery-page--horizontal-strip .gallery-title.gallery-title--strip-standard {
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(36px, 4vw, 48px);
-      font-weight: 300;
-      letter-spacing: 0.02em;
-      text-transform: none;
-    }
-    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-title.gallery-title--strip-standard {
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-weight: 300;
-      letter-spacing: 0.02em;
     }
     .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
       padding: 48px 40px 0;
@@ -2567,12 +2787,6 @@
         margin-bottom: 28px;
         text-align: center;
       }
-    }
-    .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
-      padding-top: 100px;
-    }
-    .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-header {
-      padding-top: 108px;
     }
     /* Match fullpage gallery section: no lateral max-width / padding on shell (strip runs full content width). */
     .gallery-page--horizontal-strip .gallery-shell {
@@ -2867,7 +3081,6 @@
     @media (max-width: 640px) {
       .gallery-grid { grid-template-columns: repeat(2, 1fr); }
       .gallery-grid img { height: 180px; }
-      .gallery-title { font-size: 2rem; }
       .gallery-header { padding: 64px 16px 16px; }
       .gallery-page.classic-home .gallery-header {
         padding: 40px clamp(16px, 5vw, 32px) 24px;
@@ -2879,11 +3092,35 @@
         padding-bottom: 0;
         margin-bottom: 28px;
       }
+      .gallery-page.blade-page.blade-page--sub .gallery-header {
+        padding: clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px) 12px;
+      }
       .gallery-page.blade-page.blade-page--sub.gallery-page--horizontal-strip .gallery-header {
-        padding-top: 100px;
+        padding-top: clamp(20px, 5vw, 28px);
+        padding-left: clamp(20px, 5vw, 40px);
+        padding-right: clamp(20px, 5vw, 40px);
+      }
+      .gallery-page.luxe-page.luxe-page--sub .gallery-header {
+        padding: clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px) 12px;
       }
       .gallery-page.luxe-page.luxe-page--sub.gallery-page--horizontal-strip .gallery-header {
-        padding-top: 92px;
+        padding-top: clamp(20px, 5vw, 28px);
+        padding-left: clamp(20px, 5vw, 40px);
+        padding-right: clamp(20px, 5vw, 40px);
+      }
+      .gallery-page.gallery-page--stonecut .gallery-header {
+        padding: clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px) 12px;
+      }
+      .gallery-page.gallery-page--stonecut.gallery-page--horizontal-strip .gallery-header {
+        padding-top: clamp(20px, 5vw, 28px);
+        padding-left: clamp(20px, 5vw, 40px);
+        padding-right: clamp(20px, 5vw, 40px);
+      }
+      .studio12-page.studio12-sub:has(.s12-gallery-light--fullpage) {
+        padding-top: 0;
+      }
+      .studio12-page.studio12-sub .s12-gallery-light--fullpage {
+        padding-top: clamp(20px, 5vw, 28px);
       }
       .gallery-page.classic-home .gallery-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -2975,14 +3212,6 @@
     }
     .luxe-nav.luxe-nav--topbar .tattoo-nav-menu {
       color: var(--bk-fg, #1a1a1a);
-    }
-    .luxe-page--sub .gallery-header {
-      padding-top: 108px;
-    }
-    @media (max-width: 640px) {
-      .luxe-page--sub .gallery-header {
-        padding-top: 92px;
-      }
     }
     .luxe-hero {
       position: relative;
@@ -3619,6 +3848,39 @@
     .bk-shop-checkout-submit:hover { background: #333; }
     .bk-shop-checkout-submit:disabled { opacity: 0.5; cursor: not-allowed; }
     .bk-shop-checkout-error { margin-top: 12px; color: #b33; font-size: 0.9rem; }
+    .bk-shop-checkout-payment-section {
+      display: none;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .bk-shop-checkout-payment-section--visible { display: block; }
+    .bk-shop-checkout-payment-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin: 0 0 12px;
+    }
+    #bk-shop-payment-element { margin-bottom: 16px; min-height: 120px; }
+    .bk-shop-checkout-fee-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: #666;
+      margin-top: 8px;
+    }
+    .bk-shop-checkout-total-line {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 1.05rem;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .blade-page .bk-shop-checkout-payment-section { border-top-color: rgba(245, 240, 232, 0.12); }
+    .blade-page .bk-shop-checkout-fee-line { color: rgba(245, 240, 232, 0.55); }
+    .stonecut-page .bk-shop-checkout-payment-section { border-top-color: rgba(232, 224, 208, 0.12); }
+    .stonecut-page .bk-shop-checkout-fee-line { color: var(--bk-fg-muted, #a09888); }
     .bk-shop-checkout-success { text-align: center; padding: 32px 12px; }
     .bk-shop-checkout-success h2 { margin: 0 0 12px; }
     .bk-shop-checkout-success p { color: #555; line-height: 1.55; }
@@ -4524,8 +4786,13 @@
     .blade-page .blade-shop-page-shell .luxe-product-price,
     .blade-page .blade-shop-page-shell .luxe-product-price-sale { color: var(--bh-gold); }
     .blade-page .blade-shop-page-shell .luxe-product-category { color: var(--bh-grey); }
-    .blade-page.blade-page--sub .gallery-header { padding-top: 100px; }
-    .blade-page.blade-page--sub .gallery-title { color: var(--bh-cream); font-family: 'Bebas Neue', sans-serif; }
+    .blade-page.blade-page--sub .gallery-title {
+      color: var(--bh-cream);
+      font-family: 'Bebas Neue', sans-serif;
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
     .blade-page.blade-page--sub .gallery-grid .gallery-grid-link { border-radius: 4px; }
     .blade-page.blade-page--sub .gallery-grid img { border-radius: 0; }
     .blade-page.blade-page--sub .gallery-empty-hint { color: var(--bh-grey); }
@@ -6400,10 +6667,21 @@
       margin: 0 auto;
       justify-content: flex-start;
     }
+    /* Studio 12 /gallery: in-flow nav — do not add overlay clearance padding. */
+    .studio12-page.studio12-sub:has(.s12-gallery-light--fullpage) {
+      padding-top: 0;
+    }
+    .studio12-page.studio12-sub:has(.s12-gallery-light--fullpage) .s12-topnav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+    }
     .studio12-page.studio12-sub .s12-gallery-light--fullpage {
       flex: 1 1 auto;
       min-height: 0;
       width: 100%;
+      padding-top: clamp(24px, 4vw, 32px);
     }
     .studio12-page.studio12-sub footer.s12-footer {
       margin-top: auto;
@@ -6815,6 +7093,23 @@
         return '<article class="bk-team-roster-card bk-team-roster-card--static">' +
           '<div class="bk-team-roster-card-inner">' + bodyInner + '</div></article>';
       }
+      function teamRosterThemeClass(tenant) {
+        if (isBladeTheme(tenant)) return 'bk-team-roster-section--blade';
+        if (isStonecutTheme(tenant)) return 'bk-team-roster-section--stonecut';
+        if (isLuxeTheme(tenant)) return 'bk-team-roster-section--luxe';
+        if (isStudio12Theme(tenant)) return 'bk-team-roster-section--studio12';
+        return 'bk-team-roster-section--classic';
+      }
+      function teamMemberThemeClass(tenant) {
+        return teamRosterThemeClass(tenant).replace('bk-team-roster-section', 'bk-team-member-section');
+      }
+      function teamRosterColorSurface(tenant, isHome) {
+        if (isBladeTheme(tenant)) return 'card';
+        if (isStonecutTheme(tenant)) return isHome ? 'page' : 'about';
+        if (isLuxeTheme(tenant)) return isHome ? 'featured' : 'about';
+        if (isStudio12Theme(tenant)) return isHome ? 'card' : 'about';
+        return isHome ? 'featured' : 'about';
+      }
       function teamRosterSectionHtml(tenant, providers, opts) {
         opts = opts || {};
         if (!providers || !providers.length) return '';
@@ -6840,7 +7135,8 @@
           ? wcSpan(tenant, 'wc.generic.teamHomeSubtitle', 'The artists behind the work')
           : wcSpan(tenant, 'wc.generic.teamPageSubtitle', 'The artists behind the work');
         var sectionId = isHome ? ' id="team"' : '';
-        var sectionClass = 'bk-team-roster-section bk-team-roster-section--editorial' +
+        var surface = teamRosterColorSurface(tenant, isHome);
+        var sectionClass = 'bk-team-roster-section ' + teamRosterThemeClass(tenant) +
           (isHome ? ' bk-team-roster-section--home' : ' bk-team-roster-section--page');
         var scrollHint = '';
         if (!isHome) {
@@ -6850,12 +7146,19 @@
             'onclick="window.scrollBy({top:Math.min(window.innerHeight*0.85,document.body.scrollHeight),behavior:\'smooth\'})">' +
             '<span aria-hidden="true">\u2193</span></button></div>';
         }
-        return '<section' + sectionId + ' class="' + sectionClass + '" data-bk-color-surface="about" data-bk-band-tappable>' +
-          bkColorBandInnerWrap(
-            '<div class="bk-team-roster-head">' +
+        var eyebrowFirst = isStonecutTheme(tenant) || isStudio12Theme(tenant) || isLuxeTheme(tenant) || isClassicTheme(tenant);
+        var headHtml = eyebrowFirst
+          ? '<div class="bk-team-roster-head">' +
+            '<p class="bk-team-roster-subtitle">' + subtitle + '</p>' +
+            '<h2 class="bk-team-roster-title">' + title + '</h2>' +
+            '</div>'
+          : '<div class="bk-team-roster-head">' +
             '<h2 class="bk-team-roster-title">' + title + '</h2>' +
             '<p class="bk-team-roster-subtitle">' + subtitle + '</p>' +
-            '</div>' +
+            '</div>';
+        return '<section' + sectionId + ' class="' + sectionClass + '" data-bk-color-surface="' + surface + '" data-bk-band-tappable>' +
+          bkColorBandInnerWrap(
+            headHtml +
             '<div class="bk-team-roster-grid">' + cards + '</div>' +
             viewAll +
             scrollHint
@@ -6895,11 +7198,12 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var list = providers || [];
+        var teamSurface = teamRosterColorSurface(tenant, false);
         var content = teamRosterSectionHtml(tenant, list, { mode: 'page' })
           || '<p class="bk-team-roster-empty">No team members visible yet. Turn on visibility in Design \u2192 Team.</p>';
         if (isStudio12Theme(tenant)) {
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
-            '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable>' +
+            '<div class="bk-team-page-band" data-bk-color-surface="' + teamSurface + '" data-bk-band-tappable>' +
             bkColorBandInnerWrap(content) + '</div>' +
             studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
         }
@@ -6921,9 +7225,9 @@
         else if (isLuxeTheme(tenant)) teamSiteFooter = luxeContactSectionHtml(tenant);
         else if (isStonecutTheme(tenant)) teamSiteFooter = stonecutSiteFooterHtml(tenant);
         else if (isClassicTheme(tenant)) teamSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
-        var teamPageStyle = tenantPageStyle(tenant, 'page');
+        var teamPageStyle = tenantPageStyle(tenant, teamSurface);
         return '<div class="' + wrapClass + '">' + nav +
-          '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable style="' + teamPageStyle + '">' +
+          '<div class="bk-team-page-band" data-bk-color-surface="' + teamSurface + '" data-bk-band-tappable style="' + teamPageStyle + '">' +
           bkColorBandInnerWrap(content) + '</div>' +
           teamSiteFooter + galleryLightboxShellHtml() + sidebar + '</div>';
       }
@@ -7150,7 +7454,7 @@
             'onclick="window.scrollBy({top:Math.min(window.innerHeight*0.85,document.body.scrollHeight),behavior:\'smooth\'})">' +
             '<span aria-hidden="true">\u2193</span></button></div>'
           : '';
-        return '<section class="bk-team-member-section">' +
+        return '<section class="bk-team-member-section ' + teamMemberThemeClass(tenant) + '">' +
           '<div class="bk-team-member-hero">' +
             '<div class="bk-team-member-photo-col">' +
               '<div class="bk-team-member-photo">' + photoInner + '</div>' +
@@ -7176,7 +7480,7 @@
         var bookUrl = base + '/book';
         if (isStudio12Theme(tenant)) {
           return '<div class="studio12-page studio12-sub bk-team-member-page">' + studio12NavHtml(tenant) +
-            '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable>' +
+            '<div class="bk-team-page-band" data-bk-color-surface="' + teamRosterColorSurface(tenant, false) + '" data-bk-band-tappable>' +
             bkColorBandInnerWrap(content) + '</div>' +
             studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + galleryLightboxShellHtml() + '</div>';
         }
@@ -7198,9 +7502,10 @@
         else if (isLuxeTheme(tenant)) teamSiteFooter = luxeContactSectionHtml(tenant);
         else if (isStonecutTheme(tenant)) teamSiteFooter = stonecutSiteFooterHtml(tenant);
         else if (isClassicTheme(tenant)) teamSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
-        var teamPageStyle = tenantPageStyle(tenant, 'page');
+        var teamSurface = teamRosterColorSurface(tenant, false);
+        var teamPageStyle = tenantPageStyle(tenant, teamSurface);
         return '<div class="' + wrapClass + '">' + nav +
-          '<div class="bk-team-page-band" data-bk-color-surface="about" data-bk-band-tappable style="' + teamPageStyle + '">' +
+          '<div class="bk-team-page-band" data-bk-color-surface="' + teamSurface + '" data-bk-band-tappable style="' + teamPageStyle + '">' +
           bkColorBandInnerWrap(content) + '</div>' +
           teamSiteFooter + galleryLightboxShellHtml() + sidebar + '</div>';
       }
@@ -7365,6 +7670,8 @@
         var c = tenantColors(tenant);
         if (surface === 'gallery') return { bg: c.galleryBg, fg: c.galleryFg };
         if (surface === 'featured') return { bg: c.featuredBg, fg: c.featuredFg };
+        if (surface === 'card') return { bg: c.card, fg: c.fg };
+        if (surface === 'about') return { bg: c.aboutBg, fg: c.aboutFg };
         return { bg: c.bg, fg: c.fg };
       }
 
@@ -12192,21 +12499,91 @@
       function shopCheckoutInnerHtml(tenant) {
         return '<div class="bk-shop-checkout-page">' +
           '<h1>Checkout</h1>' +
-          '<p class="bk-shop-checkout-lead">Complete your order. Booking appointments is separate — use Book in the menu anytime.</p>' +
+          '<p class="bk-shop-checkout-lead">Enter your details, then pay securely by card. Booking appointments is separate — use Book in the menu anytime.</p>' +
           '<div class="bk-shop-checkout-summary" id="bk-shop-checkout-summary"></div>' +
           '<form id="bk-shop-checkout-form" autocomplete="on">' +
           '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-name">Name</label><input id="bk-shop-checkout-name" name="name" type="text" required autocomplete="name"></div>' +
           '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-email">Email</label><input id="bk-shop-checkout-email" name="email" type="email" required autocomplete="email"></div>' +
           '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-phone">Phone <span style="font-weight:400;color:#888">(optional)</span></label><input id="bk-shop-checkout-phone" name="phone" type="tel" autocomplete="tel"></div>' +
           '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-notes">Order notes <span style="font-weight:400;color:#888">(optional)</span></label><textarea id="bk-shop-checkout-notes" name="notes" rows="3"></textarea></div>' +
-          '<button type="submit" class="bk-shop-checkout-submit" id="bk-shop-checkout-submit">Place order</button>' +
+          '<div class="bk-shop-checkout-payment-section" id="bk-shop-checkout-payment-section">' +
+          '<p class="bk-shop-checkout-payment-label">Payment</p>' +
+          '<div id="bk-shop-payment-element"></div>' +
+          '</div>' +
+          '<button type="submit" class="bk-shop-checkout-submit" id="bk-shop-checkout-submit">Continue to payment</button>' +
           '<p class="bk-shop-checkout-error" id="bk-shop-checkout-error" style="display:none"></p>' +
           '</form>' +
           '<div class="bk-shop-checkout-success" id="bk-shop-checkout-success" style="display:none">' +
-          '<h2>Order received</h2>' +
-          '<p>Thanks — the business will follow up about your order. You can keep browsing the shop anytime.</p>' +
+          '<h2>Order confirmed</h2>' +
+          '<p>Thanks — your payment was received and the business will follow up about your order.</p>' +
           '<p style="margin-top:20px"><a href="' + esc(tenantBaseUrl(tenant) + '/shop') + '">Back to shop</a></p>' +
           '</div></div>';
+      }
+      function shopStripePublishableKey(serverKey) {
+        return (serverKey && String(serverKey).trim()) ||
+          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
+      }
+      function shopPaymentElementAppearance(tenant) {
+        var c = tenantColors(tenant);
+        return {
+          theme: 'stripe',
+          variables: {
+            colorPrimary: c.accent,
+            colorBackground: c.card,
+            colorText: c.fg,
+            colorDanger: '#df1b41',
+            borderRadius: '8px',
+            fontFamily: 'var(--font-display), system-ui, sans-serif',
+          },
+        };
+      }
+      function showShopCheckoutSuccess(tenant) {
+        var form = document.getElementById('bk-shop-checkout-form');
+        var summaryEl = document.getElementById('bk-shop-checkout-summary');
+        var successEl = document.getElementById('bk-shop-checkout-success');
+        if (form) form.style.display = 'none';
+        if (summaryEl) summaryEl.style.display = 'none';
+        if (successEl) successEl.style.display = 'block';
+        writeShopCart(tenant.id, { lines: [] });
+        var navCount = document.getElementById('bk-shop-nav-count');
+        if (navCount) navCount.style.display = 'none';
+        window.__bkShopCheckoutStripe = null;
+      }
+      function finalizeShopCheckoutPayment(tenant, orderId, paymentIntentId) {
+        return ensureAnonymousAuth().then(function() {
+          return functions.httpsCallable('finalizeShopOrderPayment')({
+            tenantSlug: tenant.slug,
+            orderId: orderId,
+            paymentIntentId: paymentIntentId
+          });
+        }).then(function() {
+          showShopCheckoutSuccess(tenant);
+        });
+      }
+      function handleShopCheckoutReturn(tenant) {
+        try {
+          var params = new URLSearchParams(location.search || '');
+          var redirectStatus = (params.get('redirect_status') || '').toLowerCase();
+          var paymentIntentId = (params.get('payment_intent') || '').trim();
+          if (!paymentIntentId || redirectStatus !== 'succeeded') return Promise.resolve(false);
+          var orderId = (params.get('order_id') || sessionStorage.getItem('bkShopCheckoutOrderId') || '').trim();
+          if (!orderId) return Promise.resolve(false);
+          return finalizeShopCheckoutPayment(tenant, orderId, paymentIntentId).then(function() {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', tenantBaseUrl(tenant) + '/shop/checkout');
+            }
+            return true;
+          }).catch(function(err) {
+            var errorEl = document.getElementById('bk-shop-checkout-error');
+            if (errorEl) {
+              errorEl.textContent = (err && err.message) ? err.message : 'Could not confirm payment.';
+              errorEl.style.display = 'block';
+            }
+            return false;
+          });
+        } catch (e) {
+          return Promise.resolve(false);
+        }
       }
       function studio12ShopCheckoutPage(tenant) {
         return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
@@ -12247,9 +12624,9 @@
         bindShopPage(tenant);
         var summaryEl = document.getElementById('bk-shop-checkout-summary');
         var form = document.getElementById('bk-shop-checkout-form');
-        var successEl = document.getElementById('bk-shop-checkout-success');
         var errorEl = document.getElementById('bk-shop-checkout-error');
         var submitBtn = document.getElementById('bk-shop-checkout-submit');
+        var paymentSection = document.getElementById('bk-shop-checkout-payment-section');
         if (!summaryEl || !form) return;
 
         function renderCheckoutSummary() {
@@ -12260,20 +12637,73 @@
             return;
           }
           var html = '';
-          var total = 0;
+          var subtotal = 0;
           for (var i = 0; i < cart.lines.length; i++) {
             var L = cart.lines[i];
             var unit = Number(L.unitPrice) || 0;
-            total += unit * (L.qty || 0);
+            subtotal += unit * (L.qty || 0);
             html += shopCartLineHtml(L);
           }
-          html += '<div class="bk-shop-checkout-total">Total ' + formatMoney(total) + '</div>';
+          var stripeState = window.__bkShopCheckoutStripe;
+          if (stripeState && stripeState.totalCents) {
+            html += '<div class="bk-shop-checkout-fee-line"><span>Subtotal</span><span>' + formatMoney(stripeState.subtotalCents / 100) + '</span></div>';
+            if (stripeState.surchargeCents > 0) {
+              html += '<div class="bk-shop-checkout-fee-line"><span>Card processing</span><span>' + formatMoney(stripeState.surchargeCents / 100) + '</span></div>';
+            }
+            html += '<div class="bk-shop-checkout-total-line"><span>Total</span><span>' + formatMoney(stripeState.totalCents / 100) + '</span></div>';
+          } else {
+            html += '<div class="bk-shop-checkout-total">Subtotal ' + formatMoney(subtotal) + '</div>';
+          }
           summaryEl.innerHTML = html;
           form.style.display = '';
         }
 
+        function setContactFieldsDisabled(disabled) {
+          ['name', 'email', 'phone', 'notes'].forEach(function(fieldName) {
+            var el = form.querySelector('[name="' + fieldName + '"]');
+            if (el) el.disabled = !!disabled;
+          });
+        }
+
+        function mountShopPaymentElement(checkoutData) {
+          var pk = shopStripePublishableKey(checkoutData.publishableKey);
+          if (!pk) {
+            throw new Error('Stripe publishable key is missing. Configure STRIPE_PUBLISHABLE_KEY on Cloud Functions.');
+          }
+          if (typeof Stripe !== 'function') {
+            throw new Error('Stripe.js did not load.');
+          }
+          var stripe = Stripe(pk, { stripeAccount: checkoutData.stripeAccountId });
+          var elements = stripe.elements({
+            clientSecret: checkoutData.clientSecret,
+            appearance: shopPaymentElementAppearance(tenant),
+          });
+          var mountEl = document.getElementById('bk-shop-payment-element');
+          if (!mountEl) throw new Error('Payment form is unavailable.');
+          mountEl.innerHTML = '';
+          var paymentElement = elements.create('payment');
+          paymentElement.mount('#bk-shop-payment-element');
+          window.__bkShopCheckoutStripe = {
+            stripe: stripe,
+            elements: elements,
+            paymentElement: paymentElement,
+            orderId: checkoutData.orderId,
+            paymentIntentId: checkoutData.paymentIntentId,
+            subtotalCents: checkoutData.subtotalCents,
+            surchargeCents: checkoutData.surchargeCents || 0,
+            totalCents: checkoutData.totalCents,
+          };
+          if (paymentSection) paymentSection.classList.add('bk-shop-checkout-payment-section--visible');
+          setContactFieldsDisabled(true);
+          if (submitBtn) submitBtn.textContent = 'Pay ' + formatMoney((checkoutData.totalCents || 0) / 100);
+          renderCheckoutSummary();
+        }
+
         window.__bkShopCheckoutRefresh = renderCheckoutSummary;
-        renderCheckoutSummary();
+
+        handleShopCheckoutReturn(tenant).then(function(handled) {
+          if (!handled) renderCheckoutSummary();
+        });
 
         if (form.dataset.bkCheckoutBound) return;
         form.dataset.bkCheckoutBound = '1';
@@ -12297,34 +12727,75 @@
             return;
           }
           errorEl.style.display = 'none';
+
+          var stripeState = window.__bkShopCheckoutStripe;
+          if (!stripeState) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Preparing payment…';
+            var payload = {
+              tenantSlug: tenant.slug,
+              customerName: name,
+              customerEmail: email,
+              customerPhone: phone.trim() || null,
+              notes: notes || null,
+              lineItems: cart.lines.map(function(L) {
+                return { productId: L.productId, name: L.name || '', qty: L.qty || 1 };
+              })
+            };
+            ensureAnonymousAuth()
+              .then(function() { return functions.httpsCallable('createShopCheckoutPayment')(payload); })
+              .then(function(res) {
+                var data = (res && res.data) || {};
+                if (!data.clientSecret || !data.stripeAccountId) {
+                  throw new Error('Could not start payment. Please try again.');
+                }
+                try {
+                  sessionStorage.setItem('bkShopCheckoutOrderId', data.orderId || '');
+                } catch (storageErr) { /* ignore */ }
+                mountShopPaymentElement(data);
+                submitBtn.disabled = false;
+              })
+              .catch(function(err) {
+                errorEl.textContent = (err && err.message) ? err.message : 'Could not start payment. Please try again.';
+                errorEl.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Continue to payment';
+              });
+            return;
+          }
+
           submitBtn.disabled = true;
-          submitBtn.textContent = 'Placing order…';
-          var payload = {
-            tenantSlug: tenant.slug,
-            customerName: name,
-            customerEmail: email,
-            customerPhone: phone.trim() || null,
-            notes: notes || null,
-            lineItems: cart.lines.map(function(L) {
-              return { productId: L.productId, name: L.name || '', qty: L.qty || 1 };
-            })
-          };
-          ensureAnonymousAuth()
-            .then(function() { return functions.httpsCallable('createShopOrderFromWeb')(payload); })
-            .then(function() {
-              writeShopCart(tenant.id, { lines: [] });
-              form.style.display = 'none';
-              summaryEl.style.display = 'none';
-              successEl.style.display = 'block';
-              var navCount = document.getElementById('bk-shop-nav-count');
-              if (navCount) navCount.style.display = 'none';
-            })
-            .catch(function(err) {
-              errorEl.textContent = (err && err.message) ? err.message : 'Could not place order. Please try again.';
-              errorEl.style.display = 'block';
-              submitBtn.disabled = false;
-              submitBtn.textContent = 'Place order';
-            });
+          submitBtn.textContent = 'Processing…';
+          var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
+            encodeURIComponent(stripeState.orderId || '');
+          stripeState.stripe.confirmPayment({
+            elements: stripeState.elements,
+            confirmParams: {
+              return_url: returnUrl,
+              payment_method_data: {
+                billing_details: {
+                  name: name,
+                  email: email,
+                  phone: phone.trim() || undefined,
+                },
+              },
+            },
+            redirect: 'if_required',
+          }).then(function(result) {
+            if (result.error) {
+              throw result.error;
+            }
+            return finalizeShopCheckoutPayment(
+              tenant,
+              stripeState.orderId,
+              stripeState.paymentIntentId
+            );
+          }).catch(function(err) {
+            errorEl.textContent = (err && err.message) ? err.message : 'Payment could not be completed.';
+            errorEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Pay ' + formatMoney((stripeState.totalCents || 0) / 100);
+          });
         });
       }
       function bindShopPage(tenant) {

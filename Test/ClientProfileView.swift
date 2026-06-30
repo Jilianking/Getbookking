@@ -1,13 +1,33 @@
 import SwiftUI
+import FirebaseAuth
+
+private enum ClientScheduleSheetMode: Identifiable {
+    case confirmPending(BookingRequest)
+    case reschedule(BookingRequest)
+    case scheduleNew
+
+    var id: String {
+        switch self {
+        case .confirmPending(let request):
+            return "confirm-\(request.documentId ?? UUID().uuidString)"
+        case .reschedule(let request):
+            return "reschedule-\(request.documentId ?? UUID().uuidString)"
+        case .scheduleNew:
+            return "schedule-new"
+        }
+    }
+}
 
 struct ClientProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel: ClientProfileViewModel
+    @StateObject private var requestsViewModel = RequestsViewModel()
     @ObservedObject var clientsViewModel: ClientsViewModel
     var drawerState: DrawerState
 
     @State private var showingEditSheet = false
-    @State private var showingBookingForm = false
+    @State private var scheduleSheetMode: ClientScheduleSheetMode?
 
     init(client: Client, clientsViewModel: ClientsViewModel, drawerState: DrawerState) {
         _viewModel = StateObject(wrappedValue: ClientProfileViewModel(client: client))
@@ -32,8 +52,11 @@ struct ClientProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("+ Book") { showingBookingForm = true }
-                    .font(.subheadline.weight(.semibold))
+                Button(viewModel.scheduleToolbarLabel(canManageAssignment: canManageAssignment)) {
+                    Task { await openScheduleSheet() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .disabled(authViewModel.isDemoMode)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Edit") { showingEditSheet = true }
@@ -50,15 +73,110 @@ struct ClientProfileView: View {
                 Task { await clientsViewModel.loadClients(isDemoMode: authViewModel.isDemoMode) }
             }
         }
-        .sheet(isPresented: $showingBookingForm) {
-            BookingFormView(
-                drawerState: drawerState,
-                prefillName: viewModel.client.name,
-                prefillEmail: viewModel.client.email,
-                prefillPhone: viewModel.client.phone
-            )
-            .environmentObject(authViewModel)
+        .sheet(item: $scheduleSheetMode, onDismiss: {
+            Task { await reloadAfterSchedule() }
+        }) { mode in
+            scheduleSheet(for: mode)
         }
+    }
+
+    private var teamAccess: EffectiveTeamAccess {
+        authViewModel.teamAccess
+    }
+
+    private var canManageAssignment: Bool {
+        teamAccess.isOwner || teamAccess.canViewAllBookings
+    }
+
+    private var canPickArtistOnConfirm: Bool {
+        canManageAssignment && teamAccess.showsStaffAssignmentUI(
+            rosterCount: requestsViewModel.teamFilterRoster.count
+        )
+    }
+
+    private var canSendDepositSms: Bool {
+        guard teamAccess.canSendClientSms else { return false }
+        let phone = (viewModel.client.phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !PhoneFormatting.digits(from: phone).isEmpty
+    }
+
+    @ViewBuilder
+    private func scheduleSheet(for mode: ClientScheduleSheetMode) -> some View {
+        switch mode {
+        case .confirmPending(let request):
+            ConfirmBookingAppointmentSheet(
+                request: resolvedBooking(request),
+                viewModel: requestsViewModel,
+                canPickArtist: canPickArtistOnConfirm,
+                currentMemberUid: Auth.auth().currentUser?.uid,
+                requiresDeposit: teamAccess.confirmationType.requiresDeposit,
+                depositAmount: teamAccess.depositAmount ?? requestsViewModel.workflowDepositAmount,
+                canSendDepositSms: canSendDepositSms
+            )
+        case .reschedule(let request):
+            ConfirmBookingAppointmentSheet(
+                request: resolvedBooking(request),
+                viewModel: requestsViewModel,
+                canPickArtist: canPickArtistOnConfirm,
+                currentMemberUid: Auth.auth().currentUser?.uid,
+                isReschedule: true,
+                requiresDeposit: teamAccess.confirmationType.requiresDeposit,
+                depositAmount: teamAccess.depositAmount ?? requestsViewModel.workflowDepositAmount,
+                canSendDepositSms: canSendDepositSms
+            )
+        case .scheduleNew:
+            StaffScheduleClientAppointmentSheet(
+                client: viewModel.client,
+                viewModel: requestsViewModel,
+                canPickArtist: canPickArtistOnConfirm,
+                requiresDeposit: teamAccess.confirmationType.requiresDeposit,
+                depositAmount: teamAccess.depositAmount ?? requestsViewModel.workflowDepositAmount,
+                studioCanSendSms: teamAccess.canSendClientSms,
+                onConfirmed: {
+                    Task { await reloadAfterSchedule() }
+                }
+            )
+        }
+    }
+
+    private func resolvedBooking(_ booking: BookingRequest) -> BookingRequest {
+        guard let id = booking.documentId,
+              let fresh = requestsViewModel.bookingRequests.first(where: { $0.documentId == id }) else {
+            return booking
+        }
+        return fresh
+    }
+
+    private func openScheduleSheet() async {
+        requestsViewModel.sessionStore = sessionStore
+        await requestsViewModel.loadRequests(
+            isDemoMode: authViewModel.isDemoMode,
+            sessionStore: sessionStore
+        )
+        let action = viewModel.scheduleAction(
+            using: requestsViewModel.bookingRequests,
+            canManageAssignment: canManageAssignment
+        )
+        await MainActor.run {
+            switch action {
+            case .confirm(let booking):
+                scheduleSheetMode = .confirmPending(booking)
+            case .reschedule(let booking):
+                scheduleSheetMode = .reschedule(booking)
+            case .scheduleNew:
+                scheduleSheetMode = .scheduleNew
+            }
+        }
+    }
+
+    private func reloadAfterSchedule() async {
+        sessionStore.invalidateBookings()
+        await sessionStore.loadNewBookingsIfNeeded(force: true, isDemoMode: authViewModel.isDemoMode)
+        await viewModel.load(isDemoMode: authViewModel.isDemoMode)
+        await requestsViewModel.refreshRequests(
+            isDemoMode: authViewModel.isDemoMode,
+            sessionStore: sessionStore
+        )
     }
 
     private var profileHeader: some View {

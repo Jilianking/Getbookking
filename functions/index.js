@@ -2101,6 +2101,250 @@ exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
   return { ok: true, duplicate: false, id: ref.id };
 });
 
+async function fetchTenantProductsById(tenantId) {
+  const productSnap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("products")
+    .get();
+  const productsById = new Map();
+  productSnap.docs.forEach((doc) => {
+    productsById.set(doc.id, doc.data());
+  });
+  return productsById;
+}
+
+function buildValidatedShopLineItems(rawLines, productsById) {
+  if (!Array.isArray(rawLines) || !rawLines.length) {
+    throw new functions.https.HttpsError("invalid-argument", "lineItems is required");
+  }
+  if (rawLines.length > 50) {
+    throw new functions.https.HttpsError("invalid-argument", "Too many line items");
+  }
+  const lineItems = [];
+  let subtotalCents = 0;
+  for (const raw of rawLines) {
+    const productId = (raw?.productId || "").toString().trim();
+    if (!productId) continue;
+    const prod = productsById.get(productId);
+    if (!prod || prod.isActive === false) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "One or more products are no longer available"
+      );
+    }
+    const qty = Math.min(999, Math.max(1, parseInt(raw?.qty, 10) || 1));
+    const price = Number(prod.price) || 0;
+    let effective = price;
+    const sale = prod.salePrice != null ? Number(prod.salePrice) : NaN;
+    if (!isNaN(sale) && sale >= 0 && sale < price) effective = sale;
+    const unitPriceCents = Math.round(effective * 100);
+    const lineTotalCents = unitPriceCents * qty;
+    subtotalCents += lineTotalCents;
+    const fallbackName = (prod.name || "Item").toString().trim();
+    const clientName = (raw?.name || "").toString().trim();
+    lineItems.push({
+      productId,
+      name: (clientName || fallbackName).slice(0, 200),
+      qty,
+      unitPriceCents,
+      lineTotalCents,
+    });
+  }
+  if (!lineItems.length) {
+    throw new functions.https.HttpsError("invalid-argument", "No valid line items");
+  }
+  return { lineItems, subtotalCents };
+}
+
+async function resolvePublicShopTenant(tenantSlug) {
+  const slug = (tenantSlug || "").toString().trim().toLowerCase();
+  if (!slug) {
+    throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
+  }
+  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
+  if (tenantSnap.empty) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+  const tenantDoc = tenantSnap.docs[0];
+  const tenantId = tenantDoc.id;
+  const tenantData = tenantDoc.data() || {};
+  if (tenantData.isActive === false) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This business is not accepting orders"
+    );
+  }
+  if (tenantData.isDemoAccount === true) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This demo site is read-only. Sign up for your own account to accept orders."
+    );
+  }
+  if (tenantData.shopEnabled !== true) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Shop is not enabled for this business"
+    );
+  }
+  return { tenantId, tenantData };
+}
+
+async function assertTenantShopStripeReady(stripe, tenantData) {
+  const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
+  if (!stripeAccountId || isDemoShowcaseStripeAccountId(stripeAccountId)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Online card payments are not set up for this shop yet."
+    );
+  }
+  const account = await stripe.accounts.retrieve(stripeAccountId);
+  if (!account.charges_enabled) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Online payments are not available yet. The business is still completing Stripe setup."
+    );
+  }
+  return stripeAccountId;
+}
+
+async function upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone) {
+  const customerRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(customerDocIdForTenant(customerName, customerEmail, customerPhone));
+  await customerRef.set(
+    {
+      name: customerName,
+      email: customerEmail,
+      ...(customerPhone ? { phone: customerPhone } : {}),
+      source: "shop_checkout_web",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, paymentIntentId) {
+  const orderRef = db.collection("tenants").doc(tenantId).collection("shopOrders").doc(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Order not found");
+  }
+  const order = orderSnap.data() || {};
+  if ((order.status || "").toString() === "paid") {
+    return { ok: true, alreadyPaid: true, orderId };
+  }
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+  const tenantData = tenantSnap.data() || {};
+  const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
+  if (!stripeAccountId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Stripe is not configured for this business"
+    );
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  if (pi.status !== "succeeded") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Payment is not complete yet"
+    );
+  }
+  const meta = pi.metadata || {};
+  if ((meta.shopOrderId || "").toString() !== orderId) {
+    throw new functions.https.HttpsError("permission-denied", "Payment does not match this order");
+  }
+  if ((meta.tenantId || "").toString() !== tenantId) {
+    throw new functions.https.HttpsError("permission-denied", "Payment does not belong to this business");
+  }
+  const surchargeCents = parseInt(meta.surchargeCents, 10);
+  const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
+  const serviceCents = parseInt(meta.serviceAmountCents, 10);
+  const resolvedSubtotal =
+    Number.isNaN(serviceCents) || serviceCents <= 0
+      ? Math.max(0, (pi.amount || 0) - resolvedSurcharge)
+      : serviceCents;
+  const grossCents = pi.amount || resolvedSubtotal + resolvedSurcharge;
+  const platformFee = platformFeeCents(grossCents);
+
+  await orderRef.set(
+    {
+      status: "paid",
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+      stripePaymentIntentId: paymentIntentId,
+      subtotalCents: resolvedSubtotal,
+      surchargeCents: resolvedSurcharge,
+      totalCents: grossCents,
+      platformFeeCents: platformFee,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  const ledgerRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("paymentLedger")
+    .doc(paymentIntentId);
+  const existingLedger = await ledgerRef.get();
+  if (!existingLedger.exists) {
+    const chargeId =
+      typeof pi.latest_charge === "string"
+        ? pi.latest_charge
+        : pi.latest_charge && pi.latest_charge.id;
+    let stripeFeeCents = 0;
+    if (chargeId) {
+      try {
+        const charge = await stripe.charges.retrieve(chargeId, {
+          stripeAccount: stripeAccountId,
+        });
+        if (charge.balance_transaction) {
+          const btId =
+            typeof charge.balance_transaction === "string"
+              ? charge.balance_transaction
+              : charge.balance_transaction.id;
+          const bt = await stripe.balanceTransactions.retrieve(btId, {
+            stripeAccount: stripeAccountId,
+          });
+          stripeFeeCents = bt.fee || 0;
+        }
+      } catch (feeErr) {
+        console.warn("markShopOrderPaid fee lookup", feeErr.message);
+      }
+    }
+    await ledgerRef.set({
+      paymentIntentId,
+      chargeId: chargeId || null,
+      shopOrderId: orderId,
+      bookingRequestId: null,
+      attributedMemberUid: (tenantData.ownerUid || "").toString() || null,
+      paymentKind: "shop",
+      serviceCents: resolvedSubtotal,
+      surchargeCents: resolvedSurcharge,
+      grossCents,
+      stripeFeeCents,
+      platformFeeCents: platformFee,
+      splitApplied: false,
+      splitPercentApplied: 0,
+      artistShareCents: 0,
+      studioServiceShareCents: resolvedSubtotal,
+      initiatedByUid: null,
+      chargeStripeScope: "tenant",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  return { ok: true, orderId, totalCents: grossCents };
+}
+
 /**
  * Public web: create a shop order at checkout (cart + customer contact).
  * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes? }
@@ -2150,57 +2394,8 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
   }
 
   const rawLines = Array.isArray(data?.lineItems) ? data.lineItems : [];
-  if (!rawLines.length) {
-    throw new functions.https.HttpsError("invalid-argument", "lineItems is required");
-  }
-  if (rawLines.length > 50) {
-    throw new functions.https.HttpsError("invalid-argument", "Too many line items");
-  }
-
-  const productSnap = await db
-    .collection("tenants")
-    .doc(tenantId)
-    .collection("products")
-    .get();
-  const productsById = new Map();
-  productSnap.docs.forEach((doc) => {
-    productsById.set(doc.id, doc.data());
-  });
-
-  const lineItems = [];
-  let subtotalCents = 0;
-  for (const raw of rawLines) {
-    const productId = (raw?.productId || "").toString().trim();
-    if (!productId) continue;
-    const prod = productsById.get(productId);
-    if (!prod || prod.isActive === false) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "One or more products are no longer available"
-      );
-    }
-    const qty = Math.min(999, Math.max(1, parseInt(raw?.qty, 10) || 1));
-    const price = Number(prod.price) || 0;
-    let effective = price;
-    const sale = prod.salePrice != null ? Number(prod.salePrice) : NaN;
-    if (!isNaN(sale) && sale >= 0 && sale < price) effective = sale;
-    const unitPriceCents = Math.round(effective * 100);
-    const lineTotalCents = unitPriceCents * qty;
-    subtotalCents += lineTotalCents;
-    const fallbackName = (prod.name || "Item").toString().trim();
-    const clientName = (raw?.name || "").toString().trim();
-    lineItems.push({
-      productId,
-      name: (clientName || fallbackName).slice(0, 200),
-      qty,
-      unitPriceCents,
-      lineTotalCents,
-    });
-  }
-
-  if (!lineItems.length) {
-    throw new functions.https.HttpsError("invalid-argument", "No valid line items");
-  }
+  const productsById = await fetchTenantProductsById(tenantId);
+  const { lineItems, subtotalCents } = buildValidatedShopLineItems(rawLines, productsById);
 
   const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
   const customerPhone = normalizeCustomerPhone(data?.customerPhone);
@@ -2223,25 +2418,132 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
     .collection("shopOrders")
     .add(orderData);
 
-  const customerRef = db
-    .collection("tenants")
-    .doc(tenantId)
-    .collection("customers")
-    .doc(customerDocIdForTenant(customerName, customerEmail, customerPhone));
-  await customerRef.set(
-    {
-      name: customerName,
-      email: customerEmail,
-      ...(customerPhone ? { phone: customerPhone } : {}),
-      source: "shop_checkout_web",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone);
 
   return { orderId: ref.id, subtotalCents };
 });
+
+/**
+ * Public web: create shop order + Stripe PaymentIntent for embedded checkout.
+ * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes? }
+ */
+exports.createShopCheckoutPayment = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+    const customerName = (data?.customerName || "").toString().trim();
+    const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
+
+    if (!tenantSlug || !customerName || !customerEmail) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "tenantSlug, customerName, and customerEmail are required"
+      );
+    }
+
+    const { tenantId, tenantData } = await resolvePublicShopTenant(tenantSlug);
+    const rawLines = Array.isArray(data?.lineItems) ? data.lineItems : [];
+    const productsById = await fetchTenantProductsById(tenantId);
+    const { lineItems, subtotalCents } = buildValidatedShopLineItems(rawLines, productsById);
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
+    const checkout = computeCardCheckoutAmounts(subtotalCents, "online");
+    const feeCents = platformFeeCents(checkout.totalCents);
+
+    const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
+    const customerPhone = normalizeCustomerPhone(data?.customerPhone);
+    const orderRef = db.collection("tenants").doc(tenantId).collection("shopOrders").doc();
+    const orderId = orderRef.id;
+
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: checkout.totalCents,
+        currency: "usd",
+        automatic_payment_methods: { enabled: true },
+        application_fee_amount: feeCents,
+        receipt_email: customerEmail,
+        metadata: {
+          tenantId,
+          paymentKind: "shop",
+          shopOrderId: orderId,
+          serviceAmountCents: String(checkout.serviceCents),
+          surchargeCents: String(checkout.surchargeCents),
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: "tenant",
+        },
+      },
+      { stripeAccount: stripeAccountId }
+    );
+
+    const orderData = {
+      status: "pending_payment",
+      source: "shop",
+      tenantId,
+      customerName,
+      customerEmail,
+      lineItems,
+      subtotalCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+      stripePaymentIntentId: pi.id,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (customerPhone) orderData.customerPhone = customerPhone;
+    if (notes) orderData.notes = notes;
+    await orderRef.set(orderData);
+    await upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone);
+
+    const pkOut = stripePublishableKeyParam.value().trim();
+    const out = {
+      orderId,
+      clientSecret: pi.client_secret,
+      paymentIntentId: pi.id,
+      stripeAccountId,
+      subtotalCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+    };
+    if (pkOut) out.publishableKey = pkOut;
+    return out;
+  });
+
+/**
+ * Public web: mark shop order paid after Stripe PaymentIntent succeeds.
+ * Params: { tenantSlug, orderId, paymentIntentId }
+ */
+exports.finalizeShopOrderPayment = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+    const orderId = (data?.orderId || "").toString().trim();
+    const paymentIntentId = (data?.paymentIntentId || "").toString().trim();
+
+    if (!tenantSlug || !orderId || !paymentIntentId || !paymentIntentId.startsWith("pi_")) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "tenantSlug, orderId, and paymentIntentId are required"
+      );
+    }
+
+    const { tenantId } = await resolvePublicShopTenant(tenantSlug);
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    return markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, paymentIntentId);
+  });
 
 /**
  * Creates a PaymentIntent for Tap to Pay. amountCents in USD cents.
@@ -2683,6 +2985,23 @@ exports.stripeSubscriptionWebhook = functions
         await finalizeFromCheckoutSession(stripe, full);
       } catch (e) {
         console.error("stripeSubscriptionWebhook finalize", e);
+      }
+    }
+
+    if (event.type === "payment_intent.succeeded") {
+      const pi = event.data.object;
+      const meta = pi.metadata || {};
+      if ((meta.paymentKind || "").toString() === "shop" && meta.shopOrderId && meta.tenantId) {
+        try {
+          await markShopOrderPaidFromPaymentIntent(
+            stripe,
+            meta.tenantId.toString(),
+            meta.shopOrderId.toString(),
+            pi.id
+          );
+        } catch (e) {
+          console.error("stripeSubscriptionWebhook shop order finalize", e.message);
+        }
       }
     }
 

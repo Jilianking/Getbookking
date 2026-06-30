@@ -339,6 +339,65 @@ class RequestsViewModel: ObservableObject {
         )
     }
 
+    /// Staff walk-in: create a booking request for an existing client and confirm in one step.
+    /// Returns the new request id when confirm succeeds.
+    @discardableResult
+    func createAndConfirmBookingForClient(
+        client: Client,
+        serviceId: String,
+        serviceSlug: String,
+        serviceName: String,
+        member: TenantTeamMember,
+        scheduledStart: Date,
+        notes: String?
+    ) async -> String? {
+        if let store = sessionStore, store.isDemoSession {
+            await MainActor.run {
+                actionError = "Scheduling is not available in demo mode."
+            }
+            return nil
+        }
+        guard let tid = resolvedTenantId else {
+            await MainActor.run { actionError = "Studio not loaded." }
+            return nil
+        }
+        await MainActor.run {
+            isUpdatingStatus = true
+            actionError = nil
+        }
+        do {
+            let preferred = BookingAssignSchedulePlanner.formatSlotLabel(scheduledStart)
+            let requestId = try await firebaseService.createTenantBookingRequest(
+                tenantId: tid,
+                customerName: client.name,
+                customerEmail: client.email,
+                customerPhone: client.phone,
+                serviceId: serviceId,
+                serviceSlug: serviceSlug,
+                serviceName: serviceName,
+                preferredTime: preferred,
+                requestedStartTime: scheduledStart,
+                notes: notes,
+                formResponses: nil
+            )
+            await confirmBookingAppointment(
+                requestId: requestId,
+                member: member,
+                scheduledStart: scheduledStart,
+                preferredTimeLabel: preferred,
+                notes: notes
+            )
+            let failed = await MainActor.run { actionError != nil }
+            return failed ? nil : requestId
+        } catch {
+            await MainActor.run {
+                actionError = error.localizedDescription
+                isUpdatingStatus = false
+            }
+            return nil
+        }
+    }
+
     /// Creates a Stripe deposit link and texts it to the client (after confirm).
     func sendDepositLinkViaSms(for booking: BookingRequest, depositAmount: Double) async {
         if let store = sessionStore, store.isDemoSession { return }

@@ -423,8 +423,12 @@ private enum ShopOrderFilter: String, CaseIterable, Identifiable {
     func matches(_ order: ShopOrder) -> Bool {
         switch self {
         case .all: return true
-        case .new: return order.statusLower == ShopOrderStatus.pending && order.readAt == nil
-        case .pending: return order.statusLower == ShopOrderStatus.pending
+        case .new:
+            let s = order.statusLower
+            return (s == ShopOrderStatus.pending || s == ShopOrderStatus.paid) && order.readAt == nil
+        case .pending:
+            let s = order.statusLower
+            return s == ShopOrderStatus.pending || s == ShopOrderStatus.paid
         case .fulfilled: return order.statusLower == ShopOrderStatus.fulfilled
         case .cancelled: return order.statusLower == ShopOrderStatus.cancelled
         }
@@ -540,6 +544,8 @@ private struct ShopHubOrderRow: View {
         switch order.statusLower {
         case ShopOrderStatus.pending:
             return (AppDesign.brandWarm, AppDesign.brandCream)
+        case ShopOrderStatus.paid:
+            return (AppDesign.accentGreen, AppDesign.accentGreen.opacity(0.14))
         case ShopOrderStatus.fulfilled:
             return (AppDesign.accentGreen, AppDesign.accentGreen.opacity(0.14))
         case ShopOrderStatus.cancelled:
@@ -552,7 +558,7 @@ private struct ShopHubOrderRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                if order.isUnread && order.statusLower == ShopOrderStatus.pending {
+                if order.isUnread && (order.statusLower == ShopOrderStatus.pending || order.statusLower == ShopOrderStatus.paid) {
                     Circle()
                         .fill(AppDesign.accentBlue)
                         .frame(width: 8, height: 8)
@@ -574,7 +580,7 @@ private struct ShopHubOrderRow: View {
                 }
                 Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text(order.formattedSubtotal)
+                    Text(order.formattedTotal)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppDesign.textPrimary)
                     Text(ShopOrderStatus.displayLabel(for: order.status))
@@ -612,7 +618,7 @@ private struct ShopOrderDetailSheet: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(currentOrder.formattedSubtotal)
+                            Text(currentOrder.formattedTotal)
                                 .font(.title2.weight(.bold))
                             Spacer()
                             AppStatusPill(
@@ -703,7 +709,7 @@ private struct ShopOrderDetailSheet: View {
                         .appCard()
                     }
 
-                    if currentOrder.statusLower == ShopOrderStatus.pending {
+                    if currentOrder.statusLower == ShopOrderStatus.pending || currentOrder.statusLower == ShopOrderStatus.paid {
                         VStack(spacing: 10) {
                             Button {
                                 Task {

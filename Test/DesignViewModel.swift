@@ -2364,17 +2364,24 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     var shopOrdersRevenueCents: Int {
         shopOrders
-            .filter { $0.statusLower != ShopOrderStatus.cancelled }
-            .reduce(0) { $0 + $1.subtotalCents }
+            .filter {
+                let s = $0.statusLower
+                return s != ShopOrderStatus.cancelled && s != ShopOrderStatus.pendingPayment
+            }
+            .reduce(0) { $0 + ($1.totalCents ?? $1.subtotalCents) }
     }
 
     var shopPendingOrderCount: Int {
-        shopOrders.filter { $0.statusLower == ShopOrderStatus.pending }.count
+        shopOrders.filter {
+            let s = $0.statusLower
+            return s == ShopOrderStatus.pending || s == ShopOrderStatus.paid
+        }.count
     }
 
     var shopUnreadOrderCount: Int {
         shopOrders.filter {
-            $0.statusLower == ShopOrderStatus.pending && $0.readAt == nil
+            let s = $0.statusLower
+            return (s == ShopOrderStatus.pending || s == ShopOrderStatus.paid) && $0.readAt == nil
         }.count
     }
 

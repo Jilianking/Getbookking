@@ -27,6 +27,20 @@ struct ClientVisitSummary: Identifiable {
     let price: Double?
 }
 
+enum ClientScheduleAction {
+    case confirm(BookingRequest)
+    case reschedule(BookingRequest)
+    case scheduleNew
+
+    var toolbarLabel: String {
+        switch self {
+        case .confirm: return "Confirm"
+        case .reschedule: return "Reschedule"
+        case .scheduleNew: return "Schedule"
+        }
+    }
+}
+
 enum NotesSaveState: Equatable {
     case idle
     case saving
@@ -80,6 +94,13 @@ final class ClientProfileViewModel: ObservableObject {
         return totalSpent / Double(months)
     }
 
+    var pendingBooking: BookingRequest? {
+        matchingBookings
+            .filter { Self.isPendingStatus($0.status) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+            .first
+    }
+
     var upcomingBooking: BookingRequest? {
         let now = Date()
         return matchingBookings
@@ -89,6 +110,34 @@ final class ClientProfileViewModel: ObservableObject {
             }
             .sorted { ($0.requestedStartTime ?? .distantFuture) < ($1.requestedStartTime ?? .distantFuture) }
             .first
+    }
+
+    func scheduleToolbarLabel(canManageAssignment: Bool) -> String {
+        scheduleAction(using: bookings, canManageAssignment: canManageAssignment).toolbarLabel
+    }
+
+    func scheduleAction(using tenantBookings: [BookingRequest], canManageAssignment: Bool) -> ClientScheduleAction {
+        let matched = tenantBookings.filter { Self.matches(booking: $0, client: client) }
+        if canManageAssignment,
+           let pending = matched
+            .filter({ Self.isPendingStatus($0.status) })
+            .sorted(by: { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) })
+            .first {
+            return .confirm(pending)
+        }
+        if canManageAssignment {
+            let now = Date()
+            if let upcoming = matched
+                .filter({
+                    $0.status.lowercased() == "confirmed" &&
+                    ($0.requestedStartTime ?? .distantPast) >= now
+                })
+                .sorted(by: { ($0.requestedStartTime ?? .distantFuture) < ($1.requestedStartTime ?? .distantFuture) })
+                .first {
+                return .reschedule(upcoming)
+            }
+        }
+        return .scheduleNew
     }
 
     var recentVisits: [ClientVisitSummary] {
@@ -452,6 +501,11 @@ final class ClientProfileViewModel: ObservableObject {
     static func isVisitStatus(_ status: String) -> Bool {
         let normalized = status.lowercased()
         return normalized == "confirmed" || normalized == "completed"
+    }
+
+    static func isPendingStatus(_ status: String) -> Bool {
+        let normalized = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "new" || normalized == "pending"
     }
 
     private func trimmedOrNil(_ value: String?) -> String? {

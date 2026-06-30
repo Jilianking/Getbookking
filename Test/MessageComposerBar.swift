@@ -52,6 +52,7 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
 
 struct MessageComposerBar: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
+    @EnvironmentObject private var sessionStore: TenantSessionStore
     @Binding var message: String
     var darkStyle: Bool
     var placeholder: String
@@ -67,11 +68,13 @@ struct MessageComposerBar: View {
     @FocusState.Binding var fieldFocused: Bool
 
     @StateObject private var paymentsViewModel = PaymentsViewModel()
+    @StateObject private var requestsViewModel = RequestsViewModel()
     @State private var actionsExpanded = false
     @State private var quickRepliesExpanded = false
     @State private var bookingUrl = ""
     @State private var paymentSheetKind: MessagePaymentSheetKind?
-    @State private var showingBookingForm = false
+    @State private var showingStaffScheduleSheet = false
+    @State private var showingLegacyBookingForm = false
     @State private var actionNotice: String?
 
     private var usablePresets: [String] {
@@ -127,11 +130,23 @@ struct MessageComposerBar: View {
                 onDismiss: { paymentSheetKind = nil }
             )
         }
-        .sheet(isPresented: $showingBookingForm) {
+        .sheet(isPresented: $showingStaffScheduleSheet) {
+            StaffScheduleClientAppointmentSheet(
+                prefillName: prefillName,
+                prefillPhone: prefillPhone,
+                viewModel: requestsViewModel,
+                canPickArtist: canPickArtistOnConfirm,
+                requiresDeposit: authViewModel.teamAccess.confirmationType.requiresDeposit,
+                depositAmount: authViewModel.teamAccess.depositAmount ?? requestsViewModel.workflowDepositAmount,
+                studioCanSendSms: authViewModel.teamAccess.canSendClientSms
+            )
+        }
+        .sheet(isPresented: $showingLegacyBookingForm) {
             BookingFormView(
                 drawerState: drawerState,
                 prefillName: prefillName,
-                prefillPhone: prefillPhone
+                prefillPhone: prefillPhone,
+                staffSchedulingForClient: true
             )
             .environmentObject(authViewModel)
         }
@@ -363,7 +378,7 @@ struct MessageComposerBar: View {
             insertIntoMessage("Book online here: \(bookingUrl)")
             collapseMenus()
         case .bookAppointment:
-            showingBookingForm = true
+            openStaffScheduleSheet()
             collapseMenus()
         case .quickReplies:
             withAnimation {
@@ -412,7 +427,30 @@ struct MessageComposerBar: View {
         return p.isEmpty ? nil : p
     }
 
+    private var canPickArtistOnConfirm: Bool {
+        let access = authViewModel.teamAccess
+        let canManage = access.isOwner || access.canViewAllBookings
+        return canManage && access.showsStaffAssignmentUI(
+            rosterCount: requestsViewModel.teamFilterRoster.count
+        )
+    }
+
+    private func openStaffScheduleSheet() {
+        Task {
+            requestsViewModel.sessionStore = sessionStore
+            await requestsViewModel.loadRequests(isDemoMode: isDemoMode, sessionStore: sessionStore)
+            await MainActor.run {
+                if sessionStore.tenantId != nil {
+                    showingStaffScheduleSheet = true
+                } else {
+                    showingLegacyBookingForm = true
+                }
+            }
+        }
+    }
+
     private func loadComposerContext() async {
+        requestsViewModel.sessionStore = sessionStore
         await paymentsViewModel.loadData(isDemoMode: isDemoMode)
         guard !isDemoMode, let uid = Auth.auth().currentUser?.uid else { return }
         let firebase = FirebaseService()

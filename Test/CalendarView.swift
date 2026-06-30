@@ -15,17 +15,32 @@ struct CalendarView: View {
         from: Calendar.current.dateComponents([.year, .month], from: Date())
     ) ?? Date()
     @State private var viewMode: CalendarViewMode = .month
-    @State private var showingBookingForm = false
+    @State private var showingNewBookingSheet = false
+    @State private var showingLegacyBookingForm = false
     @State private var selectedBookingRequest: BookingRequest?
     var drawerState: DrawerState
     let sectionTitle: String
+
+    private var canManageAssignment: Bool {
+        authViewModel.teamAccess.isOwner || authViewModel.teamAccess.canViewAllBookings
+    }
+
+    private var canPickArtistOnConfirm: Bool {
+        canManageAssignment && authViewModel.teamAccess.showsStaffAssignmentUI(
+            rosterCount: requestsViewModel.teamFilterRoster.count
+        )
+    }
+
+    private var useStaffScheduleFlow: Bool {
+        sessionStore.tenantId != nil
+    }
 
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 0) {
                     AppScreenTitle(title: sectionTitle)
-                    Button(action: { showingBookingForm = true }) {
+                    Button(action: { openNewBookingSheet() }) {
                         HStack {
                             Image(systemName: "plus")
                             Text("New Booking")
@@ -111,8 +126,13 @@ struct CalendarView: View {
                 }
             }
             .task {
+                requestsViewModel.sessionStore = sessionStore
                 await viewModel.loadEvents(
                     forMonthAround: displayedMonth,
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                await requestsViewModel.loadRequests(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
@@ -134,7 +154,30 @@ struct CalendarView: View {
                     displayedMonth = monthStart
                 }
             }
-            .sheet(isPresented: $showingBookingForm) {
+            .sheet(isPresented: $showingNewBookingSheet) {
+                StaffScheduleClientAppointmentSheet(
+                    viewModel: requestsViewModel,
+                    canPickArtist: canPickArtistOnConfirm,
+                    requiresDeposit: authViewModel.teamAccess.confirmationType.requiresDeposit,
+                    depositAmount: authViewModel.teamAccess.depositAmount ?? requestsViewModel.workflowDepositAmount,
+                    studioCanSendSms: authViewModel.teamAccess.canSendClientSms,
+                    onConfirmed: {
+                        Task {
+                            sessionStore.invalidateBookings()
+                            await sessionStore.loadNewBookingsIfNeeded(
+                                force: true,
+                                isDemoMode: authViewModel.isDemoMode
+                            )
+                            await viewModel.loadEvents(
+                                forMonthAround: displayedMonth,
+                                isDemoMode: authViewModel.isDemoMode,
+                                sessionStore: sessionStore
+                            )
+                        }
+                    }
+                )
+            }
+            .sheet(isPresented: $showingLegacyBookingForm) {
                 BookingFormView(drawerState: drawerState)
                     .environmentObject(authViewModel)
                     .onDisappear {
@@ -158,9 +201,38 @@ struct CalendarView: View {
             }
             .onAppear {
                 requestsViewModel.sessionStore = sessionStore
+                openNewBookingIfRequested()
+            }
+            .onChange(of: drawerState.calendarShouldOpenNewBooking) { _, shouldOpen in
+                if shouldOpen {
+                    openNewBookingIfRequested()
+                }
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private func openNewBookingIfRequested() {
+        guard drawerState.calendarShouldOpenNewBooking else { return }
+        drawerState.calendarShouldOpenNewBooking = false
+        openNewBookingSheet()
+    }
+
+    private func openNewBookingSheet() {
+        Task {
+            requestsViewModel.sessionStore = sessionStore
+            await requestsViewModel.loadRequests(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            await MainActor.run {
+                if useStaffScheduleFlow {
+                    showingNewBookingSheet = true
+                } else {
+                    showingLegacyBookingForm = true
+                }
+            }
+        }
     }
 
     private var eventsByDay: [Date: [Event]] {

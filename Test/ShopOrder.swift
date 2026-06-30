@@ -30,12 +30,16 @@ struct ShopOrder: Identifiable, Equatable {
     var source: String?
     var lineItems: [ShopOrderLineItem]
     var subtotalCents: Int
+    var surchargeCents: Int?
+    var totalCents: Int?
     var customerName: String?
     var customerEmail: String?
     var customerPhone: String?
     var notes: String?
     var bookingRequestId: String?
+    var stripePaymentIntentId: String?
     var createdAt: Date?
+    var paidAt: Date?
     var readAt: Date?
 
     var isUnread: Bool { readAt == nil }
@@ -58,6 +62,15 @@ struct ShopOrder: Identifiable, Equatable {
 
     var formattedSubtotal: String {
         String(format: "$%.2f", Double(subtotalCents) / 100.0)
+    }
+
+    var formattedTotal: String {
+        let cents = totalCents ?? subtotalCents
+        return String(format: "$%.2f", Double(cents) / 100.0)
+    }
+
+    var isPaid: Bool {
+        statusLower == ShopOrderStatus.paid
     }
 
     var itemSummary: String {
@@ -111,12 +124,16 @@ struct ShopOrder: Identifiable, Equatable {
 
 enum ShopOrderStatus {
     static let pending = "pending"
+    static let pendingPayment = "pending_payment"
+    static let paid = "paid"
     static let fulfilled = "fulfilled"
     static let cancelled = "cancelled"
 
     static func displayLabel(for status: String) -> String {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case pending: return "Pending"
+        case pendingPayment: return "Awaiting payment"
+        case paid: return "Paid"
         case fulfilled: return "Fulfilled"
         case cancelled: return "Cancelled"
         default: return status.capitalized

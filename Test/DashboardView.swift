@@ -5,6 +5,9 @@ struct DashboardView: View {
     @EnvironmentObject var sessionStore: TenantSessionStore
     @ObservedObject var viewModel: DashboardViewModel
     @StateObject private var paymentsViewModel = PaymentsViewModel()
+    @StateObject private var requestsViewModel = RequestsViewModel()
+    @State private var selectedBookingRequest: BookingRequest?
+    @State private var selectedRequest: Request?
     var drawerState: DrawerState
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
@@ -56,10 +59,11 @@ struct DashboardView: View {
 
                     LazyVGrid(columns: quickActionColumns, spacing: 10) {
                         DashboardQuickTile(
-                            icon: "dollarsign.circle.fill",
-                            title: "Revenue"
+                            icon: "calendar.badge.checkmark",
+                            title: "Schedule"
                         ) {
-                            drawerState.selectedSection = .payments
+                            drawerState.calendarShouldOpenNewBooking = true
+                            drawerState.selectedSection = .calendar
                             drawerState.isOpen = false
                         }
                         DashboardQuickTile(
@@ -110,12 +114,21 @@ struct DashboardView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
+                await requestsViewModel.refreshRequests(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
         }
         .navigationViewStyle(.stack)
         .task {
+            requestsViewModel.sessionStore = sessionStore
             await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
             await paymentsViewModel.loadData(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            await requestsViewModel.loadRequests(
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
@@ -138,6 +151,33 @@ struct DashboardView: View {
             Text(tapToPayAlertMessage ?? "")
         }
         #endif
+        .sheet(item: $selectedBookingRequest, onDismiss: {
+            Task { await reloadAfterRequestDetail() }
+        }) { booking in
+            BookingRequestDetailView(
+                request: booking,
+                viewModel: requestsViewModel,
+                drawerState: drawerState,
+                teamAccess: authViewModel.teamAccess
+            )
+            .environmentObject(sessionStore)
+        }
+        .sheet(item: $selectedRequest) { request in
+            RequestDetailView(request: request, viewModel: requestsViewModel, drawerState: drawerState)
+        }
+        .onAppear {
+            requestsViewModel.sessionStore = sessionStore
+        }
+    }
+
+    private func reloadAfterRequestDetail() async {
+        sessionStore.invalidateBookings()
+        await sessionStore.loadNewBookingsIfNeeded(force: true, isDemoMode: authViewModel.isDemoMode)
+        await viewModel.refresh(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
+        await requestsViewModel.refreshRequests(
+            isDemoMode: authViewModel.isDemoMode,
+            sessionStore: sessionStore
+        )
     }
 
     private func handleTakePaymentTapped() {
@@ -210,14 +250,24 @@ struct DashboardView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(viewModel.recentBookingRequests.prefix(5)) { br in
-                            DashboardBookingRequestRow(request: br)
+                            Button {
+                                openBookingRequest(br)
+                            } label: {
+                                DashboardBookingRequestRow(request: br)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 12)
                 }
             } else {
                 ForEach(viewModel.recentRequests.prefix(5)) { request in
-                    DashboardRequestRow(request: request)
+                    Button {
+                        selectedRequest = request
+                    } label: {
+                        DashboardRequestRow(request: request)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
             }
@@ -225,6 +275,25 @@ struct DashboardView: View {
         .padding(.bottom, 16)
         .appCard()
         .padding(.horizontal)
+    }
+
+    private func openBookingRequest(_ booking: BookingRequest) {
+        markBookingRequestReadLocally(booking)
+        selectedBookingRequest = booking
+        Task {
+            await requestsViewModel.markBookingRequestAsReadIfNeeded(booking)
+        }
+    }
+
+    private func markBookingRequestReadLocally(_ booking: BookingRequest) {
+        guard booking.readAt == nil,
+              let requestId = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestId.isEmpty else { return }
+        let readAt = Date()
+        sessionStore.markBookingRequestReadLocally(requestId: requestId, readAt: readAt)
+        if let index = requestsViewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+            requestsViewModel.bookingRequests[index].readAt = readAt
+        }
     }
 }
 
@@ -254,6 +323,7 @@ struct DashboardBookingRequestRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
+        .contentShape(Rectangle())
     }
 
     private var statusLabel: String {
@@ -291,5 +361,6 @@ struct DashboardRequestRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
+        .contentShape(Rectangle())
     }
 }

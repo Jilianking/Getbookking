@@ -101,6 +101,8 @@ final class DrawerState {
     var messagesComposeBookingRequestId: String?
     var messagesComposeBody: String?
     var messagesShouldOpenCompose = false
+    /// Dashboard Schedule quick action → Calendar + New Booking sheet.
+    var calendarShouldOpenNewBooking = false
 }
 
 struct AdminRootView: View {

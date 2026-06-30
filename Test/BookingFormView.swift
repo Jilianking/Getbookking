@@ -15,6 +15,8 @@ struct BookingFormView: View {
     var prefillName: String? = nil
     var prefillEmail: String? = nil
     var prefillPhone: String? = nil
+    /// Opened from Clients — staff is scheduling on the client's behalf (not public web booking).
+    var staffSchedulingForClient: Bool = false
     
     @State private var name = ""
     @State private var email = ""
@@ -108,7 +110,7 @@ struct BookingFormView: View {
                                 Spacer()
                             }
                         } else {
-                            Text("Submit Booking")
+                            Text(staffSchedulingForClient ? "Confirm appointment" : "Submit Booking")
                         }
                     }
                     .buttonStyle(AppPrimaryButtonStyle(enabled: isFormValid && !isSubmitting))
@@ -119,7 +121,7 @@ struct BookingFormView: View {
             }
             .appListSurface()
             .appScreenBackground()
-            .navigationTitle("New Booking")
+            .navigationTitle(staffSchedulingForClient ? "Schedule appointment" : "New Booking")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if let drawerState = drawerState {

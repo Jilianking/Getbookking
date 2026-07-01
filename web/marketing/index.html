@@ -251,15 +251,20 @@
 
     .hero-ctas {
       display: flex;
+      flex-direction: column;
+      align-items: flex-start;
       gap: 12px;
-      justify-content: flex-start;
-      flex-wrap: wrap;
+      max-width: 320px;
       margin-bottom: 0;
     }
 
     .hero-ctas .btn-primary,
-    .hero-ctas .btn-secondary {
+    .hero-ctas .btn-secondary,
+    .hero-ctas .btn-early-access {
+      width: 100%;
+      text-align: center;
       font-size: 16px;
+      box-sizing: border-box;
     }
 
     .btn-primary, a.btn-primary {
@@ -295,29 +300,32 @@
 
     .btn-secondary:hover, a.btn-secondary:hover { border-color: var(--brand-dark); background: var(--brand-offwhite); }
 
-    .hero-early-access {
-      max-width: 1120px;
-      margin: 28px auto 0;
-      text-align: center;
-    }
-
     .btn-early-access, a.btn-early-access {
       display: inline-block;
-      padding: 12px 28px;
-      background: transparent;
-      color: var(--brand-warm);
-      border: 1px solid var(--brand-warm);
+      padding: 14px 32px;
+      background: var(--border);
+      color: var(--brand-dark);
+      border: 1px solid transparent;
       border-radius: 8px;
       font-size: 15px;
       font-family: 'DM Sans', sans-serif;
-      font-weight: 600;
+      font-weight: 500;
       text-decoration: none;
-      transition: background 0.15s, color 0.15s;
+      transition: background 0.15s;
     }
 
     .btn-early-access:hover, a.btn-early-access:hover {
-      background: var(--brand-warm);
-      color: var(--brand-cream);
+      background: #DDD4C8;
+      color: var(--brand-dark);
+    }
+
+    .hero-trust {
+      margin-top: 14px;
+      max-width: 320px;
+      font-size: 13px;
+      color: var(--text-tertiary);
+      text-align: center;
+      line-height: 1.5;
     }
 
     /* ── SECTIONS ── */
@@ -684,8 +692,8 @@
       }
       .hero h1 { font-size: clamp(36px, 9vw, 44px); }
       .hero-sub { font-size: 18px; margin-left: auto; margin-right: auto; }
-      .hero-ctas { justify-content: center; }
-      .hero-early-access { text-align: center; }
+      .hero-ctas { align-items: center; margin: 0 auto; }
+      .hero-trust { margin-left: auto; margin-right: auto; }
       .hero-phones-panel {
         min-height: 0;
         padding: 14px 0 8px;
@@ -734,24 +742,7 @@
       .hero-phone-wrap--messages { margin-right: -28px; }
       .hero-phone-wrap--design { margin-left: -28px; }
       .hero-ctas {
-        flex-direction: column;
-        align-items: stretch;
         width: 100%;
-        max-width: 320px;
-        margin: 0 auto;
-      }
-      .hero-ctas .btn-primary,
-      .hero-ctas .btn-secondary {
-        width: 100%;
-        text-align: center;
-      }
-      .hero-early-access {
-        margin-top: 20px;
-        padding: 0 16px;
-      }
-      .hero-early-access .btn-early-access {
-        width: 100%;
-        max-width: 320px;
       }
     }
 
@@ -842,11 +833,10 @@
         <div class="hero-ctas">
           <a href="signup.html" class="btn-primary">Get started free</a>
           <a href="#features" class="btn-secondary">See how it works →</a>
+          <a href="testflight.html" class="btn-early-access">Get early access</a>
         </div>
+        <p class="hero-trust">30-day free trial · Cancel anytime</p>
       </div>
-    </div>
-    <div class="hero-early-access">
-      <a href="testflight.html" class="btn-early-access">Get early access</a>
     </div>
   </section>
 
@@ -879,7 +869,7 @@
             <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
           </div>
           <h3>Point of sale</h3>
-          <p>Accept payments in-person or online. Track tips, split payments, and keep clean records automatically.</p>
+          <p>Accept payments with Tap to Pay on iPhone or online. Track tips, split payments, and keep clean records automatically.</p>
         </div>
         <div class="feat-card">
           <div class="feat-icon">
@@ -944,7 +934,7 @@
           <ul class="plan-feats">
             <li>Professional website</li>
             <li>Online booking &amp; deposits</li>
-            <li>Tap to Pay &amp; card checkout</li>
+            <li>Tap to Pay on iPhone &amp; card checkout</li>
             <li>Client texting</li>
           </ul>
           <a href="signup.html?plan=solo" class="plan-cta outline">Start free trial</a>

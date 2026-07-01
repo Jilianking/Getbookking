@@ -7617,11 +7617,11 @@
         return s || fallback;
       }
 
-      /** Original-preset defaults per layout family (when Firestore field is empty). */
+      /** Default-preset colors per layout family (when Firestore field is empty). Blade → Pearl Light. */
       function themeColorDefaults(tenant) {
         if (isBladeTheme(tenant)) {
-          return { bg: '#0a0a08', fg: '#f5f0e8', card: '#141410', accent: '#c9a84c', accentHover: '#e5c97a', accentFg: '#0a0a08',
-            featuredBg: '#0a0a08', featuredFg: '#f5f0e8', galleryBg: '#0a0a08', galleryFg: '#f5f0e8', aboutBg: '#141410', aboutFg: '#f5f0e8' };
+          return { bg: '#ffffff', fg: '#1a1f28', card: '#eef1f4', accent: '#5a8cc0', accentHover: '#4678a8', accentFg: '#ffffff',
+            featuredBg: '#f6f7f8', featuredFg: '#1a1f28', galleryBg: '#f6f7f8', galleryFg: '#1a1f28', aboutBg: '#2a3238', aboutFg: '#f6f7f8' };
         }
         if (isStonecutTheme(tenant)) {
           return { bg: '#060604', fg: '#e8e0d0', card: '#0e0d0a', accent: '#c0221a', accentHover: '#d42a20', accentFg: '#e8e0d0',

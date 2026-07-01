@@ -2130,17 +2130,17 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         }
         await MainActor.run { errorMessage = nil }
         let family = theme.family
-        let originalPalette = WebColorPalettes.original(for: family)
+        let defaultPalette = WebColorPalettes.defaultPalette(for: family)
         var updates: [String: Any] = ["webThemeId": theme.rawValue]
-        for (key, value) in WebColorPalettes.firestoreUpdates(paletteId: originalPalette.id, tokens: originalPalette.tokens) {
+        for (key, value) in WebColorPalettes.firestoreUpdates(paletteId: defaultPalette.id, tokens: defaultPalette.tokens) {
             updates[key] = value
         }
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
             await MainActor.run {
                 webThemeId = theme.rawValue
-                webColorPaletteId = originalPalette.id
-                applyColorTokensLocally(originalPalette.tokens)
+                webColorPaletteId = defaultPalette.id
+                applyColorTokensLocally(defaultPalette.tokens)
                 invalidateWebPreview()
                 saveSuccess = true
             }
@@ -2596,6 +2596,6 @@ extension DesignViewModel {
         }) {
             return match.name
         }
-        return WebColorPalettes.original(for: family).name
+        return WebColorPalettes.defaultPalette(for: family).name
     }
 }

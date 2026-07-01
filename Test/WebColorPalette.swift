@@ -173,9 +173,13 @@ enum WebColorPalettes {
     private static let lightSourceFamilies: [TemplateFamily] = [.studio12, .classic, .luxe]
     private static let darkSourceFamilies: [TemplateFamily] = [.blade, .stonecut]
 
-    /// Default picker tab: light templates → Light, dark templates → Dark.
+    /// Default picker tab: Blade defaults to Pearl Light (light); other dark templates → Dark.
     static func defaultPickerTone(for family: TemplateFamily) -> WebColorPalettePickerTone {
-        isLightFamily(family) ? .light : .dark
+        switch family {
+        case .blade: return .light
+        case .classic, .luxe, .studio12: return .light
+        case .stonecut: return .dark
+        }
     }
 
     /// Resolves a catalog id for `family` using the picker tone filter.
@@ -586,23 +590,33 @@ enum WebColorPalettes {
         palette(family: family, id: "original") ?? palettes(for: family).first!
     }
 
+    /// Starting palette when none is stored or when switching templates.
+    static func defaultPaletteId(for family: TemplateFamily) -> String {
+        family == .blade ? "pearl-light" : "original"
+    }
+
+    static func defaultPalette(for family: TemplateFamily) -> WebColorPalette {
+        palette(family: family, id: defaultPaletteId(for: family)) ?? original(for: family)
+    }
+
     static func resolvedPaletteId(stored: String?, family: TemplateFamily) -> String {
+        let fallback = defaultPaletteId(for: family)
         let trimmed = (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "original" }
+        if trimmed.isEmpty { return fallback }
         if trimmed == customPaletteId { return customPaletteId }
         let baseIds = Set(palettes(for: family).map(\.id))
         if baseIds.contains(trimmed) { return trimmed }
-        if v3AccentOnlyIds.contains(trimmed) { return "original" }
+        if v3AccentOnlyIds.contains(trimmed) { return fallback }
         if palette(family: family, id: trimmed) != nil {
-            return migratedBasePaletteId(from: trimmed, family: family) ?? "original"
+            return migratedBasePaletteId(from: trimmed, family: family) ?? fallback
         }
-        return "original"
+        return fallback
     }
 
     private static func migratedBasePaletteId(from legacyId: String, family: TemplateFamily) -> String? {
         let bases = baseIds(for: family)
         if bases.contains(legacyId) { return legacyId }
-        if v3AccentOnlyIds.contains(legacyId) { return "original" }
+        if v3AccentOnlyIds.contains(legacyId) { return defaultPaletteId(for: family) }
         return nil
     }
 

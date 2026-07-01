@@ -206,7 +206,7 @@ class DashboardViewModel: ObservableObject {
         let demoAmounts = [820.0, 940, 880, 1020, 960, 1100, 1050, 1280]
         let thisWeek = demoAmounts.last ?? 0
         let lastWeek = demoAmounts.count >= 2 ? demoAmounts[demoAmounts.count - 2] : 0
-        let weekOverWeekPct = Self.percentChange(current: thisWeek, prior: lastWeek)
+        let weekOverWeekPct = RevenueChartMath.percentChange(current: thisWeek, prior: lastWeek)
         let points = demoAmounts.enumerated().map { index, amount in
             WeeklyRevenuePoint(id: index + 1, label: "Wk \(index + 1)", amount: amount)
         }
@@ -317,58 +317,22 @@ class DashboardViewModel: ObservableObject {
     }
 
     private static func makeRevenueSnapshot(from entries: [(date: Date, amount: Double)], now: Date = Date()) -> RevenueSnapshot {
-        let weekly = bucketWeeklyRevenue(entries, weeks: 8, now: now)
-        let thisWeek = weekly.last?.amount ?? 0
-        let lastWeek = weekly.count >= 2 ? weekly[weekly.count - 2].amount : 0
-        let weekOverWeekPct = percentChange(current: thisWeek, prior: lastWeek)
+        let weeklySnapshot = RevenueChartMath.makeWeeklySnapshot(from: entries, weeks: 8, now: now)
 
         let cal = Calendar.current
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
         let priorMonthStart = cal.date(byAdding: .month, value: -1, to: monthStart) ?? monthStart
-        let thisMonth = sumEntries(entries, start: monthStart, end: now)
-        let lastMonth = sumEntries(entries, start: priorMonthStart, end: monthStart)
-        let monthOverMonthPct = percentChange(current: thisMonth, prior: lastMonth)
-
-        let avgPerWeek = weekly.isEmpty
-            ? 0
-            : weekly.reduce(0) { $0 + $1.amount } / Double(weekly.count)
+        let thisMonth = RevenueChartMath.sumEntries(entries, start: monthStart, end: now)
+        let lastMonth = RevenueChartMath.sumEntries(entries, start: priorMonthStart, end: monthStart)
+        let monthOverMonthPct = RevenueChartMath.percentChange(current: thisMonth, prior: lastMonth)
 
         return RevenueSnapshot(
-            weekly: weekly,
-            thisWeek: thisWeek,
-            weekOverWeekPct: weekOverWeekPct,
+            weekly: weeklySnapshot.weekly,
+            thisWeek: weeklySnapshot.thisWeek,
+            weekOverWeekPct: weeklySnapshot.weekOverWeekPct,
             thisMonth: thisMonth,
             monthOverMonthPct: monthOverMonthPct,
-            avgPerWeek: avgPerWeek
+            avgPerWeek: weeklySnapshot.avgPerWeek
         )
-    }
-
-    private static func bucketWeeklyRevenue(
-        _ entries: [(date: Date, amount: Double)],
-        weeks: Int,
-        now: Date
-    ) -> [WeeklyRevenuePoint] {
-        let cal = Calendar.current
-        return (0..<weeks).map { index in
-            let weeksAgo = weeks - 1 - index
-            let anchor = cal.date(byAdding: .weekOfYear, value: -weeksAgo, to: now) ?? now
-            let weekStart = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: anchor)) ?? anchor
-            let weekEnd = cal.date(byAdding: .weekOfYear, value: 1, to: weekStart) ?? weekStart
-            let total = entries
-                .filter { $0.date >= weekStart && $0.date < weekEnd }
-                .reduce(0) { $0 + $1.amount }
-            return WeeklyRevenuePoint(id: index + 1, label: "Wk \(index + 1)", amount: total)
-        }
-    }
-
-    private static func sumEntries(_ entries: [(date: Date, amount: Double)], start: Date, end: Date) -> Double {
-        entries
-            .filter { $0.date >= start && $0.date < end }
-            .reduce(0) { $0 + $1.amount }
-    }
-
-    private static func percentChange(current: Double, prior: Double) -> Double? {
-        guard prior > 0 else { return current > 0 ? nil : 0 }
-        return ((current - prior) / prior) * 100
     }
 }

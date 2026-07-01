@@ -54,6 +54,16 @@ struct InsightsView: View {
                             .padding(32)
                     } else {
                         kpiGrid
+                        InsightsRevenueChartCard(
+                            weeklyPoints: viewModel.revenueWeeklyPoints,
+                            dailyPoints: viewModel.revenueDailyPoints,
+                            periodTotal: viewModel.revenueInRange,
+                            periodLabel: viewModel.selectedRange.periodLabel,
+                            trendText: viewModel.revenueTrendText,
+                            showsConnectPrompt: viewModel.useTenantData && !viewModel.stripeConnected,
+                            usesLegacyRevenue: !viewModel.useTenantData
+                        )
+                        .padding(.horizontal, 16)
                         bookingsBreakdownCard
                         if !viewModel.topServiceLabels.isEmpty {
                             topServicesCard
@@ -61,8 +71,6 @@ struct InsightsView: View {
                         clientsCard
                         if viewModel.useTenantData {
                             paymentsCard
-                        } else if viewModel.revenueInRange > 0 {
-                            legacyRevenueCard
                         }
                     }
                 }
@@ -80,7 +88,12 @@ struct InsightsView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
+                        Task {
+                            await viewModel.refresh(
+                                isDemoMode: authViewModel.isDemoMode,
+                                sessionStore: sessionStore
+                            )
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .foregroundStyle(AppDesign.textPrimary)
@@ -89,7 +102,10 @@ struct InsightsView: View {
                 }
             }
             .refreshable {
-                await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.refresh(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
             .onChange(of: viewModel.selectedRange) { _, _ in
                 viewModel.recomputeForSelectedRange()
@@ -288,26 +304,6 @@ struct InsightsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 4)
             }
-        }
-    }
-
-    private var legacyRevenueCard: some View {
-        InsightCardContainer {
-            InsightCardHeader(
-                icon: "dollarsign.circle.fill",
-                iconColor: AppDesign.iconTileForeground,
-                title: "Revenue",
-                trailing: {
-                    Text(viewModel.selectedRange.periodLabel)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(AppDesign.textSecondary)
-                }
-            )
-            metricListRow(
-                label: "Completed bookings",
-                value: formatRevenue(viewModel.revenueInRange),
-                valueColor: AppDesign.brandWarm
-            )
         }
     }
 

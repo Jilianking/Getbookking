@@ -7,12 +7,6 @@
 import SwiftUI
 import Charts
 
-struct WeeklyRevenuePoint: Identifiable, Equatable {
-    let id: Int
-    let label: String
-    let amount: Double
-}
-
 struct DashboardRevenueChartCard: View {
     let points: [WeeklyRevenuePoint]
     let thisWeek: Double

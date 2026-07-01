@@ -532,7 +532,7 @@ struct DesignView: View {
         }) {
             return match.name
         }
-        return WebColorPalettes.original(for: family).name
+        return WebColorPalettes.defaultPalette(for: family).name
     }
 
     private var previewContent: some View {
@@ -2842,7 +2842,7 @@ private struct DesignTemplatePickerPopover: View {
                 .padding(.vertical, 2)
             }
             .frame(maxHeight: 400)
-            Text("Switching template resets colors to that layout’s Original preset.")
+            Text("Switching template resets colors to that layout’s default preset.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }

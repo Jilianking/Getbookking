@@ -102,6 +102,10 @@ final class InsightsViewModel: ObservableObject {
     @Published var paymentChargesInRange = 0
     @Published var paymentVolumeInRange: Double = 0
 
+    // Revenue chart (real Stripe / legacy booking revenue only)
+    @Published var revenueWeeklyPoints: [WeeklyRevenuePoint] = []
+    @Published var revenueDailyPoints: [DailyRevenuePoint] = []
+
     private var cachedTenantBookings: [BookingRequest] = []
     private var cachedLegacyRequests: [Request] = []
     private var cachedCustomerDates: [Date] = []
@@ -235,8 +239,8 @@ final class InsightsViewModel: ObservableObject {
         }
     }
 
-    func refresh(isDemoMode: Bool = false) async {
-        await loadData(isDemoMode: isDemoMode)
+    func refresh(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
+        await loadData(isDemoMode: isDemoMode, sessionStore: sessionStore)
     }
 
     func recomputeForSelectedRange() {
@@ -277,6 +281,8 @@ final class InsightsViewModel: ObservableObject {
         ]
         paymentChargesInRange = 14
         paymentVolumeInRange = 1200
+        revenueWeeklyPoints = []
+        revenueDailyPoints = []
     }
 
     private func applyTenantMetrics(periodStart: Date?, priorBounds: (start: Date, end: Date)?, now: Date) {
@@ -313,6 +319,8 @@ final class InsightsViewModel: ObservableObject {
 
         paymentChargesInRange = chargesCurrent.count
         paymentVolumeInRange = revenueInRange
+
+        applyRevenueChart(periodStart: periodStart, now: now, range: selectedRange)
     }
 
     private func applyLegacyMetrics(periodStart: Date?, priorBounds: (start: Date, end: Date)?, now: Date) {
@@ -347,6 +355,32 @@ final class InsightsViewModel: ObservableObject {
 
         paymentChargesInRange = 0
         paymentVolumeInRange = 0
+
+        applyRevenueChart(periodStart: periodStart, now: now, range: selectedRange)
+    }
+
+    private func applyRevenueChart(periodStart: Date?, now: Date, range: InsightsTimeRange) {
+        let entries = revenueEntriesForChart()
+        let filtered = RevenueChartMath.filterEntries(entries, start: periodStart, end: now)
+        revenueWeeklyPoints = RevenueChartMath.bucketWeekly(
+            filtered,
+            maxWeeks: 8,
+            now: now,
+            periodStart: periodStart
+        )
+        revenueDailyPoints = RevenueChartMath.bucketDaily(
+            filtered,
+            range: range,
+            now: now,
+            periodStart: periodStart
+        )
+    }
+
+    private func revenueEntriesForChart() -> [(date: Date, amount: Double)] {
+        if useTenantData {
+            return cachedStripeCharges.map { (date: $0.date, amount: $0.amount) }
+        }
+        return cachedLegacyRevenueEntries.map { (date: $0.date, amount: $0.amount) }
     }
 
     private func bookingInPeriod(_ r: BookingRequest, start: Date?, end: Date) -> Bool {
@@ -433,7 +467,12 @@ final class InsightsViewModel: ObservableObject {
             let avail = Double((balData?["availableCents"] as? NSNumber)?.intValue ?? 0) / 100
             let pend = Double((balData?["pendingCents"] as? NSNumber)?.intValue ?? 0) / 100
 
-            let tx = try await functions.httpsCallable("getConnectBalanceTransactions").call()
+            let start = Calendar.current.date(byAdding: .day, value: -365, to: Date()) ?? Date()
+            let payload: [String: Any] = [
+                "startTimestampSeconds": Int(start.timeIntervalSince1970),
+                "limit": 100,
+            ]
+            let tx = try await functions.httpsCallable("getConnectBalanceTransactions").call(payload)
             let txData = tx.data as? [String: Any]
             let list = txData?["transactions"] as? [[String: Any]] ?? []
             var charges: [(Date, Double)] = []

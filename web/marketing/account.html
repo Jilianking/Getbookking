@@ -7,27 +7,86 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/account.css?v=4" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/nav.css?v=6" />
+  <link rel="stylesheet" href="assets/account.css?v=6" />
 </head>
-<body>
-  <header class="acct-header">
-    <a class="brand" href="index.html" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-128.png?v=8" alt="" width="56" height="56" />
+<body class="acct-layout">
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-128.png?v=8" alt="" class="nav-logo-mark" width="56" height="56" />
       <span>Get Bookking</span>
     </a>
-  </header>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="templates.html">Templates</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="account.html">Your account</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="index.html#pricing">Pricing</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="testflight.html">Early access</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link nav-active"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
   <main class="acct-page">
     <div id="stripeSuccessPanel" class="acct-stripe-panel hidden">
-      <h1>Stripe connected</h1>
-      <p class="success">Your payout account setup is complete (or in review).</p>
-      <p>Open the <strong>Bookking</strong> app again — your Stripe status refreshes automatically when you return.</p>
+      <h1 id="stripeSuccessTitle">Stripe application submitted</h1>
+      <p id="stripeSuccessLead" class="pending">We received your payout details.</p>
+      <p id="stripeSuccessBody">Stripe may need up to 1–2 business days to verify your identity before you can accept payments. Some accounts are approved within minutes.</p>
+      <p id="stripeSuccessNext">Open the <strong>Bookking</strong> app again. On <strong>Payments</strong>, pull to refresh — when payments are enabled, <strong>Tap to Pay on iPhone</strong> will be ready.</p>
+      <p id="stripeSuccessLoading" class="acct-stripe-loading hidden">Checking your payout status…</p>
+      <div class="acct-stripe-actions">
+        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Bookking app</a>
+        <a href="index.html" class="acct-stripe-btn acct-stripe-btn--secondary">Visit website</a>
+        <p class="acct-stripe-actions-hint">If the app is already installed, switch back from your home screen or app switcher.</p>
+      </div>
     </div>
 
     <div id="stripeRefreshPanel" class="acct-stripe-panel hidden">
       <h1>Continue Stripe setup</h1>
       <p>Your onboarding link expired or was interrupted. Open the Bookking app and tap <strong>Connect Stripe</strong> again to continue.</p>
+      <div class="acct-stripe-actions">
+        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Bookking app</a>
+        <a href="index.html" class="acct-stripe-btn acct-stripe-btn--secondary">Visit website</a>
+        <p class="acct-stripe-actions-hint">If the app is already installed, switch back from your home screen or app switcher.</p>
+      </div>
     </div>
 
     <div id="accountDefaultPanel">
@@ -163,6 +222,90 @@
     function showPanel(id) {
       ['stripeSuccessPanel', 'stripeRefreshPanel', 'accountDefaultPanel'].forEach(function(pid) {
         document.getElementById(pid).classList.toggle('hidden', pid !== id);
+      });
+    }
+
+    function resolveOpenAppHref() {
+      var store = (window.appStoreUrl || '').trim();
+      if (store) return store;
+      var tf = (window.testflightPublicJoinUrl || '').trim();
+      if (tf) return tf;
+      return 'testflight.html';
+    }
+
+    function wireStripeReturnLinks() {
+      var href = resolveOpenAppHref();
+      var external = /^https?:\/\//i.test(href);
+      document.querySelectorAll('[data-open-app-link]').forEach(function(el) {
+        el.href = href;
+        if (external) {
+          el.setAttribute('target', '_blank');
+          el.setAttribute('rel', 'noopener noreferrer');
+        } else {
+          el.removeAttribute('target');
+          el.removeAttribute('rel');
+        }
+      });
+    }
+
+    wireStripeReturnLinks();
+
+    function setStripeSuccessLead(text, tone) {
+      var lead = document.getElementById('stripeSuccessLead');
+      if (!lead) return;
+      lead.textContent = text;
+      lead.classList.remove('success', 'pending');
+      if (tone) lead.classList.add(tone);
+    }
+
+    function applyStripeReturnStatus(data) {
+      var titleEl = document.getElementById('stripeSuccessTitle');
+      var bodyEl = document.getElementById('stripeSuccessBody');
+      var nextEl = document.getElementById('stripeSuccessNext');
+      var loadingEl = document.getElementById('stripeSuccessLoading');
+      if (loadingEl) loadingEl.classList.add('hidden');
+
+      if (data && data.chargesEnabled) {
+        if (titleEl) titleEl.textContent = "You're approved to accept payments";
+        setStripeSuccessLead('Your payout account is active.', 'success');
+        if (bodyEl) {
+          bodyEl.textContent = 'You can take deposits, payment links, and in-person payments with Tap to Pay on iPhone.';
+        }
+        if (nextEl) {
+          nextEl.innerHTML = 'Open the <strong>Bookking</strong> app → <strong>Payments</strong> → <strong>Tap to Pay on iPhone</strong> to accept your first contactless payment.';
+        }
+        return;
+      }
+
+      if (data && data.detailsSubmitted) {
+        if (titleEl) titleEl.textContent = 'Stripe application submitted';
+        setStripeSuccessLead('Verification in progress — you cannot take payments yet.', 'pending');
+        if (bodyEl) {
+          bodyEl.textContent = 'Stripe is reviewing your identity and payout details. This usually takes a few minutes, but can take up to 1–2 business days. We will not enable charges until Stripe approves your account.';
+        }
+        if (nextEl) {
+          nextEl.innerHTML = 'Open the <strong>Bookking</strong> app and go to <strong>Payments</strong>. Pull to refresh to see when you are approved. You will get Tap to Pay on iPhone once payments are enabled.';
+        }
+        return;
+      }
+
+      if (titleEl) titleEl.textContent = 'Continue in the Bookking app';
+      setStripeSuccessLead('Stripe setup is not finished yet.', 'pending');
+      if (bodyEl) {
+        bodyEl.textContent = 'Return to the app and tap Connect Stripe or Tap to Pay on iPhone to complete payout setup.';
+      }
+      if (nextEl) {
+        nextEl.innerHTML = 'If you already finished the Stripe form, open <strong>Payments</strong> in the app and pull to refresh.';
+      }
+    }
+
+    function loadStripeReturnStatus() {
+      var loadingEl = document.getElementById('stripeSuccessLoading');
+      if (loadingEl) loadingEl.classList.remove('hidden');
+      return fns.httpsCallable('getConnectAccountStatus')({}).then(function(res) {
+        applyStripeReturnStatus(res.data || {});
+      }).catch(function() {
+        if (loadingEl) loadingEl.classList.add('hidden');
       });
     }
 
@@ -530,12 +673,17 @@
         window.location.replace('billing.html?billing=portal');
         return;
       }
-      if (stripeParam !== 'success' && stripeParam !== 'refresh') {
+      if (stripeParam === 'success') {
+        loadStripeReturnStatus();
+        return;
+      }
+      if (stripeParam !== 'refresh') {
         loadBillingSummary();
         loadAccountLifecycle();
       }
     });
   </script>
+  <script src="assets/nav.js?v=6"></script>
   <script src="assets/nav-auth.js?v=3"></script>
 </body>
 </html>

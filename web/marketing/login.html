@@ -206,6 +206,7 @@
       document.getElementById('signedInEmail').textContent = email;
       document.getElementById('loginFormPanel').classList.add('hidden');
       document.getElementById('loginSignedInPanel').classList.remove('hidden');
+      updateSignedInContinueLink();
     }
 
     (function applyQueryParams() {
@@ -218,6 +219,23 @@
         document.getElementById('timeoutMsg').classList.remove('hidden');
       }
     })();
+
+    function postLoginDestination() {
+      var params = new URLSearchParams(window.location.search);
+      var next = (params.get('next') || '').trim();
+      if (!next || next.indexOf('://') !== -1) return 'account.html';
+      if (next.charAt(0) === '/' || next.indexOf('..') !== -1) return 'account.html';
+      return next;
+    }
+
+    function updateSignedInContinueLink() {
+      var dest = postLoginDestination();
+      var link = document.querySelector('#loginSignedInPanel a.btn-primary');
+      if (link) {
+        link.href = dest;
+        link.textContent = dest.indexOf('billing.html') !== -1 ? 'Continue to billing' : 'Go to my account';
+      }
+    }
 
     document.getElementById('switchAccountBtn').addEventListener('click', function() {
       auth.signOut().then(showLoginForm);
@@ -232,7 +250,7 @@
       btn.disabled = true;
       auth.signInWithEmailAndPassword(email, password)
         .then(function() {
-          window.location.href = 'account.html';
+          window.location.href = postLoginDestination();
         })
         .catch(function(e) {
           btn.disabled = false;
@@ -257,6 +275,12 @@
 
     auth.onAuthStateChanged(function(user) {
       if (user && user.email) {
+        var dest = postLoginDestination();
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('next') && dest.indexOf('billing.html') !== -1) {
+          window.location.replace(dest);
+          return;
+        }
         showSignedInPanel(user.email);
       } else {
         showLoginForm();

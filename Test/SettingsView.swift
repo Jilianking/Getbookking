@@ -838,10 +838,10 @@ private struct AccountSettingsDetailView: View {
                             )
                             if billingViewModel.subscriptionTrialing {
                                 Button {
-                                    Task { await billingViewModel.startSubscriptionToday() }
+                                    Task { await billingViewModel.openBillingToStartSubscription() }
                                 } label: {
                                     HStack {
-                                        if billingViewModel.isStartingSubscription {
+                                        if billingViewModel.isOpeningBillingWebsite {
                                             ProgressView()
                                                 .scaleEffect(0.9)
                                         }
@@ -849,7 +849,7 @@ private struct AccountSettingsDetailView: View {
                                     }
                                 }
                                 .disabled(
-                                    billingViewModel.isStartingSubscription ||
+                                    billingViewModel.isOpeningBillingWebsite ||
                                     billingViewModel.isSyncingBilling ||
                                     billingViewModel.isOpeningBillingPortal
                                 )
@@ -887,7 +887,7 @@ private struct AccountSettingsDetailView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await billingViewModel.syncBillingAfterPortalIfNeeded() }
+            Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
         }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {

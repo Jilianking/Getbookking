@@ -697,9 +697,25 @@ class FirebaseService: ObservableObject {
                 "confirmationType": ProviderWorkflow.default.confirmationType.rawValue,
                 "responseTimeHours": ProviderWorkflow.default.responseTimeHours
             ],
-            "createdAt": Timestamp(date: Date())
+            "createdAt": Timestamp(date: Date()),
+            "onboarding": [
+                "appTourPending": true,
+                "tapToPayDashboardTipPending": true,
+            ],
         ]
         try await db.collection("users").document(uid).setData(data)
+    }
+
+    func completeAppTour(uid: String) async throws {
+        guard let safeUid = sanitizedFirestoreId(uid) else {
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid user id"])
+        }
+        try await db.collection("users").document(safeUid).updateData([
+            "onboarding.appTourPending": false,
+            "onboarding.appTourCompleted": true,
+            "onboarding.appTourCompletedAt": Timestamp(date: Date()),
+            "onboarding.tapToPayDashboardTipPending": false,
+        ])
     }
 
     func fetchProviderProfile(uid: String) async throws -> ProviderProfile? {
@@ -1175,6 +1191,7 @@ class FirebaseService: ObservableObject {
 
         let tenantId = data["tenantId"] as? String
         let tenantSlug = data["tenantSlug"] as? String
+        let appTourPending = AppTourStore.isAppTourPending(from: data)
 
         return ProviderProfile(
             tenantId: tenantId,
@@ -1190,7 +1207,8 @@ class FirebaseService: ObservableObject {
             subscriptionStatus: subscriptionStatus,
             availability: availability,
             workflow: workflow,
-            createdAt: createdAt
+            createdAt: createdAt,
+            appTourPending: appTourPending
         )
     }
 }

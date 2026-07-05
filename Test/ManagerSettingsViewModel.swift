@@ -51,11 +51,11 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsMonthlyUsageCount: Int = 0
     @Published var smsMonthlyUsageRemaining: Int = 1000
     @Published var smsMonthlyLimit: Int = 1000
-    @Published var isStartingSubscription = false
+    @Published var isOpeningBillingWebsite = false
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
-    /// Set before opening Stripe Customer Portal; triggers sync when app becomes active again.
-    @Published var shouldSyncBillingAfterPortal = false
+    /// Set before opening web billing; triggers sync when app becomes active again.
+    @Published var shouldSyncBillingAfterWeb = false
     @Published var isProvisioningSms = false
     @Published var isProvisioningMemberSms = false
 
@@ -184,7 +184,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "Stripe did not return a billing portal URL."]
                 )
             }
-            shouldSyncBillingAfterPortal = true
+            shouldSyncBillingAfterWeb = true
             await UIApplication.shared.open(url)
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
@@ -192,24 +192,21 @@ final class ManagerSettingsViewModel: ObservableObject {
         isOpeningBillingPortal = false
     }
 
-    func syncBillingAfterPortalIfNeeded() async {
-        guard shouldSyncBillingAfterPortal else { return }
-        shouldSyncBillingAfterPortal = false
+    func syncBillingAfterWebIfNeeded() async {
+        guard shouldSyncBillingAfterWeb else { return }
+        shouldSyncBillingAfterWeb = false
         await syncBillingFromStripe()
     }
 
-    func startSubscriptionToday() async {
+    /// Opens getbookking.com billing to start paid subscription (Apple-safe; payment on web).
+    func openBillingToStartSubscription() async {
         guard isTenantOwner else { return }
-        isStartingSubscription = true
+        isOpeningBillingWebsite = true
         errorMessage = nil
-        do {
-            _ = try await functions.httpsCallable("startSubscriptionToday").call([:])
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            await load(isDemoMode: false)
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-        }
-        isStartingSubscription = false
+        defer { isOpeningBillingWebsite = false }
+        guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
+        shouldSyncBillingAfterWeb = true
+        await UIApplication.shared.open(url)
     }
 
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {

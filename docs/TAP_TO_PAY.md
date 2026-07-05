@@ -33,8 +33,15 @@ Cloud Functions (deploy from `functions/`):
 ## App flow
 
 - **Payments** → **Tap to Pay** (always tappable; routes to Stripe Connect or checkout).
+- **First tap:** Apple Tap to Pay Terms & Conditions (via Stripe Terminal reader connect) **before** Stripe Connect onboarding in Safari.
+- T&C is shown once per device; `TapToPayReaderSession` persists acceptance locally.
 - Reader warms up when the app becomes active (signed in, Stripe connected, location configured).
 - Checkout shows processing → approved / declined / timeout and optional share receipt.
+
+## Backend (Tap to Pay terms)
+
+- `prepareTapToPayTermsAcceptance` — creates Connect account + Terminal location without `charges_enabled`; iOS connects reader for Apple T&C.
+- `createTerminalConnectionTokenForTapToPay` — ensures Connect account exists before issuing token.
 
 ## Apple review (still required)
 

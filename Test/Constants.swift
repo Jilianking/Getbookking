@@ -50,6 +50,9 @@ struct Constants {
         static var marketingTemplatesURL: String { "\(marketingWebOrigin)/templates.html" }
         static var marketingPrivacyURL: String { "\(marketingWebOrigin)/privacy.html" }
         static var marketingTermsURL: String { "\(marketingWebOrigin)/terms.html" }
+        /// Owner billing page — start paid subscription (trial users from the app).
+        static var marketingBillingStartURL: String { "\(marketingWebOrigin)/billing.html?start=today" }
+        static var marketingBillingURL: String { "\(marketingWebOrigin)/billing.html" }
 
         /// Opens web forgot-password with optional email prefill from the iOS app.
         static func marketingForgotPasswordURL(email: String) -> URL? {

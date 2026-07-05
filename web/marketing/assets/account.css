@@ -405,6 +405,78 @@ button.acct-row:hover {
 
 .acct-stripe-panel p.success { color: var(--success); font-weight: 500; }
 
+.acct-stripe-panel p.pending {
+  color: #9a6700;
+  font-weight: 500;
+}
+
+.acct-stripe-loading {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-bottom: 0;
+}
+
+.acct-stripe-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 8px;
+}
+
+.acct-stripe-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.acct-stripe-btn--primary {
+  background: var(--brand-dark);
+  color: #fff;
+  border: 1px solid var(--brand-dark);
+}
+
+.acct-stripe-btn--primary:hover {
+  background: #1f1610;
+  color: #fff;
+  text-decoration: none;
+}
+
+.acct-stripe-btn--secondary {
+  background: #fff;
+  color: var(--brand-dark);
+  border: 1px solid var(--border);
+}
+
+.acct-stripe-btn--secondary:hover {
+  background: var(--brand-offwhite);
+  color: var(--brand-dark);
+  text-decoration: none;
+}
+
+.acct-stripe-actions-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+body.acct-layout .acct-page {
+  padding-top: 32px;
+}
+
+body.acct-layout .acct-page h1 {
+  margin-bottom: 28px;
+}
+
 .acct-danger-zone {
   margin-top: 8px;
 }

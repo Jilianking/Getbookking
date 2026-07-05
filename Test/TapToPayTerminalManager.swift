@@ -93,6 +93,17 @@ final class TapToPayTerminalManager {
         await warmUpReader(locationId: locationId, merchantDisplayName: merchantDisplayName)
     }
 
+    /// Connect Tap to Pay reader (shows Apple T&C on first use). Used before Stripe Connect onboarding.
+    func connectReaderForTermsAcceptance(
+        locationId: String,
+        merchantDisplayName: String? = nil
+    ) async throws {
+        try await warmUpReaderThrowing(
+            locationId: locationId,
+            merchantDisplayName: normalizedMerchantDisplayName(merchantDisplayName)
+        )
+    }
+
     func processPayment(clientSecret: String, locationId: String, merchantDisplayName: String? = nil) async throws {
         ensureInitialized()
         guard !locationId.isEmpty else { throw TapToPayError.missingLocationId }

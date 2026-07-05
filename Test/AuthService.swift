@@ -31,6 +31,14 @@ enum SubscriptionPlan: String, CaseIterable {
         }
     }
 
+    var monthlyPriceLabel: String {
+        switch self {
+        case .solo: return "$39/mo"
+        case .studio: return "$79/mo"
+        case .shop: return "$149/mo"
+        }
+    }
+
     /// Solo is owner-only; team invites require Studio or Shop.
     var allowsTeamInvites: Bool {
         self != .solo

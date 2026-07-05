@@ -44,7 +44,10 @@
             <span class="bill-kv-label">Includes</span>
             <span class="bill-kv-value bill-includes-value">Text messaging, reminders, priority support</span>
           </div>
-          <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:16px;">Upgrade to Pro</button>
+          <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:16px;">Start subscription today</button>
+          <p class="bill-success hidden" id="startSubSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
+            Subscription started. Return to the Bookking app and pull to refresh on Messaging to enable client texting.
+          </p>
           <div class="bill-plan-actions hidden" id="planActions">
             <button type="button" class="btn-secondary" id="changePlanBtn">Change plan</button>
             <button type="button" class="btn-outline-danger" id="cancelSubBtn">Cancel subscription</button>
@@ -116,6 +119,23 @@
     </div>
   </div>
 
+  <div class="acct-modal-backdrop hidden" id="startSubModalBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="startSubModal" role="dialog" aria-modal="true" aria-labelledby="startSubModalTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="startSubModalTitle">Start subscription today?</h2>
+        <button type="button" class="acct-modal-close" id="startSubModalClose" aria-label="Close">&times;</button>
+      </div>
+      <p id="startSubModalBody" style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">
+        Your card on file will be charged today. You’ll skip the rest of your free trial and can enable client texting in the app.
+      </p>
+      <div class="acct-modal-actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="startSubModalCancel">Not now</button>
+        <button type="button" class="btn-upgrade" id="startSubModalConfirm" style="flex:1;">Yes, start subscription</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
@@ -129,6 +149,13 @@
 
     var params = new URLSearchParams(window.location.search);
     var billingParam = params.get('billing');
+    var startParam = params.get('start');
+    var pendingStartTodayPrompt = false;
+
+    function loginRedirectUrl() {
+      var next = 'billing.html' + window.location.search;
+      return 'login.html?next=' + encodeURIComponent(next);
+    }
 
     function formatMoney(cents, currency) {
       if (cents == null || cents === '') return '';
@@ -321,6 +348,28 @@
 
       document.getElementById('billingEmail').textContent = (user && user.email) ? user.email : '—';
       renderInvoices(d.invoices, displayPlan);
+
+      if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing') {
+        pendingStartTodayPrompt = false;
+        history.replaceState({}, '', 'billing.html');
+        updateStartSubModalCopy(sub);
+        openStartSubModal();
+        startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (startParam === 'today' && sub && sub.status !== 'trialing') {
+        history.replaceState({}, '', 'billing.html');
+      }
+    }
+
+    function updateStartSubModalCopy(sub) {
+      var body = document.getElementById('startSubModalBody');
+      var priceText = '';
+      if (sub && sub.unitAmount != null && sub.interval) {
+        var intervalLabel = sub.interval === 'year' ? 'year' : 'month';
+        priceText = formatMoney(sub.unitAmount, sub.currency) + ' / ' + intervalLabel;
+      }
+      body.textContent = priceText
+        ? ('Your card on file will be charged ' + priceText + ' today. You\u2019ll skip the rest of your free trial and can enable client texting in the Bookking app.')
+        : ('Your card on file will be charged today. You\u2019ll skip the rest of your free trial and can enable client texting in the Bookking app.');
     }
 
     function loadBilling() {
@@ -365,19 +414,50 @@
       document.body.classList.remove('acct-modal-open');
     }
 
-    document.getElementById('startSubBtn').addEventListener('click', function() {
+    function openStartSubModal() {
+      var sub = billingData && billingData.subscription;
+      updateStartSubModalCopy(sub);
+      document.getElementById('startSubModalBackdrop').classList.remove('hidden');
+      document.getElementById('startSubModal').classList.remove('hidden');
+      document.getElementById('startSubModal').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('acct-modal-open');
+    }
+
+    function closeStartSubModal() {
+      document.getElementById('startSubModalBackdrop').classList.add('hidden');
+      document.getElementById('startSubModal').classList.add('hidden');
+      document.getElementById('startSubModal').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('acct-modal-open');
+    }
+
+    function runStartSubscriptionToday() {
       var btn = document.getElementById('startSubBtn');
+      var confirmBtn = document.getElementById('startSubModalConfirm');
       var errEl = document.getElementById('billingError');
+      var successEl = document.getElementById('startSubSuccess');
       btn.disabled = true;
+      if (confirmBtn) confirmBtn.disabled = true;
       errEl.classList.add('hidden');
-      fns.httpsCallable('startSubscriptionToday')({}).then(function() {
-        loadBilling();
-        btn.disabled = false;
+      successEl.classList.add('hidden');
+      return fns.httpsCallable('startSubscriptionToday')({}).then(function() {
+        closeStartSubModal();
+        successEl.classList.remove('hidden');
+        return loadBilling();
       }).catch(function(err) {
         errEl.textContent = (err && err.message) ? err.message : String(err);
         errEl.classList.remove('hidden');
+      }).finally(function() {
         btn.disabled = false;
+        if (confirmBtn) confirmBtn.disabled = false;
       });
+    }
+
+    document.getElementById('startSubBtn').addEventListener('click', function() {
+      openStartSubModal();
+    });
+
+    document.getElementById('startSubModalConfirm').addEventListener('click', function() {
+      runStartSubscriptionToday();
     });
 
     document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
@@ -391,20 +471,30 @@
       closeCancelModal();
       openBillingPortal();
     });
+    document.getElementById('startSubModalClose').addEventListener('click', closeStartSubModal);
+    document.getElementById('startSubModalCancel').addEventListener('click', closeStartSubModal);
+    document.getElementById('startSubModalBackdrop').addEventListener('click', closeStartSubModal);
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && !document.getElementById('cancelModal').classList.contains('hidden')) {
-        closeCancelModal();
+      if (e.key === 'Escape') {
+        if (!document.getElementById('cancelModal').classList.contains('hidden')) {
+          closeCancelModal();
+        } else if (!document.getElementById('startSubModal').classList.contains('hidden')) {
+          closeStartSubModal();
+        }
       }
     });
 
     auth.onAuthStateChanged(function(user) {
       if (!user) {
-        window.location.replace('login.html');
+        window.location.replace(loginRedirectUrl());
         return;
       }
       if (billingParam === 'portal') {
         syncBillingAfterPortalReturn();
         return;
+      }
+      if (startParam === 'today') {
+        pendingStartTodayPrompt = true;
       }
       loadBilling();
     });

@@ -172,6 +172,7 @@ class PaymentsViewModel: ObservableObject {
     @Published var isStudioPayroll = false
     @Published var paymentStripeScope = "tenant"
     @Published var isEnsuringTapToPayLocation = false
+    @Published var isEnsuringTapToPayTerms = false
     @Published var tapToPayDisplayNameDraft: String = ""
     @Published var tapToPayDisplayNamePlaceholder: String = "Studio"
     @Published var canEditTapToPayDisplayName = false
@@ -183,6 +184,8 @@ class PaymentsViewModel: ObservableObject {
     @Published var tapToPaySettingsSaveSuccess = false
     @Published var isLoading = false
     @Published var isConnectingStripe = false
+    /// True from tap until Tap to Pay checkout, Safari, or alert finishes launching.
+    @Published var isLaunchingTapToPay = false
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
     @Published var depositLinkUrl: String?
@@ -241,6 +244,9 @@ class PaymentsViewModel: ObservableObject {
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+    private var prefetchedConnectURL: URL?
+    private var prefetchedConnectFetchedAt: Date?
+    private let connectLinkPrefetchTTL: TimeInterval = 120
 
     /// Settings row / banner title for current Connect state.
     var stripeConnectStatusLabel: String {
@@ -289,6 +295,220 @@ class PaymentsViewModel: ObservableObject {
             await loadBalance()
             await loadTransactions()
         }
+    }
+
+    enum ConnectAccountLinkOutcome {
+        case alreadyConnected
+        case pendingReview
+        case openedInSafari
+        case noAction
+    }
+
+    /// Fetches a Stripe Connect onboarding URL in the background so Take payment opens Safari faster.
+    func prewarmConnectLinkIfNeeded(isDemoMode: Bool = false) async {
+        if isDemoMode { return }
+        guard Auth.auth().currentUser != nil else { return }
+        guard canTakePayments, !stripeConnected, needsStripeConnect else { return }
+        guard !(stripeHasAccount && stripeDetailsSubmitted) else { return }
+        if let fetchedAt = prefetchedConnectFetchedAt,
+           prefetchedConnectURL != nil,
+           Date().timeIntervalSince(fetchedAt) < connectLinkPrefetchTTL {
+            return
+        }
+        _ = await fetchConnectAccountLink(openInSafari: false, isDemoMode: isDemoMode)
+    }
+
+    func invalidateConnectLinkPrefetch() {
+        prefetchedConnectURL = nil
+        prefetchedConnectFetchedAt = nil
+    }
+
+    #if TAP_TO_PAY_ENABLED
+    enum TapToPayLaunchResult {
+        case showCheckout
+        case showAlert(String)
+        case openedConnectInSafari
+    }
+
+    var tapToPayLaunchOverlayMessage: String {
+        if isEnsuringTapToPayTerms { return "Preparing Tap to Pay terms…" }
+        if isConnectingStripe { return "Opening Stripe…" }
+        if isEnsuringTapToPayLocation { return "Preparing Tap to Pay…" }
+        return "Loading…"
+    }
+
+    /// Pre-create Terminal location on dashboard load so the first tap opens checkout immediately.
+    func prewarmTapToPayIfConnected() async {
+        guard stripeConnected, resolvedTapToPayLocationId.isEmpty else { return }
+        try? await ensureTapToPayLocation()
+    }
+
+    /// Connects the Tap to Pay reader so Apple Terms & Conditions appear before Stripe onboarding.
+    private func ensureTapToPayAppleTermsAccepted(isDemoMode: Bool) async throws {
+        if isDemoMode { return }
+        if TapToPayReaderSession.shared.termsAcceptedOnDevice { return }
+
+        isEnsuringTapToPayTerms = true
+        defer { isEnsuringTapToPayTerms = false }
+
+        let result = try await functions.httpsCallable("prepareTapToPayTermsAcceptance").call([:])
+        guard let data = result.data as? [String: Any] else { return }
+
+        stripeHasAccount = data["hasAccount"] as? Bool ?? stripeHasAccount
+        if let detailsSubmitted = data["detailsSubmitted"] as? Bool {
+            stripeDetailsSubmitted = detailsSubmitted
+        }
+        if let chargesEnabled = data["chargesEnabled"] as? Bool {
+            stripeConnected = chargesEnabled
+            needsStripeConnect = canTakePayments && !chargesEnabled
+        }
+        hasLoadedStripeStatus = true
+
+        let locationId = (data["locationId"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = (data["displayName"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let scope = (data["paymentScope"] as? String) ?? paymentStripeScope
+
+        guard !locationId.isEmpty else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 11,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
+                ]
+            )
+        }
+
+        TapToPayLocationStore.shared.applyConnectStatus(
+            terminalLocationId: locationId,
+            paymentScope: scope
+        )
+        if !displayName.isEmpty {
+            TapToPayLocationStore.shared.updateMerchantDisplayName(displayName)
+        }
+
+        try await TapToPayTerminalManager.shared.connectReaderForTermsAcceptance(
+            locationId: locationId,
+            merchantDisplayName: displayName.isEmpty ? nil : displayName
+        )
+
+        guard TapToPayReaderSession.shared.termsAcceptedOnDevice else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 12,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Accept Tap to Pay on iPhone terms to continue.",
+                ]
+            )
+        }
+    }
+
+    /// Opens checkout, Safari Connect, or an in-review alert. Uses cached Connect state when already loaded.
+    func launchTapToPayFlow(isDemoMode: Bool) async -> TapToPayLaunchResult {
+        if isDemoMode {
+            return .showAlert("Tap to Pay isn't available in demo mode.")
+        }
+        if !canTakePayments {
+            return .showAlert("Your studio collects payments for you. Ask your admin to enable independent payouts.")
+        }
+        if let block = TapToPayEligibility.blockingMessage() {
+            return .showAlert(block)
+        }
+
+        if !stripeConnected,
+           hasLoadedStripeStatus,
+           stripeHasAccount,
+           stripeDetailsSubmitted {
+            return .showAlert(stripePaymentsBlockedMessage)
+        }
+
+        isLaunchingTapToPay = true
+        defer { isLaunchingTapToPay = false }
+
+        if !TapToPayReaderSession.shared.termsAcceptedOnDevice {
+            do {
+                try await ensureTapToPayAppleTermsAccepted(isDemoMode: isDemoMode)
+            } catch {
+                return .showAlert(FirebaseFunctionsErrorHelper.message(from: error))
+            }
+        }
+
+        if stripeConnected, !resolvedTapToPayLocationId.isEmpty {
+            return .showCheckout
+        }
+
+        if !stripeConnected {
+            if !hasLoadedStripeStatus {
+                await refreshStripeConnectStatus(isDemoMode: isDemoMode)
+                if stripeHasAccount && stripeDetailsSubmitted && !stripeConnected {
+                    return .showAlert(stripePaymentsBlockedMessage)
+                }
+            }
+        }
+
+        if !stripeConnected {
+            let connectOutcome = await createConnectAccountLink(isDemoMode: isDemoMode)
+            switch connectOutcome {
+            case .alreadyConnected:
+                break
+            case .pendingReview:
+                return .showAlert(stripePaymentsBlockedMessage)
+            case .openedInSafari:
+                return .openedConnectInSafari
+            case .noAction:
+                if let err = errorMessage, !err.isEmpty {
+                    return .showAlert(err)
+                }
+                if stripeHasAccount && stripeDetailsSubmitted {
+                    return .showAlert(stripePaymentsBlockedMessage)
+                }
+                return .openedConnectInSafari
+            }
+        }
+
+        guard stripeConnected else {
+            if stripeHasAccount && stripeDetailsSubmitted {
+                return .showAlert(stripePaymentsBlockedMessage)
+            }
+            return .openedConnectInSafari
+        }
+
+        if resolvedTapToPayLocationId.isEmpty {
+            do {
+                try await ensureTapToPayLocation()
+            } catch {
+                return .showAlert(FirebaseFunctionsErrorHelper.message(from: error))
+            }
+        }
+        if resolvedTapToPayLocationId.isEmpty {
+            return .showAlert("Tap to Pay could not be set up. Add your business address under Website Design, then try again.")
+        }
+        return .showCheckout
+    }
+    #endif
+
+    private func applyConnectStatusFromResponse(_ data: [String: Any]?) {
+        guard let data else { return }
+        if let hasAccount = data["hasAccount"] as? Bool {
+            stripeHasAccount = hasAccount
+        }
+        if let detailsSubmitted = data["detailsSubmitted"] as? Bool {
+            stripeDetailsSubmitted = detailsSubmitted
+        }
+        if let chargesEnabled = data["chargesEnabled"] as? Bool {
+            stripeConnected = chargesEnabled
+            needsStripeConnect = canTakePayments && !chargesEnabled
+            if chargesEnabled {
+                stripeStatusHint = nil
+                invalidateConnectLinkPrefetch()
+            } else if stripeHasAccount && stripeDetailsSubmitted {
+                stripeStatusHint = "Stripe is reviewing your account. Return to the app after setup — status updates automatically."
+            }
+        }
+        hasLoadedStripeStatus = true
     }
 
     func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
@@ -388,6 +608,9 @@ class PaymentsViewModel: ObservableObject {
             stripeDetailsSubmitted = detailsSubmitted
             stripeConnected = chargesEnabled
             needsStripeConnect = canTakePayments && !chargesEnabled
+            if chargesEnabled {
+                invalidateConnectLinkPrefetch()
+            }
             if let loc = data?["terminalLocationId"] as? String {
                 TapToPayLocationStore.shared.applyConnectStatus(
                     terminalLocationId: loc,
@@ -467,21 +690,57 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    func createConnectAccountLink(isDemoMode: Bool = false) async {
+    @discardableResult
+    func createConnectAccountLink(isDemoMode: Bool = false) async -> ConnectAccountLinkOutcome {
         if isDemoMode {
             errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
-            return
+            return .noAction
         }
         guard Auth.auth().currentUser != nil else {
             errorMessage = "You must be signed in to connect Stripe."
-            return
+            return .noAction
         }
         if stripeConnected {
             stripeStatusHint = nil
-            return
+            invalidateConnectLinkPrefetch()
+            return .alreadyConnected
+        }
+
+        if let fetchedAt = prefetchedConnectFetchedAt,
+           let cached = prefetchedConnectURL,
+           Date().timeIntervalSince(fetchedAt) < connectLinkPrefetchTTL {
+            invalidateConnectLinkPrefetch()
+            isConnectingStripe = true
+            defer { isConnectingStripe = false }
+            let opened = await UIApplication.shared.open(cached)
+            if !opened {
+                errorMessage = "Could not open Stripe. Check that Safari is available."
+                return .noAction
+            }
+            return .openedInSafari
+        }
+
+        return await fetchConnectAccountLink(openInSafari: true, isDemoMode: isDemoMode)
+    }
+
+    @discardableResult
+    private func fetchConnectAccountLink(openInSafari: Bool, isDemoMode: Bool) async -> ConnectAccountLinkOutcome {
+        if isDemoMode {
+            errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
+            return .noAction
+        }
+        guard Auth.auth().currentUser != nil else {
+            errorMessage = "You must be signed in to connect Stripe."
+            return .noAction
+        }
+        if stripeConnected {
+            stripeStatusHint = nil
+            invalidateConnectLinkPrefetch()
+            return .alreadyConnected
         }
         isConnectingStripe = true
         errorMessage = nil
+        defer { isConnectingStripe = false }
         do {
             let base = Constants.Hosting.marketingWebOrigin
             let result = try await functions.httpsCallable("createConnectAccountLink").call([
@@ -490,21 +749,26 @@ class PaymentsViewModel: ObservableObject {
                 "refreshUrl": "\(base)/account.html?stripe=refresh",
             ])
             let data = result.data as? [String: Any]
-            isConnectingStripe = false
 
             if data?["alreadyConnected"] as? Bool == true {
-                await refreshStripeConnectStatus(isDemoMode: false)
-                stripeStatusHint = nil
-                return
+                applyConnectStatusFromResponse([
+                    "hasAccount": true,
+                    "detailsSubmitted": data?["detailsSubmitted"] as? Bool ?? true,
+                    "chargesEnabled": true,
+                ] as [String: Any])
+                invalidateConnectLinkPrefetch()
+                return .alreadyConnected
             }
 
             if data?["pendingReview"] as? Bool == true {
-                stripeHasAccount = true
-                stripeDetailsSubmitted = true
-                needsStripeConnect = true
+                applyConnectStatusFromResponse([
+                    "hasAccount": true,
+                    "detailsSubmitted": true,
+                    "chargesEnabled": false,
+                ] as [String: Any])
                 stripeStatusHint = "Stripe is reviewing your account. You'll be notified when charges are enabled."
-                await refreshStripeConnectStatus(isDemoMode: false)
-                return
+                invalidateConnectLinkPrefetch()
+                return .pendingReview
             }
 
             guard let urlString = data?["url"] as? String,
@@ -515,13 +779,26 @@ class PaymentsViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
                 )
             }
-            let opened = await UIApplication.shared.open(url)
-            if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
+
+            if openInSafari {
+                invalidateConnectLinkPrefetch()
+                let opened = await UIApplication.shared.open(url)
+                if !opened {
+                    errorMessage = "Could not open Stripe. Check that Safari is available."
+                    return .noAction
+                }
+                return .openedInSafari
             }
+
+            prefetchedConnectURL = url
+            prefetchedConnectFetchedAt = Date()
+            stripeHasAccount = true
+            hasLoadedStripeStatus = true
+            return .noAction
         } catch {
-            isConnectingStripe = false
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            invalidateConnectLinkPrefetch()
+            return .noAction
         }
     }
 

@@ -365,6 +365,10 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
       responseTimeHours: 24,
     },
     createdAt: now,
+    onboarding: {
+      appTourPending: true,
+      tapToPayDashboardTipPending: true,
+    },
   };
 
   const batch = db.batch();
@@ -508,6 +512,154 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
 }
 
+/** Score Connect accounts so we prefer fully enabled over incomplete duplicates. */
+function connectAccountPriority(account) {
+  if (!account) return -1;
+  let score = 0;
+  if (account.charges_enabled) score += 1000;
+  if (account.details_submitted) score += 100;
+  if (account.payouts_enabled) score += 10;
+  const currentlyDue =
+    (account.requirements && account.requirements.currently_due) || [];
+  if (currentlyDue.length === 0) score += 5;
+  return score;
+}
+
+/** Find the best Express Connect account for an email (handles duplicate onboarding attempts). */
+async function findBestConnectAccountForEmail(stripe, email) {
+  const normalized = (email || "").toString().trim().toLowerCase();
+  if (!normalized) return null;
+
+  let best = null;
+  let bestScore = -1;
+  let startingAfter = undefined;
+
+  for (let pageNum = 0; pageNum < 10; pageNum++) {
+    const params = { limit: 100 };
+    if (startingAfter) params.starting_after = startingAfter;
+    const page = await stripe.accounts.list(params);
+    for (const acct of page.data) {
+      const acctEmail = (acct.email || "").toString().trim().toLowerCase();
+      if (acctEmail !== normalized) continue;
+      const score = connectAccountPriority(acct);
+      if (score > bestScore) {
+        bestScore = score;
+        best = acct;
+      }
+    }
+    if (!page.has_more || page.data.length === 0) break;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+  return best;
+}
+
+/**
+ * Prefer the best Connect account for this email and persist stripeAccountId on accountRef.
+ * Fixes Firestore pointing at an abandoned duplicate while a completed account exists in Stripe.
+ * Skips the slow platform-wide account list when there is no saved id (new tenants).
+ */
+async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
+  const storedIdTrimmed = (storedId || "").toString().trim();
+  if (!storedIdTrimmed) {
+    return null;
+  }
+
+  let storedAccount = null;
+  try {
+    storedAccount = await stripe.accounts.retrieve(storedIdTrimmed);
+  } catch (err) {
+    console.warn(
+      "reconcileConnectAccountId retrieve failed",
+      storedIdTrimmed,
+      err.message || err
+    );
+    storedAccount = null;
+  }
+
+  // Fast path: saved account is submitted or fully enabled — skip listing all Connect accounts.
+  if (storedAccount) {
+    if (storedAccount.charges_enabled || storedAccount.details_submitted) {
+      return { stripeAccountId: storedIdTrimmed, account: storedAccount };
+    }
+  }
+
+  // Slow path: incomplete or missing stored account — search by email for a better match.
+  const storedScore = connectAccountPriority(storedAccount);
+  const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
+  const emailScore = connectAccountPriority(bestByEmail);
+
+  let chosenId = storedIdTrimmed;
+  let chosenAccount = storedAccount;
+
+  if (bestByEmail && emailScore > storedScore) {
+    chosenId = bestByEmail.id;
+    chosenAccount = bestByEmail;
+  } else if (!storedAccount && bestByEmail) {
+    chosenId = bestByEmail.id;
+    chosenAccount = bestByEmail;
+  }
+
+  if (chosenId && chosenId !== storedIdTrimmed) {
+    await accountRef.set({ stripeAccountId: chosenId }, { merge: true });
+    console.log("reconcileConnectAccountId linked account", {
+      from: storedIdTrimmed,
+      to: chosenId,
+      email: (email || "").toString().trim(),
+    });
+  }
+
+  if (!chosenAccount && chosenId) {
+    chosenAccount = await stripe.accounts.retrieve(chosenId);
+  }
+
+  if (!chosenId || !chosenAccount) return null;
+  return { stripeAccountId: chosenId, account: chosenAccount };
+}
+
+/** Resolve or create the Connect account id, reconciling duplicates before creating a new one. */
+async function ensureConnectAccountId(stripe, accountRef, email, storedId) {
+  const storedIdTrimmed = (storedId || "").toString().trim();
+  if (storedIdTrimmed) {
+    const reconciled = await reconcileConnectAccountId(
+      stripe,
+      accountRef,
+      storedIdTrimmed,
+      email
+    );
+    if (reconciled) return reconciled;
+  }
+
+  const freshDoc = await accountRef.get();
+  const raceId = (freshDoc.data()?.stripeAccountId || "").toString().trim();
+  if (raceId) {
+    const account = await stripe.accounts.retrieve(raceId);
+    return { stripeAccountId: raceId, account };
+  }
+
+  const account = await stripe.accounts.create({
+    type: "express",
+    email: email || undefined,
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+  });
+  await accountRef.set({ stripeAccountId: account.id }, { merge: true });
+  return { stripeAccountId: account.id, account };
+}
+
+function connectAccountPendingReview(account) {
+  if (!account || account.charges_enabled || !account.details_submitted) {
+    return false;
+  }
+  const currentlyDue =
+    (account.requirements && account.requirements.currently_due) || [];
+  const pendingVerification =
+    (account.requirements && account.requirements.pending_verification) || [];
+  if (currentlyDue.length === 0) return true;
+  return pendingVerification.length > 0;
+}
+
 /**
  * Creates a Stripe Connect Account Link for the authenticated provider.
  * If the tenant has no Connect account, creates one first and saves stripeAccountId to Firestore.
@@ -562,39 +714,32 @@ exports.createConnectAccountLink = functions
         payCtx.scope === "user"
           ? db.collection("users").doc(uid)
           : tenantRef;
-      let stripeAccountId = payCtx.stripeAccountId;
+      const ensured = await ensureConnectAccountId(
+        stripe,
+        accountRef,
+        email,
+        payCtx.stripeAccountId
+      );
+      const stripeAccountId = ensured.stripeAccountId;
+      const account = ensured.account;
 
-      if (!stripeAccountId) {
-        const account = await stripe.accounts.create({
-          type: "express",
-          email: email || undefined,
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          },
-        });
-        stripeAccountId = account.id;
-        await accountRef.set({ stripeAccountId }, { merge: true });
-      }
-
-      const account = await stripe.accounts.retrieve(stripeAccountId);
       if (account.charges_enabled) {
         return {
           alreadyConnected: true,
           chargesEnabled: true,
           hasAccount: true,
           detailsSubmitted: account.details_submitted ?? false,
+          stripeAccountId,
         };
       }
 
-      const currentlyDue =
-        (account.requirements && account.requirements.currently_due) || [];
-      if (account.details_submitted && currentlyDue.length === 0) {
+      if (connectAccountPendingReview(account)) {
         return {
           pendingReview: true,
           hasAccount: true,
           detailsSubmitted: true,
           chargesEnabled: false,
+          stripeAccountId,
         };
       }
 
@@ -673,7 +818,32 @@ exports.getConnectAccountStatus = functions
       return demoConnectAccountStatusResponse(demoShowcase.payCtx);
     }
 
-    const stripeAccountId = payCtx.stripeAccountId;
+    const stripe = new Stripe(secretKey, {
+      apiVersion: "2024-11-20.acacia",
+    });
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    const email =
+      userData.email || context.auth.token?.email || null;
+    const accountRef =
+      payCtx.scope === "user"
+        ? db.collection("users").doc(uid)
+        : db.collection("tenants").doc(payCtx.tenantId);
+
+    let stripeAccountId = payCtx.stripeAccountId;
+    if (stripeAccountId && !isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      const reconciled = await reconcileConnectAccountId(
+        stripe,
+        accountRef,
+        stripeAccountId,
+        email
+      );
+      if (reconciled) {
+        stripeAccountId = reconciled.stripeAccountId;
+      }
+    }
+
     if (!stripeAccountId) {
       return {
         hasAccount: false,
@@ -688,16 +858,11 @@ exports.getConnectAccountStatus = functions
       return demoConnectAccountStatusResponse(payCtx);
     }
 
-    const stripe = new Stripe(secretKey, {
-      apiVersion: "2024-11-20.acacia",
-    });
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
     const terminalLocationId = payCtx.terminalLocationId || null;
     const tenantDoc = await db.collection("tenants").doc(payCtx.tenantId).get();
     const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
-    const userDoc = await db.collection("users").doc(uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
     const tapToPayDisplayName =
       payCtx.scope === "user"
         ? tapToPayTerminalDisplayNameForUser(userData, tenantData)
@@ -867,6 +1032,51 @@ async function assertCanTakePayments(uid) {
     );
   }
   return ctx;
+}
+
+/**
+ * Ensures a Connect account exists for Tap to Pay (creates Express account if needed).
+ * Does not require charges_enabled — used before Apple T&C and Stripe onboarding.
+ */
+async function ensureStripeAccountForTapToPayContext(uid, stripe) {
+  const userDoc = await db.collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Account not found");
+  }
+  const userData = userDoc.data();
+  const tenantId = userData.tenantId;
+  const email = userData.email || "";
+  if (!tenantId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No business linked to this account. Finish signup first."
+    );
+  }
+  const payCtx = await resolvePaymentStripeContext(uid);
+  if (!payCtx?.canTakePayments) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+    );
+  }
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const accountRef =
+    payCtx.scope === "user" ? db.collection("users").doc(uid) : tenantRef;
+  const ensured = await ensureConnectAccountId(
+    stripe,
+    accountRef,
+    email,
+    payCtx.stripeAccountId
+  );
+  const account = ensured.account;
+  return {
+    ...payCtx,
+    stripeAccountId: ensured.stripeAccountId,
+    hasAccount: true,
+    chargesEnabled: !!account.charges_enabled,
+    detailsSubmitted: !!account.details_submitted,
+    pendingReview: connectAccountPendingReview(account),
+  };
 }
 
 function memberDisplayNameFromUserData(userData, fallback) {
@@ -2823,15 +3033,6 @@ exports.createTerminalConnectionTokenForTapToPay = functions
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
 
-    const payCtx = await assertCanTakePayments(context.auth.uid);
-    const stripeAccountId = payCtx.stripeAccountId;
-    if (!stripeAccountId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "No Stripe account linked"
-      );
-    }
-
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError(
@@ -2841,6 +3042,14 @@ exports.createTerminalConnectionTokenForTapToPay = functions
     }
 
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const payCtx = await ensureStripeAccountForTapToPayContext(context.auth.uid, stripe);
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
 
     // Connection tokens can optionally be scoped to a location. For Tap to Pay on iPhone,
     // location scoping is provided at connect-time via `locationId` in the connection config.
@@ -2850,6 +3059,74 @@ exports.createTerminalConnectionTokenForTapToPay = functions
     );
 
     return { secret: token.secret };
+  });
+
+/**
+ * Creates Connect account + Terminal location (if needed) so iOS can show Apple Tap to Pay T&C
+ * before Stripe Connect onboarding in Safari. Does not require charges_enabled.
+ */
+exports.prepareTapToPayTermsAcceptance = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const uid = context.auth.uid;
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const payCtx = await ensureStripeAccountForTapToPayContext(uid, stripe);
+    const tenantId = payCtx.tenantId;
+    const tenantDoc = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Business not found.");
+    }
+    const tenantData = tenantDoc.data() || {};
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    try {
+      const locationId =
+        payCtx.scope === "user"
+          ? await ensureStripeTerminalLocationForUser(
+              uid,
+              stripe,
+              payCtx.stripeAccountId,
+              userData,
+              tenantData
+            )
+          : await ensureStripeTerminalLocationForTenant(
+              tenantId,
+              stripe,
+              payCtx.stripeAccountId,
+              tenantData
+            );
+      const displayName =
+        payCtx.scope === "user"
+          ? tapToPayTerminalDisplayNameForUser(userData, tenantData)
+          : tapToPayTerminalDisplayNameForTenant(tenantData);
+      return {
+        locationId,
+        displayName,
+        paymentScope: payCtx.scope,
+        hasAccount: true,
+        chargesEnabled: payCtx.chargesEnabled,
+        detailsSubmitted: payCtx.detailsSubmitted,
+        pendingReview: payCtx.pendingReview,
+        stripeAccountId: payCtx.stripeAccountId,
+      };
+    } catch (err) {
+      console.error("prepareTapToPayTermsAcceptance", err);
+      const msg =
+        err && err.message
+          ? String(err.message)
+          : "Could not prepare Tap to Pay. Check your business address in Website Design.";
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
   });
 
 /**

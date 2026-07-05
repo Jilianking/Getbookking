@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     @ObservedObject var viewModel: DashboardViewModel
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @StateObject private var requestsViewModel = RequestsViewModel()
@@ -72,6 +73,10 @@ struct DashboardView: View {
                         ) {
                             handleTakePaymentTapped()
                         }
+                        .appTourAnchor(
+                            .dashboardTakePayment,
+                            isActive: appTour.isStepActive(.dashboardTakePayment)
+                        )
                         DashboardQuickTile(
                             icon: "message.fill",
                             title: "Message"
@@ -97,6 +102,7 @@ struct DashboardView: View {
                 }
                 .padding(.vertical, 16)
             }
+            .scrollDisabled(appTour.isStepActive(.dashboardTakePayment))
             .appScreenBackground()
             .appNavigationChrome()
             .navigationBarTitleDisplayMode(.inline)
@@ -114,11 +120,22 @@ struct DashboardView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
+                #if TAP_TO_PAY_ENABLED
+                await paymentsViewModel.prewarmTapToPayIfConnected()
+                #endif
+                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 await requestsViewModel.refreshRequests(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
             }
+            #if TAP_TO_PAY_ENABLED
+            .overlay {
+                if paymentsViewModel.isLaunchingTapToPay {
+                    TapToPayLaunchOverlay(message: paymentsViewModel.tapToPayLaunchOverlayMessage)
+                }
+            }
+            #endif
         }
         .navigationViewStyle(.stack)
         .task {
@@ -128,13 +145,21 @@ struct DashboardView: View {
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
+            #if TAP_TO_PAY_ENABLED
+            await paymentsViewModel.prewarmTapToPayIfConnected()
+            #endif
+            await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
             await requestsViewModel.loadRequests(
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
         }
         .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
-            Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
+            Task {
+                paymentsViewModel.invalidateConnectLinkPrefetch()
+                await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode)
+                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+            }
         }
         #if TAP_TO_PAY_ENABLED
         .sheet(isPresented: $showTapToPaySheet) {
@@ -182,36 +207,15 @@ struct DashboardView: View {
 
     private func handleTakePaymentTapped() {
         #if TAP_TO_PAY_ENABLED
-        if authViewModel.isDemoMode {
-            tapToPayAlertMessage = "Tap to Pay isn't available in demo mode."
-            return
-        }
-        if !paymentsViewModel.canTakePayments {
-            tapToPayAlertMessage = "Your studio collects payments for you. Ask your admin to enable independent payouts."
-            return
-        }
-        if let block = TapToPayEligibility.blockingMessage() {
-            tapToPayAlertMessage = block
-            return
-        }
-        if !paymentsViewModel.stripeConnected {
-            Task { await paymentsViewModel.createConnectAccountLink(isDemoMode: false) }
-            return
-        }
         Task {
-            if paymentsViewModel.resolvedTapToPayLocationId.isEmpty {
-                do {
-                    try await paymentsViewModel.ensureTapToPayLocation()
-                } catch {
-                    tapToPayAlertMessage = FirebaseFunctionsErrorHelper.message(from: error)
-                    return
-                }
+            switch await paymentsViewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode) {
+            case .showCheckout:
+                showTapToPaySheet = true
+            case .showAlert(let message):
+                tapToPayAlertMessage = message
+            case .openedConnectInSafari:
+                break
             }
-            if paymentsViewModel.resolvedTapToPayLocationId.isEmpty {
-                tapToPayAlertMessage = "Tap to Pay could not be set up. Add your business address under Website Design, then try again."
-                return
-            }
-            showTapToPaySheet = true
         }
         #else
         drawerState.selectedSection = .payments

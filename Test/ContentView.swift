@@ -30,15 +30,13 @@ struct ContentView: View {
         .preferredColorScheme(appAppearance.preferredColorScheme)
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
-                let now = Date()
-                if let last = lastForegroundRefresh, now.timeIntervalSince(last) < 120 {
-                    TapToPayAppLifecycle.warmUpReaderIfConfigured()
-                    return
-                }
-                lastForegroundRefresh = now
-                Task { await authViewModel.refreshTenantLogoFromServer() }
                 TapToPayAppLifecycle.warmUpReaderIfConfigured()
                 StripeConnectRefresh.request()
+                let now = Date()
+                if lastForegroundRefresh == nil || now.timeIntervalSince(lastForegroundRefresh!) >= 120 {
+                    lastForegroundRefresh = now
+                    Task { await authViewModel.refreshTenantLogoFromServer() }
+                }
             }
         }
     }

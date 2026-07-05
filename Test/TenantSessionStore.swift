@@ -32,6 +32,9 @@ final class TenantSessionStore: ObservableObject {
     @Published private(set) var demoPayments: DemoPaymentsSnapshot?
     @Published private(set) var isDemoSession = false
     @Published private(set) var demoLoadError: String?
+    @Published private(set) var isDemoLoading = false
+
+    private static var demoSnapshotCache: [String: [String: Any]] = [:]
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -114,10 +117,37 @@ final class TenantSessionStore: ObservableObject {
         demoPayments = nil
         isDemoSession = false
         demoLoadError = nil
+        isDemoLoading = false
+    }
+
+    /// Clears cached session only when the signed-in user or demo persona changes.
+    @discardableResult
+    func prepareForSession(uid: String?, isDemoMode: Bool, demoPersona: DemoPersona?) -> Bool {
+        let newKey: String?
+        if isDemoMode, let persona = demoPersona {
+            newKey = "demo-\(persona.slug)"
+        } else {
+            newKey = uid
+        }
+        guard let newKey else {
+            if loadedUid != nil {
+                reset()
+                return true
+            }
+            return false
+        }
+        if loadedUid == newKey, sessionLoaded || isDemoSession {
+            return false
+        }
+        reset()
+        return true
     }
 
     func bootstrap(isDemoMode: Bool, demoPersona persona: DemoPersona? = nil) async {
         if isDemoMode, let persona {
+            if isDemoSession, demoPersona == persona, sessionLoaded, demoLoadError == nil {
+                return
+            }
             await loadDemoSession(persona: persona)
             return
         }
@@ -132,14 +162,23 @@ final class TenantSessionStore: ObservableObject {
         _ = await (bookings, newBookings, members)
     }
 
-    func loadDemoSession(persona: DemoPersona) async {
-        reset()
+    func loadDemoSession(persona: DemoPersona, forceRefresh: Bool = false) async {
         demoLoadError = nil
+
+        if !forceRefresh, let cached = Self.demoSnapshotCache[persona.slug] {
+            applyDemoPayload(cached, persona: persona)
+            return
+        }
+
+        isDemoLoading = true
+        defer { isDemoLoading = false }
+
         do {
             let result = try await functions.httpsCallable("getDemoAppSnapshot").call(["slug": persona.slug])
             guard let payload = result.data as? [String: Any] else {
                 throw DemoSessionError.loadFailed("Demo data unavailable.")
             }
+            Self.demoSnapshotCache[persona.slug] = payload
             applyDemoPayload(payload, persona: persona)
         } catch {
             let msg = FirebaseFunctionsErrorHelper.message(from: error)
@@ -296,6 +335,12 @@ final class TenantSessionStore: ObservableObject {
             ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
         }
         syncUnreadRequestsCount()
+    }
+
+    func markAppTourCompleted() {
+        guard var current = profile else { return }
+        current.appTourPending = false
+        profile = current
     }
 
     func ensureSessionLoaded(isDemoMode: Bool) async {

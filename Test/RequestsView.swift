@@ -47,11 +47,13 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
 struct RequestsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = RequestsViewModel()
     @State private var requestFilter: BookingRequestFilter = .newOnly
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
+    @State private var openConfirmWhenDetailAppears = false
     @State private var searchText = ""
     @State private var showSeedConfirm = false
     var drawerState: DrawerState
@@ -66,195 +68,273 @@ struct RequestsView: View {
     }
 
     var body: some View {
+        navigationContent
+            .navigationViewStyle(.stack)
+    }
+
+    private var navigationContent: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                AppSearchField(placeholder: "Search by name or email...", text: $searchText)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
-
-                AppFilterChipBar(filters: statusChipFilters, selection: $requestFilter)
-                    .padding(.bottom, 10)
-
-                if showsTeamFilter {
-                    HStack(spacing: 8) {
-                        filterMenuLabel(
-                            title: "\(teamFilterTitle) (\(teamFilterCount(for: teamFilterKey)))"
-                        ) {
-                            Picker("Filter", selection: $teamFilterKey) {
-                                Text("All (\(teamFilterCount(for: BookingAssigneeFilter.allKey)))")
-                                    .tag(BookingAssigneeFilter.allKey)
-                                Text("Unassigned (\(teamFilterCount(for: BookingAssigneeFilter.unassignedKey)))")
-                                    .tag(BookingAssigneeFilter.unassignedKey)
-                                if let owner = viewModel.teamFilterOwner {
-                                    Text("\(teamFilterLabel(for: owner)) (\(teamFilterCount(for: owner.uid)))")
-                                        .tag(owner.uid)
-                                }
-                                ForEach(viewModel.teamFilterRoster.filter { $0.accessRole != .owner }) { member in
-                                    Text("\(teamFilterLabel(for: member)) (\(teamFilterCount(for: member.uid)))")
-                                        .tag(member.uid)
-                                }
-                            }
-                        }
-                        Button(action: {
-                            Task {
-                                await viewModel.refreshRequests(
-                                    isDemoMode: authViewModel.isDemoMode,
-                                    sessionStore: sessionStore
-                                )
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(AppDesign.textPrimary)
-                                .padding(10)
-                                .background(AppDesign.cardBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(AppDesign.chipBorder, lineWidth: 1)
-                                )
-                        }
+            requestsScreenContent
+                .appScreenBackground()
+                .appNavigationChrome()
+                .navigationTitle(sectionTitle)
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar { requestsToolbar }
+                .confirmationDialog(
+                    "Load test booking requests?",
+                    isPresented: $showSeedConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Add 100 test requests") {
+                        Task { await viewModel.seedTestBookingRequests(count: 100) }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Inserts sample rows into your business (source: seed). Owner only. Use on test tenants like test100.")
                 }
-
-                // List
-                if viewModel.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.useTenantData && !authViewModel.teamAccess.canViewAllBookings {
-                    ContentUnavailableView(
-                        "Bookings restricted",
-                        systemImage: "lock.fill",
-                        description: Text("You don’t have permission to view all booking requests. Ask the owner to enable “View all bookings” for managers.")
+                .sheet(item: $selectedRequest) { request in
+                    RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
+                }
+                .sheet(item: $selectedBookingRequest, onDismiss: {
+                    openConfirmWhenDetailAppears = false
+                }) { br in
+                    BookingRequestDetailView(
+                        request: br,
+                        viewModel: viewModel,
+                        drawerState: drawerState,
+                        teamAccess: authViewModel.teamAccess,
+                        openConfirmOnAppear: openConfirmWhenDetailAppears
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        if viewModel.useTenantData {
-                            ForEach(filteredBookingRequests) { br in
-                                BookingRequestListRow(
-                                    request: br,
-                                    viewModel: viewModel,
-                                    teamAccess: authViewModel.teamAccess,
-                                    onMarkRead: { requestId in
-                                        sessionStore.markBookingRequestReadLocally(requestId: requestId)
-                                        if let index = viewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
-                                            viewModel.bookingRequests[index].readAt = Date()
-                                        }
-                                    }
-                                )
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                                .onTapGesture { openBookingRequest(br) }
-                            }
-                        } else {
-                            ForEach(filteredRequests) { request in
-                                RequestListRow(request: request)
-                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(Color.clear)
-                                    .onTapGesture { selectedRequest = request }
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(AppDesign.background)
+                }
+                .onAppear {
+                    viewModel.sessionStore = sessionStore
+                }
+                .task {
+                    viewModel.sessionStore = sessionStore
+                    await viewModel.loadRequests(
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
+                    )
+                }
+                .onChange(of: drawerState.appTourDismissModalsToken) { _, _ in
+                    selectedBookingRequest = nil
+                    selectedRequest = nil
+                }
+        }
+    }
 
-                    Text("Showing \(viewModel.useTenantData ? filteredBookingRequests.count : filteredRequests.count) of \(viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count) request(s)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+    private var requestsScreenContent: some View {
+        VStack(spacing: 0) {
+            searchAndFilterHeader
+            requestsListBody
+        }
+    }
 
-                    if let seedMessage = viewModel.seedMessage {
-                        Text(seedMessage)
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    if let err = viewModel.actionError {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                }
-            }
-            .appScreenBackground()
-            .appNavigationChrome()
-            .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { drawerState.isOpen = true }) {
-                        Image(systemName: "line.3.horizontal")
-                            .foregroundStyle(AppDesign.textPrimary)
-                    }
-                }
-                #if DEBUG
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if authViewModel.teamAccess.isOwner,
-                       viewModel.useTenantData,
-                       !authViewModel.isDemoMode {
-                        Button {
-                            showSeedConfirm = true
-                        } label: {
-                            if viewModel.isSeeding {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "tray.and.arrow.down.fill")
-                            }
-                        }
-                        .disabled(viewModel.isSeeding)
-                    }
-                }
-                #endif
-            }
-            .confirmationDialog(
-                "Load test booking requests?",
-                isPresented: $showSeedConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Add 100 test requests") {
-                    Task { await viewModel.seedTestBookingRequests(count: 100) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Inserts sample rows into your business (source: seed). Owner only. Use on test tenants like test100.")
-            }
-            .sheet(item: $selectedRequest) { request in
-                RequestDetailView(request: request, viewModel: viewModel, drawerState: drawerState)
-            }
-            .sheet(item: $selectedBookingRequest) { br in
-                BookingRequestDetailView(
-                    request: br,
-                    viewModel: viewModel,
-                    drawerState: drawerState,
-                    teamAccess: authViewModel.teamAccess
+    private var searchAndFilterHeader: some View {
+        VStack(spacing: 0) {
+            AppSearchField(placeholder: "Search by name or email...", text: $searchText)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+
+            AppFilterChipBar(filters: statusChipFilters, selection: $requestFilter)
+                .padding(.bottom, 10)
+                .appTourAnchor(
+                    .requestsApprove,
+                    isActive: appTour.isStepActive(.requestsApprove)
+                        && viewModel.useTenantData
+                        && filteredBookingRequests.isEmpty
                 )
-            }
-            .onAppear {
-                viewModel.sessionStore = sessionStore
-            }
-            .task {
-                viewModel.sessionStore = sessionStore
-                await viewModel.loadRequests(
-                    isDemoMode: authViewModel.isDemoMode,
-                    sessionStore: sessionStore
-                )
+
+            if showsTeamFilter {
+                teamFilterBar
             }
         }
-        .navigationViewStyle(.stack)
+    }
+
+    private var teamFilterBar: some View {
+        HStack(spacing: 8) {
+            filterMenuLabel(
+                title: "\(teamFilterTitle) (\(teamFilterCount(for: teamFilterKey)))"
+            ) {
+                Picker("Filter", selection: $teamFilterKey) {
+                    Text("All (\(teamFilterCount(for: BookingAssigneeFilter.allKey)))")
+                        .tag(BookingAssigneeFilter.allKey)
+                    Text("Unassigned (\(teamFilterCount(for: BookingAssigneeFilter.unassignedKey)))")
+                        .tag(BookingAssigneeFilter.unassignedKey)
+                    if let owner = viewModel.teamFilterOwner {
+                        Text("\(teamFilterLabel(for: owner)) (\(teamFilterCount(for: owner.uid)))")
+                            .tag(owner.uid)
+                    }
+                    ForEach(viewModel.teamFilterRoster.filter { $0.accessRole != .owner }) { member in
+                        Text("\(teamFilterLabel(for: member)) (\(teamFilterCount(for: member.uid)))")
+                            .tag(member.uid)
+                    }
+                }
+            }
+            Button(action: refreshRequests) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .padding(10)
+                    .background(AppDesign.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(AppDesign.chipBorder, lineWidth: 1)
+                    )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+
+    @ViewBuilder
+    private var requestsListBody: some View {
+        if viewModel.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.useTenantData && !authViewModel.teamAccess.canViewAllBookings {
+            ContentUnavailableView(
+                "Bookings restricted",
+                systemImage: "lock.fill",
+                description: Text("You don’t have permission to view all booking requests. Ask the owner to enable “View all bookings” for managers.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            requestsListSection
+        }
+    }
+
+    private var requestsListSection: some View {
+        VStack(spacing: 0) {
+            List {
+                if viewModel.useTenantData {
+                    ForEach(filteredBookingRequests) { br in
+                        bookingRequestListRow(br)
+                    }
+                } else {
+                    ForEach(filteredRequests) { request in
+                        RequestListRow(request: request)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .onTapGesture { selectedRequest = request }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(AppDesign.background)
+
+            requestsListFooter
+        }
+    }
+
+    private func bookingRequestListRow(_ br: BookingRequest) -> some View {
+        BookingRequestListRow(
+            request: br,
+            viewModel: viewModel,
+            teamAccess: authViewModel.teamAccess,
+            onMarkRead: { markBookingRequestReadLocally(requestId: $0) },
+            onAccept: { openBookingRequestForAccept(br) },
+            onOpenDetail: { openBookingRequest(br) }
+        )
+        .appTourAnchor(
+            .requestsApprove,
+            isActive: appTour.isStepActive(.requestsApprove)
+                && br.documentId == filteredBookingRequests.first?.documentId
+        )
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    @ViewBuilder
+    private var requestsListFooter: some View {
+        Text(requestsCountLabel)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+
+        if let seedMessage = viewModel.seedMessage {
+            Text(seedMessage)
+                .font(.caption)
+                .foregroundColor(.green)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        if let err = viewModel.actionError {
+            Text(err)
+                .font(.caption)
+                .foregroundColor(.red)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+    }
+
+    private var requestsCountLabel: String {
+        let shown = viewModel.useTenantData ? filteredBookingRequests.count : filteredRequests.count
+        let total = viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count
+        return "Showing \(shown) of \(total) request(s)"
+    }
+
+    @ToolbarContentBuilder
+    private var requestsToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button(action: { drawerState.isOpen = true }) {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(AppDesign.textPrimary)
+            }
+        }
+        #if DEBUG
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if authViewModel.teamAccess.isOwner,
+               viewModel.useTenantData,
+               !authViewModel.isDemoMode {
+                Button {
+                    showSeedConfirm = true
+                } label: {
+                    if viewModel.isSeeding {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "tray.and.arrow.down.fill")
+                    }
+                }
+                .disabled(viewModel.isSeeding)
+            }
+        }
+        #endif
+    }
+
+    private func refreshRequests() {
+        Task {
+            await viewModel.refreshRequests(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+        }
+    }
+
+    private func markBookingRequestReadLocally(requestId: String) {
+        sessionStore.markBookingRequestReadLocally(requestId: requestId)
+        if let index = viewModel.bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+            viewModel.bookingRequests[index].readAt = Date()
+        }
     }
 
     private func openBookingRequest(_ booking: BookingRequest) {
+        openConfirmWhenDetailAppears = false
+        markBookingRequestReadLocally(booking)
+        selectedBookingRequest = booking
+        Task {
+            await viewModel.markBookingRequestAsReadIfNeeded(booking)
+        }
+    }
+
+    private func openBookingRequestForAccept(_ booking: BookingRequest) {
+        openConfirmWhenDetailAppears = true
         markBookingRequestReadLocally(booking)
         selectedBookingRequest = booking
         Task {
@@ -381,13 +461,27 @@ struct BookingRequestListRow: View {
     @ObservedObject var viewModel: RequestsViewModel
     let teamAccess: EffectiveTeamAccess
     var onMarkRead: ((String) -> Void)? = nil
+    var onAccept: (() -> Void)? = nil
+    var onOpenDetail: (() -> Void)? = nil
 
     private var statusLower: String {
         request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
+    private var isPendingConfirmation: Bool {
+        statusLower == "new" || statusLower == "pending"
+    }
+
+    private var canShowDeclineAction: Bool {
+        teamAccess.canApproveRejectRequests && isPendingConfirmation
+    }
+
+    private var canShowAcceptAction: Bool {
+        (teamAccess.isOwner || teamAccess.canViewAllBookings) && isPendingConfirmation
+    }
+
     private var canShowApprovalActions: Bool {
-        teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending")
+        canShowDeclineAction || canShowAcceptAction
     }
 
     private var serviceName: String {
@@ -404,61 +498,99 @@ struct BookingRequestListRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                AppAvatarView(
-                    tenantLogoURL: nil,
-                    accountPhotoURL: nil,
-                    displayNameFallback: request.customerName,
-                    size: 44
-                )
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(request.customerName ?? "Unknown")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppDesign.textPrimary)
-                    if !submittedAgo.isEmpty {
-                        Text("Requested \(submittedAgo)")
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
-                    }
-                }
-                Spacer(minLength: 8)
-                AppStatusPill(text: request.status, soft: true)
-            }
-
-            HStack(spacing: 8) {
-                AppMetadataChip(icon: "scissors", text: serviceName)
-                if let start = request.requestedStartTime {
-                    AppMetadataChip(
-                        icon: "calendar",
-                        text: start.formatted(.dateTime.month(.abbreviated).day())
-                    )
-                    AppMetadataChip(
-                        icon: "clock",
-                        text: start.formatted(date: .omitted, time: .shortened)
-                    )
-                } else if let preferred = request.preferredTime, !preferred.isEmpty {
-                    AppMetadataChip(icon: "clock", text: preferred)
-                }
-            }
-
-            if canShowApprovalActions, let docId = request.documentId, !docId.isEmpty {
-                Button {
-                    onMarkRead?(docId)
-                    Task {
-                        await viewModel.setBookingRequestStatus(
-                            requestId: docId,
-                            status: "declined",
-                            notes: request.notes
-                        )
-                    }
-                } label: {
-                    Text("Decline")
-                }
-                .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
-            }
+            summarySection
+            approvalActionsSection
         }
         .padding(16)
         .appCard()
+    }
+
+    private var summarySection: some View {
+        Button(action: { onOpenDetail?() }) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    AppAvatarView(
+                        tenantLogoURL: nil,
+                        accountPhotoURL: nil,
+                        displayNameFallback: request.customerName,
+                        size: 44
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(request.customerName ?? "Unknown")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                        if !submittedAgo.isEmpty {
+                            Text("Requested \(submittedAgo)")
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    AppStatusPill(text: request.status, soft: true)
+                }
+
+                metadataChipsRow
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var metadataChipsRow: some View {
+        HStack(spacing: 8) {
+            AppMetadataChip(icon: "scissors", text: serviceName)
+            if let start = request.requestedStartTime {
+                AppMetadataChip(
+                    icon: "calendar",
+                    text: start.formatted(.dateTime.month(.abbreviated).day())
+                )
+                AppMetadataChip(
+                    icon: "clock",
+                    text: start.formatted(date: .omitted, time: .shortened)
+                )
+            } else if let preferred = request.preferredTime, !preferred.isEmpty {
+                AppMetadataChip(icon: "clock", text: preferred)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var approvalActionsSection: some View {
+        if canShowApprovalActions, let docId = request.documentId, !docId.isEmpty {
+            HStack(spacing: 12) {
+                if canShowDeclineAction {
+                    declineButton(docId: docId)
+                }
+                if canShowAcceptAction {
+                    acceptButton
+                }
+            }
+        }
+    }
+
+    private func declineButton(docId: String) -> some View {
+        Button {
+            onMarkRead?(docId)
+            Task {
+                await viewModel.setBookingRequestStatus(
+                    requestId: docId,
+                    status: "declined",
+                    notes: request.notes
+                )
+            }
+        } label: {
+            Text("Decline")
+        }
+        .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
+        .disabled(viewModel.isUpdatingStatus)
+    }
+
+    private var acceptButton: some View {
+        Button(action: { onAccept?() }) {
+            Text("Accept")
+        }
+        .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus))
+        .disabled(viewModel.isUpdatingStatus)
     }
 }
 
@@ -467,6 +599,7 @@ struct BookingRequestDetailView: View {
     @ObservedObject var viewModel: RequestsViewModel
     var drawerState: DrawerState
     let teamAccess: EffectiveTeamAccess
+    var openConfirmOnAppear: Bool = false
     @EnvironmentObject var sessionStore: TenantSessionStore
     @Environment(\.dismiss) var dismiss
     @State private var assigneePickerKey: String = BookingAssigneeFilter.unassignedKey
@@ -475,6 +608,7 @@ struct BookingRequestDetailView: View {
     @State private var showConfirmAppointmentSheet = false
     @State private var confirmAppointmentSheetIsReschedule = false
     @State private var contactAlreadyExists = false
+    @State private var didPresentInitialConfirm = false
 
     private var currentRequest: BookingRequest {
         guard let id = request.documentId,
@@ -543,6 +677,47 @@ struct BookingRequestDetailView: View {
     }
 
     var body: some View {
+        detailNavigationStack
+            .sheet(isPresented: $showAssignScheduleSheet) {
+                AssignBookingScheduleSheet(
+                    request: currentRequest,
+                    viewModel: viewModel,
+                    showsStaffPicker: showsStaffAssignmentUI
+                )
+            }
+            .sheet(isPresented: $showConfirmAppointmentSheet) {
+                ConfirmBookingAppointmentSheet(
+                    request: currentRequest,
+                    viewModel: viewModel,
+                    canPickArtist: canPickArtistOnConfirm,
+                    currentMemberUid: Auth.auth().currentUser?.uid,
+                    isReschedule: confirmAppointmentSheetIsReschedule,
+                    requiresDeposit: teamAccess.confirmationType.requiresDeposit,
+                    depositAmount: teamAccess.depositAmount ?? viewModel.workflowDepositAmount,
+                    canSendDepositSms: canSendDepositSmsForRequest
+                )
+            }
+            .task(id: request.documentId) {
+                markReadLocallyIfNeeded()
+                await markReadIfNeeded()
+                let exists = await viewModel.isBookingRequestCustomerInContacts(currentRequest)
+                await MainActor.run { contactAlreadyExists = exists }
+            }
+            .onAppear {
+                assigneePickerKey = Self.assigneePickerKey(
+                    for: currentRequest,
+                    roster: viewModel.teamFilterRoster
+                )
+                assigneePickerReady = true
+                presentInitialConfirmIfNeeded()
+            }
+            .onChange(of: assigneePickerKey) { _, newKey in
+                guard assigneePickerReady else { return }
+                Task { await applyAssigneePickerKey(newKey) }
+            }
+    }
+
+    private var detailNavigationStack: some View {
         NavigationView {
             ScrollView {
                 detailScrollContent
@@ -553,42 +728,6 @@ struct BookingRequestDetailView: View {
             .toolbar { detailToolbar }
         }
         .navigationViewStyle(.stack)
-        .sheet(isPresented: $showAssignScheduleSheet) {
-            AssignBookingScheduleSheet(
-                request: currentRequest,
-                viewModel: viewModel,
-                showsStaffPicker: showsStaffAssignmentUI
-            )
-        }
-        .sheet(isPresented: $showConfirmAppointmentSheet) {
-            ConfirmBookingAppointmentSheet(
-                request: currentRequest,
-                viewModel: viewModel,
-                canPickArtist: canPickArtistOnConfirm,
-                currentMemberUid: Auth.auth().currentUser?.uid,
-                isReschedule: confirmAppointmentSheetIsReschedule,
-                requiresDeposit: teamAccess.confirmationType.requiresDeposit,
-                depositAmount: teamAccess.depositAmount ?? viewModel.workflowDepositAmount,
-                canSendDepositSms: canSendDepositSmsForRequest
-            )
-        }
-        .task(id: request.documentId) {
-            markReadLocallyIfNeeded()
-            await markReadIfNeeded()
-            let exists = await viewModel.isBookingRequestCustomerInContacts(currentRequest)
-            await MainActor.run { contactAlreadyExists = exists }
-        }
-        .onAppear {
-            assigneePickerKey = Self.assigneePickerKey(
-                for: currentRequest,
-                roster: viewModel.teamFilterRoster
-            )
-            assigneePickerReady = true
-        }
-        .onChange(of: assigneePickerKey) { _, newKey in
-            guard assigneePickerReady else { return }
-            Task { await applyAssigneePickerKey(newKey) }
-        }
     }
 
     @ViewBuilder
@@ -720,6 +859,13 @@ struct BookingRequestDetailView: View {
                 systemImage: confirmedTimeSystemImage
             )
         }
+    }
+
+    private func presentInitialConfirmIfNeeded() {
+        guard openConfirmOnAppear, !didPresentInitialConfirm, canConfirmPendingAppointment else { return }
+        didPresentInitialConfirm = true
+        confirmAppointmentSheetIsReschedule = false
+        showConfirmAppointmentSheet = true
     }
 
     private func openConfirmedTimeEditor() {
@@ -887,7 +1033,7 @@ struct BookingRequestDetailView: View {
                             confirmAppointmentSheetIsReschedule = false
                             showConfirmAppointmentSheet = true
                         } label: {
-                            Text("Confirm Appointment")
+                            Text("Accept")
                         }
                         .buttonStyle(AppPrimaryButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
                         .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)

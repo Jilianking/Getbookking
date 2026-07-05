@@ -13,12 +13,16 @@ import StripeTerminal
 final class TapToPayReaderSession: ObservableObject {
     static let shared = TapToPayReaderSession()
 
+    private static let termsAcceptedDefaultsKey = "tapToPayTermsAcceptedOnDevice"
+
     @Published private(set) var preparationProgress: Double?
     @Published private(set) var statusMessage: String?
     @Published private(set) var isReaderReady = false
     @Published private(set) var termsAcceptedOnDevice = false
 
-    private init() {}
+    private init() {
+        termsAcceptedOnDevice = UserDefaults.standard.bool(forKey: Self.termsAcceptedDefaultsKey)
+    }
 
     func resetForWarmUp() {
         preparationProgress = nil
@@ -49,6 +53,7 @@ final class TapToPayReaderSession: ObservableObject {
 
     func markTermsAccepted() {
         termsAcceptedOnDevice = true
+        UserDefaults.standard.set(true, forKey: Self.termsAcceptedDefaultsKey)
     }
 
     func markFailed(_ message: String) {

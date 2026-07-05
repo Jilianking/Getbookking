@@ -103,11 +103,14 @@ final class DrawerState {
     var messagesShouldOpenCompose = false
     /// Dashboard Schedule quick action → Calendar + New Booking sheet.
     var calendarShouldOpenNewBooking = false
+    /// Incremented when the app tour advances — child views dismiss sheets / inline panels.
+    var appTourDismissModalsToken: Int = 0
 }
 
 struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @StateObject private var appTour = AppTourCoordinator()
     @State private var drawerState = DrawerState()
     @StateObject private var dashboardMetrics = DashboardViewModel()
     @State private var visitedSections: Set<AdminSection> = [.dashboard]
@@ -142,6 +145,13 @@ struct AdminRootView: View {
         return sections
     }
 
+    private var sessionTaskId: String {
+        if authViewModel.isDemoMode {
+            return authViewModel.demoPersona?.slug ?? "demo-unknown"
+        }
+        return authViewModel.currentUserUid ?? ""
+    }
+
     var body: some View {
         ZStack(alignment: .leading) {
             // Main content
@@ -165,10 +175,34 @@ struct AdminRootView: View {
                     .shadow(color: .black.opacity(0.12), radius: 12, x: 4, y: 0)
                     .transition(.move(edge: .leading))
             }
+
+            if appTour.isActive, let step = appTour.activeStep {
+                Color.clear
+                    .appTourSpotlightOverlay(
+                        isPresented: true,
+                        holeGlobal: appTour.currentHoleGlobal,
+                        message: step.message,
+                        stepLabel: step.stepLabel,
+                        primaryButtonTitle: step.nextButtonTitle,
+                        onPrimary: { advanceAppTour() },
+                        onSkipTour: { skipAppTour() }
+                    )
+                    .zIndex(1000)
+            }
+        }
+        .environmentObject(appTour)
+        .onPreferenceChange(AppTourFramePreferenceKey.self) { frames in
+            appTour.updateFrames(frames)
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
         .onChange(of: drawerState.selectedSection) { _, section in
             visitedSections.insert(section)
+            if authViewModel.isDemoMode, !AppTourStore.persistDemoDismissal, section == .dashboard, !appTour.isActive {
+                Task {
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    appTour.start()
+                }
+            }
         }
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
@@ -180,19 +214,29 @@ struct AdminRootView: View {
                 drawerState.selectedSection = drawerSections.first ?? .dashboard
             }
         }
-        .task(id: authViewModel.currentUserUid) {
+        .task(id: sessionTaskId) {
             if authViewModel.isAuthenticated, authViewModel.currentUserUid != nil {
-                sessionStore.reset()
-                await sessionStore.bootstrap(
+                let sessionChanged = sessionStore.prepareForSession(
+                    uid: authViewModel.currentUserUid,
                     isDemoMode: authViewModel.isDemoMode,
                     demoPersona: authViewModel.demoPersona
                 )
-                await dashboardMetrics.loadData(
+                if sessionChanged, authViewModel.isDemoMode {
+                    dashboardMetrics.resetForNewSession()
+                }
+                async let bootstrap: () = sessionStore.bootstrap(
+                    isDemoMode: authViewModel.isDemoMode,
+                    demoPersona: authViewModel.demoPersona
+                )
+                async let metrics: () = dashboardMetrics.loadData(
                     sessionStore: sessionStore,
                     isDemoMode: authViewModel.isDemoMode
                 )
+                _ = await (bootstrap, metrics)
+                await startAppTourIfNeeded()
             } else if !authViewModel.isAuthenticated {
                 sessionStore.reset()
+                appTour.skipTour(onComplete: {})
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
@@ -282,6 +326,14 @@ struct AdminRootView: View {
                     Text(err)
                         .font(.caption2)
                         .foregroundStyle(.red)
+                } else if sessionStore.isDemoLoading {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Loading sample data…")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(AppDesign.textSecondary)
                 } else {
                     Text("Nothing is saved · explore freely")
                         .font(.caption2)
@@ -431,6 +483,55 @@ struct AdminRootView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    private func startAppTourIfNeeded() async {
+        if authViewModel.isDemoMode {
+            guard sessionStore.isDemoSession else { return }
+            if let err = sessionStore.demoLoadError, !err.isEmpty { return }
+        }
+
+        let pending = sessionStore.profile?.appTourPending ?? false
+        guard appTour.shouldStart(
+            isDemoMode: authViewModel.isDemoMode,
+            appTourPending: pending,
+            isOwner: authViewModel.teamAccess.isOwner || authViewModel.isDemoMode,
+            demoSessionReady: sessionStore.isDemoSession
+        ) else { return }
+
+        visitedSections.insert(.dashboard)
+        drawerState.selectedSection = .dashboard
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        appTour.start()
+    }
+
+    private func advanceAppTour() {
+        Task { @MainActor in
+            drawerState.appTourDismissModalsToken &+= 1
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            appTour.advance(
+                drawerState: drawerState,
+                visitedSections: &visitedSections,
+                onComplete: completeAppTourPersistence
+            )
+        }
+    }
+
+    private func skipAppTour() {
+        drawerState.appTourDismissModalsToken &+= 1
+        appTour.skipTour(onComplete: completeAppTourPersistence)
+    }
+
+    private func completeAppTourPersistence() {
+        if authViewModel.isDemoMode {
+            AppTourStore.markDemoTourCompletedIfNeeded()
+            return
+        }
+        sessionStore.markAppTourCompleted()
+        guard let uid = authViewModel.currentUserUid else { return }
+        Task {
+            try? await FirebaseService().completeAppTour(uid: uid)
+        }
     }
 }
 

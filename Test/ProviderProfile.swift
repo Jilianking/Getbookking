@@ -22,6 +22,8 @@ struct ProviderProfile {
     var availability: ProviderAvailability
     var workflow: ProviderWorkflow
     var createdAt: Date?
+    /// Multi-step app tour pending (new signups only).
+    var appTourPending: Bool
 }
 
 struct TimeSlot: Identifiable, Codable, Equatable {

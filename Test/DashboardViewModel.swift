@@ -27,6 +27,28 @@ class DashboardViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     
+    /// Clears metrics before demo bootstrap so a prior real account does not flash on screen.
+    func resetForNewSession() {
+        pendingRequestsCount = 0
+        unreadRequestsCount = 0
+        upcomingBookingsCount = 0
+        confirmedThisMonthCount = 0
+        totalClientsCount = 0
+        monthlyRevenue = 0
+        businessDisplayName = ""
+        tenantIndustry = BookingTemplate.custom.rawValue
+        recentRequests = []
+        recentBookingRequests = []
+        useTenantData = false
+        weeklyRevenue = []
+        revenueThisWeek = 0
+        revenueWeekOverWeekPct = nil
+        revenueThisMonth = 0
+        revenueMonthOverMonthPct = nil
+        revenueAvgPerWeek = 0
+        isLoading = true
+    }
+
     func loadData(sessionStore: TenantSessionStore, isDemoMode: Bool = false) async {
         await MainActor.run { isLoading = true }
         
@@ -106,8 +128,7 @@ class DashboardViewModel: ObservableObject {
                     guard let created = req.createdAt else { return false }
                     return created >= monthStart
                 }
-                let revenueEntries = await loadStripeRevenueEntries()
-                let revenueSnapshot = Self.makeRevenueSnapshot(from: revenueEntries)
+                let isDemoTenant = sessionStore.tenant?["isDemoAccount"] as? Bool == true
 
                 await MainActor.run {
                     useTenantData = true
@@ -116,18 +137,25 @@ class DashboardViewModel: ObservableObject {
                     upcomingBookingsCount = upcoming.count
                     confirmedThisMonthCount = confirmedMonth.count
                     totalClientsCount = clientsCount
-                    monthlyRevenue = revenueSnapshot.thisMonth
                     businessDisplayName = sessionStore.businessDisplayName
                     tenantIndustry = sessionStore.tenantIndustry
                     recentBookingRequests = Array(bookingReqs.prefix(10))
                     recentRequests = []
-                    if sessionStore.tenant?["isDemoAccount"] as? Bool == true,
-                       Self.shouldUseDemoRevenueFallback(revenueSnapshot, payments: nil) {
-                        applyDemoRevenueChart()
-                    } else {
-                        applyRevenueSnapshot(revenueSnapshot)
-                    }
                     isLoading = false
+                }
+
+                Task {
+                    let revenueEntries = await loadStripeRevenueEntries()
+                    let revenueSnapshot = Self.makeRevenueSnapshot(from: revenueEntries)
+                    await MainActor.run {
+                        monthlyRevenue = revenueSnapshot.thisMonth
+                        if isDemoTenant,
+                           Self.shouldUseDemoRevenueFallback(revenueSnapshot, payments: nil) {
+                            applyDemoRevenueChart()
+                        } else {
+                            applyRevenueSnapshot(revenueSnapshot)
+                        }
+                    }
                 }
             } else {
                 let requests = try await firebaseService.fetchRequests()

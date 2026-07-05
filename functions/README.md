@@ -41,6 +41,7 @@
 
 - **createConnectAccountLink** (callable): Creates a Stripe Connect account (if needed) and returns an Account Link URL for onboarding. The iOS app opens this URL in Safari.
 - **createTerminalConnectionTokenForTapToPay** (callable): Returns a Stripe Terminal ConnectionToken secret used by the iOS Tap to Pay flow.
+- **prepareTapToPayTermsAcceptance** (callable): Ensures Connect account + Terminal location so iOS can show Apple Tap to Pay T&C before Stripe onboarding.
 
 ### Platform fee (customer payments)
 

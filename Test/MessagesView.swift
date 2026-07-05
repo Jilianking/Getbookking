@@ -3,6 +3,7 @@ import SwiftUI
 struct MessagesView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = MessagesViewModel()
     @State private var selectedThreadId: String?
     @State private var showingCompose = false
@@ -81,6 +82,11 @@ struct MessagesView: View {
                                         summary: summary,
                                         viewModel: viewModel,
                                         showsDivider: index < filteredSummaries.count - 1
+                                    )
+                                    .appTourAnchor(
+                                        .messagesReply,
+                                        isActive: appTour.isStepActive(.messagesReply)
+                                            && summary.threadId == filteredSummaries.first?.threadId
                                     )
                                     .contentShape(Rectangle())
                                     .onTapGesture {
@@ -170,6 +176,19 @@ struct MessagesView: View {
                 applyMessagesComposePrefill(from: drawerState)
                 selectedThreadId = nil
                 showingCompose = true
+            }
+            .onChange(of: drawerState.appTourDismissModalsToken) { _, _ in
+                selectedThreadId = nil
+                showingCompose = false
+            }
+            .onChange(of: appTour.activeStep) { _, step in
+                guard step == .messagesReply else { return }
+                Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if selectedThreadId == nil, let first = filteredSummaries.first {
+                        selectedThreadId = first.threadId
+                    }
+                }
             }
             .task {
                 viewModel.startThreadsListening(
@@ -263,6 +282,7 @@ struct ThreadRow: View {
 struct MessageThreadView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     let threadId: String
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
@@ -345,6 +365,7 @@ struct MessageThreadView: View {
                 isDemoMode: authViewModel.isDemoMode,
                 fieldFocused: $isComposerFocused
             )
+            .appTourAnchor(.messagesReply, isActive: appTour.isStepActive(.messagesReply))
         }
         .task {
             if let summary = viewModel.summary(for: threadId) {

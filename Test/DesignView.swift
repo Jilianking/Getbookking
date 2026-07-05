@@ -11,6 +11,7 @@ import UIKit
 struct DesignView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .gallery
     @State private var isShowingManage = false
@@ -96,6 +97,10 @@ struct DesignView: View {
                                 }
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(AppDesign.textPrimary)
+                                .appTourAnchor(
+                                    .designWebsite,
+                                    isActive: appTour.isStepActive(.designWebsite) && !isShowingManage
+                                )
                                 if viewModel.hasTenant, URL(string: viewModel.bookingUrl) != nil {
                                     Button(action: openInSafari) {
                                         Image(systemName: "safari")

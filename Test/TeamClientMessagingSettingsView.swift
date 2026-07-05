@@ -13,6 +13,7 @@ struct TeamClientMessagingSettingsView: View {
     @State private var draftDeclined = ""
     @State private var draftQuickReplies: [String] = []
     @State private var presetsLoaded = false
+    @State private var showStartSubscriptionConfirm = false
 
     var body: some View {
         List {
@@ -43,8 +44,28 @@ struct TeamClientMessagingSettingsView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await viewModel.syncBillingAfterPortalIfNeeded() }
+            Task { await viewModel.syncBillingAfterWebIfNeeded() }
         }
+        .confirmationDialog(
+            "Start subscription today?",
+            isPresented: $showStartSubscriptionConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Continue on website") {
+                Task { await viewModel.openBillingToStartSubscription() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(startSubscriptionConfirmMessage)
+        }
+    }
+
+    private var startSubscriptionConfirmMessage: String {
+        let price = viewModel.tenantSubscriptionPlan.monthlyPriceLabel
+        return """
+        You’ll finish on getbookking.com. Your card on file will be charged \(price) today, \
+        skipping your free trial. Return to the app afterward to enable client texting.
+        """
     }
 
     private func syncPresetDraftsFromViewModel() {
@@ -165,8 +186,11 @@ struct TeamClientMessagingSettingsView: View {
             if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.smsStatus == "active" {
                 Text("If texts fail to send, use Refresh texting number.")
                     .font(.caption2)
+            } else if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.subscriptionTrialing {
+                Text("Client texting is not included during the free trial. Payment completes on getbookking.com.")
+                    .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode {
-                Text("Paid subscription required. Sync billing from Stripe if you already subscribed on the website.")
+                Text("Already paid on the website? Pull to refresh or use Sync billing below.")
                     .font(.caption2)
             } else {
                 Text("Dedicated local number for appointment texts to clients.")
@@ -180,7 +204,8 @@ struct TeamClientMessagingSettingsView: View {
             Text("Link your Stripe subscription to unlock client texting.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            billingActionButtons
+            startSubscriptionPrimaryButton
+            billingSecondaryLinks
         }
     }
 
@@ -189,36 +214,73 @@ struct TeamClientMessagingSettingsView: View {
             Text("Client texting starts after your paid subscription begins.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            billingActionButtons
+            startSubscriptionPrimaryButton
+            billingSecondaryLinks
         }
     }
 
-    private var billingActionButtons: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button { Task { await viewModel.openStripeBillingPortal() } } label: {
-                HStack {
-                    if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
-                    Text("Manage billing in Stripe")
+    private var startSubscriptionPrimaryButton: some View {
+        Button {
+            showStartSubscriptionConfirm = true
+        } label: {
+            HStack {
+                if viewModel.isOpeningBillingWebsite {
+                    ProgressView()
+                        .scaleEffect(0.9)
                 }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Start subscription today")
+                        .font(.headline)
+                    Text("Skip free trial · \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel) · Unlock texting")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
             }
-            .disabled(viewModel.isOpeningBillingPortal || viewModel.isSyncingBilling || viewModel.isStartingSubscription)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(
+            viewModel.isOpeningBillingWebsite ||
+            viewModel.isSyncingBilling ||
+            viewModel.isOpeningBillingPortal
+        )
+    }
 
-            Button { Task { await viewModel.syncBillingFromStripe() } } label: {
+    private var billingSecondaryLinks: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                Task { await viewModel.syncBillingFromStripe() }
+            } label: {
                 HStack {
                     if viewModel.isSyncingBilling { ProgressView().scaleEffect(0.9) }
                     Text("Sync billing from Stripe")
+                        .font(.subheadline)
                 }
             }
-            .disabled(viewModel.isSyncingBilling || viewModel.isStartingSubscription || viewModel.isOpeningBillingPortal)
+            .disabled(
+                viewModel.isSyncingBilling ||
+                viewModel.isOpeningBillingWebsite ||
+                viewModel.isOpeningBillingPortal
+            )
 
-            Button { Task { await viewModel.startSubscriptionToday() } } label: {
+            Button {
+                Task { await viewModel.openStripeBillingPortal() }
+            } label: {
                 HStack {
-                    if viewModel.isStartingSubscription { ProgressView().scaleEffect(0.9) }
-                    Text("Start subscription today")
+                    if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
+                    Text("Manage billing in Stripe")
+                        .font(.subheadline)
                 }
             }
-            .disabled(viewModel.isStartingSubscription || viewModel.isSyncingBilling || viewModel.isOpeningBillingPortal)
+            .disabled(
+                viewModel.isOpeningBillingPortal ||
+                viewModel.isSyncingBilling ||
+                viewModel.isOpeningBillingWebsite
+            )
         }
+        .foregroundStyle(.secondary)
+        .padding(.top, 4)
     }
 
     private var activeSmsContent: some View {

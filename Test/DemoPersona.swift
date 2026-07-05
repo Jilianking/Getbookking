@@ -10,6 +10,9 @@ enum DemoPersona: String, CaseIterable, Identifiable {
     case salon
     case gym
 
+    /// Single shared demo for all plans until Studio / Shop variants ship.
+    static let `default`: DemoPersona = .salon
+
     var id: String { rawValue }
 
     var slug: String {
@@ -245,7 +248,8 @@ enum DemoSnapshotParser {
             subscriptionStatus: (tenant["subscriptionStatus"] as? String) ?? "active",
             availability: .default,
             workflow: .default,
-            createdAt: nil
+            createdAt: nil,
+            appTourPending: false
         )
     }
 }

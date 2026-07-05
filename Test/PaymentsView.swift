@@ -9,6 +9,7 @@ import SwiftUI
 struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
+    @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
     @State private var showManualPaymentSheet = false
@@ -128,6 +129,13 @@ struct PaymentsView: View {
             .sheet(isPresented: $showAllTransactions) {
                 PaymentsAllTransactionsSheet(viewModel: viewModel)
             }
+            #if TAP_TO_PAY_ENABLED
+            .overlay {
+                if viewModel.isLaunchingTapToPay {
+                    TapToPayLaunchOverlay(message: viewModel.tapToPayLaunchOverlayMessage)
+                }
+            }
+            #endif
         }
     }
 
@@ -142,36 +150,15 @@ struct PaymentsView: View {
     }
 
     private func handleTapToPayTapped() {
-        if authViewModel.isDemoMode {
-            tapToPayAlertMessage = "Tap to Pay isn't available in demo mode."
-            return
-        }
-        if !viewModel.canTakePayments {
-            tapToPayAlertMessage = "Your studio collects payments for you. Ask your admin to enable independent payouts."
-            return
-        }
-        if let block = TapToPayEligibility.blockingMessage() {
-            tapToPayAlertMessage = block
-            return
-        }
-        if !viewModel.stripeConnected {
-            Task { await viewModel.createConnectAccountLink(isDemoMode: false) }
-            return
-        }
         Task {
-            if viewModel.resolvedTapToPayLocationId.isEmpty {
-                do {
-                    try await viewModel.ensureTapToPayLocation()
-                } catch {
-                    tapToPayAlertMessage = FirebaseFunctionsErrorHelper.message(from: error)
-                    return
-                }
+            switch await viewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode) {
+            case .showCheckout:
+                showTapToPaySheet = true
+            case .showAlert(let message):
+                tapToPayAlertMessage = message
+            case .openedConnectInSafari:
+                break
             }
-            if viewModel.resolvedTapToPayLocationId.isEmpty {
-                tapToPayAlertMessage = "Tap to Pay could not be set up. Add your business address under Website Design, then try again."
-                return
-            }
-            showTapToPaySheet = true
         }
     }
     #endif
@@ -287,9 +274,8 @@ struct PaymentsView: View {
                     icon: "wave.3.right.circle.fill",
                     iconColor: .blue,
                     title: "Tap to Pay on iPhone",
-                    subtitle: "Contactless cards & wallets",
+                    subtitle: tapToPayCardSubtitle,
                     action: { handleTapToPayTapped() },
-                    disabled: !viewModel.stripeConnected,
                     showsDivider: true
                 )
                 .overlay {
@@ -375,6 +361,7 @@ struct PaymentsView: View {
                 .padding(.horizontal)
             }
         }
+        .appTourAnchor(.paymentsHistory, isActive: appTour.isStepActive(.paymentsHistory))
     }
 
     private var studioPayrollBanner: some View {
@@ -409,10 +396,17 @@ private struct StripeConnectBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: {
-                if isPendingReview {
-                    Task { await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode) }
-                } else {
-                    Task { await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                Task {
+                    if isPendingReview {
+                        await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
+                    } else {
+                        await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
+                        guard !viewModel.stripeConnected else { return }
+                        if viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted {
+                            return
+                        }
+                        _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode)
+                    }
                 }
             }) {
                 HStack(spacing: 12) {
@@ -942,3 +936,29 @@ struct WithdrawSheet: View {
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 }
+
+#if TAP_TO_PAY_ENABLED
+struct TapToPayLaunchOverlay: View {
+    let message: String
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.32)
+                .ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(1.05)
+                Text(message)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .transition(.opacity)
+    }
+}
+#endif

@@ -1033,7 +1033,7 @@ private struct ShopProductCatalogContent: View {
                     editingProduct = nil
                 }
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large, .medium])
             .presentationDragIndicator(.visible)
         }
     }
@@ -1325,17 +1325,18 @@ private struct ShopProductFormSheet: View {
                     VStack(spacing: 0) {
                         shopSheetLabeledField(title: "Name") {
                             TextField("Product name", text: $name)
-                                .multilineTextAlignment(.trailing)
+                                .textInputAutocapitalization(.words)
                         }
                         Divider().padding(.leading, 16)
                         shopSheetLabeledField(title: "Category") {
                             TextField("e.g. Shampoo", text: $category)
-                                .multilineTextAlignment(.trailing)
+                                .textInputAutocapitalization(.words)
                         }
                         Divider().padding(.leading, 16)
                         shopSheetLabeledField(title: "Description") {
-                            TextField("Optional", text: $description)
-                                .multilineTextAlignment(.trailing)
+                            TextField("Optional", text: $description, axis: .vertical)
+                                .lineLimit(2...4)
+                                .textInputAutocapitalization(.sentences)
                         }
                     }
                     .appCard()
@@ -1383,6 +1384,7 @@ private struct ShopProductFormSheet: View {
                 .padding(.top, 8)
                 .padding(.bottom, 28)
             }
+            .scrollDismissesKeyboard(.interactively)
             .appScreenBackground()
             .navigationTitle(isEditing ? "Edit product" : "New product")
             .navigationBarTitleDisplayMode(.inline)
@@ -1547,11 +1549,12 @@ private struct ShopProductFormSheet: View {
     }
 
     private func shopSheetLabeledField<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .center) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .foregroundStyle(Color.primary)
-            Spacer(minLength: 12)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.secondaryLabel))
             content()
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

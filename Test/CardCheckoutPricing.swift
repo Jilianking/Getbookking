@@ -92,6 +92,11 @@ enum CardCheckoutPricing {
 struct CardCheckoutBreakdownView: View {
     let breakdown: CardCheckoutBreakdown
     var alwaysShowFeeLines: Bool = false
+    @State private var showFeeDetails = false
+
+    private var showFeeRow: Bool {
+        alwaysShowFeeLines || breakdown.hasPassThroughFees
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -100,18 +105,25 @@ struct CardCheckoutBreakdownView: View {
                 Spacer()
                 Text(CardCheckoutPricing.formatUSD(cents: breakdown.serviceCents))
             }
-            if alwaysShowFeeLines || breakdown.cardProcessingFeeCents > 0 {
-                HStack {
-                    Text("Card processing")
+            if showFeeRow {
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(spacing: 4) {
+                        Text("Processing & service fees")
+                        Button {
+                            showFeeDetails.toggle()
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Processing fee details")
+                        .popover(isPresented: $showFeeDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+                            feeDetailsPopover
+                        }
+                    }
                     Spacer()
-                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.cardProcessingFeeCents))
-                }
-            }
-            if alwaysShowFeeLines || breakdown.platformFeeCents > 0 {
-                HStack {
-                    Text("Platform fee (1%)")
-                    Spacer()
-                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.platformFeeCents))
+                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.passThroughFeeCents))
                 }
             }
             Divider()
@@ -135,5 +147,44 @@ struct CardCheckoutBreakdownView: View {
         .padding(12)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var feeDetailsPopover: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if breakdown.cardProcessingFeeCents > 0 {
+                feeDetailLine(
+                    title: "Card processing (Stripe)",
+                    amount: breakdown.cardProcessingFeeCents
+                )
+            }
+            if breakdown.platformFeeCents > 0 {
+                feeDetailLine(
+                    title: "Platform fee (1%)",
+                    amount: breakdown.platformFeeCents
+                )
+            }
+            if breakdown.passThroughFeeCents <= 0 {
+                Text("Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("The business receives the full product price.")
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(12)
+        .frame(width: 248, alignment: .leading)
+        .presentationCompactAdaptation(.popover)
+    }
+
+    private func feeDetailLine(title: String, amount: Int) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Text(CardCheckoutPricing.formatUSD(cents: amount))
+                .foregroundStyle(.primary)
+        }
     }
 }

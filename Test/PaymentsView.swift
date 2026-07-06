@@ -85,6 +85,9 @@ struct PaymentsView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
+                #if TAP_TO_PAY_ENABLED
+                await viewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                #endif
             }
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }

@@ -53,9 +53,13 @@ final class TapToPayTerminalManager {
 
         let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
 
+        let termsAlreadyAccepted = await MainActor.run {
+            TapToPayReaderSession.shared.termsAcceptedOnDevice
+        }
         if connectedReader != nil,
            connectedLocationId == locationId,
-           connectedMerchantDisplayName == resolvedName {
+           connectedMerchantDisplayName == resolvedName,
+           termsAlreadyAccepted {
             await MainActor.run { TapToPayReaderSession.shared.markReady() }
             return
         }
@@ -87,6 +91,11 @@ final class TapToPayTerminalManager {
         }
     }
 
+    /// Drops an active reader session (e.g. merchant dismissed Apple T&C without accepting).
+    func releaseReaderConnection() async {
+        await disconnectReaderIfConnected()
+    }
+
     /// Disconnect and reconnect so Stripe Terminal picks up a new merchant display name.
     func reconnectReader(locationId: String, merchantDisplayName: String) async {
         await disconnectReaderIfConnected()
@@ -98,10 +107,14 @@ final class TapToPayTerminalManager {
         locationId: String,
         merchantDisplayName: String? = nil
     ) async throws {
-        try await warmUpReaderThrowing(
-            locationId: locationId,
-            merchantDisplayName: normalizedMerchantDisplayName(merchantDisplayName)
-        )
+        await warmUpReader(locationId: locationId, merchantDisplayName: merchantDisplayName)
+        let isReady = await MainActor.run { TapToPayReaderSession.shared.isReaderReady }
+        if !isReady {
+            let message = await MainActor.run {
+                TapToPayReaderSession.shared.statusMessage ?? "Could not connect to Tap to Pay."
+            }
+            throw TapToPayError.message(message)
+        }
     }
 
     func processPayment(clientSecret: String, locationId: String, merchantDisplayName: String? = nil) async throws {

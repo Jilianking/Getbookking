@@ -115,23 +115,14 @@ struct PaymentReceiptDetail: Equatable {
                 amountCents: serviceCents
             ),
         ]
-        if cardProcessing > 0 {
+        let passThroughFee = cardProcessing + platformFee
+        if passThroughFee > 0 {
             items.append(
                 PaymentReceiptLineItem(
-                    id: "processing",
-                    name: "Card processing",
+                    id: "fees",
+                    name: "Processing & service fees",
                     quantity: 1,
-                    amountCents: cardProcessing
-                )
-            )
-        }
-        if platformFee > 0 {
-            items.append(
-                PaymentReceiptLineItem(
-                    id: "platform",
-                    name: "Platform fee (1%)",
-                    quantity: 1,
-                    amountCents: platformFee
+                    amountCents: passThroughFee
                 )
             )
         }

@@ -881,7 +881,6 @@ struct ManageBookTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
     let teamAccess: EffectiveTeamAccess
     @Binding var serviceToEdit: TenantService?
-    @Binding var formFieldToEdit: FormField?
     @State private var showFormStylePicker = false
     @State private var showFormFieldsSheet = false
 
@@ -915,8 +914,10 @@ struct ManageBookTabContent: View {
 
                 ManageCardDivider()
                 ManageNavigationRow(
-                    title: "Form fields",
-                    subtitle: "\(viewModel.formFields.count) fields",
+                    title: resolvedFormStyle == .guided ? "Guided steps" : "Form fields",
+                    subtitle: resolvedFormStyle == .guided
+                        ? "3 steps · \(viewModel.formFields.count) fields"
+                        : "\(viewModel.formFields.count) fields",
                     value: "Edit"
                 ) {
                     showFormFieldsSheet = true
@@ -992,7 +993,11 @@ struct ManageBookTabContent: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showFormFieldsSheet) {
-            ManageFormFieldsSheet(viewModel: viewModel, formFieldToEdit: $formFieldToEdit)
+            if resolvedFormStyle == .guided {
+                ManageGuidedStepsSheet(viewModel: viewModel, serviceToEdit: $serviceToEdit)
+            } else {
+                ManageFormFieldsSheet(viewModel: viewModel)
+            }
         }
     }
 }
@@ -1073,8 +1078,9 @@ private struct ManageBookingFormStylePickerSheet: View {
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(Color.primary)
                                 Text(style.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color(.secondaryLabel))
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
                             if BookingFormStyle.resolved(stored: viewModel.bookingFormStyleId) == style {
@@ -1098,56 +1104,543 @@ private struct ManageBookingFormStylePickerSheet: View {
     }
 }
 
-private struct ManageFormFieldsSheet: View {
+private enum FormFieldsListSpace {
+    static let name = "formFieldsList"
+}
+
+private struct RowFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+private enum GuidedStepsListSpace {
+    static let name = "guidedStepsList"
+}
+
+private struct ManageGuidedStepsSheet: View {
     @ObservedObject var viewModel: DesignViewModel
-    @Binding var formFieldToEdit: FormField?
+    @Binding var serviceToEdit: TenantService?
     @Environment(\.dismiss) private var dismiss
+    @State private var editingField: FormField?
+    @State private var editingStep: GuidedFormStep?
+    @State private var isSaving = false
+    @State private var draggingFieldId: String?
+    @State private var draggingServiceId: String?
+    @State private var draggingStepId: String?
+    @State private var rowFrames: [String: CGRect] = [:]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(viewModel.formFields) { field in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(field.label)
-                                    .font(.subheadline.weight(.medium))
-                                Text("\(field.type.displayName) • \(field.required ? "Required" : "Optional")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    ForEach(Array(viewModel.guidedStepOrder.enumerated()), id: \.element.id) { index, step in
+                        guidedStepSection(step, displayNumber: index + 1)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+            }
+            .coordinateSpace(name: GuidedStepsListSpace.name)
+            .scrollDisabled(draggingFieldId != nil || draggingServiceId != nil || draggingStepId != nil)
+            .onPreferenceChange(RowFramePreferenceKey.self) { rowFrames = $0 }
+            .appScreenBackground()
+            .navigationTitle("Guided steps")
+            .navigationBarTitleDisplayMode(.inline)
+            .appNavigationChrome()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        Task {
+                            isSaving = true
+                            await viewModel.saveFormFields()
+                            isSaving = false
+                            dismiss()
+                        }
+                    }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .disabled(isSaving)
+                }
+            }
+            .sheet(item: $editingField) { field in
+                EditFormFieldSheet(
+                    field: field,
+                    existingKeys: viewModel.formFields
+                        .filter { $0.id != field.id }
+                        .map { $0.key.lowercased() },
+                    onCancel: { editingField = nil },
+                    onSave: { updatedField in
+                        viewModel.updateFormField(updatedField)
+                        editingField = nil
+                    },
+                    onDelete: {
+                        viewModel.removeFormField(field)
+                        editingField = nil
+                    }
+                )
+            }
+            .sheet(item: $editingStep) { step in
+                EditGuidedStepTitleSheet(
+                    step: step,
+                    initialTitle: viewModel.guidedTitle(for: step),
+                    onCancel: { editingStep = nil },
+                    onSave: { title in
+                        viewModel.setGuidedTitle(title, for: step)
+                        editingStep = nil
+                    }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func guidedStepSection(_ step: GuidedFormStep, displayNumber: Int) -> some View {
+        let fields = viewModel.formFields(for: step)
+        let stepFrameKey = "step:\(step.rawValue)"
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 28, height: 44)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .named(GuidedStepsListSpace.name))
+                            .onChanged { value in
+                                draggingStepId = step.rawValue
+                                reorderStep(step, atY: value.location.y)
                             }
-                            Spacer()
-                            Button(role: .destructive) {
-                                viewModel.removeFormField(field)
-                            } label: {
-                                Image(systemName: "trash")
+                            .onEnded { _ in draggingStepId = nil }
+                    )
+                Text("\(displayNumber)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Color(red: 0.45, green: 0.32, blue: 0.24), in: Circle())
+                Text(viewModel.guidedTitle(for: step))
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                Spacer(minLength: 8)
+                Button {
+                    editingStep = step
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            }
+            .zIndex(draggingStepId == step.rawValue ? 1 : 0)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: RowFramePreferenceKey.self,
+                        value: [stepFrameKey: geometry.frame(in: .named(GuidedStepsListSpace.name))]
+                    )
+                }
+            }
+
+            if step == .service {
+                if viewModel.services.isEmpty {
+                    Text("No services yet. Add services under Book → Services on the previous screen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                } else {
+                    ForEach(Array(viewModel.services.enumerated()), id: \.element.id) { index, service in
+                        ManageGuidedServiceRow(
+                            service: service,
+                            isDragging: draggingServiceId == service.id,
+                            listCoordinateSpace: GuidedStepsListSpace.name,
+                            onTap: { serviceToEdit = service },
+                            onReorderDrag: { value in
+                                draggingServiceId = service.id
+                                reorderService(withId: service.id, atIndex: index, atY: value.location.y)
+                            },
+                            onReorderDragEnded: { draggingServiceId = nil }
+                        )
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: RowFramePreferenceKey.self,
+                                    value: ["service:\(service.id)": geometry.frame(in: .named(GuidedStepsListSpace.name))]
+                                )
                             }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture { formFieldToEdit = field }
-                        .padding()
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            } else {
+                ForEach(fields) { field in
+                    ManageFormFieldRow(
+                        field: field,
+                        isDragging: draggingFieldId == field.id,
+                        listCoordinateSpace: GuidedStepsListSpace.name,
+                        onTap: { editingField = field },
+                        onReorderDrag: { value in
+                            draggingFieldId = field.id
+                            reorderFieldInStep(withId: field.id, step: step, atY: value.location.y)
+                        },
+                        onReorderDragEnded: { draggingFieldId = nil }
+                    )
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: RowFramePreferenceKey.self,
+                                value: ["field:\(field.id)": geometry.frame(in: .named(GuidedStepsListSpace.name))]
+                            )
+                        }
+                    }
+                }
+
+                Button {
+                    viewModel.addFormField(to: step)
+                } label: {
+                    Label("Add field to this step", systemImage: "plus")
+                        .font(.subheadline.weight(.medium))
+                }
+                .padding(.top, fields.isEmpty ? 0 : 4)
+            }
+        }
+    }
+
+    private func reorderStep(_ step: GuidedFormStep, atY y: CGFloat) {
+        guard let index = viewModel.guidedStepOrder.firstIndex(of: step) else { return }
+
+        if index + 1 < viewModel.guidedStepOrder.count {
+            let nextStep = viewModel.guidedStepOrder[index + 1]
+            if let frame = rowFrames["step:\(nextStep.rawValue)"], y > frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    viewModel.moveGuidedStep(from: index, direction: 1)
+                }
+                return
+            }
+        }
+
+        if index > 0 {
+            let previousStep = viewModel.guidedStepOrder[index - 1]
+            if let frame = rowFrames["step:\(previousStep.rawValue)"], y < frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    viewModel.moveGuidedStep(from: index, direction: -1)
+                }
+            }
+        }
+    }
+
+    private func reorderService(withId id: String, atIndex index: Int, atY y: CGFloat) {
+        if index + 1 < viewModel.services.count {
+            let nextID = viewModel.services[index + 1].id
+            if let frame = rowFrames["service:\(nextID)"], y > frame.midY {
+                Task { await viewModel.moveService(from: index, direction: 1) }
+                return
+            }
+        }
+
+        if index > 0 {
+            let previousID = viewModel.services[index - 1].id
+            if let frame = rowFrames["service:\(previousID)"], y < frame.midY {
+                Task { await viewModel.moveService(from: index, direction: -1) }
+            }
+        }
+    }
+
+    private func reorderFieldInStep(withId id: String, step: GuidedFormStep, atY y: CGFloat) {
+        var stepFields = viewModel.formFields(for: step)
+        guard let stepIndex = stepFields.firstIndex(where: { $0.id == id }) else { return }
+
+        if stepIndex + 1 < stepFields.count {
+            let nextID = stepFields[stepIndex + 1].id
+            if let frame = rowFrames["field:\(nextID)"], y > frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    stepFields.move(fromOffsets: IndexSet(integer: stepIndex), toOffset: stepIndex + 2)
+                    viewModel.applyGuidedStepOrder(stepFields, for: step)
+                }
+                return
+            }
+        }
+
+        if stepIndex > 0 {
+            let previousID = stepFields[stepIndex - 1].id
+            if let frame = rowFrames["field:\(previousID)"], y < frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    stepFields.move(fromOffsets: IndexSet(integer: stepIndex), toOffset: stepIndex - 1)
+                    viewModel.applyGuidedStepOrder(stepFields, for: step)
+                }
+            }
+        }
+    }
+}
+
+private struct ManageGuidedServiceRow: View {
+    let service: TenantService
+    var isDragging: Bool = false
+    var listCoordinateSpace: String
+    let onTap: () -> Void
+    var onReorderDrag: (DragGesture.Value) -> Void = { _ in }
+    var onReorderDragEnded: () -> Void = {}
+
+    private var subtitle: String {
+        var parts: [String] = [service.bladePriceCaption]
+        if let minutes = service.durationMinutes, minutes > 0 {
+            parts.append("\(minutes) min")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "line.3.horizontal")
+                .font(.body)
+                .foregroundStyle(.tertiary)
+                .frame(width: 28, height: 44)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .named(listCoordinateSpace))
+                        .onChanged(onReorderDrag)
+                        .onEnded { _ in onReorderDragEnded() }
+                )
+            Button(action: onTap) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(service.name)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Color.primary)
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(.secondaryLabel))
+                    }
+                    Spacer(minLength: 8)
+                    Text("Service")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color(.secondaryLabel))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color(.tertiarySystemFill), in: Capsule())
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .appCard()
+        .zIndex(isDragging ? 1 : 0)
+    }
+}
+
+private struct EditGuidedStepTitleSheet: View {
+    let step: GuidedFormStep
+    let initialTitle: String
+    let onCancel: () -> Void
+    let onSave: (String) -> Void
+
+    @State private var title: String = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Step title", text: $title, prompt: Text(step.defaultTitle))
+            }
+            .navigationTitle("Edit step")
+            .navigationBarTitleDisplayMode(.inline)
+            .appNavigationChrome()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(title)
+                    }
+                    .font(.body.weight(.semibold))
+                }
+            }
+            .onAppear { title = initialTitle }
+        }
+    }
+}
+
+private struct ManageFormFieldsSheet: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var editingField: FormField?
+    @State private var isSaving = false
+    @State private var draggingFieldId: String?
+    @State private var rowFrames: [String: CGRect] = [:]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.formFields) { field in
+                        ManageFormFieldRow(
+                            field: field,
+                            isDragging: draggingFieldId == field.id,
+                            listCoordinateSpace: FormFieldsListSpace.name,
+                            onTap: { editingField = field },
+                            onReorderDrag: { value in
+                                draggingFieldId = field.id
+                                reorderField(withId: field.id, atY: value.location.y)
+                            },
+                            onReorderDragEnded: {
+                                draggingFieldId = nil
+                            }
+                        )
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: RowFramePreferenceKey.self,
+                                    value: [field.id: geometry.frame(in: .named(FormFieldsListSpace.name))]
+                                )
+                            }
+                        }
                     }
 
                     Button(action: { viewModel.addFormField() }) {
                         Label("Add field", systemImage: "plus")
+                            .font(.body.weight(.medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-
-                    Button("Save form") {
-                        Task { await viewModel.saveFormFields() }
-                    }
-                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 8)
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
+            .coordinateSpace(name: FormFieldsListSpace.name)
+            .scrollDisabled(draggingFieldId != nil)
+            .onPreferenceChange(RowFramePreferenceKey.self) { rowFrames = $0 }
+            .appScreenBackground()
             .navigationTitle("Form fields")
             .navigationBarTitleDisplayMode(.inline)
+            .appNavigationChrome()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        Task {
+                            isSaving = true
+                            await viewModel.saveFormFields()
+                            isSaving = false
+                            dismiss()
+                        }
+                    }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .disabled(isSaving)
                 }
             }
+            .sheet(item: $editingField) { field in
+                EditFormFieldSheet(
+                    field: field,
+                    existingKeys: viewModel.formFields
+                        .filter { $0.id != field.id }
+                        .map { $0.key.lowercased() },
+                    onCancel: { editingField = nil },
+                    onSave: { updatedField in
+                        viewModel.updateFormField(updatedField)
+                        editingField = nil
+                    },
+                    onDelete: {
+                        viewModel.removeFormField(field)
+                        editingField = nil
+                    }
+                )
+            }
+        }
+    }
+
+    private func reorderField(withId id: String, atY y: CGFloat) {
+        guard let fromIndex = viewModel.formFields.firstIndex(where: { $0.id == id }) else { return }
+
+        if fromIndex + 1 < viewModel.formFields.count {
+            let nextID = viewModel.formFields[fromIndex + 1].id
+            if let frame = rowFrames[nextID], y > frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    viewModel.moveFormFields(from: IndexSet(integer: fromIndex), to: fromIndex + 2)
+                }
+                return
+            }
+        }
+
+        if fromIndex > 0 {
+            let previousID = viewModel.formFields[fromIndex - 1].id
+            if let frame = rowFrames[previousID], y < frame.midY {
+                withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                    viewModel.moveFormFields(from: IndexSet(integer: fromIndex), to: fromIndex - 1)
+                }
+            }
+        }
+    }
+}
+
+private struct ManageFormFieldRow: View {
+    let field: FormField
+    var isDragging: Bool = false
+    var listCoordinateSpace: String = FormFieldsListSpace.name
+    var dragHandleIcon: String = "line.3.horizontal"
+    let onTap: () -> Void
+    var onReorderDrag: (DragGesture.Value) -> Void = { _ in }
+    var onReorderDragEnded: () -> Void = {}
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: dragHandleIcon)
+                .font(.body)
+                .foregroundStyle(.tertiary)
+                .frame(width: 28, height: 44)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .named(listCoordinateSpace))
+                        .onChanged(onReorderDrag)
+                        .onEnded { _ in onReorderDragEnded() }
+                )
+            Button(action: onTap) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(field.label)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Color.primary)
+                        Text(field.listSubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(.secondaryLabel))
+                    }
+                    Spacer(minLength: 8)
+                    formFieldStatusBadge
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .appCard()
+        .zIndex(isDragging ? 1 : 0)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var formFieldStatusBadge: some View {
+        if field.required {
+            Text("Required")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color(red: 0.55, green: 0.32, blue: 0.22))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(red: 0.96, green: 0.88, blue: 0.82), in: Capsule())
+        } else {
+            Text("Optional")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color(.secondaryLabel))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(.tertiarySystemFill), in: Capsule())
         }
     }
 }

@@ -3887,62 +3887,194 @@
     }
     .bk-shop-cart-checkout:hover { background: #333; }
     .bk-shop-cart-checkout:disabled { opacity: 0.45; cursor: not-allowed; }
-    .bk-shop-checkout-page { max-width: 520px; margin: 0 auto; padding: 24px 20px 48px; }
-    .bk-shop-checkout-page h1 { margin: 0 0 8px; font-size: 1.75rem; font-weight: 600; }
-    .bk-shop-checkout-lead { margin: 0 0 24px; color: #666; font-size: 0.95rem; line-height: 1.5; }
-    .bk-shop-checkout-summary { margin-bottom: 24px; padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.04); }
-    .bk-shop-checkout-summary .bk-shop-line { border-bottom-color: rgba(0,0,0,0.06); }
-    .bk-shop-checkout-summary .bk-shop-line:last-of-type { border-bottom: none; }
-    .bk-shop-checkout-total { margin-top: 12px; font-weight: 600; font-size: 1.05rem; }
-    .bk-shop-checkout-field { margin-bottom: 14px; }
-    .bk-shop-checkout-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+    .bk-shop-checkout-page { max-width: 480px; margin: 0 auto; padding: 28px 16px 56px; }
+    .bk-shop-checkout-card {
+      --bk-checkout-card: #fff;
+      --bk-checkout-fg: #111;
+      --bk-checkout-muted: rgba(0,0,0,0.55);
+      --bk-checkout-border: rgba(0,0,0,0.1);
+      --bk-checkout-input-bg: #f5f5f4;
+      --bk-checkout-accent: #2563eb;
+      --bk-checkout-accent-fg: #fff;
+      --bk-checkout-shadow: 0 16px 48px rgba(0,0,0,0.12);
+      background: var(--bk-checkout-card);
+      color: var(--bk-checkout-fg);
+      border-radius: 18px;
+      padding: 28px 22px 26px;
+      box-shadow: var(--bk-checkout-shadow);
+      border: 1px solid var(--bk-checkout-border);
+    }
+    .bk-shop-checkout-head { margin-bottom: 22px; }
+    .bk-shop-checkout-head h1 { margin: 0 0 6px; font-size: 1.65rem; font-weight: 700; letter-spacing: -0.02em; }
+    .bk-shop-checkout-subtitle { margin: 0; font-size: 0.92rem; color: var(--bk-checkout-muted); line-height: 1.45; }
+    .bk-shop-checkout-empty { text-align: center; padding: 24px 8px; color: var(--bk-checkout-muted); }
+    .bk-shop-checkout-field { margin-bottom: 16px; }
+    .bk-shop-checkout-field label {
+      display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.01em;
+    }
+    .bk-shop-checkout-field-hint {
+      display: block; font-size: 0.78rem; color: var(--bk-checkout-muted); margin-bottom: 8px; line-height: 1.35;
+    }
     .bk-shop-checkout-field input, .bk-shop-checkout-field textarea {
-      width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 10px;
-      border: 1px solid rgba(0,0,0,0.12); font-size: 1rem;
+      width: 100%; box-sizing: border-box; padding: 13px 14px; border-radius: 10px;
+      border: 1px solid var(--bk-checkout-border); font-size: 1rem;
+      background: var(--bk-checkout-input-bg); color: var(--bk-checkout-fg);
+    }
+    .bk-shop-checkout-field input:focus, .bk-shop-checkout-field textarea:focus {
+      outline: none; border-color: var(--bk-checkout-accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--bk-checkout-accent) 22%, transparent);
+    }
+    .bk-shop-checkout-section { margin: 22px 0 18px; }
+    .bk-shop-checkout-section-label { margin: 0 0 10px; font-size: 0.82rem; font-weight: 600; }
+    .bk-shop-checkout-fulfillment {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px 14px; border-radius: 12px;
+      border: 1.5px solid var(--bk-checkout-accent);
+      background: color-mix(in srgb, var(--bk-checkout-accent) 8%, var(--bk-checkout-card));
+    }
+    .bk-shop-checkout-fulfillment-icon { flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px; opacity: 0.85; }
+    .bk-shop-checkout-fulfillment-title { font-weight: 600; font-size: 0.95rem; display: block; }
+    .bk-shop-checkout-fulfillment-sub { font-size: 0.8rem; color: var(--bk-checkout-muted); display: block; margin-top: 2px; }
+    .bk-shop-checkout-pickup-address { margin: 8px 0 0; font-size: 0.82rem; color: var(--bk-checkout-muted); line-height: 1.4; }
+    .bk-shop-checkout-note-toggle {
+      background: none; border: none; padding: 0; margin: 4px 0 16px;
+      color: var(--bk-checkout-accent); font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    }
+    .bk-shop-checkout-notes-wrap { margin-bottom: 16px; }
+    .bk-shop-checkout-summary {
+      margin: 20px 0 4px;
+      padding: 16px 0 0;
+      border-top: 1px solid var(--bk-checkout-border);
+    }
+    .bk-shop-checkout-summary-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 8px;
+      font-size: 0.92rem;
+      line-height: 1.35;
+    }
+    .bk-shop-checkout-summary-row:last-child { margin-bottom: 0; }
+    .bk-shop-checkout-summary-label {
+      color: var(--bk-checkout-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .bk-shop-checkout-summary-amount {
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .bk-shop-checkout-summary-fee-pending {
+      color: var(--bk-checkout-muted);
+      font-size: 0.84rem;
+      font-style: italic;
+    }
+    .bk-shop-checkout-summary-divider {
+      margin: 10px 0;
+      border: none;
+      border-top: 1px solid var(--bk-checkout-border);
+    }
+    .bk-shop-checkout-summary-total .bk-shop-checkout-summary-label,
+    .bk-shop-checkout-summary-total .bk-shop-checkout-summary-amount {
+      color: var(--bk-checkout-fg);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .bk-shop-fee-info-wrap {
+      position: relative;
+      display: inline-flex;
+      vertical-align: middle;
+    }
+    .bk-shop-fee-info {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--bk-checkout-muted) 18%, transparent);
+      color: var(--bk-checkout-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      font-style: italic;
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1;
+      cursor: help;
+    }
+    .bk-shop-fee-info:hover,
+    .bk-shop-fee-info:focus-visible {
+      background: color-mix(in srgb, var(--bk-checkout-accent) 16%, transparent);
+      color: var(--bk-checkout-accent);
+      outline: none;
+    }
+    .bk-shop-fee-tip {
+      display: none;
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      z-index: 20;
+      width: min(260px, calc(100vw - 48px));
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #1a1a1a;
+      color: #f5f5f5;
+      font-size: 0.78rem;
+      font-weight: 400;
+      font-style: normal;
+      line-height: 1.45;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      pointer-events: none;
+    }
+    .bk-shop-fee-tip p { margin: 0 0 6px; }
+    .bk-shop-fee-tip p:last-child { margin-bottom: 0; }
+    .bk-shop-fee-tip-note {
+      margin-top: 8px !important;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.14);
+      color: rgba(255,255,255,0.72);
+    }
+    .bk-shop-fee-info-wrap.bk-shop-fee-tip-open .bk-shop-fee-tip,
+    .bk-shop-fee-info-wrap:hover .bk-shop-fee-tip,
+    .bk-shop-fee-info-wrap:focus-within .bk-shop-fee-tip {
+      display: block;
+    }
+    @media (max-width: 520px) {
+      .bk-shop-fee-tip {
+        left: auto;
+        right: -8px;
+        transform: none;
+      }
+    }
+    .bk-shop-checkout-payment-section {
+      margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--bk-checkout-border);
+    }
+    .bk-shop-checkout-payment-label { font-size: 0.82rem; font-weight: 600; margin: 0 0 10px; }
+    #bk-shop-payment-element { margin-bottom: 8px; min-height: 44px; }
+    .bk-shop-payment-loading { font-size: 0.85rem; color: var(--bk-checkout-muted); margin: 0 0 12px; min-height: 20px; }
+    .bk-shop-checkout-stripe-note {
+      margin: 0 0 18px; font-size: 0.76rem; color: var(--bk-checkout-muted); line-height: 1.4;
     }
     .bk-shop-checkout-submit {
-      width: 100%; margin-top: 8px; padding: 14px 18px; border: none; border-radius: 10px;
-      background: #111; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer;
+      width: 100%; margin-top: 4px; padding: 15px 18px; border: none; border-radius: 12px;
+      background: var(--bk-checkout-accent); color: var(--bk-checkout-accent-fg);
+      font-size: 1rem; font-weight: 600; cursor: pointer;
     }
-    .bk-shop-checkout-submit:hover { background: #333; }
-    .bk-shop-checkout-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-    .bk-shop-checkout-error { margin-top: 12px; color: #b33; font-size: 0.9rem; }
-    .bk-shop-checkout-payment-section {
-      display: none;
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid rgba(0, 0, 0, 0.08);
+    .bk-shop-checkout-submit:hover { filter: brightness(1.06); }
+    .bk-shop-checkout-submit:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+    .bk-shop-checkout-secure {
+      margin: 14px 0 0; text-align: center; font-size: 0.76rem; color: var(--bk-checkout-muted);
+      display: flex; align-items: center; justify-content: center; gap: 5px;
     }
-    .bk-shop-checkout-payment-section--visible { display: block; }
-    .bk-shop-checkout-payment-label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      margin: 0 0 12px;
-    }
-    #bk-shop-payment-element { margin-bottom: 16px; min-height: 120px; }
-    .bk-shop-checkout-fee-line {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.9rem;
-      color: #666;
-      margin-top: 8px;
-    }
-    .bk-shop-checkout-total-line {
-      display: flex;
-      justify-content: space-between;
-      font-weight: 600;
-      font-size: 1.05rem;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(0, 0, 0, 0.08);
-    }
-    .blade-page .bk-shop-checkout-payment-section { border-top-color: rgba(245, 240, 232, 0.12); }
-    .blade-page .bk-shop-checkout-fee-line { color: rgba(245, 240, 232, 0.55); }
-    .stonecut-page .bk-shop-checkout-payment-section { border-top-color: rgba(232, 224, 208, 0.12); }
-    .stonecut-page .bk-shop-checkout-fee-line { color: var(--bk-fg-muted, #a09888); }
+    .bk-shop-checkout-error { margin-top: 12px; color: #e55353; font-size: 0.88rem; line-height: 1.4; }
     .bk-shop-checkout-success { text-align: center; padding: 32px 12px; }
     .bk-shop-checkout-success h2 { margin: 0 0 12px; }
-    .bk-shop-checkout-success p { color: #555; line-height: 1.55; }
+    .bk-shop-checkout-success p { color: var(--bk-checkout-muted); line-height: 1.55; }
     .bk-shop-checkout-success a { color: inherit; font-weight: 600; }
     .bk-shop-nav-cart {
       position: relative;
@@ -5365,6 +5497,25 @@
       box-sizing: border-box;
     }
     .stonecut-page .stonecut-shop-inner { text-align: center; }
+    .stonecut-page .stonecut-checkout-shell {
+      padding: 48px 24px 80px;
+      max-width: none;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-sizing: border-box;
+    }
+    .stonecut-page .stonecut-checkout-shell .bk-shop-checkout-page {
+      max-width: 520px;
+      width: 100%;
+      padding: 16px 12px 48px;
+      box-sizing: border-box;
+    }
+    .stonecut-page .stonecut-checkout-shell .bk-shop-checkout-card {
+      width: 100%;
+      box-sizing: border-box;
+    }
     .stonecut-page .stonecut-shop-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -5407,6 +5558,8 @@
     }
     @media (max-width: 900px) {
       .stonecut-page .stonecut-shop-shell { padding: 88px 20px 72px; }
+      .stonecut-page .stonecut-checkout-shell { padding: 28px 12px 64px; }
+      .stonecut-page .stonecut-checkout-shell .bk-shop-checkout-page { padding: 8px 4px 40px; }
       .stonecut-page .stonecut-shop-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
     }
 
@@ -6976,25 +7129,65 @@
         console.warn('Anonymous sign-in failed (Storage uploads may fail):', err);
       });
       const db = firebase.firestore();
-      const functions = firebase.functions();
+      const functions = firebase.app().functions('us-central1');
       const storage = firebase.storage();
+
+      /** Tenant slug from `{slug}.getbookking.com` or `{slug}.getbooking.com`. */
+      function tenantSlugFromBookingHost(host) {
+        host = (host || '').toLowerCase();
+        var apexes = ['getbookking.com', 'getbooking.com'];
+        for (var i = 0; i < apexes.length; i++) {
+          var apex = apexes[i];
+          if (host === apex || host === ('www.' + apex)) return '';
+          var suffix = '.' + apex;
+          if (host.endsWith(suffix) && host.length > suffix.length) {
+            var sub = host.slice(0, -suffix.length);
+            if (sub && sub.indexOf('.') === -1) return sub;
+          }
+        }
+        return '';
+      }
+
+      function tenantBookingPlatformHost(host) {
+        host = (host || '').toLowerCase();
+        return host.indexOf('getbooking.com') !== -1 ? 'getbooking.com' : 'getbookking.com';
+      }
 
       function ensureAnonymousAuth() {
         if (firebase.auth().currentUser) return Promise.resolve();
         return firebase.auth().signInAnonymously();
       }
 
-      /** Supports subdomain (`{tenant}.getbookking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
+      function formatFirebaseHttpsError(err) {
+        if (!err) return 'Something went wrong. Please try again.';
+        var d = err.details;
+        if (typeof d === 'string' && d.trim()) return d.trim();
+        var msg = (err.message && String(err.message).trim()) || '';
+        if (/failed to fetch|cors|network error/i.test(msg)) {
+          return 'Could not reach checkout. Please refresh and try again.';
+        }
+        if (msg && msg.toLowerCase() !== 'internal' && msg !== err.code) return msg;
+        var code = err.code || '';
+        if (code === 'functions/internal' || code === 'internal') {
+          return 'Checkout failed on the server. The business may need to finish Stripe setup.';
+        }
+        if (code.indexOf('failed-precondition') !== -1 || code === 'functions/failed-precondition') {
+          return msg || (d != null ? String(d) : 'This request could not be completed.');
+        }
+        if (code.indexOf('unauthenticated') !== -1 || code === 'functions/unauthenticated') {
+          return 'Could not start checkout. Please refresh and try again.';
+        }
+        return msg || code || 'Something went wrong. Please try again.';
+      }
+
+      /** Supports subdomain (`{tenant}.getbookking.com/home`, `{tenant}.getbooking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
       var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1 };
 
       function parsePath() {
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
         var parts = path ? path.split('/') : [];
         var host = (location.hostname || '').toLowerCase();
-        var hostTenant = '';
-        if (host.endsWith('.getbookking.com') && host !== 'getbookking.com' && host !== 'www.getbookking.com') {
-          hostTenant = host.split('.')[0] || '';
-        }
+        var hostTenant = tenantSlugFromBookingHost(host);
 
         var tenantSlug = '';
         var memberSlug = '';
@@ -7598,9 +7791,10 @@
         if (!slug) return location.origin;
         var host = (location.hostname || '').toLowerCase();
         var protocol = location.protocol || 'https:';
-        if (host === slug + '.getbookking.com') return location.origin;
-        if (host === 'getbookking.com' || host === 'www.getbookking.com' || host.endsWith('.getbookking.com')) {
-          return protocol + '//' + slug + '.getbookking.com';
+        var platform = tenantBookingPlatformHost(host);
+        if (host === slug + '.' + platform) return location.origin;
+        if (host === platform || host === ('www.' + platform) || host.endsWith('.' + platform)) {
+          return protocol + '//' + slug + '.' + platform;
         }
         return location.origin + '/' + slug;
       }
@@ -9651,13 +9845,21 @@
         }
         return segs.join('');
       }
-      function guidedWizardPhaseChromeHtml() {
+      function guidedStepTitle(tenant, key, fallback) {
+        var titles = tenant && tenant.guidedStepTitles;
+        if (titles && typeof titles === 'object' && titles[key]) {
+          var t = String(titles[key]).trim();
+          if (t) return esc(t);
+        }
+        return esc(fallback);
+      }
+      function guidedWizardPhaseChromeHtml(tenant) {
         return '' +
           '<div class="booking-guided-steps" data-guided-wizard-steps role="navigation" aria-label="Booking steps">' +
             '<div class="booking-guided-step-labels booking-guided-phase-labels">' +
-              '<span data-guided-phase-label="service" class="is-active">Service</span>' +
-              '<span data-guided-phase-label="project">Cut</span>' +
-              '<span data-guided-phase-label="contact">You</span>' +
+              '<span data-guided-phase-label="service" class="is-active">' + guidedStepTitle(tenant, 'service', 'Service') + '</span>' +
+              '<span data-guided-phase-label="project">' + guidedStepTitle(tenant, 'project', 'Cut') + '</span>' +
+              '<span data-guided-phase-label="contact">' + guidedStepTitle(tenant, 'contact', 'You') + '</span>' +
               '<span data-guided-phase-label="confirm">Confirm</span>' +
             '</div>' +
             '<div class="booking-guided-step-row booking-guided-phase-dots">' +
@@ -9943,7 +10145,7 @@
           if (depositNote) depositNote.setAttribute('data-sms-gated', 'on');
         }
       }
-      function setupGuidedBookingForm(fm) {
+      function setupGuidedBookingForm(fm, initDropzonesFn) {
         if (!fm || !fm.classList.contains('booking-form--guided')) return;
         var wizardActive = fm.hasAttribute('data-guided-wizard-form');
         var wrap = wizardActive ? fm.closest('.booking-guided--wizard') : null;
@@ -10150,6 +10352,19 @@
             sheetBody.innerHTML = guidedSheetFieldBodyHtml(f);
             var lists = sheetBody.querySelectorAll('[data-guided-choice-list]');
             for (var li = 0; li < lists.length; li++) setupGuidedChoiceList(lists[li]);
+            if (f.type === 'file' && typeof initDropzonesFn === 'function') {
+              initDropzonesFn(sheetBody);
+              var mainFile = fm.querySelector('input[type="file"][data-key="' + f.key + '"]');
+              var sheetFile = sheetBody.querySelector('[data-sheet-file]');
+              if (mainFile && mainFile.files && mainFile.files.length && sheetFile) {
+                try {
+                  var dt = new DataTransfer();
+                  for (var fi = 0; fi < mainFile.files.length; fi++) dt.items.add(mainFile.files[fi]);
+                  sheetFile.files = dt.files;
+                  sheetFile.dispatchEvent(new Event('change', { bubbles: true }));
+                } catch (restoreErr) { /* keep empty sheet */ }
+              }
+            }
             var hidden = fm.querySelector('input[data-key="' + f.key + '"]');
             var sheetInput = sheetBody.querySelector('[data-sheet-input]');
             if (sheetInput && hidden) sheetInput.value = hidden.value || '';
@@ -10177,13 +10392,13 @@
                     mainFile.style.cssText = 'position:absolute;opacity:0;width:0;height:0;pointer-events:none';
                     fm.appendChild(mainFile);
                   }
-                  if (sheetFile.files && sheetFile.files.length) {
-                    try {
-                      var dt = new DataTransfer();
+                  try {
+                    var dt = new DataTransfer();
+                    if (sheetFile.files) {
                       for (var fi = 0; fi < sheetFile.files.length; fi++) dt.items.add(sheetFile.files[fi]);
-                      mainFile.files = dt.files;
-                    } catch (err) { /* fallback: user re-picks on main input */ }
-                  }
+                    }
+                    mainFile.files = dt.files;
+                  } catch (err) { /* fallback: user re-picks on main input */ }
                 }
                 syncOptionalRow(fm, key);
                 closeSheet();
@@ -10351,7 +10566,7 @@
             bookingPageHeaderHtml +
             (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
             '<div class="booking-guided booking-guided--wizard booking-guided--steps-first">' +
-              guidedWizardPhaseChromeHtml() +
+              guidedWizardPhaseChromeHtml(tenant) +
               '<form id="book-form" class="booking-form booking-form--guided" data-guided-wizard-form data-guided-confirm-step="' + guidedWizard.confirmStep + '"' + mobileFormAttrs + guidedFormSchemaAttr + '>' +
                 guidedPanelsHtml +
                 (mobileProj.useMobileSplit ? guidedFieldSheetHtml() : '') +
@@ -10531,6 +10746,8 @@
               heroFont: data.heroFont || '',
               webThemeId: data.webThemeId || '',
               bookingFormStyleId: data.bookingFormStyleId || '',
+              guidedStepTitles: data.guidedStepTitles || {},
+              guidedStepOrder: data.guidedStepOrder || [],
               luxeHeroTagline: data.luxeHeroTagline || '',
               luxePromoHeadline: data.luxePromoHeadline || '',
               bladeHeroTagline: data.bladeHeroTagline || '',
@@ -12547,28 +12764,186 @@
           '<span class="bk-shop-nav-count" id="bk-shop-nav-count" style="display:none"></span></button>' +
           '</div>';
       }
+      function shopCheckoutCardStyle(tenant) {
+        var c = tenantColors(tenant);
+        var pageDark = isStonecutTheme(tenant);
+        var checkoutCard = '#ffffff';
+        var checkoutFg = pageDark ? '#111111' : (c.fg || '#111111');
+        var muted = 'rgba(0,0,0,0.55)';
+        var border = 'rgba(0,0,0,0.1)';
+        var inputBg = '#f5f5f4';
+        var shadow = pageDark
+          ? '0 16px 48px rgba(0,0,0,0.45)'
+          : '0 16px 48px rgba(0,0,0,0.12)';
+        return '--bk-checkout-card:' + checkoutCard + ';--bk-checkout-fg:' + checkoutFg + ';--bk-checkout-muted:' + muted +
+          ';--bk-checkout-border:' + border + ';--bk-checkout-input-bg:' + inputBg +
+          ';--bk-checkout-accent:' + c.accent + ';--bk-checkout-accent-fg:' + c.accentFg +
+          ';--bk-checkout-shadow:' + shadow + ';';
+      }
+      function shopCartSubtotal(cart) {
+        var subtotal = 0;
+        for (var i = 0; i < cart.lines.length; i++) {
+          var L = cart.lines[i];
+          subtotal += (Number(L.unitPrice) || 0) * (L.qty || 0);
+        }
+        return subtotal;
+      }
+      function shopCheckoutSubtitleLine(cart) {
+        if (!cart.lines.length) return '';
+        if (cart.lines.length === 1) {
+          return (cart.lines[0].name || 'Item').trim();
+        }
+        var n = 0;
+        for (var i = 0; i < cart.lines.length; i++) n += cart.lines[i].qty || 0;
+        return n + ' item' + (n === 1 ? '' : 's');
+      }
+      function shopCheckoutFeeTooltipHtml(stripeState) {
+        if (!stripeState || !stripeState.surchargeCents) {
+          return '<p>Includes Stripe card processing (2.9% + 30\u00a2) and a 1% platform fee.</p>' +
+            '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
+        }
+        var platform = stripeState.platformFeeCents || 0;
+        var processing = Math.max(0, stripeState.surchargeCents - platform);
+        var html = '';
+        if (processing > 0) {
+          html += '<p>Card processing (Stripe): ' + formatMoney(processing / 100) + '</p>';
+        }
+        if (platform > 0) {
+          html += '<p>Platform fee (1%): ' + formatMoney(platform / 100) + '</p>';
+        }
+        html += '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
+        return html;
+      }
+      function updateShopCheckoutSummary(cart, stripeState, contactOk, isPreparing) {
+        var summaryEl = document.getElementById('bk-shop-checkout-summary');
+        if (!summaryEl) return;
+        if (!cart.lines.length) {
+          summaryEl.style.display = 'none';
+          return;
+        }
+        summaryEl.style.display = '';
+        var subtotalEl = document.getElementById('bk-shop-checkout-subtotal');
+        var feeEl = document.getElementById('bk-shop-checkout-fee');
+        var totalEl = document.getElementById('bk-shop-checkout-total');
+        var totalRow = document.getElementById('bk-shop-checkout-total-row');
+        var tipEl = document.getElementById('bk-shop-fee-tip');
+        var cartSubtotal = shopCartSubtotal(cart);
+        var subtotalCents = stripeState && stripeState.subtotalCents != null
+          ? stripeState.subtotalCents
+          : Math.round(cartSubtotal * 100);
+        if (subtotalEl) subtotalEl.textContent = formatMoney(subtotalCents / 100);
+        if (feeEl) {
+          if (stripeState && stripeState.surchargeCents != null) {
+            feeEl.textContent = formatMoney(stripeState.surchargeCents / 100);
+            feeEl.className = 'bk-shop-checkout-summary-amount';
+          } else if (isPreparing) {
+            feeEl.textContent = 'Calculating\u2026';
+            feeEl.className = 'bk-shop-checkout-summary-amount bk-shop-checkout-summary-fee-pending';
+          } else {
+            feeEl.textContent = contactOk ? 'Calculated at checkout' : 'Calculated at checkout';
+            feeEl.className = 'bk-shop-checkout-summary-amount bk-shop-checkout-summary-fee-pending';
+          }
+        }
+        if (totalRow && totalEl) {
+          if (stripeState && stripeState.totalCents != null) {
+            totalRow.style.display = '';
+            totalEl.textContent = formatMoney(stripeState.totalCents / 100);
+          } else {
+            totalRow.style.display = 'none';
+          }
+        }
+        if (tipEl) tipEl.innerHTML = shopCheckoutFeeTooltipHtml(stripeState);
+      }
+      function shopCheckoutPickupAddress(tenant) {
+        var name = tenantSiteDisplayName(tenant, 'Studio');
+        var city = (tenant.serviceCity && String(tenant.serviceCity).trim()) ||
+          (tenant.serviceArea && String(tenant.serviceArea).trim()) || '';
+        var street = tenantStreetAddressText(tenant);
+        var line = street ? street.split('\n')[0] : '';
+        if (city && line) return name + ', ' + line + ', ' + city;
+        if (city) return name + ', ' + city;
+        if (line) return name + ', ' + line;
+        return name;
+      }
       function shopCheckoutInnerHtml(tenant) {
+        var cardStyle = shopCheckoutCardStyle(tenant);
+        var pickupAddr = esc(shopCheckoutPickupAddress(tenant));
         return '<div class="bk-shop-checkout-page">' +
+          '<div class="bk-shop-checkout-card" style="' + cardStyle + '">' +
+          '<div class="bk-shop-checkout-head">' +
           '<h1>Checkout</h1>' +
-          '<p class="bk-shop-checkout-lead">Enter your details, then pay securely by card. Booking appointments is separate — use Book in the menu anytime.</p>' +
-          '<div class="bk-shop-checkout-summary" id="bk-shop-checkout-summary"></div>' +
+          '<p class="bk-shop-checkout-subtitle" id="bk-shop-checkout-subtitle"></p>' +
+          '</div>' +
+          '<div class="bk-shop-checkout-empty" id="bk-shop-checkout-empty" style="display:none">' +
+          '<p>Your cart is empty.</p>' +
+          '<p style="margin-top:12px"><a href="' + esc(tenantBaseUrl(tenant) + '/shop') + '">Continue shopping</a></p>' +
+          '</div>' +
           '<form id="bk-shop-checkout-form" autocomplete="on">' +
-          '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-name">Name</label><input id="bk-shop-checkout-name" name="name" type="text" required autocomplete="name"></div>' +
-          '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-email">Email</label><input id="bk-shop-checkout-email" name="email" type="email" required autocomplete="email"></div>' +
-          '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-phone">Phone <span style="font-weight:400;color:#888">(optional)</span></label><input id="bk-shop-checkout-phone" name="phone" type="tel" autocomplete="tel"></div>' +
-          '<div class="bk-shop-checkout-field"><label for="bk-shop-checkout-notes">Order notes <span style="font-weight:400;color:#888">(optional)</span></label><textarea id="bk-shop-checkout-notes" name="notes" rows="3"></textarea></div>' +
+          '<div class="bk-shop-checkout-field">' +
+          '<label for="bk-shop-checkout-name">Full name</label>' +
+          '<input id="bk-shop-checkout-name" name="name" type="text" required autocomplete="name" placeholder="Your name">' +
+          '</div>' +
+          '<div class="bk-shop-checkout-field">' +
+          '<label for="bk-shop-checkout-email">Email</label>' +
+          '<span class="bk-shop-checkout-field-hint">We\'ll send your receipt here</span>' +
+          '<input id="bk-shop-checkout-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">' +
+          '</div>' +
+          '<div class="bk-shop-checkout-field">' +
+          '<label for="bk-shop-checkout-phone">Phone <span style="font-weight:400;opacity:0.7">(optional)</span></label>' +
+          '<span class="bk-shop-checkout-field-hint">For pickup updates</span>' +
+          '<input id="bk-shop-checkout-phone" name="phone" type="tel" autocomplete="tel" placeholder="(555) 555-0134">' +
+          '</div>' +
+          '<div class="bk-shop-checkout-section">' +
+          '<p class="bk-shop-checkout-section-label">How would you like to get it?</p>' +
+          '<div class="bk-shop-checkout-fulfillment">' +
+          '<svg class="bk-shop-checkout-fulfillment-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">' +
+          '<path d="M3 9l9-5 9 5v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z"/><path d="M9 22V12h6v10"/></svg>' +
+          '<span><span class="bk-shop-checkout-fulfillment-title">Pickup</span>' +
+          '<span class="bk-shop-checkout-fulfillment-sub">Free · ready when prepared</span></span>' +
+          '</div>' +
+          '<p class="bk-shop-checkout-pickup-address">' + pickupAddr + '</p>' +
+          '</div>' +
+          '<button type="button" class="bk-shop-checkout-note-toggle" id="bk-shop-checkout-note-toggle">+ Add a note</button>' +
+          '<div class="bk-shop-checkout-notes-wrap" id="bk-shop-checkout-notes-wrap" hidden>' +
+          '<div class="bk-shop-checkout-field" style="margin-bottom:0">' +
+          '<textarea id="bk-shop-checkout-notes" name="notes" rows="3" placeholder="Special instructions"></textarea>' +
+          '</div></div>' +
+          '<div class="bk-shop-checkout-summary" id="bk-shop-checkout-summary">' +
+          '<div class="bk-shop-checkout-summary-row">' +
+          '<span class="bk-shop-checkout-summary-label">Subtotal</span>' +
+          '<span class="bk-shop-checkout-summary-amount" id="bk-shop-checkout-subtotal">$0.00</span>' +
+          '</div>' +
+          '<div class="bk-shop-checkout-summary-row">' +
+          '<span class="bk-shop-checkout-summary-label">' +
+          'Processing &amp; service fees' +
+          '<span class="bk-shop-fee-info-wrap" id="bk-shop-fee-info-wrap">' +
+          '<button type="button" class="bk-shop-fee-info" id="bk-shop-fee-info" aria-label="Processing fee details" aria-expanded="false" aria-controls="bk-shop-fee-tip">i</button>' +
+          '<div class="bk-shop-fee-tip" id="bk-shop-fee-tip" role="tooltip"></div>' +
+          '</span></span>' +
+          '<span class="bk-shop-checkout-summary-amount bk-shop-checkout-summary-fee-pending" id="bk-shop-checkout-fee">Calculated at checkout</span>' +
+          '</div>' +
+          '<hr class="bk-shop-checkout-summary-divider">' +
+          '<div class="bk-shop-checkout-summary-row bk-shop-checkout-summary-total" id="bk-shop-checkout-total-row" style="display:none">' +
+          '<span class="bk-shop-checkout-summary-label">Total</span>' +
+          '<span class="bk-shop-checkout-summary-amount" id="bk-shop-checkout-total">$0.00</span>' +
+          '</div></div>' +
           '<div class="bk-shop-checkout-payment-section" id="bk-shop-checkout-payment-section">' +
           '<p class="bk-shop-checkout-payment-label">Payment</p>' +
+          '<p class="bk-shop-payment-loading" id="bk-shop-payment-loading">Enter your name and email to load payment options.</p>' +
           '<div id="bk-shop-payment-element"></div>' +
+          '<p class="bk-shop-checkout-stripe-note">Handled by Stripe — card details never touch our servers.</p>' +
           '</div>' +
-          '<button type="submit" class="bk-shop-checkout-submit" id="bk-shop-checkout-submit">Continue to payment</button>' +
+          '<button type="submit" class="bk-shop-checkout-submit" id="bk-shop-checkout-submit" disabled>Pay $0.00</button>' +
+          '<p class="bk-shop-checkout-secure">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>' +
+          ' Secure checkout by Stripe</p>' +
           '<p class="bk-shop-checkout-error" id="bk-shop-checkout-error" style="display:none"></p>' +
           '</form>' +
           '<div class="bk-shop-checkout-success" id="bk-shop-checkout-success" style="display:none">' +
           '<h2>Order confirmed</h2>' +
           '<p>Thanks — your payment was received and the business will follow up about your order.</p>' +
           '<p style="margin-top:20px"><a href="' + esc(tenantBaseUrl(tenant) + '/shop') + '">Back to shop</a></p>' +
-          '</div></div>';
+          '</div></div></div>';
       }
       function shopStripePublishableKey(serverKey) {
         return (serverKey && String(serverKey).trim()) ||
@@ -12580,20 +12955,20 @@
           theme: 'stripe',
           variables: {
             colorPrimary: c.accent,
-            colorBackground: c.card,
-            colorText: c.fg,
+            colorBackground: '#ffffff',
+            colorText: '#111111',
             colorDanger: '#df1b41',
-            borderRadius: '8px',
+            borderRadius: '10px',
             fontFamily: 'var(--font-display), system-ui, sans-serif',
           },
         };
       }
       function showShopCheckoutSuccess(tenant) {
         var form = document.getElementById('bk-shop-checkout-form');
-        var summaryEl = document.getElementById('bk-shop-checkout-summary');
+        var headEl = document.querySelector('.bk-shop-checkout-head');
         var successEl = document.getElementById('bk-shop-checkout-success');
         if (form) form.style.display = 'none';
-        if (summaryEl) summaryEl.style.display = 'none';
+        if (headEl) headEl.style.display = 'none';
         if (successEl) successEl.style.display = 'block';
         writeShopCart(tenant.id, { lines: [] });
         var navCount = document.getElementById('bk-shop-nav-count');
@@ -12627,7 +13002,7 @@
           }).catch(function(err) {
             var errorEl = document.getElementById('bk-shop-checkout-error');
             if (errorEl) {
-              errorEl.textContent = (err && err.message) ? err.message : 'Could not confirm payment.';
+              errorEl.textContent = formatFirebaseHttpsError(err);
               errorEl.style.display = 'block';
             }
             return false;
@@ -12668,62 +13043,88 @@
         return webShopCheckoutShell(tenant, 'tattoo-page classic-home', tattooNavHtml(tenant), classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio')), 'luxe-shop-page-shell');
       }
       function stonecutShopCheckoutPage(tenant) {
-        var main = '<main class="stonecut-shop-shell">' + shopCheckoutInnerHtml(tenant) + '</main>';
+        var main = '<main class="stonecut-shop-shell stonecut-checkout-shell">' + shopCheckoutInnerHtml(tenant) + '</main>';
         return '<div class="stonecut-page">' + stonecutNavHtml(tenant) + main + stonecutSiteFooterHtml(tenant) + tattooSidebarShellHtml(tenant) + '</div>';
       }
       function bindShopCheckoutPage(tenant) {
         bindShopPage(tenant);
-        var summaryEl = document.getElementById('bk-shop-checkout-summary');
         var form = document.getElementById('bk-shop-checkout-form');
         var errorEl = document.getElementById('bk-shop-checkout-error');
         var submitBtn = document.getElementById('bk-shop-checkout-submit');
-        var paymentSection = document.getElementById('bk-shop-checkout-payment-section');
-        if (!summaryEl || !form) return;
+        var subtitleEl = document.getElementById('bk-shop-checkout-subtitle');
+        var emptyEl = document.getElementById('bk-shop-checkout-empty');
+        var paymentLoading = document.getElementById('bk-shop-payment-loading');
+        var noteToggle = document.getElementById('bk-shop-checkout-note-toggle');
+        var notesWrap = document.getElementById('bk-shop-checkout-notes-wrap');
+        if (!form) return;
 
-        function renderCheckoutSummary() {
+        var prepareTimer = null;
+        var preparing = false;
+        var lastPrepareKey = '';
+
+        function gatherContact() {
+          var name = ((form.querySelector('[name="name"]') || {}).value || '').trim();
+          var email = ((form.querySelector('[name="email"]') || {}).value || '').trim().toLowerCase();
+          var phone = ((form.querySelector('[name="phone"]') || {}).value || '').trim();
+          var notesField = form.querySelector('[name="notes"]');
+          var notesExtra = notesField ? String(notesField.value || '').trim() : '';
           var cart = readShopCart(tenant.id);
-          if (!cart.lines.length) {
-            summaryEl.innerHTML = '<p>Your cart is empty. <a href="' + esc(tenantBaseUrl(tenant) + '/shop') + '">Continue shopping</a></p>';
-            form.style.display = 'none';
-            return;
-          }
-          var html = '';
-          var subtotal = 0;
-          for (var i = 0; i < cart.lines.length; i++) {
-            var L = cart.lines[i];
-            var unit = Number(L.unitPrice) || 0;
-            subtotal += unit * (L.qty || 0);
-            html += shopCartLineHtml(L);
-          }
-          var stripeState = window.__bkShopCheckoutStripe;
-          if (stripeState && stripeState.totalCents) {
-            html += '<div class="bk-shop-checkout-fee-line"><span>Subtotal</span><span>' + formatMoney(stripeState.subtotalCents / 100) + '</span></div>';
-            if (stripeState.surchargeCents > 0) {
-              html += '<div class="bk-shop-checkout-fee-line"><span>Card processing</span><span>' + formatMoney(stripeState.surchargeCents / 100) + '</span></div>';
-            }
-            html += '<div class="bk-shop-checkout-total-line"><span>Total</span><span>' + formatMoney(stripeState.totalCents / 100) + '</span></div>';
-          } else {
-            html += '<div class="bk-shop-checkout-total">Subtotal ' + formatMoney(subtotal) + '</div>';
-          }
-          summaryEl.innerHTML = html;
-          form.style.display = '';
+          var cartNotes = formatShopCartNotes(cart);
+          var notes = [cartNotes, notesExtra].filter(Boolean).join('\n\n');
+          return { name: name, email: email, phone: phone, notes: notes, cart: cart };
         }
 
-        function setContactFieldsDisabled(disabled) {
-          ['name', 'email', 'phone', 'notes'].forEach(function(fieldName) {
-            var el = form.querySelector('[name="' + fieldName + '"]');
-            if (el) el.disabled = !!disabled;
-          });
+        function contactValid(contact) {
+          return !!(contact.name && contact.email && contact.email.indexOf('@') > 0);
+        }
+
+        function updateCheckoutChrome() {
+          var contact = gatherContact();
+          var cart = contact.cart;
+          if (!cart.lines.length) {
+            if (emptyEl) emptyEl.style.display = 'block';
+            form.style.display = 'none';
+            if (subtitleEl) subtitleEl.textContent = '';
+            return;
+          }
+          if (emptyEl) emptyEl.style.display = 'none';
+          form.style.display = '';
+          var subtotal = shopCartSubtotal(cart);
+          var stripeState = window.__bkShopCheckoutStripe;
+          var contactOk = contactValid(contact);
+          if (subtitleEl) {
+            subtitleEl.textContent = shopCheckoutSubtitleLine(cart);
+          }
+          updateShopCheckoutSummary(cart, stripeState, contactOk, preparing);
+          if (submitBtn) {
+            var payAmount = stripeState && stripeState.totalCents
+              ? stripeState.totalCents / 100
+              : subtotal;
+            submitBtn.textContent = 'Pay ' + formatMoney(payAmount);
+            submitBtn.disabled = !contactOk || preparing;
+          }
+        }
+
+        function clearPaymentState() {
+          var stripeState = window.__bkShopCheckoutStripe;
+          if (stripeState && stripeState.paymentElement) {
+            try { stripeState.paymentElement.unmount(); } catch (e) { /* ignore */ }
+          }
+          window.__bkShopCheckoutStripe = null;
+          lastPrepareKey = '';
+          var mountEl = document.getElementById('bk-shop-payment-element');
+          if (mountEl) mountEl.innerHTML = '';
+          if (paymentLoading) {
+            paymentLoading.style.display = '';
+            paymentLoading.textContent = 'Enter your name and email to load payment options.';
+          }
+          updateCheckoutChrome();
         }
 
         function mountShopPaymentElement(checkoutData) {
           var pk = shopStripePublishableKey(checkoutData.publishableKey);
-          if (!pk) {
-            throw new Error('Stripe publishable key is missing. Configure STRIPE_PUBLISHABLE_KEY on Cloud Functions.');
-          }
-          if (typeof Stripe !== 'function') {
-            throw new Error('Stripe.js did not load.');
-          }
+          if (!pk) throw new Error('Stripe publishable key is missing. Configure STRIPE_PUBLISHABLE_KEY on Cloud Functions.');
+          if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
           var stripe = Stripe(pk, { stripeAccount: checkoutData.stripeAccountId });
           var elements = stripe.elements({
             clientSecret: checkoutData.clientSecret,
@@ -12732,7 +13133,7 @@
           var mountEl = document.getElementById('bk-shop-payment-element');
           if (!mountEl) throw new Error('Payment form is unavailable.');
           mountEl.innerHTML = '';
-          var paymentElement = elements.create('payment');
+          var paymentElement = elements.create('payment', { layout: 'tabs' });
           paymentElement.mount('#bk-shop-payment-element');
           window.__bkShopCheckoutStripe = {
             stripe: stripe,
@@ -12742,112 +13143,196 @@
             paymentIntentId: checkoutData.paymentIntentId,
             subtotalCents: checkoutData.subtotalCents,
             surchargeCents: checkoutData.surchargeCents || 0,
+            platformFeeCents: checkoutData.platformFeeCents || 0,
             totalCents: checkoutData.totalCents,
           };
-          if (paymentSection) paymentSection.classList.add('bk-shop-checkout-payment-section--visible');
-          setContactFieldsDisabled(true);
-          if (submitBtn) submitBtn.textContent = 'Pay ' + formatMoney((checkoutData.totalCents || 0) / 100);
-          renderCheckoutSummary();
+          if (paymentLoading) paymentLoading.style.display = 'none';
+          updateCheckoutChrome();
         }
 
-        window.__bkShopCheckoutRefresh = renderCheckoutSummary;
+        function prepareCheckoutPayment(force) {
+          var contact = gatherContact();
+          if (!contact.cart.lines.length || !contactValid(contact)) return Promise.resolve(false);
+          var key = contact.name + '|' + contact.email + '|' + contact.phone + '|' + contact.notes;
+          if (!force && window.__bkShopCheckoutStripe && lastPrepareKey === key) {
+            return Promise.resolve(true);
+          }
+          if (preparing) return Promise.resolve(false);
+          preparing = true;
+          updateCheckoutChrome();
+          if (paymentLoading) {
+            paymentLoading.style.display = '';
+            paymentLoading.textContent = 'Loading payment options…';
+          }
+          if (errorEl) errorEl.style.display = 'none';
+          var payload = {
+            tenantSlug: tenant.slug,
+            customerName: contact.name,
+            customerEmail: contact.email,
+            customerPhone: contact.phone || null,
+            notes: contact.notes || null,
+            lineItems: contact.cart.lines.map(function(L) {
+              return { productId: L.productId, name: L.name || '', qty: L.qty || 1 };
+            })
+          };
+          return ensureAnonymousAuth()
+            .then(function() { return functions.httpsCallable('createShopCheckoutPayment')(payload); })
+            .then(function(res) {
+              var data = (res && res.data) || {};
+              if (!data.clientSecret || !data.stripeAccountId) {
+                throw new Error('Could not start payment. Please try again.');
+              }
+              try { sessionStorage.setItem('bkShopCheckoutOrderId', data.orderId || ''); } catch (storageErr) { /* ignore */ }
+              if (window.__bkShopCheckoutStripe) clearPaymentState();
+              mountShopPaymentElement(data);
+              lastPrepareKey = key;
+              return true;
+            })
+            .catch(function(err) {
+              if (errorEl) {
+                errorEl.textContent = formatFirebaseHttpsError(err);
+                errorEl.style.display = 'block';
+              }
+              if (paymentLoading) {
+                paymentLoading.style.display = '';
+                paymentLoading.textContent = 'Payment options could not be loaded.';
+              }
+              return false;
+            })
+            .finally(function() {
+              preparing = false;
+              updateCheckoutChrome();
+            });
+        }
+
+        function schedulePreparePayment(force) {
+          clearTimeout(prepareTimer);
+          prepareTimer = setTimeout(function() { prepareCheckoutPayment(!!force); }, force ? 0 : 500);
+        }
+
+        window.__bkShopCheckoutRefresh = updateCheckoutChrome;
 
         handleShopCheckoutReturn(tenant).then(function(handled) {
-          if (!handled) renderCheckoutSummary();
+          if (!handled) updateCheckoutChrome();
         });
 
-        if (form.dataset.bkCheckoutBound) return;
+        if (noteToggle && notesWrap) {
+          noteToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            notesWrap.hidden = !notesWrap.hidden;
+            noteToggle.textContent = notesWrap.hidden ? '+ Add a note' : '− Hide note';
+          });
+        }
+
+        ['name', 'email', 'phone'].forEach(function(fieldName) {
+          var el = form.querySelector('[name="' + fieldName + '"]');
+          if (!el) return;
+          el.addEventListener('input', function() {
+            if (window.__bkShopCheckoutStripe) clearPaymentState();
+            updateCheckoutChrome();
+            schedulePreparePayment(false);
+          });
+        });
+
+        if (form.dataset.bkCheckoutBound) {
+          updateCheckoutChrome();
+          return;
+        }
         form.dataset.bkCheckoutBound = '1';
+
+        var feeInfoWrap = document.getElementById('bk-shop-fee-info-wrap');
+        var feeInfoBtn = document.getElementById('bk-shop-fee-info');
+        if (feeInfoBtn && feeInfoWrap) {
+          feeInfoBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var open = feeInfoWrap.classList.toggle('bk-shop-fee-tip-open');
+            feeInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          });
+          document.addEventListener('click', function(e) {
+            if (!feeInfoWrap.contains(e.target)) {
+              feeInfoWrap.classList.remove('bk-shop-fee-tip-open');
+              feeInfoBtn.setAttribute('aria-expanded', 'false');
+            }
+          });
+        }
 
         form.addEventListener('submit', function(ev) {
           ev.preventDefault();
-          var cart = readShopCart(tenant.id);
-          if (!cart.lines.length) return;
-          var name = (form.querySelector('[name="name"]') || {}).value || '';
-          var email = (form.querySelector('[name="email"]') || {}).value || '';
-          var phone = (form.querySelector('[name="phone"]') || {}).value || '';
-          var notesField = form.querySelector('[name="notes"]');
-          var notesExtra = notesField ? String(notesField.value || '').trim() : '';
-          var cartNotes = formatShopCartNotes(cart);
-          var notes = [cartNotes, notesExtra].filter(Boolean).join('\n\n');
-          name = name.trim();
-          email = email.trim().toLowerCase();
-          if (!name || !email) {
-            errorEl.textContent = 'Name and email are required.';
-            errorEl.style.display = 'block';
+          var contact = gatherContact();
+          if (!contact.cart.lines.length) return;
+          if (!contactValid(contact)) {
+            if (errorEl) {
+              errorEl.textContent = 'Name and email are required.';
+              errorEl.style.display = 'block';
+            }
             return;
           }
-          errorEl.style.display = 'none';
+          if (errorEl) errorEl.style.display = 'none';
 
-          var stripeState = window.__bkShopCheckoutStripe;
-          if (!stripeState) {
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Preparing payment…';
-            var payload = {
-              tenantSlug: tenant.slug,
-              customerName: name,
-              customerEmail: email,
-              customerPhone: phone.trim() || null,
-              notes: notes || null,
-              lineItems: cart.lines.map(function(L) {
-                return { productId: L.productId, name: L.name || '', qty: L.qty || 1 };
-              })
-            };
-            ensureAnonymousAuth()
-              .then(function() { return functions.httpsCallable('createShopCheckoutPayment')(payload); })
-              .then(function(res) {
-                var data = (res && res.data) || {};
-                if (!data.clientSecret || !data.stripeAccountId) {
-                  throw new Error('Could not start payment. Please try again.');
-                }
-                try {
-                  sessionStorage.setItem('bkShopCheckoutOrderId', data.orderId || '');
-                } catch (storageErr) { /* ignore */ }
-                mountShopPaymentElement(data);
-                submitBtn.disabled = false;
-              })
-              .catch(function(err) {
-                errorEl.textContent = (err && err.message) ? err.message : 'Could not start payment. Please try again.';
-                errorEl.style.display = 'block';
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Continue to payment';
-              });
-            return;
-          }
-
-          submitBtn.disabled = true;
-          submitBtn.textContent = 'Processing…';
-          var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
-            encodeURIComponent(stripeState.orderId || '');
-          stripeState.stripe.confirmPayment({
-            elements: stripeState.elements,
-            confirmParams: {
-              return_url: returnUrl,
-              payment_method_data: {
-                billing_details: {
-                  name: name,
-                  email: email,
-                  phone: phone.trim() || undefined,
+          var runPay = function() {
+            var stripeState = window.__bkShopCheckoutStripe;
+            if (!stripeState) return Promise.resolve(false);
+            if (submitBtn) {
+              submitBtn.disabled = true;
+              submitBtn.textContent = 'Processing…';
+            }
+            var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
+              encodeURIComponent(stripeState.orderId || '');
+            return stripeState.stripe.confirmPayment({
+              elements: stripeState.elements,
+              confirmParams: {
+                return_url: returnUrl,
+                payment_method_data: {
+                  billing_details: {
+                    name: contact.name,
+                    email: contact.email,
+                    phone: contact.phone || undefined,
+                  },
                 },
               },
-            },
-            redirect: 'if_required',
-          }).then(function(result) {
-            if (result.error) {
-              throw result.error;
+              redirect: 'if_required',
+            }).then(function(result) {
+              if (result.error) throw result.error;
+              return finalizeShopCheckoutPayment(
+                tenant,
+                stripeState.orderId,
+                stripeState.paymentIntentId
+              );
+            });
+          };
+
+          if (window.__bkShopCheckoutStripe) {
+            runPay().catch(function(err) {
+              if (errorEl) {
+                errorEl.textContent = (err && err.message) ? err.message : 'Payment could not be completed.';
+                errorEl.style.display = 'block';
+              }
+              updateCheckoutChrome();
+            });
+            return;
+          }
+
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Preparing payment…';
+          }
+          prepareCheckoutPayment(true).then(function(ok) {
+            if (!ok) {
+              updateCheckoutChrome();
+              return;
             }
-            return finalizeShopCheckoutPayment(
-              tenant,
-              stripeState.orderId,
-              stripeState.paymentIntentId
-            );
+            return runPay();
           }).catch(function(err) {
-            errorEl.textContent = (err && err.message) ? err.message : 'Payment could not be completed.';
-            errorEl.style.display = 'block';
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Pay ' + formatMoney((stripeState.totalCents || 0) / 100);
+            if (errorEl) {
+              errorEl.textContent = formatFirebaseHttpsError(err);
+              errorEl.style.display = 'block';
+            }
+            updateCheckoutChrome();
           });
         });
+
+        updateCheckoutChrome();
       }
       function bindShopPage(tenant) {
         var root = document.getElementById('root');
@@ -13300,7 +13785,8 @@
                 }
                 return ensureAnonymousAuth().then(runUploads);
               }
-              function setupDropzones(fm) {
+              function setupDropzones(root) {
+                if (!root) return;
                 function isAllowedFile(file) {
                   var t = (file && file.type) || '';
                   if (t.indexOf('image/') === 0) return true;
@@ -13322,12 +13808,14 @@
                   for (var si = 0; si < files.length; si++) dt.items.add(files[si]);
                   input.files = dt.files;
                 }
-                var dropzones = fm.querySelectorAll('.upload-drop[data-reference-images-drop]');
+                var dropzones = root.querySelectorAll('.upload-drop[data-reference-images-drop]');
                 for (var i = 0; i < dropzones.length; i++) {
                   (function(dz){
+                    if (dz.getAttribute('data-dropzone-bound') === '1') return;
                     var input = dz.querySelector('input[type="file"]');
                     var listEl = dz.querySelector('[data-upload-filelist]');
                     if (!input) return;
+                    dz.setAttribute('data-dropzone-bound', '1');
                     var selectedFiles = [];
                     var previewUrls = {};
 
@@ -13514,7 +14002,7 @@
               if (fm) {
               setupDropzones(fm);
               setupPreferredDaysDropdown(fm);
-              setupGuidedBookingForm(fm);
+              setupGuidedBookingForm(fm, setupDropzones);
               injectBookingSmsConsent(fm, tenant);
               attachTitleCaseNameInputs(fm);
               fm.addEventListener('submit', function(ev){

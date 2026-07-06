@@ -121,7 +121,7 @@ struct DashboardView: View {
                     sessionStore: sessionStore
                 )
                 #if TAP_TO_PAY_ENABLED
-                await paymentsViewModel.prewarmTapToPayIfConnected()
+                await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
                 #endif
                 await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 await requestsViewModel.refreshRequests(
@@ -146,7 +146,7 @@ struct DashboardView: View {
                 sessionStore: sessionStore
             )
             #if TAP_TO_PAY_ENABLED
-            await paymentsViewModel.prewarmTapToPayIfConnected()
+            await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
             #endif
             await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
             await requestsViewModel.loadRequests(
@@ -159,6 +159,9 @@ struct DashboardView: View {
                 paymentsViewModel.invalidateConnectLinkPrefetch()
                 await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode)
                 await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                #if TAP_TO_PAY_ENABLED
+                await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                #endif
             }
         }
         #if TAP_TO_PAY_ENABLED

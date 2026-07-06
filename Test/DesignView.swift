@@ -729,8 +729,7 @@ struct DesignView: View {
                             ManageBookTabContent(
                                 viewModel: viewModel,
                                 teamAccess: authViewModel.teamAccess,
-                                serviceToEdit: $bladeServiceToEdit,
-                                formFieldToEdit: $formFieldToEdit
+                                serviceToEdit: $bladeServiceToEdit
                             )
                         case .about:
                             ManageAboutTabContent(
@@ -2136,103 +2135,302 @@ struct HexColorRow: View {
     }
 }
 
-private struct EditFormFieldSheet: View {
+private struct OptionRowFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [Int: CGRect] = [:]
+
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+struct EditFormFieldSheet: View {
     let field: FormField
     let existingKeys: [String]
     let onCancel: () -> Void
     let onSave: (FormField) -> Void
+    var onDelete: (() -> Void)? = nil
 
     @State private var label: String
-    @State private var key: String
     @State private var type: FormFieldType
     @State private var required: Bool
-    @State private var optionsText: String
+    @State private var options: [String]
     @State private var placeholder: String
     @State private var validationError: String?
+    @State private var draggingOptionIndex: Int?
+    @State private var optionRowFrames: [Int: CGRect] = [:]
+
+    private let optionsListSpace = "formFieldOptionsList"
 
     init(
         field: FormField,
         existingKeys: [String],
         onCancel: @escaping () -> Void,
-        onSave: @escaping (FormField) -> Void
+        onSave: @escaping (FormField) -> Void,
+        onDelete: (() -> Void)? = nil
     ) {
         self.field = field
         self.existingKeys = existingKeys
         self.onCancel = onCancel
         self.onSave = onSave
+        self.onDelete = onDelete
         _label = State(initialValue: field.label)
-        _key = State(initialValue: field.key)
         _type = State(initialValue: field.type)
         _required = State(initialValue: field.required)
-        _optionsText = State(initialValue: (field.options ?? []).joined(separator: ", "))
+        _options = State(initialValue: field.options ?? [])
         _placeholder = State(initialValue: field.placeholder ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Field") {
-                    TextField("Label", text: $label)
-                    TextField("Key", text: $key)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Picker("Type", selection: $type) {
-                        ForEach(FormFieldType.allCases, id: \.self) { item in
-                            Text(item.displayName).tag(item)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    editSection("Field") {
+                        VStack(alignment: .leading, spacing: 0) {
+                            editLabeledField(title: "Label", text: $label)
+                            editDivider
+                            editTypeRow
+                            editDivider
+                            editToggleRow(title: "Required", isOn: $required)
                         }
                     }
-                    Toggle("Required", isOn: $required)
-                }
-                Section("Display") {
-                    TextField("Placeholder (optional)", text: $placeholder)
-                }
-                if type == .select {
-                    Section("Dropdown options") {
-                        TextField("Comma-separated options", text: $optionsText, axis: .vertical)
-                            .lineLimit(2...6)
-                        Text("Example: Morning, Afternoon, Evening")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+
+                    if type == .select {
+                        editSection("Options") {
+                            VStack(alignment: .leading, spacing: 0) {
+                                VStack(spacing: 0) {
+                                    ForEach(options.indices, id: \.self) { index in
+                                        VStack(spacing: 0) {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: "line.3.horizontal")
+                                                    .font(.body)
+                                                    .foregroundStyle(.tertiary)
+                                                    .frame(width: 28, height: 44)
+                                                    .contentShape(Rectangle())
+                                                    .gesture(
+                                                        DragGesture(minimumDistance: 0, coordinateSpace: .named(optionsListSpace))
+                                                            .onChanged { value in
+                                                                if draggingOptionIndex == nil {
+                                                                    draggingOptionIndex = index
+                                                                }
+                                                                if let dragIndex = draggingOptionIndex {
+                                                                    reorderOption(atY: value.location.y, fromIndex: dragIndex)
+                                                                }
+                                                            }
+                                                            .onEnded { _ in
+                                                                draggingOptionIndex = nil
+                                                            }
+                                                    )
+                                                TextField("Option", text: binding(for: index))
+                                                    .font(.body)
+                                                Button {
+                                                    options.remove(at: index)
+                                                } label: {
+                                                    Image(systemName: "minus.circle.fill")
+                                                        .font(.title3)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .zIndex(draggingOptionIndex == index ? 1 : 0)
+                                            .background {
+                                                GeometryReader { geometry in
+                                                    Color.clear.preference(
+                                                        key: OptionRowFramePreferenceKey.self,
+                                                        value: [index: geometry.frame(in: .named(optionsListSpace))]
+                                                    )
+                                                }
+                                            }
+
+                                            if index < options.count - 1 {
+                                                editDivider
+                                            }
+                                        }
+                                    }
+                                }
+                                .coordinateSpace(name: optionsListSpace)
+                                .onPreferenceChange(OptionRowFramePreferenceKey.self) { optionRowFrames = $0 }
+                                .frame(minHeight: optionListHeight)
+
+                                if !options.isEmpty {
+                                    editDivider
+                                }
+                                Button {
+                                    options.append("")
+                                } label: {
+                                    Label("Add option", systemImage: "plus")
+                                        .font(.body.weight(.medium))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                            }
+                        }
                     }
-                }
-                if let validationError {
-                    Section {
+
+                    editSection("Display") {
+                        editLabeledField(title: "Placeholder", text: $placeholder, prompt: "Shown when empty")
+                    }
+
+                    if let validationError {
                         Text(validationError)
-                            .font(.caption)
-                            .foregroundColor(.red)
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 4)
+                    }
+
+                    if let onDelete {
+                        Button(role: .destructive, action: onDelete) {
+                            Text("Delete field")
+                                .font(.body.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .padding(.top, 8)
                     }
                 }
+                .padding(16)
             }
+            .appScreenBackground()
             .navigationTitle("Edit field")
             .navigationBarTitleDisplayMode(.inline)
+            .appNavigationChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { onCancel() }
+                    Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveField() }
+                    Button("Save", action: saveField)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                }
+            }
+            .onChange(of: type) { _, newType in
+                if newType != .select {
+                    options = []
+                } else if options.isEmpty {
+                    options = [""]
+                }
+            }
+            .onAppear {
+                if type == .select && options.isEmpty {
+                    options = [""]
                 }
             }
         }
     }
 
+    private var editDivider: some View {
+        Divider().padding(.leading, 14)
+    }
+
+    private var optionListHeight: CGFloat {
+        max(CGFloat(options.count), 1) * 52
+    }
+
+    private func moveOption(from source: IndexSet, to destination: Int) {
+        options.move(fromOffsets: source, toOffset: destination)
+    }
+
+    private func reorderOption(atY y: CGFloat, fromIndex: Int) {
+        guard fromIndex >= 0, fromIndex < options.count else { return }
+
+        if fromIndex + 1 < options.count,
+           let belowFrame = optionRowFrames[fromIndex + 1],
+           y > belowFrame.midY {
+            withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                moveOption(from: IndexSet(integer: fromIndex), to: fromIndex + 2)
+                draggingOptionIndex = fromIndex + 1
+            }
+            return
+        }
+
+        if fromIndex > 0,
+           let aboveFrame = optionRowFrames[fromIndex - 1],
+           y < aboveFrame.midY {
+            withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+                moveOption(from: IndexSet(integer: fromIndex), to: fromIndex - 1)
+                draggingOptionIndex = fromIndex - 1
+            }
+        }
+    }
+
+    private var editTypeRow: some View {
+        HStack {
+            Text("Type")
+                .font(.body.weight(.medium))
+            Spacer()
+            Picker("Type", selection: $type) {
+                ForEach(FormFieldType.allCases, id: \.self) { item in
+                    Text(item.displayName).tag(item)
+                }
+            }
+            .labelsHidden()
+            .tint(Color(.secondaryLabel))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func editToggleRow(title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title)
+                .font(.body.weight(.medium))
+        }
+        .tint(.green)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private func editLabeledField(title: String, text: Binding<String>, prompt: String = "") -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.secondaryLabel))
+            TextField(prompt, text: text)
+                .font(.body)
+                .textInputAutocapitalization(title == "Label" ? .words : .never)
+                .autocorrectionDisabled(title != "Label")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func editSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ManageSectionHeader(title)
+            content()
+                .appCard()
+        }
+    }
+
+    private func binding(for index: Int) -> Binding<String> {
+        Binding(
+            get: { options.indices.contains(index) ? options[index] : "" },
+            set: { newValue in
+                guard options.indices.contains(index) else { return }
+                options[index] = newValue
+            }
+        )
+    }
+
     private func saveField() {
         let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedKey = sanitizeKey(key)
         guard !trimmedLabel.isEmpty else {
             validationError = "Label is required."
             return
         }
-        guard !normalizedKey.isEmpty else {
-            validationError = "Key is required."
+        let resolvedKey = field.usesAutoGeneratedKey ? sanitizeKey(trimmedLabel) : field.key
+        guard !resolvedKey.isEmpty else {
+            validationError = "Could not derive a field key from the label."
             return
         }
-        guard !existingKeys.contains(normalizedKey.lowercased()) else {
+        guard !existingKeys.contains(resolvedKey.lowercased()) else {
             validationError = "That key is already used by another field."
             return
         }
-        let parsedOptions = optionsText
-            .split(separator: ",")
+        let parsedOptions = options
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         if type == .select && parsedOptions.isEmpty {
@@ -2243,7 +2441,7 @@ private struct EditFormFieldSheet: View {
         onSave(
             FormField(
                 id: field.id,
-                key: normalizedKey,
+                key: resolvedKey,
                 label: trimmedLabel,
                 type: type,
                 required: required,

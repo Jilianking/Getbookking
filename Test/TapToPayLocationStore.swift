@@ -48,6 +48,7 @@ final class TapToPayLocationStore: ObservableObject {
 
     #if TAP_TO_PAY_ENABLED
     private func scheduleReaderReconnectIfConfigured() {
+        guard TapToPayReaderSession.shared.termsAcceptedOnDevice else { return }
         let locationId = resolvedLocationId
         let name = merchantDisplayName
         guard !locationId.isEmpty, !name.isEmpty else { return }

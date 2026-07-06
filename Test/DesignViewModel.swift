@@ -186,6 +186,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var formFields: [FormField] = []
     /// `/book` layout: `standard` (dropdowns) or `guided` (service grid + pills). Independent of `webThemeId`.
     @Published var bookingFormStyleId: String = BookingFormStyle.standard.rawValue
+    @Published var guidedStepTitles: [String: String] = [:]
+    @Published var guidedStepOrder: [GuidedFormStep] = GuidedFormStep.allCases
 
     // Services
     @Published var services: [TenantService] = []
@@ -1060,6 +1062,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 aboutSectionBackgroundColorHex = tenant?["aboutSectionBackgroundColor"] as? String ?? "#111111"
                 aboutSectionTextColorHex = tenant?["aboutSectionTextColor"] as? String ?? "#FFFFFF"
                 bookingFormStyleId = BookingFormStyle.resolved(stored: tenant?["bookingFormStyleId"] as? String).rawValue
+                guidedStepTitles = Self.parseGuidedStepTitles(tenant?["guidedStepTitles"] as? [String: Any])
+                guidedStepOrder = GuidedFormStep.parseOrder(from: tenant?["guidedStepOrder"] as? [String])
                 if let schema = tenant?["formSchema"] as? [[String: Any]] {
                     formFields = schema.compactMap { FormField.fromFirestore($0) }
                     if formFields.isEmpty { formFields = FormField.defaultFields }
@@ -1721,11 +1725,46 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     func saveFormFields() async {
         guard let tid = tenantId else { return }
+        normalizeGuidedFieldSectionsIfNeeded()
         let schema = formFields.map { $0.toFirestore() }
         await saveTenantUpdates(tid, [
             "formSchema": schema,
             "bookingFormStyleId": BookingFormStyle.resolved(stored: bookingFormStyleId).rawValue,
+            "guidedStepTitles": guidedStepTitles,
+            "guidedStepOrder": guidedStepOrder.map(\.rawValue),
         ])
+    }
+
+    func guidedTitle(for step: GuidedFormStep) -> String {
+        let custom = guidedStepTitles[step.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return custom.isEmpty ? step.defaultTitle : custom
+    }
+
+    func setGuidedTitle(_ title: String, for step: GuidedFormStep) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == step.defaultTitle {
+            guidedStepTitles.removeValue(forKey: step.rawValue)
+        } else {
+            guidedStepTitles[step.rawValue] = trimmed
+        }
+    }
+
+    func moveGuidedStep(from index: Int, direction: Int) {
+        let target = index + direction
+        guard guidedStepOrder.indices.contains(index), guidedStepOrder.indices.contains(target) else { return }
+        guidedStepOrder.swapAt(index, target)
+    }
+
+    static func parseGuidedStepTitles(_ raw: [String: Any]?) -> [String: String] {
+        guard let raw else { return [:] }
+        var titles: [String: String] = [:]
+        for step in GuidedFormStep.allCases {
+            if let value = raw[step.rawValue] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { titles[step.rawValue] = trimmed }
+            }
+        }
+        return titles
     }
 
     func saveBookingFormStyle() async {
@@ -1958,6 +1997,51 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         formFields.append(FormField(key: "field_\(formFields.count + 1)", label: "New field", type: .text, required: false))
     }
 
+    func addFormField(to step: GuidedFormStep) {
+        let field = FormField(
+            key: "field_\(formFields.count + 1)",
+            label: "New field",
+            type: .text,
+            required: step != .project
+        )
+        var service = formFields.filter { $0.guidedStep == .service }
+        var project = formFields.filter { $0.guidedStep == .project }
+        var contact = formFields.filter { $0.guidedStep == .contact }
+        switch step {
+        case .service: service.append(field)
+        case .project: project.append(field)
+        case .contact: contact.append(field)
+        }
+        formFields = service + project + contact
+    }
+
+    func formFields(for step: GuidedFormStep) -> [FormField] {
+        let fields = formFields.filter { $0.guidedStep == step }
+        if step == .contact {
+            return fields.sorted {
+                GuidedFormStep.contactSortOrder(for: $0.key) < GuidedFormStep.contactSortOrder(for: $1.key)
+            }
+        }
+        return fields
+    }
+
+    func applyGuidedStepOrder(_ orderedStepFields: [FormField], for step: GuidedFormStep) {
+        var service = formFields.filter { $0.guidedStep == .service }
+        var project = formFields.filter { $0.guidedStep == .project }
+        var contact = formFields.filter { $0.guidedStep == .contact }
+        switch step {
+        case .service: service = orderedStepFields
+        case .project: project = orderedStepFields
+        case .contact: contact = orderedStepFields
+        }
+        formFields = service + project + contact
+    }
+
+    func normalizeGuidedFieldSectionsIfNeeded() {
+        guard BookingFormStyle.resolved(stored: bookingFormStyleId) == .guided else { return }
+        formFields = formFields(for: .service) + formFields(for: .project) + formFields(for: .contact)
+    }
+
     func removeFormField(_ field: FormField) {
         formFields.removeAll { $0.id == field.id }
     }
@@ -1965,6 +2049,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     func updateFormField(_ updatedField: FormField) {
         guard let index = formFields.firstIndex(where: { $0.id == updatedField.id }) else { return }
         formFields[index] = updatedField
+    }
+
+    func moveFormFields(from source: IndexSet, to destination: Int) {
+        formFields.move(fromOffsets: source, toOffset: destination)
     }
 
 

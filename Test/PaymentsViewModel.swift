@@ -333,27 +333,23 @@ class PaymentsViewModel: ObservableObject {
     var tapToPayLaunchOverlayMessage: String {
         if isEnsuringTapToPayTerms { return "Preparing Tap to Pay terms…" }
         if isConnectingStripe { return "Opening Stripe…" }
-        if isEnsuringTapToPayLocation { return "Preparing Tap to Pay…" }
+        if isEnsuringTapToPayLocation { return "Connecting Tap to Pay…" }
         return "Loading…"
     }
 
-    /// Pre-create Terminal location on dashboard load so the first tap opens checkout immediately.
-    func prewarmTapToPayIfConnected() async {
-        guard stripeConnected, resolvedTapToPayLocationId.isEmpty else { return }
-        try? await ensureTapToPayLocation()
+    /// Prepares Terminal location on launch; connects reader only after Apple T&C is accepted.
+    func prewarmTapToPayOnLaunch(isDemoMode: Bool = false) async {
+        guard !isDemoMode, canTakePayments else { return }
+        if TapToPayEligibility.blockingMessage() != nil { return }
+
+        if let prepareData = await TapToPayAppLifecycle.prewarm() {
+            applyPrepareTapToPayResponse(prepareData)
+        } else if stripeConnected, resolvedTapToPayLocationId.isEmpty {
+            try? await ensureTapToPayLocation()
+        }
     }
 
-    /// Connects the Tap to Pay reader so Apple Terms & Conditions appear before Stripe onboarding.
-    private func ensureTapToPayAppleTermsAccepted(isDemoMode: Bool) async throws {
-        if isDemoMode { return }
-        if TapToPayReaderSession.shared.termsAcceptedOnDevice { return }
-
-        isEnsuringTapToPayTerms = true
-        defer { isEnsuringTapToPayTerms = false }
-
-        let result = try await functions.httpsCallable("prepareTapToPayTermsAcceptance").call([:])
-        guard let data = result.data as? [String: Any] else { return }
-
+    private func applyPrepareTapToPayResponse(_ data: [String: Any]) {
         stripeHasAccount = data["hasAccount"] as? Bool ?? stripeHasAccount
         if let detailsSubmitted = data["detailsSubmitted"] as? Bool {
             stripeDetailsSubmitted = detailsSubmitted
@@ -363,46 +359,89 @@ class PaymentsViewModel: ObservableObject {
             needsStripeConnect = canTakePayments && !chargesEnabled
         }
         hasLoadedStripeStatus = true
+        if let scope = data["paymentScope"] as? String, !scope.isEmpty {
+            paymentStripeScope = scope
+        }
 
         let locationId = (data["locationId"] as? String ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = (data["displayName"] as? String ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let scope = (data["paymentScope"] as? String) ?? paymentStripeScope
-
-        guard !locationId.isEmpty else {
-            throw NSError(
-                domain: "TapToPay",
-                code: 11,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
-                ]
-            )
-        }
+        guard !locationId.isEmpty else { return }
 
         TapToPayLocationStore.shared.applyConnectStatus(
             terminalLocationId: locationId,
-            paymentScope: scope
+            paymentScope: data["paymentScope"] as? String
         )
         if !displayName.isEmpty {
             TapToPayLocationStore.shared.updateMerchantDisplayName(displayName)
         }
+    }
 
-        try await TapToPayTerminalManager.shared.connectReaderForTermsAcceptance(
-            locationId: locationId,
-            merchantDisplayName: displayName.isEmpty ? nil : displayName
-        )
+    /// Connects the Tap to Pay reader so Apple Terms & Conditions appear before Stripe onboarding.
+    private func ensureTapToPayAppleTermsAccepted(isDemoMode: Bool) async throws {
+        if isDemoMode { return }
+        if TapToPayReaderSession.shared.termsAcceptedOnDevice { return }
 
-        guard TapToPayReaderSession.shared.termsAcceptedOnDevice else {
-            throw NSError(
-                domain: "TapToPay",
-                code: 12,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Accept Tap to Pay on iPhone terms to continue.",
-                ]
+        let locationId: String
+        let displayName: String
+
+        if !resolvedTapToPayLocationId.isEmpty {
+            locationId = resolvedTapToPayLocationId
+            let cachedName = TapToPayLocationStore.shared.merchantDisplayName
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            displayName = cachedName.isEmpty ? effectiveTapToPayDisplayName : cachedName
+            isEnsuringTapToPayLocation = true
+            defer { isEnsuringTapToPayLocation = false }
+        } else {
+            isEnsuringTapToPayTerms = true
+            defer { isEnsuringTapToPayTerms = false }
+
+            let result = try await functions.httpsCallable("prepareTapToPayTermsAcceptance").call([:])
+            guard let data = result.data as? [String: Any] else {
+                throw NSError(
+                    domain: "TapToPay",
+                    code: 11,
+                    userInfo: [NSLocalizedDescriptionKey: "Tap to Pay could not be set up. Try again."]
+                )
+            }
+            applyPrepareTapToPayResponse(data)
+            locationId = resolvedTapToPayLocationId
+            displayName = (data["displayName"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !locationId.isEmpty else {
+                throw NSError(
+                    domain: "TapToPay",
+                    code: 11,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
+                    ]
+                )
+            }
+        }
+
+        do {
+            try await TapToPayTerminalManager.shared.connectReaderForTermsAcceptance(
+                locationId: locationId,
+                merchantDisplayName: displayName.isEmpty ? nil : displayName
             )
+
+            guard TapToPayReaderSession.shared.termsAcceptedOnDevice else {
+                await TapToPayTerminalManager.shared.releaseReaderConnection()
+                throw NSError(
+                    domain: "TapToPay",
+                    code: 12,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Accept Tap to Pay on iPhone terms to continue.",
+                    ]
+                )
+            }
+        } catch {
+            await TapToPayTerminalManager.shared.releaseReaderConnection()
+            throw error
         }
     }
 

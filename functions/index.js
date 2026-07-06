@@ -24,6 +24,7 @@
  */
 
 const functions = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -900,6 +901,10 @@ exports.getConnectAccountStatus = functions
  */
 const PLATFORM_FEE_BPS = 100;
 
+const PROCESSING_SERVICE_FEE_LABEL = "Processing & service fees";
+const PROCESSING_SERVICE_FEE_DESCRIPTION =
+  "Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.";
+
 /** Application fee in USD cents (min 1¢). Collected via Connect; grossed up to customer at checkout. */
 function platformFeeCents(amountCents) {
   const n = Math.round(Number(amountCents));
@@ -1732,30 +1737,17 @@ exports.createDepositLink = functions
       },
     ];
     if (checkout.surchargeCents > 0) {
-      const cardProcessingCents = Math.max(
-        0,
-        checkout.surchargeCents - checkout.platformFeeCents
-      );
-      if (cardProcessingCents > 0) {
-        lineItems.push({
-          price_data: {
-            currency: "usd",
-            product_data: { name: "Card processing" },
-            unit_amount: cardProcessingCents,
+      lineItems.push({
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: PROCESSING_SERVICE_FEE_LABEL,
+            description: PROCESSING_SERVICE_FEE_DESCRIPTION,
           },
-          quantity: 1,
-        });
-      }
-      if (checkout.platformFeeCents > 0) {
-        lineItems.push({
-          price_data: {
-            currency: "usd",
-            product_data: { name: "Platform fee (1%)" },
-            unit_amount: checkout.platformFeeCents,
-          },
-          quantity: 1,
-        });
-      }
+          unit_amount: checkout.surchargeCents,
+        },
+        quantity: 1,
+      });
     }
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const link = await stripe.paymentLinks.create(
@@ -1975,22 +1967,11 @@ function receiptLineItemsFromAmounts({
     },
   ];
   if (surcharge > 0) {
-    const platform = platformFeeCents(gross);
-    const cardProcessing = Math.max(0, surcharge - platform);
-    if (cardProcessing > 0) {
-      items.push({
-        name: "Card processing",
-        quantity: 1,
-        amountCents: cardProcessing,
-      });
-    }
-    if (platform > 0) {
-      items.push({
-        name: "Platform fee (1%)",
-        quantity: 1,
-        amountCents: platform,
-      });
-    }
+    items.push({
+      name: PROCESSING_SERVICE_FEE_LABEL,
+      quantity: 1,
+      amountCents: surcharge,
+    });
   }
   return items;
 }
@@ -2599,7 +2580,16 @@ async function assertTenantShopStripeReady(stripe, tenantData) {
       "Online card payments are not set up for this shop yet."
     );
   }
-  const account = await stripe.accounts.retrieve(stripeAccountId);
+  let account;
+  try {
+    account = await stripe.accounts.retrieve(stripeAccountId);
+  } catch (err) {
+    console.warn("assertTenantShopStripeReady retrieve failed", stripeAccountId, err.message || err);
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Online card payments are not set up for this shop yet."
+    );
+  }
   if (!account.charges_enabled) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -2824,19 +2814,27 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
   return { orderId: ref.id, subtotalCents };
 });
 
+/** Public browser callables need explicit invoker + CORS (secret-backed v1 defaults to private IAM). */
+const publicWebCallableOptions = {
+  secrets: [stripeSecretKey],
+  invoker: "public",
+  cors: true,
+  region: "us-central1",
+};
+
 /**
  * Public web: create shop order + Stripe PaymentIntent for embedded checkout.
  * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes? }
  */
-exports.createShopCheckoutPayment = functions
-  .runWith({ secrets: [stripeSecretKey] })
-  .https.onCall(async (data, context) => {
+exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (request) => {
+    const data = request.data;
+    try {
     const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
     const customerName = (data?.customerName || "").toString().trim();
     const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
 
     if (!tenantSlug || !customerName || !customerEmail) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "invalid-argument",
         "tenantSlug, customerName, and customerEmail are required"
       );
@@ -2849,7 +2847,7 @@ exports.createShopCheckoutPayment = functions
 
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "failed-precondition",
         "Stripe is not configured"
       );
@@ -2857,6 +2855,12 @@ exports.createShopCheckoutPayment = functions
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
     const checkout = computeCardCheckoutAmounts(subtotalCents, "online");
+    if (checkout.totalCents < 50) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Order total must be at least $0.50 to pay by card."
+      );
+    }
     const feeCents = platformFeeCents(checkout.totalCents);
 
     const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
@@ -2910,25 +2914,31 @@ exports.createShopCheckoutPayment = functions
       stripeAccountId,
       subtotalCents: checkout.serviceCents,
       surchargeCents: checkout.surchargeCents,
+      platformFeeCents: checkout.platformFeeCents,
       totalCents: checkout.totalCents,
     };
     if (pkOut) out.publishableKey = pkOut;
     return out;
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      if (err instanceof functions.https.HttpsError) throw err;
+      console.error("createShopCheckoutPayment", err);
+      throw new HttpsError("internal", stripeErrorMessage(err));
+    }
   });
 
 /**
  * Public web: mark shop order paid after Stripe PaymentIntent succeeds.
  * Params: { tenantSlug, orderId, paymentIntentId }
  */
-exports.finalizeShopOrderPayment = functions
-  .runWith({ secrets: [stripeSecretKey] })
-  .https.onCall(async (data, context) => {
+exports.finalizeShopOrderPayment = onCall(publicWebCallableOptions, async (request) => {
+    const data = request.data;
     const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
     const orderId = (data?.orderId || "").toString().trim();
     const paymentIntentId = (data?.paymentIntentId || "").toString().trim();
 
     if (!tenantSlug || !orderId || !paymentIntentId || !paymentIntentId.startsWith("pi_")) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "invalid-argument",
         "tenantSlug, orderId, and paymentIntentId are required"
       );
@@ -2937,7 +2947,7 @@ exports.finalizeShopOrderPayment = functions
     const { tenantId } = await resolvePublicShopTenant(tenantSlug);
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "failed-precondition",
         "Stripe is not configured"
       );

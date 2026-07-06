@@ -71,34 +71,37 @@ struct TeamNotificationToggle: View {
 struct TeamApproveRejectRow: View {
     @ObservedObject var viewModel: ManagerSettingsViewModel
     var managersApproveAppointments: Bool
+    /// Live studio policy: owner sets team type + confirmation type requires approval.
+    var bookingRequiresApproval: Bool
+
+    private var canEnable: Bool {
+        managersApproveAppointments && bookingRequiresApproval
+    }
 
     var body: some View {
-        if !managersApproveAppointments {
-            HStack {
-                Text("Approve & reject requests")
-                Spacer()
-                Text("Off")
-                    .foregroundStyle(.secondary)
-            }
-            Text("Turn on Owner sets team booking type above to enable manager approvals for the studio flow.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        } else if viewModel.tenantBookingRequiresApproval {
-            TeamPermissionToggle(
-                viewModel: viewModel,
-                title: "Approve & reject requests",
-                keyPath: \.approveRejectRequests
+        Toggle(
+            "Approve & reject requests",
+            isOn: Binding(
+                get: { viewModel.permissions.approveRejectRequests },
+                set: { viewModel.permissions.approveRejectRequests = $0 }
             )
-        } else {
-            HStack {
-                Text("Approve & reject requests")
-                Spacer()
-                Text("Off")
-                    .foregroundStyle(.secondary)
-            }
-            Text("Choose Request + approve (or similar) under Booking confirmation to enable approvals.")
+        )
+        .disabled(!canEnable)
+
+        if !canEnable, let caption = disabledCaption {
+            Text(caption)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var disabledCaption: String? {
+        if !managersApproveAppointments {
+            return "Turn on Owner sets team booking type above to enable manager approvals for the studio flow."
+        }
+        if !bookingRequiresApproval {
+            return "Choose Request + approve, Approve + deposit, or Consultation first under Booking confirmation to enable approvals."
+        }
+        return nil
     }
 }

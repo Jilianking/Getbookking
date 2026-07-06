@@ -78,8 +78,11 @@ final class TenantSessionStore: ObservableObject {
     }
 
     static func isNewWorkflowStatus(_ status: String) -> Bool {
-        let s = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return s == "new" || s == "pending"
+        BookingRequestStatus.isNew(status)
+    }
+
+    static func isInFlightPendingStatus(_ status: String) -> Bool {
+        BookingRequestStatus.isInFlightPending(status)
     }
 
     static func filterNewWorkflowRequests(_ list: [BookingRequest]) -> [BookingRequest] {

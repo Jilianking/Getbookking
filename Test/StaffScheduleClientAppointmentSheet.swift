@@ -29,6 +29,7 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var selectedMemberUid: String?
     @State private var notes = ""
     @State private var sendDepositLinkViaText = true
+    @State private var depositAmountText: String
 
     init(
         client: Client? = nil,
@@ -73,6 +74,7 @@ struct StaffScheduleClientAppointmentSheet: View {
             _selectedMemberUid = State(initialValue: roster.first?.uid)
         }
         _sendDepositLinkViaText = State(initialValue: studioCanSendSms)
+        _depositAmountText = State(initialValue: DepositAmountInput.initialText(defaultAmount: depositAmount))
     }
 
     private var isWalkIn: Bool { client == nil }
@@ -122,6 +124,24 @@ struct StaffScheduleClientAppointmentSheet: View {
         return !PhoneFormatting.digits(from: phone ?? "").isEmpty
     }
 
+    private var effectiveDepositAmount: Double? {
+        DepositAmountInput.parse(depositAmountText)
+    }
+
+    private var willSendDeposit: Bool {
+        requiresDeposit
+            && sendDepositLinkViaText
+            && canSendDepositSms
+            && DepositAmountInput.isValidForLink(effectiveDepositAmount)
+    }
+
+    private var depositSendBlocksSubmit: Bool {
+        requiresDeposit
+            && sendDepositLinkViaText
+            && canSendDepositSms
+            && !DepositAmountInput.isValidForLink(effectiveDepositAmount)
+    }
+
     private var isSaving: Bool {
         viewModel.isUpdatingStatus
     }
@@ -142,6 +162,7 @@ struct StaffScheduleClientAppointmentSheet: View {
             && selectedMember != nil
             && !isSaving
             && !isLoadingServices
+            && !depositSendBlocksSubmit
     }
 
     var body: some View {
@@ -197,7 +218,13 @@ struct StaffScheduleClientAppointmentSheet: View {
                     .appCard()
 
                     if requiresDeposit {
-                        depositRequiredCard
+                        PerAppointmentDepositSection(
+                            sectionTitle: "Deposit required",
+                            sendToggleTitle: "Send deposit link via text",
+                            amountText: $depositAmountText,
+                            sendViaText: $sendDepositLinkViaText,
+                            canSendSms: canSendDepositSms
+                        )
                     }
 
                     if let err = viewModel.actionError {
@@ -207,7 +234,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    if requiresDeposit, hasConfiguredDeposit, sendDepositLinkViaText, canSendDepositSms {
+                    if willSendDeposit {
                         Label("Deposit link will be sent on confirm", systemImage: "message.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -292,50 +319,6 @@ struct StaffScheduleClientAppointmentSheet: View {
         }
     }
 
-    private var hasConfiguredDeposit: Bool {
-        guard let depositAmount, depositAmount > 0 else { return false }
-        return true
-    }
-
-    private var depositAmountLabel: String {
-        guard let depositAmount, depositAmount > 0 else { return "—" }
-        return Self.currencyFormatter.string(from: NSNumber(value: depositAmount)) ?? String(format: "$%.2f", depositAmount)
-    }
-
-    private var depositRequiredCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            BookingRequestSectionHeader(title: "Deposit required")
-
-            if hasConfiguredDeposit {
-                HStack {
-                    Text("Deposit amount")
-                        .font(.subheadline)
-                    Spacer()
-                    Text(depositAmountLabel)
-                        .font(.subheadline.weight(.semibold))
-                }
-
-                Toggle("Send deposit link via text", isOn: $sendDepositLinkViaText)
-                    .disabled(!canSendDepositSms)
-
-                Text(
-                    canSendDepositSms
-                        ? (sendDepositLinkViaText ? "Client will receive a text with payment link" : "Skip sending — confirm without deposit")
-                        : "Texting or client phone is unavailable — confirm without sending a link."
-                )
-                .font(.caption)
-                .foregroundStyle(AppDesign.textSecondary)
-            } else {
-                Text("Set a deposit amount in Settings → My booking type to send payment links.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .appCard()
-    }
-
     private func artistLabel(for member: TenantTeamMember) -> String {
         if member.accessRole == .owner { return "Owner" }
         let title = member.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -378,11 +361,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes
         )
         if requestId != nil,
-           requiresDeposit,
-           hasConfiguredDeposit,
-           sendDepositLinkViaText,
-           canSendDepositSms,
-           let amount = depositAmount {
+           willSendDeposit,
+           let amount = effectiveDepositAmount {
             let booking = BookingRequest(
                 documentId: requestId,
                 status: "confirmed",
@@ -416,11 +396,4 @@ struct StaffScheduleClientAppointmentSheet: View {
             dismiss()
         }
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "USD"
-        return f
-    }()
 }

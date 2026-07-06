@@ -55,6 +55,15 @@ enum AppDesign {
     static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
     static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
     static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)
+    static let statusPending = adaptive(
+        light: UIColor(red: 0.55, green: 0.38, blue: 0.12, alpha: 1),
+        dark: UIColor(red: 0.92, green: 0.78, blue: 0.45, alpha: 1)
+    )
+    static let pendingBackground = adaptive(
+        light: UIColor(red: 0.98, green: 0.94, blue: 0.86, alpha: 1),
+        dark: UIColor(red: 0.22, green: 0.18, blue: 0.12, alpha: 1)
+    )
+
     static let statusCancelled = adaptive(
         light: UIColor(hex: 0x8B4A3A),
         dark: UIColor(red: 0.85, green: 0.45, blue: 0.38, alpha: 1)
@@ -103,8 +112,10 @@ enum AppDesign {
 
     static func softStatusColors(for status: String) -> (foreground: Color, background: Color) {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "new", "pending":
+        case "new":
             return (brandWarm, brandCream)
+        case "pending", "pending_deposit", "pending_consultation":
+            return (statusPending, pendingBackground)
         case "confirmed":
             return (brandDark, brandCream)
         case "declined", "cancelled":
@@ -435,12 +446,7 @@ struct AppStatusPill: View {
     }
 
     private var displayText: String {
-        let lower = text.lowercased()
-        if lower == "new" { return "New" }
-        if lower == "confirmed" { return "Confirmed" }
-        if lower == "declined" { return "Declined" }
-        if lower == "cancelled" { return "Cancelled" }
-        return text.capitalized
+        BookingRequestStatus.displayLabel(text)
     }
 }
 

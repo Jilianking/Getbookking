@@ -253,13 +253,14 @@ class RequestsViewModel: ObservableObject {
         }
     }
 
-    /// Assigns time + artist and marks the request confirmed (single confirm flow).
+    /// Assigns time + artist and sets workflow status (confirmed, pending_deposit, pending_consultation).
     func confirmBookingAppointment(
         requestId: String,
         member: TenantTeamMember,
         scheduledStart: Date,
         preferredTimeLabel: String,
-        notes: String?
+        notes: String?,
+        targetStatus: String = BookingRequestStatus.confirmed
     ) async {
         if let store = sessionStore, store.isDemoSession {
             await markBookingRequestAsRead(requestId: requestId)
@@ -274,7 +275,7 @@ class RequestsViewModel: ObservableObject {
                 memberEmail: member.email,
                 scheduledStart: scheduledStart,
                 preferredTimeLabel: preferredTimeLabel,
-                status: "confirmed"
+                status: targetStatus
             )
             await reloadAfterMutation(isDemoMode: true)
             await MainActor.run { isUpdatingStatus = false }
@@ -299,7 +300,7 @@ class RequestsViewModel: ObservableObject {
         }
         await setBookingRequestStatus(
             requestId: requestId,
-            status: "confirmed",
+            status: targetStatus,
             notes: notes,
             managesLoadingState: false
         )

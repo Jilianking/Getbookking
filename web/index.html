@@ -316,10 +316,56 @@
     .booking-page-subtitle--tagline em {
       font-style: italic;
     }
-    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page) .booking-page-eyebrow {
+    /* /book + confirmation: in-flow nav (Classic pattern) — nav height drives layout; shell adds rhythm only. */
+    .luxe-page.luxe-page--sub:has(.booking-shell) .luxe-nav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bk-bg, #FFFDF9);
+      border-bottom: 1px solid var(--bk-fg-10, rgba(26, 26, 26, 0.1));
+    }
+    .tattoo-page.blade-page.blade-page--sub:has(.booking-shell) {
+      padding-top: 0;
+    }
+    .tattoo-page.blade-page.blade-page--sub:has(.booking-shell) .blade-topnav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bh-black, var(--bk-bg, #0a0a08));
+    }
+    .stonecut-page:has(.booking-shell) {
+      padding-top: 0;
+    }
+    .stonecut-page:has(.booking-shell) .stonecut-nav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: var(--bk-bg, #060604);
+      border-bottom: 1px solid color-mix(in srgb, var(--bk-fg, #e8e0d0) 8%, transparent);
+    }
+    .studio12-page.studio12-sub:has(.booking-shell) {
+      padding-top: 0;
+    }
+    .studio12-page.studio12-sub:has(.booking-shell) .s12-topnav {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+    }
+    .luxe-page.luxe-page--sub:has(.booking-shell) .booking-shell,
+    .tattoo-page.blade-page.blade-page--sub:has(.booking-shell) .booking-shell,
+    .stonecut-page:has(.booking-shell) .booking-shell,
+    .studio12-page.studio12-sub:has(.booking-shell) .booking-shell,
+    .tattoo-page.classic-home:has(.booking-shell) .booking-shell {
+      padding-top: clamp(24px, 4vw, 32px);
+    }
+    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page):not(.studio12-page) .booking-page-eyebrow {
       color: rgba(255, 255, 255, 0.55);
     }
-    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page) .booking-page-subtitle--tagline {
+    .tattoo-page:not(.classic-home):not(.luxe-page):not(.blade-page):not(.stonecut-page):not(.studio12-page) .booking-page-subtitle--tagline {
       color: rgba(255, 255, 255, 0.65);
     }
     .booking-tagline {
@@ -2006,7 +2052,6 @@
       min-height: 100vh;
     }
     .tattoo-page.classic-home .booking-shell {
-      padding-top: 24px;
       justify-content: flex-start;
     }
     .tattoo-page.classic-home .booking-page-eyebrow {
@@ -2840,6 +2885,20 @@
     }
     .studio12-page .s12-gallery-light--fullpage .gallery-alt--strip .gallery-grid-link,
     .studio12-page .s12-gallery-light--fullpage .gallery-alt--strip .gallery-grid-link img {
+      border-radius: 12px;
+    }
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--masonry {
+      padding: 0 clamp(20px, 5vw, 40px) clamp(48px, 8vw, 72px);
+      max-width: 1280px;
+      margin: 0 auto;
+      box-sizing: border-box;
+      column-gap: 16px;
+    }
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt-masonry-cell {
+      margin-bottom: 16px;
+    }
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--masonry .gallery-grid-link,
+    .studio12-page .s12-gallery-light--fullpage .gallery-alt--masonry .gallery-grid-link img {
       border-radius: 12px;
     }
     .gallery-alt--strip .gallery-alt-strip-item .gallery-grid-link img {
@@ -4058,14 +4117,6 @@
       background: var(--bk-bg, #FFFDF9);
       color: var(--bk-fg, #1a1a1a);
     }
-    .luxe-page--sub .booking-shell {
-      padding-top: 72px;
-    }
-    @media (max-width: 640px) {
-      .luxe-page--sub .booking-shell {
-        padding-top: 64px;
-      }
-    }
     .luxe-page .booking-page-title {
       color: #1a1a1a;
       font-family: var(--font-hero);
@@ -4807,10 +4858,6 @@
       min-height: 0;
       justify-content: flex-start;
     }
-    /* Blade subpages offset fixed nav on the page root — shell only needs a small gap. */
-    .tattoo-page.blade-page.blade-page--sub .booking-shell {
-      padding-top: 24px;
-    }
     .blade-page.blade-page--sub .blade-shop-page-shell {
       flex: 1 1 auto;
       min-height: 0;
@@ -5174,7 +5221,6 @@
       color: inherit;
       flex: 1 1 auto;
       min-height: 0;
-      padding-top: 20px;
       padding-left: 16px;
       padding-right: 16px;
       padding-bottom: 48px;
@@ -6731,6 +6777,7 @@
     .studio12-page.studio12-sub .booking-page-title {
       font-family: "Cormorant Garamond", serif !important;
       font-weight: 300 !important;
+      color: var(--s12-espresso, var(--bk-fg, #2a1f18));
     }
     .studio12-page.studio12-sub .booking-page-eyebrow {
       color: var(--s12-clay, var(--bk-accent));
@@ -8929,17 +8976,21 @@
       function tattooHeadlineLogoHtml(tenant) {
         return '';
       }
-      /** Default /book tagline when tenant.tagline is empty (theme-aware). */
-      function bookingPageTaglineInnerHtml(tenant) {
+      /** Default /book subtitle when no `wc.book.pageSubtitle` override (theme-aware). */
+      function bookingPageSubtitleFallback(tenant) {
         var raw = tenant.tagline && String(tenant.tagline).trim();
-        if (raw) return wcSpan(tenant, 'wc.generic.tagline', raw);
-        if (isLuxeTheme(tenant)) return esc(defaultLuxeHeroTaglineForIndustry(tenant.industry));
-        if (isBladeTheme(tenant)) return esc(defaultBladeHeroDescriptionForIndustry(tenant.industry));
+        if (raw) return raw;
+        if (isLuxeTheme(tenant)) return defaultLuxeHeroTaglineForIndustry(tenant.industry);
+        if (isBladeTheme(tenant)) return defaultBladeHeroDescriptionForIndustry(tenant.industry);
         if (isStonecutTheme(tenant)) {
           var about = (tenant.aboutText && String(tenant.aboutText).trim()) || '';
-          if (about) return esc(about.split('\n')[0].slice(0, 160));
+          if (about) return about.split('\n')[0].slice(0, 160);
         }
-        return esc(defaultLuxeHeroTaglineForIndustry(tenant.industry));
+        return defaultLuxeHeroTaglineForIndustry(tenant.industry);
+      }
+      /** Editable /book tagline (quick-edit key `wc.book.pageSubtitle`). */
+      function bookingPageTaglineInnerHtml(tenant) {
+        return wcSpan(tenant, 'wc.book.pageSubtitle', bookingPageSubtitleFallback(tenant));
       }
       function bookingPageEyebrowInnerHtml(tenant) {
         var sa = (tenant.serviceArea && String(tenant.serviceArea).trim()) || '';
@@ -8955,7 +9006,7 @@
           : '';
         return '<div class="booking-page-header booking-page-header--branded">' +
           '<p class="booking-page-eyebrow">' + bookingPageEyebrowInnerHtml(tenant) + '</p>' +
-          '<h1 class="booking-page-title">Book an appointment</h1>' +
+          '<h1 class="booking-page-title">' + wcSpan(tenant, 'wc.book.pageTitle', 'Book an appointment') + '</h1>' +
           subtitleHtml +
         '</div>';
       }

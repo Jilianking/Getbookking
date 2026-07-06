@@ -7,6 +7,7 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
     case all
     case unread
     case newOnly
+    case pendingOnly
     case confirmed
     case cancelledOrDeclined
 
@@ -17,19 +18,21 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
         case .all: return "All"
         case .unread: return "Unread"
         case .newOnly: return "New"
+        case .pendingOnly: return "Pending"
         case .confirmed: return "Confirmed"
         case .cancelledOrDeclined: return "Cancelled / Declined"
         }
     }
 
     func matches(_ br: BookingRequest) -> Bool {
-        let s = br.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let s = BookingRequestStatus.normalized(br.status)
         switch self {
         case .all: return true
-        case .unread: return (s == "new" || s == "pending") && br.readAt == nil
-        case .newOnly: return s == "new" || s == "pending"
-        case .confirmed: return s == "confirmed"
-        case .cancelledOrDeclined: return s == "cancelled" || s == "declined"
+        case .unread: return BookingRequestStatus.isNew(br.status) && br.readAt == nil
+        case .newOnly: return BookingRequestStatus.isNew(br.status)
+        case .pendingOnly: return BookingRequestStatus.isInFlightPending(br.status)
+        case .confirmed: return s == BookingRequestStatus.confirmed
+        case .cancelledOrDeclined: return s == "cancelled" || s == BookingRequestStatus.declined
         }
     }
 
@@ -38,6 +41,7 @@ private enum BookingRequestFilter: Int, CaseIterable, Identifiable, Hashable {
         case .all: return true
         case .unread: return r.status == .pending && r.reviewedAt == nil
         case .newOnly: return r.status == .pending
+        case .pendingOnly: return r.status == .discussed
         case .confirmed: return r.status == .confirmed
         case .cancelledOrDeclined: return r.status == .cancelled || r.status == .declined
         }
@@ -63,6 +67,7 @@ struct RequestsView: View {
         [
             (.all, "All"),
             (.newOnly, "New"),
+            (.pendingOnly, "Pending"),
             (.confirmed, "Confirmed"),
         ]
     }
@@ -465,19 +470,19 @@ struct BookingRequestListRow: View {
     var onOpenDetail: (() -> Void)? = nil
 
     private var statusLower: String {
-        request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        BookingRequestStatus.normalized(request.status)
     }
 
-    private var isPendingConfirmation: Bool {
-        statusLower == "new" || statusLower == "pending"
+    private var canManageActions: Bool {
+        BookingRequestStatus.canManageBookingActions(teamAccess)
     }
 
     private var canShowDeclineAction: Bool {
-        teamAccess.canApproveRejectRequests && isPendingConfirmation
+        canManageActions && BookingRequestStatus.canShowDecline(request.status)
     }
 
     private var canShowAcceptAction: Bool {
-        (teamAccess.isOwner || teamAccess.canViewAllBookings) && isPendingConfirmation
+        canManageActions && BookingRequestStatus.canShowAccept(request.status)
     }
 
     private var canShowApprovalActions: Bool {
@@ -619,7 +624,7 @@ struct BookingRequestDetailView: View {
     }
 
     private var statusLower: String {
-        currentRequest.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        BookingRequestStatus.normalized(currentRequest.status)
     }
 
     private var canManageAssignment: Bool {
@@ -634,33 +639,40 @@ struct BookingRequestDetailView: View {
         canManageAssignment && showsStaffAssignmentUI
     }
 
+    private var canManageActions: Bool {
+        BookingRequestStatus.canManageBookingActions(teamAccess)
+    }
+
     private var canShowApprovalActions: Bool {
-        teamAccess.canApproveRejectRequests &&
-            (statusLower == "new" || statusLower == "pending")
+        canManageActions && BookingRequestStatus.canShowDecline(currentRequest.status)
     }
 
     private var canConfirmPendingAppointment: Bool {
-        canManageAssignment && isPendingConfirmation
+        canManageAssignment && BookingRequestStatus.isNew(currentRequest.status)
     }
 
     private var canShowDeclineAction: Bool {
-        canShowApprovalActions
+        canManageActions && BookingRequestStatus.canShowDecline(currentRequest.status)
     }
 
     private var confirmedTimeLabel: String {
-        if statusLower == "confirmed", let start = currentRequest.requestedStartTime {
+        if statusLower == BookingRequestStatus.confirmed, let start = currentRequest.requestedStartTime {
+            return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        }
+        if BookingRequestStatus.isInFlightPending(currentRequest.status), let start = currentRequest.requestedStartTime {
             return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         }
         return "Not set yet"
     }
 
     private var isPendingConfirmation: Bool {
-        statusLower == "new" || statusLower == "pending"
+        BookingRequestStatus.isNew(currentRequest.status)
     }
 
     private var canEditConfirmedTime: Bool {
-        if isPendingConfirmation { return canConfirmPendingAppointment }
-        if statusLower == "confirmed" { return canManageAssignment }
+        if BookingRequestStatus.isNew(currentRequest.status) { return canConfirmPendingAppointment }
+        if BookingRequestStatus.isInFlightPending(currentRequest.status) { return canManageAssignment }
+        if statusLower == BookingRequestStatus.confirmed { return canManageAssignment }
         return false
     }
 
@@ -692,6 +704,7 @@ struct BookingRequestDetailView: View {
                     canPickArtist: canPickArtistOnConfirm,
                     currentMemberUid: Auth.auth().currentUser?.uid,
                     isReschedule: confirmAppointmentSheetIsReschedule,
+                    confirmationType: teamAccess.confirmationType,
                     requiresDeposit: teamAccess.confirmationType.requiresDeposit,
                     depositAmount: teamAccess.depositAmount ?? viewModel.workflowDepositAmount,
                     canSendDepositSms: canSendDepositSmsForRequest
@@ -1042,7 +1055,7 @@ struct BookingRequestDetailView: View {
             }
             .padding(16)
             .appCard()
-        } else if teamAccess.bookingRequiresApproval && !teamAccess.canApproveRejectRequests && (statusLower == "new" || statusLower == "pending") {
+        } else if !canManageActions && BookingRequestStatus.isNew(currentRequest.status) {
             Text("You can view this request but cannot approve or decline it.")
                 .font(.caption)
                 .foregroundStyle(AppDesign.textSecondary)

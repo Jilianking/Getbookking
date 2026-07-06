@@ -331,11 +331,7 @@ struct DashboardBookingRequestRow: View {
     }
 
     private var statusLabel: String {
-        let s = request.status.uppercased()
-        if s == "NEW" { return "New" }
-        if s == "CONFIRMED" { return "Confirmed" }
-        if s == "DECLINED" { return "Declined" }
-        return request.status.capitalized
+        BookingRequestStatus.displayLabel(request.status)
     }
 }
 

@@ -200,6 +200,11 @@ struct SettingsView: View {
         return "\(viewModel.tenantSubscriptionPlan.displayName) · \(industry)"
     }
 
+    /// Non-owners only, when the studio owner does not set a shared booking type.
+    private var showsMyBookingTypeOnMainSettings: Bool {
+        !viewModel.isTenantOwner && !viewModel.managersApproveAppointments
+    }
+
     @ViewBuilder
     private var businessSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -282,20 +287,22 @@ struct SettingsView: View {
                     Divider().padding(.leading, 52)
                 }
 
-                NavigationLink {
-                    PersonalBookingSettingsView(viewModel: viewModel)
-                        .environmentObject(authViewModel)
-                } label: {
-                    AppSettingsRow(
-                        icon: "calendar.badge.clock",
-                        iconColor: AppDesign.accentBlue,
-                        title: "My booking type",
-                        value: viewModel.effectiveBookingConfirmationType.displayName
-                    )
-                }
-                .buttonStyle(.plain)
+                if showsMyBookingTypeOnMainSettings {
+                    NavigationLink {
+                        PersonalBookingSettingsView(viewModel: viewModel)
+                            .environmentObject(authViewModel)
+                    } label: {
+                        AppSettingsRow(
+                            icon: "calendar.badge.clock",
+                            iconColor: AppDesign.accentBlue,
+                            title: "My booking type",
+                            value: viewModel.effectiveBookingConfirmationType.displayName
+                        )
+                    }
+                    .buttonStyle(.plain)
 
-                Divider().padding(.leading, 52)
+                    Divider().padding(.leading, 52)
+                }
 
                 NavigationLink {
                     PersonalSchedulingSettingsView(viewModel: viewModel)
@@ -505,11 +512,7 @@ struct PersonalSchedulingSettingsView: View {
             }
 
             Section(
-                footer: Text(
-                    viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                        ? "Your time zone and calendar. Booking type is in Business settings → Booking settings."
-                        : "Your time zone and calendar. Studio booking policy is in Team settings → Booking settings when you use studio policy."
-                )
+                footer: Text(schedulingSettingsFooter)
                 .font(.caption2)
             ) {
                 Picker("Time zone", selection: $viewModel.timeZoneId) {
@@ -539,6 +542,19 @@ struct PersonalSchedulingSettingsView: View {
         .sheet(isPresented: $showBusinessHoursSheet) {
             SettingsBusinessHoursSheet(viewModel: viewModel)
         }
+    }
+
+    private var schedulingSettingsFooter: String {
+        if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
+            return "Your time zone and calendar. Booking type is in Business settings → Booking settings."
+        }
+        if viewModel.isTenantOwner {
+            return "Your time zone and calendar. Studio booking policy is in Team settings → Booking settings."
+        }
+        if !viewModel.managersApproveAppointments {
+            return "Your time zone and calendar. Booking type is in Settings → My booking type."
+        }
+        return "Your time zone and calendar. Your owner sets booking type in Team settings → Booking settings."
     }
 }
 

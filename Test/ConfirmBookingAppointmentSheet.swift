@@ -12,6 +12,7 @@ struct ConfirmBookingAppointmentSheet: View {
     let canPickArtist: Bool
     let currentMemberUid: String?
     var isReschedule: Bool = false
+    var confirmationType: BookingConfirmationType = .requestApprove
     var requiresDeposit: Bool = false
     var depositAmount: Double?
     var canSendDepositSms: Bool = false
@@ -21,6 +22,7 @@ struct ConfirmBookingAppointmentSheet: View {
     @State private var confirmedTime: Date
     @State private var selectedMemberUid: String?
     @State private var sendDepositLinkViaText = true
+    @State private var depositAmountText: String
 
     init(
         request: BookingRequest,
@@ -28,6 +30,7 @@ struct ConfirmBookingAppointmentSheet: View {
         canPickArtist: Bool,
         currentMemberUid: String?,
         isReschedule: Bool = false,
+        confirmationType: BookingConfirmationType = .requestApprove,
         requiresDeposit: Bool = false,
         depositAmount: Double? = nil,
         canSendDepositSms: Bool = false
@@ -37,6 +40,7 @@ struct ConfirmBookingAppointmentSheet: View {
         self.canPickArtist = canPickArtist
         self.currentMemberUid = currentMemberUid
         self.isReschedule = isReschedule
+        self.confirmationType = confirmationType
         self.requiresDeposit = requiresDeposit
         self.depositAmount = depositAmount
         self.canSendDepositSms = canSendDepositSms
@@ -46,6 +50,7 @@ struct ConfirmBookingAppointmentSheet: View {
         _confirmedDate = State(initialValue: calendar.startOfDay(for: seed))
         _confirmedTime = State(initialValue: seed)
         _sendDepositLinkViaText = State(initialValue: isReschedule ? false : canSendDepositSms)
+        _depositAmountText = State(initialValue: DepositAmountInput.initialText(defaultAmount: depositAmount))
 
         let roster = viewModel.teamFilterRoster
         let assignedUid = request.assignedMemberUid?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -95,14 +100,15 @@ struct ConfirmBookingAppointmentSheet: View {
         requiresDeposit
     }
 
-    private var hasConfiguredDeposit: Bool {
-        guard let depositAmount, depositAmount > 0 else { return false }
-        return true
+    private var effectiveDepositAmount: Double? {
+        DepositAmountInput.parse(depositAmountText)
     }
 
-    private var depositAmountLabel: String {
-        guard let depositAmount, depositAmount > 0 else { return "—" }
-        return Self.currencyFormatter.string(from: NSNumber(value: depositAmount)) ?? String(format: "$%.2f", depositAmount)
+    private var willSendDeposit: Bool {
+        showDepositSection
+            && sendDepositLinkViaText
+            && canSendDepositSms
+            && DepositAmountInput.isValidForLink(effectiveDepositAmount)
     }
 
     private var clientRequestedTimeHint: String? {
@@ -119,8 +125,32 @@ struct ConfirmBookingAppointmentSheet: View {
         return "Pick the date and time that work for your schedule."
     }
 
+    private var pendingStatusLabel: String {
+        if confirmationType == .consultationFirst {
+            return BookingRequestStatus.displayLabel(BookingRequestStatus.pendingConsultation)
+        }
+        if willSendDeposit {
+            return BookingRequestStatus.displayLabel(BookingRequestStatus.pendingDeposit)
+        }
+        return "Pending confirmation"
+    }
+
+    private var confirmButtonTitle: String {
+        if isReschedule { return "Update Time" }
+        if confirmationType == .consultationFirst { return "Schedule consult" }
+        if willSendDeposit { return "Send deposit & hold time" }
+        return "Lock In & Confirm ✓"
+    }
+
     private var isSaving: Bool {
         isReschedule ? viewModel.isUpdatingAssignment : viewModel.isUpdatingStatus
+    }
+
+    private var depositSendBlocksSubmit: Bool {
+        showDepositSection
+            && sendDepositLinkViaText
+            && canSendDepositSms
+            && !DepositAmountInput.isValidForLink(effectiveDepositAmount)
     }
 
     private var canSubmit: Bool {
@@ -128,6 +158,7 @@ struct ConfirmBookingAppointmentSheet: View {
             && selectedMember != nil
             && !(currentRequest.documentId ?? "").isEmpty
             && !isSaving
+            && !depositSendBlocksSubmit
     }
 
     var body: some View {
@@ -141,7 +172,7 @@ struct ConfirmBookingAppointmentSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(AppDesign.textSecondary)
                         AppStatusPill(
-                            text: isReschedule ? currentRequest.status : "Pending confirmation",
+                            text: isReschedule ? currentRequest.status : pendingStatusLabel,
                             soft: true
                         )
                     }
@@ -185,7 +216,21 @@ struct ConfirmBookingAppointmentSheet: View {
                     .appCard()
 
                     if showDepositSection {
-                        depositRequiredCard
+                        PerAppointmentDepositSection(
+                            sectionTitle: isReschedule ? "Deposit link" : "Deposit required",
+                            sendToggleTitle: isReschedule
+                                ? "Resend deposit link via text"
+                                : "Send deposit link via text",
+                            amountText: $depositAmountText,
+                            sendViaText: $sendDepositLinkViaText,
+                            canSendSms: canSendDepositSms,
+                            skipSendCaption: isReschedule
+                                ? "Skip sending — only update the appointment time"
+                                : "Skip sending — confirm without deposit",
+                            unavailableSmsCaption: isReschedule
+                                ? "Texting or client phone is unavailable — update time without sending a link."
+                                : "Texting or client phone is unavailable — confirm without sending a link."
+                        )
                     }
 
                     if let err = viewModel.actionError {
@@ -195,7 +240,7 @@ struct ConfirmBookingAppointmentSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    if showDepositSection && hasConfiguredDeposit && sendDepositLinkViaText && canSendDepositSms {
+                    if willSendDeposit {
                         Label(
                             isReschedule ? "Deposit link will be sent after update" : "Deposit link will be sent on confirm",
                             systemImage: "message.fill"
@@ -213,7 +258,7 @@ struct ConfirmBookingAppointmentSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text(isReschedule ? "Update Time" : "Lock In & Confirm ✓")
+                                Text(confirmButtonTitle)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -237,58 +282,6 @@ struct ConfirmBookingAppointmentSheet: View {
         }
     }
 
-    private var depositRequiredCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            BookingRequestSectionHeader(title: isReschedule ? "Deposit link" : "Deposit required")
-
-            if hasConfiguredDeposit {
-                HStack {
-                    Text("Deposit amount")
-                        .font(.subheadline)
-                    Spacer()
-                    Text(depositAmountLabel)
-                        .font(.subheadline.weight(.semibold))
-                }
-
-                Toggle(
-                    isReschedule ? "Resend deposit link via text" : "Send deposit link via text",
-                    isOn: $sendDepositLinkViaText
-                )
-                    .disabled(!canSendDepositSms)
-
-                Text(depositToggleCaption)
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
-            } else {
-                Text("Set a deposit amount in Settings → My booking type to send payment links.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .appCard()
-    }
-
-    private var depositToggleCaption: String {
-        if !canSendDepositSms {
-            if isReschedule {
-                return "Texting or client phone is unavailable — update time without sending a link."
-            }
-            return "Texting or client phone is unavailable — confirm without sending a link."
-        }
-        if sendDepositLinkViaText {
-            if isReschedule {
-                return "Send a new link if the client hasn't paid or lost the original text"
-            }
-            return "Client will receive a text with payment link"
-        }
-        if isReschedule {
-            return "Skip sending — only update the appointment time"
-        }
-        return "Skip sending — confirm without deposit"
-    }
-
     private func artistLabel(for member: TenantTeamMember) -> String {
         if member.accessRole == .owner { return "Owner" }
         let title = member.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -301,6 +294,13 @@ struct ConfirmBookingAppointmentSheet: View {
               let member = selectedMember,
               let start = scheduledStart else { return }
         let preferred = BookingAssignSchedulePlanner.formatSlotLabel(start)
+        let targetStatus = isReschedule
+            ? BookingRequestStatus.confirmed
+            : BookingRequestStatus.targetStatusAfterAccept(
+                confirmationType: confirmationType,
+                requiresDeposit: requiresDeposit,
+                sendDepositLink: willSendDeposit
+            )
         if isReschedule {
             await viewModel.rescheduleBookingAppointment(
                 requestId: rid,
@@ -314,26 +314,17 @@ struct ConfirmBookingAppointmentSheet: View {
                 member: member,
                 scheduledStart: start,
                 preferredTimeLabel: preferred,
-                notes: currentRequest.notes
+                notes: currentRequest.notes,
+                targetStatus: targetStatus
             )
         }
         if viewModel.actionError == nil,
-           showDepositSection,
-           hasConfiguredDeposit,
-           sendDepositLinkViaText,
-           canSendDepositSms,
-           let amount = depositAmount {
+           willSendDeposit,
+           let amount = effectiveDepositAmount {
             await viewModel.sendDepositLinkViaSms(for: currentRequest, depositAmount: amount)
         }
         if viewModel.actionError == nil {
             dismiss()
         }
     }
-
-    private static let currencyFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "USD"
-        return f
-    }()
 }

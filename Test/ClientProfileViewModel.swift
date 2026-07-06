@@ -504,8 +504,7 @@ final class ClientProfileViewModel: ObservableObject {
     }
 
     static func isPendingStatus(_ status: String) -> Bool {
-        let normalized = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized == "new" || normalized == "pending"
+        BookingRequestStatus.isNew(status) || BookingRequestStatus.isInFlightPending(status)
     }
 
     private func trimmedOrNil(_ value: String?) -> String? {

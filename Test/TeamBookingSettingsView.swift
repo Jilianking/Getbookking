@@ -113,7 +113,10 @@ struct TeamBookingSettingsView: View {
             )
             TeamApproveRejectRow(
                 viewModel: teamPolicyViewModel,
-                managersApproveAppointments: settingsViewModel.managersApproveAppointments
+                managersApproveAppointments: settingsViewModel.managersApproveAppointments,
+                bookingRequiresApproval: settingsViewModel.managersApproveAppointments
+                    ? settingsViewModel.confirmationType.requiresApproval
+                    : false
             )
             TeamPermissionToggle(
                 viewModel: teamPolicyViewModel,

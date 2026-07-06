@@ -26,7 +26,7 @@ struct TeamSettingsHubView: View {
                 }
             } else {
                 Section {
-                    Text("Booking, your website services, and client texting for your business.")
+                    Text("Booking and client texting for your business.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -59,22 +59,20 @@ struct TeamSettingsHubView: View {
                     )
                 }
 
-                NavigationLink {
-                    TeamDesignServicesSettingsView(
-                        viewModel: teamPolicyViewModel,
-                        isSoloBusinessSettings: isSoloBusinessSettings
-                    )
-                    .environmentObject(authViewModel)
-                } label: {
-                    settingsRow(
-                        title: "Design & services",
-                        subtitle: isSoloBusinessSettings
-                            ? "Services and pricing on Design"
-                            : "Manager access to services and pricing"
-                    )
-                }
-
                 if includeTeamManagementSections {
+                    NavigationLink {
+                        TeamDesignServicesSettingsView(
+                            viewModel: teamPolicyViewModel,
+                            isSoloBusinessSettings: isSoloBusinessSettings
+                        )
+                        .environmentObject(authViewModel)
+                    } label: {
+                        settingsRow(
+                            title: "Design & services",
+                            subtitle: "Manager access to services and pricing"
+                        )
+                    }
+
                     NavigationLink {
                         TeamClientsReportsSettingsView(viewModel: teamPolicyViewModel)
                             .environmentObject(authViewModel)

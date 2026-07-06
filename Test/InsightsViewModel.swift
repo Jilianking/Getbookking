@@ -421,7 +421,8 @@ final class InsightsViewModel: ObservableObject {
         for r in reqs {
             let st = r.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             switch st {
-            case "new", "pending": b.newCount += 1
+            case "new": b.newCount += 1
+            case "pending", "pending_deposit", "pending_consultation": b.other += 1
             case "confirmed": b.confirmed += 1
             case "cancelled", "declined": b.cancelledOrDeclined += 1
             default: b.other += 1

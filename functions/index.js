@@ -3642,6 +3642,19 @@ exports.stripeSubscriptionWebhook = functions
         } catch (e) {
           console.error("stripeSubscriptionWebhook shop order finalize", e.message);
         }
+      } else if (
+        (meta.paymentKind || "").toString() === "deposit" &&
+        meta.bookingRequestId &&
+        meta.tenantId
+      ) {
+        try {
+          await confirmBookingAfterDepositPaid(
+            meta.tenantId.toString(),
+            meta.bookingRequestId.toString()
+          );
+        } catch (e) {
+          console.error("stripeSubscriptionWebhook deposit confirm", e.message);
+        }
       }
     }
 
@@ -3725,6 +3738,30 @@ function bookingRequiresApproval(confirmationType) {
     t === "approve_and_deposit" ||
     t === "consultation_first"
   );
+}
+
+async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId) {
+  const tid = (tenantId || "").toString().trim();
+  const rid = (bookingRequestId || "").toString().trim();
+  if (!tid || !rid) return false;
+  const reqRef = db
+    .collection("tenants")
+    .doc(tid)
+    .collection("bookingRequests")
+    .doc(rid);
+  const snap = await reqRef.get();
+  if (!snap.exists) return false;
+  const status = (snap.data().status || "").toString().trim().toLowerCase();
+  if (status !== "pending_deposit") return false;
+  await reqRef.set(
+    {
+      status: "confirmed",
+      depositPaidAt: admin.firestore.FieldValue.serverTimestamp(),
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return true;
 }
 
 function canManageAppointmentTime(ctx) {
@@ -4165,6 +4202,10 @@ exports.recordTenantPayment = functions
       chargeStripeScope: chargeCtx?.scope || "tenant",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    if (paymentKind === "deposit" && bookingRequestId) {
+      await confirmBookingAfterDepositPaid(tenantId, bookingRequestId);
+    }
 
     return {
       ok: true,
@@ -5144,13 +5185,7 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
       );
     }
   } else if (isDecline) {
-    if (!ctx.bookingRequiresApproval) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "This business does not use request approval for bookings."
-      );
-    }
-    if (!canApproveRejectBookingRequests(ctx)) {
+    if (!canApproveRejectBookingRequests(ctx) && !canManageAppointmentTime(ctx)) {
       throw new functions.https.HttpsError(
         "permission-denied",
         "You do not have permission to approve or reject booking requests."

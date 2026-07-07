@@ -34,6 +34,7 @@ Cloud Functions (deploy from `functions/`):
 
 - **Payments** → **Tap to Pay** (always tappable; routes to Stripe Connect or checkout).
 - **First tap:** Apple Tap to Pay Terms & Conditions (via Stripe Terminal reader connect) **before** Stripe Connect onboarding in Safari.
+- **After T&C (first time):** Merchant education — Apple “How to Tap” overlay on iOS 18+, or in-app pages on older iOS. Reopen anytime under **Payments → Tap to Pay settings → How to use Tap to Pay**.
 - T&C is shown once per device; `TapToPayReaderSession` persists acceptance locally.
 - Reader warms up when the app becomes active (signed in, Stripe connected, location configured).
 - Checkout shows processing → approved / declined / timeout and optional share receipt.
@@ -45,4 +46,4 @@ Cloud Functions (deploy from `functions/`):
 
 ## Apple review (still required)
 
-See Apple’s [App Requirements and Review PDF](https://apple.ent.box.com/v/ttpoiappreviewpdf) for education screens, marketing launch assets, admin-only T&C, and submission videos. Phase 2+ items are tracked in product backlog.
+See Apple’s [App Requirements and Review PDF](https://apple.ent.box.com/v/ttpoiappreviewpdf) for marketing launch assets and submission videos. Merchant education (post–T&C + Settings) is implemented in `TapToPayMerchantEducation.swift`.

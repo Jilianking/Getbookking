@@ -37,6 +37,20 @@
       "target": "marketing",
       "public": "web/marketing",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        { "source": "/admin/login", "destination": "/admin/login.html" },
+        { "source": "/admin/welcome", "destination": "/admin/welcome.html" },
+        { "source": "/admin", "destination": "/admin/requests.html" },
+        { "source": "/admin/requests", "destination": "/admin/requests.html" },
+        { "source": "/admin/bugs", "destination": "/admin/bugs.html" },
+        { "source": "/admin/reports", "destination": "/admin/reports.html" },
+        { "source": "/admin/testflight", "destination": "/admin/testflight.html" },
+        { "source": "/admin/settings", "destination": "/admin/settings.html" },
+        { "source": "/beta/login", "destination": "/beta/login.html" },
+        { "source": "/beta/report-bug", "destination": "/beta/report-bug.html" },
+        { "source": "/beta", "destination": "/beta/index.html" },
+        { "source": "/login", "destination": "/login.html" }
+      ],
       "headers": [
         {
           "source": "**",

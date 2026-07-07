@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beta requests — Bookking Admin</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=4" />
+</head>
+<body class="admin-body">
+  <script>
+    if (/\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\.html$/i, '') + location.search + location.hash);
+    }
+  </script>
+  <div class="admin-shell" id="adminShell"><div class="admin-loading" style="padding:48px">Loading admin portal…</div></div>
+
+  <div class="admin-modal-backdrop" id="inviteModal" aria-hidden="true">
+    <div class="admin-modal" role="dialog" aria-labelledby="inviteTitle">
+      <h2 id="inviteTitle">Invite tester</h2>
+      <form id="inviteForm" class="admin-form">
+        <div class="admin-field">
+          <label for="invFirst">First name</label>
+          <input id="invFirst" required />
+        </div>
+        <div class="admin-field">
+          <label for="invLast">Last name</label>
+          <input id="invLast" required />
+        </div>
+        <div class="admin-field">
+          <label for="invEmail">Email</label>
+          <input id="invEmail" type="email" required />
+        </div>
+        <div class="admin-field">
+          <label for="invPlan">Plan</label>
+          <select id="invPlan">
+            <option value="solo">Solo</option>
+            <option value="studio">Studio</option>
+            <option value="shop">Shop</option>
+          </select>
+        </div>
+        <div class="admin-field">
+          <label for="invTeam">Team size</label>
+          <input id="invTeam" type="number" min="1" max="10" value="1" />
+        </div>
+        <div class="admin-field">
+          <label for="invBusiness">Business name</label>
+          <input id="invBusiness" value="Beta tester" />
+        </div>
+        <p class="admin-error" id="inviteError" hidden></p>
+        <div class="admin-modal-actions">
+          <button type="button" class="admin-btn" id="inviteCancel">Cancel</button>
+          <button type="submit" class="admin-btn admin-btn--primary" id="inviteSubmit">Send invite</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="admin-modal-backdrop" id="detailModal" aria-hidden="true">
+    <div class="admin-modal" role="dialog" aria-labelledby="detailTitle" style="max-width:520px">
+      <h2 id="detailTitle">Request details</h2>
+      <div id="detailBody" class="admin-detail-grid"></div>
+      <div class="admin-modal-actions" id="detailActions"></div>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/admin.js?v=5"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script>
+    var activePlan = 'all';
+    var dashboardData = null;
+    var waitlistItems = [];
+
+    function updateSidebarBadges() {
+      document.querySelectorAll('.admin-nav a').forEach(function (link) {
+        var href = link.getAttribute('href') || '';
+        var badge = link.querySelector('.admin-badge');
+        if (href.indexOf('/admin/requests') !== -1 && window.__adminBadges && window.__adminBadges.pending) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'admin-badge';
+            link.appendChild(badge);
+          }
+          badge.textContent = window.__adminBadges.pending;
+        } else if (href.indexOf('/admin/bugs') !== -1 && window.__adminBadges && window.__adminBadges.openBugs) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'admin-badge';
+            link.appendChild(badge);
+          }
+          badge.textContent = window.__adminBadges.openBugs;
+        }
+      });
+    }
+
+    function setInviteError(msg) {
+      var el = document.getElementById('inviteError');
+      el.hidden = !msg;
+      el.textContent = msg || '';
+    }
+
+    function openInviteModal() {
+      document.getElementById('inviteModal').classList.add('is-open');
+      setInviteError('');
+    }
+
+    function closeInviteModal() {
+      document.getElementById('inviteModal').classList.remove('is-open');
+    }
+
+    document.getElementById('inviteCancel').addEventListener('click', closeInviteModal);
+    document.getElementById('inviteModal').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) closeInviteModal();
+    });
+
+    function formatFullDate(value) {
+      if (!value) return '—';
+      var ms;
+      if (value.toDate) ms = value.toDate().getTime();
+      else if (value.seconds) ms = value.seconds * 1000;
+      else ms = new Date(value).getTime();
+      if (!ms || Number.isNaN(ms)) return '—';
+      return new Date(ms).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    function formatPlan(plan) {
+      var p = (plan || '').toString();
+      if (!p) return '—';
+      return p.charAt(0).toUpperCase() + p.slice(1);
+    }
+
+    function formatStatus(status) {
+      var map = {
+        pending: 'Pending',
+        approved: 'Approved',
+        invite_sent: 'Invite sent',
+        active: 'Active',
+        declined: 'Declined'
+      };
+      return map[status] || status || '—';
+    }
+
+    function formatSource(source) {
+      var map = {
+        'testflight-page': 'TestFlight signup page',
+        'admin-invite': 'Admin invite',
+        'admin-provision': 'Admin provision'
+      };
+      return map[source] || source || '—';
+    }
+
+    function detailRow(label, value) {
+      return '<div class="admin-detail-row"><dt>' + BetaAdmin.escapeHtml(label) +
+        '</dt><dd>' + BetaAdmin.escapeHtml(value == null || value === '' ? '—' : String(value)) + '</dd></div>';
+    }
+
+    function findWaitlistItem(id) {
+      for (var i = 0; i < waitlistItems.length; i++) {
+        if (waitlistItems[i].id === id) return waitlistItems[i];
+      }
+      return null;
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.remove('is-open');
+    }
+
+    function openDetailModal(id) {
+      var item = findWaitlistItem(id);
+      if (!item) return;
+      var fullName = ((item.firstName || '') + ' ' + (item.lastName || '')).trim() || 'Request';
+      document.getElementById('detailTitle').textContent = fullName;
+      document.getElementById('detailBody').innerHTML =
+        detailRow('First name', item.firstName) +
+        detailRow('Last name', item.lastName) +
+        detailRow('Email', item.email) +
+        detailRow('Plan', formatPlan(item.plan)) +
+        detailRow('Team size', item.teamSize) +
+        detailRow('Business name', item.businessName) +
+        detailRow('Business type', item.businessTypeLabel || item.businessType) +
+        detailRow('Status', formatStatus(item.status)) +
+        detailRow('Source', formatSource(item.source)) +
+        detailRow('Submitted', formatFullDate(item.createdAt)) +
+        detailRow('Last updated', formatFullDate(item.updatedAt)) +
+        (item.approvedAt ? detailRow('Approved', formatFullDate(item.approvedAt)) : '') +
+        (item.inviteSentAt ? detailRow('Invite sent', formatFullDate(item.inviteSentAt)) : '') +
+        (item.declinedAt ? detailRow('Declined', formatFullDate(item.declinedAt)) : '');
+
+      var actions = document.getElementById('detailActions');
+      if (item.status === 'pending') {
+        actions.innerHTML =
+          '<button type="button" class="admin-btn" id="detailCloseBtn">Close</button>' +
+          '<button type="button" class="admin-btn" id="detailDeclineBtn">Decline</button>' +
+          '<button type="button" class="admin-btn admin-btn--primary" id="detailApproveBtn">Approve</button>';
+        document.getElementById('detailCloseBtn').addEventListener('click', closeDetailModal);
+        document.getElementById('detailDeclineBtn').addEventListener('click', function () {
+          handleDecline(item.id, this);
+        });
+        document.getElementById('detailApproveBtn').addEventListener('click', function () {
+          handleApprove(item.id, this);
+        });
+      } else {
+        actions.innerHTML = '<button type="button" class="admin-btn admin-btn--primary" id="detailCloseBtn">Close</button>';
+        document.getElementById('detailCloseBtn').addEventListener('click', closeDetailModal);
+      }
+
+      document.getElementById('detailModal').classList.add('is-open');
+    }
+
+    document.getElementById('detailModal').addEventListener('click', function (e) {
+      if (e.target === e.currentTarget) closeDetailModal();
+    });
+
+    function renderDashboard() {
+      var main = document.getElementById('adminMain');
+      var stats = dashboardData.stats;
+      var settings = dashboardData.settings;
+      window.__adminBadges = {
+        pending: stats.pending,
+        openBugs: stats.openBugs || 0
+      };
+      updateSidebarBadges();
+
+      var emailBanner = '';
+      var emailConfig = dashboardData.emailConfig || {};
+      if (!emailConfig.resendConfigured) {
+        emailBanner =
+          '<div class="admin-insight" style="margin-bottom:16px">' +
+            '<strong>Resend not configured.</strong> Approve/decline still create accounts, but no email is sent. ' +
+            'Add <code>RESEND_API_KEY</code> to <code>functions/.env.test-app-96812</code> and redeploy functions. ' +
+            'Replies route to <code>' + BetaAdmin.escapeHtml(emailConfig.supportEmail || 'support@getbookking.com') + '</code>. ' +
+            '<a href="/admin/settings">Email setup</a>' +
+          '</div>';
+      }
+
+      main.innerHTML =
+        '<div class="admin-topbar">' +
+          '<div>' +
+            '<h1>Beta requests</h1>' +
+            '<p class="admin-subtitle">Signups close ' + BetaAdmin.escapeHtml(settings.signupsCloseLabel || 'soon') + '</p>' +
+          '</div>' +
+          '<div class="admin-actions">' +
+            '<button type="button" class="admin-btn" id="exportBtn">Export</button>' +
+            '<button type="button" class="admin-btn admin-btn--primary" id="inviteBtn">Invite tester</button>' +
+          '</div>' +
+        '</div>' +
+        emailBanner +
+        '<div class="admin-stats">' +
+          statCard('Pending', stats.pending) +
+          statCard('Active testers', stats.activeTesters) +
+          statCard('Studio signups', stats.studioUsed) +
+          statCard('Shop signups', stats.shopUsed) +
+        '</div>' +
+        '<div class="admin-filters" id="planFilters"></div>' +
+        '<div class="admin-card admin-table-wrap" id="tableWrap"></div>' +
+        '<div class="admin-split" id="splitPanels"></div>';
+
+      renderFilters();
+      renderTable();
+      renderSplitPanels();
+
+      document.getElementById('exportBtn').addEventListener('click', exportCsv);
+      document.getElementById('inviteBtn').addEventListener('click', openInviteModal);
+    }
+
+    function statCard(label, value) {
+      return '<div class="admin-stat-card"><div class="admin-stat-label">' + BetaAdmin.escapeHtml(label) +
+        '</div><div class="admin-stat-value">' + BetaAdmin.escapeHtml(String(value)) + '</div></div>';
+    }
+
+    function renderFilters() {
+      var chips = [
+        { id: 'all', label: 'All ' + waitlistItems.length },
+        { id: 'solo', label: 'Solo' },
+        { id: 'studio', label: 'Studio' },
+        { id: 'shop', label: 'Shop' }
+      ];
+      document.getElementById('planFilters').innerHTML = chips.map(function (chip) {
+        return '<button type="button" class="admin-chip' + (activePlan === chip.id ? ' is-active' : '') +
+          '" data-plan="' + chip.id + '">' + BetaAdmin.escapeHtml(chip.label) + '</button>';
+      }).join('');
+      document.querySelectorAll('.admin-chip').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          activePlan = btn.getAttribute('data-plan');
+          loadWaitlist().then(function () {
+            renderFilters();
+            renderTable();
+          });
+        });
+      });
+    }
+
+    function filteredItems() {
+      if (activePlan === 'all') return waitlistItems;
+      return waitlistItems.filter(function (i) { return i.plan === activePlan; });
+    }
+
+    function renderTable() {
+      var items = filteredItems();
+      var wrap = document.getElementById('tableWrap');
+      if (!items.length) {
+        wrap.innerHTML = '<div class="admin-empty admin-loading">No requests yet.</div>';
+        return;
+      }
+      var rows = items.map(function (item) {
+        var actionCell;
+        if (item.status === 'pending') {
+          actionCell =
+            '<div class="admin-row-actions">' +
+              '<button type="button" class="admin-btn admin-btn--primary" data-approve="' + item.id + '">Approve</button>' +
+              '<button type="button" class="admin-btn" data-decline="' + item.id + '">Decline</button>' +
+            '</div>';
+        } else if (item.status === 'invite_sent' || item.status === 'active' || item.status === 'approved') {
+          actionCell = '<span class="admin-status-pill">Invite sent ✓</span>';
+        } else if (item.status === 'declined') {
+          actionCell = '<span class="admin-list-meta">Declined</span>';
+        } else {
+          actionCell = '<span class="admin-list-meta">' + BetaAdmin.escapeHtml(item.status) + '</span>';
+        }
+        return '<tr class="admin-table-row--clickable" data-request-id="' + item.id + '">' +
+          '<td><div class="admin-requester">' +
+            '<span class="admin-avatar">' + BetaAdmin.initials(item.firstName, item.lastName, item.email) + '</span>' +
+            '<div><strong>' + BetaAdmin.escapeHtml(BetaAdmin.displayName(item.firstName, item.lastName)) + '</strong>' +
+            '<span>' + BetaAdmin.escapeHtml(item.email) + '</span></div></div></td>' +
+          '<td>' + BetaAdmin.escapeHtml(item.businessTypeLabel || item.businessName) + '</td>' +
+          '<td>' + BetaAdmin.timeAgo(item.createdAt) + '</td>' +
+          '<td>' + actionCell + '</td>' +
+        '</tr>';
+      }).join('');
+
+      wrap.innerHTML =
+        '<table class="admin-table"><thead><tr>' +
+          '<th>Requester</th><th>Business</th><th>Submitted</th><th style="text-align:right">Action</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+      wrap.querySelectorAll('[data-approve]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          handleApprove(btn.getAttribute('data-approve'), btn);
+        });
+      });
+      wrap.querySelectorAll('[data-decline]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          handleDecline(btn.getAttribute('data-decline'), btn);
+        });
+      });
+      wrap.querySelectorAll('[data-request-id]').forEach(function (row) {
+        row.addEventListener('click', function () {
+          openDetailModal(row.getAttribute('data-request-id'));
+        });
+      });
+    }
+
+    function renderSplitPanels() {
+      var bugs = dashboardData.recentBugs || [];
+      var reports = dashboardData.recentReports || [];
+      var insight = (reports[0] && reports[0].insight) || dashboardData.settings.weeklyInsight || '';
+
+      document.getElementById('splitPanels').innerHTML =
+        '<section class="admin-panel">' +
+          '<div class="admin-panel-head"><h2>Bug reports</h2><a href="/admin/bugs">View all</a></div>' +
+          '<div class="admin-list">' +
+            (bugs.length ? bugs.map(bugItem).join('') : '<div class="admin-empty">No bug reports yet.</div>') +
+          '</div>' +
+        '</section>' +
+        '<section class="admin-panel">' +
+          '<div class="admin-panel-head"><h2>Weekly reports</h2><a href="/admin/reports">View all</a></div>' +
+          '<div class="admin-list">' +
+            (reports.length ? reports.map(reportItem).join('') : '<div class="admin-empty">No weekly reports yet.</div>') +
+          '</div>' +
+          (insight ? '<div class="admin-insight">✨ Top theme: ' + BetaAdmin.escapeHtml(insight) + '</div>' : '') +
+        '</section>';
+    }
+
+    function bugItem(bug) {
+      return '<div class="admin-list-item">' +
+        '<span class="severity severity--' + BetaAdmin.escapeHtml(bug.severity || 'medium') + '">' +
+          (bug.severity || 'med') + '</span>' +
+        '<div><div class="admin-list-title">' + BetaAdmin.escapeHtml(bug.title) + '</div>' +
+        '<div class="admin-list-meta">' + BetaAdmin.escapeHtml(bug.reporterName || 'Tester') +
+          ' · iOS ' + BetaAdmin.escapeHtml(bug.iosVersion || '—') +
+          ' · ' + BetaAdmin.timeAgo(bug.createdAt) + '</div></div></div>';
+    }
+
+    function reportItem(report) {
+      return '<div class="admin-list-item">' +
+        '<div style="grid-column: span 2"><div class="admin-list-title">' +
+          BetaAdmin.escapeHtml(report.weekLabel || report.title) + '</div>' +
+        '<div class="admin-list-meta">' + (report.submissionCount || 0) + ' submitted</div></div></div>';
+    }
+
+    function showApproveResult(res) {
+      var data = (res && res.data) || {};
+      if (data.emailSent) {
+        alert('Approved. Invite email sent.');
+        return;
+      }
+      var lines = ['Approved. Account created but email was NOT sent (Resend not configured).'];
+      if (data.welcomeUrl) lines.push('Welcome link: ' + data.welcomeUrl);
+      if (data.tempPassword) lines.push('Temporary password: ' + data.tempPassword);
+      lines.push('Share these with the tester manually, or configure Resend in Settings.');
+      alert(lines.join('\n\n'));
+    }
+
+    function handleApprove(id, btn) {
+      btn.disabled = true;
+      BetaAdmin.callCallable(state.fb, state.user, 'approveBetaRequest', { waitlistId: id })
+        .then(function (res) {
+          closeDetailModal();
+          showApproveResult(res);
+          return refreshAll();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          alert(BetaAdmin.callableMessage(err));
+        });
+    }
+
+    function handleDecline(id, btn) {
+      if (!confirm('Decline this beta request and send the decline email?')) return;
+      btn.disabled = true;
+      BetaAdmin.callCallable(state.fb, state.user, 'declineBetaRequest', { waitlistId: id })
+        .then(function (res) {
+          closeDetailModal();
+          var data = (res && res.data) || {};
+          if (data.emailSent) {
+            alert('Declined. Notification email sent.');
+          } else {
+            alert('Declined. No email sent (Resend not configured).');
+          }
+          return refreshAll();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          alert(BetaAdmin.callableMessage(err));
+        });
+    }
+
+    function exportCsv() {
+      var rows = [['First name', 'Last name', 'Email', 'Plan', 'Team size', 'Business', 'Type', 'Status', 'Submitted']];
+      waitlistItems.forEach(function (item) {
+        rows.push([
+          item.firstName, item.lastName, item.email, item.plan, item.teamSize,
+          item.businessName, item.businessType, item.status,
+          item.createdAt && item.createdAt.seconds ? new Date(item.createdAt.seconds * 1000).toISOString() : ''
+        ]);
+      });
+      BetaAdmin.downloadCsv('beta-waitlist.csv', rows);
+    }
+
+    var state = {};
+
+    function loadWaitlist() {
+      var payload = { limit: 200 };
+      if (activePlan !== 'all') payload.plan = activePlan;
+      return BetaAdmin.callCallable(state.fb, state.user, 'listBetaWaitlist', payload).then(function (res) {
+        waitlistItems = (res.data && res.data.items) || [];
+      });
+    }
+
+    function loadDashboard() {
+      return BetaAdmin.callCallable(state.fb, state.user, 'getBetaAdminDashboard').then(function (res) {
+        dashboardData = res.data;
+      });
+    }
+
+    function refreshAll() {
+      return Promise.all([loadDashboard(), loadWaitlist()])
+        .then(renderDashboard)
+        .catch(function (err) {
+          BetaAdmin.showAdminError(BetaAdmin.callableMessage(err));
+        });
+    }
+
+    document.getElementById('inviteForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      setInviteError('');
+      var btn = document.getElementById('inviteSubmit');
+      btn.disabled = true;
+      BetaAdmin.callCallable(state.fb, state.user, 'inviteBetaTesterManual', {
+        firstName: document.getElementById('invFirst').value.trim(),
+        lastName: document.getElementById('invLast').value.trim(),
+        email: document.getElementById('invEmail').value.trim(),
+        plan: document.getElementById('invPlan').value,
+        teamSize: parseInt(document.getElementById('invTeam').value, 10) || 1,
+        businessName: document.getElementById('invBusiness').value.trim()
+      }).then(function () {
+        closeInviteModal();
+        document.getElementById('inviteForm').reset();
+        return refreshAll();
+      }).catch(function (err) {
+        setInviteError(BetaAdmin.callableMessage(err));
+      }).finally(function () {
+        btn.disabled = false;
+      });
+    });
+
+    BetaAdmin.boot('requests')
+      .then(function (ctx) {
+        state = ctx;
+        document.getElementById('adminMain').innerHTML = '<div class="admin-loading">Loading dashboard…</div>';
+        return refreshAll();
+      })
+      .catch(function (err) {
+        var msg = BetaAdmin.callableMessage(err);
+        if (msg.indexOf('permission-denied') !== -1 || msg.indexOf('access') !== -1) {
+          msg = 'You do not have access to the beta admin portal. Sign in with jilianmk70@gmail.com.';
+        }
+        BetaAdmin.showAdminError(
+          msg + ' If this persists on getbookking.com, add getbookking.com under Firebase Authentication → Authorized domains.'
+        );
+      });
+  </script>
+</body>
+</html>

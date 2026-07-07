@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bug reports — Bookking Admin</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=3" />
+</head>
+<body class="admin-body">
+  <div class="admin-shell" id="adminShell"><div class="admin-loading" style="padding:48px">Loading admin portal…</div></div>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/admin.js?v=5"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script>
+    BetaAdmin.boot('bugs').then(function (ctx) {
+      var main = document.getElementById('adminMain');
+      main.innerHTML = '<div class="admin-topbar"><div><h1>Bug reports</h1><p class="admin-subtitle">Triaged from beta testers</p></div></div><div class="admin-card admin-table-wrap" id="tableWrap"><div class="admin-loading">Loading…</div></div>';
+      return BetaAdmin.callCallable(ctx.fb, ctx.user, 'listBetaBugReports', { limit: 200 });
+    }).then(function (res) {
+      var items = (res.data && res.data.items) || [];
+      var wrap = document.getElementById('tableWrap');
+      if (!items.length) {
+        wrap.innerHTML = '<div class="admin-empty admin-loading">No bug reports yet.</div>';
+        return;
+      }
+      wrap.innerHTML = '<table class="admin-table"><thead><tr><th>Severity</th><th>Report</th><th>Status</th><th>Submitted</th></tr></thead><tbody>' +
+        items.map(function (item) {
+          var screenLabel = item.screen ? item.screen.replace(/_/g, ' ') : '';
+          var freqLabel = item.frequency || '';
+          var attachments = item.attachments || [];
+          var attachHtml = attachments.length
+            ? '<div class="admin-list-meta" style="margin-top:8px">' +
+                attachments.map(function (a) {
+                  return '<a href="' + BetaAdmin.escapeHtml(a.url || '#') + '" target="_blank" rel="noopener">' +
+                    BetaAdmin.escapeHtml(a.name || 'Attachment') + '</a>';
+                }).join(' · ') +
+              '</div>'
+            : '';
+          var notesHtml = item.notes
+            ? '<div class="admin-list-meta" style="margin-top:6px;font-style:italic">Notes: ' +
+                BetaAdmin.escapeHtml(item.notes) + '</div>'
+            : '';
+          return '<tr><td><span class="severity severity--' + BetaAdmin.escapeHtml(item.severity || 'medium') + '">' +
+            BetaAdmin.escapeHtml(item.severity || 'med') + '</span></td><td><div class="admin-list-title">' +
+            BetaAdmin.escapeHtml(item.title) + '</div><div class="admin-list-meta">' +
+            BetaAdmin.escapeHtml(item.reporterName || '') + ' · iOS ' + BetaAdmin.escapeHtml(item.iosVersion || '—') +
+            (screenLabel ? ' · ' + BetaAdmin.escapeHtml(screenLabel) : '') +
+            (freqLabel ? ' · ' + BetaAdmin.escapeHtml(freqLabel) : '') +
+            '</div><div class="admin-list-meta" style="margin-top:6px">' + BetaAdmin.escapeHtml(item.stepsToReproduce || item.description || '') +
+            '</div>' + notesHtml + attachHtml +
+            '</td><td><select data-bug-id="' + item.id + '" class="bug-status">' +
+            ['open', 'triaged', 'fixed'].map(function (s) {
+              return '<option value="' + s + '"' + (item.status === s ? ' selected' : '') + '>' + s + '</option>';
+            }).join('') + '</select></td><td>' + BetaAdmin.timeAgo(item.createdAt) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      document.querySelectorAll('.bug-status').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var fb = BetaAdmin.initFirebase();
+          BetaAdmin.callCallable(fb, fb.auth.currentUser, 'updateBetaBugReport', {
+            id: sel.getAttribute('data-bug-id'),
+            status: sel.value
+          }).catch(function (err) { alert(BetaAdmin.callableMessage(err)); });
+        });
+      });
+    }).catch(function (err) {
+      BetaAdmin.showAdminError(BetaAdmin.callableMessage(err));
+    });
+  </script>
+</body>
+</html>

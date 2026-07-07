@@ -12,6 +12,7 @@ struct DashboardView: View {
     var drawerState: DrawerState
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
+    @State private var showTapToPayEducation = false
     @State private var tapToPayAlertMessage: String?
     #endif
 
@@ -170,6 +171,18 @@ struct DashboardView: View {
                 showTapToPaySheet = false
             }
         }
+        .sheet(isPresented: $showTapToPayEducation) {
+            TapToPayMerchantEducationView {
+                showTapToPayEducation = false
+                Task {
+                    await paymentsViewModel.finishMerchantEducationAndContinueTapToPay(
+                        isDemoMode: authViewModel.isDemoMode,
+                        showCheckout: { showTapToPaySheet = true },
+                        showAlert: { tapToPayAlertMessage = $0 }
+                    )
+                }
+            }
+        }
         .alert("Tap to Pay", isPresented: Binding(
             get: { tapToPayAlertMessage != nil },
             set: { if !$0 { tapToPayAlertMessage = nil } }
@@ -211,13 +224,18 @@ struct DashboardView: View {
     private func handleTakePaymentTapped() {
         #if TAP_TO_PAY_ENABLED
         Task {
-            switch await paymentsViewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode) {
-            case .showCheckout:
-                showTapToPaySheet = true
-            case .showAlert(let message):
-                tapToPayAlertMessage = message
-            case .openedConnectInSafari:
-                break
+            let result = await paymentsViewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode)
+            switch result {
+            case .showMerchantEducation:
+                await presentTapToPayMerchantEducationAndContinue()
+            default:
+                paymentsViewModel.applyTapToPayLaunchResult(
+                    result,
+                    isDemoMode: authViewModel.isDemoMode,
+                    showCheckout: { showTapToPaySheet = true },
+                    showAlert: { tapToPayAlertMessage = $0 },
+                    showEducation: { showTapToPayEducation = true }
+                )
             }
         }
         #else
@@ -225,6 +243,23 @@ struct DashboardView: View {
         drawerState.isOpen = false
         #endif
     }
+
+    #if TAP_TO_PAY_ENABLED
+    private func presentTapToPayMerchantEducationAndContinue() async {
+        await TapToPayMerchantEducationFlow.run(
+            showFallbackSheet: { showTapToPayEducation = true },
+            onFinished: {
+                Task {
+                    await paymentsViewModel.finishMerchantEducationAndContinueTapToPay(
+                        isDemoMode: authViewModel.isDemoMode,
+                        showCheckout: { showTapToPaySheet = true },
+                        showAlert: { tapToPayAlertMessage = $0 }
+                    )
+                }
+            }
+        )
+    }
+    #endif
 
     private var recentRequestsCard: some View {
         VStack(alignment: .leading, spacing: 12) {

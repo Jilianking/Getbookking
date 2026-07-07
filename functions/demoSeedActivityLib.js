@@ -20,14 +20,6 @@ function atHour(base, hour, minute = 0) {
   return d;
 }
 
-function formatPreferredTime(date) {
-  const hour = date.getHours();
-  const min = date.getMinutes();
-  const h12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-  const suffix = hour >= 12 ? "PM" : "AM";
-  return `${h12}:${min === 0 ? "00" : String(min).padStart(2, "0")} ${suffix}`;
-}
-
 /** Matches functions/index.js customerDocIdForTenant */
 function customerDocIdForTenant(email, phone) {
   const digits = (phone || "").toString().replace(/\D/g, "");
@@ -940,8 +932,6 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
         customerEmail: person.email.toLowerCase(),
         customerPhone: person.phone,
         serviceName: resolved.serviceName,
-        preferredTime: formatPreferredTime(start),
-        preferredDays: ["Tuesday", "Thursday", "Saturday"].slice(0, 1 + (i % 3)),
         notes: `Demo booking — ${resolved.serviceName}`,
         assignedMemberName: ctx.ownerDisplayName,
         assignedMemberEmail: ctx.ownerEmail || undefined,

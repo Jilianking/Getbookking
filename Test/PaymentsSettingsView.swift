@@ -8,6 +8,9 @@ import SwiftUI
 struct PaymentsSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
     @State private var showReceiptPreferences = false
+    #if TAP_TO_PAY_ENABLED
+    @State private var showTapToPayEducation = false
+    #endif
 
     var body: some View {
         ScrollView {
@@ -16,6 +19,7 @@ struct PaymentsSettingsView: View {
                 if viewModel.canEditTapToPayDisplayName {
                     tapToPayNameSection
                     checkoutOptionsSection
+                    helpSection
                 }
                 #endif
 
@@ -41,6 +45,11 @@ struct PaymentsSettingsView: View {
         #if TAP_TO_PAY_ENABLED
         .navigationDestination(isPresented: $showReceiptPreferences) {
             ReceiptPreferencesView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showTapToPayEducation) {
+            TapToPayMerchantEducationView {
+                showTapToPayEducation = false
+            }
         }
         #endif
     }
@@ -155,6 +164,46 @@ struct PaymentsSettingsView: View {
                 }
             }
         )
+    }
+
+    private var helpSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Help")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppDesign.textSecondary)
+                .padding(.horizontal)
+
+            VStack(spacing: 0) {
+                Button {
+                    Task {
+                        await TapToPayMerchantEducationFlow.runFromSettings {
+                            showTapToPayEducation = true
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("How to use Tap to Pay")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
+                            Text("Contactless cards, Apple Pay, and digital wallets")
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .appCard()
+            .padding(.horizontal)
+        }
     }
     #endif
 }

@@ -37,5 +37,16 @@ service firebase.storage {
                   && request.resource.contentType.matches('image/.*')
                   && canWriteTenantTree(tenantId);
     }
+
+    // Beta bug report attachments (tester uploads to own uid folder).
+    match /betaBugAttachments/{uid}/{uploadId}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                  && request.auth.uid == uid
+                  && request.resource.size < 25 * 1024 * 1024
+                  && (request.resource.contentType.matches('image/.*')
+                      || request.resource.contentType.matches('video/.*')
+                      || request.resource.contentType == 'application/pdf');
+    }
   }
 }

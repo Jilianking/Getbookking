@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Report a bug — Get Bookking Beta</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=4" />
+  <style>
+    .report-page {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+    .report-header { margin-bottom: 20px; }
+    .report-header h1 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 34px;
+      font-weight: 400;
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
+    .report-header .admin-subtitle { margin-bottom: 0; line-height: 1.5; }
+
+    .report-card {
+      background: var(--admin-card);
+      border: 1px solid var(--admin-border);
+      border-radius: 18px;
+      padding: 24px 22px;
+    }
+
+    .report-device-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      border: 1px solid var(--admin-border);
+      border-radius: 999px;
+      background: var(--admin-insight);
+      font-size: 13px;
+      color: var(--admin-muted);
+      margin-bottom: 22px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .report-device-bar:hover { border-color: #D4C9B8; background: #FFF3D4; }
+    .report-device-bar__icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
+    .report-device-bar__text { flex: 1; min-width: 0; line-height: 1.45; }
+    .report-device-bar strong { color: var(--admin-text); font-weight: 600; }
+    .report-device-bar__chev {
+      flex-shrink: 0;
+      color: var(--admin-soft);
+      font-size: 18px;
+      line-height: 1;
+      transform: rotate(90deg);
+    }
+
+    .report-device-edit {
+      margin-bottom: 22px;
+      padding: 18px;
+      border: 1px solid var(--admin-border);
+      border-radius: 14px;
+      background: var(--admin-bg);
+    }
+    .report-device-edit[hidden] { display: none !important; }
+
+    .report-card .admin-form { gap: 22px; }
+    .report-card .admin-field label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--admin-muted);
+      margin-bottom: 8px;
+    }
+    .report-card .admin-field input,
+    .report-card .admin-field select,
+    .report-card .admin-field textarea {
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 15px;
+      border: 1px solid var(--admin-border);
+      background: #fff;
+      width: 100%;
+    }
+    .report-card .admin-field textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+    .report-card .admin-field input:focus,
+    .report-card .admin-field select:focus,
+    .report-card .admin-field textarea:focus {
+      outline: none;
+      border-color: #C4B5A0;
+      box-shadow: 0 0 0 3px rgba(26, 20, 16, 0.06);
+    }
+
+    .report-segments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .report-segments .admin-chip {
+      flex: 1 1 calc(50% - 5px);
+      min-width: 0;
+      text-align: center;
+      padding: 12px 14px;
+      font-size: 13px;
+      background: transparent;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .report-segments .admin-chip.is-active {
+      background: var(--admin-dark);
+      border-color: var(--admin-dark);
+      color: #fff;
+    }
+    #severityGroup .admin-chip--high.is-active {
+      background: var(--admin-high);
+      border-color: #FECACA;
+      color: var(--admin-high-text);
+    }
+    #severityGroup .admin-chip--low.is-active {
+      background: var(--admin-low);
+      border-color: #D1D5DB;
+      color: var(--admin-low-text);
+    }
+    #frequencyGroup .admin-chip--always.is-active {
+      background: var(--admin-med);
+      border-color: #FDE68A;
+      color: var(--admin-med-text);
+    }
+
+    .report-upload {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 128px;
+      border: 1.5px dashed var(--admin-border);
+      border-radius: 14px;
+      padding: 24px 20px;
+      text-align: center;
+      color: var(--admin-muted);
+      background: var(--admin-bg);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .report-upload:hover,
+    .report-upload.is-dragover {
+      border-color: #C4B5A0;
+      background: #FFF8E6;
+    }
+    .report-upload.is-disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .report-upload__icon {
+      width: 36px;
+      height: 36px;
+      color: var(--admin-soft);
+    }
+    .report-upload__title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--admin-text);
+    }
+    .report-upload__hint { font-size: 13px; color: var(--admin-soft); }
+
+    .report-file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .report-file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--admin-border);
+      border-radius: 12px;
+      background: #fff;
+      font-size: 13px;
+    }
+    .report-file-item__name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+      color: var(--admin-text);
+    }
+    .report-file-item__meta { color: var(--admin-soft); flex-shrink: 0; }
+    .report-file-item__remove {
+      border: none;
+      background: none;
+      color: var(--admin-muted);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .report-file-item__remove:hover { color: var(--admin-high-text); }
+
+    .report-submit {
+      width: 100%;
+      justify-content: center;
+      padding: 16px 24px;
+      font-size: 15px;
+      margin-top: 4px;
+    }
+
+    .report-success {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--admin-success-bg);
+      color: var(--admin-success-text);
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .report-card .admin-error { margin-bottom: 16px; }
+    .req { color: var(--admin-high-text); }
+    .report-optional { font-weight: 400; color: var(--admin-soft); }
+
+    @media (max-width: 640px) {
+      .report-page { padding-bottom: 32px; }
+      .report-segments .admin-chip { flex: 1 1 100%; }
+      .report-card { padding: 20px 18px; }
+    }
+  </style>
+</head>
+<body class="admin-body">
+  <script>
+    if (/\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\.html$/i, '') + location.search + location.hash);
+    }
+  </script>
+  <div class="report-page" id="reportApp">
+    <div class="admin-loading">Loading…</div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/beta.js?v=2"></script>
+  <script src="/assets/firebase-loader.js?v=2"></script>
+  <script>
+    (function () {
+      var state = null;
+      var severity = 'medium';
+      var frequency = 'always';
+      var deviceEditOpen = false;
+      var selectedFiles = [];
+
+      var UPLOAD_ICON =
+        '<svg class="report-upload__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+          '<rect x="3" y="3" width="18" height="18" rx="3" />' +
+          '<circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />' +
+          '<path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round" />' +
+        '</svg>';
+
+      var SCREENS = [
+        { value: 'dashboard', label: 'Dashboard' },
+        { value: 'booking', label: 'Booking' },
+        { value: 'calendar', label: 'Calendar' },
+        { value: 'clients', label: 'Clients' },
+        { value: 'checkout', label: 'Checkout / Payment' },
+        { value: 'messages', label: 'Messages' },
+        { value: 'insights', label: 'Insights' },
+        { value: 'design', label: 'Design' },
+        { value: 'settings', label: 'Settings' },
+        { value: 'other', label: 'Other' }
+      ];
+
+      function renderForm() {
+        var detected = BetaPortal.detectDeviceInfo();
+        document.getElementById('reportApp').innerHTML =
+          '<div class="admin-brand" style="margin-bottom:20px;padding:0">' +
+            '<a href="/beta" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit">' +
+              '<img src="/assets/brand/logo-dark-128.png?v=8" alt="" width="36" height="36" />' +
+              '<div class="admin-brand-text">Bookking</div>' +
+              '<span class="admin-pill">Beta</span>' +
+            '</a>' +
+          '</div>' +
+          '<div class="report-header">' +
+            '<h1>Report a bug</h1>' +
+            '<p class="admin-subtitle">The more detail you give, the faster we can fix it. Takes about a minute.</p>' +
+          '</div>' +
+          '<p class="report-success" id="submitSuccess" hidden>Bug report submitted. Thank you!</p>' +
+          '<div class="report-card">' +
+            '<p class="admin-error" id="formError" hidden></p>' +
+            '<div class="report-device-bar" id="deviceBar" role="button" tabindex="0">' +
+              '<span class="report-device-bar__icon" aria-hidden="true">📱</span>' +
+              '<span class="report-device-bar__text">Auto-detected: <strong id="deviceSummary">' + deviceSummaryText(detected) + '</strong> — tap to edit if wrong</span>' +
+              '<span class="report-device-bar__chev" aria-hidden="true">›</span>' +
+            '</div>' +
+            '<div class="report-device-edit" id="deviceEdit" hidden>' +
+              '<div class="admin-form">' +
+                '<div class="admin-field"><label for="deviceModel">Device</label><input id="deviceModel" value="' + BetaPortal.escapeHtml(detected.deviceModel) + '" placeholder="iPhone 15 Pro" /></div>' +
+                '<div class="admin-field"><label for="iosVersion">iOS version</label><input id="iosVersion" value="' + BetaPortal.escapeHtml(detected.iosVersion) + '" placeholder="18.5" /></div>' +
+                '<div class="admin-field"><label for="appVersion">App version</label><input id="appVersion" value="' + BetaPortal.escapeHtml(detected.appVersion) + '" placeholder="0.9.2" /></div>' +
+                '<div class="admin-field"><label for="buildNumber">Build</label><input id="buildNumber" value="' + BetaPortal.escapeHtml(detected.buildNumber) + '" placeholder="47" /></div>' +
+              '</div>' +
+            '</div>' +
+            '<form id="bugForm" class="admin-form">' +
+              '<div class="admin-field"><label for="title">What went wrong? <span class="req">*</span></label>' +
+                '<input id="title" required placeholder="Payment screen freezes when I tap confirm" /></div>' +
+              '<div class="admin-field"><label for="screen">Where in the app did it happen? <span class="req">*</span></label>' +
+                '<select id="screen" required>' +
+                  '<option value="">Select a screen…</option>' +
+                  SCREENS.map(function (s) {
+                    return '<option value="' + s.value + '">' + BetaPortal.escapeHtml(s.label) + '</option>';
+                  }).join('') +
+                '</select></div>' +
+              '<div class="admin-field"><label for="steps">Steps to reproduce <span class="req">*</span></label>' +
+                '<textarea id="steps" placeholder="1. Open a client booking&#10;2. Tap Charge card&#10;3. Tap confirm — screen freezes"></textarea></div>' +
+              '<div class="admin-field"><label for="notes">Additional notes <span class="report-optional">(optional)</span></label>' +
+                '<textarea id="notes" placeholder="Expected behavior, workarounds, or anything else that might help"></textarea></div>' +
+              '<div class="admin-field"><label>How bad is it? <span class="req">*</span></label>' +
+                '<div class="report-segments" id="severityGroup">' +
+                  '<button type="button" class="admin-chip admin-chip--high" data-severity="high">Can\'t use the app</button>' +
+                  '<button type="button" class="admin-chip admin-chip--medium is-active" data-severity="medium">Annoying but works</button>' +
+                  '<button type="button" class="admin-chip admin-chip--low" data-severity="low">Minor / cosmetic</button>' +
+                '</div></div>' +
+              '<div class="admin-field"><label>Did it happen more than once?</label>' +
+                '<div class="report-segments" id="frequencyGroup">' +
+                  '<button type="button" class="admin-chip admin-chip--always is-active" data-frequency="always">Every time</button>' +
+                  '<button type="button" class="admin-chip" data-frequency="sometimes">Sometimes</button>' +
+                  '<button type="button" class="admin-chip" data-frequency="once">Just once</button>' +
+                '</div></div>' +
+              '<div class="admin-field"><label>Screenshot or screen recording</label>' +
+                '<input type="file" id="attachmentInput" accept="image/*,video/*,application/pdf" multiple hidden />' +
+                '<div class="report-upload" id="uploadZone" role="button" tabindex="0">' +
+                  UPLOAD_ICON +
+                  '<span class="report-upload__title">Screenshot or screen recording</span>' +
+                  '<span class="report-upload__hint" id="uploadHint">Tap to choose or drop up to ' + BetaPortal.MAX_ATTACHMENTS + ' files (images, video, PDF · max 25 MB each)</span>' +
+                '</div>' +
+                '<div class="report-file-list" id="fileList"></div></div>' +
+              '<button type="submit" class="admin-btn admin-btn--primary report-submit" id="submitBtn">Submit bug report</button>' +
+            '</form>' +
+          '</div>';
+
+        document.getElementById('deviceBar').addEventListener('click', toggleDeviceEdit);
+        document.getElementById('deviceBar').addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleDeviceEdit();
+          }
+        });
+
+        document.querySelectorAll('#severityGroup .admin-chip').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            severity = btn.getAttribute('data-severity');
+            document.querySelectorAll('#severityGroup .admin-chip').forEach(function (b) {
+              b.classList.toggle('is-active', b === btn);
+            });
+          });
+        });
+
+        document.querySelectorAll('#frequencyGroup .admin-chip').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            frequency = btn.getAttribute('data-frequency');
+            document.querySelectorAll('#frequencyGroup .admin-chip').forEach(function (b) {
+              b.classList.toggle('is-active', b === btn);
+            });
+          });
+        });
+
+        bindUploadHandlers();
+        renderFileList();
+        document.getElementById('bugForm').addEventListener('submit', onSubmit);
+      }
+
+      function bindUploadHandlers() {
+        var zone = document.getElementById('uploadZone');
+        var input = document.getElementById('attachmentInput');
+
+        zone.addEventListener('click', function () {
+          if (selectedFiles.length >= BetaPortal.MAX_ATTACHMENTS) return;
+          input.click();
+        });
+        zone.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            zone.click();
+          }
+        });
+
+        input.addEventListener('change', function () {
+          addFiles(input.files);
+          input.value = '';
+        });
+
+        ['dragenter', 'dragover'].forEach(function (ev) {
+          zone.addEventListener(ev, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.add('is-dragover');
+          });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+          zone.addEventListener(ev, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            zone.classList.remove('is-dragover');
+          });
+        });
+        zone.addEventListener('drop', function (e) {
+          addFiles(e.dataTransfer && e.dataTransfer.files);
+        });
+      }
+
+      function addFiles(fileList) {
+        if (!fileList || !fileList.length) return;
+        showError('');
+        var added = 0;
+        Array.prototype.forEach.call(fileList, function (file) {
+          if (selectedFiles.length >= BetaPortal.MAX_ATTACHMENTS) return;
+          var err = BetaPortal.validateAttachmentFile(file);
+          if (err) {
+            showError(err);
+            return;
+          }
+          var duplicate = selectedFiles.some(function (f) {
+            return f.name === file.name && f.size === file.size;
+          });
+          if (duplicate) return;
+          selectedFiles.push(file);
+          added += 1;
+        });
+        if (added) showError('');
+        renderFileList();
+      }
+
+      function removeFile(index) {
+        selectedFiles.splice(index, 1);
+        renderFileList();
+      }
+
+      function renderFileList() {
+        var list = document.getElementById('fileList');
+        var zone = document.getElementById('uploadZone');
+        var hint = document.getElementById('uploadHint');
+        if (!list || !zone) return;
+
+        if (selectedFiles.length >= BetaPortal.MAX_ATTACHMENTS) {
+          zone.classList.add('is-disabled');
+          hint.textContent = 'Maximum ' + BetaPortal.MAX_ATTACHMENTS + ' files attached. Remove one to add another.';
+        } else {
+          zone.classList.remove('is-disabled');
+          hint.textContent = selectedFiles.length
+            ? 'Tap to add another file (' + selectedFiles.length + '/' + BetaPortal.MAX_ATTACHMENTS + ')'
+            : 'Tap to choose or drop up to ' + BetaPortal.MAX_ATTACHMENTS + ' files (images, video, PDF · max 25 MB each)';
+        }
+
+        list.innerHTML = selectedFiles.map(function (file, index) {
+          return '<div class="report-file-item">' +
+            '<span class="report-file-item__name">' + BetaPortal.escapeHtml(file.name) + '</span>' +
+            '<span class="report-file-item__meta">' + BetaPortal.formatFileSize(file.size) + '</span>' +
+            '<button type="button" class="report-file-item__remove" data-remove-index="' + index + '" aria-label="Remove ' + BetaPortal.escapeHtml(file.name) + '">×</button>' +
+          '</div>';
+        }).join('');
+
+        list.querySelectorAll('[data-remove-index]').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            removeFile(parseInt(btn.getAttribute('data-remove-index'), 10));
+          });
+        });
+      }
+
+      function deviceSummaryText(info) {
+        var parts = [];
+        if (info.deviceModel) parts.push(info.deviceModel);
+        if (info.iosVersion) parts.push('iOS ' + info.iosVersion);
+        if (info.appVersion) {
+          var app = 'App v' + info.appVersion;
+          if (info.buildNumber) app += ' (Build ' + info.buildNumber + ')';
+          parts.push(app);
+        }
+        return parts.length ? parts.join(' · ') : 'Unknown device — tap to add details';
+      }
+
+      function updateDeviceSummary() {
+        var summary = deviceSummaryText({
+          deviceModel: document.getElementById('deviceModel').value.trim(),
+          iosVersion: document.getElementById('iosVersion').value.trim(),
+          appVersion: document.getElementById('appVersion').value.trim(),
+          buildNumber: document.getElementById('buildNumber').value.trim()
+        });
+        document.getElementById('deviceSummary').textContent = summary;
+      }
+
+      function toggleDeviceEdit() {
+        deviceEditOpen = !deviceEditOpen;
+        document.getElementById('deviceEdit').hidden = !deviceEditOpen;
+        if (deviceEditOpen && !document.getElementById('deviceEdit').dataset.bound) {
+          document.getElementById('deviceEdit').dataset.bound = '1';
+          ['deviceModel', 'iosVersion', 'appVersion', 'buildNumber'].forEach(function (id) {
+            document.getElementById(id).addEventListener('input', updateDeviceSummary);
+          });
+        }
+      }
+
+      function showError(msg) {
+        var el = document.getElementById('formError');
+        if (!el) return;
+        el.hidden = !msg;
+        el.textContent = msg || '';
+      }
+
+      function onSubmit(e) {
+        e.preventDefault();
+        showError('');
+        var title = document.getElementById('title').value.trim();
+        var screen = document.getElementById('screen').value;
+        var steps = document.getElementById('steps').value.trim();
+        if (!title) {
+          showError('Describe what went wrong.');
+          return;
+        }
+        if (!screen) {
+          showError('Select where in the app it happened.');
+          return;
+        }
+        if (!steps) {
+          showError('Add steps to reproduce, or describe what you were doing.');
+          return;
+        }
+
+        var btn = document.getElementById('submitBtn');
+        var originalLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = selectedFiles.length ? 'Uploading files…' : 'Submitting…';
+
+        function submitReport(attachments) {
+          btn.textContent = 'Submitting…';
+          return BetaPortal.callCallable(state.fb, state.user, 'submitBetaBugReport', {
+            title: title,
+            screen: screen,
+            stepsToReproduce: steps,
+            description: steps,
+            notes: document.getElementById('notes').value.trim(),
+            severity: severity,
+            frequency: frequency,
+            deviceModel: document.getElementById('deviceModel').value.trim(),
+            iosVersion: document.getElementById('iosVersion').value.trim(),
+            appVersion: document.getElementById('appVersion').value.trim(),
+            buildNumber: document.getElementById('buildNumber').value.trim(),
+            attachments: attachments || []
+          });
+        }
+
+        var uploadPromise = selectedFiles.length
+          ? BetaPortal.uploadBugAttachments(state.fb, state.user, selectedFiles)
+          : Promise.resolve([]);
+
+        uploadPromise
+          .then(function (attachments) { return submitReport(attachments); })
+          .then(function () {
+            document.getElementById('submitSuccess').hidden = false;
+            document.getElementById('bugForm').reset();
+            selectedFiles = [];
+            renderFileList();
+            severity = 'medium';
+            frequency = 'always';
+            document.querySelectorAll('#severityGroup .admin-chip').forEach(function (b) {
+              b.classList.toggle('is-active', b.getAttribute('data-severity') === 'medium');
+            });
+            document.querySelectorAll('#frequencyGroup .admin-chip').forEach(function (b) {
+              b.classList.toggle('is-active', b.getAttribute('data-frequency') === 'always');
+            });
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+            showError(BetaPortal.callableMessage(err));
+          });
+      }
+
+      BetaPortal.requireTester().then(function (ctx) {
+        state = ctx;
+        renderForm();
+      }).catch(function (err) {
+        document.getElementById('reportApp').innerHTML =
+          '<p class="admin-error">' + BetaPortal.escapeHtml(BetaPortal.callableMessage(err)) + '</p>' +
+          '<p style="margin-top:12px"><a class="admin-btn" href="' + BetaPortal.loginUrl('/beta/report-bug') + '">Sign in</a></p>';
+      });
+    })();
+  </script>
+</body>
+</html>

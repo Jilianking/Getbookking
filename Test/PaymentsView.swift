@@ -15,6 +15,7 @@ struct PaymentsView: View {
     @State private var showManualPaymentSheet = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
+    @State private var showTapToPayEducation = false
     @State private var tapToPayAlertMessage: String?
     #endif
     @State private var showWithdrawSheet = false
@@ -108,6 +109,18 @@ struct PaymentsView: View {
                     showTapToPaySheet = false
                 }
             }
+            .sheet(isPresented: $showTapToPayEducation) {
+                TapToPayMerchantEducationView {
+                    showTapToPayEducation = false
+                    Task {
+                        await viewModel.finishMerchantEducationAndContinueTapToPay(
+                            isDemoMode: authViewModel.isDemoMode,
+                            showCheckout: { showTapToPaySheet = true },
+                            showAlert: { tapToPayAlertMessage = $0 }
+                        )
+                    }
+                }
+            }
             .alert("Tap to Pay", isPresented: Binding(
                 get: { tapToPayAlertMessage != nil },
                 set: { if !$0 { tapToPayAlertMessage = nil } }
@@ -154,15 +167,35 @@ struct PaymentsView: View {
 
     private func handleTapToPayTapped() {
         Task {
-            switch await viewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode) {
-            case .showCheckout:
-                showTapToPaySheet = true
-            case .showAlert(let message):
-                tapToPayAlertMessage = message
-            case .openedConnectInSafari:
-                break
+            let result = await viewModel.launchTapToPayFlow(isDemoMode: authViewModel.isDemoMode)
+            switch result {
+            case .showMerchantEducation:
+                await presentTapToPayMerchantEducationAndContinue()
+            default:
+                viewModel.applyTapToPayLaunchResult(
+                    result,
+                    isDemoMode: authViewModel.isDemoMode,
+                    showCheckout: { showTapToPaySheet = true },
+                    showAlert: { tapToPayAlertMessage = $0 },
+                    showEducation: { showTapToPayEducation = true }
+                )
             }
         }
+    }
+
+    private func presentTapToPayMerchantEducationAndContinue() async {
+        await TapToPayMerchantEducationFlow.run(
+            showFallbackSheet: { showTapToPayEducation = true },
+            onFinished: {
+                Task {
+                    await viewModel.finishMerchantEducationAndContinueTapToPay(
+                        isDemoMode: authViewModel.isDemoMode,
+                        showCheckout: { showTapToPaySheet = true },
+                        showAlert: { tapToPayAlertMessage = $0 }
+                    )
+                }
+            }
+        )
     }
     #endif
 

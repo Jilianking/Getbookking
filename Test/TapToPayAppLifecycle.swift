@@ -40,6 +40,8 @@ enum TapToPayAppLifecycle {
 
         await syncConnectStatusForTapToPay()
 
+        TapToPayTerminalManager.shared.prepareTerminalSDK()
+
         let store = TapToPayLocationStore.shared
         var prepareData: [String: Any]?
 

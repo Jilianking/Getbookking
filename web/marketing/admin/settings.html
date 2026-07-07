@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — Bookking Admin</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=4" />
+  <style>
+    .settings-grid { display: grid; gap: 16px; }
+    .settings-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--admin-soft);
+      margin: 8px 0 12px;
+    }
+    .settings-preview {
+      margin-top: 10px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--admin-bg);
+      border: 1px solid var(--admin-border);
+      font-size: 13px;
+      color: var(--admin-muted);
+      line-height: 1.55;
+    }
+    .settings-preview strong { color: var(--admin-text); }
+    .settings-preview ol { margin: 8px 0 8px 18px; }
+    .settings-preview li { margin-bottom: 4px; }
+    .settings-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  </style>
+</head>
+<body class="admin-body">
+  <div class="admin-shell" id="adminShell"><div class="admin-loading" style="padding:48px">Loading admin portal…</div></div>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/admin.js?v=5"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script>
+    var fb;
+    var adminUser;
+    var loadedSettings = {};
+
+    var EMAIL_DEFAULTS = {
+      approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
+      approvalEmailIntro: "Good news — you've been approved for the Get Bookking iOS beta.\n\nOne quick step before anything works: your account isn't fully active until you finish setup.",
+      approvalEmailPortalNote: "Once you're in, your beta portal is where you'll submit quick weekly reports and flag any bugs — it takes about two minutes a week, and it's how you keep your beta spot active.",
+      approvalEmailClosing: "Your temporary password expires in 7 days, so it's worth doing now.\n\nQuestions? Just reply to this email.\n\nWelcome aboard,",
+      declineEmailSubject: "Get Bookking beta — update on your request",
+      declineEmailBody: "Thank you for applying to the Get Bookking iOS beta — we really appreciate you taking the time.\n\nThis round filled up quickly and spots were limited, so we weren't able to include everyone. We've kept you on the waitlist: if a spot opens up, or when we expand the beta, you'll be one of the first to hear.\n\nYou don't need to do anything — we'll email you the moment there's room.\n\nThanks again for wanting to be part of this early. It means a lot."
+    };
+
+    function settingOrDefault(key, value) {
+      var v = (value || '').toString().trim();
+      return v || EMAIL_DEFAULTS[key] || '';
+    }
+
+    function renderApprovalPreview() {
+      var intro = document.getElementById('approvalEmailIntro').value.trim() || EMAIL_DEFAULTS.approvalEmailIntro;
+      var portal = document.getElementById('approvalEmailPortalNote').value.trim() || EMAIL_DEFAULTS.approvalEmailPortalNote;
+      var closing = document.getElementById('approvalEmailClosing').value.trim() || EMAIL_DEFAULTS.approvalEmailClosing;
+      document.getElementById('approvalPreview').innerHTML =
+        '<p><strong>Hi Jordan,</strong></p>' +
+        intro.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
+        '<ol>' +
+          '<li>Open <strong>your setup link</strong> and sign in with <strong>jordan@example.com</strong> and temporary password: <strong>••••••••</strong></li>' +
+          '<li>You&rsquo;ll be prompted to choose your own password — your account isn&rsquo;t fully active until you do</li>' +
+          '<li>Accept your TestFlight invite (arriving separately from Apple) to install the app</li>' +
+        '</ol>' +
+        portal.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
+        closing.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
+        '<p><strong>Get Bookking</strong></p>';
+    }
+
+    function renderDeclinePreview() {
+      var body = document.getElementById('declineEmailBody').value.trim() || EMAIL_DEFAULTS.declineEmailBody;
+      document.getElementById('declinePreview').innerHTML =
+        '<p><strong>Hi Jordan,</strong></p>' +
+        body.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
+        '<p><strong>Get Bookking</strong></p>';
+    }
+
+    BetaAdmin.boot('settings').then(function (ctx) {
+      fb = ctx.fb;
+      adminUser = ctx.user;
+      document.getElementById('adminMain').innerHTML =
+        '<div class="admin-topbar"><div><h1>Settings</h1><p class="admin-subtitle">Beta program configuration</p></div></div>' +
+        '<div class="settings-grid">' +
+          '<div class="admin-card" style="padding:20px"><form id="generalForm" class="admin-form">' +
+            '<div class="settings-section-title">General</div>' +
+            '<div class="admin-field"><label for="signupsCloseLabel">Signups urgency label</label>' +
+              '<input id="signupsCloseLabel" placeholder="Jul 24" />' +
+              '<p class="admin-list-meta" style="margin-top:6px">Shown on admin requests (e.g. &ldquo;Signups close Jul 24&rdquo;). Marketing only.</p></div>' +
+            '<div class="admin-field"><label for="contactEmail">Beta support email (Reply-To)</label>' +
+              '<input id="contactEmail" type="email" placeholder="support@getbookking.com" /></div>' +
+            '<div class="admin-field"><label for="weeklyInsight">Dashboard insight snippet</label>' +
+              '<input id="weeklyInsight" placeholder="testers want SMS booking reminders" /></div>' +
+            '<div class="settings-actions">' +
+              '<button type="submit" class="admin-btn admin-btn--primary">Save general</button>' +
+              '<span id="generalSaved" class="admin-list-meta" hidden>Saved.</span>' +
+            '</div>' +
+          '</form></div>' +
+
+          '<div class="admin-card" style="padding:20px" id="emailSetupCard">' +
+            '<div class="settings-section-title">Email delivery</div>' +
+            '<p class="admin-list-meta" id="emailStatusLine">Checking…</p>' +
+            '<p class="admin-list-meta" style="margin-top:8px;line-height:1.6">Approve and decline emails send via Resend when configured. Replies go to the support email above.</p>' +
+          '</div>' +
+
+          '<div class="admin-card" style="padding:20px"><form id="emailForm" class="admin-form">' +
+            '<div class="settings-section-title">Approval email</div>' +
+            '<div class="admin-field"><label for="approvalEmailSubject">Subject</label>' +
+              '<input id="approvalEmailSubject" /></div>' +
+            '<div class="admin-field"><label for="approvalEmailIntro">Opening message</label>' +
+              '<textarea id="approvalEmailIntro" rows="4"></textarea>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — before the setup steps.</p></div>' +
+            '<div class="settings-preview">' +
+              '<strong>Always included automatically:</strong>' +
+              '<ol>' +
+                '<li>Setup link + email + temporary password</li>' +
+                '<li>Prompt to choose a new password (required before beta portal access)</li>' +
+                '<li>TestFlight install step</li>' +
+              '</ol>' +
+            '</div>' +
+            '<div class="admin-field"><label for="approvalEmailPortalNote">Beta portal note</label>' +
+              '<textarea id="approvalEmailPortalNote" rows="3"></textarea></div>' +
+            '<div class="admin-field"><label for="approvalEmailClosing">Closing</label>' +
+              '<textarea id="approvalEmailClosing" rows="4"></textarea>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Signature is always <strong>Get Bookking</strong>. Temp password expires in 7 days.</p></div>' +
+            '<div class="admin-field"><label>Preview</label><div class="settings-preview" id="approvalPreview"></div></div>' +
+
+            '<div class="settings-section-title" style="margin-top:24px">Decline email</div>' +
+            '<div class="admin-field"><label for="declineEmailSubject">Subject</label>' +
+              '<input id="declineEmailSubject" /></div>' +
+            '<div class="admin-field"><label for="declineEmailBody">Message</label>' +
+              '<textarea id="declineEmailBody" rows="8"></textarea>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — signature is always <strong>Get Bookking</strong>.</p></div>' +
+            '<div class="admin-field"><label>Preview</label><div class="settings-preview" id="declinePreview"></div></div>' +
+            '<div class="settings-actions">' +
+              '<button type="submit" class="admin-btn admin-btn--primary">Save email templates</button>' +
+              '<span id="emailSaved" class="admin-list-meta" hidden>Saved.</span>' +
+            '</div>' +
+          '</form></div>' +
+
+          '<div class="admin-card" style="padding:20px">' +
+            '<div class="settings-section-title">Enrollment</div>' +
+            '<p class="admin-list-meta" style="line-height:1.6">Waitlist signups are unlimited. TestFlight shows <strong>Limited spots</strong> as marketing urgency. Approve any pending request — no slot caps. Testers must finish setup (temp password → new password) before the beta portal unlocks.</p>' +
+          '</div>' +
+
+          '<div class="admin-card" style="padding:20px">' +
+            '<div class="settings-section-title">Admin access</div>' +
+            '<p class="admin-list-meta">Set <code>BETA_ADMIN_UIDS</code> in <code>functions/.env.test-app-96812</code>, redeploy functions, then sign in at <a href="/admin/login">/admin/login</a>.</p>' +
+          '</div>' +
+        '</div>';
+
+      ['approvalEmailIntro', 'approvalEmailPortalNote', 'approvalEmailClosing', 'declineEmailBody'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', function () {
+          renderApprovalPreview();
+          renderDeclinePreview();
+        });
+      });
+
+      return BetaAdmin.callCallable(fb, adminUser, 'getBetaPlatformSettings');
+    }).then(function (res) {
+      loadedSettings = (res.data && res.data.settings) || {};
+      document.getElementById('signupsCloseLabel').value = loadedSettings.signupsCloseLabel || '';
+      document.getElementById('contactEmail').value = loadedSettings.contactEmail || 'support@getbookking.com';
+      document.getElementById('weeklyInsight').value = loadedSettings.weeklyInsight || '';
+      document.getElementById('approvalEmailSubject').value = settingOrDefault('approvalEmailSubject', loadedSettings.approvalEmailSubject);
+      document.getElementById('approvalEmailIntro').value = settingOrDefault('approvalEmailIntro', loadedSettings.approvalEmailIntro);
+      document.getElementById('approvalEmailPortalNote').value = settingOrDefault('approvalEmailPortalNote', loadedSettings.approvalEmailPortalNote);
+      document.getElementById('approvalEmailClosing').value = settingOrDefault('approvalEmailClosing', loadedSettings.approvalEmailClosing);
+      document.getElementById('declineEmailSubject').value = settingOrDefault('declineEmailSubject', loadedSettings.declineEmailSubject);
+      document.getElementById('declineEmailBody').value = settingOrDefault('declineEmailBody', loadedSettings.declineEmailBody);
+      renderApprovalPreview();
+      renderDeclinePreview();
+      return BetaAdmin.callCallable(fb, adminUser, 'getBetaEmailStatus');
+    }).then(function (res) {
+      var cfg = (res.data) || {};
+      var line = document.getElementById('emailStatusLine');
+      if (cfg.resendConfigured) {
+        line.innerHTML = '<strong style="color:var(--admin-success-text)">Resend connected.</strong> Sends from ' +
+          BetaAdmin.escapeHtml(cfg.from || '') + ' · Reply-To ' + BetaAdmin.escapeHtml(cfg.supportEmail || '');
+      } else {
+        line.innerHTML = '<strong style="color:#b42318">Resend not connected.</strong> Approve/decline still work but emails are skipped until <code>RESEND_API_KEY</code> is set in functions env.';
+      }
+    }).then(function () {
+      document.getElementById('generalForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        BetaAdmin.callCallable(fb, adminUser, 'updateBetaPlatformSettings', {
+          signupsCloseLabel: document.getElementById('signupsCloseLabel').value.trim(),
+          contactEmail: document.getElementById('contactEmail').value.trim(),
+          weeklyInsight: document.getElementById('weeklyInsight').value.trim()
+        }).then(function () {
+          var saved = document.getElementById('generalSaved');
+          saved.hidden = false;
+          setTimeout(function () { saved.hidden = true; }, 2000);
+        }).catch(function (err) { alert(BetaAdmin.callableMessage(err)); });
+      });
+
+      document.getElementById('emailForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        BetaAdmin.callCallable(fb, adminUser, 'updateBetaPlatformSettings', {
+          approvalEmailSubject: document.getElementById('approvalEmailSubject').value.trim(),
+          approvalEmailIntro: document.getElementById('approvalEmailIntro').value.trim(),
+          approvalEmailPortalNote: document.getElementById('approvalEmailPortalNote').value.trim(),
+          approvalEmailClosing: document.getElementById('approvalEmailClosing').value.trim(),
+          declineEmailSubject: document.getElementById('declineEmailSubject').value.trim(),
+          declineEmailBody: document.getElementById('declineEmailBody').value.trim()
+        }).then(function () {
+          var saved = document.getElementById('emailSaved');
+          saved.hidden = false;
+          setTimeout(function () { saved.hidden = true; }, 2000);
+        }).catch(function (err) { alert(BetaAdmin.callableMessage(err)); });
+      });
+    }).catch(function (err) {
+      BetaAdmin.showAdminError(BetaAdmin.callableMessage(err));
+    });
+  </script>
+</body>
+</html>

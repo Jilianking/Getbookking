@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome — Get Bookking Beta</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/legal.css" />
+  <style>
+    .welcome-wrap { max-width: 460px; margin: 48px auto; padding: 0 20px; }
+    .welcome-card { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px; }
+    .welcome-card h1 { font-family: 'Instrument Serif', serif; font-size: 28px; font-weight: 400; margin-bottom: 8px; }
+    .welcome-card p { color: var(--text-secondary); font-size: 14px; margin-bottom: 18px; }
+    .welcome-card label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .welcome-card input { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; font: inherit; margin-bottom: 14px; }
+    .welcome-btn { width: 100%; border: none; border-radius: 999px; padding: 13px; background: #1A1410; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .welcome-btn:disabled { opacity: 0.55; }
+    .welcome-error { color: #b42318; font-size: 14px; margin-bottom: 12px; }
+    .welcome-step[hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="welcome-wrap">
+    <div class="welcome-card">
+      <h1>Welcome to the beta</h1>
+      <p id="welcomeLead">Sign in with the temporary password from your invite email. Your account isn&rsquo;t fully active until you choose a new password.</p>
+      <p class="welcome-error" id="welcomeError" hidden></p>
+
+      <div id="stepSignIn" class="welcome-step">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" readonly />
+        <label for="tempPassword">Temporary password</label>
+        <input id="tempPassword" type="password" autocomplete="current-password" />
+        <button type="button" class="welcome-btn" id="signInBtn">Continue</button>
+      </div>
+
+      <div id="stepNewPassword" class="welcome-step" hidden>
+        <label for="newPassword">Create your password</label>
+        <input id="newPassword" type="password" autocomplete="new-password" minlength="6" />
+        <label for="confirmPassword">Confirm password</label>
+        <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" />
+        <button type="button" class="welcome-btn" id="setPasswordBtn">Enter beta portal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script>
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var fns = firebase.app().functions('us-central1');
+    var token = new URLSearchParams(location.search).get('t') || '';
+
+    function showError(msg) {
+      var el = document.getElementById('welcomeError');
+      el.hidden = !msg;
+      el.textContent = msg || '';
+    }
+
+    if (!token) {
+      showError('Invalid invite link. Open the link from your approval email.');
+    } else {
+      fns.httpsCallable('validateBetaOnboardingToken')({ token: token })
+        .then(function (res) {
+          document.getElementById('email').value = (res.data && res.data.email) || '';
+        })
+        .catch(function (err) {
+          showError((err && err.message) || 'This invite link is not valid.');
+        });
+    }
+
+    document.getElementById('signInBtn').addEventListener('click', function () {
+      showError('');
+      var email = document.getElementById('email').value.trim();
+      var password = document.getElementById('tempPassword').value;
+      var btn = document.getElementById('signInBtn');
+      btn.disabled = true;
+      auth.signInWithEmailAndPassword(email, password)
+        .then(function () {
+          document.getElementById('stepSignIn').hidden = true;
+          document.getElementById('stepNewPassword').hidden = false;
+          document.getElementById('welcomeLead').textContent = 'Choose a new password for your beta account.';
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          showError((err && err.message) || 'Could not sign in. Check your temporary password.');
+        });
+    });
+
+    document.getElementById('setPasswordBtn').addEventListener('click', function () {
+      showError('');
+      var p1 = document.getElementById('newPassword').value;
+      var p2 = document.getElementById('confirmPassword').value;
+      if (p1.length < 6) {
+        showError('Password must be at least 6 characters.');
+        return;
+      }
+      if (p1 !== p2) {
+        showError('Passwords do not match.');
+        return;
+      }
+      var btn = document.getElementById('setPasswordBtn');
+      btn.disabled = true;
+      fns.httpsCallable('completeBetaOnboarding')({ token: token, newPassword: p1 })
+        .then(function () {
+          return auth.currentUser.getIdToken(true);
+        })
+        .then(function () {
+          window.location.href = '/beta';
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          showError((err && err.message) || 'Could not finish setup.');
+        });
+    });
+  </script>
+</body>
+</html>

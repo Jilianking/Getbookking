@@ -328,6 +328,7 @@ class PaymentsViewModel: ObservableObject {
         case showCheckout
         case showAlert(String)
         case openedConnectInSafari
+        case showMerchantEducation
     }
 
     var tapToPayLaunchOverlayMessage: String {
@@ -383,6 +384,8 @@ class PaymentsViewModel: ObservableObject {
         if isDemoMode { return }
         if TapToPayReaderSession.shared.termsAcceptedOnDevice { return }
 
+        TapToPayTerminalManager.shared.prepareTerminalSDK()
+
         let locationId: String
         let displayName: String
 
@@ -391,8 +394,6 @@ class PaymentsViewModel: ObservableObject {
             let cachedName = TapToPayLocationStore.shared.merchantDisplayName
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             displayName = cachedName.isEmpty ? effectiveTapToPayDisplayName : cachedName
-            isEnsuringTapToPayLocation = true
-            defer { isEnsuringTapToPayLocation = false }
         } else {
             isEnsuringTapToPayTerms = true
             defer { isEnsuringTapToPayTerms = false }
@@ -422,14 +423,15 @@ class PaymentsViewModel: ObservableObject {
             }
         }
 
+        isEnsuringTapToPayLocation = true
+        defer { isEnsuringTapToPayLocation = false }
+
         do {
             try await TapToPayTerminalManager.shared.connectReaderForTermsAcceptance(
                 locationId: locationId,
                 merchantDisplayName: displayName.isEmpty ? nil : displayName
             )
-
             guard TapToPayReaderSession.shared.termsAcceptedOnDevice else {
-                await TapToPayTerminalManager.shared.releaseReaderConnection()
                 throw NSError(
                     domain: "TapToPay",
                     code: 12,
@@ -445,7 +447,7 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    /// Opens checkout, Safari Connect, or an in-review alert. Uses cached Connect state when already loaded.
+    /// Opens checkout, Safari Connect, merchant education, or an in-review alert. Apple T&C always runs before Stripe.
     func launchTapToPayFlow(isDemoMode: Bool) async -> TapToPayLaunchResult {
         if isDemoMode {
             return .showAlert("Tap to Pay isn't available in demo mode.")
@@ -457,22 +459,41 @@ class PaymentsViewModel: ObservableObject {
             return .showAlert(block)
         }
 
-        if !stripeConnected,
-           hasLoadedStripeStatus,
-           stripeHasAccount,
-           stripeDetailsSubmitted {
-            return .showAlert(stripePaymentsBlockedMessage)
-        }
+        TapToPayTerminalManager.shared.prepareTerminalSDK()
 
+        let termsWereAcceptedBefore = TapToPayReaderSession.shared.termsAcceptedOnDevice
         isLaunchingTapToPay = true
-        defer { isLaunchingTapToPay = false }
 
         if !TapToPayReaderSession.shared.termsAcceptedOnDevice {
             do {
                 try await ensureTapToPayAppleTermsAccepted(isDemoMode: isDemoMode)
             } catch {
+                isLaunchingTapToPay = false
                 return .showAlert(FirebaseFunctionsErrorHelper.message(from: error))
             }
+        }
+
+        isLaunchingTapToPay = false
+
+        guard TapToPayReaderSession.shared.termsAcceptedOnDevice else {
+            return .showAlert("Accept Tap to Pay on iPhone terms to continue.")
+        }
+
+        let termsJustAccepted = !termsWereAcceptedBefore
+        if termsJustAccepted, TapToPayMerchantEducationStore.shouldShowAfterTermsAcceptance {
+            return .showMerchantEducation
+        }
+
+        return await continueTapToPayLaunchAfterEducation(isDemoMode: isDemoMode)
+    }
+
+    /// Stripe Connect + checkout after Apple T&C and merchant education.
+    func continueTapToPayLaunchAfterEducation(isDemoMode: Bool) async -> TapToPayLaunchResult {
+        if !stripeConnected,
+           hasLoadedStripeStatus,
+           stripeHasAccount,
+           stripeDetailsSubmitted {
+            return .showAlert(stripePaymentsBlockedMessage)
         }
 
         if stripeConnected, !resolvedTapToPayLocationId.isEmpty {
@@ -526,6 +547,43 @@ class PaymentsViewModel: ObservableObject {
             return .showAlert("Tap to Pay could not be set up. Add your business address under Website Design, then try again.")
         }
         return .showCheckout
+    }
+
+    @MainActor
+    func applyTapToPayLaunchResult(
+        _ result: TapToPayLaunchResult,
+        isDemoMode: Bool,
+        showCheckout: () -> Void,
+        showAlert: (String) -> Void,
+        showEducation: () -> Void
+    ) {
+        switch result {
+        case .showCheckout:
+            showCheckout()
+        case .showAlert(let message):
+            showAlert(message)
+        case .openedConnectInSafari:
+            break
+        case .showMerchantEducation:
+            showEducation()
+        }
+    }
+
+    @MainActor
+    func finishMerchantEducationAndContinueTapToPay(
+        isDemoMode: Bool,
+        showCheckout: () -> Void,
+        showAlert: (String) -> Void
+    ) async {
+        TapToPayMerchantEducationStore.markEducationSeen()
+        let result = await continueTapToPayLaunchAfterEducation(isDemoMode: isDemoMode)
+        applyTapToPayLaunchResult(
+            result,
+            isDemoMode: isDemoMode,
+            showCheckout: showCheckout,
+            showAlert: showAlert,
+            showEducation: {}
+        )
     }
     #endif
 

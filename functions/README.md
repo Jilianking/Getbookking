@@ -37,6 +37,13 @@
 
    Rules: **30-day free trial has no SMS**. Owner must **start paid subscription** (`active`), then **opt in** under Team settings → Notifications → Enable client texting.
 
+8. **Beta admin portal** (`web/marketing/admin/`):
+   - Set **`BETA_ADMIN_UIDS`** in `functions/.env` to your Firebase Auth uid(s), comma-separated.
+   - Optional email (Resend): **`RESEND_API_KEY`**, **`BETA_EMAIL_FROM`** (outbound From), **`BETA_SUPPORT_EMAIL`** (Reply-To; default **`support@getbookking.com`** via admin settings).
+   - Optional: **`MARKETING_ORIGIN`** (default `https://getbookking.com`) for onboarding links in approval emails.
+   - Deploy functions + hosting (`marketing` target), then open `…/admin/requests.html` and sign in with an allowed account.
+   - Firestore indexes: deploy with `firebase deploy --only firestore:indexes` if queries prompt for new indexes.
+
 ## Functions
 
 - **createConnectAccountLink** (callable): Creates a Stripe Connect account (if needed) and returns an Account Link URL for onboarding. The iOS app opens this URL in Safari.
@@ -51,3 +58,19 @@ A **1%** Connect application fee (`PLATFORM_FEE_BPS = 100` in `index.js`) is col
 - **createPaymentIntentForTapToPay** — in-person Tap to Pay
 
 It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). The customer pays the listed amount; the fee is deducted from the provider’s side (minimum 1¢ per charge). Refunds use `refund_application_fee: true`.
+
+### Beta program
+
+- **submitBetaWaitlist** (public callable): Marketing `testflight.html` signups → `betaWaitlist`.
+- **Seed beta waitlist** (optional, for admin portal testing):
+  ```bash
+  cd ..   # from functions/ to Test/
+  node scripts/seed-beta-waitlist.js --count=12
+  node scripts/seed-beta-waitlist.js --email=you@example.com
+  ```
+  Submits via the same `submitBetaWaitlist` callable as `testflight.html` (emails like `beta-seed-001@example.com`, or `--email` for one custom entry). Options: `--prefix=beta-demo`, `--emulator`, `--first-name`, `--last-name`, `--plan`, `--team-size`, `--business-name`, `--business-type`.
+- **getBetaAdminDashboard**, **listBetaWaitlist**, **approveBetaRequest**, **declineBetaRequest**, **inviteBetaTesterManual** (admin): Beta requests portal.
+- **publishBetaWeeklyReport**, **listBetaReports**, **listBetaBugReports**, **updateBetaBugReport** (admin): Weekly reports + bug triage.
+- **validateBetaOnboardingToken**, **completeBetaOnboarding** (public/tester): `admin/welcome.html` temp password → new password flow.
+- **getBetaTesterPortal**, **submitBetaBugReport** (beta testers): `beta/index.html`.
+

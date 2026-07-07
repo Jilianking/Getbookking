@@ -7293,3 +7293,6 @@ exports.twilioInboundSms = functions
 
     res.type("text/xml").send("<Response></Response>");
   });
+
+const { registerBetaAdminFunctions } = require("./betaAdmin");
+registerBetaAdminFunctions(exports);

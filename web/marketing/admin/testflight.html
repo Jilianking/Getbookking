@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TestFlight — Bookking Admin</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=3" />
+</head>
+<body class="admin-body">
+  <div class="admin-shell" id="adminShell"><div class="admin-loading" style="padding:48px">Loading admin portal…</div></div>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/admin.js?v=5"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script>
+    BetaAdmin.boot('testflight').then(function (ctx) {
+      document.getElementById('adminMain').innerHTML =
+        '<div class="admin-topbar"><div><h1>TestFlight</h1><p class="admin-subtitle">Public join link used in approval emails</p></div></div>' +
+        '<div class="admin-card" style="padding:20px"><form id="tfForm" class="admin-form">' +
+          '<div class="admin-field"><label for="testflightUrl">TestFlight public join URL</label>' +
+          '<input id="testflightUrl" placeholder="https://testflight.apple.com/join/AbCdEfGh" /></div>' +
+          '<p class="admin-list-meta">Also shown on testflight.html when configured in platform settings.</p>' +
+          '<button type="submit" class="admin-btn admin-btn--primary">Save</button>' +
+          '<p id="tfSaved" class="admin-list-meta" hidden>Saved.</p>' +
+        '</form></div>';
+      return BetaAdmin.callCallable(ctx.fb, ctx.user, 'getBetaPlatformSettings');
+    }).then(function (res) {
+      var settings = (res.data && res.data.settings) || {};
+      document.getElementById('testflightUrl').value = settings.testflightPublicJoinUrl || window.testflightPublicJoinUrl || '';
+      document.getElementById('tfForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var fb = BetaAdmin.initFirebase();
+        BetaAdmin.callCallable(fb, fb.auth.currentUser, 'updateBetaPlatformSettings', {
+          testflightPublicJoinUrl: document.getElementById('testflightUrl').value.trim()
+        }).then(function () {
+          var saved = document.getElementById('tfSaved');
+          saved.hidden = false;
+          setTimeout(function () { saved.hidden = true; }, 2000);
+        }).catch(function (err) { alert(BetaAdmin.callableMessage(err)); });
+      });
+    }).catch(function (err) {
+      BetaAdmin.showAdminError(BetaAdmin.callableMessage(err));
+    });
+  </script>
+</body>
+</html>

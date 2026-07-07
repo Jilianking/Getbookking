@@ -836,15 +836,15 @@ struct BookingRequestDetailView: View {
                     value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
                     systemImage: "calendar"
                 )
-            }
-            if let pt = request.preferredTime, !pt.isEmpty {
-                BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
-            }
-            if let days = request.preferredDays, !days.isEmpty {
-                BookingRequestDetailRow(
-                    label: "Preferred days",
-                    value: days.joined(separator: ", ")
-                )
+                if let pt = request.preferredTime, !pt.isEmpty {
+                    BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
+                }
+                if let days = request.preferredDays, !days.isEmpty {
+                    BookingRequestDetailRow(
+                        label: "Preferred days",
+                        value: days.joined(separator: ", ")
+                    )
+                }
             }
             confirmedTimeSection
         }

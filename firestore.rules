@@ -38,6 +38,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /betaMembers/{memberId} {
+      allow read, write: if false;
+    }
+
+    match /betaOnboardingTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /betaBugReports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /betaReports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /platformSettings/{docId} {
+      allow read, write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if true;
 

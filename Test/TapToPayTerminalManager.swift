@@ -31,6 +31,11 @@ final class TapToPayTerminalManager {
         isInitialized = true
     }
 
+    /// Initializes Stripe Terminal SDK without connecting (speeds up first tap connect).
+    func prepareTerminalSDK() {
+        ensureInitialized()
+    }
+
     /// Discover + connect reader (launch / foreground / before checkout).
     func warmUpReader(locationId: String, merchantDisplayName: String? = nil) async {
         guard !locationId.isEmpty else {
@@ -107,13 +112,47 @@ final class TapToPayTerminalManager {
         locationId: String,
         merchantDisplayName: String? = nil
     ) async throws {
-        await warmUpReader(locationId: locationId, merchantDisplayName: merchantDisplayName)
-        let isReady = await MainActor.run { TapToPayReaderSession.shared.isReaderReady }
-        if !isReady {
-            let message = await MainActor.run {
-                TapToPayReaderSession.shared.statusMessage ?? "Could not connect to Tap to Pay."
-            }
-            throw TapToPayError.message(message)
+        if let blocking = TapToPayEligibility.blockingMessage() { throw TapToPayError.message(blocking) }
+        if let deviceBlock = TapToPayEligibility.deviceSupportsTapToPay() { throw TapToPayError.message(deviceBlock) }
+
+        ensureInitialized()
+
+        let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
+        guard !locationId.isEmpty else { throw TapToPayError.missingLocationId }
+
+        if connectedReader != nil {
+            await disconnectReaderIfConnected()
+        }
+
+        await MainActor.run {
+            TapToPayReaderSession.shared.resetForWarmUp()
+            TapToPayReaderSession.shared.beginWaitingForAppleTermsAcceptance()
+        }
+
+        let reader = try await discoverTapToPayReader()
+        try await connectTapToPayReader(
+            reader: reader,
+            locationId: locationId,
+            merchantDisplayName: resolvedName
+        )
+        connectedReader = reader
+        connectedLocationId = locationId
+        connectedMerchantDisplayName = resolvedName
+        await MainActor.run { TapToPayReaderSession.shared.markReady() }
+
+        if await TapToPayReaderSession.shared.waitForAppleTermsAcceptance() {
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        if TapToPayReaderSession.shared.termsAcceptedOnDevice {
+            TapToPayReaderSession.shared.cancelWaitingForAppleTermsAcceptance(resumeValue: true)
+            return
+        }
+
+        // connectReader succeeded — Stripe only completes once Apple T&C requirements are met.
+        await MainActor.run {
+            TapToPayReaderSession.shared.markTermsConfirmedAfterSuccessfulConnect()
         }
     }
 
@@ -205,7 +244,7 @@ final class TapToPayTerminalManager {
 
         func tapToPayReaderDidAcceptTermsOfService(_ reader: Reader) {
             Task { @MainActor in
-                TapToPayReaderSession.shared.markTermsAccepted()
+                TapToPayReaderSession.shared.markTermsAcceptedFromApple()
             }
         }
 

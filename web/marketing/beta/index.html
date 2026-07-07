@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beta portal — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=3" />
+  <style>
+    .beta-page { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
+    .beta-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
+    .beta-header h1 { font-family: 'Instrument Serif', Georgia, serif; font-size: 34px; font-weight: 400; }
+    .beta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .beta-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body class="admin-body">
+  <script>
+    if (/\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\.html$/i, '') + location.search + location.hash);
+    }
+  </script>
+  <div class="beta-page" id="betaApp">
+    <div class="admin-loading">Loading beta portal…</div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/beta.js?v=1"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script>
+    BetaPortal.requireTester().then(function (ctx) {
+      renderPortal(ctx);
+    }).catch(function (err) {
+      document.getElementById('betaApp').innerHTML =
+        '<div class="admin-error">' + BetaPortal.escapeHtml(BetaPortal.callableMessage(err)) + '</div>' +
+        '<p style="margin-top:12px"><a class="admin-btn" href="' + BetaPortal.loginUrl('/beta') + '">Sign in</a></p>';
+    });
+
+    function renderPortal(ctx) {
+      var data = ctx.portal || {};
+      var settings = data.settings || {};
+      var reports = data.reports || [];
+      var user = ctx.user;
+      var tf = settings.testflightPublicJoinUrl || window.testflightPublicJoinUrl || '';
+
+      document.getElementById('betaApp').innerHTML =
+        '<div class="beta-header">' +
+          '<div>' +
+            '<div class="admin-brand" style="margin-bottom:12px;padding:0">' +
+              '<img src="/assets/brand/logo-dark-128.png?v=8" alt="" width="36" height="36" />' +
+              '<div class="admin-brand-text">Bookking</div>' +
+              '<span class="admin-pill">Beta</span>' +
+            '</div>' +
+            '<h1>Beta portal</h1>' +
+            '<p class="admin-subtitle">Signed in as ' + BetaPortal.escapeHtml(user.email) + '</p>' +
+          '</div>' +
+          '<button type="button" class="admin-btn" id="betaSignOut">Sign out</button>' +
+        '</div>' +
+        '<div class="beta-grid">' +
+          '<section class="admin-panel">' +
+            '<h2 style="font-size:16px;margin-bottom:10px">Install the app</h2>' +
+            (tf
+              ? '<p class="admin-list-meta"><a href="' + BetaPortal.escapeHtml(tf) + '" target="_blank" rel="noopener">Open TestFlight invite</a></p>'
+              : '<p class="admin-list-meta">TestFlight link will appear here once available.</p>') +
+            '<p class="admin-list-meta">Questions? Email <a href="mailto:' + BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '">' +
+              BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '</a></p>' +
+          '</section>' +
+          '<section class="admin-panel">' +
+            '<h2 style="font-size:16px;margin-bottom:10px">Report a bug</h2>' +
+            '<p class="admin-list-meta">Found something broken? Tell us what happened and we\'ll triage it.</p>' +
+            '<p style="margin-top:14px"><a class="admin-btn admin-btn--primary" href="/beta/report-bug">Report a bug</a></p>' +
+          '</section>' +
+        '</div>' +
+        '<section class="admin-panel" style="margin-top:16px">' +
+          '<h2 style="font-size:16px;margin-bottom:12px">Weekly reports</h2>' +
+          (reports.length
+            ? reports.map(function (r) {
+                return '<div style="padding:12px 0;border-bottom:1px solid var(--admin-border)">' +
+                  '<strong>' + BetaPortal.escapeHtml(r.weekLabel || r.title) + '</strong>' +
+                  '<div class="admin-list-meta" style="margin-top:6px">' + BetaPortal.escapeHtml(r.body || '') + '</div></div>';
+              }).join('')
+            : '<div class="admin-empty">No reports yet.</div>') +
+        '</section>';
+
+      document.getElementById('betaSignOut').addEventListener('click', function () {
+        ctx.fb.auth.signOut().then(function () {
+          location.href = BetaPortal.loginUrl();
+        });
+      });
+    }
+  </script>
+</body>
+</html>

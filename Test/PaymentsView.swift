@@ -766,16 +766,14 @@ struct ManualPaymentSheet: View {
 
     private func openCheckout() async {
         localError = nil
-        do {
-            let url = try await viewModel.createManualCheckoutLink(serviceAmountCents: serviceAmountCents)
-            let opened = await UIApplication.shared.open(url)
-            if opened {
-                onDismiss()
-            } else {
-                localError = "Could not open checkout."
-            }
-        } catch {
-            localError = FirebaseFunctionsErrorHelper.message(from: error)
+        let result = await viewModel.chargeManualCheckoutInApp(serviceAmountCents: serviceAmountCents)
+        switch result {
+        case .success:
+            onDismiss()
+        case .canceled:
+            break
+        case .failed(let message):
+            localError = message
         }
     }
 }

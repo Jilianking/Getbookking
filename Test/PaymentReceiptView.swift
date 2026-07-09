@@ -13,7 +13,7 @@ struct PaymentReceiptView: View {
         VStack(alignment: .leading, spacing: 0) {
             receiptHeader
             VStack(alignment: .leading, spacing: 20) {
-                Text("Receipt from \(detail.businessName)")
+                Text(detail.headerTitle)
                     .font(.title2.weight(.bold))
                     .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.18))
 
@@ -22,13 +22,16 @@ struct PaymentReceiptView: View {
                         metaRow(label: "Receipt number", value: receiptNumber)
                     }
                     metaRow(
-                        label: "Amount paid",
+                        label: detail.amountMetaLabel,
                         value: PaymentsViewModel.formatUSD(detail.totalPaidUSD)
                     )
                     metaRow(
-                        label: "Date paid",
+                        label: detail.dateMetaLabel,
                         value: detail.paidAt.formatted(.dateTime.month(.wide).day().year().hour().minute())
                     )
+                    if let statusMessage = detail.statusMessage, !statusMessage.isEmpty {
+                        metaRow(label: "Status", value: statusMessage)
+                    }
                     if let customerName = detail.customerName, !customerName.isEmpty {
                         metaRow(label: "Customer", value: customerName)
                     }
@@ -199,7 +202,7 @@ struct PaymentReceiptSheet: View {
                     .padding(16)
             }
             .appScreenBackground()
-            .navigationTitle("Receipt")
+            .navigationTitle(detail.sheetNavigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

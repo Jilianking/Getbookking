@@ -38,7 +38,7 @@ struct TapToPaySheet: View {
     @State private var receiptPhoneDraft = ""
     @State private var manualCheckoutError: String?
     @State private var showTapToPayReceiptSheet = false
-    @State private var approvedReceiptDetail: PaymentReceiptDetail?
+    @State private var receiptDetail: PaymentReceiptDetail?
     @State private var lastPaymentIntentId: String?
     @State private var lastCheckout: CardCheckoutBreakdown?
     @State private var lastPaidAt = Date()
@@ -144,9 +144,9 @@ struct TapToPaySheet: View {
                 )
             }
             .sheet(isPresented: $showTapToPayReceiptSheet) {
-                if let approvedReceiptDetail {
+                if let receiptDetail {
                     PaymentReceiptSheet(
-                        detail: approvedReceiptDetail,
+                        detail: receiptDetail,
                         drawerState: drawerState,
                         onDismissAll: onDismiss
                     )
@@ -360,7 +360,7 @@ struct TapToPaySheet: View {
         presentOnScreenReceipt(amountCents: amountCents)
     }
 
-    private func presentOnScreenReceipt(amountCents: Int) {
+    private func presentOnScreenReceipt(amountCents: Int, paymentMethodLabel: String = "Tap to Pay on iPhone") {
         let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
             serviceCents: serviceAmountCents,
             channel: .tapToPay
@@ -372,9 +372,10 @@ struct TapToPaySheet: View {
             note: noteText,
             paymentIntentId: lastPaymentIntentId,
             includesSignature: !signatureLines.isEmpty,
-            paidAt: lastPaidAt
+            paidAt: lastPaidAt,
+            paymentMethodLabel: paymentMethodLabel
         )
-        approvedReceiptDetail = detail
+        receiptDetail = detail
         receiptText = viewModel.tapToPayReceiptBody(
             amountCents: amountCents,
             includesSignature: !signatureLines.isEmpty,
@@ -449,8 +450,8 @@ struct TapToPaySheet: View {
                 }
 
                 // Apple req 5.10: receipt must be available for declined/failed/timed-out payments.
-                Button("Send payment notice") {
-                    shareDeclinedNotice()
+                Button("View payment notice") {
+                    presentPaymentNotice()
                 }
                 .buttonStyle(.bordered)
 
@@ -482,27 +483,36 @@ struct TapToPaySheet: View {
         .padding(.horizontal, 20)
     }
 
-    private func shareDeclinedNotice() {
-        let amount = formatCurrency(Double(serviceAmountCents) / 100)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        let dateString = formatter.string(from: Date())
-        let business = viewModel.effectiveTapToPayDisplayName
-        let statusLine: String = {
+    private func presentPaymentNotice() {
+        let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
+            serviceCents: serviceAmountCents,
+            channel: .tapToPay
+        )
+        let reason: PaymentReceiptDocumentKind.UnpaidAttemptReason = {
             switch phase {
-            case .timedOut: return "Payment timed out — card not charged."
-            case .declined: return "Payment declined — card not charged."
-            default: return "Payment not completed — card not charged."
+            case .declined: return .declined
+            case .timedOut: return .timedOut
+            default: return .notCompleted
             }
         }()
-        var parts = ["Payment Not Completed", business, amount, dateString]
-        if let name = selectedClient?.name, !name.isEmpty {
-            parts.append("Customer: \(name)")
-        }
-        parts.append(statusLine)
-        receiptText = parts.joined(separator: "\n")
-        showShareReceipt = true
+        let detailMessage: String? = {
+            switch phase {
+            case .declined(let message), .timedOut(let message), .failed(let message):
+                return message
+            default:
+                return nil
+            }
+        }()
+        receiptDetail = PaymentReceiptDetail.fromTapToPayUnsuccessful(
+            checkout: checkout,
+            businessName: viewModel.effectiveTapToPayDisplayName,
+            customerName: selectedClient?.name,
+            note: noteText,
+            reason: reason,
+            detailMessage: detailMessage
+        )
+        receiptText = receiptDetail?.smsBody() ?? ""
+        showTapToPayReceiptSheet = true
     }
 
     private func appendDigit(_ digit: Int) {
@@ -558,6 +568,7 @@ struct TapToPaySheet: View {
             } else {
                 phase = .failed(message: text)
             }
+            presentPaymentNotice()
         }
     }
 
@@ -567,17 +578,24 @@ struct TapToPaySheet: View {
             manualCheckoutError = "Enter an amount of at least $0.50."
             return
         }
-        do {
-            let url = try await viewModel.createManualCheckoutLink(
-                serviceAmountCents: serviceAmountCents,
-                bookingRequestId: linkedBookingRequestId
+        let result = await viewModel.chargeManualCheckoutInApp(
+            serviceAmountCents: serviceAmountCents,
+            bookingRequestId: linkedBookingRequestId
+        )
+        switch result {
+        case .success(let intent):
+            lastPaymentIntentId = intent.paymentIntentId
+            lastCheckout = intent.checkout
+            lastPaidAt = Date()
+            phase = .approved(amountCents: intent.checkout.totalCents)
+            presentOnScreenReceipt(
+                amountCents: intent.checkout.totalCents,
+                paymentMethodLabel: "Manual payment"
             )
-            let opened = await UIApplication.shared.open(url)
-            if !opened {
-                manualCheckoutError = "Could not open checkout. Copy the link from Deposit link in Payments."
-            }
-        } catch {
-            manualCheckoutError = FirebaseFunctionsErrorHelper.message(from: error)
+        case .canceled:
+            break
+        case .failed(let message):
+            manualCheckoutError = message
         }
     }
 

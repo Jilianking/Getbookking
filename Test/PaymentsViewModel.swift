@@ -353,7 +353,7 @@ class PaymentsViewModel: ObservableObject {
         if let prepareData = await TapToPayAppLifecycle.prewarm() {
             applyPrepareTapToPayResponse(prepareData)
         } else if stripeConnected, resolvedTapToPayLocationId.isEmpty {
-            try? await ensureTapToPayLocation()
+            _ = try? await ensureTapToPayLocation()
         }
 
         // Apple req 3.2 / 6.2: show full-screen Hero banner once per eligible user.
@@ -371,12 +371,14 @@ class PaymentsViewModel: ObservableObject {
     }
 
     private func scheduleTapToPayValuePropPushIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.tapToPayValuePropPushSentKey) else { return }
+        let sentKey = Self.tapToPayValuePropPushSentKey
+        guard !UserDefaults.standard.bool(forKey: sentKey) else { return }
+        let pushBody = TapToPayBranding.featureSubtitle
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else { return }
             let content = UNMutableNotificationContent()
             content.title = "Tap to Pay on iPhone is available"
-            content.body = TapToPayBranding.featureSubtitle
+            content.body = pushBody
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
             let request = UNNotificationRequest(
@@ -385,7 +387,7 @@ class PaymentsViewModel: ObservableObject {
                 trigger: trigger
             )
             UNUserNotificationCenter.current().add(request) { _ in }
-            UserDefaults.standard.set(true, forKey: Self.tapToPayValuePropPushSentKey)
+            UserDefaults.standard.set(true, forKey: sentKey)
         }
     }
 
@@ -970,7 +972,102 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    /// Stripe Payment Link for online card entry when Tap to Pay fails (PCI handled by Stripe checkout).
+    /// Stripe Payment Sheet for in-app card entry when Tap to Pay fails or manual payment is chosen.
+    func createManualCheckoutPaymentIntent(
+        serviceAmountCents: Int,
+        bookingRequestId: String? = nil
+    ) async throws -> ManualCheckoutPaymentIntent {
+        guard serviceAmountCents >= 50 else {
+            throw NSError(
+                domain: "Payments",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Amount must be at least $0.50"]
+            )
+        }
+        isCreatingManualCheckoutLink = true
+        defer { isCreatingManualCheckoutLink = false }
+        var payload: [String: Any] = [
+            "serviceAmountCents": serviceAmountCents,
+            "paymentKind": "service",
+        ]
+        if let bookingRequestId, !bookingRequestId.isEmpty {
+            payload["bookingRequestId"] = bookingRequestId
+        }
+        let result = try await functions.httpsCallable("createPaymentIntentForManualCheckout").call(payload)
+        let data = result.data as? [String: Any]
+        guard let clientSecret = data?["clientSecret"] as? String, !clientSecret.isEmpty else {
+            throw NSError(
+                domain: "Payments",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
+            )
+        }
+        let paymentIntentId = (data?["paymentIntentId"] as? String) ?? ""
+        let stripeAccountId = (data?["stripeAccountId"] as? String) ?? ""
+        guard !stripeAccountId.isEmpty else {
+            throw NSError(
+                domain: "Payments",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Stripe account is not configured for payments."]
+            )
+        }
+        let service = (data?["serviceCents"] as? Int) ?? serviceAmountCents
+        let passThrough = (data?["surchargeCents"] as? Int) ?? 0
+        let total = (data?["totalCents"] as? Int) ?? (service + passThrough)
+        let platformFee = (data?["platformFeeCents"] as? Int)
+            ?? CardCheckoutPricing.platformFeeCents(totalCents: total)
+        let checkout = CardCheckoutBreakdown(
+            serviceCents: service,
+            passThroughFeeCents: passThrough,
+            platformFeeCents: platformFee,
+            totalCents: total,
+            channel: .online
+        )
+        return ManualCheckoutPaymentIntent(
+            clientSecret: clientSecret,
+            paymentIntentId: paymentIntentId,
+            stripeAccountId: stripeAccountId,
+            checkout: checkout
+        )
+    }
+
+    /// Creates PaymentIntent and presents Stripe Payment Sheet in-app.
+    @MainActor
+    func chargeManualCheckoutInApp(
+        serviceAmountCents: Int,
+        bookingRequestId: String? = nil
+    ) async -> ManualCheckoutChargeOutcome {
+        do {
+            let intent = try await createManualCheckoutPaymentIntent(
+                serviceAmountCents: serviceAmountCents,
+                bookingRequestId: bookingRequestId
+            )
+            let sheetResult = await ManualPaymentSheetPresenter.present(
+                clientSecret: intent.clientSecret,
+                stripeAccountId: intent.stripeAccountId,
+                merchantDisplayName: effectiveTapToPayDisplayName
+            )
+            switch sheetResult {
+            case .completed:
+                if !intent.paymentIntentId.isEmpty {
+                    await recordTenantPayment(
+                        paymentIntentId: intent.paymentIntentId,
+                        bookingRequestId: bookingRequestId
+                    )
+                }
+                await loadData(isDemoMode: false)
+                return .success(intent)
+            case .canceled:
+                return .canceled
+            case .failed(let message):
+                return .failed(message)
+            }
+        } catch {
+            return .failed(FirebaseFunctionsErrorHelper.message(from: error))
+        }
+    }
+
+    /// Legacy Payment Link URL (external Safari). Prefer `chargeManualCheckoutInApp`.
     func createManualCheckoutLink(
         serviceAmountCents: Int,
         bookingRequestId: String? = nil

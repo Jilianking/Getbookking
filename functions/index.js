@@ -1779,6 +1779,84 @@ exports.createDepositLink = functions
     };
   });
 
+/**
+ * Creates a PaymentIntent for in-app manual card entry (Stripe Payment Sheet).
+ * Same pricing as createDepositLink; returns clientSecret for iOS.
+ */
+exports.createPaymentIntentForManualCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    if (serviceAmount < 50) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Amount must be at least 50 cents ($0.50)"
+      );
+    }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const payCtx = await assertCanInitiateBookingPayment(
+      uid,
+      await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
+    );
+    const checkout = computeCardCheckoutAmounts(serviceAmount, "online");
+    const paymentKind = (data?.paymentKind || "service").toString().trim() || "service";
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe account linked"
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const feeCents = platformFeeCents(checkout.totalCents);
+    const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: checkout.totalCents,
+        currency: "usd",
+        payment_method_types: ["card"],
+        application_fee_amount: feeCents,
+        capture_method: "automatic",
+        metadata: {
+          tenantId: tenantId || "",
+          paymentKind,
+          serviceAmountCents: String(checkout.serviceCents),
+          surchargeCents: String(checkout.surchargeCents),
+          bookingRequestId,
+          initiatedByUid: uid,
+          attributedMemberUid,
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: payCtx.scope || "tenant",
+          checkoutChannel: "manual_in_app",
+        },
+      },
+      { stripeAccount: stripeAccountId }
+    );
+    return {
+      clientSecret: pi.client_secret,
+      paymentIntentId: pi.id,
+      stripeAccountId,
+      platformFeeCents: feeCents,
+      serviceCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+      attributedMemberUid,
+      chargeStripeScope: payCtx.scope || "tenant",
+    };
+  });
+
 function chargeIdFromExpandedBalanceSource(source) {
   if (!source) return null;
   if (typeof source === "string") {

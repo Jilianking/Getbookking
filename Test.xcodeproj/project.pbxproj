@@ -14,6 +14,8 @@
 		35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */; };
 		35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED262F1B100000BB5E8B /* StripeTerminal */; };
 		35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED282F1B200000BB5E8B /* FirebaseMessaging */; };
+		35C0ED2C2F1B300000BB5E8B /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */; };
+		35CDF9152FFF2C9C001FE834 /* Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 35CDF9142FFF2C9C001FE834 /* Secrets.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +39,7 @@
 		35C0ECA62F16A57500BB5E8B /* Test.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Test.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		35C0ECB52F16A57700BB5E8B /* TestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		35C0ECBF2F16A57700BB5E8B /* TestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		35CDF9142FFF2C9C001FE834 /* Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Secrets.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +72,7 @@
 				35C0ED242F1ACC7000BB5E8B /* FirebaseFunctions in Frameworks */,
 				35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */,
 				35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */,
+				35C0ED2C2F1B300000BB5E8B /* StripePaymentSheet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +96,7 @@
 		35C0EC9D2F16A57500BB5E8B = {
 			isa = PBXGroup;
 			children = (
+				35CDF9142FFF2C9C001FE834 /* Secrets.plist */,
 				35C0ECA82F16A57500BB5E8B /* Test */,
 				35C0ECB82F16A57700BB5E8B /* TestTests */,
 				35C0ECC22F16A57700BB5E8B /* TestUITests */,
@@ -136,6 +141,7 @@
 				35C0ED232F1ACC7000BB5E8B /* FirebaseFunctions */,
 				35C0ED262F1B100000BB5E8B /* StripeTerminal */,
 				35C0ED282F1B200000BB5E8B /* FirebaseMessaging */,
+				35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */,
 			);
 			productName = Test;
 			productReference = 35C0ECA62F16A57500BB5E8B /* Test.app */;
@@ -222,6 +228,7 @@
 			packageReferences = (
 				35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				35C0ED252F1B100000BB5E8B /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */,
+				35C0ED2A2F1B300000BB5E8B /* XCRemoteSwiftPackageReference "stripe-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 35C0ECA72F16A57500BB5E8B /* Products */;
@@ -240,6 +247,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				35CDF9152FFF2C9C001FE834 /* Secrets.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -685,6 +693,14 @@
 				version = 4.7.3;
 			};
 		};
+		35C0ED2A2F1B300000BB5E8B /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 24.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -722,6 +738,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 35C0ED2A2F1B300000BB5E8B /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentSheet;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

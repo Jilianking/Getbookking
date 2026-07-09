@@ -70,7 +70,7 @@ struct DashboardView: View {
                         }
                         DashboardQuickTile(
                             icon: "wave.3.right.circle.fill",
-                            title: "Take payment"
+                            title: "Tap to Pay on iPhone"
                         ) {
                             handleTakePaymentTapped()
                         }
@@ -167,7 +167,7 @@ struct DashboardView: View {
         }
         #if TAP_TO_PAY_ENABLED
         .sheet(isPresented: $showTapToPaySheet) {
-            TapToPaySheet(viewModel: paymentsViewModel) {
+            TapToPaySheet(viewModel: paymentsViewModel, drawerState: drawerState) {
                 showTapToPaySheet = false
             }
         }
@@ -190,6 +190,20 @@ struct DashboardView: View {
             Button("OK", role: .cancel) { tapToPayAlertMessage = nil }
         } message: {
             Text(tapToPayAlertMessage ?? "")
+        }
+        .sheet(isPresented: Binding(
+            get: { paymentsViewModel.showTapToPayHeroBanner },
+            set: { if !$0 { paymentsViewModel.dismissHeroBanner() } }
+        )) {
+            TapToPayHeroBannerView(
+                onGetStarted: {
+                    paymentsViewModel.dismissHeroBanner()
+                    handleTakePaymentTapped()
+                },
+                onDismiss: {
+                    paymentsViewModel.dismissHeroBanner()
+                }
+            )
         }
         #endif
         .sheet(item: $selectedBookingRequest, onDismiss: {

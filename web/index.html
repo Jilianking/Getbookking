@@ -4055,7 +4055,7 @@
       margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--bk-checkout-border);
     }
     .bk-shop-checkout-payment-label { font-size: 0.82rem; font-weight: 600; margin: 0 0 10px; }
-    #bk-shop-payment-element { margin-bottom: 8px; min-height: 44px; }
+    #bk-shop-payment-element { margin-bottom: 8px; min-height: 120px; }
     .bk-shop-payment-loading { font-size: 0.85rem; color: var(--bk-checkout-muted); margin: 0 0 12px; min-height: 20px; }
     .bk-shop-checkout-stripe-note {
       margin: 0 0 18px; font-size: 0.76rem; color: var(--bk-checkout-muted); line-height: 1.4;
@@ -4076,6 +4076,55 @@
     .bk-shop-checkout-success h2 { margin: 0 0 12px; }
     .bk-shop-checkout-success p { color: var(--bk-checkout-muted); line-height: 1.55; }
     .bk-shop-checkout-success a { color: inherit; font-weight: 600; }
+    .bk-shop-receipt {
+      text-align: left;
+      margin: 0 auto 20px;
+      max-width: 420px;
+      padding: 20px;
+      border: 1px solid var(--bk-checkout-border, rgba(0,0,0,0.1));
+      border-radius: 12px;
+      background: var(--bk-checkout-input-bg, #f5f5f4);
+    }
+    .bk-shop-receipt-head { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--bk-checkout-border, rgba(0,0,0,0.1)); }
+    .bk-shop-receipt-business { font-size: 1.05rem; font-weight: 700; margin: 0 0 4px; color: var(--bk-checkout-fg, #111); }
+    .bk-shop-receipt-meta { font-size: 0.78rem; color: var(--bk-checkout-muted); margin: 0; line-height: 1.45; }
+    .bk-shop-receipt-lines { margin: 0 0 14px; }
+    .bk-shop-receipt-line {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 8px 0; font-size: 0.9rem;
+      border-bottom: 1px dashed rgba(0,0,0,0.08);
+    }
+    .bk-shop-receipt-line:last-child { border-bottom: none; }
+    .bk-shop-receipt-line-name { flex: 1; min-width: 0; color: var(--bk-checkout-fg, #111); }
+    .bk-shop-receipt-line-qty { color: var(--bk-checkout-muted); font-size: 0.82rem; display: block; margin-top: 2px; }
+    .bk-shop-receipt-line-amount { font-weight: 600; white-space: nowrap; color: var(--bk-checkout-fg, #111); }
+    .bk-shop-receipt-totals { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--bk-checkout-border, rgba(0,0,0,0.1)); }
+    .bk-shop-receipt-total-row {
+      display: flex; justify-content: space-between; gap: 12px;
+      font-size: 0.88rem; padding: 4px 0; color: var(--bk-checkout-muted);
+    }
+    .bk-shop-receipt-total-row.bk-shop-receipt-grand {
+      font-size: 1rem; font-weight: 700; color: var(--bk-checkout-fg, #111); padding-top: 8px;
+    }
+    .bk-shop-receipt-actions {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px;
+    }
+    .bk-shop-receipt-print {
+      border: 1px solid var(--bk-checkout-border, rgba(0,0,0,0.15));
+      background: transparent;
+      color: var(--bk-checkout-fg, #111);
+      font-size: 0.88rem; font-weight: 600;
+      padding: 10px 16px; border-radius: 10px; cursor: pointer;
+    }
+    @media print {
+      body * { visibility: hidden; }
+      .bk-shop-receipt, .bk-shop-receipt * { visibility: visible; }
+      .bk-shop-receipt {
+        position: absolute; left: 0; top: 0; width: 100%; max-width: none;
+        border: none; background: #fff;
+      }
+      .bk-shop-receipt-actions { display: none !important; }
+    }
     .bk-shop-nav-cart {
       position: relative;
       width: auto;
@@ -12929,7 +12978,7 @@
           '</div></div>' +
           '<div class="bk-shop-checkout-payment-section" id="bk-shop-checkout-payment-section">' +
           '<p class="bk-shop-checkout-payment-label">Payment</p>' +
-          '<p class="bk-shop-payment-loading" id="bk-shop-payment-loading">Enter your name and email to load payment options.</p>' +
+          '<p class="bk-shop-payment-loading" id="bk-shop-payment-loading">Loading payment options…</p>' +
           '<div id="bk-shop-payment-element"></div>' +
           '<p class="bk-shop-checkout-stripe-note">Handled by Stripe — card details never touch our servers.</p>' +
           '</div>' +
@@ -12940,8 +12989,9 @@
           '<p class="bk-shop-checkout-error" id="bk-shop-checkout-error" style="display:none"></p>' +
           '</form>' +
           '<div class="bk-shop-checkout-success" id="bk-shop-checkout-success" style="display:none">' +
-          '<h2>Order confirmed</h2>' +
-          '<p>Thanks — your payment was received and the business will follow up about your order.</p>' +
+          '<h2>Payment received</h2>' +
+          '<p style="margin:0 0 16px">Thank you — here is your receipt.</p>' +
+          '<div id="bk-shop-checkout-receipt"></div>' +
           '<p style="margin-top:20px"><a href="' + esc(tenantBaseUrl(tenant) + '/shop') + '">Back to shop</a></p>' +
           '</div></div></div>';
       }
@@ -12963,17 +13013,80 @@
           },
         };
       }
-      function showShopCheckoutSuccess(tenant) {
+      function formatReceiptCents(cents) {
+        return formatMoney(Math.max(0, cents || 0) / 100);
+      }
+      function formatReceiptDate(iso) {
+        if (!iso) return '';
+        try {
+          return new Date(iso).toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          });
+        } catch (e) {
+          return '';
+        }
+      }
+      function renderShopCheckoutReceipt(receipt) {
+        if (!receipt) return '';
+        var lines = Array.isArray(receipt.lineItems) ? receipt.lineItems : [];
+        var linesHtml = lines.map(function(line) {
+          var qty = Math.max(1, line.qty || 1);
+          var name = esc(line.name || 'Item');
+          var lineTotal = formatReceiptCents(line.lineTotalCents);
+          return '<div class="bk-shop-receipt-line">' +
+            '<div class="bk-shop-receipt-line-name">' + name +
+            '<span class="bk-shop-receipt-line-qty">Qty ' + qty + '</span></div>' +
+            '<div class="bk-shop-receipt-line-amount">' + lineTotal + '</div>' +
+            '</div>';
+        }).join('');
+        if (!linesHtml) {
+          linesHtml = '<div class="bk-shop-receipt-line"><div class="bk-shop-receipt-line-name">Order</div>' +
+            '<div class="bk-shop-receipt-line-amount">' + formatReceiptCents(receipt.totalCents) + '</div></div>';
+        }
+        var feeRow = '';
+        if ((receipt.surchargeCents || 0) > 0) {
+          feeRow = '<div class="bk-shop-receipt-total-row">' +
+            '<span>Processing &amp; service fees</span>' +
+            '<span>' + formatReceiptCents(receipt.surchargeCents) + '</span></div>';
+        }
+        var emailNote = receipt.customerEmail
+          ? '<p class="bk-shop-receipt-meta" style="margin-top:10px">A copy was sent to ' + esc(receipt.customerEmail) + '.</p>'
+          : '';
+        var paidLabel = formatReceiptDate(receipt.paidAt);
+        return '<div class="bk-shop-receipt" id="bk-shop-receipt-print">' +
+          '<div class="bk-shop-receipt-head">' +
+          '<p class="bk-shop-receipt-business">' + esc(receipt.businessName || 'Receipt') + '</p>' +
+          '<p class="bk-shop-receipt-meta">Order #' + esc((receipt.orderId || '').slice(-8).toUpperCase()) +
+          (paidLabel ? ' · ' + esc(paidLabel) : '') + '</p>' +
+          '<p class="bk-shop-receipt-meta">' + esc(receipt.customerName || '') + '</p>' +
+          '</div>' +
+          '<div class="bk-shop-receipt-lines">' + linesHtml + '</div>' +
+          '<div class="bk-shop-receipt-totals">' +
+          '<div class="bk-shop-receipt-total-row"><span>Subtotal</span><span>' + formatReceiptCents(receipt.subtotalCents) + '</span></div>' +
+          feeRow +
+          '<div class="bk-shop-receipt-total-row bk-shop-receipt-grand"><span>Total paid</span><span>' +
+          formatReceiptCents(receipt.totalCents) + '</span></div>' +
+          '</div>' +
+          emailNote +
+          '<div class="bk-shop-receipt-actions">' +
+          '<button type="button" class="bk-shop-receipt-print" onclick="window.print()">Print receipt</button>' +
+          '</div></div>';
+      }
+      function showShopCheckoutSuccess(tenant, receipt) {
         var form = document.getElementById('bk-shop-checkout-form');
         var headEl = document.querySelector('.bk-shop-checkout-head');
         var successEl = document.getElementById('bk-shop-checkout-success');
+        var receiptEl = document.getElementById('bk-shop-checkout-receipt');
         if (form) form.style.display = 'none';
         if (headEl) headEl.style.display = 'none';
+        if (receiptEl) receiptEl.innerHTML = renderShopCheckoutReceipt(receipt);
         if (successEl) successEl.style.display = 'block';
         writeShopCart(tenant.id, { lines: [] });
         var navCount = document.getElementById('bk-shop-nav-count');
         if (navCount) navCount.style.display = 'none';
         window.__bkShopCheckoutStripe = null;
+        try { sessionStorage.removeItem('bkShopCheckoutOrderId'); } catch (e) { /* ignore */ }
       }
       function finalizeShopCheckoutPayment(tenant, orderId, paymentIntentId) {
         return ensureAnonymousAuth().then(function() {
@@ -12982,8 +13095,9 @@
             orderId: orderId,
             paymentIntentId: paymentIntentId
           });
-        }).then(function() {
-          showShopCheckoutSuccess(tenant);
+        }).then(function(res) {
+          var data = (res && res.data) || {};
+          showShopCheckoutSuccess(tenant, data.receipt || null);
         });
       }
       function handleShopCheckoutReturn(tenant) {
@@ -13078,6 +13192,13 @@
           return !!(contact.name && contact.email && contact.email.indexOf('@') > 0);
         }
 
+        function cartPrepareKey(cart) {
+          if (!cart || !cart.lines || !cart.lines.length) return '';
+          return cart.lines.map(function(L) {
+            return (L.productId || '') + ':' + (L.qty || 1);
+          }).join('|');
+        }
+
         function updateCheckoutChrome() {
           var contact = gatherContact();
           var cart = contact.cart;
@@ -13116,7 +13237,7 @@
           if (mountEl) mountEl.innerHTML = '';
           if (paymentLoading) {
             paymentLoading.style.display = '';
-            paymentLoading.textContent = 'Enter your name and email to load payment options.';
+            paymentLoading.textContent = 'Loading payment options…';
           }
           updateCheckoutChrome();
         }
@@ -13152,8 +13273,8 @@
 
         function prepareCheckoutPayment(force) {
           var contact = gatherContact();
-          if (!contact.cart.lines.length || !contactValid(contact)) return Promise.resolve(false);
-          var key = contact.name + '|' + contact.email + '|' + contact.phone + '|' + contact.notes;
+          if (!contact.cart.lines.length) return Promise.resolve(false);
+          var key = cartPrepareKey(contact.cart);
           if (!force && window.__bkShopCheckoutStripe && lastPrepareKey === key) {
             return Promise.resolve(true);
           }
@@ -13167,8 +13288,8 @@
           if (errorEl) errorEl.style.display = 'none';
           var payload = {
             tenantSlug: tenant.slug,
-            customerName: contact.name,
-            customerEmail: contact.email,
+            customerName: contactValid(contact) ? contact.name : '',
+            customerEmail: contactValid(contact) ? contact.email : '',
             customerPhone: contact.phone || null,
             notes: contact.notes || null,
             lineItems: contact.cart.lines.map(function(L) {
@@ -13228,14 +13349,13 @@
           var el = form.querySelector('[name="' + fieldName + '"]');
           if (!el) return;
           el.addEventListener('input', function() {
-            if (window.__bkShopCheckoutStripe) clearPaymentState();
             updateCheckoutChrome();
-            schedulePreparePayment(false);
           });
         });
 
         if (form.dataset.bkCheckoutBound) {
           updateCheckoutChrome();
+          if (readShopCart(tenant.id).lines.length) schedulePreparePayment(true);
           return;
         }
         form.dataset.bkCheckoutBound = '1';
@@ -13254,6 +13374,23 @@
               feeInfoWrap.classList.remove('bk-shop-fee-tip-open');
               feeInfoBtn.setAttribute('aria-expanded', 'false');
             }
+          });
+        }
+
+        function syncShopCheckoutContact(contact) {
+          var stripeState = window.__bkShopCheckoutStripe;
+          if (!stripeState || !stripeState.orderId) {
+            return Promise.reject(new Error('Payment is not ready yet.'));
+          }
+          return ensureAnonymousAuth().then(function() {
+            return functions.httpsCallable('updateShopCheckoutContact')({
+              tenantSlug: tenant.slug,
+              orderId: stripeState.orderId,
+              customerName: contact.name,
+              customerEmail: contact.email,
+              customerPhone: contact.phone || null,
+              notes: contact.notes || null,
+            });
           });
         }
 
@@ -13279,19 +13416,21 @@
             }
             var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
               encodeURIComponent(stripeState.orderId || '');
-            return stripeState.stripe.confirmPayment({
-              elements: stripeState.elements,
-              confirmParams: {
-                return_url: returnUrl,
-                payment_method_data: {
-                  billing_details: {
-                    name: contact.name,
-                    email: contact.email,
-                    phone: contact.phone || undefined,
+            return syncShopCheckoutContact(contact).then(function() {
+              return stripeState.stripe.confirmPayment({
+                elements: stripeState.elements,
+                confirmParams: {
+                  return_url: returnUrl,
+                  payment_method_data: {
+                    billing_details: {
+                      name: contact.name,
+                      email: contact.email,
+                      phone: contact.phone || undefined,
+                    },
                   },
                 },
-              },
-              redirect: 'if_required',
+                redirect: 'if_required',
+              });
             }).then(function(result) {
               if (result.error) throw result.error;
               return finalizeShopCheckoutPayment(
@@ -13333,6 +13472,7 @@
         });
 
         updateCheckoutChrome();
+        if (readShopCart(tenant.id).lines.length) schedulePreparePayment(true);
       }
       function bindShopPage(tenant) {
         var root = document.getElementById('root');

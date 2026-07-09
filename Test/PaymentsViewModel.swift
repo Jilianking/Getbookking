@@ -9,6 +9,7 @@ import Combine
 import UIKit
 import FirebaseAuth
 import FirebaseFunctions
+import UserNotifications
 
 struct PaymentTransaction: Identifiable, Hashable {
     let id: String
@@ -186,6 +187,13 @@ class PaymentsViewModel: ObservableObject {
     @Published var isConnectingStripe = false
     /// True from tap until Tap to Pay checkout, Safari, or alert finishes launching.
     @Published var isLaunchingTapToPay = false
+    /// Apple req 3.2 / 6.2: full-screen Hero banner shown once to all eligible users.
+    @Published var showTapToPayHeroBanner = false
+
+    #if TAP_TO_PAY_ENABLED
+    private static let tapToPayHeroBannerSeenKey = "tapToPayHeroBannerSeen"
+    private static let tapToPayValuePropPushSentKey = "tapToPayValuePropPushSent"
+    #endif
     @Published var errorMessage: String?
     @Published var transactions: [PaymentTransaction] = []
     @Published var depositLinkUrl: String?
@@ -333,7 +341,6 @@ class PaymentsViewModel: ObservableObject {
 
     var tapToPayLaunchOverlayMessage: String {
         if isEnsuringTapToPayTerms { return "Preparing Tap to Pay terms…" }
-        if isConnectingStripe { return "Opening Stripe…" }
         if isEnsuringTapToPayLocation { return "Connecting Tap to Pay…" }
         return "Loading…"
     }
@@ -347,6 +354,38 @@ class PaymentsViewModel: ObservableObject {
             applyPrepareTapToPayResponse(prepareData)
         } else if stripeConnected, resolvedTapToPayLocationId.isEmpty {
             try? await ensureTapToPayLocation()
+        }
+
+        // Apple req 3.2 / 6.2: show full-screen Hero banner once per eligible user.
+        if !UserDefaults.standard.bool(forKey: Self.tapToPayHeroBannerSeenKey) {
+            showTapToPayHeroBanner = true
+        }
+
+        // Apple req 3.3 / 6.3: send Value Proposition push once per eligible user.
+        scheduleTapToPayValuePropPushIfNeeded()
+    }
+
+    func dismissHeroBanner() {
+        showTapToPayHeroBanner = false
+        UserDefaults.standard.set(true, forKey: Self.tapToPayHeroBannerSeenKey)
+    }
+
+    private func scheduleTapToPayValuePropPushIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.tapToPayValuePropPushSentKey) else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Tap to Pay on iPhone is available"
+            content.body = TapToPayBranding.featureSubtitle
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "tapToPayValueProp",
+                content: content,
+                trigger: trigger
+            )
+            UNUserNotificationCenter.current().add(request) { _ in }
+            UserDefaults.standard.set(true, forKey: Self.tapToPayValuePropPushSentKey)
         }
     }
 
@@ -460,6 +499,11 @@ class PaymentsViewModel: ObservableObject {
         }
 
         TapToPayTerminalManager.shared.prepareTerminalSDK()
+
+        // Apple req 3.8.1: only the account owner/admin may accept Tap to Pay T&C.
+        if !TapToPayReaderSession.shared.termsAcceptedOnDevice && !isTenantOwner {
+            return .showAlert("Contact your account admin to enable Tap to Pay on iPhone.")
+        }
 
         let termsWereAcceptedBefore = TapToPayReaderSession.shared.termsAcceptedOnDevice
         isLaunchingTapToPay = true

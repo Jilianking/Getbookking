@@ -39,6 +39,8 @@
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [
         { "source": "/admin/login", "destination": "/admin/login.html" },
+        { "source": "/admin/forgot-password", "destination": "/admin/forgot-password.html" },
+        { "source": "/admin/reset-password", "destination": "/reset-password.html" },
         { "source": "/admin/welcome", "destination": "/admin/welcome.html" },
         { "source": "/admin", "destination": "/admin/requests.html" },
         { "source": "/admin/requests", "destination": "/admin/requests.html" },
@@ -47,9 +49,13 @@
         { "source": "/admin/testflight", "destination": "/admin/testflight.html" },
         { "source": "/admin/settings", "destination": "/admin/settings.html" },
         { "source": "/beta/login", "destination": "/beta/login.html" },
+        { "source": "/beta/welcome", "destination": "/beta/welcome.html" },
+        { "source": "/beta/forgot-password", "destination": "/beta/forgot-password.html" },
+        { "source": "/beta/reset-password", "destination": "/reset-password.html" },
         { "source": "/beta/report-bug", "destination": "/beta/report-bug.html" },
         { "source": "/beta", "destination": "/beta/index.html" },
-        { "source": "/login", "destination": "/login.html" }
+        { "source": "/login", "destination": "/login.html" },
+        { "source": "/reset-password", "destination": "/reset-password.html" }
       ],
       "headers": [
         {

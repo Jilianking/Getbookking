@@ -2406,7 +2406,7 @@ function validateBetaWaitlistPlanAndTeamSize(plan, teamSize) {
 
 /**
  * Public marketing: iOS beta waitlist (TestFlight signup page). No auth required.
- * Params: { firstName, lastName, email, plan, teamSize, businessName, businessType, website? (honeypot) }
+ * Params: { firstName, lastName, email, plan, teamSize, businessName, businessType, businessTypeCustom?, website? (honeypot) }
  */
 exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
   if ((data?.website || "").toString().trim()) {
@@ -2420,11 +2420,22 @@ exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
   const teamSize = parseBetaWaitlistTeamSize(data?.teamSize);
   const businessName = (data?.businessName || "").toString().trim();
   const businessType = (data?.businessType || "").toString().trim().toLowerCase();
+  const businessTypeCustom = (data?.businessTypeCustom || "")
+    .toString()
+    .trim()
+    .slice(0, 200);
 
   if (!firstName || !lastName || !email || !plan || !businessName || !businessType) {
     throw new functions.https.HttpsError(
       "invalid-argument",
       "First name, last name, email, plan, business name, and business type are required."
+    );
+  }
+
+  if (businessType === "other" && !businessTypeCustom) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Describe your business type."
     );
   }
 
@@ -2444,6 +2455,12 @@ exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
 
   validateBetaWaitlistPlanAndTeamSize(plan, teamSize);
 
+  const waitlistBusinessFields = {
+    businessName,
+    businessType,
+    businessTypeCustom: businessType === "other" ? businessTypeCustom : "",
+  };
+
   const existing = await db
     .collection("betaWaitlist")
     .where("email", "==", email)
@@ -2457,8 +2474,7 @@ exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
         lastName,
         plan,
         teamSize,
-        businessName,
-        businessType,
+        ...waitlistBusinessFields,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -2472,8 +2488,7 @@ exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
     email,
     plan,
     teamSize,
-    businessName,
-    businessType,
+    ...waitlistBusinessFields,
     source: "testflight-page",
     status: "pending",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -2618,6 +2633,48 @@ async function upsertShopCheckoutCustomer(tenantId, customerName, customerEmail,
   );
 }
 
+function shopOrderReceiptResponse(tenantData, orderId, order, totals = {}) {
+  const businessName =
+    (tenantData?.displayName || tenantData?.businessName || "Receipt").toString().trim() ||
+    "Receipt";
+  const lineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
+  const subtotalCents =
+    totals.subtotalCents ??
+    order?.subtotalCents ??
+    lineItems.reduce((sum, line) => sum + (line.lineTotalCents || 0), 0);
+  const surchargeCents = totals.surchargeCents ?? order?.surchargeCents ?? 0;
+  const totalCents =
+    totals.totalCents ??
+    order?.totalCents ??
+    subtotalCents + Math.max(0, surchargeCents);
+  const customerEmail = (order?.customerEmail || "").toString().trim().toLowerCase();
+  const paidAt =
+    totals.paidAt ||
+    (order?.paidAt && typeof order.paidAt.toDate === "function"
+      ? order.paidAt.toDate().toISOString()
+      : null);
+  return {
+    ok: true,
+    orderId,
+    receipt: {
+      businessName,
+      orderId,
+      customerName: (order?.customerName || "").toString().trim() || "Customer",
+      customerEmail: customerEmail.endsWith("@checkout.pending") ? "" : customerEmail,
+      lineItems: lineItems.map((line) => ({
+        name: (line.name || "Item").toString(),
+        qty: Math.max(1, parseInt(line.qty, 10) || 1),
+        unitPriceCents: Math.max(0, parseInt(line.unitPriceCents, 10) || 0),
+        lineTotalCents: Math.max(0, parseInt(line.lineTotalCents, 10) || 0),
+      })),
+      subtotalCents,
+      surchargeCents: Math.max(0, surchargeCents),
+      totalCents,
+      paidAt,
+    },
+  };
+}
+
 async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, paymentIntentId) {
   const orderRef = db.collection("tenants").doc(tenantId).collection("shopOrders").doc(orderId);
   const orderSnap = await orderRef.get();
@@ -2625,14 +2682,17 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
     throw new functions.https.HttpsError("not-found", "Order not found");
   }
   const order = orderSnap.data() || {};
-  if ((order.status || "").toString() === "paid") {
-    return { ok: true, alreadyPaid: true, orderId };
-  }
   const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  const tenantData = tenantSnap.exists ? tenantSnap.data() || {} : {};
+  if ((order.status || "").toString() === "paid") {
+    return {
+      ...shopOrderReceiptResponse(tenantData, orderId, order),
+      alreadyPaid: true,
+    };
+  }
   if (!tenantSnap.exists) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantData = tenantSnap.data() || {};
   const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
   if (!stripeAccountId) {
     throw new functions.https.HttpsError(
@@ -2733,7 +2793,18 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
     });
   }
 
-  return { ok: true, orderId, totalCents: grossCents };
+  const paidAtIso = new Date().toISOString();
+  return shopOrderReceiptResponse(tenantData, orderId, {
+    ...order,
+    subtotalCents: resolvedSubtotal,
+    surchargeCents: resolvedSurcharge,
+    totalCents: grossCents,
+  }, {
+    subtotalCents: resolvedSubtotal,
+    surchargeCents: resolvedSurcharge,
+    totalCents: grossCents,
+    paidAt: paidAtIso,
+  });
 }
 
 /**
@@ -2830,14 +2901,9 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
     const data = request.data;
     try {
     const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
-    const customerName = (data?.customerName || "").toString().trim();
-    const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
 
-    if (!tenantSlug || !customerName || !customerEmail) {
-      throw new HttpsError(
-        "invalid-argument",
-        "tenantSlug, customerName, and customerEmail are required"
-      );
+    if (!tenantSlug) {
+      throw new HttpsError("invalid-argument", "tenantSlug is required");
     }
 
     const { tenantId, tenantData } = await resolvePublicShopTenant(tenantSlug);
@@ -2867,6 +2933,11 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
     const customerPhone = normalizeCustomerPhone(data?.customerPhone);
     const orderRef = db.collection("tenants").doc(tenantId).collection("shopOrders").doc();
     const orderId = orderRef.id;
+    const customerName = (data?.customerName || "").toString().trim() || "Customer";
+    const customerEmail =
+      (data?.customerEmail || "").toString().trim().toLowerCase() ||
+      `guest+${orderId}@checkout.pending`;
+    const isPlaceholderCustomer = customerEmail.endsWith("@checkout.pending");
 
     const pi = await stripe.paymentIntents.create(
       {
@@ -2904,7 +2975,9 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
     if (customerPhone) orderData.customerPhone = customerPhone;
     if (notes) orderData.notes = notes;
     await orderRef.set(orderData);
-    await upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone);
+    if (!isPlaceholderCustomer) {
+      await upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone);
+    }
 
     const pkOut = stripePublishableKeyParam.value().trim();
     const out = {
@@ -2926,6 +2999,73 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       throw new HttpsError("internal", stripeErrorMessage(err));
     }
   });
+
+/**
+ * Public web: attach real customer contact to a pending shop order before payment confirm.
+ * Params: { tenantSlug, orderId, customerName, customerEmail, customerPhone?, notes? }
+ */
+exports.updateShopCheckoutContact = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data;
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  const orderId = (data?.orderId || "").toString().trim();
+  const customerName = (data?.customerName || "").toString().trim();
+  const customerEmail = (data?.customerEmail || "").toString().trim().toLowerCase();
+
+  if (!tenantSlug || !orderId || !customerName || !customerEmail) {
+    throw new HttpsError(
+      "invalid-argument",
+      "tenantSlug, orderId, customerName, and customerEmail are required"
+    );
+  }
+  if (customerEmail.indexOf("@") <= 0) {
+    throw new HttpsError("invalid-argument", "A valid customerEmail is required");
+  }
+
+  const { tenantId, tenantData } = await resolvePublicShopTenant(tenantSlug);
+  const orderRef = db.collection("tenants").doc(tenantId).collection("shopOrders").doc(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) {
+    throw new HttpsError("not-found", "Order not found");
+  }
+  const order = orderSnap.data() || {};
+  if ((order.status || "").toString() !== "pending_payment") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This order can no longer be updated."
+    );
+  }
+
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) {
+    throw new HttpsError("failed-precondition", "Stripe is not configured");
+  }
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
+  const paymentIntentId = (order.stripePaymentIntentId || "").toString().trim();
+  if (!paymentIntentId) {
+    throw new HttpsError("failed-precondition", "Payment is not ready for this order");
+  }
+
+  await stripe.paymentIntents.update(
+    paymentIntentId,
+    { receipt_email: customerEmail },
+    { stripeAccount: stripeAccountId }
+  );
+
+  const customerPhone = normalizeCustomerPhone(data?.customerPhone);
+  const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
+  const patch = {
+    customerName,
+    customerEmail,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (customerPhone) patch.customerPhone = customerPhone;
+  if (notes) patch.notes = notes;
+  await orderRef.set(patch, { merge: true });
+  await upsertShopCheckoutCustomer(tenantId, customerName, customerEmail, customerPhone);
+
+  return { ok: true, orderId };
+});
 
 /**
  * Public web: mark shop order paid after Stripe PaymentIntent succeeds.
@@ -7293,6 +7433,136 @@ exports.twilioInboundSms = functions
 
     res.type("text/xml").send("<Response></Response>");
   });
+
+function passwordResetMarketingOrigin() {
+  return (marketingOriginParam.value() || "https://getbookking.com").toString().trim().replace(/\/+$/, "")
+    || "https://getbookking.com";
+}
+
+function passwordResetPortalOrigin(portal) {
+  const marketing = passwordResetMarketingOrigin();
+  if (portal === "admin") {
+    const explicit = (process.env.ADMIN_ORIGIN || "").toString().trim().replace(/\/+$/, "");
+    if (explicit) return explicit;
+    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
+      return "https://admin.getbookking.com";
+    }
+    return marketing;
+  }
+  if (portal === "beta") {
+    const explicit = (process.env.BETA_ORIGIN || "").toString().trim().replace(/\/+$/, "");
+    if (explicit) return explicit;
+    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
+      return "https://beta.getbookking.com";
+    }
+    return marketing;
+  }
+  return marketing;
+}
+
+function passwordResetPortalPaths(portal) {
+  if (portal === "admin") {
+    return { resetPath: "/admin/reset-password", loginPath: "/admin/login" };
+  }
+  if (portal === "beta") {
+    return { resetPath: "/beta/reset-password", loginPath: "/beta/login" };
+  }
+  return { resetPath: "/reset-password", loginPath: "/login.html" };
+}
+
+function parsePasswordResetOobLink(link) {
+  const parsed = new URL(link);
+  let oobCode = parsed.searchParams.get("oobCode");
+  if (!oobCode && parsed.hash) {
+    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    oobCode = hashParams.get("oobCode");
+  }
+  return oobCode;
+}
+
+/**
+ * Sends a branded password reset email via Resend, pointing to the custom
+ * reset-password handler instead of Firebase's default action page.
+ * Public callable — no auth required (user is logged out).
+ * Params: { email, portal?: "marketing" | "admin" | "beta" }
+ */
+exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
+  const email = ((data && data.email) ? data.email : "").toString().trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new functions.https.HttpsError("invalid-argument", "A valid email address is required.");
+  }
+
+  const portalRaw = ((data && data.portal) ? data.portal : "marketing").toString().trim().toLowerCase();
+  const portal = portalRaw === "admin" || portalRaw === "beta" ? portalRaw : "marketing";
+  const origin = passwordResetPortalOrigin(portal);
+  const paths = passwordResetPortalPaths(portal);
+  const loginUrl = origin + paths.loginPath;
+
+  let resetLink;
+  try {
+    resetLink = await admin.auth().generatePasswordResetLink(email, { url: loginUrl });
+  } catch (err) {
+    if (err.code === "auth/user-not-found") {
+      return { ok: true };
+    }
+    console.error("generatePasswordResetLink error", err);
+    throw new functions.https.HttpsError("internal", "Could not generate reset link.");
+  }
+
+  let oobCode;
+  try {
+    oobCode = parsePasswordResetOobLink(resetLink);
+  } catch (err) {
+    console.error("Failed to parse reset link", resetLink, err);
+    throw new functions.https.HttpsError("internal", "Could not parse reset link.");
+  }
+
+  if (!oobCode) {
+    console.error("Reset link missing oobCode", resetLink);
+    throw new functions.https.HttpsError("internal", "Reset link missing required parameters.");
+  }
+
+  const customResetUrl =
+    origin +
+    paths.resetPath +
+    "?mode=resetPassword" +
+    "&oobCode=" + encodeURIComponent(oobCode) +
+    "&continueUrl=" + encodeURIComponent(loginUrl);
+
+  const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+  if (!resendApiKey) {
+    console.warn("RESEND_API_KEY not set; skipping password reset email to", email);
+    return { ok: true };
+  }
+
+  const from = (process.env.BETA_EMAIL_FROM || "Get Bookking <beta@getbookking.com>").trim();
+  const replyTo = (process.env.BETA_SUPPORT_EMAIL || "support@getbookking.com").trim();
+
+  const html = [
+    "<p>Hello,</p>",
+    "<p>Follow this link to reset your Get Bookking password for your <strong>" + email + "</strong> account.</p>",
+    "<p><a href=\"" + customResetUrl + "\">Reset password</a></p>",
+    "<p>If you didn't ask to reset your password, you can ignore this email.</p>",
+    "<p>Thanks,<br>Your Get Bookking team</p>",
+  ].join("\n");
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + resendApiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from, to: email, subject: "Reset your Get Bookking password", html, reply_to: replyTo }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error("Resend error sending password reset", res.status, body);
+    throw new functions.https.HttpsError("internal", "Could not send reset email. Please try again.");
+  }
+
+  return { ok: true };
+});
 
 const { registerBetaAdminFunctions } = require("./betaAdmin");
 registerBetaAdminFunctions(exports);

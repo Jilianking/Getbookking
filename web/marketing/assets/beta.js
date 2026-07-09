@@ -49,10 +49,16 @@
 
   function loginUrl(nextPath) {
     var next = (nextPath || '').trim();
+    var path;
     if (!next || !isAllowedNext(next)) {
-      return BETA_BASE + '/login';
+      path = BETA_BASE + '/login';
+    } else {
+      path = BETA_BASE + '/login?next=' + encodeURIComponent(next);
     }
-    return BETA_BASE + '/login?next=' + encodeURIComponent(next);
+    if (global.PortalOrigins && !global.PortalOrigins.isDevHost()) {
+      return global.PortalOrigins.absoluteUrl('beta', path);
+    }
+    return path;
   }
 
   function postLoginDestination() {
@@ -172,7 +178,12 @@
             verified = true;
             finish(null, { fb: ctx.fb, user: user, portal: res.data || {} });
           }).catch(function (err) {
-            finish(err);
+            var msg = callableMessage(err);
+            ctx.fb.auth.signOut().finally(function () {
+              var dest = loginUrl(global.location.pathname);
+              var sep = dest.indexOf('?') === -1 ? '?' : '&';
+              global.location.replace(dest + sep + 'error=' + encodeURIComponent(msg));
+            });
           });
         }, function (err) {
           finish(err || new Error('Could not verify sign-in.'));

@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Get early access — Get Bookking iOS beta</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
-  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=8" />
-  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=8" />
+  <title>Get early access — 6 months free — Get Bookking iOS beta</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=10" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=10" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
-  <link rel="stylesheet" href="assets/nav.css?v=6" />
+  <link rel="stylesheet" href="assets/nav.css?v=15" />
   <link rel="stylesheet" href="assets/testflight.css?v=4" />
 </head>
 <body class="testflight-layout">
 
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-128.png?v=8" alt="" class="nav-logo-mark" width="56" height="56" />
+      <img src="assets/brand/logo-dark-128.png?v=10" alt="" class="nav-logo-mark" width="56" height="56" />
       <span>Get Bookking</span>
     </a>
     <ul class="nav-links">
@@ -29,6 +29,7 @@
     </ul>
     <div class="nav-actions">
       <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <a href="signup.html" class="nav-cta nav-cta--desktop nav-cta--filled nav-auth-signup">Sign up</a>
       <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
         <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
           <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
@@ -61,7 +62,7 @@
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
         <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
-        <li><a href="signup.html" class="nav-drawer-cta">Get started free</a></li>
+        <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta">Sign up</a></li>
       </ul>
     </nav>
   </aside>
@@ -72,7 +73,7 @@
 
       <div id="testflightIntro">
         <p class="testflight-label">iOS beta</p>
-        <h1>Get early access — and 3 months free</h1>
+        <h1>Get early access — and 6 months free</h1>
         <p class="testflight-lead">Messages, bookings, payments, and your website — all in one place. Sign up to be among the first to try the app and help shape what it becomes.</p>
 
         <ul class="testflight-benefits">
@@ -96,10 +97,9 @@
 
         <div class="testflight-offer">
           <div class="testflight-offer-head">
-            <span class="testflight-offer-icon" aria-hidden="true">🎁</span>
             <div>
-              <strong>Solo users get 3 months free</strong>
-              <p>Limited beta spots across all plans. No credit card required.</p>
+              <strong>6 months free — grandfathered into founding pricing</strong>
+              <p>Beta testers lock in launch pricing for life. Limited spots across all plans. No credit card required.</p>
             </div>
           </div>
 
@@ -107,15 +107,12 @@
           <div class="testflight-plan-grid" role="radiogroup" aria-label="Plan">
             <button type="button" class="testflight-plan is-selected" data-plan="solo" aria-pressed="true">
               <span class="testflight-plan-name">Solo</span>
-              <span class="testflight-plan-meta"><span class="testflight-plan-dot testflight-plan-dot--limited"></span> Limited spots</span>
             </button>
             <button type="button" class="testflight-plan" data-plan="studio" aria-pressed="false">
               <span class="testflight-plan-name">Studio</span>
-              <span class="testflight-plan-meta"><span class="testflight-plan-dot testflight-plan-dot--limited"></span> Limited spots</span>
             </button>
             <button type="button" class="testflight-plan" data-plan="shop" aria-pressed="false">
               <span class="testflight-plan-name">Shop</span>
-              <span class="testflight-plan-meta"><span class="testflight-plan-dot testflight-plan-dot--limited"></span> Limited spots</span>
             </button>
           </div>
         </div>
@@ -172,6 +169,10 @@
               <option value="other">Other</option>
             </select>
           </div>
+          <div class="testflight-field" id="businessTypeCustomWrap" hidden>
+            <label for="businessTypeCustom">Describe your business type</label>
+            <input id="businessTypeCustom" name="businessTypeCustom" type="text" maxlength="200" placeholder="e.g. Spa, Photography, Med spa" autocomplete="organization-title" />
+          </div>
           <input type="hidden" id="plan" name="plan" value="solo" />
           <div class="testflight-honeypot" aria-hidden="true">
             <label for="website">Website</label>
@@ -217,7 +218,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
-  <script src="assets/nav-auth.js?v=3"></script>
+  <script src="assets/nav-auth.js?v=4"></script>
   <script>
     firebase.initializeApp(firebaseConfig);
     var fns = firebase.app().functions('us-central1');
@@ -276,6 +277,22 @@
 
     applyPlanSelection('solo');
 
+    var businessTypeSelect = document.getElementById('businessType');
+    var businessTypeCustomWrap = document.getElementById('businessTypeCustomWrap');
+    var businessTypeCustomInput = document.getElementById('businessTypeCustom');
+
+    function syncBusinessTypeCustomField() {
+      var isOther = businessTypeSelect.value === 'other';
+      businessTypeCustomWrap.hidden = !isOther;
+      if (!isOther) {
+        businessTypeCustomInput.value = '';
+      } else {
+        businessTypeCustomInput.focus();
+      }
+    }
+
+    businessTypeSelect.addEventListener('change', syncBusinessTypeCustomField);
+
     var joinUrl = (window.testflightPublicJoinUrl || '').trim();
     if (joinUrl) {
       joinBetaBtn.href = joinUrl;
@@ -308,10 +325,17 @@
       var teamSize = parseInt(teamSizeInput.value, 10);
       var businessName = document.getElementById('businessName').value.trim();
       var businessType = document.getElementById('businessType').value;
+      var businessTypeCustom = document.getElementById('businessTypeCustom').value.trim();
       var website = document.getElementById('website').value.trim();
 
       if (!firstName || !lastName || !email || !plan || !businessName || !businessType) {
         showError('Please fill in all fields.');
+        return;
+      }
+
+      if (businessType === 'other' && !businessTypeCustom) {
+        showError('Describe your business type.');
+        syncBusinessTypeCustomField();
         return;
       }
 
@@ -334,6 +358,7 @@
         teamSize: teamSize,
         businessName: businessName,
         businessType: businessType,
+        businessTypeCustom: businessType === 'other' ? businessTypeCustom : '',
         website: website
       }).then(function () {
         intro.hidden = true;

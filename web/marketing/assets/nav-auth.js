@@ -91,10 +91,12 @@
     var email = user && user.email ? user.email : "";
     var initial = initialFromUser(user);
 
-    document.body.classList.remove("nav-auth-pending");
     if (!loggedIn) closeAccountMenu();
 
     document.querySelectorAll(".nav-auth-login").forEach(function (el) {
+      setHidden(el, loggedIn);
+    });
+    document.querySelectorAll(".nav-auth-signup").forEach(function (el) {
       setHidden(el, loggedIn);
     });
     document.querySelectorAll(".nav-auth-account").forEach(function (el) {
@@ -111,6 +113,9 @@
       el.textContent = loggedIn ? name : "Account";
     });
     document.querySelectorAll(".nav-auth-login-item").forEach(function (el) {
+      setHidden(el, loggedIn);
+    });
+    document.querySelectorAll(".nav-auth-signup-item").forEach(function (el) {
       setHidden(el, loggedIn);
     });
     document.querySelectorAll(".nav-auth-account-item").forEach(function (el) {
@@ -148,7 +153,6 @@
     if (!firebase.apps.length) firebase.initializeApp(config);
     var auth = firebase.auth();
 
-    document.body.classList.add("nav-auth-pending");
     bindAccountDropdown();
 
     ["click", "keydown", "scroll", "mousemove", "touchstart"].forEach(function (ev) {

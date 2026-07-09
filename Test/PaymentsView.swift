@@ -105,7 +105,7 @@ struct PaymentsView: View {
             }
             #if TAP_TO_PAY_ENABLED
             .sheet(isPresented: $showTapToPaySheet) {
-                TapToPaySheet(viewModel: viewModel) {
+                TapToPaySheet(viewModel: viewModel, drawerState: drawerState) {
                     showTapToPaySheet = false
                 }
             }
@@ -150,6 +150,20 @@ struct PaymentsView: View {
                 if viewModel.isLaunchingTapToPay {
                     TapToPayLaunchOverlay(message: viewModel.tapToPayLaunchOverlayMessage)
                 }
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.showTapToPayHeroBanner },
+                set: { if !$0 { viewModel.dismissHeroBanner() } }
+            )) {
+                TapToPayHeroBannerView(
+                    onGetStarted: {
+                        viewModel.dismissHeroBanner()
+                        handleTapToPayTapped()
+                    },
+                    onDismiss: {
+                        viewModel.dismissHeroBanner()
+                    }
+                )
             }
             #endif
         }
@@ -304,24 +318,18 @@ struct PaymentsView: View {
                 .foregroundStyle(AppDesign.textSecondary)
                 .padding(.horizontal)
 
-            VStack(spacing: 0) {
-                #if TAP_TO_PAY_ENABLED
-                PaymentCompactActionRow(
-                    icon: "wave.3.right.circle.fill",
-                    iconColor: .blue,
-                    title: "Tap to Pay on iPhone",
-                    subtitle: tapToPayCardSubtitle,
-                    action: { handleTapToPayTapped() },
-                    showsDivider: true
-                )
-                .overlay {
-                    if viewModel.isEnsuringTapToPayLocation {
-                        ProgressView()
-                    }
-                }
-                .allowsHitTesting(!viewModel.isEnsuringTapToPayLocation)
-                #endif
+            #if TAP_TO_PAY_ENABLED
+            TapToPayOniPhoneButton(
+                subtitle: tapToPayCardSubtitle,
+                showsActivity: viewModel.isLaunchingTapToPay
+                    || viewModel.isEnsuringTapToPayLocation
+                    || viewModel.isEnsuringTapToPayTerms,
+                action: { handleTapToPayTapped() }
+            )
+            .padding(.horizontal)
+            #endif
 
+            VStack(spacing: 0) {
                 PaymentCompactActionRow(
                     icon: "creditcard.fill",
                     iconColor: .purple,

@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFunctions
 
 /// Subscription plan chosen at sign-up (stored in Firestore; payment later).
 enum SubscriptionPlan: String, CaseIterable {
@@ -141,7 +142,7 @@ class AuthViewModel: ObservableObject {
         PushNotificationManager.shared.syncTokenAfterSignIn()
     }
 
-    /// Sends Firebase password reset email (login screen and Settings → Change password).
+    /// Sends branded password reset email via Cloud Function (Resend + custom reset page).
     func sendPasswordReset(email: String) async throws {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -151,7 +152,24 @@ class AuthViewModel: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: "Enter your email address first."]
             )
         }
-        try await Auth.auth().sendPasswordReset(withEmail: trimmed)
+        let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+        do {
+            _ = try await functions.httpsCallable("sendPasswordResetLink").call([
+                "email": trimmed,
+                "portal": "marketing",
+            ])
+        } catch {
+            throw NSError(
+                domain: "AuthViewModel",
+                code: 4,
+                userInfo: [
+                    NSLocalizedDescriptionKey: FirebaseFunctionsErrorHelper.message(
+                        from: error,
+                        fallback: "Could not send reset email."
+                    ),
+                ]
+            )
+        }
     }
 
     /// Required before sensitive actions such as account deletion.

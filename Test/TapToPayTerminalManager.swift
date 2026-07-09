@@ -8,6 +8,38 @@
 import Foundation
 import StripeTerminal
 
+/// Serializes Stripe Terminal reader operations (discover, connect, disconnect, pay).
+actor TapToPayReaderOperationCoordinator {
+    static let shared = TapToPayReaderOperationCoordinator()
+
+    private var isRunning = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func withLock<T>(_ body: () async throws -> T) async rethrows -> T {
+        await acquire()
+        defer { release() }
+        return try await body()
+    }
+
+    private func acquire() async {
+        if !isRunning {
+            isRunning = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isRunning = false
+            return
+        }
+        waiters.removeFirst().resume()
+    }
+}
+
 final class TapToPayTerminalManager {
     static let shared = TapToPayTerminalManager()
 
@@ -36,8 +68,70 @@ final class TapToPayTerminalManager {
         ensureInitialized()
     }
 
+    /// True when the reader is connected for the given location and display name.
+    func shouldSkipWarmUp(locationId: String, merchantDisplayName: String?) async -> Bool {
+        await TapToPayReaderOperationCoordinator.shared.withLock {
+            guard !locationId.isEmpty else { return false }
+            let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
+            let termsAlreadyAccepted = await MainActor.run {
+                TapToPayReaderSession.shared.termsAcceptedOnDevice
+            }
+            return isConnectedForConfiguration(
+                locationId: locationId,
+                merchantDisplayName: resolvedName,
+                termsAlreadyAccepted: termsAlreadyAccepted
+            )
+        }
+    }
+
     /// Discover + connect reader (launch / foreground / before checkout).
     func warmUpReader(locationId: String, merchantDisplayName: String? = nil) async {
+        await TapToPayReaderOperationCoordinator.shared.withLock {
+            await warmUpReaderUnlocked(locationId: locationId, merchantDisplayName: merchantDisplayName)
+        }
+    }
+
+    /// Drops an active reader session (e.g. merchant dismissed Apple T&C without accepting).
+    func releaseReaderConnection() async {
+        await TapToPayReaderOperationCoordinator.shared.withLock {
+            await disconnectReaderIfConnected()
+        }
+    }
+
+    /// Disconnect and reconnect so Stripe Terminal picks up a new merchant display name.
+    func reconnectReader(locationId: String, merchantDisplayName: String) async {
+        await TapToPayReaderOperationCoordinator.shared.withLock {
+            await disconnectReaderIfConnected()
+            await warmUpReaderUnlocked(locationId: locationId, merchantDisplayName: merchantDisplayName)
+        }
+    }
+
+    /// Connect Tap to Pay reader (shows Apple T&C on first use). Used before Stripe Connect onboarding.
+    func connectReaderForTermsAcceptance(
+        locationId: String,
+        merchantDisplayName: String? = nil
+    ) async throws {
+        try await TapToPayReaderOperationCoordinator.shared.withLock {
+            try await connectReaderForTermsAcceptanceUnlocked(
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName
+            )
+        }
+    }
+
+    func processPayment(clientSecret: String, locationId: String, merchantDisplayName: String? = nil) async throws {
+        try await TapToPayReaderOperationCoordinator.shared.withLock {
+            try await processPaymentUnlocked(
+                clientSecret: clientSecret,
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName
+            )
+        }
+    }
+
+    // MARK: - Unlocked operations (caller must hold TapToPayReaderOperationCoordinator lock)
+
+    private func warmUpReaderUnlocked(locationId: String, merchantDisplayName: String?) async {
         guard !locationId.isEmpty else {
             await MainActor.run {
                 TapToPayReaderSession.shared.markFailed("Tap to Pay location is not configured.")
@@ -57,19 +151,20 @@ final class TapToPayTerminalManager {
         }
 
         let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
-
         let termsAlreadyAccepted = await MainActor.run {
             TapToPayReaderSession.shared.termsAcceptedOnDevice
         }
-        if connectedReader != nil,
-           connectedLocationId == locationId,
-           connectedMerchantDisplayName == resolvedName,
-           termsAlreadyAccepted {
+
+        if isConnectedForConfiguration(
+            locationId: locationId,
+            merchantDisplayName: resolvedName,
+            termsAlreadyAccepted: termsAlreadyAccepted
+        ) {
             await MainActor.run { TapToPayReaderSession.shared.markReady() }
             return
         }
 
-        if connectedReader != nil {
+        if terminalHasConnectedReader() {
             await disconnectReaderIfConnected()
         }
 
@@ -82,35 +177,19 @@ final class TapToPayTerminalManager {
                 locationId: locationId,
                 merchantDisplayName: resolvedName
             )
-            connectedReader = reader
-            connectedLocationId = locationId
-            connectedMerchantDisplayName = resolvedName
+            recordConnectedReader(reader, locationId: locationId, merchantDisplayName: resolvedName)
             await MainActor.run { TapToPayReaderSession.shared.markReady() }
         } catch {
-            connectedReader = nil
-            connectedLocationId = ""
-            connectedMerchantDisplayName = ""
+            clearConnectedReaderState()
             await MainActor.run {
                 TapToPayReaderSession.shared.markFailed(TapToPayErrorMapper.userMessage(for: error))
             }
         }
     }
 
-    /// Drops an active reader session (e.g. merchant dismissed Apple T&C without accepting).
-    func releaseReaderConnection() async {
-        await disconnectReaderIfConnected()
-    }
-
-    /// Disconnect and reconnect so Stripe Terminal picks up a new merchant display name.
-    func reconnectReader(locationId: String, merchantDisplayName: String) async {
-        await disconnectReaderIfConnected()
-        await warmUpReader(locationId: locationId, merchantDisplayName: merchantDisplayName)
-    }
-
-    /// Connect Tap to Pay reader (shows Apple T&C on first use). Used before Stripe Connect onboarding.
-    func connectReaderForTermsAcceptance(
+    private func connectReaderForTermsAcceptanceUnlocked(
         locationId: String,
-        merchantDisplayName: String? = nil
+        merchantDisplayName: String?
     ) async throws {
         if let blocking = TapToPayEligibility.blockingMessage() { throw TapToPayError.message(blocking) }
         if let deviceBlock = TapToPayEligibility.deviceSupportsTapToPay() { throw TapToPayError.message(deviceBlock) }
@@ -120,7 +199,7 @@ final class TapToPayTerminalManager {
         let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
         guard !locationId.isEmpty else { throw TapToPayError.missingLocationId }
 
-        if connectedReader != nil {
+        if terminalHasConnectedReader() {
             await disconnectReaderIfConnected()
         }
 
@@ -135,9 +214,7 @@ final class TapToPayTerminalManager {
             locationId: locationId,
             merchantDisplayName: resolvedName
         )
-        connectedReader = reader
-        connectedLocationId = locationId
-        connectedMerchantDisplayName = resolvedName
+        recordConnectedReader(reader, locationId: locationId, merchantDisplayName: resolvedName)
         await MainActor.run { TapToPayReaderSession.shared.markReady() }
 
         if await TapToPayReaderSession.shared.waitForAppleTermsAcceptance() {
@@ -150,20 +227,25 @@ final class TapToPayTerminalManager {
             return
         }
 
-        // connectReader succeeded — Stripe only completes once Apple T&C requirements are met.
         await MainActor.run {
             TapToPayReaderSession.shared.markTermsConfirmedAfterSuccessfulConnect()
         }
     }
 
-    func processPayment(clientSecret: String, locationId: String, merchantDisplayName: String? = nil) async throws {
+    private func processPaymentUnlocked(
+        clientSecret: String,
+        locationId: String,
+        merchantDisplayName: String?
+    ) async throws {
         ensureInitialized()
         guard !locationId.isEmpty else { throw TapToPayError.missingLocationId }
 
         let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
-        if connectedReader == nil
-            || connectedLocationId != locationId
-            || connectedMerchantDisplayName != resolvedName {
+        if !isConnectedForConfiguration(
+            locationId: locationId,
+            merchantDisplayName: resolvedName,
+            termsAlreadyAccepted: true
+        ) {
             try await warmUpReaderThrowing(locationId: locationId, merchantDisplayName: resolvedName)
         }
 
@@ -175,7 +257,7 @@ final class TapToPayTerminalManager {
     private func warmUpReaderThrowing(locationId: String, merchantDisplayName: String) async throws {
         if let blocking = TapToPayEligibility.blockingMessage() { throw TapToPayError.message(blocking) }
         if let deviceBlock = TapToPayEligibility.deviceSupportsTapToPay() { throw TapToPayError.message(deviceBlock) }
-        if connectedReader != nil {
+        if terminalHasConnectedReader() {
             await disconnectReaderIfConnected()
         }
         let reader = try await discoverTapToPayReader()
@@ -184,9 +266,7 @@ final class TapToPayTerminalManager {
             locationId: locationId,
             merchantDisplayName: merchantDisplayName
         )
-        connectedReader = reader
-        connectedLocationId = locationId
-        connectedMerchantDisplayName = merchantDisplayName
+        recordConnectedReader(reader, locationId: locationId, merchantDisplayName: merchantDisplayName)
         await MainActor.run { TapToPayReaderSession.shared.markReady() }
     }
 
@@ -196,16 +276,52 @@ final class TapToPayTerminalManager {
         return raw
     }
 
+    private func terminalHasConnectedReader() -> Bool {
+        Terminal.shared.connectedReader != nil || connectedReader != nil
+    }
+
+    private func syncConnectedReaderFromTerminalIfNeeded() {
+        if connectedReader == nil, let sdkReader = Terminal.shared.connectedReader {
+            connectedReader = sdkReader
+        }
+    }
+
+    private func isConnectedForConfiguration(
+        locationId: String,
+        merchantDisplayName: String,
+        termsAlreadyAccepted: Bool
+    ) -> Bool {
+        guard termsAlreadyAccepted else { return false }
+        guard terminalHasConnectedReader() else { return false }
+        syncConnectedReaderFromTerminalIfNeeded()
+        return connectedLocationId == locationId
+            && connectedMerchantDisplayName == merchantDisplayName
+    }
+
+    private func recordConnectedReader(_ reader: Reader, locationId: String, merchantDisplayName: String) {
+        connectedReader = reader
+        connectedLocationId = locationId
+        connectedMerchantDisplayName = merchantDisplayName
+    }
+
+    private func clearConnectedReaderState() {
+        connectedReader = nil
+        connectedLocationId = ""
+        connectedMerchantDisplayName = ""
+    }
+
     private func disconnectReaderIfConnected() async {
-        guard connectedReader != nil else { return }
+        syncConnectedReaderFromTerminalIfNeeded()
+        guard terminalHasConnectedReader() else {
+            clearConnectedReaderState()
+            return
+        }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             Terminal.shared.disconnectReader { _ in
                 continuation.resume()
             }
         }
-        connectedReader = nil
-        connectedLocationId = ""
-        connectedMerchantDisplayName = ""
+        clearConnectedReaderState()
         await MainActor.run { TapToPayReaderSession.shared.markDisconnected() }
     }
 
@@ -261,9 +377,7 @@ final class TapToPayTerminalManager {
         }
 
         func reader(_ reader: Reader, didDisconnect reason: DisconnectReason) {
-            TapToPayTerminalManager.shared.connectedReader = nil
-            TapToPayTerminalManager.shared.connectedLocationId = ""
-            TapToPayTerminalManager.shared.connectedMerchantDisplayName = ""
+            TapToPayTerminalManager.shared.clearConnectedReaderState()
             Task { @MainActor in
                 TapToPayReaderSession.shared.markDisconnected()
             }
@@ -326,6 +440,28 @@ final class TapToPayTerminalManager {
     }
 
     private func connectTapToPayReader(
+        reader: Reader,
+        locationId: String,
+        merchantDisplayName: String
+    ) async throws {
+        do {
+            try await connectTapToPayReaderOnce(
+                reader: reader,
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName
+            )
+        } catch {
+            guard TapToPayErrorMapper.isAlreadyConnectedToReader(error) else { throw error }
+            await disconnectReaderIfConnected()
+            try await connectTapToPayReaderOnce(
+                reader: reader,
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName
+            )
+        }
+    }
+
+    private func connectTapToPayReaderOnce(
         reader: Reader,
         locationId: String,
         merchantDisplayName: String

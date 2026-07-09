@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Beta requests — Bookking Admin</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
@@ -68,7 +68,8 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
-  <script src="/assets/admin.js?v=5"></script>
+  <script src="/assets/portal-origins.js?v=1"></script>
+  <script src="/assets/admin.js?v=6"></script>
   <script src="/assets/firebase-loader.js?v=1"></script>
   <script>
     var activePlan = 'all';
@@ -209,6 +210,14 @@
         document.getElementById('detailApproveBtn').addEventListener('click', function () {
           handleApprove(item.id, this);
         });
+      } else if (item.status === 'declined' || item.status === 'invite_sent' || item.status === 'approved') {
+        actions.innerHTML =
+          '<button type="button" class="admin-btn" id="detailCloseBtn">Close</button>' +
+          '<button type="button" class="admin-btn admin-btn--primary" id="detailReopenBtn">Reopen request</button>';
+        document.getElementById('detailCloseBtn').addEventListener('click', closeDetailModal);
+        document.getElementById('detailReopenBtn').addEventListener('click', function () {
+          handleReopen(item.id, this);
+        });
       } else {
         actions.innerHTML = '<button type="button" class="admin-btn admin-btn--primary" id="detailCloseBtn">Close</button>';
         document.getElementById('detailCloseBtn').addEventListener('click', closeDetailModal);
@@ -320,10 +329,20 @@
               '<button type="button" class="admin-btn admin-btn--primary" data-approve="' + item.id + '">Approve</button>' +
               '<button type="button" class="admin-btn" data-decline="' + item.id + '">Decline</button>' +
             '</div>';
-        } else if (item.status === 'invite_sent' || item.status === 'active' || item.status === 'approved') {
-          actionCell = '<span class="admin-status-pill">Invite sent ✓</span>';
+        } else if (item.status === 'invite_sent' || item.status === 'approved') {
+          actionCell =
+            '<div class="admin-row-actions">' +
+              '<span class="admin-status-pill">Invite sent ✓</span>' +
+              '<button type="button" class="admin-btn" data-reopen="' + item.id + '">Reopen</button>' +
+            '</div>';
+        } else if (item.status === 'active') {
+          actionCell = '<span class="admin-status-pill">Active</span>';
         } else if (item.status === 'declined') {
-          actionCell = '<span class="admin-list-meta">Declined</span>';
+          actionCell =
+            '<div class="admin-row-actions">' +
+              '<span class="admin-list-meta">Declined</span>' +
+              '<button type="button" class="admin-btn" data-reopen="' + item.id + '">Reopen</button>' +
+            '</div>';
         } else {
           actionCell = '<span class="admin-list-meta">' + BetaAdmin.escapeHtml(item.status) + '</span>';
         }
@@ -353,6 +372,12 @@
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           handleDecline(btn.getAttribute('data-decline'), btn);
+        });
+      });
+      wrap.querySelectorAll('[data-reopen]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          handleReopen(btn.getAttribute('data-reopen'), btn);
         });
       });
       wrap.querySelectorAll('[data-request-id]').forEach(function (row) {
@@ -419,6 +444,21 @@
         .then(function (res) {
           closeDetailModal();
           showApproveResult(res);
+          return refreshAll();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          alert(BetaAdmin.callableMessage(err));
+        });
+    }
+
+    function handleReopen(id, btn) {
+      if (!confirm('Reopen this request? It will return to Pending so you can approve or decline again.')) return;
+      btn.disabled = true;
+      BetaAdmin.callCallable(state.fb, state.user, 'reopenBetaWaitlistRequest', { waitlistId: id })
+        .then(function () {
+          closeDetailModal();
+          alert('Request reopened. It is pending again.');
           return refreshAll();
         })
         .catch(function (err) {

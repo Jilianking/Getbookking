@@ -37,7 +37,7 @@ Cloud Functions (deploy from `functions/`):
 - **After T&C (first time):** Merchant education — Apple “How to Tap” overlay on iOS 18+, or in-app pages on older iOS. Reopen anytime under **Payments → Tap to Pay settings → How to use Tap to Pay**.
 - T&C is shown once per device; `TapToPayReaderSession` persists acceptance locally.
 - Reader warms up when the app becomes active (signed in, Stripe connected, location configured).
-- Checkout shows processing → approved / declined / timeout and optional share receipt.
+- Checkout shows processing → approved / declined / timeout and an on-screen receipt sheet (share PDF / Messages).
 
 ## Backend (Tap to Pay terms)
 

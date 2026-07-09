@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome — Bookking Beta</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=10" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/admin.css?v=3" />
+  <link rel="stylesheet" href="/assets/portal-auth-fields.css?v=1" />
+  <style>
+    .admin-login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      background: var(--admin-bg);
+    }
+    .welcome-card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border: 1px solid var(--admin-border);
+      border-radius: 16px;
+      padding: 36px 32px;
+    }
+    .welcome-card h1 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 30px;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .welcome-card p { color: var(--admin-muted); font-size: 14px; margin-bottom: 24px; }
+    .welcome-card label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--admin-muted);
+      margin-bottom: 6px;
+    }
+    .welcome-error { color: #b42318; font-size: 14px; margin-bottom: 12px; }
+    .welcome-step[hidden] { display: none !important; }
+    .welcome-footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .welcome-footer a {
+      color: var(--admin-accent, #8B6F47);
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .welcome-footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body class="admin-body">
+  <div class="admin-login-wrap">
+    <div class="welcome-card">
+      <div class="admin-brand" style="margin-bottom: 20px; padding: 0;">
+        <img src="/assets/brand/logo-dark-128.png?v=10" alt="" width="36" height="36" />
+        <div class="admin-brand-text">Bookking</div>
+        <span class="admin-pill">Beta</span>
+      </div>
+
+      <h1>Welcome to the beta</h1>
+      <p id="welcomeLead">Sign in with the temporary password from your invite email. Your account isn&rsquo;t fully active until you choose a new password.</p>
+      <p class="welcome-error" id="welcomeError" hidden></p>
+
+      <div id="stepSignIn" class="welcome-step">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" readonly style="margin-bottom:14px" />
+        <label for="tempPassword">Temporary password</label>
+        <div class="portal-auth-field">
+          <input id="tempPassword" type="password" autocomplete="current-password" />
+          <button type="button" class="portal-auth-eye" data-password-toggle="tempPassword" aria-label="Show password"></button>
+        </div>
+        <button type="button" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="signInBtn">Continue</button>
+        <div class="welcome-footer">
+          <a href="/beta/forgot-password" id="forgotLink">Forgot password?</a>
+        </div>
+      </div>
+
+      <div id="stepNewPassword" class="welcome-step" hidden>
+        <label for="newPassword">Create your password</label>
+        <div class="portal-auth-field">
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="6" />
+          <button type="button" class="portal-auth-eye" data-password-toggle="newPassword" aria-label="Show password"></button>
+        </div>
+        <label for="confirmPassword">Confirm password</label>
+        <div class="portal-auth-field">
+          <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" />
+          <button type="button" class="portal-auth-eye" data-password-toggle="confirmPassword" aria-label="Show password"></button>
+        </div>
+        <button type="button" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="setPasswordBtn">Enter beta portal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/portal-origins.js?v=1"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/firebase-loader.js?v=1"></script>
+  <script src="/assets/portal-password-toggle.js?v=1"></script>
+  <script>
+    (function () {
+      PortalPasswordToggle.bind();
+
+      var loader = window.BetaAdminFirebase;
+      var auth = null;
+      var fns = null;
+      var token = new URLSearchParams(location.search).get('t') || '';
+
+      function showError(msg) {
+        var el = document.getElementById('welcomeError');
+        el.hidden = !msg;
+        el.textContent = msg || '';
+      }
+
+      function boot() {
+        return loader.load(['app', 'auth', 'functions']).then(function () {
+          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+          auth = firebase.auth();
+          fns = firebase.app().functions('us-central1');
+        });
+      }
+
+      boot().then(function () {
+        if (!token) {
+          showError('Invalid invite link. Open the link from your approval email.');
+          return;
+        }
+        return fns.httpsCallable('validateBetaOnboardingToken')({ token: token }).then(function (res) {
+          var email = (res.data && res.data.email) || '';
+          document.getElementById('email').value = email;
+          var forgot = document.getElementById('forgotLink');
+          if (forgot && email) {
+            forgot.href = '/beta/forgot-password?email=' + encodeURIComponent(email);
+          }
+        });
+      }).catch(function (err) {
+        showError((err && err.message) || 'This invite link is not valid.');
+      });
+
+      document.getElementById('signInBtn').addEventListener('click', function () {
+        showError('');
+        var email = document.getElementById('email').value.trim();
+        var password = document.getElementById('tempPassword').value;
+        var btn = document.getElementById('signInBtn');
+        btn.disabled = true;
+        boot().then(function () {
+          return auth.signInWithEmailAndPassword(email, password);
+        }).then(function () {
+          document.getElementById('stepSignIn').hidden = true;
+          document.getElementById('stepNewPassword').hidden = false;
+          document.getElementById('welcomeLead').textContent = 'Choose a new password for your beta account.';
+          PortalPasswordToggle.bind();
+        }).catch(function (err) {
+          btn.disabled = false;
+          showError((err && err.message) || 'Could not sign in. Check your temporary password.');
+        });
+      });
+
+      document.getElementById('setPasswordBtn').addEventListener('click', function () {
+        showError('');
+        var p1 = document.getElementById('newPassword').value;
+        var p2 = document.getElementById('confirmPassword').value;
+        if (p1.length < 6) {
+          showError('Password must be at least 6 characters.');
+          return;
+        }
+        if (p1 !== p2) {
+          showError('Passwords do not match.');
+          return;
+        }
+        var btn = document.getElementById('setPasswordBtn');
+        btn.disabled = true;
+        boot().then(function () {
+          return fns.httpsCallable('completeBetaOnboarding')({ token: token, newPassword: p1 });
+        }).then(function () {
+          return auth.currentUser.getIdToken(true);
+        }).then(function () {
+          window.location.href = (window.PortalOrigins && !window.PortalOrigins.isDevHost())
+            ? window.PortalOrigins.absoluteUrl('beta', '/beta')
+            : '/beta';
+        }).catch(function (err) {
+          btn.disabled = false;
+          showError((err && err.message) || 'Could not finish setup.');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

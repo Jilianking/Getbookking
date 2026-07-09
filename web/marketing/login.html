@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Log in — Get Bookking</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=8" />
-  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=8" />
-  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=8" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=10" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=10" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
@@ -23,6 +23,9 @@
       --border: #E8E0D4;
       --error: #b42318;
     }
+    html {
+      width: 100%;
+    }
     body {
       font-family: 'DM Sans', sans-serif;
       color: var(--text-primary);
@@ -33,6 +36,9 @@
       display: flex;
       flex-direction: column;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      width: 100%;
+      max-width: 100%;
     }
     .acct-header {
       display: flex;
@@ -61,6 +67,18 @@
     .acct-header nav { display: flex; gap: 20px; align-items: center; font-size: 14px; }
     .acct-header nav a { color: var(--text-secondary); text-decoration: none; }
     .acct-header nav a:hover { color: var(--text-primary); }
+    .acct-header nav a.acct-header-signup {
+      padding: 9px 20px;
+      border: 1px solid var(--brand-dark);
+      border-radius: 8px;
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+      font-weight: 500;
+    }
+    .acct-header nav a.acct-header-signup:hover {
+      opacity: 0.92;
+      color: var(--brand-cream);
+    }
     .acct-wrap {
       flex: 1;
       display: flex;
@@ -142,15 +160,17 @@
     }
     @media (max-width: 520px) { .acct-header { padding: 0 20px; } }
   </style>
+  <link rel="stylesheet" href="assets/portal-auth-fields.css?v=1" />
 </head>
 <body>
   <header class="acct-header">
     <a class="brand" href="index.html" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-128.png?v=8" alt="" width="56" height="56" />
+      <img src="assets/brand/logo-dark-128.png?v=10" alt="" width="56" height="56" />
       <span>Get Bookking</span>
     </a>
     <nav>
-      <a href="signup.html">Start free</a>
+      <a href="login.html">Log in</a>
+      <a href="signup.html" class="acct-header-signup">Sign up</a>
     </nav>
   </header>
 
@@ -160,7 +180,7 @@
         <h1>Already signed in</h1>
         <p class="subtitle">You have an active session on this browser.</p>
         <p class="signed-in-email" id="signedInEmail"></p>
-        <a href="account.html" class="btn-primary" style="display:block;text-align:center;text-decoration:none;">Go to my account</a>
+        <a href="account.html" class="btn-primary" id="continueBtn" style="display:block;text-align:center;text-decoration:none;">Go to my account</a>
         <button type="button" class="btn-secondary" id="switchAccountBtn">Sign in as someone else</button>
       </div>
       <div id="loginFormPanel" class="login-panel">
@@ -171,7 +191,10 @@
         <label for="email">Email</label>
         <input type="email" id="email" name="email" autocomplete="username" required />
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" autocomplete="current-password" required />
+        <div class="portal-auth-field">
+          <input type="password" id="password" name="password" autocomplete="current-password" required />
+          <button type="button" class="portal-auth-eye" data-password-toggle="password" aria-label="Show password"></button>
+        </div>
         <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
       </form>
       <p class="error-msg" id="errorMsg"></p>
@@ -187,27 +210,13 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="js/firebase-config.js"></script>
+  <script src="assets/portal-origins.js?v=1"></script>
+  <script src="assets/portal-login.js?v=1"></script>
+  <script src="assets/portal-password-toggle.js?v=1"></script>
   <script>
+    PortalPasswordToggle.bind();
     firebase.initializeApp(firebaseConfig);
     var auth = firebase.auth();
-
-    function showError(msg) {
-      var el = document.getElementById('errorMsg');
-      el.textContent = msg || '';
-      el.classList.toggle('visible', !!msg);
-    }
-
-    function showLoginForm() {
-      document.getElementById('loginSignedInPanel').classList.add('hidden');
-      document.getElementById('loginFormPanel').classList.remove('hidden');
-    }
-
-    function showSignedInPanel(email) {
-      document.getElementById('signedInEmail').textContent = email;
-      document.getElementById('loginFormPanel').classList.add('hidden');
-      document.getElementById('loginSignedInPanel').classList.remove('hidden');
-      updateSignedInContinueLink();
-    }
 
     (function applyQueryParams() {
       var params = new URLSearchParams(window.location.search);
@@ -228,43 +237,6 @@
       return next;
     }
 
-    function updateSignedInContinueLink() {
-      var dest = postLoginDestination();
-      var link = document.querySelector('#loginSignedInPanel a.btn-primary');
-      if (link) {
-        link.href = dest;
-        link.textContent = dest.indexOf('billing.html') !== -1 ? 'Continue to billing' : 'Go to my account';
-      }
-    }
-
-    document.getElementById('switchAccountBtn').addEventListener('click', function() {
-      auth.signOut().then(showLoginForm);
-    });
-
-    document.getElementById('loginForm').addEventListener('submit', function(ev) {
-      ev.preventDefault();
-      var email = document.getElementById('email').value.trim();
-      var password = document.getElementById('password').value;
-      var btn = document.getElementById('submitBtn');
-      showError('');
-      btn.disabled = true;
-      auth.signInWithEmailAndPassword(email, password)
-        .then(function() {
-          window.location.href = postLoginDestination();
-        })
-        .catch(function(e) {
-          btn.disabled = false;
-          var code = e && e.code ? e.code : '';
-          if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-            showError('Incorrect email or password.');
-          } else if (code === 'auth/invalid-email') {
-            showError('Enter a valid email address.');
-          } else {
-            showError((e && e.message) ? e.message : 'Could not log in.');
-          }
-        });
-    });
-
     document.getElementById('forgotLink').addEventListener('click', function(ev) {
       var email = document.getElementById('email').value.trim();
       if (email) {
@@ -273,20 +245,27 @@
       }
     });
 
-    auth.onAuthStateChanged(function(user) {
-      if (user && user.email) {
-        var dest = postLoginDestination();
-        var params = new URLSearchParams(window.location.search);
-        if (params.get('next') && dest.indexOf('billing.html') !== -1) {
-          window.location.replace(dest);
-          return;
-        }
-        showSignedInPanel(user.email);
-      } else {
-        showLoginForm();
-      }
+    PortalLogin.init({
+      auth: auth,
+      formId: 'loginForm',
+      signedInPanelId: 'loginSignedInPanel',
+      formPanelId: 'loginFormPanel',
+      signedInEmailId: 'signedInEmail',
+      switchBtnId: 'switchAccountBtn',
+      submitBtnId: 'submitBtn',
+      errorElId: 'errorMsg',
+      emailInputId: 'email',
+      passwordInputId: 'password',
+      continueBtnId: 'continueBtn',
+      getDestination: postLoginDestination,
+      onVerify: null,
+      formatVerifyError: PortalLogin.authErrorMessage,
+      getContinueLabel: function(dest) {
+        return dest.indexOf('billing.html') !== -1 ? 'Continue to billing' : 'Go to my account';
+      },
+      autoRedirectWhenSignedIn: true
     });
   </script>
-  <script src="assets/nav-auth.js?v=3"></script>
+  <script src="assets/nav-auth.js?v=4"></script>
 </body>
 </html>

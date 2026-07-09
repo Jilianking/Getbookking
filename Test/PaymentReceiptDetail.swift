@@ -146,4 +146,76 @@ struct PaymentReceiptDetail: Equatable {
             stripeReceiptUrl: nil
         )
     }
+
+    /// Receipt shown immediately after an in-person Tap to Pay charge (Apple 4.5 outcome + receipt).
+    static func fromTapToPay(
+        checkout: CardCheckoutBreakdown,
+        businessName: String,
+        customerName: String?,
+        note: String?,
+        paymentIntentId: String?,
+        includesSignature: Bool,
+        paidAt: Date = Date()
+    ) -> PaymentReceiptDetail {
+        var items: [PaymentReceiptLineItem] = [
+            PaymentReceiptLineItem(
+                id: "service",
+                name: "Tap to Pay on iPhone",
+                quantity: 1,
+                amountCents: checkout.serviceCents
+            ),
+        ]
+        if checkout.hasPassThroughFees {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "fees",
+                    name: "Processing & service fees",
+                    quantity: 1,
+                    amountCents: checkout.passThroughFeeCents
+                )
+            )
+        }
+        let trimmedNote = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedNote.isEmpty {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "note",
+                    name: trimmedNote,
+                    quantity: 1,
+                    amountCents: 0
+                )
+            )
+        }
+        if includesSignature {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "signature",
+                    name: "Customer signature on file",
+                    quantity: 1,
+                    amountCents: 0
+                )
+            )
+        }
+
+        let receiptNumber: String? = {
+            let id = (paymentIntentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty else { return nil }
+            return String(id.suffix(8)).uppercased()
+        }()
+
+        let trimmedCustomer = (customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return PaymentReceiptDetail(
+            businessName: businessName.isEmpty ? "Receipt" : businessName,
+            receiptNumber: receiptNumber,
+            paidAt: paidAt,
+            customerName: trimmedCustomer.isEmpty ? nil : trimmedCustomer,
+            customerEmail: nil,
+            serviceLabel: "Tap to Pay on iPhone",
+            lineItems: items,
+            totalPaidCents: checkout.totalCents,
+            serviceCents: checkout.serviceCents,
+            stripeReceiptUrl: nil
+        )
+    }
 }

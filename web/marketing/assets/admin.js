@@ -65,13 +65,21 @@
 
   function loginUrl(nextPath) {
     var next = (nextPath || '').trim();
+    var path;
     if (!next) {
-      return ADMIN_BASE + '/login';
+      path = ADMIN_BASE + '/login';
+    } else if (next.indexOf('/') === 0) {
+      path = ADMIN_BASE + '/login?next=' + encodeURIComponent(next);
+    } else {
+      path =
+        ADMIN_BASE +
+        '/login?next=' +
+        encodeURIComponent(ADMIN_BASE + '/' + next.replace(/\.html$/, ''));
     }
-    if (next.indexOf('/') === 0) {
-      return ADMIN_BASE + '/login?next=' + encodeURIComponent(next);
+    if (global.PortalOrigins && !global.PortalOrigins.isDevHost()) {
+      return global.PortalOrigins.absoluteUrl('admin', path);
     }
-    return ADMIN_BASE + '/login?next=' + encodeURIComponent(ADMIN_BASE + '/' + next.replace(/\.html$/, ''));
+    return path;
   }
 
   function callableMessage(err) {
@@ -142,7 +150,7 @@
     return '' +
       '<aside class="admin-sidebar">' +
         '<div class="admin-brand">' +
-          '<img src="/assets/brand/logo-dark-128.png?v=8" alt="" width="36" height="36" />' +
+          '<img src="/assets/brand/logo-dark-128.png?v=10" alt="" width="36" height="36" />' +
           '<div><div class="admin-brand-text">Bookking</div></div>' +
           '<span class="admin-pill">Admin</span>' +
         '</div>' +
@@ -220,7 +228,12 @@
           verified = true;
           finish(null, { fb: fb, user: user });
         }).catch(function (err) {
-          finish(err);
+          var msg = callableMessage(err);
+          fb.auth.signOut().finally(function () {
+            var dest = loginUrl(ADMIN_BASE + '/' + activeId);
+            var sep = dest.indexOf('?') === -1 ? '?' : '&';
+            global.location.replace(dest + sep + 'error=' + encodeURIComponent(msg));
+          });
         });
       }, function (err) {
         finish(err || new Error('Could not verify sign-in.'));

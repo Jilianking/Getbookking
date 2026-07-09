@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Beta sign in — Bookking</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=8" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/assets/admin.css?v=3" />
+  <link rel="stylesheet" href="/assets/portal-auth-fields.css?v=1" />
   <style>
     .admin-login-wrap {
       min-height: 100vh;
@@ -49,90 +50,129 @@
       margin-bottom: 14px;
     }
     .admin-login-error { color: #b42318; font-size: 14px; margin-bottom: 12px; }
+    .login-panel.hidden { display: none; }
+    .signed-in-email { font-weight: 600; color: var(--admin-text); margin-bottom: 18px; }
+    .admin-login-secondary {
+      width: 100%;
+      margin-top: 10px;
+      justify-content: center;
+    }
+    .admin-login-footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .admin-login-footer a {
+      color: var(--admin-accent, #8B6F47);
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .admin-login-footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body class="admin-body">
   <div class="admin-login-wrap">
     <div class="admin-login-card">
       <div class="admin-brand" style="margin-bottom: 20px; padding: 0;">
-        <img src="/assets/brand/logo-dark-128.png?v=8" alt="" width="36" height="36" />
+        <img src="/assets/brand/logo-dark-128.png?v=10" alt="" width="36" height="36" />
         <div class="admin-brand-text">Bookking</div>
         <span class="admin-pill">Beta</span>
       </div>
-      <h1>Sign in</h1>
-      <p>Beta tester portal</p>
-      <p class="admin-login-error" id="loginError" hidden></p>
-      <form id="betaLoginForm">
-        <label for="email">Email</label>
-        <input id="email" type="email" autocomplete="username" required />
-        <label for="password">Password</label>
-        <input id="password" type="password" autocomplete="current-password" required />
-        <button type="submit" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="submitBtn">Continue</button>
-      </form>
+
+      <div id="loginSignedInPanel" class="login-panel hidden">
+        <h1>Already signed in</h1>
+        <p>You have an active beta session on this browser.</p>
+        <p class="signed-in-email" id="signedInEmail"></p>
+        <button type="button" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="continueBtn">Continue to beta portal</button>
+        <button type="button" class="admin-btn admin-login-secondary" id="switchAccountBtn">Sign in as someone else</button>
+      </div>
+
+      <div id="loginFormPanel" class="login-panel">
+        <h1>Sign in</h1>
+        <p>Beta tester portal</p>
+        <p class="admin-login-error" id="loginError" hidden></p>
+        <form id="betaLoginForm">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="username" required />
+          <label for="password">Password</label>
+          <div class="portal-auth-field">
+            <input id="password" type="password" autocomplete="current-password" required />
+            <button type="button" class="portal-auth-eye" data-password-toggle="password" aria-label="Show password"></button>
+          </div>
+          <button type="submit" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="submitBtn">Continue</button>
+        </form>
+        <div class="admin-login-footer">
+          <a href="/beta/forgot-password" id="forgotLink">Forgot password?</a>
+        </div>
+      </div>
     </div>
   </div>
 
+  <script src="/assets/portal-origins.js?v=1"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/assets/beta.js?v=1"></script>
+  <script src="/assets/beta.js?v=2"></script>
   <script src="/assets/firebase-loader.js?v=1"></script>
+  <script src="/assets/portal-login.js?v=1"></script>
+  <script src="/assets/portal-password-toggle.js?v=1"></script>
   <script>
+    PortalPasswordToggle.bind();
     (function () {
       var fb = null;
-      var ready = false;
 
-      function showError(msg) {
-        var el = document.getElementById('loginError');
-        el.hidden = !msg;
-        el.textContent = msg || '';
-      }
-
-      function verifyTesterAndRedirect(user) {
-        return user.getIdToken(true).then(function () {
-          return fb.fns.httpsCallable('getBetaTesterPortal')();
-        }).then(function () {
-          window.location.replace(BetaPortal.postLoginDestination());
-        });
-      }
-
-      document.getElementById('betaLoginForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        showError('');
-        if (!ready || !fb) {
-          showError('Still loading sign-in. Please wait a moment and try again.');
-          return;
+      function formatVerifyError(err) {
+        var code = err && err.code ? err.code : '';
+        if (code === 'permission-denied') {
+          return 'Beta portal access is not enabled for this account.';
         }
-        var btn = document.getElementById('submitBtn');
-        btn.disabled = true;
-        fb.auth.signInWithEmailAndPassword(
-          document.getElementById('email').value.trim(),
-          document.getElementById('password').value
-        ).then(function (cred) {
-          return verifyTesterAndRedirect(cred.user);
-        }).catch(function (err) {
-          btn.disabled = false;
-          var code = err && err.code ? err.code : '';
-          if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-            showError('Incorrect email or password.');
-          } else if (code === 'permission-denied') {
-            showError('Beta portal access is not enabled for this account.');
-          } else {
-            showError(BetaPortal.callableMessage(err));
+        return BetaPortal.callableMessage(err);
+      }
+
+      function startLogin(auth) {
+        (function applyQueryParams() {
+          var params = new URLSearchParams(window.location.search);
+          var err = (params.get('error') || '').trim();
+          if (err) {
+            PortalLogin.setError('loginError', err);
+          }
+        })();
+
+        document.getElementById('forgotLink').addEventListener('click', function (ev) {
+          var email = document.getElementById('email').value.trim();
+          if (email) {
+            ev.preventDefault();
+            window.location.href = '/beta/forgot-password?email=' + encodeURIComponent(email);
           }
         });
-      });
+
+        PortalLogin.init({
+          auth: auth,
+          formId: 'betaLoginForm',
+          signedInPanelId: 'loginSignedInPanel',
+          formPanelId: 'loginFormPanel',
+          signedInEmailId: 'signedInEmail',
+          switchBtnId: 'switchAccountBtn',
+          submitBtnId: 'submitBtn',
+          errorElId: 'loginError',
+          emailInputId: 'email',
+          passwordInputId: 'password',
+          continueBtnId: 'continueBtn',
+          getDestination: BetaPortal.postLoginDestination,
+          onVerify: function () {
+            return fb.fns.httpsCallable('getBetaTesterPortal')();
+          },
+          formatVerifyError: formatVerifyError,
+          getContinueLabel: function () {
+            return 'Continue to beta portal';
+          },
+          autoRedirectWhenSignedIn: false
+        });
+      }
 
       BetaPortal.bootFirebase().then(function (ctx) {
         fb = ctx.fb;
-        ready = true;
-        fb.auth.onAuthStateChanged(function (user) {
-          if (!user) return;
-          verifyTesterAndRedirect(user).catch(function (err) {
-            showError(BetaPortal.callableMessage(err));
-            fb.auth.signOut();
-          });
-        });
+        startLogin(fb.auth);
       }).catch(function (err) {
-        showError(BetaPortal.callableMessage(err));
+        PortalLogin.setError('loginError', BetaPortal.callableMessage(err));
         document.getElementById('submitBtn').disabled = true;
       });
     })();

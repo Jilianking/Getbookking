@@ -13,6 +13,7 @@ private enum TapToPayCheckoutPhase: Equatable {
     case collectSignature(amountCents: Int)
     case approved(amountCents: Int)
     case declined(message: String)
+    case timedOut(message: String)
     case failed(message: String)
 }
 
@@ -20,6 +21,7 @@ struct TapToPaySheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
     @ObservedObject private var readerSession = TapToPayReaderSession.shared
     @EnvironmentObject private var sessionStore: TenantSessionStore
+    var drawerState: DrawerState
     var onDismiss: () -> Void
 
     @State private var amountCentsInput = 0
@@ -35,6 +37,11 @@ struct TapToPaySheet: View {
     @State private var showReceiptPrompt = false
     @State private var receiptPhoneDraft = ""
     @State private var manualCheckoutError: String?
+    @State private var showTapToPayReceiptSheet = false
+    @State private var approvedReceiptDetail: PaymentReceiptDetail?
+    @State private var lastPaymentIntentId: String?
+    @State private var lastCheckout: CardCheckoutBreakdown?
+    @State private var lastPaidAt = Date()
 
     private var serviceAmountCents: Int { amountCentsInput }
 
@@ -90,6 +97,9 @@ struct TapToPaySheet: View {
                 case .declined(let message):
                     outcomeContent(success: false, message: message)
                     Spacer(minLength: 0)
+                case .timedOut(let message):
+                    outcomeContent(success: false, message: message)
+                    Spacer(minLength: 0)
                 case .failed(let message):
                     outcomeContent(success: false, message: message)
                     Spacer(minLength: 0)
@@ -133,13 +143,29 @@ struct TapToPaySheet: View {
                     }
                 )
             }
+            .sheet(isPresented: $showTapToPayReceiptSheet) {
+                if let approvedReceiptDetail {
+                    PaymentReceiptSheet(
+                        detail: approvedReceiptDetail,
+                        drawerState: drawerState,
+                        onDismissAll: onDismiss
+                    )
+                }
+            }
             .task {
                 await sessionStore.loadCustomersIfNeeded(isDemoMode: false)
                 await sessionStore.loadBookingsIfNeeded(isDemoMode: false)
-                await TapToPayTerminalManager.shared.warmUpReader(
+                let displayName = TapToPayLocationStore.shared.merchantDisplayName
+                let skipWarmUp = await TapToPayTerminalManager.shared.shouldSkipWarmUp(
                     locationId: locationId,
-                    merchantDisplayName: TapToPayLocationStore.shared.merchantDisplayName
+                    merchantDisplayName: displayName
                 )
+                if !skipWarmUp {
+                    await TapToPayTerminalManager.shared.warmUpReader(
+                        locationId: locationId,
+                        merchantDisplayName: displayName
+                    )
+                }
             }
         }
     }
@@ -331,28 +357,31 @@ struct TapToPaySheet: View {
             currentSignatureLine = []
         }
         phase = .approved(amountCents: amountCents)
-        offerReceiptIfConfigured(amountCents: amountCents)
+        presentOnScreenReceipt(amountCents: amountCents)
     }
 
-    private func offerReceiptIfConfigured(amountCents: Int) {
-        let delivery = viewModel.tapToPayReceiptPreferences.delivery
-        guard delivery != .none else { return }
+    private func presentOnScreenReceipt(amountCents: Int) {
+        let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
+            serviceCents: serviceAmountCents,
+            channel: .tapToPay
+        )
+        let detail = PaymentReceiptDetail.fromTapToPay(
+            checkout: checkout,
+            businessName: viewModel.effectiveTapToPayDisplayName,
+            customerName: selectedClient?.name,
+            note: noteText,
+            paymentIntentId: lastPaymentIntentId,
+            includesSignature: !signatureLines.isEmpty,
+            paidAt: lastPaidAt
+        )
+        approvedReceiptDetail = detail
         receiptText = viewModel.tapToPayReceiptBody(
             amountCents: amountCents,
             includesSignature: !signatureLines.isEmpty,
             clientName: selectedClient?.name,
             note: noteText
         )
-        switch delivery {
-        case .none:
-            break
-        case .text:
-            receiptPhoneDraft = PhoneFormatting.digits(from: selectedClient?.phone ?? "")
-            openReceiptViaText(preferredPhone: selectedClient?.phone)
-        case .prompt:
-            receiptPhoneDraft = PhoneFormatting.digits(from: selectedClient?.phone ?? "")
-            showReceiptPrompt = true
-        }
+        showTapToPayReceiptSheet = true
     }
 
     private func openReceiptViaText(preferredPhone: String?) {
@@ -376,13 +405,21 @@ struct TapToPaySheet: View {
         return components.url
     }
 
+    private var outcomeFailureTitle: String {
+        switch phase {
+        case .declined: return "Payment declined"
+        case .timedOut: return "Payment timed out"
+        default: return "Payment not completed"
+        }
+    }
+
     @ViewBuilder
     private func outcomeContent(success: Bool, message: String? = nil) -> some View {
         VStack(spacing: 16) {
             Image(systemName: success ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .font(.system(size: 52))
                 .foregroundStyle(success ? .green : .red)
-            Text(success ? "Payment approved" : "Payment not completed")
+            Text(success ? "Payment approved" : outcomeFailureTitle)
                 .font(.headline)
             if let message, !success {
                 Text(message)
@@ -398,26 +435,10 @@ struct TapToPaySheet: View {
                         .font(.caption)
                         .foregroundStyle(AppDesign.textSecondary)
                 }
-                if viewModel.tapToPayReceiptPreferences.delivery != .none {
-                    Button("Send receipt") {
-                        receiptText = viewModel.tapToPayReceiptBody(
-                            amountCents: cents,
-                            includesSignature: !signatureLines.isEmpty,
-                            clientName: selectedClient?.name,
-                            note: noteText
-                        )
-                        switch viewModel.tapToPayReceiptPreferences.delivery {
-                        case .none:
-                            break
-                        case .text:
-                            openReceiptViaText(preferredPhone: selectedClient?.phone)
-                        case .prompt:
-                            receiptPhoneDraft = PhoneFormatting.digits(from: selectedClient?.phone ?? "")
-                            showReceiptPrompt = true
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
+                Button("View receipt") {
+                    presentOnScreenReceipt(amountCents: cents)
                 }
+                .buttonStyle(.borderedProminent)
             }
             if !success {
                 if let manualCheckoutError, !manualCheckoutError.isEmpty {
@@ -426,6 +447,12 @@ struct TapToPaySheet: View {
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                 }
+
+                // Apple req 5.10: receipt must be available for declined/failed/timed-out payments.
+                Button("Send payment notice") {
+                    shareDeclinedNotice()
+                }
+                .buttonStyle(.bordered)
 
                 Button {
                     Task { await openManualCheckout() }
@@ -453,6 +480,29 @@ struct TapToPaySheet: View {
         }
         .padding(.top, 48)
         .padding(.horizontal, 20)
+    }
+
+    private func shareDeclinedNotice() {
+        let amount = formatCurrency(Double(serviceAmountCents) / 100)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let dateString = formatter.string(from: Date())
+        let business = viewModel.effectiveTapToPayDisplayName
+        let statusLine: String = {
+            switch phase {
+            case .timedOut: return "Payment timed out — card not charged."
+            case .declined: return "Payment declined — card not charged."
+            default: return "Payment not completed — card not charged."
+            }
+        }()
+        var parts = ["Payment Not Completed", business, amount, dateString]
+        if let name = selectedClient?.name, !name.isEmpty {
+            parts.append("Customer: \(name)")
+        }
+        parts.append(statusLine)
+        receiptText = parts.joined(separator: "\n")
+        showShareReceipt = true
     }
 
     private func appendDigit(_ digit: Int) {
@@ -487,6 +537,9 @@ struct TapToPaySheet: View {
                 await viewModel.recordTenantPayment(paymentIntentId: intent.paymentIntentId)
             }
             await viewModel.loadData(isDemoMode: false)
+            lastPaymentIntentId = intent.paymentIntentId
+            lastCheckout = intent.checkout
+            lastPaidAt = Date()
             signatureLines = []
             currentSignatureLine = []
             let totalCents = intent.checkout.totalCents
@@ -494,12 +547,14 @@ struct TapToPaySheet: View {
                 phase = .collectSignature(amountCents: totalCents)
             } else {
                 phase = .approved(amountCents: totalCents)
-                offerReceiptIfConfigured(amountCents: totalCents)
+                presentOnScreenReceipt(amountCents: totalCents)
             }
         } catch {
             let text = TapToPayErrorMapper.userMessage(for: error)
             if text.localizedCaseInsensitiveContains("declin") {
                 phase = .declined(message: text)
+            } else if text.localizedCaseInsensitiveContains("timed out") || text.localizedCaseInsensitiveContains("time out") {
+                phase = .timedOut(message: text)
             } else {
                 phase = .failed(message: text)
             }
@@ -531,15 +586,6 @@ struct TapToPaySheet: View {
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
-    }
-
-    private func receiptBody(amountCents: Int, includesSignature: Bool = false) -> String {
-        viewModel.tapToPayReceiptBody(
-            amountCents: amountCents,
-            includesSignature: includesSignature,
-            clientName: selectedClient?.name,
-            note: noteText
-        )
     }
 
     private func shareReceiptURL() -> URL? {

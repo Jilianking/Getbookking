@@ -57,6 +57,26 @@ function marketingOrigin() {
   );
 }
 
+function adminOrigin() {
+  const explicit = (process.env.ADMIN_ORIGIN || "").toString().trim().replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const m = marketingOrigin();
+  if (/getbookking\.com$/i.test(m.replace(/^https?:\/\//, ""))) {
+    return "https://admin.getbookking.com";
+  }
+  return m;
+}
+
+function betaOrigin() {
+  const explicit = (process.env.BETA_ORIGIN || "").toString().trim().replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const m = marketingOrigin();
+  if (/getbookking\.com$/i.test(m.replace(/^https?:\/\//, ""))) {
+    return "https://beta.getbookking.com";
+  }
+  return m;
+}
+
 function parseAdminUids() {
   return (process.env.BETA_ADMIN_UIDS || "")
     .split(",")
@@ -138,8 +158,10 @@ function textToEmailParagraphs(text) {
     .join("");
 }
 
-function businessTypeLabel(raw) {
+function businessTypeLabel(raw, customLabel) {
+  const custom = (customLabel || "").toString().trim();
   const key = (raw || "").toString().trim().toLowerCase();
+  if (key === "other" && custom) return custom;
   return BUSINESS_TYPE_LABELS[key] || key || "Business";
 }
 
@@ -251,7 +273,8 @@ function formatWaitlistRow(doc) {
     teamSize: d.teamSize || 1,
     businessName: d.businessName || "",
     businessType: d.businessType || "",
-    businessTypeLabel: businessTypeLabel(d.businessType),
+    businessTypeCustom: d.businessTypeCustom || "",
+    businessTypeLabel: businessTypeLabel(d.businessType, d.businessTypeCustom),
     status: d.status || "pending",
     source: d.source || "",
     createdAt: d.createdAt || null,
@@ -406,7 +429,7 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
     { merge: true }
   );
 
-  const welcomeUrl = `${marketingOrigin()}/admin/welcome?t=${encodeURIComponent(token)}`;
+  const welcomeUrl = `${betaOrigin()}/beta/welcome?t=${encodeURIComponent(token)}`;
   const testflightUrl = (
     options.testflightUrl ||
     settings.testflightPublicJoinUrl ||
@@ -629,6 +652,55 @@ function registerBetaAdminFunctions(functionsModule) {
     }
 
     return { ok: true, emailSent: false, emailSkipped: true };
+  });
+
+  fns.reopenBetaWaitlistRequest = functions.https.onCall(async (data, context) => {
+    const adminUid = assertPlatformAdmin(context);
+    const waitlistId = (data?.waitlistId || "").toString().trim();
+    if (!waitlistId) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing request id."
+      );
+    }
+    const waitlistRef = db().collection("betaWaitlist").doc(waitlistId);
+    const waitlistSnap = await waitlistRef.get();
+    if (!waitlistSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Request not found.");
+    }
+    const entry = waitlistSnap.data();
+    const status = (entry.status || "pending").toString();
+    if (status === "pending") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This request is already pending."
+      );
+    }
+    if (status === "active") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This tester already completed onboarding. Contact them directly instead of reopening."
+      );
+    }
+
+    const del = admin.firestore.FieldValue.delete();
+    await waitlistRef.set(
+      {
+        status: "pending",
+        approvedAt: del,
+        inviteSentAt: del,
+        approvedByUid: del,
+        declinedAt: del,
+        declinedByUid: del,
+        declineReason: del,
+        reopenAt: admin.firestore.FieldValue.serverTimestamp(),
+        reopenedByUid: adminUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { ok: true };
   });
 
   fns.getBetaEmailStatus = functions.https.onCall(async (data, context) => {
@@ -1039,7 +1111,7 @@ function registerBetaAdminFunctions(functionsModule) {
       },
       { merge: true }
     );
-    return { ok: true, email, authUid, loginUrl: `${marketingOrigin()}/beta/login` };
+    return { ok: true, email, authUid, loginUrl: `${betaOrigin()}/beta/login` };
   });
 }
 

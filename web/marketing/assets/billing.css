@@ -93,15 +93,20 @@
 
 .bill-plan-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
 }
 
 .bill-plan-actions .btn-secondary,
 .bill-plan-actions .btn-outline-danger {
-  flex: 1;
+  flex: 1 1 calc(50% - 5px);
   margin-top: 0;
   text-align: center;
+}
+
+.bill-plan-actions #cancelSubBtn {
+  flex: 1 1 100%;
 }
 
 .btn-outline-danger {
@@ -157,6 +162,11 @@
   font-size: 12px;
   color: var(--text-tertiary);
   margin-top: 14px;
+}
+
+.bill-stripe-note--inset {
+  margin-top: 12px;
+  margin-bottom: 0;
 }
 
 .bill-btn-text {

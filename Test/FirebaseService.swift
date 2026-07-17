@@ -699,7 +699,7 @@ class FirebaseService: ObservableObject {
             ],
             "createdAt": Timestamp(date: Date()),
             "onboarding": [
-                "appTourPending": true,
+                "appTourPending": false,
                 "tapToPayDashboardTipPending": true,
             ],
         ]
@@ -1014,6 +1014,7 @@ class FirebaseService: ObservableObject {
                 source: d["source"] as? String,
                 lineItems: ShopOrder.parseLineItems(lineItemsRaw),
                 subtotalCents: d["subtotalCents"] as? Int ?? Int(d["subtotalCents"] as? Double ?? 0),
+                taxCents: d["taxCents"] as? Int ?? (d["taxCents"] as? Double).map { Int($0) },
                 surchargeCents: d["surchargeCents"] as? Int ?? (d["surchargeCents"] as? Double).map { Int($0) },
                 totalCents: d["totalCents"] as? Int ?? (d["totalCents"] as? Double).map { Int($0) },
                 customerName: d["customerName"] as? String,

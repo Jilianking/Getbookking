@@ -12881,6 +12881,17 @@
           ? stripeState.subtotalCents
           : Math.round(cartSubtotal * 100);
         if (subtotalEl) subtotalEl.textContent = formatMoney(subtotalCents / 100);
+        var taxRow = document.getElementById('bk-shop-checkout-tax-row');
+        var taxEl = document.getElementById('bk-shop-checkout-tax');
+        var taxCents = stripeState && stripeState.taxCents != null ? stripeState.taxCents : 0;
+        if (taxRow && taxEl) {
+          if (taxCents > 0) {
+            taxRow.style.display = '';
+            taxEl.textContent = formatMoney(taxCents / 100);
+          } else {
+            taxRow.style.display = 'none';
+          }
+        }
         if (feeEl) {
           if (stripeState && stripeState.surchargeCents != null) {
             feeEl.textContent = formatMoney(stripeState.surchargeCents / 100);
@@ -12961,6 +12972,10 @@
           '<div class="bk-shop-checkout-summary-row">' +
           '<span class="bk-shop-checkout-summary-label">Subtotal</span>' +
           '<span class="bk-shop-checkout-summary-amount" id="bk-shop-checkout-subtotal">$0.00</span>' +
+          '</div>' +
+          '<div class="bk-shop-checkout-summary-row" id="bk-shop-checkout-tax-row" style="display:none">' +
+          '<span class="bk-shop-checkout-summary-label">Sales tax</span>' +
+          '<span class="bk-shop-checkout-summary-amount" id="bk-shop-checkout-tax">$0.00</span>' +
           '</div>' +
           '<div class="bk-shop-checkout-summary-row">' +
           '<span class="bk-shop-checkout-summary-label">' +
@@ -13045,8 +13060,13 @@
             '<div class="bk-shop-receipt-line-amount">' + formatReceiptCents(receipt.totalCents) + '</div></div>';
         }
         var feeRow = '';
+        if ((receipt.taxCents || 0) > 0) {
+          feeRow += '<div class="bk-shop-receipt-total-row">' +
+            '<span>Sales tax</span>' +
+            '<span>' + formatReceiptCents(receipt.taxCents) + '</span></div>';
+        }
         if ((receipt.surchargeCents || 0) > 0) {
-          feeRow = '<div class="bk-shop-receipt-total-row">' +
+          feeRow += '<div class="bk-shop-receipt-total-row">' +
             '<span>Processing &amp; service fees</span>' +
             '<span>' + formatReceiptCents(receipt.surchargeCents) + '</span></div>';
         }
@@ -13263,6 +13283,7 @@
             orderId: checkoutData.orderId,
             paymentIntentId: checkoutData.paymentIntentId,
             subtotalCents: checkoutData.subtotalCents,
+            taxCents: checkoutData.taxCents || 0,
             surchargeCents: checkoutData.surchargeCents || 0,
             platformFeeCents: checkoutData.platformFeeCents || 0,
             totalCents: checkoutData.totalCents,

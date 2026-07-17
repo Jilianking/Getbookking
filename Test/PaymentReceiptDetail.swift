@@ -4,6 +4,17 @@
 
 import Foundation
 
+struct PaymentReceiptOutcomeBanner: Equatable {
+    enum Style: Equatable {
+        case success
+        case failure
+    }
+
+    let title: String
+    let message: String?
+    let style: Style
+}
+
 struct PaymentReceiptLineItem: Identifiable, Equatable {
     let id: String
     let name: String
@@ -66,6 +77,31 @@ struct PaymentReceiptDetail: Equatable {
         switch documentKind {
         case .paid: return "Date paid"
         case .unpaidAttempt: return "Date"
+        }
+    }
+
+    var isUnpaidAttempt: Bool {
+        if case .unpaidAttempt = documentKind { return true }
+        return false
+    }
+
+    var outcomeBanner: PaymentReceiptOutcomeBanner? {
+        switch documentKind {
+        case .paid:
+            return nil
+        case .unpaidAttempt(let reason):
+            let title: String = {
+                switch reason {
+                case .declined: return "Payment declined"
+                case .timedOut: return "Payment timed out"
+                case .notCompleted: return "Payment not completed"
+                }
+            }()
+            return PaymentReceiptOutcomeBanner(
+                title: title,
+                message: statusMessage,
+                style: .failure
+            )
         }
     }
 

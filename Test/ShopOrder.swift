@@ -30,6 +30,7 @@ struct ShopOrder: Identifiable, Equatable {
     var source: String?
     var lineItems: [ShopOrderLineItem]
     var subtotalCents: Int
+    var taxCents: Int?
     var surchargeCents: Int?
     var totalCents: Int?
     var customerName: String?
@@ -65,7 +66,7 @@ struct ShopOrder: Identifiable, Equatable {
     }
 
     var formattedTotal: String {
-        let cents = totalCents ?? subtotalCents
+        let cents = totalCents ?? (subtotalCents + (taxCents ?? 0) + (surchargeCents ?? 0))
         return String(format: "$%.2f", Double(cents) / 100.0)
     }
 

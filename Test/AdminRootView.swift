@@ -176,19 +176,6 @@ struct AdminRootView: View {
                     .transition(.move(edge: .leading))
             }
 
-            if appTour.isActive, let step = appTour.activeStep {
-                Color.clear
-                    .appTourSpotlightOverlay(
-                        isPresented: true,
-                        holeGlobal: appTour.currentHoleGlobal,
-                        message: step.message,
-                        stepLabel: step.stepLabel,
-                        primaryButtonTitle: step.nextButtonTitle,
-                        onPrimary: { advanceAppTour() },
-                        onSkipTour: { skipAppTour() }
-                    )
-                    .zIndex(1000)
-            }
         }
         .environmentObject(appTour)
         .onPreferenceChange(AppTourFramePreferenceKey.self) { frames in
@@ -197,12 +184,6 @@ struct AdminRootView: View {
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
         .onChange(of: drawerState.selectedSection) { _, section in
             visitedSections.insert(section)
-            if authViewModel.isDemoMode, !AppTourStore.persistDemoDismissal, section == .dashboard, !appTour.isActive {
-                Task {
-                    try? await Task.sleep(nanoseconds: 150_000_000)
-                    appTour.start()
-                }
-            }
         }
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
@@ -233,7 +214,6 @@ struct AdminRootView: View {
                     isDemoMode: authViewModel.isDemoMode
                 )
                 _ = await (bootstrap, metrics)
-                await startAppTourIfNeeded()
             } else if !authViewModel.isAuthenticated {
                 sessionStore.reset()
                 appTour.skipTour(onComplete: {})
@@ -483,55 +463,6 @@ struct AdminRootView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
-    }
-
-    private func startAppTourIfNeeded() async {
-        if authViewModel.isDemoMode {
-            guard sessionStore.isDemoSession else { return }
-            if let err = sessionStore.demoLoadError, !err.isEmpty { return }
-        }
-
-        let pending = sessionStore.profile?.appTourPending ?? false
-        guard appTour.shouldStart(
-            isDemoMode: authViewModel.isDemoMode,
-            appTourPending: pending,
-            isOwner: authViewModel.teamAccess.isOwner || authViewModel.isDemoMode,
-            demoSessionReady: sessionStore.isDemoSession
-        ) else { return }
-
-        visitedSections.insert(.dashboard)
-        drawerState.selectedSection = .dashboard
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        appTour.start()
-    }
-
-    private func advanceAppTour() {
-        Task { @MainActor in
-            drawerState.appTourDismissModalsToken &+= 1
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            appTour.advance(
-                drawerState: drawerState,
-                visitedSections: &visitedSections,
-                onComplete: completeAppTourPersistence
-            )
-        }
-    }
-
-    private func skipAppTour() {
-        drawerState.appTourDismissModalsToken &+= 1
-        appTour.skipTour(onComplete: completeAppTourPersistence)
-    }
-
-    private func completeAppTourPersistence() {
-        if authViewModel.isDemoMode {
-            AppTourStore.markDemoTourCompletedIfNeeded()
-            return
-        }
-        sessionStore.markAppTourCompleted()
-        guard let uid = authViewModel.currentUserUid else { return }
-        Task {
-            try? await FirebaseService().completeAppTour(uid: uid)
-        }
     }
 }
 

@@ -14,6 +14,7 @@ struct DashboardView: View {
     @State private var showTapToPaySheet = false
     @State private var showTapToPayEducation = false
     @State private var tapToPayAlertMessage: String?
+    @State private var launchTapToPayAfterHeroDismissal = false
     #endif
 
     private var dashboardHeadline: String {
@@ -173,14 +174,8 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showTapToPayEducation) {
             TapToPayMerchantEducationView {
+                paymentsViewModel.finishMerchantEducation()
                 showTapToPayEducation = false
-                Task {
-                    await paymentsViewModel.finishMerchantEducationAndContinueTapToPay(
-                        isDemoMode: authViewModel.isDemoMode,
-                        showCheckout: { showTapToPaySheet = true },
-                        showAlert: { tapToPayAlertMessage = $0 }
-                    )
-                }
             }
         }
         .alert("Tap to Pay", isPresented: Binding(
@@ -191,14 +186,21 @@ struct DashboardView: View {
         } message: {
             Text(tapToPayAlertMessage ?? "")
         }
-        .sheet(isPresented: Binding(
-            get: { paymentsViewModel.showTapToPayHeroBanner },
-            set: { if !$0 { paymentsViewModel.dismissHeroBanner() } }
-        )) {
+        .sheet(
+            isPresented: Binding(
+                get: { paymentsViewModel.showTapToPayHeroBanner },
+                set: { if !$0 { paymentsViewModel.dismissHeroBanner() } }
+            ),
+            onDismiss: {
+                guard launchTapToPayAfterHeroDismissal else { return }
+                launchTapToPayAfterHeroDismissal = false
+                handleTakePaymentTapped()
+            }
+        ) {
             TapToPayHeroBannerView(
                 onGetStarted: {
+                    launchTapToPayAfterHeroDismissal = true
                     paymentsViewModel.dismissHeroBanner()
-                    handleTakePaymentTapped()
                 },
                 onDismiss: {
                     paymentsViewModel.dismissHeroBanner()
@@ -263,13 +265,7 @@ struct DashboardView: View {
         await TapToPayMerchantEducationFlow.run(
             showFallbackSheet: { showTapToPayEducation = true },
             onFinished: {
-                Task {
-                    await paymentsViewModel.finishMerchantEducationAndContinueTapToPay(
-                        isDemoMode: authViewModel.isDemoMode,
-                        showCheckout: { showTapToPaySheet = true },
-                        showAlert: { tapToPayAlertMessage = $0 }
-                    )
-                }
+                paymentsViewModel.finishMerchantEducation()
             }
         )
     }

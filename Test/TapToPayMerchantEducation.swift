@@ -1,10 +1,12 @@
 //
 //  TapToPayMerchantEducation.swift
 //  Apple merchant education after Tap to Pay T&C (req 4.1–4.6).
+//  Prefers Apple’s How to Tap overlay (iOS 18+); fallback uses US-EN toolkit education videos + approved copy.
 //
 
 #if TAP_TO_PAY_ENABLED
 
+import AVKit
 import SwiftUI
 import UIKit
 #if canImport(ProximityReader)
@@ -76,54 +78,69 @@ private extension UIApplication {
     }
 }
 
+// MARK: - Toolkit education assets + approved copy
+
+private enum TapToPayEducationPage: Int, CaseIterable, Identifiable {
+    case contactlessCard
+    case iphoneWallet
+    case watchWallet
+    case acceptedPayments
+
+    var id: Int { rawValue }
+
+    /// Bundle resource name (no extension) for US-EN 9x16 toolkit animations.
+    var videoResourceName: String? {
+        switch self {
+        case .contactlessCard: return "TTPoiP_CardToiPhone_9x16_en-US"
+        case .iphoneWallet: return "TTPoiP_iPhoneToiPhone_9x16_en-US"
+        case .watchWallet: return "TTPoiP_WatchToiPhone_9x16_en-US"
+        case .acceptedPayments: return nil
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .contactlessCard: return "Contactless cards"
+        case .iphoneWallet: return "Apple Pay & digital wallets"
+        case .watchWallet: return "Apple Watch & wallets"
+        case .acceptedPayments: return "Accepted payments"
+        }
+    }
+
+    /// Approved how-to subheads / body from Tap to Pay Marketing Copy Blocks (US).
+    var body: String {
+        switch self {
+        case .contactlessCard:
+            return TapToPayBranding.educationCardBody
+        case .iphoneWallet, .watchWallet:
+            return TapToPayBranding.educationWalletBody
+        case .acceptedPayments:
+            return TapToPayBranding.educationAcceptedPaymentsBody
+        }
+    }
+}
+
 // MARK: - Fallback education (iOS 17 / when Apple overlay unavailable)
 
 struct TapToPayMerchantEducationView: View {
     var onContinue: () -> Void
 
     @State private var page = 0
-    private let pageCount = 4
+    private let pages = TapToPayEducationPage.allCases
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $page) {
-                    educationPage(
-                        icon: "checkmark.circle.fill",
-                        iconColor: AppDesign.accentGreen,
-                        title: "You’re set up for Tap to Pay",
-                        body: "Your iPhone can now accept in-person contactless payments from cards and digital wallets."
-                    )
-                    .tag(0)
-
-                    educationPage(
-                        icon: "creditcard.fill",
-                        iconColor: AppDesign.accentBlue,
-                        title: "Contactless cards",
-                        body: "Ask the customer to hold their card flat near the top of your iPhone. Keep steady until you see the checkmark."
-                    )
-                    .tag(1)
-
-                    educationPage(
-                        icon: "wave.3.right.circle.fill",
-                        iconColor: AppDesign.brandWarm,
-                        title: "Apple Pay & digital wallets",
-                        body: "Customers can pay the same way with Apple Pay and other digital wallets — hold their device near the top of your iPhone."
-                    )
-                    .tag(2)
-
-                    educationPage(
-                        icon: "checkmark.seal.fill",
-                        iconColor: AppDesign.brandDark,
-                        title: "Accepted payments",
-                        body: "Visa, Mastercard, American Express, and Discover contactless cards and wallets are supported in the United States."
-                    )
-                    .tag(3)
+                    ForEach(pages) { educationPage in
+                        educationPageView(educationPage)
+                            .tag(educationPage.rawValue)
+                    }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
 
                 Button(action: advance) {
-                    Text(page < pageCount - 1 ? "Next" : "Continue")
+                    Text(page < pages.count - 1 ? "Next" : "Continue")
                         .font(.headline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -141,37 +158,92 @@ struct TapToPayMerchantEducationView: View {
         }
     }
 
-    private func educationPage(
-        icon: String,
-        iconColor: Color,
-        title: String,
-        body: String
-    ) -> some View {
-        VStack(spacing: 20) {
-            Spacer(minLength: 12)
-            Image(systemName: icon)
-                .font(.system(size: 52))
-                .foregroundStyle(iconColor)
-            Text(title)
-                .font(.title2.weight(.bold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(AppDesign.textPrimary)
-                .padding(.horizontal, 24)
-            Text(body)
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(AppDesign.textSecondary)
-                .padding(.horizontal, 28)
-            Spacer(minLength: 12)
+    @ViewBuilder
+    private func educationPageView(_ page: TapToPayEducationPage) -> some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                if let resource = page.videoResourceName {
+                    TapToPayLoopingEducationVideo(resourceName: resource)
+                        .frame(maxWidth: 320)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                } else {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 52))
+                        .foregroundStyle(AppDesign.brandDark)
+                        .padding(.top, 28)
+                }
+
+                Text(page.title)
+                    .font(.title2.weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .padding(.horizontal, 24)
+
+                Text(page.body)
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 16)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
     private func advance() {
-        if page < pageCount - 1 {
+        if page < pages.count - 1 {
             withAnimation { page += 1 }
         } else {
             onContinue()
         }
+    }
+}
+
+/// Muted looping playback of an Apple toolkit education MP4 from the app bundle.
+private struct TapToPayLoopingEducationVideo: View {
+    let resourceName: String
+
+    @State private var player: AVQueuePlayer?
+    @State private var looper: AVPlayerLooper?
+
+    var body: some View {
+        Group {
+            if let player {
+                VideoPlayer(player: player)
+                    .disabled(true)
+                    .aspectRatio(9 / 16, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityLabel("Tap to Pay on iPhone demonstration")
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.black.opacity(0.06))
+                    .aspectRatio(9 / 16, contentMode: .fit)
+                    .overlay {
+                        ProgressView()
+                    }
+            }
+        }
+        .onAppear(perform: prepareAndPlay)
+        .onDisappear {
+            player?.pause()
+        }
+    }
+
+    private func prepareAndPlay() {
+        guard player == nil else {
+            player?.play()
+            return
+        }
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "mp4") else {
+            return
+        }
+        let template = AVPlayerItem(url: url)
+        let queue = AVQueuePlayer()
+        queue.isMuted = true
+        looper = AVPlayerLooper(player: queue, templateItem: template)
+        player = queue
+        queue.play()
     }
 }
 

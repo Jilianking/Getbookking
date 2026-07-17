@@ -327,15 +327,17 @@ struct SettingsView: View {
             AppSectionHeader(title: "Payments")
 
             VStack(spacing: 0) {
-                Button {
-                    drawerState.selectedSection = .payments
-                    drawerState.isOpen = false
+                NavigationLink {
+                    PaymentSettingsView(
+                        viewModel: paymentsViewModel,
+                        isDemoMode: authViewModel.isDemoMode
+                    )
                 } label: {
                     let status = paymentsSetupStatus
                     AppSettingsRow(
                         icon: "s.circle.fill",
                         iconColor: AppDesign.accentGreen,
-                        title: "Stripe & Tap to Pay",
+                        title: "Payment settings",
                         status: status.label,
                         statusColor: status.color
                     )

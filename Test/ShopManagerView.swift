@@ -834,10 +834,10 @@ private struct ShopSettingsSheet: View {
                                     .foregroundStyle(.orange)
                                     .frame(width: 28, alignment: .center)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Payments")
+                                    Text("Payment settings")
                                         .font(.body.weight(.medium))
                                         .foregroundStyle(Color.primary)
-                                    Text("Stripe, payouts, tax")
+                                    Text("Tax, Stripe dashboard — in Settings")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -975,13 +975,29 @@ private enum ShopCatalogStyle {
     case standalone
 }
 
+private enum ShopProductFormMode: Identifiable {
+    case new
+    case edit(Product)
+
+    var id: String {
+        switch self {
+        case .new: return "new"
+        case .edit(let product): return product.id
+        }
+    }
+
+    var editingProduct: Product? {
+        if case .edit(let product) = self { return product }
+        return nil
+    }
+}
+
 private struct ShopProductCatalogContent: View {
     @ObservedObject var viewModel: DesignViewModel
     var style: ShopCatalogStyle
 
     @State private var searchText = ""
-    @State private var showProductForm = false
-    @State private var editingProduct: Product?
+    @State private var productFormMode: ShopProductFormMode?
 
     private var filteredProducts: [Product] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1024,14 +1040,11 @@ private struct ShopProductCatalogContent: View {
                     .padding(.top, 4)
             }
         }
-        .sheet(isPresented: $showProductForm) {
+        .sheet(item: $productFormMode) { mode in
             ShopProductFormSheet(
                 viewModel: viewModel,
-                editingProduct: editingProduct,
-                onDismiss: {
-                    showProductForm = false
-                    editingProduct = nil
-                }
+                editingProduct: mode.editingProduct,
+                onDismiss: { productFormMode = nil }
             )
             .presentationDetents([.large, .medium])
             .presentationDragIndicator(.visible)
@@ -1042,8 +1055,7 @@ private struct ShopProductCatalogContent: View {
         HStack(spacing: 10) {
             AppSearchField(placeholder: "Search products", text: $searchText)
             Button {
-                editingProduct = nil
-                showProductForm = true
+                productFormMode = .new
             } label: {
                 Image(systemName: "plus")
                     .font(.body.weight(.semibold))
@@ -1074,8 +1086,7 @@ private struct ShopProductCatalogContent: View {
                     .foregroundStyle(.secondary)
                 if style == .hub {
                     Button("Add your first product") {
-                        editingProduct = nil
-                        showProductForm = true
+                        productFormMode = .new
                     }
                     .font(.subheadline.weight(.medium))
                 }
@@ -1087,13 +1098,14 @@ private struct ShopProductCatalogContent: View {
         ForEach(filteredProducts) { product in
             if style == .hub {
                 ShopHubProductRow(product: product) {
-                    editingProduct = product
-                    showProductForm = true
+                    productFormMode = .edit(product)
                 }
             } else {
-                ShopManageProductRow(product: product) {
-                    Task { await viewModel.deleteProduct(product) }
-                }
+                ShopManageProductRow(
+                    product: product,
+                    onEdit: { productFormMode = .edit(product) },
+                    onDelete: { Task { await viewModel.deleteProduct(product) } }
+                )
             }
         }
 
@@ -1108,8 +1120,7 @@ private struct ShopProductCatalogContent: View {
 
         if style != .hub {
             Button {
-                editingProduct = nil
-                showProductForm = true
+                productFormMode = .new
             } label: {
                 Label("Add Product", systemImage: "plus.circle.fill")
                     .font(.subheadline.weight(.medium))
@@ -1207,6 +1218,7 @@ private struct ShopHubProductRow: View {
 
 private struct ShopManageProductRow: View {
     let product: Product
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -1245,6 +1257,9 @@ private struct ShopManageProductRow: View {
                     .font(.caption.weight(.semibold))
             }
             Spacer()
+            Button("Edit", action: onEdit)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(shopAccentPurple)
             Button(role: .destructive, action: onDelete) {
                 Image(systemName: "trash").font(.caption).foregroundStyle(.red)
             }
@@ -1290,14 +1305,14 @@ struct ShopCatalogView: View {
 
 private struct ShopProductFormSheet: View {
     @ObservedObject var viewModel: DesignViewModel
-    var editingProduct: Product?
+    let editingProduct: Product?
     let onDismiss: () -> Void
 
-    @State private var name = ""
-    @State private var category = ""
-    @State private var description = ""
-    @State private var price = ""
-    @State private var isVisible = true
+    @State private var name: String
+    @State private var category: String
+    @State private var description: String
+    @State private var price: String
+    @State private var isVisible: Bool
     @State private var imageItem: PhotosPickerItem? = nil
     @State private var imageData: Data? = nil
     @State private var cropItem: SingleImageCropSheetItem?
@@ -1305,6 +1320,17 @@ private struct ShopProductFormSheet: View {
     @State private var showDeleteConfirm = false
 
     private var isEditing: Bool { editingProduct != nil }
+
+    init(viewModel: DesignViewModel, editingProduct: Product?, onDismiss: @escaping () -> Void) {
+        self.viewModel = viewModel
+        self.editingProduct = editingProduct
+        self.onDismiss = onDismiss
+        _name = State(initialValue: editingProduct?.name ?? "")
+        _category = State(initialValue: editingProduct?.category ?? "")
+        _description = State(initialValue: editingProduct?.description ?? "")
+        _price = State(initialValue: editingProduct.map { String(format: "%.2f", $0.price) } ?? "")
+        _isVisible = State(initialValue: editingProduct?.isActive ?? true)
+    }
 
     var body: some View {
         NavigationStack {
@@ -1399,7 +1425,6 @@ private struct ShopProductFormSheet: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .onAppear(perform: populateFromEditingProduct)
             .sheet(item: $cropItem, onDismiss: { cropItem = nil }) { item in
                 UploadImagePreparationSheet(
                     images: [item.image],
@@ -1486,15 +1511,6 @@ private struct ShopProductFormSheet: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func populateFromEditingProduct() {
-        guard let product = editingProduct else { return }
-        name = product.name
-        category = product.category
-        description = product.description
-        price = String(format: "%.2f", product.price)
-        isVisible = product.isActive
     }
 
     private func loadPhoto(from item: PhotosPickerItem?) async {

@@ -184,22 +184,77 @@ enum PaymentReceiptPDFExporter {
     }
 }
 
+// MARK: - Outcome banner
+
+struct PaymentReceiptOutcomeBannerView: View {
+    let banner: PaymentReceiptOutcomeBanner
+
+    private var accentColor: Color {
+        banner.style == .success ? .green : .red
+    }
+
+    private var backgroundColor: Color {
+        banner.style == .success
+            ? Color.green.opacity(0.12)
+            : Color.red.opacity(0.12)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: banner.style == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(accentColor)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(banner.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.18))
+                if let message = banner.message, !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(Color(red: 0.45, green: 0.48, blue: 0.52))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
 // MARK: - Receipt sheet
 
 struct PaymentReceiptSheet: View {
     let detail: PaymentReceiptDetail
     var drawerState: DrawerState
     var onDismissAll: (() -> Void)?
+    var outcomeBanner: PaymentReceiptOutcomeBanner?
+    var onTryAgain: (() -> Void)?
+    var onManualPayment: (() -> Void)?
+    var manualPaymentInProgress: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var showShareSheet = false
     @State private var pdfURL: URL?
     @State private var isPreparingShare = false
 
+    private var resolvedBanner: PaymentReceiptOutcomeBanner? {
+        outcomeBanner ?? detail.outcomeBanner
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                PaymentReceiptView(detail: detail)
-                    .padding(16)
+                VStack(spacing: 16) {
+                    if let resolvedBanner {
+                        PaymentReceiptOutcomeBannerView(banner: resolvedBanner)
+                    }
+                    PaymentReceiptView(detail: detail)
+                    if detail.isUnpaidAttempt, onTryAgain != nil || onManualPayment != nil {
+                        unpaidRecoveryActions
+                    }
+                }
+                .padding(16)
             }
             .appScreenBackground()
             .navigationTitle(detail.sheetNavigationTitle)
@@ -236,6 +291,37 @@ struct PaymentReceiptSheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var unpaidRecoveryActions: some View {
+        VStack(spacing: 10) {
+            if let onManualPayment {
+                Button {
+                    onManualPayment()
+                } label: {
+                    HStack {
+                        if manualPaymentInProgress {
+                            ProgressView()
+                        } else {
+                            Text("Manual payment")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(manualPaymentInProgress)
+            }
+            if let onTryAgain {
+                Button("Try tap again") {
+                    dismiss()
+                    onTryAgain()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.top, 4)
     }
 
     @MainActor

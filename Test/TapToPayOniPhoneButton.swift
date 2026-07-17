@@ -8,13 +8,39 @@
 import SwiftUI
 import UIKit
 
-/// Shared Tap to Pay on iPhone marketing asset + fallback styling (Apple Developer Marketing Guidelines).
+/// Shared Tap to Pay on iPhone marketing assets + approved copy (Apple TTPOI Marketing Guide, US).
 enum TapToPayBranding {
     static let officialBadgeAssetName = "TapToPayOniPhoneBadge"
-    static let featureSubtitle = "Accept contactless cards and digital wallets with your iPhone."
+    /// Official US-EN In-App Hero tile from Marketing Templates (APR / toolkit April 2026).
+    static let heroBannerAssetName = "TapToPayHeroBanner"
+
+    /// Approved value-prop subheadline (Marketing Copy Blocks).
+    static let featureSubtitle = "Accept contactless payments right on your iPhone."
+    static let primaryCTA = "Get started"
+    static let shortDisclaimer = "Terms apply."
+    /// Legal line shown on Apple’s US-EN In-App Hero tile (matches toolkit export).
+    static let heroTileLegal =
+        "Some contactless cards may not be accepted. Transaction limits may apply. The Contactless Symbol is a trademark owned by and used with permission of EMVCo, LLC."
+
+    /// Approved push notification (Marketing Copy Blocks — value proposition).
+    static let pushTitle = "Accept in-person payments with Tap to Pay on iPhone."
+    static let pushBody =
+        "You can accept all types of contactless payments right on your iPhone—from physical debit and credit cards to Apple Pay and other digital wallets. Terms apply."
+
+    /// Approved how-to copy (Marketing Copy Blocks — How to use).
+    static let educationCardBody =
+        "Your customer simply holds their card horizontally over the contactless symbol on your iPhone for a few seconds, until the Done checkmark appears."
+    static let educationWalletBody =
+        "Your customer simply holds their device over the contactless symbol on your iPhone for a few seconds, until the Done checkmark appears."
+    static let educationAcceptedPaymentsBody =
+        "Visa, Mastercard, American Express, and Discover contactless cards and wallets are supported in the United States."
 
     static var hasOfficialBadge: Bool {
         UIImage(named: officialBadgeAssetName) != nil
+    }
+
+    static var hasOfficialHeroBanner: Bool {
+        UIImage(named: heroBannerAssetName) != nil
     }
 }
 

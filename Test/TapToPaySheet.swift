@@ -12,9 +12,6 @@ private enum TapToPayCheckoutPhase: Equatable {
     case processing
     case collectSignature(amountCents: Int)
     case approved(amountCents: Int)
-    case declined(message: String)
-    case timedOut(message: String)
-    case failed(message: String)
 }
 
 struct TapToPaySheet: View {
@@ -92,16 +89,7 @@ struct TapToPaySheet: View {
                     signatureContent
                     Spacer(minLength: 0)
                 case .approved:
-                    outcomeContent(success: true)
-                    Spacer(minLength: 0)
-                case .declined(let message):
-                    outcomeContent(success: false, message: message)
-                    Spacer(minLength: 0)
-                case .timedOut(let message):
-                    outcomeContent(success: false, message: message)
-                    Spacer(minLength: 0)
-                case .failed(let message):
-                    outcomeContent(success: false, message: message)
+                    approvedOutcomeContent
                     Spacer(minLength: 0)
                 }
             }
@@ -144,13 +132,7 @@ struct TapToPaySheet: View {
                 )
             }
             .sheet(isPresented: $showTapToPayReceiptSheet) {
-                if let receiptDetail {
-                    PaymentReceiptSheet(
-                        detail: receiptDetail,
-                        drawerState: drawerState,
-                        onDismissAll: onDismiss
-                    )
-                }
+                tapToPayReceiptSheet
             }
             .task {
                 await sessionStore.loadCustomersIfNeeded(isDemoMode: false)
@@ -166,6 +148,31 @@ struct TapToPaySheet: View {
                         merchantDisplayName: displayName
                     )
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tapToPayReceiptSheet: some View {
+        if let receiptDetail {
+            if receiptDetail.isUnpaidAttempt {
+                PaymentReceiptSheet(
+                    detail: receiptDetail,
+                    drawerState: drawerState,
+                    onDismissAll: onDismiss,
+                    onTryAgain: { manualCheckoutError = nil },
+                    onManualPayment: {
+                        showTapToPayReceiptSheet = false
+                        Task { await openManualCheckout() }
+                    },
+                    manualPaymentInProgress: viewModel.isCreatingManualCheckoutLink
+                )
+            } else {
+                PaymentReceiptSheet(
+                    detail: receiptDetail,
+                    drawerState: drawerState,
+                    onDismissAll: onDismiss
+                )
             }
         }
     }
@@ -193,6 +200,15 @@ struct TapToPaySheet: View {
             noteField
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
+
+            if let manualCheckoutError, !manualCheckoutError.isEmpty {
+                Text(manualCheckoutError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
 
             readerStatusBlock
                 .padding(.horizontal, 20)
@@ -406,29 +422,14 @@ struct TapToPaySheet: View {
         return components.url
     }
 
-    private var outcomeFailureTitle: String {
-        switch phase {
-        case .declined: return "Payment declined"
-        case .timedOut: return "Payment timed out"
-        default: return "Payment not completed"
-        }
-    }
-
-    @ViewBuilder
-    private func outcomeContent(success: Bool, message: String? = nil) -> some View {
+    private var approvedOutcomeContent: some View {
         VStack(spacing: 16) {
-            Image(systemName: success ? "checkmark.circle.fill" : "xmark.circle.fill")
+            Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 52))
-                .foregroundStyle(success ? .green : .red)
-            Text(success ? "Payment approved" : outcomeFailureTitle)
+                .foregroundStyle(.green)
+            Text("Payment approved")
                 .font(.headline)
-            if let message, !success {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(AppDesign.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            if success, case .approved(let cents) = phase {
+            if case .approved(let cents) = phase {
                 Text(formatCurrency(Double(cents) / 100))
                     .font(.title2.weight(.semibold))
                 if !signatureLines.isEmpty {
@@ -441,68 +442,19 @@ struct TapToPaySheet: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
-            if !success {
-                if let manualCheckoutError, !manualCheckoutError.isEmpty {
-                    Text(manualCheckoutError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-
-                // Apple req 5.10: receipt must be available for declined/failed/timed-out payments.
-                Button("View payment notice") {
-                    presentPaymentNotice()
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    Task { await openManualCheckout() }
-                } label: {
-                    HStack {
-                        if viewModel.isCreatingManualCheckoutLink {
-                            ProgressView()
-                        } else {
-                            Text("Manual payment")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(serviceAmountCents < 50 || viewModel.isCreatingManualCheckoutLink)
-
-                Button("Try tap again") {
-                    manualCheckoutError = nil
-                    signatureLines = []
-                    currentSignatureLine = []
-                    phase = .entry
-                }
-                .buttonStyle(.bordered)
-            }
         }
         .padding(.top, 48)
         .padding(.horizontal, 20)
     }
 
-    private func presentPaymentNotice() {
+    private func presentPaymentNotice(
+        reason: PaymentReceiptDocumentKind.UnpaidAttemptReason,
+        detailMessage: String
+    ) {
         let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
             serviceCents: serviceAmountCents,
             channel: .tapToPay
         )
-        let reason: PaymentReceiptDocumentKind.UnpaidAttemptReason = {
-            switch phase {
-            case .declined: return .declined
-            case .timedOut: return .timedOut
-            default: return .notCompleted
-            }
-        }()
-        let detailMessage: String? = {
-            switch phase {
-            case .declined(let message), .timedOut(let message), .failed(let message):
-                return message
-            default:
-                return nil
-            }
-        }()
         receiptDetail = PaymentReceiptDetail.fromTapToPayUnsuccessful(
             checkout: checkout,
             businessName: viewModel.effectiveTapToPayDisplayName,
@@ -513,6 +465,17 @@ struct TapToPaySheet: View {
         )
         receiptText = receiptDetail?.smsBody() ?? ""
         showTapToPayReceiptSheet = true
+    }
+
+    private func unpaidAttemptReason(for message: String) -> PaymentReceiptDocumentKind.UnpaidAttemptReason {
+        if message.localizedCaseInsensitiveContains("declin") {
+            return .declined
+        }
+        if message.localizedCaseInsensitiveContains("timed out")
+            || message.localizedCaseInsensitiveContains("time out") {
+            return .timedOut
+        }
+        return .notCompleted
     }
 
     private func appendDigit(_ digit: Int) {
@@ -561,14 +524,12 @@ struct TapToPaySheet: View {
             }
         } catch {
             let text = TapToPayErrorMapper.userMessage(for: error)
-            if text.localizedCaseInsensitiveContains("declin") {
-                phase = .declined(message: text)
-            } else if text.localizedCaseInsensitiveContains("timed out") || text.localizedCaseInsensitiveContains("time out") {
-                phase = .timedOut(message: text)
-            } else {
-                phase = .failed(message: text)
-            }
-            presentPaymentNotice()
+            manualCheckoutError = nil
+            phase = .entry
+            presentPaymentNotice(
+                reason: unpaidAttemptReason(for: text),
+                detailMessage: text
+            )
         }
     }
 

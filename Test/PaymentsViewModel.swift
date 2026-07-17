@@ -201,6 +201,9 @@ class PaymentsViewModel: ObservableObject {
     @Published var isCreatingManualCheckoutLink = false
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
+    @Published var shopTaxEnabled = false
+    @Published var isSavingShopTax = false
+    @Published var isOpeningStripeDashboard = false
     @Published var selectedTransaction: PaymentTransaction?
 
     var monthEarnings: Double {
@@ -340,25 +343,34 @@ class PaymentsViewModel: ObservableObject {
     }
 
     var tapToPayLaunchOverlayMessage: String {
-        if isEnsuringTapToPayTerms { return "Preparing Tap to Pay terms…" }
-        if isEnsuringTapToPayLocation { return "Connecting Tap to Pay…" }
+        if isEnsuringTapToPayTerms { return "Preparing Apple Tap to Pay terms…" }
+        if isEnsuringTapToPayLocation { return "Configuring Tap to Pay…" }
         return "Loading…"
     }
 
     /// Prepares Terminal location on launch; connects reader only after Apple T&C is accepted.
+    ///
+    /// Ordered enablement (Apple → then Stripe):
+    /// 1. Hero / entry
+    /// 2. Apple T&C via Stripe Terminal connect (`tosAcceptancePermitted`)
+    /// 3. Reader configuration progress
+    /// 4. Merchant education
+    /// 5. Stripe Connect onboarding (if not finished)
+    /// 6. Checkout when `charges_enabled`
     func prewarmTapToPayOnLaunch(isDemoMode: Bool = false) async {
         guard !isDemoMode, canTakePayments else { return }
         if TapToPayEligibility.blockingMessage() != nil { return }
+
+        // Apple req 3.2 / 6.2: show the launch Hero promptly. Network and reader
+        // preparation must not postpone this awareness screen.
+        if !UserDefaults.standard.bool(forKey: Self.tapToPayHeroBannerSeenKey) {
+            showTapToPayHeroBanner = true
+        }
 
         if let prepareData = await TapToPayAppLifecycle.prewarm() {
             applyPrepareTapToPayResponse(prepareData)
         } else if stripeConnected, resolvedTapToPayLocationId.isEmpty {
             _ = try? await ensureTapToPayLocation()
-        }
-
-        // Apple req 3.2 / 6.2: show full-screen Hero banner once per eligible user.
-        if !UserDefaults.standard.bool(forKey: Self.tapToPayHeroBannerSeenKey) {
-            showTapToPayHeroBanner = true
         }
 
         // Apple req 3.3 / 6.3: send Value Proposition push once per eligible user.
@@ -373,12 +385,11 @@ class PaymentsViewModel: ObservableObject {
     private func scheduleTapToPayValuePropPushIfNeeded() {
         let sentKey = Self.tapToPayValuePropPushSentKey
         guard !UserDefaults.standard.bool(forKey: sentKey) else { return }
-        let pushBody = TapToPayBranding.featureSubtitle
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else { return }
             let content = UNMutableNotificationContent()
-            content.title = "Tap to Pay on iPhone is available"
-            content.body = pushBody
+            content.title = TapToPayBranding.pushTitle
+            content.body = TapToPayBranding.pushBody
             content.sound = .default
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
             let request = UNNotificationRequest(
@@ -488,7 +499,8 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    /// Opens checkout, Safari Connect, merchant education, or an in-review alert. Apple T&C always runs before Stripe.
+    /// Opens checkout, Safari Connect, merchant education, or an in-review alert.
+    /// Never starts Stripe Connect onboarding until Apple T&C (and first education) are done.
     func launchTapToPayFlow(isDemoMode: Bool) async -> TapToPayLaunchResult {
         if isDemoMode {
             return .showAlert("Tap to Pay isn't available in demo mode.")
@@ -510,6 +522,7 @@ class PaymentsViewModel: ObservableObject {
         let termsWereAcceptedBefore = TapToPayReaderSession.shared.termsAcceptedOnDevice
         isLaunchingTapToPay = true
 
+        // Step 2: Apple T&C — does not require Stripe charges_enabled.
         if !TapToPayReaderSession.shared.termsAcceptedOnDevice {
             do {
                 try await ensureTapToPayAppleTermsAccepted(isDemoMode: isDemoMode)
@@ -525,15 +538,17 @@ class PaymentsViewModel: ObservableObject {
             return .showAlert("Accept Tap to Pay on iPhone terms to continue.")
         }
 
+        // Step 4: merchant education before Stripe / checkout on first acceptance.
         let termsJustAccepted = !termsWereAcceptedBefore
         if termsJustAccepted, TapToPayMerchantEducationStore.shouldShowAfterTermsAcceptance {
             return .showMerchantEducation
         }
 
+        // Step 5–6: Stripe Connect (if needed), then checkout.
         return await continueTapToPayLaunchAfterEducation(isDemoMode: isDemoMode)
     }
 
-    /// Stripe Connect + checkout after Apple T&C and merchant education.
+    /// Stripe Connect + checkout only after Apple T&C and merchant education.
     func continueTapToPayLaunchAfterEducation(isDemoMode: Bool) async -> TapToPayLaunchResult {
         if !stripeConnected,
            hasLoadedStripeStatus,
@@ -615,21 +630,11 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Marks merchant education complete. Does **not** auto-open Stripe Connect —
+    /// the merchant taps Tap to Pay again to continue (Stripe / checkout).
     @MainActor
-    func finishMerchantEducationAndContinueTapToPay(
-        isDemoMode: Bool,
-        showCheckout: () -> Void,
-        showAlert: (String) -> Void
-    ) async {
+    func finishMerchantEducation() {
         TapToPayMerchantEducationStore.markEducationSeen()
-        let result = await continueTapToPayLaunchAfterEducation(isDemoMode: isDemoMode)
-        applyTapToPayLaunchResult(
-            result,
-            isDemoMode: isDemoMode,
-            showCheckout: showCheckout,
-            showAlert: showAlert,
-            showEducation: {}
-        )
     }
     #endif
 
@@ -717,8 +722,10 @@ class PaymentsViewModel: ObservableObject {
                 } else {
                     isTenantOwner = false
                 }
+                shopTaxEnabled = tenant["shopTaxEnabled"] as? Bool ?? false
             } else {
                 isTenantOwner = false
+                shopTaxEnabled = false
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
@@ -942,6 +949,63 @@ class PaymentsViewModel: ObservableObject {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
             invalidateConnectLinkPrefetch()
             return .noAction
+        }
+    }
+
+    func reloadShopTaxSetting(isDemoMode: Bool = false) async {
+        guard !isDemoMode, let tid = tenantId else { return }
+        if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
+            shopTaxEnabled = tenant["shopTaxEnabled"] as? Bool ?? false
+        }
+    }
+
+    func saveShopTaxEnabled(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            errorMessage = "Payment settings aren't saved in demo mode."
+            return
+        }
+        guard let tid = tenantId else { return }
+        isSavingShopTax = true
+        errorMessage = nil
+        defer { isSavingShopTax = false }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "shopTaxEnabled": shopTaxEnabled,
+            ])
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func openExpressDashboard(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            errorMessage = "Stripe dashboard isn't available in demo mode."
+            return
+        }
+        guard Auth.auth().currentUser != nil else {
+            errorMessage = "You must be signed in."
+            return
+        }
+        isOpeningStripeDashboard = true
+        errorMessage = nil
+        defer { isOpeningStripeDashboard = false }
+        do {
+            let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
+            let data = result.data as? [String: Any]
+            guard let urlString = data?["url"] as? String,
+                  let url = URL(string: urlString) else {
+                throw NSError(
+                    domain: "Payments",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
+                )
+            }
+            let opened = await UIApplication.shared.open(url)
+            if !opened {
+                errorMessage = "Could not open Stripe. Check that Safari is available."
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
     }
 

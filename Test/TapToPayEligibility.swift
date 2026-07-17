@@ -73,6 +73,9 @@ enum TapToPayErrorMapper {
             return "Tap to Pay is still connecting. Wait a moment and try again."
         }
         let combined = "\(ns.domain) \(ns.code) \(ns.localizedDescription)".lowercased()
+        if combined.contains("blocked") || combined.contains("cannot be used with the built-in") {
+            return "Tap to Pay isn’t available for this Apple Account right now. Apple terms can’t be shown until Tap to Pay is re-enabled. Contact Apple or Stripe support, or try another Apple ID."
+        }
         if combined.contains("osversionnotsupported") || combined.contains("os_version_not_supported") {
             return "Update iOS to the latest version to use Tap to Pay."
         }

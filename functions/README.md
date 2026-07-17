@@ -40,6 +40,7 @@
 8. **Beta admin portal** (`web/marketing/admin/`):
    - Set **`BETA_ADMIN_UIDS`** in `functions/.env` to your Firebase Auth uid(s), comma-separated.
    - Optional email (Resend): **`RESEND_API_KEY`**, **`BETA_EMAIL_FROM`** (outbound From), **`BETA_SUPPORT_EMAIL`** (Reply-To; default **`support@getbookking.com`** via admin settings).
+   - Tap to Pay partner launch email (Apple 6.1): same Resend vars; auto-sent after signup provision; callable **`sendTapToPayLaunchEmail`** for owner test/resend (`force: true`).
    - Optional: **`MARKETING_ORIGIN`** (default `https://getbookking.com`) for onboarding links in approval emails.
    - Deploy functions + hosting (`marketing` target), then open `…/admin/requests.html` and sign in with an allowed account.
    - Firestore indexes: deploy with `firebase deploy --only firestore:indexes` if queries prompt for new indexes.

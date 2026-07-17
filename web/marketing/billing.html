@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/account.css?v=4" />
-  <link rel="stylesheet" href="assets/billing.css?v=1" />
+  <link rel="stylesheet" href="assets/billing.css?v=2" />
 </head>
 <body>
   <header class="acct-header">
@@ -45,31 +45,23 @@
             <span class="bill-kv-value bill-includes-value">Text messaging, reminders, priority support</span>
           </div>
           <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:16px;">Start subscription today</button>
+          <button type="button" class="btn-upgrade hidden" id="resubscribeBtn" style="margin-top:16px;">Resubscribe</button>
+          <button type="button" class="btn-secondary hidden" id="keepSubscriptionBtn" style="margin-top:12px;">Keep subscription</button>
           <p class="bill-success hidden" id="startSubSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
             Subscription started. Return to the Bookking app and pull to refresh on Messaging to enable client texting.
           </p>
+          <p class="bill-success hidden" id="resubscribeSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
+            Subscription restored. Return to the Bookking app and pull to refresh on Messaging to enable client texting.
+          </p>
           <div class="bill-plan-actions hidden" id="planActions">
             <button type="button" class="btn-secondary" id="changePlanBtn">Change plan</button>
+            <button type="button" class="btn-secondary" id="changePaymentBtn">Change payment method</button>
             <button type="button" class="btn-outline-danger" id="cancelSubBtn">Cancel subscription</button>
           </div>
+          <p class="bill-stripe-note bill-stripe-note--inset hidden" id="planStripeNote">Payments secured by Stripe</p>
           <p class="bill-note hidden" id="billingNote">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
-        </div>
-      </section>
-
-      <section class="bill-section hidden" id="paymentSection">
-        <div class="bill-section-label">Payment method</div>
-        <div class="bill-card">
-          <div class="bill-payment-row">
-            <div class="bill-payment-info">
-              <span class="bill-payment-icon" aria-hidden="true"></span>
-              <div>
-                <div class="bill-payment-label" id="paymentMethodLabel">—</div>
-                <div class="bill-payment-sub hidden" id="paymentMethodSub"></div>
-              </div>
-            </div>
-            <button type="button" class="bill-btn-text" id="updatePaymentBtn">Update</button>
-          </div>
-          <p class="bill-stripe-note">Payments secured by Stripe</p>
+          <p class="bill-note hidden" id="resubscribeNote">Your subscription has ended. Resubscribe to pay and restore client texting and plan features.</p>
+          <p class="bill-note hidden" id="cancelPendingNote"></p>
         </div>
       </section>
 
@@ -149,6 +141,8 @@
 
     var params = new URLSearchParams(window.location.search);
     var billingParam = params.get('billing');
+    var checkoutParam = params.get('checkout');
+    var checkoutSessionId = params.get('session_id');
     var startParam = params.get('start');
     var pendingStartTodayPrompt = false;
 
@@ -193,19 +187,6 @@
       if (inv.amountPaid === 0) return { text: 'Free', cls: 'is-free' };
       if (inv.status === 'paid') return { text: 'Paid', cls: 'is-paid' };
       return { text: statusBadgeLabel(inv.status), cls: '' };
-    }
-
-    function openBillingPortal() {
-      var errEl = document.getElementById('billingError');
-      errEl.classList.add('hidden');
-      return fns.httpsCallable('createBillingPortalSession')({
-        marketingOrigin: window.location.origin
-      }).then(function(res) {
-        if (res.data && res.data.url) window.location.href = res.data.url;
-      }).catch(function(err) {
-        errEl.textContent = (err && err.message) ? err.message : String(err);
-        errEl.classList.remove('hidden');
-      });
     }
 
     function renderInvoices(invoices, planName) {
@@ -261,6 +242,68 @@
       });
     }
 
+    function openBillingPortal() {
+      var errEl = document.getElementById('billingError');
+      errEl.classList.add('hidden');
+      return fns.httpsCallable('createBillingPortalSession')({
+        marketingOrigin: window.location.origin
+      }).then(function(res) {
+        if (res.data && res.data.url) window.location.href = res.data.url;
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      });
+    }
+
+    function openResubscribeCheckout() {
+      var errEl = document.getElementById('billingError');
+      var btn = document.getElementById('resubscribeBtn');
+      errEl.classList.add('hidden');
+      document.getElementById('resubscribeSuccess').classList.add('hidden');
+      btn.disabled = true;
+      var priorLabel = btn.textContent;
+      btn.textContent = 'Redirecting to checkout…';
+      return fns.httpsCallable('createResubscribeCheckout')({
+        marketingOrigin: window.location.origin
+      }).then(function(res) {
+        if (res.data && res.data.url) {
+          window.location.href = res.data.url;
+          return;
+        }
+        throw new Error('Stripe did not return a checkout URL.');
+      }).catch(function(err) {
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+      }).finally(function() {
+        btn.disabled = false;
+        btn.textContent = priorLabel;
+      });
+    }
+
+    function completeResubscribeAfterReturn(sessionId) {
+      var errEl = document.getElementById('billingError');
+      var loadingEl = document.getElementById('billingLoading');
+      var contentEl = document.getElementById('billingContent');
+      errEl.classList.add('hidden');
+      loadingEl.classList.remove('hidden');
+      contentEl.classList.add('hidden');
+      loadingEl.querySelector('p').textContent = 'Confirming your subscription…';
+      return fns.httpsCallable('completeResubscribeCheckout')({
+        sessionId: sessionId
+      }).then(function() {
+        history.replaceState({}, '', 'billing.html');
+        loadingEl.querySelector('p').textContent = 'Loading billing…';
+        document.getElementById('resubscribeSuccess').classList.remove('hidden');
+        return loadBilling();
+      }).catch(function(err) {
+        history.replaceState({}, '', 'billing.html');
+        loadingEl.querySelector('p').textContent = 'Loading billing…';
+        errEl.textContent = (err && err.message) ? err.message : String(err);
+        errEl.classList.remove('hidden');
+        return loadBilling();
+      });
+    }
+
     function renderBilling(d, user) {
       billingData = d;
       document.getElementById('billingLoading').classList.add('hidden');
@@ -313,37 +356,45 @@
       }
 
       var startBtn = document.getElementById('startSubBtn');
+      var resubscribeBtn = document.getElementById('resubscribeBtn');
+      var keepSubscriptionBtn = document.getElementById('keepSubscriptionBtn');
       var planActions = document.getElementById('planActions');
+      var planStripeNote = document.getElementById('planStripeNote');
       var noteEl = document.getElementById('billingNote');
+      var resubscribeNote = document.getElementById('resubscribeNote');
+      var cancelPendingNote = document.getElementById('cancelPendingNote');
       startBtn.classList.add('hidden');
+      resubscribeBtn.classList.add('hidden');
+      keepSubscriptionBtn.classList.add('hidden');
       planActions.classList.add('hidden');
+      planStripeNote.classList.add('hidden');
       noteEl.classList.add('hidden');
+      resubscribeNote.classList.add('hidden');
+      cancelPendingNote.classList.add('hidden');
+      document.getElementById('startSubSuccess').classList.add('hidden');
+      document.getElementById('resubscribeSuccess').classList.add('hidden');
 
       if (d.hasStripeCustomer && sub && sub.status === 'trialing') {
         startBtn.classList.remove('hidden');
         noteEl.classList.remove('hidden');
       } else if (d.hasStripeCustomer && sub && (sub.status === 'active' || sub.status === 'past_due')) {
         planActions.classList.remove('hidden');
-      }
-
-      var paymentSection = document.getElementById('paymentSection');
-      var paymentLabel = document.getElementById('paymentMethodLabel');
-      var paymentSub = document.getElementById('paymentMethodSub');
-      if (d.paymentMethodLabel) {
-        paymentLabel.textContent = d.paymentMethodLabel.replace('····', 'ending in');
-        if (d.paymentMethodExpiry) {
-          paymentSub.textContent = 'Expires ' + d.paymentMethodExpiry;
-          paymentSub.classList.remove('hidden');
-        } else {
-          paymentSub.textContent = '';
-          paymentSub.classList.add('hidden');
+        planStripeNote.classList.remove('hidden');
+        if (sub.status === 'active' && sub.cancelAtPeriodEnd) {
+          cancelPendingNote.textContent =
+            'Your subscription is scheduled to end on ' +
+            formatBillingDate(sub.currentPeriodEnd) +
+            '. Keep it active in Stripe to continue client texting and plan features.';
+          cancelPendingNote.classList.remove('hidden');
+          keepSubscriptionBtn.classList.remove('hidden');
         }
-        paymentSection.classList.remove('hidden');
-      } else if (d.hasStripeCustomer) {
-        paymentLabel.textContent = 'No payment method on file';
-        paymentSection.classList.remove('hidden');
-      } else {
-        paymentSection.classList.add('hidden');
+      } else if (
+        d.hasStripeCustomer &&
+        sub &&
+        (sub.status === 'canceled' || sub.status === 'unpaid' || sub.status === 'paused')
+      ) {
+        resubscribeBtn.classList.remove('hidden');
+        resubscribeNote.classList.remove('hidden');
       }
 
       document.getElementById('billingEmail').textContent = (user && user.email) ? user.email : '—';
@@ -461,8 +512,10 @@
     });
 
     document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
-    document.getElementById('updatePaymentBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('changePaymentBtn').addEventListener('click', openBillingPortal);
     document.getElementById('updateEmailBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('resubscribeBtn').addEventListener('click', openResubscribeCheckout);
+    document.getElementById('keepSubscriptionBtn').addEventListener('click', openBillingPortal);
     document.getElementById('cancelSubBtn').addEventListener('click', openCancelModal);
     document.getElementById('cancelModalClose').addEventListener('click', closeCancelModal);
     document.getElementById('cancelModalKeep').addEventListener('click', closeCancelModal);
@@ -487,6 +540,18 @@
     auth.onAuthStateChanged(function(user) {
       if (!user) {
         window.location.replace(loginRedirectUrl());
+        return;
+      }
+      if (checkoutParam === 'success' && checkoutSessionId) {
+        completeResubscribeAfterReturn(checkoutSessionId);
+        return;
+      }
+      if (checkoutParam === 'canceled') {
+        history.replaceState({}, '', 'billing.html');
+        var errEl = document.getElementById('billingError');
+        errEl.textContent = 'Checkout was canceled. You can resubscribe when you are ready.';
+        errEl.classList.remove('hidden');
+        loadBilling();
         return;
       }
       if (billingParam === 'portal') {

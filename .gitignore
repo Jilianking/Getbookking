@@ -2,6 +2,7 @@
 # Recommended ignores for Xcode projects
 
 # App secrets (Stripe publishable key, API URLs, etc.)
+Secrets.plist
 Test/Secrets.plist
 
 # User settings and workspace data

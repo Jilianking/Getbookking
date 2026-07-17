@@ -205,7 +205,6 @@ final class TapToPayTerminalManager {
 
         await MainActor.run {
             TapToPayReaderSession.shared.resetForWarmUp()
-            TapToPayReaderSession.shared.beginWaitingForAppleTermsAcceptance()
         }
 
         let reader = try await discoverTapToPayReader()
@@ -217,18 +216,14 @@ final class TapToPayTerminalManager {
         recordConnectedReader(reader, locationId: locationId, merchantDisplayName: resolvedName)
         await MainActor.run { TapToPayReaderSession.shared.markReady() }
 
-        if await TapToPayReaderSession.shared.waitForAppleTermsAcceptance() {
-            return
-        }
-
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        if TapToPayReaderSession.shared.termsAcceptedOnDevice {
-            TapToPayReaderSession.shared.cancelWaitingForAppleTermsAcceptance(resumeValue: true)
-            return
-        }
-
+        // `tapToPayReaderDidAcceptTermsOfService` fires when terms are newly
+        // accepted. A successful Stripe Terminal connection without that callback
+        // means Stripe/Apple already has acceptance for this device. Keep this
+        // result in memory only; never restore it from app-local storage.
         await MainActor.run {
-            TapToPayReaderSession.shared.markTermsConfirmedAfterSuccessfulConnect()
+            if !TapToPayReaderSession.shared.termsAcceptedOnDevice {
+                TapToPayReaderSession.shared.markTermsConfirmedByPSPConnection()
+            }
         }
     }
 
@@ -472,6 +467,9 @@ final class TapToPayTerminalManager {
             delegate: readerDelegate,
             locationId: locationId
         )
+        // Apple T&C must be presentable during connect when the merchant has not
+        // accepted yet. Never set this false for enablement flows.
+        .setTosAcceptancePermitted(true)
         .setAutoReconnectOnUnexpectedDisconnect(true)
         if !merchantDisplayName.isEmpty {
             builder = builder.setMerchantDisplayName(merchantDisplayName)

@@ -19,6 +19,9 @@ struct PaymentsSettingsView: View {
                 if viewModel.canEditTapToPayDisplayName {
                     tapToPayNameSection
                     checkoutOptionsSection
+                }
+                // Education stays available even when Stripe/display-name editing is not ready.
+                if viewModel.canTakePayments {
                     helpSection
                 }
                 #endif

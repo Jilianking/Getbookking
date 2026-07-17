@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "TTPoiP_In_App_Tile_Hero_9x16__en-US.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

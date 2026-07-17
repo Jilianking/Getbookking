@@ -554,58 +554,174 @@ private struct PreviewColorWellCircle: View {
     }
 }
 
-/// Full-screen system color wheel (no extra tap on a small swatch).
+/// Full-screen system color wheel with an editable hex field (system hex row is unreliable when embedded).
 private struct PreviewQuickEditColorSheet: View {
     let title: String
     let initialHex: String
     let onChange: (String) -> Void
     let onDismiss: () -> Void
 
+    @State private var workingHex: String
+    @State private var hexFieldText: String
+    @FocusState private var hexFieldFocused: Bool
+
+    init(
+        title: String,
+        initialHex: String,
+        onChange: @escaping (String) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.title = title
+        self.initialHex = initialHex
+        self.onChange = onChange
+        self.onDismiss = onDismiss
+        let normalized = PreviewQuickEditHex.normalize(initialHex)
+        _workingHex = State(initialValue: normalized)
+        _hexFieldText = State(initialValue: PreviewQuickEditHex.digits(normalized))
+    }
+
     var body: some View {
         NavigationStack {
-            SystemColorWheelPicker(initialHex: initialHex, onChange: onChange)
+            VStack(spacing: 0) {
+                hexEditor
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color(.secondarySystemBackground))
+
+                SystemColorWheelPicker(hex: $workingHex) { picked in
+                    applyHex(picked, updateField: true)
+                }
                 .ignoresSafeArea(edges: .bottom)
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { onDismiss() }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        commitHexFieldIfNeeded()
+                        onDismiss()
                     }
                 }
+            }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
+
+    private var hexEditor: some View {
+        HStack(spacing: 10) {
+            Text("Hex #")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            TextField("2A1810", text: $hexFieldText)
+                .font(.body.monospaced())
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .focused($hexFieldFocused)
+                .onChange(of: hexFieldText) { _, newValue in
+                    let filtered = PreviewQuickEditHex.sanitizeTyping(newValue)
+                    if filtered != newValue {
+                        hexFieldText = filtered
+                        return
+                    }
+                    if filtered.count == 6 {
+                        applyHex("#\(filtered)", updateField: false)
+                    }
+                }
+                .onSubmit {
+                    commitHexFieldIfNeeded()
+                    hexFieldFocused = false
+                }
+            Spacer(minLength: 0)
+            Circle()
+                .fill(Color(hex: workingHex))
+                .frame(width: 28, height: 28)
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.12), lineWidth: 1))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Hex color")
+        .accessibilityValue(workingHex)
+    }
+
+    private func applyHex(_ hex: String, updateField: Bool) {
+        let canonical = PreviewQuickEditHex.normalize(hex)
+        if updateField {
+            hexFieldText = PreviewQuickEditHex.digits(canonical)
+        }
+        guard canonical != workingHex else { return }
+        workingHex = canonical
+        onChange(canonical)
+    }
+
+    private func commitHexFieldIfNeeded() {
+        let cleaned = PreviewQuickEditHex.sanitizeTyping(hexFieldText)
+        if cleaned.count == 6 || cleaned.count == 3 {
+            applyHex(cleaned, updateField: true)
+        } else {
+            hexFieldText = PreviewQuickEditHex.digits(workingHex)
+        }
+    }
+}
+
+private enum PreviewQuickEditHex {
+    static func sanitizeTyping(_ raw: String) -> String {
+        let stripped = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+            .uppercased()
+        return String(stripped.filter(\.isHexDigit).prefix(6))
+    }
+
+    static func digits(_ hex: String) -> String {
+        String(normalize(hex).drop(while: { $0 == "#" }))
+    }
+
+    static func normalize(_ hex: String) -> String {
+        let cleaned = sanitizeTyping(hex)
+        if cleaned.count == 6 { return "#\(cleaned)" }
+        if cleaned.count == 3 {
+            return "#\(cleaned.map { "\($0)\($0)" }.joined())"
+        }
+        return "#000000"
+    }
 }
 
 private struct SystemColorWheelPicker: UIViewControllerRepresentable {
-    let initialHex: String
-    let onChange: (String) -> Void
+    @Binding var hex: String
+    let onUserPicked: (String) -> Void
 
     func makeUIViewController(context: Context) -> UIColorPickerViewController {
         let picker = UIColorPickerViewController()
-        picker.selectedColor = UIColor(Color(hex: initialHex))
+        picker.selectedColor = UIColor(Color(hex: hex))
         picker.supportsAlpha = false
         picker.delegate = context.coordinator
+        context.coordinator.lastAppliedHex = PreviewQuickEditHex.normalize(hex)
         return picker
     }
 
     func updateUIViewController(_ uiViewController: UIColorPickerViewController, context: Context) {
-        let color = UIColor(Color(hex: initialHex))
-        if !uiViewController.selectedColor.isEqual(color) {
-            uiViewController.selectedColor = color
-        }
+        let normalized = PreviewQuickEditHex.normalize(hex)
+        // Avoid resetting selectedColor on every SwiftUI pass — that breaks hex editing
+        // and fights in-progress slider / spectrum interaction.
+        guard normalized != context.coordinator.lastAppliedHex else { return }
+        context.coordinator.lastAppliedHex = normalized
+        context.coordinator.isApplyingProgrammatically = true
+        uiViewController.selectedColor = UIColor(Color(hex: normalized))
+        context.coordinator.isApplyingProgrammatically = false
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onChange: onChange)
+        Coordinator(onUserPicked: onUserPicked)
     }
 
     final class Coordinator: NSObject, UIColorPickerViewControllerDelegate {
-        let onChange: (String) -> Void
+        let onUserPicked: (String) -> Void
+        var lastAppliedHex: String = ""
+        var isApplyingProgrammatically = false
 
-        init(onChange: @escaping (String) -> Void) {
-            self.onChange = onChange
+        init(onUserPicked: @escaping (String) -> Void) {
+            self.onUserPicked = onUserPicked
         }
 
         func colorPickerViewController(
@@ -613,7 +729,10 @@ private struct SystemColorWheelPicker: UIViewControllerRepresentable {
             didSelect color: UIColor,
             continuously: Bool
         ) {
-            onChange(color.toPreviewHex())
+            guard !isApplyingProgrammatically else { return }
+            let picked = PreviewQuickEditHex.normalize(color.toPreviewHex())
+            lastAppliedHex = picked
+            onUserPicked(picked)
         }
     }
 }

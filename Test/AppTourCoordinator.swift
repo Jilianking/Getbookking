@@ -70,10 +70,7 @@ enum AppTourStore {
     }
 
     static func isAppTourPending(from data: [String: Any]) -> Bool {
-        guard let onboarding = data["onboarding"] as? [String: Any] else { return false }
-        if onboarding["appTourCompleted"] as? Bool == true { return false }
-        if onboarding["appTourPending"] as? Bool == true { return true }
-        return onboarding["tapToPayDashboardTipPending"] as? Bool ?? false
+        false
     }
 }
 
@@ -118,12 +115,8 @@ final class AppTourCoordinator: ObservableObject {
         isOwner: Bool,
         demoSessionReady: Bool
     ) -> Bool {
-        guard isOwner || isDemoMode else { return false }
-        if isDemoMode {
-            guard demoSessionReady else { return false }
-            return AppTourStore.shouldShowDemoTour
-        }
-        return appTourPending
+        // Retired: 5-step spotlight tour conflicted with Tap to Pay onboarding.
+        false
     }
 
     func start(from step: AppTourStep = .dashboardTakePayment) {

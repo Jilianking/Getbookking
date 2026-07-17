@@ -17,6 +17,7 @@ struct PaymentsView: View {
     @State private var showTapToPaySheet = false
     @State private var showTapToPayEducation = false
     @State private var tapToPayAlertMessage: String?
+    @State private var launchTapToPayAfterHeroDismissal = false
     #endif
     @State private var showWithdrawSheet = false
     @State private var showAllTransactions = false
@@ -66,7 +67,7 @@ struct PaymentsView: View {
                     }
                 }
                 #if TAP_TO_PAY_ENABLED
-                if viewModel.stripeConnected && viewModel.canEditTapToPayDisplayName {
+                if viewModel.canTakePayments {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         NavigationLink {
                             PaymentsSettingsView(viewModel: viewModel)
@@ -111,14 +112,8 @@ struct PaymentsView: View {
             }
             .sheet(isPresented: $showTapToPayEducation) {
                 TapToPayMerchantEducationView {
+                    viewModel.finishMerchantEducation()
                     showTapToPayEducation = false
-                    Task {
-                        await viewModel.finishMerchantEducationAndContinueTapToPay(
-                            isDemoMode: authViewModel.isDemoMode,
-                            showCheckout: { showTapToPaySheet = true },
-                            showAlert: { tapToPayAlertMessage = $0 }
-                        )
-                    }
                 }
             }
             .alert("Tap to Pay", isPresented: Binding(
@@ -151,14 +146,21 @@ struct PaymentsView: View {
                     TapToPayLaunchOverlay(message: viewModel.tapToPayLaunchOverlayMessage)
                 }
             }
-            .sheet(isPresented: Binding(
-                get: { viewModel.showTapToPayHeroBanner },
-                set: { if !$0 { viewModel.dismissHeroBanner() } }
-            )) {
+            .sheet(
+                isPresented: Binding(
+                    get: { viewModel.showTapToPayHeroBanner },
+                    set: { if !$0 { viewModel.dismissHeroBanner() } }
+                ),
+                onDismiss: {
+                    guard launchTapToPayAfterHeroDismissal else { return }
+                    launchTapToPayAfterHeroDismissal = false
+                    handleTapToPayTapped()
+                }
+            ) {
                 TapToPayHeroBannerView(
                     onGetStarted: {
+                        launchTapToPayAfterHeroDismissal = true
                         viewModel.dismissHeroBanner()
-                        handleTapToPayTapped()
                     },
                     onDismiss: {
                         viewModel.dismissHeroBanner()
@@ -176,7 +178,8 @@ struct PaymentsView: View {
                 ? "Connect your Stripe account to enable in-person payments"
                 : "Set up Stripe to enable in-person payments"
         }
-        return "Accept contactless cards and wallets — processing fee paid by customer"
+        return TapToPayBranding.featureSubtitle
+
     }
 
     private func handleTapToPayTapped() {
@@ -201,13 +204,7 @@ struct PaymentsView: View {
         await TapToPayMerchantEducationFlow.run(
             showFallbackSheet: { showTapToPayEducation = true },
             onFinished: {
-                Task {
-                    await viewModel.finishMerchantEducationAndContinueTapToPay(
-                        isDemoMode: authViewModel.isDemoMode,
-                        showCheckout: { showTapToPaySheet = true },
-                        showAlert: { tapToPayAlertMessage = $0 }
-                    )
-                }
+                viewModel.finishMerchantEducation()
             }
         )
     }
@@ -982,16 +979,29 @@ struct WithdrawSheet: View {
 #if TAP_TO_PAY_ENABLED
 struct TapToPayLaunchOverlay: View {
     let message: String
+    @ObservedObject private var readerSession = TapToPayReaderSession.shared
+
+    private var statusMessage: String {
+        readerSession.statusMessage?.isEmpty == false
+            ? readerSession.statusMessage!
+            : message
+    }
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.32)
                 .ignoresSafeArea()
             VStack(spacing: 14) {
-                ProgressView()
-                    .tint(.white)
-                    .scaleEffect(1.05)
-                Text(message)
+                if let progress = readerSession.preparationProgress, progress < 1 {
+                    ProgressView(value: progress)
+                        .tint(.white)
+                        .frame(width: 160)
+                } else {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.05)
+                }
+                Text(statusMessage)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)

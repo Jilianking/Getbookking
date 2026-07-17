@@ -313,6 +313,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     galleryGridLayout: "3x1",
     galleryLayoutStyle: "classic_grid",
     shopEnabled: false,
+    shopTaxEnabled: false,
     aboutText: "",
     contactEmail: email || "",
     contactAddress: "",
@@ -367,7 +368,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     },
     createdAt: now,
     onboarding: {
-      appTourPending: true,
+      appTourPending: false,
       tapToPayDashboardTipPending: true,
     },
   };
@@ -394,6 +395,19 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   });
 
   await batch.commit();
+
+  // Apple req 6.1: partner Tap to Pay launch email to eligible merchants (Resend).
+  try {
+    const { scheduleTapToPayLaunchEmailAfterSignup } = require("./tapToPayLaunchEmail");
+    scheduleTapToPayLaunchEmailAfterSignup({
+      uid,
+      email,
+      firstName,
+    });
+  } catch (err) {
+    console.error("scheduleTapToPayLaunchEmailAfterSignup", err);
+  }
+
   return { tenantId, slug };
 }
 
@@ -417,6 +431,10 @@ async function finalizeFromCheckoutSession(stripe, session) {
   if (!pendingSnap.exists) {
     const u = await db.collection("users").doc(uid).get();
     if (u.exists && u.data().tenantId) {
+      const checkoutKind = (session.metadata && session.metadata.checkoutKind) || "";
+      if (checkoutKind === "resubscribe") {
+        return finalizeResubscribeFromCheckoutSession(stripe, session, uid);
+      }
       const tid = u.data().tenantId;
       const tSnap = await db.collection("tenants").doc(tid).get();
       return { tenantId: tid, slug: tSnap.exists ? tSnap.data().slug || "" : "" };
@@ -462,6 +480,66 @@ async function finalizeFromCheckoutSession(stripe, session) {
 
   await pendingRef.delete().catch(() => {});
   return result;
+}
+
+async function finalizeResubscribeFromCheckoutSession(stripe, session, uid) {
+  const sessionUid =
+    (session.metadata && session.metadata.firebaseUid) || session.client_reference_id;
+  if (!sessionUid || sessionUid !== uid) {
+    console.warn("resubscribe checkout uid mismatch", session.id);
+    return null;
+  }
+  const checkoutKind = (session.metadata && session.metadata.checkoutKind) || "";
+  if (checkoutKind !== "resubscribe") {
+    return null;
+  }
+
+  const paidOk =
+    session.payment_status === "paid" ||
+    session.payment_status === "no_payment_required";
+  if (!paidOk || session.mode !== "subscription") {
+    console.warn("resubscribe checkout not paid / not subscription", session.id);
+    return null;
+  }
+
+  const ctx = await getMemberAccessContext(uid);
+  const metaTenantId = ((session.metadata && session.metadata.tenantId) || "").toString().trim();
+  if (metaTenantId && metaTenantId !== ctx.tenantId) {
+    console.warn("resubscribe checkout tenant mismatch", session.id);
+    return null;
+  }
+
+  let sub = session.subscription;
+  if (typeof sub === "string") {
+    sub = await stripe.subscriptions.retrieve(sub, { expand: ["items.data.price"] });
+  } else if (sub && sub.id && (!sub.items || !sub.items.data)) {
+    sub = await stripe.subscriptions.retrieve(sub.id, { expand: ["items.data.price"] });
+  }
+  if (!sub || !sub.id) {
+    console.warn("resubscribe checkout missing subscription", session.id);
+    return null;
+  }
+
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : session.customer && session.customer.id;
+
+  const syncPatch = {
+    stripeSubscriptionId: sub.id,
+  };
+  if (customerId) syncPatch.stripeCustomerId = customerId;
+  const planNorm = planNormFromStripeSubscription(sub);
+  if (planNorm) syncPatch.subscriptionPlan = planNorm;
+
+  await sms.syncSubscriptionStatusForTenant(ctx.tenantId, sub.status, syncPatch);
+
+  return {
+    ok: true,
+    tenantId: ctx.tenantId,
+    subscriptionStatus: sub.status,
+    resubscribed: true,
+  };
 }
 
 function planNormFromPriceId(priceId) {
@@ -781,6 +859,56 @@ exports.createConnectAccountLink = functions
           : "Stripe Connect failed. Enable Connect in the Stripe Dashboard and verify STRIPE_SECRET_KEY.";
       throw new functions.https.HttpsError("failed-precondition", msg);
     }
+  });
+
+/**
+ * One-time login link to the connected account's Stripe Express dashboard
+ * (tax documents, payouts, tax registrations).
+ */
+exports.createExpressDashboardLink = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const uid = context.auth.uid;
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const payCtx = await resolvePaymentStripeContext(uid);
+    if (!payCtx?.canConnect && !payCtx?.canTakePayments) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "You do not have permission to manage payments for this business."
+      );
+    }
+    const stripeAccountId = (payCtx.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId || isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Connect Stripe before opening the dashboard."
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account.details_submitted) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Finish Stripe setup before opening the dashboard."
+      );
+    }
+    const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+    if (!loginLink?.url) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe did not return a dashboard link."
+      );
+    }
+    return { url: loginLink.url };
   });
 
 /**
@@ -2589,6 +2717,68 @@ async function fetchTenantProductsById(tenantId) {
   return productsById;
 }
 
+/** Stripe Tax code: general tangible goods (retail shop products). */
+const SHOP_PRODUCT_TAX_CODE = "txcd_99999999";
+
+function shopTaxAddressFromTenant(tenantData) {
+  const addr = terminalAddressFromTenant(tenantData || {});
+  return {
+    line1: addr.line1,
+    city: addr.city,
+    state: addr.state,
+    postal_code: addr.postal_code,
+    country: addr.country || "US",
+  };
+}
+
+async function calculateShopSalesTax(stripe, stripeAccountId, tenantData, lineItems) {
+  const address = shopTaxAddressFromTenant(tenantData);
+  const calculation = await stripe.tax.calculations.create(
+    {
+      currency: "usd",
+      line_items: lineItems.map((line) => ({
+        amount: Math.max(0, parseInt(line.lineTotalCents, 10) || 0),
+        reference: (line.productId || "item").toString().slice(0, 200),
+        tax_code: SHOP_PRODUCT_TAX_CODE,
+        tax_behavior: "exclusive",
+      })),
+      customer_details: {
+        address,
+        address_source: "billing",
+      },
+      ship_from_details: {
+        address,
+      },
+    },
+    { stripeAccount: stripeAccountId }
+  );
+  const taxCents = Math.max(0, parseInt(calculation.tax_amount_exclusive, 10) || 0);
+  return {
+    taxCents,
+    taxCalculationId: calculation.id,
+  };
+}
+
+async function recordShopTaxTransactionFromCalculation(
+  stripe,
+  stripeAccountId,
+  taxCalculationId,
+  paymentIntentId
+) {
+  if (!taxCalculationId || !paymentIntentId) return;
+  try {
+    await stripe.tax.transactions.createFromCalculation(
+      {
+        calculation: taxCalculationId,
+        reference: paymentIntentId,
+      },
+      { stripeAccount: stripeAccountId }
+    );
+  } catch (err) {
+    console.warn("recordShopTaxTransactionFromCalculation", err.message || err);
+  }
+}
+
 function buildValidatedShopLineItems(rawLines, productsById) {
   if (!Array.isArray(rawLines) || !rawLines.length) {
     throw new functions.https.HttpsError("invalid-argument", "lineItems is required");
@@ -2720,11 +2910,12 @@ function shopOrderReceiptResponse(tenantData, orderId, order, totals = {}) {
     totals.subtotalCents ??
     order?.subtotalCents ??
     lineItems.reduce((sum, line) => sum + (line.lineTotalCents || 0), 0);
+  const taxCents = totals.taxCents ?? order?.taxCents ?? 0;
   const surchargeCents = totals.surchargeCents ?? order?.surchargeCents ?? 0;
   const totalCents =
     totals.totalCents ??
     order?.totalCents ??
-    subtotalCents + Math.max(0, surchargeCents);
+    subtotalCents + Math.max(0, taxCents) + Math.max(0, surchargeCents);
   const customerEmail = (order?.customerEmail || "").toString().trim().toLowerCase();
   const paidAt =
     totals.paidAt ||
@@ -2746,6 +2937,7 @@ function shopOrderReceiptResponse(tenantData, orderId, order, totals = {}) {
         lineTotalCents: Math.max(0, parseInt(line.lineTotalCents, 10) || 0),
       })),
       subtotalCents,
+      taxCents: Math.max(0, taxCents),
       surchargeCents: Math.max(0, surchargeCents),
       totalCents,
       paidAt,
@@ -2796,13 +2988,18 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
   }
   const surchargeCents = parseInt(meta.surchargeCents, 10);
   const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
+  const taxCentsMeta = parseInt(meta.taxCents, 10);
+  const resolvedTax = Number.isNaN(taxCentsMeta) ? 0 : Math.max(0, taxCentsMeta);
   const serviceCents = parseInt(meta.serviceAmountCents, 10);
   const resolvedSubtotal =
     Number.isNaN(serviceCents) || serviceCents <= 0
-      ? Math.max(0, (pi.amount || 0) - resolvedSurcharge)
+      ? Math.max(0, (pi.amount || 0) - resolvedSurcharge - resolvedTax)
       : serviceCents;
-  const grossCents = pi.amount || resolvedSubtotal + resolvedSurcharge;
+  const grossCents = pi.amount || resolvedSubtotal + resolvedTax + resolvedSurcharge;
   const platformFee = platformFeeCents(grossCents);
+  const taxCalculationId = (meta.taxCalculationId || order.taxCalculationId || "")
+    .toString()
+    .trim();
 
   await orderRef.set(
     {
@@ -2810,6 +3007,7 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
       paidAt: admin.firestore.FieldValue.serverTimestamp(),
       stripePaymentIntentId: paymentIntentId,
       subtotalCents: resolvedSubtotal,
+      taxCents: resolvedTax,
       surchargeCents: resolvedSurcharge,
       totalCents: grossCents,
       platformFeeCents: platformFee,
@@ -2817,6 +3015,15 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
     },
     { merge: true }
   );
+
+  if (taxCalculationId) {
+    await recordShopTaxTransactionFromCalculation(
+      stripe,
+      stripeAccountId,
+      taxCalculationId,
+      paymentIntentId
+    );
+  }
 
   const ledgerRef = db
     .collection("tenants")
@@ -2998,14 +3205,38 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
+
+    const shopTaxEnabled = tenantData.shopTaxEnabled === true;
+    let taxCents = 0;
+    let taxCalculationId = null;
+    if (shopTaxEnabled) {
+      try {
+        const tax = await calculateShopSalesTax(
+          stripe,
+          stripeAccountId,
+          tenantData,
+          lineItems
+        );
+        taxCents = tax.taxCents;
+        taxCalculationId = tax.taxCalculationId;
+      } catch (taxErr) {
+        console.warn("createShopCheckoutPayment tax", taxErr.message || taxErr);
+        throw new HttpsError(
+          "failed-precondition",
+          "Could not calculate sales tax. Complete tax setup in Stripe, or turn off Collect sales tax in Payment settings."
+        );
+      }
+    }
+
     const checkout = computeCardCheckoutAmounts(subtotalCents, "online");
-    if (checkout.totalCents < 50) {
+    const piAmount = subtotalCents + taxCents + checkout.surchargeCents;
+    if (piAmount < 50) {
       throw new HttpsError(
         "failed-precondition",
         "Order total must be at least $0.50 to pay by card."
       );
     }
-    const feeCents = platformFeeCents(checkout.totalCents);
+    const feeCents = platformFeeCents(piAmount);
 
     const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
     const customerPhone = normalizeCustomerPhone(data?.customerPhone);
@@ -3019,7 +3250,7 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
 
     const pi = await stripe.paymentIntents.create(
       {
-        amount: checkout.totalCents,
+        amount: piAmount,
         currency: "usd",
         automatic_payment_methods: { enabled: true },
         application_fee_amount: feeCents,
@@ -3029,7 +3260,9 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
           paymentKind: "shop",
           shopOrderId: orderId,
           serviceAmountCents: String(checkout.serviceCents),
+          taxCents: String(taxCents),
           surchargeCents: String(checkout.surchargeCents),
+          ...(taxCalculationId ? { taxCalculationId } : {}),
           chargeStripeAccountId: stripeAccountId,
           chargeStripeScope: "tenant",
         },
@@ -3045,11 +3278,13 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       customerEmail,
       lineItems,
       subtotalCents: checkout.serviceCents,
+      taxCents,
       surchargeCents: checkout.surchargeCents,
-      totalCents: checkout.totalCents,
+      totalCents: piAmount,
       stripePaymentIntentId: pi.id,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (taxCalculationId) orderData.taxCalculationId = taxCalculationId;
     if (customerPhone) orderData.customerPhone = customerPhone;
     if (notes) orderData.notes = notes;
     await orderRef.set(orderData);
@@ -3064,9 +3299,10 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       paymentIntentId: pi.id,
       stripeAccountId,
       subtotalCents: checkout.serviceCents,
+      taxCents,
       surchargeCents: checkout.surchargeCents,
-      platformFeeCents: checkout.platformFeeCents,
-      totalCents: checkout.totalCents,
+      platformFeeCents: feeCents,
+      totalCents: piAmount,
     };
     if (pkOut) out.publishableKey = pkOut;
     return out;
@@ -6898,6 +7134,158 @@ exports.syncTenantBillingFromStripe = functions
     };
   });
 
+/**
+ * Owner: Stripe Checkout to restart a canceled/unpaid subscription (no free trial).
+ */
+exports.createResubscribeCheckout = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const uid = context.auth.uid;
+    const ctx = await getMemberAccessContext(uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can resubscribe."
+      );
+    }
+
+    const status = sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData);
+    if (status === "active") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Your subscription is already active."
+      );
+    }
+    if (status === "trialing") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Use Start subscription today during your free trial."
+      );
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const ownerEmail =
+      (ctx.ownerUserData && ctx.ownerUserData.email) ||
+      (ctx.userData && ctx.userData.email) ||
+      context.auth.token.email ||
+      "";
+
+    const linked = await linkAndSyncTenantStripeBilling(
+      stripe,
+      ctx.tenantId,
+      ctx.tenant,
+      ownerEmail
+    );
+    const customerId = (linked.stripeCustomerId || "").toString().trim();
+    if (!customerId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No Stripe customer found for this business."
+      );
+    }
+
+    const subs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 20,
+    });
+    const blocking = subs.data.find((s) => s.status === "active" || s.status === "trialing");
+    if (blocking) {
+      const msg =
+        blocking.status === "trialing"
+          ? "Use Start subscription today during your free trial."
+          : "Your subscription is already active.";
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+
+    const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+    const priceId = stripePriceIdForPlan(plan);
+    const base = billingPortalReturnBase(data);
+    const successUrl = `${base}/billing.html?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${base}/billing.html?checkout=canceled`;
+
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer: customerId,
+        client_reference_id: uid,
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: {
+          firebaseUid: uid,
+          tenantId: ctx.tenantId,
+          checkoutKind: "resubscribe",
+        },
+        subscription_data: {
+          metadata: {
+            firebaseUid: uid,
+            tenantId: ctx.tenantId,
+            checkoutKind: "resubscribe",
+            plan,
+          },
+        },
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+    } catch (stripeErr) {
+      console.error("createResubscribeCheckout Stripe", stripeErr);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not start checkout: ${stripeErrorMessage(stripeErr)}`
+      );
+    }
+
+    if (!session.url) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe did not return a checkout URL."
+      );
+    }
+
+    return { url: session.url };
+  });
+
+/** After resubscribe Checkout, verify payment and sync Firestore billing. */
+exports.completeResubscribeCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const uid = context.auth.uid;
+    const sessionId = ((data && data.sessionId) || "").toString().trim();
+    if (!sessionId) {
+      throw new functions.https.HttpsError("invalid-argument", "sessionId is required.");
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription"],
+    });
+
+    const result = await finalizeResubscribeFromCheckoutSession(stripe, session, uid);
+    if (!result) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Payment is not complete or this checkout session is invalid."
+      );
+    }
+    return result;
+  });
+
 /** Owner: end free trial now and charge subscription (unlocks client texting setup). */
 exports.startSubscriptionToday = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -7644,3 +8032,6 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
 
 const { registerBetaAdminFunctions } = require("./betaAdmin");
 registerBetaAdminFunctions(exports);
+
+const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");
+registerTapToPayLaunchEmailFunctions(exports);

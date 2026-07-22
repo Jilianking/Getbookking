@@ -1,7 +1,7 @@
 //
 //  MessageComposerBar.swift
 //
-//  iMessage-style composer with + menu (icons from ui_icons.svg).
+//  iMessage-style composer with labeled + action tray.
 //
 
 import SwiftUI
@@ -16,35 +16,47 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
     case bookAppointment
     case quickReplies
 
-    var id: String { assetName }
+    var id: String { title }
 
-    var assetName: String {
-        switch self {
-        case .deposit: return "MessageIconDeposit"
-        case .paymentLink: return "MessageIconPaymentLink"
-        case .bookingLink: return "MessageIconBookingLink"
-        case .bookAppointment: return "MessageIconBookAppointment"
-        case .quickReplies: return "MessageIconQuickReplies"
-        }
-    }
-
-    var accessibilityLabel: String {
+    var title: String {
         switch self {
         case .deposit: return "Request deposit"
-        case .paymentLink: return "Send payment link"
-        case .bookingLink: return "Send booking link"
-        case .bookAppointment: return "Book appointment"
-        case .quickReplies: return "Quick replies"
+        case .paymentLink: return "Request payment"
+        case .bookingLink: return "Booking link"
+        case .bookAppointment: return "Book session"
+        case .quickReplies: return "Quick reply"
         }
     }
 
-    /// Top-to-bottom in the fan; deposit sits nearest the + button.
-    static var stackOrder: [MessageComposerIcon] {
-        [.quickReplies, .bookAppointment, .bookingLink, .paymentLink, .deposit]
+    var accessibilityLabel: String { title }
+
+    var systemImage: String {
+        switch self {
+        case .deposit: return "arrow.down.circle.fill"
+        case .paymentLink: return "creditcard.fill"
+        case .bookingLink: return "link"
+        case .bookAppointment: return "calendar"
+        case .quickReplies: return "bolt.fill"
+        }
     }
 
-    static let iconSize: CGFloat = 40
-    static let iconSpacing: CGFloat = 10
+    var accentColor: Color {
+        switch self {
+        case .deposit: return Color(red: 0.20, green: 0.55, blue: 0.95)
+        case .paymentLink: return Color(red: 0.23, green: 0.48, blue: 0.95)
+        case .bookingLink: return Color(red: 0.55, green: 0.40, blue: 0.28)
+        case .bookAppointment: return Color(red: 0.95, green: 0.55, blue: 0.20)
+        case .quickReplies: return Color(white: 0.72)
+        }
+    }
+
+    /// Top-to-bottom above the +; money actions first (thumb lands here).
+    static var stackOrder: [MessageComposerIcon] {
+        [.paymentLink, .deposit, .bookAppointment, .bookingLink, .quickReplies]
+    }
+
+    static let iconSize: CGFloat = 36
+    static let iconSpacing: CGFloat = 14
     static let plusButtonSize: CGFloat = 36
 }
 
@@ -60,6 +72,8 @@ struct MessageComposerBar: View {
     var isSending: Bool
     var canSend: Bool
     var onSend: () -> Void
+    /// When set, deposit/payment sheets send a structured amount bubble instead of inserting text.
+    var onSendPaymentRequest: ((MessagePaymentSheetKind, Int, String) -> Void)? = nil
     var clientName: String
     var clientPhone: String
     var bookingRequestId: String?
@@ -93,15 +107,25 @@ struct MessageComposerBar: View {
 
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            leftActionColumn
+        VStack(alignment: .leading, spacing: MessageComposerIcon.iconSpacing) {
+            if actionsExpanded {
+                actionTray
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                if quickRepliesExpanded, !usablePresets.isEmpty {
-                    quickRepliesPanel
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+            HStack(alignment: .bottom, spacing: 10) {
+                plusToggleButton
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if quickRepliesExpanded, !usablePresets.isEmpty {
+                        quickRepliesPanel
+                            .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    }
+                    composerField
                 }
-                composerField
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,8 +146,13 @@ struct MessageComposerBar: View {
                 viewModel: paymentsViewModel,
                 kind: kind,
                 bookingRequestId: bookingRequestId,
-                onInsert: { text in
-                    insertIntoMessage(text)
+                sendImmediately: onSendPaymentRequest != nil,
+                onComplete: { amountCents, url in
+                    if let onSendPaymentRequest {
+                        onSendPaymentRequest(kind, amountCents, url)
+                    } else {
+                        insertIntoMessage(kind.messagePrefix(for: url))
+                    }
                     paymentSheetKind = nil
                     collapseMenus()
                 },
@@ -170,30 +199,17 @@ struct MessageComposerBar: View {
         darkStyle ? Color(red: 0.08, green: 0.09, blue: 0.12) : AppDesign.cardBackground
     }
 
-    /// Icons fan upward from ✕ / + on the left edge.
-    private var leftActionColumn: some View {
-        VStack(spacing: MessageComposerIcon.iconSpacing) {
-            if actionsExpanded {
-                if quickRepliesExpanded {
-                    actionIconButton(.quickReplies, isSelected: true)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                } else {
-                    ForEach(visibleIcons) { icon in
-                        actionIconButton(icon, isSelected: false)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .opacity
-                            ))
-                    }
+    /// Labeled actions stack upward from the + / ✕ (mockup-style tray).
+    private var actionTray: some View {
+        VStack(alignment: .leading, spacing: MessageComposerIcon.iconSpacing) {
+            if quickRepliesExpanded {
+                actionLabeledButton(.quickReplies, isSelected: true)
+            } else {
+                ForEach(visibleIcons) { icon in
+                    actionLabeledButton(icon, isSelected: false)
                 }
             }
-
-            plusToggleButton
         }
-        .frame(width: MessageComposerIcon.iconSize, alignment: .bottom)
     }
 
     private var plusToggleButton: some View {
@@ -221,19 +237,31 @@ struct MessageComposerBar: View {
         .accessibilityLabel(actionsExpanded ? "Close actions" : "Message actions")
     }
 
-    private func actionIconButton(_ icon: MessageComposerIcon, isSelected: Bool = false) -> some View {
+    private func actionLabeledButton(_ icon: MessageComposerIcon, isSelected: Bool = false) -> some View {
         Button {
             handleAction(icon)
         } label: {
-            Image(icon.assetName)
-                .resizable()
-                .scaledToFit()
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(icon.accentColor)
+                    Image(systemName: icon.systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(icon == .quickReplies ? Color.black.opacity(0.75) : Color.white)
+                }
                 .frame(width: MessageComposerIcon.iconSize, height: MessageComposerIcon.iconSize)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                    Circle()
+                        .stroke(isSelected ? Color.white.opacity(0.85) : Color.clear, lineWidth: 2)
                 )
+
+                Text(icon.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(darkStyle ? Color.white : AppDesign.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(icon.accessibilityLabel)
@@ -495,13 +523,21 @@ enum MessagePaymentSheetKind: Identifiable {
         case .payment: return "Complete your payment here: \(url)"
         }
     }
+
+    var paymentKind: MessagePaymentKind {
+        switch self {
+        case .deposit: return .deposit
+        case .payment: return .payment
+        }
+    }
 }
 
 struct MessageInsertPaymentLinkSheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let kind: MessagePaymentSheetKind
     var bookingRequestId: String?
-    let onInsert: (String) -> Void
+    var sendImmediately: Bool = false
+    let onComplete: (Int, String) -> Void
     let onDismiss: () -> Void
 
     @State private var amountText = ""
@@ -548,8 +584,8 @@ struct MessageInsertPaymentLinkSheet: View {
                     VStack(spacing: 16) {
                         Text("Link ready")
                             .font(.subheadline.weight(.semibold))
-                        Button("Add to message") {
-                            onInsert(kind.messagePrefix(for: urlString))
+                        Button(sendImmediately ? "Send" : "Add to message") {
+                            onComplete(amountCents, urlString)
                         }
                         .buttonStyle(.borderedProminent)
                     }

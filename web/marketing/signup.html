@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign Up — Get Bookking</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=10" />
-  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=10" />
-  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=10" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
@@ -682,6 +682,49 @@
 
     .btn-appstore:hover { opacity: 0.88; }
 
+    .success-stripe {
+      margin: 8px auto 28px;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    .success-stripe p {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      margin: 0 0 14px;
+      line-height: 1.55;
+    }
+
+    .btn-stripe-setup {
+      display: inline-block;
+      padding: 12px 28px;
+      background: transparent;
+      color: var(--brand-dark);
+      border: 1.5px solid var(--brand-dark);
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s, background 0.15s;
+    }
+
+    .btn-stripe-setup:hover { opacity: 0.88; background: rgba(0, 0, 0, 0.04); }
+
+    .btn-stripe-setup:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .success-stripe-status {
+      display: none;
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
     .success-site-link {
       display: block;
       margin-top: 16px;
@@ -692,21 +735,106 @@
 
     .success-site-link:hover { text-decoration: underline; }
 
+    /* ── APP AVAILABILITY GATE ── */
+    .signup-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(26, 20, 16, 0.45);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .signup-gate[hidden] { display: none !important; }
+
+    body.signup-gate-open {
+      overflow: hidden;
+    }
+
+    .signup-gate-card {
+      width: 100%;
+      max-width: 440px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 32px 28px;
+      box-shadow: 0 16px 48px rgba(26, 20, 16, 0.18);
+      text-align: center;
+    }
+
+    .signup-gate-card h2 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(26px, 4vw, 32px);
+      font-weight: 400;
+      line-height: 1.2;
+      color: var(--text-primary);
+      margin: 0 0 14px;
+    }
+
+    .signup-gate-card p {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin: 0 0 28px;
+    }
+
+    .signup-gate-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .signup-gate-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1.5px solid var(--brand-dark);
+      transition: opacity 0.15s, background 0.15s;
+    }
+
+    .signup-gate-btn:hover { opacity: 0.9; }
+
+    .signup-gate-btn--primary {
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+    }
+
+    .signup-gate-btn--secondary {
+      background: transparent;
+      color: var(--brand-dark);
+    }
+
+    .signup-gate-btn--secondary:hover { background: rgba(0, 0, 0, 0.04); }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 540px) {
       .signup-card { padding: 32px 24px; }
       .choice-grid { grid-template-columns: 1fr; }
       .tpl-pick-grid { grid-template-columns: 1fr; }
       .city-state-row { grid-template-columns: 1fr; }
+      .signup-gate-card { padding: 28px 22px 22px; }
     }
   </style>
-  <link rel="stylesheet" href="assets/nav.css?v=15" />
+  <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
 
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-128.png?v=10" alt="" class="nav-logo-mark" width="56" height="56" />
+      <img src="assets/brand/logo-dark-128.png?v=12" alt="" class="nav-logo-mark" width="56" height="56" />
       <span>Get Bookking</span>
     </a>
     <ul class="nav-links">
@@ -754,6 +882,17 @@
     </nav>
   </aside>
   <div class="nav-backdrop" hidden aria-hidden="true"></div>
+
+  <div class="signup-gate" id="signupGate" role="dialog" aria-modal="true" aria-labelledby="signupGateTitle" aria-describedby="signupGateBody">
+    <div class="signup-gate-card">
+      <h2 id="signupGateTitle">The iPhone app isn’t on the App Store yet</h2>
+      <p id="signupGateBody">You can join the iOS beta for early access, or sign up here now. Your account and booking site will be ready — when the app launches, sign in with the same email.</p>
+      <div class="signup-gate-actions">
+        <button type="button" class="signup-gate-btn signup-gate-btn--primary" id="signupGateContinue">Continue signup</button>
+        <a href="/testflight" class="signup-gate-btn signup-gate-btn--secondary" id="signupGateBeta">Join the beta</a>
+      </div>
+    </div>
+  </div>
 
   <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 33.33%"></div></div>
 
@@ -890,7 +1029,7 @@
           <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — then <strong id="checkoutPlanPrice">$39</strong>/month after your trial ends.</div>
           <ul class="checkout-bullets">
             <li><strong>No charge today</strong> for the subscription price. Your card is kept on file with Stripe; the first plan charge happens when the 30-day trial ends unless you cancel first.</li>
-            <li>Cancel anytime before the trial ends from the app or billing portal to avoid the first subscription charge.</li>
+            <li>Cancel anytime before the trial ends from your account or billing portal to avoid the first subscription charge.</li>
             <li>Billing is monthly in USD. Applicable taxes may be added at checkout or on your invoice where required.</li>
             <li>Your bank statement may show <strong>GETBOOKKING</strong> or our payment processor’s name.</li>
           </ul>
@@ -919,8 +1058,13 @@
             <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <h2>You're all set!</h2>
-          <p>Your booking site is live. Download the app to manage your business on the go.</p>
-          <a href="#" class="btn-appstore" id="appStoreLink">Download the app</a>
+          <p>Your booking site is live. The iPhone app isn’t on the App Store yet — join the iOS beta for early access, or sign in with this same email when it launches.</p>
+          <div class="success-stripe">
+            <p>Want to take payments? Set up Stripe now so deposits are ready when you start accepting bookings.</p>
+            <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payouts →</button>
+            <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
+          </div>
+          <a href="/testflight" class="btn-appstore" id="appStoreLink">Join the iOS beta</a>
           <a href="#" class="success-site-link" id="siteLink" target="_blank">Visit your booking site &rarr;</a>
         </div>
       </div>
@@ -1360,7 +1504,18 @@
       }
     }
 
+    function dismissSignupGate() {
+      var gate = document.getElementById('signupGate');
+      if (gate) {
+        gate.hidden = true;
+        gate.setAttribute('aria-hidden', 'true');
+      }
+      document.body.classList.remove('signup-gate-open');
+      try { sessionStorage.setItem('bk_signup_gate_seen', '1'); } catch (e) {}
+    }
+
     function showSuccess() {
+      dismissSignupGate();
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
       var ind = document.getElementById('stepIndicator');
@@ -1369,9 +1524,63 @@
         ind.classList.add('is-done');
       }
       document.getElementById('progressFill').style.width = '100%';
-      var appU = typeof window.appStoreUrl === 'string' ? window.appStoreUrl.trim() : '';
-      var appLink = document.getElementById('appStoreLink');
-      if (appLink && appU) appLink.href = appU;
+      bindStripeSetupButton();
+    }
+
+    function bindStripeSetupButton() {
+      var btn = document.getElementById('stripeSetupBtn');
+      var statusEl = document.getElementById('stripeSetupStatus');
+      if (!btn || btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function() {
+        startStripePayoutSetup(btn, statusEl);
+      });
+    }
+
+    async function startStripePayoutSetup(btn, statusEl) {
+      function setStatus(msg, isError) {
+        if (!statusEl) return;
+        statusEl.style.display = 'block';
+        statusEl.textContent = msg || '';
+        statusEl.style.color = isError ? '#b42318' : 'var(--text-secondary)';
+      }
+
+      if (!auth.currentUser) {
+        setStatus('Sign in again, then retry Stripe setup.', true);
+        return;
+      }
+
+      btn.disabled = true;
+      setStatus('Opening Stripe…');
+      try {
+        var origin = window.location.origin.replace(/\/$/, '');
+        var result = await fns.httpsCallable('createConnectAccountLink')({
+          returnBaseUrl: origin,
+          returnUrl: origin + '/account.html?stripe=success',
+          refreshUrl: origin + '/account.html?stripe=refresh',
+        });
+        var data = (result && result.data) || {};
+        if (data.alreadyConnected) {
+          setStatus('Payouts are already set up. You’re ready to take payments in the app.');
+          btn.disabled = false;
+          return;
+        }
+        if (data.pendingReview) {
+          setStatus('Stripe is reviewing your account. Check back in the app soon.');
+          btn.disabled = false;
+          return;
+        }
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+        setStatus('Could not start Stripe setup. Try again or finish in the app.', true);
+        btn.disabled = false;
+      } catch (e) {
+        console.error('createConnectAccountLink', e);
+        setStatus(formatFirebaseHttpsError(e), true);
+        btn.disabled = false;
+      }
     }
 
     function showCheckoutCanceledOnStep3() {
@@ -1412,9 +1621,26 @@
         });
         refreshCheckoutSummary();
       }
+
+      var gate = document.getElementById('signupGate');
+      var gateContinue = document.getElementById('signupGateContinue');
+      if (gateContinue) {
+        gateContinue.addEventListener('click', function() { dismissSignupGate(); });
+      }
+
       var params = new URLSearchParams(window.location.search);
       var checkout = params.get('checkout');
       var sessionId = params.get('session_id');
+      var skipGate = false;
+      try { skipGate = sessionStorage.getItem('bk_signup_gate_seen') === '1'; } catch (e) {}
+      if (checkout === 'success' || checkout === 'cancel' || skipGate) {
+        dismissSignupGate();
+      } else if (gate) {
+        gate.hidden = false;
+        gate.removeAttribute('aria-hidden');
+        document.body.classList.add('signup-gate-open');
+        if (gateContinue) gateContinue.focus();
+      }
 
       if (checkout === 'cancel') {
         history.replaceState({}, '', 'signup.html');

@@ -1576,19 +1576,42 @@ function tapToPayPaymentSettingsForScope(scope, tenantData, userData) {
   };
 }
 
+function isStripeResourceMissing(err) {
+  const code = (err?.code || err?.raw?.code || "").toString();
+  if (code === "resource_missing") return true;
+  const msg = (err?.message || "").toString();
+  return /no such (location|account|customer|payment_intent)/i.test(msg);
+}
+
+async function retrieveTerminalLocationOrNull(stripe, stripeAccountId, locationId) {
+  const locId = (locationId || "").toString().trim();
+  if (!locId) return null;
+  try {
+    return await stripe.terminal.locations.retrieve(locId, {
+      stripeAccount: stripeAccountId,
+    });
+  } catch (err) {
+    if (isStripeResourceMissing(err)) return null;
+    throw err;
+  }
+}
+
 async function syncTerminalLocationDisplayNameIfNeeded(
   stripe,
   stripeAccountId,
   locationId,
-  displayName
+  displayName,
+  existingLoc
 ) {
   const locId = (locationId || "").toString().trim();
   const next = (displayName || "").toString().trim().slice(0, 100);
   if (!locId || !next) return;
   try {
-    const loc = await stripe.terminal.locations.retrieve(locId, {
-      stripeAccount: stripeAccountId,
-    });
+    const loc =
+      existingLoc ||
+      (await stripe.terminal.locations.retrieve(locId, {
+        stripeAccount: stripeAccountId,
+      }));
     const current = (loc.display_name || "").toString().trim();
     if (current !== next) {
       await stripe.terminal.locations.update(
@@ -1604,18 +1627,28 @@ async function syncTerminalLocationDisplayNameIfNeeded(
 
 /**
  * Ensures tenants/{tenantId}.stripeTerminalLocationId exists (Stripe Terminal Location on Connect account).
+ * Recreates the location when a stored id is missing (e.g. test→live key switch).
  */
 async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAccountId, tenantData) {
   const displayName = tapToPayTerminalDisplayNameForTenant(tenantData);
   const existing = (tenantData.stripeTerminalLocationId || "").toString().trim();
   if (existing) {
-    await syncTerminalLocationDisplayNameIfNeeded(
-      stripe,
-      stripeAccountId,
-      existing,
-      displayName
+    const loc = await retrieveTerminalLocationOrNull(stripe, stripeAccountId, existing);
+    if (loc) {
+      await syncTerminalLocationDisplayNameIfNeeded(
+        stripe,
+        stripeAccountId,
+        existing,
+        displayName,
+        loc
+      );
+      return existing;
+    }
+    console.warn(
+      "ensureStripeTerminalLocationForTenant stale location; recreating",
+      tenantId,
+      existing
     );
-    return existing;
   }
   const address = terminalAddressFromTenant(tenantData);
   const location = await stripe.terminal.locations.create(
@@ -1635,18 +1668,28 @@ async function ensureStripeTerminalLocationForTenant(tenantId, stripe, stripeAcc
 
 /**
  * Ensures users/{uid}.stripeTerminalLocationId exists (Terminal Location on member Connect account).
+ * Recreates the location when a stored id is missing (e.g. test→live key switch).
  */
 async function ensureStripeTerminalLocationForUser(uid, stripe, stripeAccountId, userData, tenantData) {
   const displayName = tapToPayTerminalDisplayNameForUser(userData, tenantData);
   const existing = (userData.stripeTerminalLocationId || "").toString().trim();
   if (existing) {
-    await syncTerminalLocationDisplayNameIfNeeded(
-      stripe,
-      stripeAccountId,
-      existing,
-      displayName
+    const loc = await retrieveTerminalLocationOrNull(stripe, stripeAccountId, existing);
+    if (loc) {
+      await syncTerminalLocationDisplayNameIfNeeded(
+        stripe,
+        stripeAccountId,
+        existing,
+        displayName,
+        loc
+      );
+      return existing;
+    }
+    console.warn(
+      "ensureStripeTerminalLocationForUser stale location; recreating",
+      uid,
+      existing
     );
-    return existing;
   }
   const address = terminalAddressFromTenant(tenantData);
   const location = await stripe.terminal.locations.create(
@@ -1731,7 +1774,8 @@ exports.generateTenantLogoWithOpenAI = functions
   });
 
 /**
- * Returns the Connect account balance. { availableCents, pendingCents }.
+ * Returns the Connect account balance.
+ * { availableCents, pendingCents, instantAvailableCents, instantPayoutEligible }.
  */
 exports.getConnectBalance = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -1746,14 +1790,29 @@ exports.getConnectBalance = functions
     }
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
-      return { availableCents: 0, pendingCents: 0 };
+      return {
+        availableCents: 0,
+        pendingCents: 0,
+        instantAvailableCents: 0,
+        instantPayoutEligible: false,
+      };
     }
     if (isDemoShowcaseStripeAccountId(stripeAccountId)) {
-      return { availableCents: 0, pendingCents: 0 };
+      return {
+        availableCents: 0,
+        pendingCents: 0,
+        instantAvailableCents: 0,
+        instantPayoutEligible: false,
+      };
     }
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
-      return { availableCents: 0, pendingCents: 0 };
+      return {
+        availableCents: 0,
+        pendingCents: 0,
+        instantAvailableCents: 0,
+        instantPayoutEligible: false,
+      };
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const balance = await stripe.balance.retrieve(
@@ -1762,14 +1821,44 @@ exports.getConnectBalance = functions
     );
     const available = balance.available?.find((b) => b.currency === "usd");
     const pending = balance.pending?.find((b) => b.currency === "usd");
+    const instant = balance.instant_available?.find((b) => b.currency === "usd");
+    const instantAvailableCents = Math.max(0, instant?.amount ?? 0);
+
+    let instantPayoutEligible = false;
+    if (instantAvailableCents >= 50) {
+      try {
+        const ext = await stripe.accounts.listExternalAccounts(stripeAccountId, {
+          object: "bank_account",
+          limit: 10,
+        });
+        const banks = ext.data || [];
+        const cards = await stripe.accounts.listExternalAccounts(stripeAccountId, {
+          object: "card",
+          limit: 10,
+        });
+        const all = banks.concat(cards.data || []);
+        instantPayoutEligible = all.some((a) =>
+          Array.isArray(a.available_payout_methods) &&
+          a.available_payout_methods.includes("instant")
+        );
+      } catch (e) {
+        console.warn("instant payout eligibility check failed", e?.message || e);
+        // Still expose instant_available; payout may fail if destination ineligible.
+        instantPayoutEligible = instantAvailableCents >= 50;
+      }
+    }
+
     return {
       availableCents: available?.amount ?? 0,
       pendingCents: pending?.amount ?? 0,
+      instantAvailableCents,
+      instantPayoutEligible,
     };
   });
 
 /**
- * Creates a payout to the connected account's bank. amountCents in USD cents.
+ * Creates a payout to the connected account's bank.
+ * amountCents in USD cents. method: "standard" (default) | "instant".
  */
 exports.createPayout = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -1782,6 +1871,14 @@ exports.createPayout = functions
       throw new functions.https.HttpsError(
         "invalid-argument",
         "Amount must be at least 50 cents ($0.50)"
+      );
+    }
+    const methodRaw = (data?.method || "standard").toString().trim().toLowerCase();
+    const method = methodRaw === "instant" ? "instant" : "standard";
+    if (method === "instant" && amountCents > 999900) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Instant payouts are limited to $9,999.00 per payout."
       );
     }
     const payCtx = await assertCanTakePayments(context.auth.uid);
@@ -1800,11 +1897,28 @@ exports.createPayout = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    await stripe.payouts.create(
-      { amount: Math.round(amountCents), currency: "usd" },
-      { stripeAccount: stripeAccountId }
-    );
-    return { success: true };
+    try {
+      await stripe.payouts.create(
+        {
+          amount: Math.round(amountCents),
+          currency: "usd",
+          method,
+        },
+        { stripeAccount: stripeAccountId }
+      );
+    } catch (err) {
+      const msg =
+        (err && err.message) ||
+        (method === "instant"
+          ? "Instant payout failed. Your bank may not support Instant Payouts, or funds aren’t eligible yet."
+          : "Payout failed. Try again or check Stripe setup.");
+      console.error("createPayout", method, err);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        msg
+      );
+    }
+    return { success: true, method };
   });
 
 /**
@@ -7564,6 +7678,16 @@ exports.sendClientSms = functions
     const to = sms.toE164US(data && data.to);
     const body = ((data && data.body) || "").toString().trim();
     const clientName = ((data && data.clientName) || "").toString().trim().slice(0, 120);
+    const paymentKindRaw = ((data && data.paymentKind) || "").toString().trim().toLowerCase();
+    const paymentKind =
+      paymentKindRaw === "deposit" || paymentKindRaw === "payment" ? paymentKindRaw : "";
+    const amountCentsRaw = Number(data && data.amountCents);
+    const amountCents =
+      Number.isFinite(amountCentsRaw) && amountCentsRaw > 0
+        ? Math.round(amountCentsRaw)
+        : 0;
+    const paymentUrl = ((data && data.paymentUrl) || "").toString().trim().slice(0, 500);
+    const threadPreview = ((data && data.threadPreview) || "").toString().trim().slice(0, 120);
     if (!to) {
       throw new functions.https.HttpsError("invalid-argument", "A valid client phone is required.");
     }
@@ -7584,6 +7708,10 @@ exports.sendClientSms = functions
         meta: {
           threadId: sms.threadIdFromPhone(to),
           clientName,
+          paymentKind: paymentKind || undefined,
+          amountCents: amountCents || undefined,
+          paymentUrl: paymentUrl || undefined,
+          threadPreview: threadPreview || undefined,
         },
         ownerUserData: ownerData,
         senderUid: context.auth.uid,

@@ -3,6 +3,7 @@
     {
       "target": "booking",
       "public": "web",
+      "cleanUrls": true,
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**"],
       "rewrites": [
         { "source": "/join", "destination": "/join.html" },
@@ -36,6 +37,8 @@
     {
       "target": "marketing",
       "public": "web/marketing",
+      "cleanUrls": true,
+      "trailingSlash": false,
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [
         { "source": "/admin/login", "destination": "/admin/login.html" },

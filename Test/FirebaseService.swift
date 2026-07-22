@@ -254,6 +254,17 @@ class FirebaseService: ObservableObject {
         let to = data["to"] as? String ?? ""
         let counterpartyPhone = direction == "outbound" ? to : from
         let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let paymentKindRaw = (data["paymentKind"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        let paymentKind = MessagePaymentKind(rawValue: paymentKindRaw)
+        let amountCents: Int? = {
+            if let n = data["amountCents"] as? Int { return n }
+            if let n = data["amountCents"] as? NSNumber { return n.intValue }
+            return nil
+        }()
+        let paymentUrl = (data["paymentUrl"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
@@ -262,7 +273,10 @@ class FirebaseService: ObservableObject {
             sender: direction == "outbound" ? .admin : .client,
             createdAt: createdAt,
             read: true,
-            threadId: threadId
+            threadId: threadId,
+            paymentKind: paymentKind,
+            amountCents: (amountCents ?? 0) > 0 ? amountCents : nil,
+            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil
         )
     }
 
@@ -359,11 +373,25 @@ class FirebaseService: ObservableObject {
 
     func sendMessage(_ message: Message) async throws {
         let toPhone = PhoneFormatting.e164US(message.clientId) ?? message.clientId
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "to": toPhone,
             "body": message.content,
             "clientName": message.clientName
         ]
+        if let kind = message.paymentKind {
+            payload["paymentKind"] = kind.rawValue
+        }
+        if let cents = message.amountCents, cents > 0 {
+            payload["amountCents"] = cents
+        }
+        if let url = message.paymentUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty {
+            payload["paymentUrl"] = url
+        }
+        if let preview = message.paymentKind.flatMap({ kind in
+            message.amountCents.map { Message.paymentRequestPreview(kind: kind, amountCents: $0) }
+        }) {
+            payload["threadPreview"] = preview
+        }
         do {
             _ = try await functions.httpsCallable("sendClientSms").call(payload)
         } catch {

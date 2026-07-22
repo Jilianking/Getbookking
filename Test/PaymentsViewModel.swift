@@ -156,6 +156,32 @@ struct TapToPayPaymentIntent {
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
     @Published var pendingBalance: Double = 0
+    /// Stripe `instant_available` (USD) — funds eligible for Instant Payouts.
+    @Published var instantAvailableBalance: Double = 0
+    /// True when Stripe reports Instant-eligible destination + enough instant_available.
+    @Published var instantPayoutEligible: Bool = false
+
+    /// Stripe available + pending (matches Connect “Total balance”).
+    var totalBalance: Double { availableBalance + pendingBalance }
+
+    /// Amount shown as withdrawable — never negative (negative Stripe available is a ledger quirk).
+    var readyToWithdrawDisplay: Double { max(0, availableBalance) }
+
+    /// Settling / future funds. When available is negative, fold that adjustment into settling so Ready + Settling = Total.
+    var settlingDisplay: Double {
+        if availableBalance < 0 {
+            return pendingBalance + availableBalance
+        }
+        return pendingBalance
+    }
+
+    /// True when enough available funds for a standard payout (Stripe min $0.50).
+    var canWithdrawToBank: Bool { availableBalance >= 0.50 }
+
+    /// True when Instant Payout can be offered in the withdraw sheet.
+    var canOfferInstantPayout: Bool {
+        instantPayoutEligible && instantAvailableBalance >= 0.50
+    }
     /// True when Stripe Connect can accept charges (not just when an account id exists).
     @Published var stripeConnected: Bool = false
     /// Tenant has a saved Connect account id (setup was started or completed).
@@ -441,38 +467,31 @@ class PaymentsViewModel: ObservableObject {
         let locationId: String
         let displayName: String
 
-        if !resolvedTapToPayLocationId.isEmpty {
-            locationId = resolvedTapToPayLocationId
-            let cachedName = TapToPayLocationStore.shared.merchantDisplayName
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            displayName = cachedName.isEmpty ? effectiveTapToPayDisplayName : cachedName
-        } else {
-            isEnsuringTapToPayTerms = true
-            defer { isEnsuringTapToPayTerms = false }
+        isEnsuringTapToPayTerms = true
+        defer { isEnsuringTapToPayTerms = false }
 
-            let result = try await functions.httpsCallable("prepareTapToPayTermsAcceptance").call([:])
-            guard let data = result.data as? [String: Any] else {
-                throw NSError(
-                    domain: "TapToPay",
-                    code: 11,
-                    userInfo: [NSLocalizedDescriptionKey: "Tap to Pay could not be set up. Try again."]
-                )
-            }
-            applyPrepareTapToPayResponse(data)
-            locationId = resolvedTapToPayLocationId
-            displayName = (data["displayName"] as? String ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await functions.httpsCallable("prepareTapToPayTermsAcceptance").call([:])
+        guard let data = result.data as? [String: Any] else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 11,
+                userInfo: [NSLocalizedDescriptionKey: "Tap to Pay could not be set up. Try again."]
+            )
+        }
+        applyPrepareTapToPayResponse(data)
+        locationId = resolvedTapToPayLocationId
+        displayName = (data["displayName"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard !locationId.isEmpty else {
-                throw NSError(
-                    domain: "TapToPay",
-                    code: 11,
-                    userInfo: [
-                        NSLocalizedDescriptionKey:
-                            "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
-                    ]
-                )
-            }
+        guard !locationId.isEmpty else {
+            throw NSError(
+                domain: "TapToPay",
+                code: 11,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
+                ]
+            )
         }
 
         isEnsuringTapToPayLocation = true
@@ -557,8 +576,15 @@ class PaymentsViewModel: ObservableObject {
             return .showAlert(stripePaymentsBlockedMessage)
         }
 
-        if stripeConnected, !resolvedTapToPayLocationId.isEmpty {
-            return .showCheckout
+        if stripeConnected {
+            do {
+                try await ensureTapToPayLocation()
+            } catch {
+                return .showAlert(FirebaseFunctionsErrorHelper.message(from: error))
+            }
+            if !resolvedTapToPayLocationId.isEmpty {
+                return .showCheckout
+            }
         }
 
         if !stripeConnected {
@@ -736,6 +762,8 @@ class PaymentsViewModel: ObservableObject {
             } else {
                 availableBalance = 0
                 pendingBalance = 0
+                instantAvailableBalance = 0
+                instantPayoutEligible = false
                 transactions = []
             }
             isLoading = false
@@ -821,11 +849,16 @@ class PaymentsViewModel: ObservableObject {
             let data = result.data as? [String: Any]
             let availableCents = (data?["availableCents"] as? NSNumber)?.intValue ?? 0
             let pendingCents = (data?["pendingCents"] as? NSNumber)?.intValue ?? 0
+            let instantCents = (data?["instantAvailableCents"] as? NSNumber)?.intValue ?? 0
             availableBalance = Double(availableCents) / 100
             pendingBalance = Double(pendingCents) / 100
+            instantAvailableBalance = Double(max(0, instantCents)) / 100
+            instantPayoutEligible = (data?["instantPayoutEligible"] as? Bool) ?? false
         } catch {
             availableBalance = 0
             pendingBalance = 0
+            instantAvailableBalance = 0
+            instantPayoutEligible = false
         }
     }
 
@@ -1179,13 +1212,17 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
-    /// Withdraw to bank. amountCents in USD cents.
-    func createPayout(amountCents: Int) async {
+    /// Withdraw to bank. amountCents in USD cents. method: "standard" | "instant".
+    func createPayout(amountCents: Int, method: String = "standard") async {
         guard amountCents >= 50 else { return }
+        let payoutMethod = method == "instant" ? "instant" : "standard"
         isCreatingPayout = true
         errorMessage = nil
         do {
-            _ = try await functions.httpsCallable("createPayout").call(["amountCents": amountCents])
+            _ = try await functions.httpsCallable("createPayout").call([
+                "amountCents": amountCents,
+                "method": payoutMethod,
+            ])
             isCreatingPayout = false
             await loadBalance()
             await loadTransactions()
@@ -1402,13 +1439,11 @@ class PaymentsViewModel: ObservableObject {
 
     #if TAP_TO_PAY_ENABLED
     /// Creates Stripe Terminal Location on the connected account if missing; returns `tml_…` id.
+    /// Always asks the backend so stale ids (e.g. after test→live) can be recreated.
     @discardableResult
     func ensureTapToPayLocation() async throws -> String {
         isEnsuringTapToPayLocation = true
         defer { isEnsuringTapToPayLocation = false }
-        if !resolvedTapToPayLocationId.isEmpty {
-            return resolvedTapToPayLocationId
-        }
         let result = try await functions.httpsCallable("ensureTapToPayTerminalLocation").call([:])
         let data = result.data as? [String: Any]
         let locationId = (data?["locationId"] as? String) ?? ""

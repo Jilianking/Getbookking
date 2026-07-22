@@ -280,12 +280,24 @@ struct InsightsView: View {
             if viewModel.stripeConnected {
                 VStack(spacing: 0) {
                     metricListRow(
-                        label: "Available balance",
-                        value: formatCurrency(viewModel.availableBalance),
+                        label: "Total balance",
+                        value: formatCurrency(viewModel.availableBalance + viewModel.pendingBalance),
                         valueColor: AppDesign.brandWarm
                     )
                     InsightDivider()
-                    metricListRow(label: "Pending", value: formatCurrency(viewModel.pendingBalance))
+                    metricListRow(
+                        label: "Ready to withdraw",
+                        value: formatCurrency(max(0, viewModel.availableBalance))
+                    )
+                    InsightDivider()
+                    metricListRow(
+                        label: "Settling",
+                        value: formatCurrency(
+                            viewModel.availableBalance < 0
+                                ? viewModel.pendingBalance + viewModel.availableBalance
+                                : viewModel.pendingBalance
+                        )
+                    )
                     InsightDivider()
                     metricListRow(
                         label: "Charges (\(viewModel.selectedRange.periodLabel))",

@@ -4,17 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Billing — Get Bookking</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=10" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/account.css?v=4" />
-  <link rel="stylesheet" href="assets/billing.css?v=2" />
+  <link rel="stylesheet" href="assets/billing.css?v=3" />
 </head>
 <body>
   <header class="acct-header">
     <a class="brand" href="index.html" aria-label="Get Bookking — home">
-      <img src="assets/brand/logo-dark-128.png?v=10" alt="" width="56" height="56" />
+      <img src="assets/brand/logo-dark-128.png?v=12" alt="" width="56" height="56" />
       <span>Get Bookking</span>
     </a>
   </header>
@@ -44,7 +44,9 @@
             <span class="bill-kv-label">Includes</span>
             <span class="bill-kv-value bill-includes-value">Text messaging, reminders, priority support</span>
           </div>
-          <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:16px;">Start subscription today</button>
+          <button type="button" class="btn-secondary" id="connectStripeBtn" style="margin-top:16px;width:100%;">Sign up for Stripe Connect to take payments</button>
+          <p class="bill-note hidden" id="connectStripeStatus" style="margin-top:10px;"></p>
+          <button type="button" class="btn-upgrade hidden" id="startSubBtn" style="margin-top:12px;">Start subscription today</button>
           <button type="button" class="btn-upgrade hidden" id="resubscribeBtn" style="margin-top:16px;">Resubscribe</button>
           <button type="button" class="btn-secondary hidden" id="keepSubscriptionBtn" style="margin-top:12px;">Keep subscription</button>
           <p class="bill-success hidden" id="startSubSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
@@ -138,13 +140,24 @@
     var fns = firebase.app().functions('us-central1');
     var billingData = null;
     var planLabelCache = 'Solo';
+    var connectStatus = null;
 
     var params = new URLSearchParams(window.location.search);
     var billingParam = params.get('billing');
     var checkoutParam = params.get('checkout');
     var checkoutSessionId = params.get('session_id');
     var startParam = params.get('start');
+    var stripeParam = params.get('stripe');
     var pendingStartTodayPrompt = false;
+
+    function formatFirebaseHttpsError(err) {
+      if (!err) return 'Something went wrong. Please try again.';
+      var d = err.details;
+      if (typeof d === 'string' && d.trim()) return d.trim();
+      var msg = (err.message && String(err.message).trim()) || '';
+      if (msg && msg.toLowerCase() !== 'internal' && msg !== err.code) return msg;
+      return msg || 'Something went wrong. Please try again.';
+    }
 
     function loginRedirectUrl() {
       var next = 'billing.html' + window.location.search;
@@ -399,6 +412,7 @@
 
       document.getElementById('billingEmail').textContent = (user && user.email) ? user.email : '—';
       renderInvoices(d.invoices, displayPlan);
+      refreshConnectStripeButton();
 
       if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing') {
         pendingStartTodayPrompt = false;
@@ -423,11 +437,121 @@
         : ('Your card on file will be charged today. You\u2019ll skip the rest of your free trial and can enable client texting in the Bookking app.');
     }
 
+    function connectButtonLabel(status) {
+      if (!status || !status.hasAccount) {
+        return 'Sign up for Stripe Connect to take payments';
+      }
+      if (status.chargesEnabled) {
+        return 'View Stripe Connect account';
+      }
+      if (status.detailsSubmitted) {
+        return 'Finish Stripe Connect setup';
+      }
+      return 'Finish Stripe Connect setup';
+    }
+
+    function refreshConnectStripeButton() {
+      var btn = document.getElementById('connectStripeBtn');
+      var statusEl = document.getElementById('connectStripeStatus');
+      if (!btn) return;
+      btn.textContent = connectButtonLabel(connectStatus);
+      btn.classList.remove('hidden');
+      if (statusEl && connectStatus && connectStatus.chargesEnabled) {
+        statusEl.textContent = 'Payouts are connected. You can accept payments in the Bookking app.';
+        statusEl.classList.remove('hidden');
+      } else if (statusEl && connectStatus && connectStatus.hasAccount && connectStatus.detailsSubmitted && !connectStatus.chargesEnabled) {
+        statusEl.textContent = 'Stripe is reviewing your account or needs more details. Tap below to continue setup.';
+        statusEl.classList.remove('hidden');
+      } else if (statusEl && connectStatus && connectStatus.hasAccount && !connectStatus.detailsSubmitted) {
+        statusEl.textContent = 'Complete Stripe onboarding to accept client deposits and Tap to Pay.';
+        statusEl.classList.remove('hidden');
+      } else if (statusEl) {
+        statusEl.classList.add('hidden');
+        statusEl.textContent = '';
+      }
+    }
+
+    function loadConnectStatus() {
+      return fns.httpsCallable('getConnectAccountStatus')({}).then(function(res) {
+        connectStatus = res.data || null;
+        refreshConnectStripeButton();
+        return connectStatus;
+      }).catch(function() {
+        connectStatus = null;
+        refreshConnectStripeButton();
+        return null;
+      });
+    }
+
+    function openConnectStripe() {
+      var btn = document.getElementById('connectStripeBtn');
+      var errEl = document.getElementById('billingError');
+      var statusEl = document.getElementById('connectStripeStatus');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      var origin = window.location.origin.replace(/\/$/, '');
+
+      function reopenOnboarding() {
+        return fns.httpsCallable('createConnectAccountLink')({
+          returnBaseUrl: origin,
+          returnUrl: origin + '/billing.html?stripe=success',
+          refreshUrl: origin + '/billing.html?stripe=refresh',
+        }).then(function(result) {
+          var data = (result && result.data) || {};
+          if (data.alreadyConnected) {
+            return openExpressDashboard();
+          }
+          if (data.pendingReview) {
+            if (statusEl) {
+              statusEl.textContent = 'Stripe is reviewing your account. Check back soon or continue setup if more details are needed.';
+              statusEl.classList.remove('hidden');
+            }
+            return loadConnectStatus();
+          }
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          }
+          throw new Error('Could not start Stripe Connect setup.');
+        });
+      }
+
+      function openExpressDashboard() {
+        return fns.httpsCallable('createExpressDashboardLink')({}).then(function(result) {
+          var data = (result && result.data) || {};
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          }
+          throw new Error('Could not open your Stripe Connect account.');
+        });
+      }
+
+      var ready = connectStatus && connectStatus.chargesEnabled
+        ? openExpressDashboard().catch(function() {
+            // Dashboard link can fail if Express isn’t ready; fall back to onboarding.
+            return reopenOnboarding();
+          })
+        : reopenOnboarding();
+
+      return ready.catch(function(err) {
+        errEl.textContent = formatFirebaseHttpsError(err);
+        errEl.classList.remove('hidden');
+      }).finally(function() {
+        btn.disabled = false;
+      });
+    }
+
     function loadBilling() {
       var errEl = document.getElementById('billingError');
       errEl.classList.add('hidden');
-      return fns.httpsCallable('getBillingSummary')({}).then(function(res) {
-        renderBilling(res.data || {}, auth.currentUser);
+      return Promise.all([
+        fns.httpsCallable('getBillingSummary')({}).then(function(res) {
+          return res.data || {};
+        }),
+        loadConnectStatus(),
+      ]).then(function(results) {
+        renderBilling(results[0], auth.currentUser);
       }).catch(function(err) {
         document.getElementById('billingLoading').classList.add('hidden');
         errEl.textContent = (err && err.message) ? err.message : String(err);
@@ -503,6 +627,10 @@
       });
     }
 
+    document.getElementById('connectStripeBtn').addEventListener('click', function() {
+      openConnectStripe();
+    });
+
     document.getElementById('startSubBtn').addEventListener('click', function() {
       openStartSubModal();
     });
@@ -557,6 +685,19 @@
       if (billingParam === 'portal') {
         syncBillingAfterPortalReturn();
         return;
+      }
+      if (stripeParam === 'success') {
+        history.replaceState({}, '', 'billing.html');
+        var okEl = document.getElementById('connectStripeStatus');
+        if (okEl) {
+          okEl.textContent = 'Stripe application submitted. Status updates here and in the Bookking app when payouts are enabled.';
+          okEl.classList.remove('hidden');
+        }
+      } else if (stripeParam === 'refresh') {
+        history.replaceState({}, '', 'billing.html');
+        var refreshErr = document.getElementById('billingError');
+        refreshErr.textContent = 'Your Stripe link expired. Tap the Connect button below to continue setup.';
+        refreshErr.classList.remove('hidden');
       }
       if (startParam === 'today') {
         pendingStartTodayPrompt = true;

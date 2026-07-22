@@ -214,12 +214,16 @@ struct PaymentsView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Available balance")
+                    Text("Total balance")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.white.opacity(0.65))
-                    Text(PaymentsViewModel.formatUSD(viewModel.availableBalance))
+                    Text(PaymentsViewModel.formatUSD(viewModel.totalBalance))
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
+                    Text("Ready to withdraw \(PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay)) · Settling \(PaymentsViewModel.formatUSD(viewModel.settlingDisplay))")
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
                 Button {
@@ -242,8 +246,13 @@ struct PaymentsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 0) {
                         balanceStatItem(
-                            title: "Pending",
-                            value: PaymentsViewModel.formatUSD(viewModel.pendingBalance),
+                            title: "Ready",
+                            value: PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay),
+                            valueColor: .white
+                        )
+                        balanceStatItem(
+                            title: "Settling",
+                            value: PaymentsViewModel.formatUSD(viewModel.settlingDisplay),
                             valueColor: .white
                         )
                         balanceStatItem(
@@ -273,8 +282,8 @@ struct PaymentsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(viewModel.availableBalance <= 0)
-                    .opacity(viewModel.availableBalance > 0 ? 1 : 0.55)
+                    .disabled(!viewModel.canWithdrawToBank)
+                    .opacity(viewModel.canWithdrawToBank ? 1 : 0.55)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -901,63 +910,128 @@ struct WithdrawSheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
     var onDismiss: () -> Void
     @State private var amountText = ""
+    @State private var payoutMethod: PayoutMethod = .standard
+
+    private enum PayoutMethod: String, CaseIterable, Identifiable {
+        case standard
+        case instant
+        var id: String { rawValue }
+    }
 
     private var amountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
         return Int(round(value * 100))
     }
 
-    private var maxCents: Int { Int(viewModel.availableBalance * 100) }
+    private var maxStandardCents: Int { Int(viewModel.readyToWithdrawDisplay * 100) }
+    private var maxInstantCents: Int {
+        Int(min(viewModel.instantAvailableBalance, viewModel.readyToWithdrawDisplay) * 100)
+    }
+    private var maxCents: Int {
+        payoutMethod == .instant ? maxInstantCents : maxStandardCents
+    }
     private var canWithdraw: Bool { amountCents >= 50 && amountCents <= maxCents }
+
+    private var estimatedInstantFeeCents: Int {
+        max(0, Int((Double(amountCents) * 0.01).rounded()))
+    }
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                Text("Available: \(formatCurrency(viewModel.availableBalance))")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                TextField("0", text: $amountText)
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.title2.monospacedDigit())
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                if let err = viewModel.errorMessage {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-                Button(action: { amountText = String(maxCents / 100) }) {
-                    Text("Withdraw full balance")
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text("Ready to withdraw: \(formatCurrency(viewModel.readyToWithdrawDisplay))")
                         .font(.subheadline)
-                }
-                .padding(.top, 8)
-                Button(action: {
-                    Task {
-                        await viewModel.createPayout(amountCents: amountCents)
-                        if !viewModel.isCreatingPayout && viewModel.errorMessage == nil {
-                            onDismiss()
-                        }
+                        .foregroundColor(.secondary)
+                    if viewModel.settlingDisplay > 0 {
+                        Text("Settling \(formatCurrency(viewModel.settlingDisplay)) — available after Stripe clears the payment.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
                     }
-                }) {
-                    HStack {
-                        if viewModel.isCreatingPayout {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Text("Withdraw")
-                        }
+
+                    TextField("0", text: $amountText)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title2.monospacedDigit())
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+
+                    Button(action: {
+                        let dollars = Double(maxCents) / 100.0
+                        amountText = String(format: "%.2f", dollars)
+                    }) {
+                        Text("Withdraw full balance")
+                            .font(.subheadline)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(canWithdraw ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Payout speed")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.textSecondary)
+
+                        payoutMethodRow(
+                            method: .standard,
+                            title: "Standard",
+                            subtitle: "Free · usually 1–2 business days",
+                            enabled: maxStandardCents >= 50
+                        )
+
+                        payoutMethodRow(
+                            method: .instant,
+                            title: "Instant",
+                            subtitle: instantSubtitle,
+                            enabled: viewModel.canOfferInstantPayout && maxInstantCents >= 50
+                        )
+                    }
+                    .padding(.horizontal, 4)
+
+                    if payoutMethod == .instant, amountCents >= 50 {
+                        Text("Est. Stripe Instant fee ~\(formatCurrency(Double(estimatedInstantFeeCents) / 100)) (about 1%). Funds typically arrive within ~30 minutes.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if let err = viewModel.errorMessage {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Button(action: {
+                        Task {
+                            await viewModel.createPayout(
+                                amountCents: amountCents,
+                                method: payoutMethod.rawValue
+                            )
+                            if !viewModel.isCreatingPayout && viewModel.errorMessage == nil {
+                                onDismiss()
+                            }
+                        }
+                    }) {
+                        HStack {
+                            if viewModel.isCreatingPayout {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text(payoutMethod == .instant ? "Withdraw instantly" : "Withdraw")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canWithdraw ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!canWithdraw || viewModel.isCreatingPayout)
                 }
-                .disabled(!canWithdraw || viewModel.isCreatingPayout)
-                Spacer(minLength: 0)
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 32)
             }
-            .padding(.top, 24)
             .navigationTitle("Withdraw to bank")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -965,7 +1039,70 @@ struct WithdrawSheet: View {
                     Button("Done") { onDismiss() }
                 }
             }
+            .onAppear {
+                if !viewModel.canOfferInstantPayout {
+                    payoutMethod = .standard
+                }
+            }
+            .onChange(of: payoutMethod) { _, _ in
+                if amountCents > maxCents, maxCents >= 50 {
+                    amountText = String(format: "%.2f", Double(maxCents) / 100.0)
+                }
+            }
         }
+    }
+
+    private var instantSubtitle: String {
+        if viewModel.canOfferInstantPayout {
+            return "Fee applies · usually ~30 minutes · up to \(formatCurrency(viewModel.instantAvailableBalance)) eligible"
+        }
+        if viewModel.instantAvailableBalance < 0.50 {
+            return "Not available yet — funds must be Instant-eligible"
+        }
+        return "Not available — bank may not support Instant Payouts"
+    }
+
+    private func payoutMethodRow(
+        method: PayoutMethod,
+        title: String,
+        subtitle: String,
+        enabled: Bool
+    ) -> some View {
+        Button {
+            guard enabled else { return }
+            payoutMethod = method
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: payoutMethod == method ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(enabled ? (payoutMethod == method ? Color.green : AppDesign.textSecondary) : Color.gray.opacity(0.4))
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(enabled ? AppDesign.textPrimary : AppDesign.textSecondary.opacity(0.6))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppDesign.brandCream)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        payoutMethod == method && enabled ? Color.green.opacity(0.5) : Color.clear,
+                        lineWidth: 1.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.65)
     }
 
     private func formatCurrency(_ value: Double) -> String {

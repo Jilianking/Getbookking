@@ -635,6 +635,8 @@ async function sendOutboundClientSms({
     .doc(tenantId)
     .collection("smsLog")
     .doc(msg.sid);
+  const paymentMeta = paymentFieldsFromMeta(meta);
+  const threadPreview = ((meta && meta.threadPreview) || "").toString().trim();
   await logRef.set({
     direction: "outbound",
     to: toE164,
@@ -646,6 +648,7 @@ async function sendOutboundClientSms({
     bookingRequestId: (meta && meta.bookingRequestId) || null,
     assignedMemberUid: route.memberUid || null,
     smsLineScope: route.lineType,
+    ...paymentMeta,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -653,7 +656,7 @@ async function sendOutboundClientSms({
     counterpartPhone: toE164,
     clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
     lastDirection: "outbound",
-    lastMessageBody: body.slice(0, 500),
+    lastMessageBody: (threadPreview || body).slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageStatus: (msg.status || "").toString(),
     assignedMemberUid: route.memberUid || null,
@@ -661,6 +664,24 @@ async function sendOutboundClientSms({
   });
 
   return msg;
+}
+
+/** Optional structured payment fields for in-app message bubbles. */
+function paymentFieldsFromMeta(meta) {
+  const out = {};
+  const kind = ((meta && meta.paymentKind) || "").toString().trim().toLowerCase();
+  if (kind === "deposit" || kind === "payment") {
+    out.paymentKind = kind;
+  }
+  const cents = Number(meta && meta.amountCents);
+  if (Number.isFinite(cents) && cents > 0) {
+    out.amountCents = Math.round(cents);
+  }
+  const url = ((meta && meta.paymentUrl) || "").toString().trim();
+  if (url) {
+    out.paymentUrl = url.slice(0, 500);
+  }
+  return out;
 }
 
 async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData) {

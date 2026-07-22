@@ -192,6 +192,17 @@ enum DemoSnapshotParser {
         let displayName = (dict["clientName"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let docId = dict["id"] as? String
+        let paymentKindRaw = (dict["paymentKind"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        let paymentKind = MessagePaymentKind(rawValue: paymentKindRaw)
+        let amountCents: Int? = {
+            if let n = dict["amountCents"] as? Int { return n }
+            if let n = dict["amountCents"] as? NSNumber { return n.intValue }
+            return nil
+        }()
+        let paymentUrl = (dict["paymentUrl"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return Message(
             id: docId,
             clientId: counterpartyPhone,
@@ -202,7 +213,10 @@ enum DemoSnapshotParser {
             sender: direction == "outbound" ? .admin : .client,
             createdAt: parseDate(dict["createdAt"]) ?? Date(),
             read: true,
-            threadId: threadId
+            threadId: threadId,
+            paymentKind: paymentKind,
+            amountCents: (amountCents ?? 0) > 0 ? amountCents : nil,
+            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil
         )
     }
 

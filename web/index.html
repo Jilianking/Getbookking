@@ -8782,8 +8782,8 @@
             window.addEventListener('scroll', onNavScroll, { passive: true });
           }
         }
-        function bladeScrollToServices() {
-          var sec = document.getElementById('services');
+        function bladeScrollToSection(id) {
+          var sec = document.getElementById(id);
           if (sec && sec.scrollIntoView) {
             sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
@@ -8792,9 +8792,10 @@
           var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
           if (!a) return;
           var href = a.getAttribute('href') || '';
-          if (href.indexOf('#services') < 0) return;
+          var m = href.match(/#(services|about|location)\b/);
+          if (!m) return;
           e.preventDefault();
-          bladeScrollToServices();
+          bladeScrollToSection(m[1]);
         });
         if (typeof IntersectionObserver === 'undefined') return;
         var fadeEls = page.querySelectorAll('.blade-fade-up');

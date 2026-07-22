@@ -52,10 +52,27 @@ body > nav .nav-cta {
   white-space: nowrap;
 }
 
-/* Tighter header — hide wordmark text, keep logo */
-@media (max-width: 1100px) {
+/* Tighter header — hide wordmark only while center links are visible */
+@media (min-width: 901px) and (max-width: 1100px) {
   body > nav .nav-logo > span {
     display: none;
+  }
+}
+
+/* Mobile: wordmark perfectly centered between crown and hamburger */
+@media (max-width: 900px) {
+  body > nav .nav-logo {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  body > nav .nav-logo > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    white-space: nowrap;
+    font-size: 17px;
+    /* offset the trailing letter-spacing so it's optically dead-center */
+    margin-right: -0.22em;
   }
 }
 
@@ -64,13 +81,12 @@ body > nav > .nav-links {
   display: flex;
 }
 
-body > nav .nav-menu-btn {
-  display: inline-flex;
-}
-
 @media (max-width: 900px) {
   body > nav > .nav-links {
     display: none !important;
+  }
+  body > nav .nav-menu-btn {
+    display: inline-flex;
   }
 }
 

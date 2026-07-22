@@ -164,6 +164,9 @@ class MessagesViewModel: ObservableObject {
         content: String,
         clientName: String? = nil,
         clientId: String? = nil,
+        paymentKind: MessagePaymentKind? = nil,
+        amountCents: Int? = nil,
+        paymentUrl: String? = nil,
         isDemoMode: Bool = false,
         sessionStore: TenantSessionStore? = nil
     ) async -> Bool {
@@ -193,15 +196,34 @@ class MessagesViewModel: ObservableObject {
             return PhoneFormatting.displayUS(clientId)
         }()
 
+        let trimmedUrl = paymentUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedPaymentKind: MessagePaymentKind? = {
+            guard let paymentKind,
+                  let amountCents, amountCents > 0,
+                  let trimmedUrl, !trimmedUrl.isEmpty else { return nil }
+            return paymentKind
+        }()
+        let resolvedContent: String = {
+            if let kind = resolvedPaymentKind,
+               let cents = amountCents,
+               let url = trimmedUrl, !url.isEmpty {
+                return Message.paymentRequestSMSBody(kind: kind, amountCents: cents, url: url)
+            }
+            return content
+        }()
+
         let message = Message(
             id: nil,
             clientId: clientId,
             clientName: resolvedName,
-            content: content,
+            content: resolvedContent,
             sender: .admin,
             createdAt: Date(),
             read: false,
-            threadId: normalizedThreadId
+            threadId: normalizedThreadId,
+            paymentKind: resolvedPaymentKind,
+            amountCents: resolvedPaymentKind != nil ? amountCents : nil,
+            paymentUrl: resolvedPaymentKind != nil ? trimmedUrl : nil
         )
 
         await MainActor.run {

@@ -358,6 +358,7 @@ struct MessageThreadView: View {
                 isSending: isLoading,
                 canSend: !newMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 onSend: sendMessage,
+                onSendPaymentRequest: sendPaymentRequest,
                 clientName: clientName,
                 clientPhone: clientPhone,
                 bookingRequestId: linkedBookingRequestId,
@@ -436,6 +437,27 @@ struct MessageThreadView: View {
             }
         }
     }
+
+    private func sendPaymentRequest(kind: MessagePaymentSheetKind, amountCents: Int, url: String) {
+        isLoading = true
+        Task {
+            let ok = await viewModel.sendMessage(
+                threadId: threadId,
+                content: "",
+                paymentKind: kind.paymentKind,
+                amountCents: amountCents,
+                paymentUrl: url,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            await MainActor.run {
+                if ok {
+                    isComposerFocused = false
+                }
+                isLoading = false
+            }
+        }
+    }
 }
 
 struct MessageBubble: View {
@@ -449,10 +471,14 @@ struct MessageBubble: View {
                 Spacer()
             }
             VStack(alignment: isAdmin ? .trailing : .leading, spacing: 4) {
-                MessageBubbleText(content: message.content, isAdmin: isAdmin)
-                    .padding()
-                    .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                if message.isPaymentRequest {
+                    MessagePaymentBubble(message: message, isAdmin: isAdmin)
+                } else {
+                    MessageBubbleText(content: message.content, isAdmin: isAdmin)
+                        .padding()
+                        .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -461,6 +487,51 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+    }
+}
+
+/// Apple Cash–style amount card for deposit / payment link messages.
+private struct MessagePaymentBubble: View {
+    let message: Message
+    let isAdmin: Bool
+
+    private var payURL: URL? {
+        guard let raw = message.paymentUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+        return URL(string: raw)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(message.paymentKind?.title ?? "Payment")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(isAdmin ? Color.white.opacity(0.9) : AppDesign.textSecondary)
+
+            Text(message.formattedPaymentAmount ?? "$0.00")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(isAdmin ? Color.white : AppDesign.textPrimary)
+                .monospacedDigit()
+
+            if let url = payURL {
+                Link(destination: url) {
+                    Text("Pay")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(isAdmin ? Color.white.opacity(0.22) : AppDesign.accentBlue)
+                        .foregroundStyle(isAdmin ? Color.white : Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 168, maxWidth: 260, alignment: .leading)
+        .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
@@ -632,6 +703,7 @@ struct ComposeMessageView: View {
                     isSending: viewModel.isSending,
                     canSend: canSend,
                     onSend: sendMessage,
+                    onSendPaymentRequest: sendPaymentRequest,
                     clientName: selectedClientName,
                     clientPhone: clientPhone,
                     bookingRequestId: linkedBookingRequestId,
@@ -750,6 +822,38 @@ struct ComposeMessageView: View {
                 content: trimmedMessage,
                 clientName: name.isEmpty ? nil : name,
                 clientId: e164Phone,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            if ok {
+                onSent?(e164Phone)
+                dismiss()
+            }
+        }
+    }
+
+    private func sendPaymentRequest(kind: MessagePaymentSheetKind, amountCents: Int, url: String) {
+        guard let e164Phone = recipientPhoneForSend else {
+            viewModel.lastError = "Enter a valid phone number."
+            return
+        }
+        var name = selectedClientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
+            if let match = viewModel.composeClients.first(where: {
+                PhoneFormatting.digits(from: $0.phone ?? "") == PhoneFormatting.digits(from: e164Phone)
+            }) {
+                name = match.name
+            }
+        }
+        Task {
+            let ok = await viewModel.sendMessage(
+                threadId: e164Phone,
+                content: "",
+                clientName: name.isEmpty ? nil : name,
+                clientId: e164Phone,
+                paymentKind: kind.paymentKind,
+                amountCents: amountCents,
+                paymentUrl: url,
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )

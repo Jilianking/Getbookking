@@ -433,11 +433,18 @@ class RequestsViewModel: ObservableObject {
                 id: nil,
                 clientId: e164,
                 clientName: booking.customerName ?? "Client",
-                content: "Pay your deposit here: \(urlString)",
+                content: Message.paymentRequestSMSBody(
+                    kind: .deposit,
+                    amountCents: cents,
+                    url: urlString
+                ),
                 sender: .admin,
                 createdAt: Date(),
                 read: true,
-                threadId: PhoneFormatting.smsThreadId(e164)
+                threadId: PhoneFormatting.smsThreadId(e164),
+                paymentKind: .deposit,
+                amountCents: cents,
+                paymentUrl: urlString
             )
             try await firebaseService.sendMessage(message)
         } catch {

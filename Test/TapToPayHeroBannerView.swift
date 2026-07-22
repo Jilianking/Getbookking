@@ -2,6 +2,7 @@
 //  TapToPayHeroBannerView.swift
 //  Full-screen splash shown once to eligible users (Apple req 3.2 / 6.2).
 //  Uses Apple’s official US-EN In-App Hero tile from the Tap to Pay Marketing Toolkit.
+//  Apple template “[Partner Button]” placeholders are never shown — replaced with real CTAs.
 //
 
 #if TAP_TO_PAY_ENABLED
@@ -41,13 +42,13 @@ struct TapToPayHeroBannerView: View {
                             .scaledToFit()
                             .frame(maxWidth: maxWidth)
                             .accessibilityHidden(true)
-                            // Cover the template’s “[Partner Button]” + replace with real CTAs.
+                            // Cover Apple template partner/legal footer; real CTAs go here.
                             .overlay {
                                 GeometryReader { imageGeo in
                                     VStack(spacing: 0) {
                                         Spacer(minLength: 0)
                                         partnerCTAOverlay
-                                            .frame(height: max(160, imageGeo.size.height * 0.30))
+                                            .frame(height: max(180, imageGeo.size.height * 0.28))
                                     }
                                 }
                             }
@@ -55,7 +56,6 @@ struct TapToPayHeroBannerView: View {
                             .accessibilityLabel("Tap to Pay on iPhone")
                             .accessibilityHint(TapToPayBranding.featureSubtitle)
 
-                        // Extra bottom padding so Later isn’t flush to the home indicator.
                         Color.clear.frame(height: 8)
                     }
                     .frame(maxWidth: .infinity)
@@ -65,7 +65,7 @@ struct TapToPayHeroBannerView: View {
         }
     }
 
-    /// White veil over the placeholder partner button + real CTAs (Apple template partner slot).
+    /// Solid cover over the Apple template partner-button slot + real Get Bookking CTAs.
     private var partnerCTAOverlay: some View {
         VStack(spacing: 10) {
             Spacer(minLength: 0)
@@ -104,18 +104,7 @@ struct TapToPayHeroBannerView: View {
         }
         .padding(.horizontal, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0),
-                    Color.white.opacity(0.85),
-                    Color.white,
-                    Color.white
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(Color.white)
     }
 
     // MARK: - Fallback (asset missing)

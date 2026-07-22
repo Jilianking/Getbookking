@@ -34,6 +34,25 @@ struct SmsThreadSummary: Identifiable, Equatable {
     }
 }
 
+enum MessagePaymentKind: String, Codable, Equatable {
+    case deposit
+    case payment
+
+    var title: String {
+        switch self {
+        case .deposit: return "Deposit"
+        case .payment: return "Payment"
+        }
+    }
+
+    var requestVerb: String {
+        switch self {
+        case .deposit: return "Deposit request"
+        case .payment: return "Payment request"
+        }
+    }
+}
+
 struct Message: Codable, Identifiable {
     var id: String?
     var clientId: String
@@ -43,7 +62,11 @@ struct Message: Codable, Identifiable {
     var createdAt: Date
     var read: Bool
     var threadId: String
-    
+    /// When set, Messages UI shows an Apple Pay–style amount card.
+    var paymentKind: MessagePaymentKind? = nil
+    var amountCents: Int? = nil
+    var paymentUrl: String? = nil
+
     enum MessageSender: String, Codable {
         case client = "client"
         case admin = "admin"
@@ -53,5 +76,35 @@ struct Message: Codable, Identifiable {
     var stableId: String {
         id ?? "\(clientId)-\(createdAt.timeIntervalSince1970)"
     }
-}
 
+    var isPaymentRequest: Bool {
+        guard let kind = paymentKind,
+              let cents = amountCents, cents > 0,
+              let url = paymentUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !url.isEmpty else { return false }
+        return kind == .deposit || kind == .payment
+    }
+
+    var formattedPaymentAmount: String? {
+        guard let cents = amountCents, cents > 0 else { return nil }
+        return String(format: "$%.2f", Double(cents) / 100.0)
+    }
+
+    /// SMS body the client receives (and fallback plain-text content).
+    static func paymentRequestSMSBody(
+        kind: MessagePaymentKind,
+        amountCents: Int,
+        url: String
+    ) -> String {
+        let amount = String(format: "$%.2f", Double(amountCents) / 100.0)
+        return "\(kind.requestVerb): \(amount)\nPay here: \(url)"
+    }
+
+    static func paymentRequestPreview(
+        kind: MessagePaymentKind,
+        amountCents: Int
+    ) -> String {
+        let amount = String(format: "$%.2f", Double(amountCents) / 100.0)
+        return "\(kind.title) · \(amount)"
+    }
+}

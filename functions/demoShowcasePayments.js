@@ -52,9 +52,12 @@ function demoConnectAccountStatusResponse(payCtx) {
 }
 
 function demoConnectBalanceResponse(payments) {
+  const availableCents = Math.max(0, Math.round(Number(payments.availableBalanceCents) || 0));
   return {
-    availableCents: Math.max(0, Math.round(Number(payments.availableBalanceCents) || 0)),
+    availableCents,
     pendingCents: Math.max(0, Math.round(Number(payments.pendingBalanceCents) || 0)),
+    instantAvailableCents: availableCents,
+    instantPayoutEligible: availableCents >= 50,
     demoShowcase: true,
   };
 }

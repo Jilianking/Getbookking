@@ -263,7 +263,13 @@ final class TenantSessionStore: ObservableObject {
             demoSmsThreads[idx] = SmsThreadSummary(
                 threadId: thread.threadId,
                 clientName: thread.clientName,
-                lastMessageBody: message.content,
+                lastMessageBody: {
+                    if let kind = message.paymentKind,
+                       let cents = message.amountCents, cents > 0 {
+                        return Message.paymentRequestPreview(kind: kind, amountCents: cents)
+                    }
+                    return message.content
+                }(),
                 lastMessageAt: message.createdAt,
                 assignedMemberUid: thread.assignedMemberUid
             )

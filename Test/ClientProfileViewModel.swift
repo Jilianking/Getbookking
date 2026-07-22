@@ -2,10 +2,12 @@ import Foundation
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 
 enum ClientProfileTab: String, CaseIterable, Identifiable {
     case overview
     case history
+    case payments
     case notes
 
     var id: String { rawValue }
@@ -14,6 +16,7 @@ enum ClientProfileTab: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return "Overview"
         case .history: return "History"
+        case .payments: return "Payments"
         case .notes: return "Notes"
         }
     }
@@ -54,6 +57,7 @@ final class ClientProfileViewModel: ObservableObject {
     @Published var selectedTab: ClientProfileTab = .overview
     @Published var isLoading = false
     @Published var bookings: [BookingRequest] = []
+    @Published var payments: [PaymentTransaction] = []
     @Published var servicePrices: [String: Double] = [:]
     @Published var saveError: String?
     @Published var noteEntries: [Client.ClientNoteEntry] = []
@@ -71,6 +75,12 @@ final class ClientProfileViewModel: ObservableObject {
 
     var matchingBookings: [BookingRequest] {
         bookings.filter { Self.matches(booking: $0, client: client) }
+    }
+
+    var matchingPayments: [PaymentTransaction] {
+        payments
+            .filter { Self.matches(payment: $0, client: client) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
     }
 
     var visitCount: Int {
@@ -226,6 +236,7 @@ final class ClientProfileViewModel: ObservableObject {
 
         if isDemoMode {
             bookings = []
+            payments = []
             return
         }
 
@@ -241,17 +252,22 @@ final class ClientProfileViewModel: ObservableObject {
 
             async let bookingTask = firebaseService.fetchTenantBookingRequests(tenantId: tid)
             async let servicesTask = firebaseService.fetchTenantServices(tenantId: tid)
+            async let paymentsTask = Self.fetchConnectPaymentTransactions()
             if let customerId = client.id {
                 async let customerTask = firebaseService.fetchTenantCustomer(tenantId: tid, customerId: customerId)
-                let (fetchedBookings, services, refreshedClient) = try await (bookingTask, servicesTask, customerTask)
+                let (fetchedBookings, services, refreshedClient, fetchedPayments) = try await (
+                    bookingTask, servicesTask, customerTask, paymentsTask
+                )
                 bookings = fetchedBookings
+                payments = fetchedPayments
                 servicePrices = Self.priceLookup(from: services)
                 if let refreshedClient {
                     client = refreshedClient
                 }
             } else {
-                let (fetchedBookings, services) = try await (bookingTask, servicesTask)
+                let (fetchedBookings, services, fetchedPayments) = try await (bookingTask, servicesTask, paymentsTask)
                 bookings = fetchedBookings
+                payments = fetchedPayments
                 servicePrices = Self.priceLookup(from: services)
             }
             syncNoteEntriesFromClient()
@@ -498,6 +514,34 @@ final class ClientProfileViewModel: ObservableObject {
         return !clientEmail.isEmpty && clientEmail == bookingEmail
     }
 
+    static func matches(payment: PaymentTransaction, client: Client) -> Bool {
+        let clientPhone = PhoneFormatting.digits(from: client.phone ?? "")
+        let desc = (payment.customerName ?? "").lowercased()
+        let clientName = client.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if clientPhone.count >= 10 {
+            let suffix = String(clientPhone.suffix(10))
+            let descDigits = PhoneFormatting.digits(from: payment.customerName ?? "")
+            if descDigits.contains(suffix) { return true }
+        }
+        if !clientName.isEmpty, clientName.count >= 3, desc.contains(clientName) {
+            return true
+        }
+        return false
+    }
+
+    private static func fetchConnectPaymentTransactions() async -> [PaymentTransaction] {
+        do {
+            let result = try await Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+                .httpsCallable("getConnectBalanceTransactions")
+                .call()
+            let data = result.data as? [String: Any]
+            let list = data?["transactions"] as? [[String: Any]] ?? []
+            return list.compactMap { PaymentTransaction.fromFirestoreDict($0) }
+        } catch {
+            return []
+        }
+    }
+
     static func isVisitStatus(_ status: String) -> Bool {
         let normalized = status.lowercased()
         return normalized == "confirmed" || normalized == "completed"
@@ -516,6 +560,7 @@ final class ClientProfileViewModel: ObservableObject {
     private static func displayConsentSource(_ source: String) -> String {
         switch source {
         case "web_booking": return "Booking form checkbox"
+        case "inbound_sms": return "Text reply (YES)"
         default:
             return source.replacingOccurrences(of: "_", with: " ").capitalized
         }

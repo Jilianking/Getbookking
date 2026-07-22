@@ -7917,7 +7917,7 @@ exports.onTenantBookingRequestSms = functions
     return null;
   });
 
-/** Twilio inbound SMS (STOP/HELP). */
+/** Twilio inbound SMS (STOP/HELP + inbound consent YES). */
 exports.twilioInboundSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onRequest(async (req, res) => {
@@ -7942,11 +7942,13 @@ exports.twilioInboundSms = functions
 
     const from = (params.From || "").toString();
     const to = (params.To || "").toString();
-    const body = (params.Body || "").toString().trim().toUpperCase();
+    const rawBody = (params.Body || "").toString();
+    const body = rawBody.trim().toUpperCase();
 
     let tenantId = null;
     let assignedMemberUid = null;
     let smsLineScope = "tenant";
+    let tenantData = null;
 
     const tenantSnap = await db
       .collection("tenants")
@@ -7955,6 +7957,7 @@ exports.twilioInboundSms = functions
       .get();
     if (!tenantSnap.empty) {
       tenantId = tenantSnap.docs[0].id;
+      tenantData = tenantSnap.docs[0].data() || {};
     } else {
       const memberSnap = await db
         .collection("users")
@@ -7966,12 +7969,20 @@ exports.twilioInboundSms = functions
         assignedMemberUid = memberDoc.id;
         tenantId = (memberDoc.data().tenantId || "").toString().trim() || null;
         smsLineScope = "member";
+        if (tenantId) {
+          const tSnap = await db.collection("tenants").doc(tenantId).get();
+          tenantData = tSnap.exists ? tSnap.data() || {} : {};
+        }
       }
     }
     if (!tenantId) {
       res.type("text/xml").send("<Response></Response>");
       return;
     }
+
+    const businessName =
+      (tenantData && (tenantData.businessName || tenantData.displayName)) ||
+      "us";
 
     if (body === "STOP" || body === "UNSUBSCRIBE" || body === "CANCEL") {
       await db
@@ -7983,26 +7994,29 @@ exports.twilioInboundSms = functions
           phone: from,
           optedOutAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+      // Clear opted-in so profile reflects opt-out until they reply YES/START again.
+      const last10 = (from || "").replace(/\D/g, "").slice(-10);
+      if (last10.length === 10) {
+        await db
+          .collection("tenants")
+          .doc(tenantId)
+          .collection("customers")
+          .doc(last10)
+          .set(
+            {
+              smsOptedIn: false,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          )
+          .catch(() => {});
+      }
       res
         .type("text/xml")
         .send(
-          "<Response><Message>You have been unsubscribed. Reply START to resubscribe.</Message></Response>"
-        );
-      return;
-    }
-
-    if (body === "START") {
-      await db
-        .collection("tenants")
-        .doc(tenantId)
-        .collection("smsOptOuts")
-        .doc(from.replace(/\W/g, "_"))
-        .delete()
-        .catch(() => {});
-      res
-        .type("text/xml")
-        .send(
-          "<Response><Message>You are resubscribed to appointment-related texts. Reply STOP to opt out.</Message></Response>"
+          sms.twimlMessage(
+            "You have been unsubscribed. Reply START to resubscribe."
+          )
         );
       return;
     }
@@ -8011,21 +8025,57 @@ exports.twilioInboundSms = functions
       res
         .type("text/xml")
         .send(
-          "<Response><Message>Bookking client texting: appointment updates only. Reply STOP to opt out.</Message></Response>"
+          sms.twimlMessage(
+            "Bookking client texting: appointment updates only. Reply STOP to opt out."
+          )
         );
+      return;
+    }
+
+    if (sms.isInboundConsentAffirmation(body)) {
+      await sms.grantInboundSmsConsent(tenantId, from);
+      await sms.recordInboundTenantSms(tenantId, {
+        from,
+        to,
+        body: rawBody,
+        threadId: sms.threadIdFromPhone(from),
+        assignedMemberUid,
+        smsLineScope,
+      });
+      const confirmed = sms.inboundConsentConfirmedBody();
+      try {
+        await sms.recordSystemOutboundSms(tenantId, {
+          from: to,
+          to: from,
+          body: confirmed,
+          threadId: sms.threadIdFromPhone(from),
+          assignedMemberUid,
+          smsLineScope,
+        });
+      } catch (e) {
+        console.warn("twilioInboundSms: consent confirm log", e.message || e);
+      }
+      res.type("text/xml").send(sms.twimlMessage(confirmed));
       return;
     }
 
     await sms.recordInboundTenantSms(tenantId, {
       from,
       to,
-      body: (params.Body || "").toString(),
+      body: rawBody,
       threadId: sms.threadIdFromPhone(from),
       assignedMemberUid,
       smsLineScope,
     });
 
-    res.type("text/xml").send("<Response></Response>");
+    const consentTwiml = await sms.maybeSendInboundConsentPrompt(tenantId, {
+      from,
+      to,
+      businessName,
+      assignedMemberUid,
+      smsLineScope,
+    });
+    res.type("text/xml").send(consentTwiml || "<Response></Response>");
   });
 
 function passwordResetMarketingOrigin() {

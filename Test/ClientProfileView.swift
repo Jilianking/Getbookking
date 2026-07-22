@@ -251,6 +251,8 @@ struct ClientProfileView: View {
                 overviewTab
             case .history:
                 historyTab
+            case .payments:
+                paymentsTab
             case .notes:
                 notesTab
             }
@@ -494,7 +496,7 @@ struct ClientProfileView: View {
                 ForEach(viewModel.matchingBookings) { booking in
                     ProfileDetailCard(sectionTitle: booking.serviceName ?? "Booking") {
                         VStack(alignment: .leading, spacing: 10) {
-                            BookingRequestDetailRow(label: "Status", value: booking.status.capitalized)
+                            BookingRequestDetailRow(label: "Status", value: BookingRequestStatus.displayLabel(booking.status))
                             if let date = booking.requestedStartTime ?? booking.createdAt {
                                 BookingRequestDetailRow(
                                     label: "Date",
@@ -504,6 +506,45 @@ struct ClientProfileView: View {
                             }
                             if let notes = booking.notes, !notes.isEmpty {
                                 BookingRequestDetailRow(label: "Notes", value: notes)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var paymentsTab: some View {
+        VStack(spacing: 22) {
+            if viewModel.matchingPayments.isEmpty {
+                ContentUnavailableView(
+                    "No payments yet",
+                    systemImage: "creditcard",
+                    description: Text("Charges and refunds linked to this customer will show up here.")
+                )
+                .padding(.top, 40)
+            } else {
+                ProfileDetailCard(sectionTitle: "Recent payments") {
+                    VStack(spacing: 0) {
+                        ForEach(Array(viewModel.matchingPayments.enumerated()), id: \.element.id) { index, txn in
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(txn.displayTitle)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AppDesign.textPrimary)
+                                    Text(txn.createdAt.map { $0.formatted(.dateTime.month(.abbreviated).day().hour().minute()) } ?? txn.channelLabel)
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
+                                Spacer(minLength: 8)
+                                Text("\(txn.isCredit ? "+" : "-")\(formatCurrency(txn.amount))")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(txn.isCredit ? AppDesign.accentGreen : AppDesign.textPrimary)
+                            }
+                            .padding(.vertical, 12)
+                            if index < viewModel.matchingPayments.count - 1 {
+                                Divider()
                             }
                         }
                     }

@@ -950,6 +950,210 @@ function extractCustomerPhone(booking) {
   return null;
 }
 
+function phoneLast10(phone) {
+  const digits = (phone || "").toString().replace(/\D/g, "");
+  if (digits.length >= 10) return digits.slice(-10);
+  return "";
+}
+
+function escapeXml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function twimlMessage(body) {
+  return `<Response><Message>${escapeXml(body)}</Message></Response>`;
+}
+
+function isInboundConsentAffirmation(bodyUpper) {
+  const b = (bodyUpper || "").toString().trim().toUpperCase();
+  return b === "YES" || b === "Y" || b === "START";
+}
+
+function inboundConsentPromptBody(businessName) {
+  const biz = (businessName || "us").toString().trim() || "us";
+  return (
+    `Thanks for texting ${biz}. Reply YES to get appointment updates by text. ` +
+    `Msg & data rates may apply. Reply STOP to opt out.`
+  );
+}
+
+function inboundConsentConfirmedBody() {
+  return "You're opted in to appointment-related texts. Reply STOP to opt out.";
+}
+
+async function isPhoneOptedOut(tenantId, phone) {
+  const e164 = toE164US(phone) || (phone || "").toString().trim();
+  if (!tenantId || !e164) return false;
+  const optId = e164.replace(/\W/g, "_");
+  const snap = await getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsOptOuts")
+    .doc(optId)
+    .get();
+  return snap.exists;
+}
+
+async function clearPhoneOptOut(tenantId, phone) {
+  const e164 = toE164US(phone) || (phone || "").toString().trim();
+  if (!tenantId || !e164) return;
+  await getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsOptOuts")
+    .doc(e164.replace(/\W/g, "_"))
+    .delete()
+    .catch(() => {});
+}
+
+/**
+ * True if this phone already has express SMS consent on the customer record.
+ */
+async function phoneHasSmsConsent(tenantId, phone) {
+  const last10 = phoneLast10(phone);
+  if (!tenantId || !last10) return false;
+
+  const customerSnap = await getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(last10)
+    .get();
+  return customerSnap.exists && customerSnap.data().smsOptedIn === true;
+}
+
+async function grantInboundSmsConsent(tenantId, phone) {
+  const last10 = phoneLast10(phone);
+  const e164 = toE164US(phone) || (phone || "").toString().trim();
+  if (!tenantId || !last10 || !e164) return false;
+
+  await clearPhoneOptOut(tenantId, e164);
+
+  const ref = getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(last10);
+  const snap = await ref.get();
+  const existing = snap.exists ? snap.data() || {} : {};
+  const keepWebSource = (existing.smsConsentSource || "").toString() === "web_booking";
+
+  await ref.set(
+    {
+      name: (existing.name || "Customer").toString().slice(0, 120),
+      email: (existing.email || "").toString(),
+      phone: e164,
+      smsOptedIn: true,
+      smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
+      smsConsentSource: keepWebSource ? "web_booking" : "inbound_sms",
+      source: existing.source || "inbound_sms",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(snap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+    },
+    { merge: true }
+  );
+  return true;
+}
+
+/**
+ * Log a system TwiML outbound (consent prompt / confirmation) into smsLog + thread.
+ * Consumes one monthly slot. Returns false if cap reached.
+ */
+async function recordSystemOutboundSms(tenantId, { from, to, body, threadId, assignedMemberUid, smsLineScope }) {
+  if (!tenantId || !from || !to || !body) return false;
+  try {
+    await consumeSmsMonthlySlot(tenantId);
+  } catch (e) {
+    if (String(e.message || e).includes("Monthly SMS limit")) {
+      console.warn("recordSystemOutboundSms: monthly cap", tenantId);
+      return false;
+    }
+    throw e;
+  }
+
+  const tid = threadId || threadIdFromPhone(to);
+  await getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsLog")
+    .add({
+      direction: "outbound",
+      from,
+      to,
+      threadId: tid,
+      body: body.slice(0, 500),
+      status: "sent",
+      systemKind: "inbound_consent",
+      assignedMemberUid: assignedMemberUid || null,
+      smsLineScope: smsLineScope || "tenant",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  await upsertSmsThread(tenantId, tid, {
+    counterpartPhone: to,
+    lastDirection: "outbound",
+    lastMessageBody: body.slice(0, 500),
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageStatus: "sent",
+    assignedMemberUid: assignedMemberUid || null,
+    smsLineScope: smsLineScope || "tenant",
+  });
+  return true;
+}
+
+/**
+ * If the sender has no SMS consent yet, send a one-time YES opt-in prompt.
+ * Returns TwiML string to reply with, or null when no prompt should be sent.
+ */
+async function maybeSendInboundConsentPrompt(tenantId, {
+  from,
+  to,
+  businessName,
+  assignedMemberUid,
+  smsLineScope,
+}) {
+  if (!tenantId || !from || !to) return null;
+  if (await isPhoneOptedOut(tenantId, from)) return null;
+  if (await phoneHasSmsConsent(tenantId, from)) return null;
+
+  const threadId = threadIdFromPhone(from);
+  const threadRef = getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("smsThreads")
+    .doc(threadId);
+  const threadSnap = await threadRef.get();
+  const threadData = threadSnap.exists ? threadSnap.data() || {} : {};
+  if (threadData.smsConsentPromptSentAt) return null;
+
+  const prompt = inboundConsentPromptBody(businessName);
+  const logged = await recordSystemOutboundSms(tenantId, {
+    from: to,
+    to: from,
+    body: prompt,
+    threadId,
+    assignedMemberUid,
+    smsLineScope,
+  });
+  if (!logged) return null;
+
+  await threadRef.set(
+    {
+      threadId,
+      counterpartPhone: from,
+      smsConsentPromptSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return twimlMessage(prompt);
+}
+
 module.exports = {
   twilioAccountSid,
   twilioAuthToken,
@@ -967,6 +1171,14 @@ module.exports = {
   sendTenantSms,
   sendOutboundClientSms,
   recordInboundTenantSms,
+  grantInboundSmsConsent,
+  maybeSendInboundConsentPrompt,
+  isInboundConsentAffirmation,
+  inboundConsentConfirmedBody,
+  recordSystemOutboundSms,
+  twimlMessage,
+  phoneHasSmsConsent,
+  clearPhoneOptOut,
   memberPersonalSmsBlockReason,
   memberPayoutMode,
   tenantStudioSmsActive,

@@ -7,8 +7,10 @@ struct DashboardView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @StateObject private var requestsViewModel = RequestsViewModel()
+    @StateObject private var clientsViewModel = ClientsViewModel()
     @State private var selectedBookingRequest: BookingRequest?
     @State private var selectedRequest: Request?
+    @State private var profileClient: Client?
     var drawerState: DrawerState
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
@@ -222,8 +224,30 @@ struct DashboardView: View {
         .sheet(item: $selectedRequest) { request in
             RequestDetailView(request: request, viewModel: requestsViewModel, drawerState: drawerState)
         }
+        .sheet(item: $profileClient) { client in
+            NavigationStack {
+                ClientProfileView(
+                    client: client,
+                    clientsViewModel: clientsViewModel,
+                    drawerState: drawerState
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { profileClient = nil }
+                    }
+                }
+            }
+            .environmentObject(authViewModel)
+            .environmentObject(sessionStore)
+        }
         .onAppear {
             requestsViewModel.sessionStore = sessionStore
+        }
+        .task {
+            await clientsViewModel.loadClients(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
         }
     }
 
@@ -302,12 +326,11 @@ struct DashboardView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(viewModel.recentBookingRequests.prefix(5)) { br in
-                            Button {
-                                openBookingRequest(br)
-                            } label: {
-                                DashboardBookingRequestRow(request: br)
-                            }
-                            .buttonStyle(.plain)
+                            DashboardBookingRequestRow(
+                                request: br,
+                                onOpenProfile: { openClientProfile(for: br) },
+                                onOpenRequest: { openBookingRequest(br) }
+                            )
                         }
                     }
                     .padding(.horizontal, 12)
@@ -337,6 +360,13 @@ struct DashboardView: View {
         }
     }
 
+    private func openClientProfile(for booking: BookingRequest) {
+        profileClient = clientsViewModel.resolveClient(
+            name: booking.customerName ?? "Unknown",
+            phone: booking.customerPhone ?? ""
+        )
+    }
+
     private func markBookingRequestReadLocally(_ booking: BookingRequest) {
         guard booking.readAt == nil,
               let requestId = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -351,31 +381,50 @@ struct DashboardView: View {
 
 struct DashboardBookingRequestRow: View {
     let request: BookingRequest
+    var onOpenProfile: (() -> Void)? = nil
+    var onOpenRequest: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(AppDesign.brandDark.opacity(0.85))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text((request.customerName ?? "?").prefix(2).uppercased())
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.white)
-                )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(request.customerName ?? "Unknown")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppDesign.textPrimary)
-                Text("\(request.serviceName ?? request.serviceSlug ?? "-") · \(request.createdAt?.formatted(.dateTime.month(.abbreviated).day()) ?? "-")")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
+            Button {
+                onOpenProfile?()
+            } label: {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(AppDesign.brandDark.opacity(0.85))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Text((request.customerName ?? "?").prefix(2).uppercased())
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.white)
+                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(request.customerName ?? "Unknown")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                        Text("\(request.serviceName ?? request.serviceSlug ?? "-") · \(request.createdAt?.formatted(.dateTime.month(.abbreviated).day()) ?? "-")")
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
             }
-            Spacer()
-            AppStatusPill(text: statusLabel, soft: true)
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 8)
+
+            Button {
+                onOpenRequest?()
+            } label: {
+                AppStatusPill(text: statusLabel, soft: true)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
+        .onTapGesture {
+            onOpenRequest?()
+        }
     }
 
     private var statusLabel: String {

@@ -294,31 +294,50 @@ struct MessageThreadView: View {
     @State private var clientPhone = ""
     @State private var linkedBookingRequestId: String?
     @State private var showThreadError = false
+    @State private var showClientProfile = false
+    @StateObject private var clientsViewModel = ClientsViewModel()
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header: back, avatar, name, phone
+            // Header: back, avatar, name, phone, profile
             HStack(spacing: 12) {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                AppAvatarView(
-                    tenantLogoURL: nil,
-                    accountPhotoURL: nil,
-                    displayNameFallback: clientName,
-                    size: 40
-                )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(clientName)
-                        .font(.headline)
-                    if !clientPhone.isEmpty {
-                        Text(clientPhone)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                Button {
+                    openClientProfile()
+                } label: {
+                    HStack(spacing: 12) {
+                        AppAvatarView(
+                            tenantLogoURL: nil,
+                            accountPhotoURL: nil,
+                            displayNameFallback: clientName,
+                            size: 40
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(clientName)
+                                .font(.headline)
+                                .foregroundStyle(AppDesign.textPrimary)
+                            if !clientPhone.isEmpty {
+                                Text(clientPhone)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
                 }
+                .buttonStyle(.plain)
                 Spacer()
+                Button {
+                    openClientProfile()
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel("Customer profile")
             }
             .padding()
             .background(AppDesign.cardBackground)
@@ -379,6 +398,10 @@ struct MessageThreadView: View {
                 forClientPhone: phoneForLookup,
                 in: sessionStore.bookingRequests
             )
+            await clientsViewModel.loadClients(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
             await loadMessages()
             await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
         }
@@ -396,6 +419,30 @@ struct MessageThreadView: View {
         .onDisappear {
             viewModel.stopListeningToMessages(threadId: threadId)
         }
+        .sheet(isPresented: $showClientProfile) {
+            NavigationStack {
+                ClientProfileView(
+                    client: clientsViewModel.resolveClient(
+                        name: clientName,
+                        phone: clientPhone.isEmpty ? threadId : clientPhone
+                    ),
+                    clientsViewModel: clientsViewModel,
+                    drawerState: drawerState
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showClientProfile = false }
+                    }
+                }
+            }
+            .environmentObject(authViewModel)
+            .environmentObject(sessionStore)
+        }
+    }
+
+    private func openClientProfile() {
+        isComposerFocused = false
+        showClientProfile = true
     }
 
     private func loadMessages() async {

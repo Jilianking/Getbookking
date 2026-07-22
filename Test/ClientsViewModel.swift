@@ -112,7 +112,42 @@ class ClientsViewModel: ObservableObject {
         }
         return UUID().uuidString
     }
-    
+
+    /// Best matching saved customer, or a lightweight client for message/request phone contacts.
+    func resolveClient(name: String, phone: String) -> Client {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = trimmedName.isEmpty ? "Customer" : trimmedName
+        let dig = PhoneFormatting.digits(from: phone)
+        if dig.count >= 10 {
+            let suffix = String(dig.suffix(10))
+            if let match = clients.first(where: {
+                let p = PhoneFormatting.digits(from: $0.phone ?? "")
+                return p.count >= 10 && String(p.suffix(10)) == suffix
+            }) {
+                return match
+            }
+            let stored = PhoneFormatting.normalizedForStorage(phone) ?? phone
+            return Client(
+                id: suffix,
+                name: displayName,
+                email: "",
+                phone: stored
+            )
+        }
+        if !trimmedName.isEmpty,
+           let match = clients.first(where: {
+               $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmedName.lowercased()
+           }) {
+            return match
+        }
+        return Client(
+            id: UUID().uuidString,
+            name: displayName,
+            email: "",
+            phone: phone.isEmpty ? nil : phone
+        )
+    }
+
     func updateClient(_ clientId: String, updates: [String: Any]) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {

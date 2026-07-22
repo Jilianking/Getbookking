@@ -117,7 +117,7 @@ enum AppDesign {
         case "pending", "pending_deposit", "pending_consultation":
             return (statusPending, pendingBackground)
         case "confirmed":
-            return (brandDark, brandCream)
+            return (textPrimary, searchBackground)
         case "declined", "cancelled":
             return (statusCancelled, declineBackground)
         default:

@@ -110,10 +110,7 @@ struct MessageComposerBar: View {
         VStack(alignment: .leading, spacing: MessageComposerIcon.iconSpacing) {
             if actionsExpanded {
                 actionTray
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             HStack(alignment: .bottom, spacing: 10) {

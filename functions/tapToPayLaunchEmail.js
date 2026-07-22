@@ -56,7 +56,7 @@ function buildTapToPayLaunchEmailHtml({
 } = {}) {
   const origin = marketingOrigin();
   // Hosted on getbookking.com marketing site (web/marketing → site root).
-  const logoUrl = assetUrl("assets/brand/bookking-email-logo.png");
+  const logoUrl = assetUrl("assets/brand/bookking-email-logo.png") + "?v=2";
   const heroUrl = assetUrl("assets/brand/ttpoi-email-launch-hero.jpg");
   const buttonUrl = (ctaUrl || `${origin}`).toString().trim();
   const greet = firstName ? `Hi ${escapeHtml(firstName)},` : "Hi,";

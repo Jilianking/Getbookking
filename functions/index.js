@@ -722,9 +722,37 @@ async function ensureConnectAccountId(stripe, accountRef, email, storedId) {
       card_payments: { requested: true },
       transfers: { requested: true },
     },
+    settings: {
+      // Recover negative balances (refunds/disputes) from future payouts,
+      // never by debiting the business's bank account.
+      payouts: { debit_negative_balances: false },
+    },
   });
   await accountRef.set({ stripeAccountId: account.id }, { merge: true });
   return { stripeAccountId: account.id, account };
+}
+
+/**
+ * Best-effort: turn off automatic bank debits for negative balances on an
+ * existing Express account. Runs lazily from getConnectAccountStatus so
+ * accounts created before this policy get migrated.
+ */
+async function ensureNoNegativeBalanceBankDebits(stripe, account) {
+  try {
+    if (!account || account.settings?.payouts?.debit_negative_balances !== true) {
+      return account;
+    }
+    return await stripe.accounts.update(account.id, {
+      settings: { payouts: { debit_negative_balances: false } },
+    });
+  } catch (err) {
+    console.warn(
+      "ensureNoNegativeBalanceBankDebits",
+      account?.id,
+      err.message || err
+    );
+    return account;
+  }
 }
 
 function connectAccountPendingReview(account) {
@@ -987,7 +1015,8 @@ exports.getConnectAccountStatus = functions
       return demoConnectAccountStatusResponse(payCtx);
     }
 
-    const account = await stripe.accounts.retrieve(stripeAccountId);
+    let account = await stripe.accounts.retrieve(stripeAccountId);
+    account = await ensureNoNegativeBalanceBankDebits(stripe, account);
 
     const terminalLocationId = payCtx.terminalLocationId || null;
     const tenantDoc = await db.collection("tenants").doc(payCtx.tenantId).get();
@@ -2465,14 +2494,58 @@ exports.createRefund = functions
     const amountCents = data?.amountCents;
     const reason = (data?.reason || "requested_by_customer").toString().trim();
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    // Guard: refunds must be covered by the available balance so Stripe never
+    // debits the linked bank account (funds still settling don't count).
+    const charge = await stripe.charges.retrieve(chargeId, {
+      stripeAccount: stripeAccountId,
+    });
+    const remainingCents = Math.max(
+      0,
+      (charge.amount || 0) - (charge.amount_refunded || 0)
+    );
+    const refundCents =
+      typeof amountCents === "number" && amountCents > 0
+        ? Math.round(amountCents)
+        : remainingCents;
+    if (refundCents <= 0) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This payment has already been fully refunded."
+      );
+    }
+    if (refundCents > remainingCents) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Refund amount exceeds what remains on this payment."
+      );
+    }
+
+    const balance = await stripe.balance.retrieve(
+      {},
+      { stripeAccount: stripeAccountId }
+    );
+    const currency = (charge.currency || "usd").toLowerCase();
+    const availableCents = (balance.available || [])
+      .filter((b) => (b.currency || "").toLowerCase() === currency)
+      .reduce((sum, b) => sum + (b.amount || 0), 0);
+    if (refundCents > availableCents) {
+      const fmt = (cents) => `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Not enough available funds to refund ${fmt(refundCents)}. ` +
+          `You have ${fmt(availableCents)} available. Funds from recent payments ` +
+          `become available after they finish settling (usually about 2 business days). ` +
+          `Try again then, or refund a smaller amount.`
+      );
+    }
+
     const params = {
       charge: chargeId,
       reason: reason,
       refund_application_fee: true,
+      amount: refundCents,
     };
-    if (typeof amountCents === "number" && amountCents > 0) {
-      params.amount = Math.round(amountCents);
-    }
     await stripe.refunds.create(params, { stripeAccount: stripeAccountId });
     return { success: true };
   });

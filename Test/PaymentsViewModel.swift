@@ -843,6 +843,11 @@ class PaymentsViewModel: ObservableObject {
         hasLoadedStripeStatus = true
     }
 
+    /// Refreshes just the Stripe balance (used by the refund sheet to pre-check available funds).
+    func refreshAvailableBalance() async {
+        await loadBalance()
+    }
+
     private func loadBalance() async {
         do {
             let result = try await functions.httpsCallable("getConnectBalance").call()

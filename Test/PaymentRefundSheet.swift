@@ -27,6 +27,7 @@ struct PaymentRefundSheet: View {
     @State private var refundMode: RefundMode = .full
     @State private var partialAmountText = ""
     @State private var localError: String?
+    @State private var balanceLoaded = false
     @FocusState private var amountFocused: Bool
 
     private var chargeTotalUSD: Double {
@@ -42,11 +43,27 @@ struct PaymentRefundSheet: View {
         return Int(round(value * 100))
     }
 
+    private var availableCents: Int {
+        Int(round(max(0, viewModel.availableBalance) * 100))
+    }
+
+    private var refundAmountCents: Int {
+        switch refundMode {
+        case .full: return maxRefundCents
+        case .partial: return partialAmountCents
+        }
+    }
+
+    private var insufficientFunds: Bool {
+        balanceLoaded && refundAmountCents > availableCents
+    }
+
     private var canSubmitPartial: Bool {
         partialAmountCents >= 50 && partialAmountCents <= maxRefundCents
     }
 
     private var canSubmit: Bool {
+        guard !insufficientFunds else { return false }
         switch refundMode {
         case .full: return maxRefundCents >= 50
         case .partial: return canSubmitPartial
@@ -62,9 +79,19 @@ struct PaymentRefundSheet: View {
                         .foregroundStyle(AppDesign.textSecondary)
                     Text(PaymentsViewModel.formatUSD(chargeTotalUSD))
                         .font(.title2.weight(.bold))
-                    Text("Refunds return money to the customer from the original charge. Partial refunds cannot exceed the amount paid.")
+                    Text("Refunds come out of your available balance. Partial refunds cannot exceed the amount paid.")
                         .font(.caption)
                         .foregroundStyle(AppDesign.textSecondary)
+                    if balanceLoaded {
+                        HStack(spacing: 4) {
+                            Text("Available balance:")
+                                .foregroundStyle(AppDesign.textSecondary)
+                            Text(PaymentsViewModel.formatUSD(Double(availableCents) / 100))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(insufficientFunds ? .red : AppDesign.textPrimary)
+                        }
+                        .font(.caption)
+                    }
                 }
 
                 Picker("Refund type", selection: $refundMode) {
@@ -100,7 +127,11 @@ struct PaymentRefundSheet: View {
                     .appCard()
                 }
 
-                if let localError {
+                if insufficientFunds {
+                    Text("Not enough available funds for this refund. Funds from recent payments become available after they finish settling (usually about 2 business days). Try again then, or refund a smaller amount.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if let localError {
                     Text(localError)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -143,6 +174,10 @@ struct PaymentRefundSheet: View {
                 if mode == .partial {
                     amountFocused = true
                 }
+            }
+            .task {
+                await viewModel.refreshAvailableBalance()
+                balanceLoaded = true
             }
         }
     }

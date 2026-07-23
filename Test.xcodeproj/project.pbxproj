@@ -427,7 +427,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Test/Test-Debug.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -437,6 +437,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access lets you take photos for your profile, website, gallery, and shop products.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save reference photos from booking requests and generated logos to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";
@@ -484,7 +485,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Test/Test-Release.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -494,6 +495,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Get Bookking";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth may be used when connecting to supported card readers.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access lets you take photos for your profile, website, gallery, and shop products.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save reference photos from booking requests and generated logos to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";

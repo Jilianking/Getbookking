@@ -15,6 +15,14 @@ struct PaymentSettingsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 stripeAccountSection
                 if viewModel.stripeConnected {
+                    #if TAP_TO_PAY_ENABLED
+                    if viewModel.canEditTapToPayDisplayName {
+                        tapToPayScreenNameSection
+                    }
+                    #endif
+                    if viewModel.canEditStatementDescriptor {
+                        statementDescriptorSection
+                    }
                     salesTaxSection
                     taxReportingSection
                 }
@@ -97,22 +105,153 @@ struct PaymentSettingsView: View {
         }
     }
 
+    private var statementDescriptorSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Statement descriptor")
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Shows on your customer’s bank or card statement (not on the Tap to Pay screen).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                TextField(
+                    "Statement descriptor",
+                    text: $viewModel.statementDescriptorDraft,
+                    prompt: Text("YOUR BUSINESS")
+                )
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .disabled(isDemoMode || viewModel.isSavingStatementDescriptor)
+                .onChange(of: viewModel.statementDescriptorDraft) { _, newValue in
+                    let filtered = newValue
+                        .uppercased()
+                        .filter { $0.isLetter || $0.isNumber || $0 == " " }
+                    if filtered != newValue {
+                        viewModel.statementDescriptorDraft = filtered
+                    }
+                }
+
+                Button {
+                    Task { await viewModel.saveStatementDescriptor(isDemoMode: isDemoMode) }
+                } label: {
+                    HStack {
+                        Text("Save statement descriptor")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.accentGreen)
+                        Spacer()
+                        if viewModel.isSavingStatementDescriptor {
+                            ProgressView().scaleEffect(0.9)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isDemoMode || viewModel.isSavingStatementDescriptor)
+
+                if viewModel.statementDescriptorSaveSuccess {
+                    Text("Saved — new charges will use this on bank/card statements.")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.accentGreen)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .appCard()
+
+            Text("5–22 characters. Letters, numbers, and spaces only. Must match your business.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    #if TAP_TO_PAY_ENABLED
+    private var tapToPayScreenNameSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Tap to Pay screen name")
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Customers see “Pay \(viewModel.effectiveTapToPayDisplayName)” on their phone during Tap to Pay. Does not change bank statements.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                TextField(
+                    "Name on Tap to Pay screen",
+                    text: $viewModel.tapToPayDisplayNameDraft,
+                    prompt: Text(viewModel.tapToPayDisplayNamePlaceholder)
+                )
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .disabled(isDemoMode || viewModel.isSavingTapToPayDisplayName)
+
+                Button {
+                    Task { await viewModel.saveTapToPayDisplayName() }
+                } label: {
+                    HStack {
+                        Text("Save Tap to Pay screen name")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.accentGreen)
+                        Spacer()
+                        if viewModel.isSavingTapToPayDisplayName {
+                            ProgressView().scaleEffect(0.9)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isDemoMode || viewModel.isSavingTapToPayDisplayName)
+
+                if viewModel.tapToPayDisplayNameSaveSuccess {
+                    Text("Saved — Tap to Pay will show Pay \(viewModel.effectiveTapToPayDisplayName).")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.accentGreen)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .appCard()
+        }
+    }
+    #endif
+
     private var salesTaxSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AppSectionHeader(title: "Shop sales tax")
+            AppSectionHeader(title: "Tax settings")
 
             VStack(alignment: .leading, spacing: 0) {
-                Toggle(isOn: shopTaxBinding) {
+                Toggle(isOn: onlineTaxBinding) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Collect sales tax")
+                        Text("Online sales tax")
                             .font(.body.weight(.medium))
-                        Text("On shop orders at checkout. Calculated by Stripe from your tax registrations.")
+                        Text("Shop and website checkout. Calculated by Stripe Tax.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .tint(.green)
                 .disabled(isDemoMode || viewModel.isSavingShopTax)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+
+                Divider().padding(.leading, 14)
+
+                Toggle(isOn: inPersonTaxBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("In-person sales tax")
+                            .font(.body.weight(.medium))
+                        Text("Manual payment and Tap to Pay. Shown on checkout and receipts.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .tint(.green)
+                .disabled(isDemoMode || viewModel.isSavingInPersonTax)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
 
@@ -132,7 +271,7 @@ struct PaymentSettingsView: View {
             }
             .appCard()
 
-            Text("Uses your business address for pickup orders. Turn on only after completing Stripe Tax setup.")
+            Text("Both use your business address. Turn on only after completing Stripe Tax setup.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 4)
@@ -190,7 +329,7 @@ struct PaymentSettingsView: View {
                 paymentSettingsLinkRow(
                     title: "Tap to Pay settings",
                     subtitle: viewModel.stripeConnected
-                        ? "Customer-facing name, signature, receipts, how to use"
+                        ? "Signature, receipts, and how to use"
                         : "How to use Tap to Pay, and settings after Stripe is connected"
                 )
             }
@@ -200,12 +339,22 @@ struct PaymentSettingsView: View {
     }
     #endif
 
-    private var shopTaxBinding: Binding<Bool> {
+    private var onlineTaxBinding: Binding<Bool> {
         Binding(
             get: { viewModel.shopTaxEnabled },
             set: { newValue in
                 viewModel.shopTaxEnabled = newValue
                 Task { await viewModel.saveShopTaxEnabled(isDemoMode: isDemoMode) }
+            }
+        )
+    }
+
+    private var inPersonTaxBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.inPersonTaxEnabled },
+            set: { newValue in
+                viewModel.inPersonTaxEnabled = newValue
+                Task { await viewModel.saveInPersonTaxEnabled(isDemoMode: isDemoMode) }
             }
         )
     }

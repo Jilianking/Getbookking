@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Contact — Get Bookking</title>
+  <title>Client Messaging — Get Bookking</title>
+  <meta name="description" content="Text clients, send appointment updates, and request deposits by SMS from Get Bookking." />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
   <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
@@ -12,12 +13,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
-
-  <link rel="stylesheet" href="assets/contact.css" />
+  <link rel="stylesheet" href="assets/messaging.css?v=1" />
   <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
-
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
       <img src="assets/brand/logo-dark-128.png?v=12" alt="" class="nav-logo-mark" width="56" height="56" />
@@ -60,7 +59,6 @@
         <li><a href="templates.html">Templates</a></li>
         <li><a href="index.html#pricing">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
-        <li><a href="contact.html" class="is-active">Contact</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
         <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
@@ -70,32 +68,134 @@
   </aside>
   <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
-  <section class="contact-hero">
-    <div class="sec-inner">
-      <div class="sec-label">Contact</div>
-      <h1>We're here to help.</h1>
-      <p class="contact-hero-lead">Send us an email — we'll get back to you.</p>
-    </div>
-  </section>
-
-  <section class="contact-body">
-    <div class="sec-inner">
-      <div class="contact-card">
-        <div class="contact-card-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+  <main>
+    <section class="msg-hero">
+      <div class="msg-hero-inner">
+        <div class="msg-hero-copy">
+          <div class="msg-label">Client messaging</div>
+          <h1>Keep every booking <em>moving forward</em> by text.</h1>
+          <p class="msg-hero-lead">
+            Message clients from Get Bookking, send booking updates, and request deposits without switching apps.
+          </p>
+          <div class="msg-actions">
+            <a href="signup.html" class="msg-btn msg-btn--primary">Get started free</a>
+            <a href="testflight.html" class="msg-btn">Get early access</a>
+          </div>
         </div>
-        <h2>Email us</h2>
-        <p class="contact-card-desc">For account help, billing questions, website setup, or anything else.</p>
-        <a class="contact-email-link" href="mailto:support@getbookking.com">support@getbookking.com</a>
-      </div>
-      <p class="contact-note">
-        <span class="contact-note-dot" aria-hidden="true"></span>
-        We typically reply within a few hours — yes, even weekends.
-      </p>
-    </div>
-  </section>
 
-    <footer>
+        <div class="msg-phone" aria-label="Example client messaging conversation">
+          <div class="msg-phone-screen">
+            <div class="msg-phone-bar">
+              <div class="msg-avatar" aria-hidden="true">JM</div>
+              <div>
+                <div class="msg-phone-name">Jordan M.</div>
+                <div class="msg-phone-status">SMS conversation</div>
+              </div>
+            </div>
+            <div class="msg-thread">
+              <div class="msg-bubble msg-bubble--out">Hi Jordan — your appointment is confirmed for Friday at 2:00 PM.</div>
+              <div class="msg-bubble msg-bubble--in">Perfect, thank you!</div>
+              <div class="msg-bubble msg-bubble--out">You’re welcome. Here’s the deposit request for your booking.</div>
+              <div class="msg-payment">
+                <div class="msg-payment-label">Deposit request</div>
+                <div class="msg-payment-amount">$50.00</div>
+                <div class="msg-payment-copy">A secure payment link is included in the client’s text.</div>
+                <div class="msg-payment-button">Pay deposit</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section">
+      <div class="msg-inner">
+        <div class="msg-heading">
+          <div class="msg-label">One conversation</div>
+          <h2>Text clients without losing the booking context.</h2>
+          <p>Search conversations, reply from the app, and keep appointment-related communication in one place.</p>
+        </div>
+        <div class="msg-grid">
+          <article class="msg-card">
+            <div class="msg-card-icon" aria-hidden="true">↔</div>
+            <h3>Two-way SMS</h3>
+            <p>Send and receive booking-related texts using a business-specific sending number.</p>
+          </article>
+          <article class="msg-card">
+            <div class="msg-card-icon" aria-hidden="true">✓</div>
+            <h3>Confirmations and reminders</h3>
+            <p>Keep clients updated about appointments, scheduling, and booking follow-up.</p>
+          </article>
+          <article class="msg-card">
+            <div class="msg-card-icon" aria-hidden="true">⌕</div>
+            <h3>Searchable conversations</h3>
+            <p>Find threads by client name, phone number, or message content when you need the details.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section msg-section--alt">
+      <div class="msg-inner msg-split">
+        <div class="msg-split-copy">
+          <div class="msg-label">Deposits by text</div>
+          <h2>Turn a conversation into a confirmed booking.</h2>
+          <p>
+            Create a Stripe deposit link in Get Bookking and send it to a client by SMS. The amount and secure payment link stay connected to the conversation.
+          </p>
+          <div class="msg-deposit-list">
+            <div class="msg-check">Choose the deposit amount for the booking.</div>
+            <div class="msg-check">Send the request to the client’s phone number.</div>
+            <div class="msg-check">Give the client a direct link to complete payment securely through Stripe.</div>
+          </div>
+        </div>
+        <div class="msg-deposit-demo" aria-label="Example deposit request">
+          <div class="msg-payment">
+            <div class="msg-payment-label">Deposit request</div>
+            <div class="msg-payment-amount">$75.00</div>
+            <div class="msg-payment-copy">Pay here: secure Get Bookking payment link</div>
+            <div class="msg-payment-button">Open secure payment</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section">
+      <div class="msg-inner msg-trust">
+        <div class="msg-split-copy">
+          <div class="msg-label">Messaging infrastructure</div>
+          <h2>Built for business conversations.</h2>
+          <p>
+            Get Bookking uses the Twilio platform to deliver reliable business SMS while keeping conversations organized alongside bookings and payments.
+          </p>
+        </div>
+        <div class="msg-twilio-panel">
+          <img
+            class="msg-twilio-badge"
+            src="assets/brand/powered-by-twilio-clear.png"
+            alt="Powered by Twilio"
+            width="180"
+            height="48"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-cta">
+      <h2>Keep clients close to the booking.</h2>
+      <p>Manage appointments, client conversations, and deposit requests from Get Bookking.</p>
+      <a href="signup.html" class="msg-btn">Get started free &rarr;</a>
+    </section>
+
+    <p class="msg-fine-print">
+      Get Bookking uses the Twilio platform for SMS delivery. Twilio does not sponsor or endorse Get Bookking. Twilio and all related logos are trademarks of Twilio Inc. or its affiliates.
+      <a href="terms.html">Messaging terms</a> · <a href="privacy.html">Privacy</a>
+    </p>
+  </main>
+
+  <footer>
     <div class="footer-inner">
       <div class="footer-brand">
         <a href="index.html" class="footer-logo" aria-label="Get Bookking — home">

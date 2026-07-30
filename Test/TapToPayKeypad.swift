@@ -10,10 +10,11 @@ struct TapToPayKeypad: View {
     let onDigit: (Int) -> Void
     let onDoubleZero: () -> Void
     let onDelete: () -> Void
+    var compact: Bool = false
 
-    private let keySize: CGFloat = 72
-    private let columnSpacing: CGFloat = 18
-    private let rowSpacing: CGFloat = 14
+    private var keySize: CGFloat { compact ? 56 : 72 }
+    private var columnSpacing: CGFloat { compact ? 12 : 18 }
+    private var rowSpacing: CGFloat { compact ? 10 : 14 }
 
     var body: some View {
         VStack(spacing: rowSpacing) {
@@ -29,8 +30,8 @@ struct TapToPayKeypad: View {
                 keyButton(systemImage: "delete.backward.fill", accessibilityLabel: "Delete") { onDelete() }
             }
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 12)
+        .padding(.vertical, compact ? 10 : 16)
+        .padding(.horizontal, compact ? 8 : 12)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color(.systemGray5))
@@ -52,11 +53,11 @@ struct TapToPayKeypad: View {
                     .frame(width: keySize, height: keySize)
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.title3.weight(.regular))
+                        .font(compact ? .body.weight(.regular) : .title3.weight(.regular))
                         .foregroundStyle(AppDesign.textPrimary)
                 } else if let title {
                     Text(title)
-                        .font(.system(size: 32, weight: .regular, design: .rounded))
+                        .font(.system(size: compact ? 26 : 32, weight: .regular, design: .rounded))
                         .foregroundStyle(AppDesign.textPrimary)
                 }
             }

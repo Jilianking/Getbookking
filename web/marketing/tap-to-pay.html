@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Contact — Get Bookking</title>
+  <title>Tap to Pay on iPhone — Get Bookking</title>
+  <meta name="description" content="Accept contactless payments right on your iPhone with Tap to Pay on iPhone in Get Bookking. Powered by Stripe — no extra card reader required." />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
   <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
@@ -13,7 +14,7 @@
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
 
-  <link rel="stylesheet" href="assets/contact.css" />
+  <link rel="stylesheet" href="assets/tap-to-pay.css?v=23" />
   <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
@@ -60,7 +61,6 @@
         <li><a href="templates.html">Templates</a></li>
         <li><a href="index.html#pricing">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
-        <li><a href="contact.html" class="is-active">Contact</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
         <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
@@ -70,30 +70,162 @@
   </aside>
   <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
-  <section class="contact-hero">
-    <div class="sec-inner">
-      <div class="sec-label">Contact</div>
-      <h1>We're here to help.</h1>
-      <p class="contact-hero-lead">Send us an email — we'll get back to you.</p>
+  <section class="ttp-hero">
+    <div class="ttp-hero-inner">
+      <div class="ttp-hero-copy">
+        <div class="sec-label">Point of sale</div>
+        <h1>Tap to Pay on iPhone.<br /><em>Accept contactless payments</em> right on your iPhone.</h1>
+        <p class="ttp-hero-lead">
+          Take Visa, Mastercard, American Express, Discover, and digital wallets in Get Bookking —
+          no extra card reader. Payments run through Stripe so you get paid securely.
+        </p>
+        <div class="ttp-hero-ctas">
+          <a href="signup.html" class="ttp-btn-primary">Get started free</a>
+          <a href="testflight.html" class="ttp-btn-secondary">Get early access</a>
+        </div>
+        <p class="ttp-hero-trust">Available in the U.S. on compatible iPhone models · Stripe Connect required</p>
+      </div>
+      <div class="ttp-hero-media">
+        <div class="ttp-video-frame">
+          <video
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            aria-label="Demonstration of Tap to Pay on iPhone — customer taps a contactless card on an iPhone"
+          >
+            <source src="assets/tap-to-pay/card-to-iphone-9x16-us-en.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="contact-body">
-    <div class="sec-inner">
-      <div class="contact-card">
-        <div class="contact-card-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
-        </div>
-        <h2>Email us</h2>
-        <p class="contact-card-desc">For account help, billing questions, website setup, or anything else.</p>
-        <a class="contact-email-link" href="mailto:support@getbookking.com">support@getbookking.com</a>
+  <section class="ttp-section">
+    <div class="ttp-sec-inner ttp-how">
+      <div class="ttp-how-copy">
+        <div class="sec-label">How it works</div>
+        <h2>Charge in a few taps</h2>
+        <p class="ttp-lead">
+          Enter the amount in Get Bookking, hold the customer’s contactless card or phone near the top of your iPhone,
+          and payment is processed through Stripe — receipts and records stay with your business.
+        </p>
+        <ul class="ttp-points">
+          <li>
+            <strong>In the shop or on the go</strong>
+            <span>Take payment at the chair, the front desk, or wherever the job finishes.</span>
+          </li>
+          <li>
+            <strong>Clear totals before you charge</strong>
+            <span>Customers see what they pay, including processing fees when you pass them through.</span>
+          </li>
+          <li>
+            <strong>Same app for bookings and payments</strong>
+            <span>Connect Stripe once, then use Tap to Pay on iPhone alongside deposits, links, and manual checkout.</span>
+          </li>
+        </ul>
       </div>
-      <p class="contact-note">
-        <span class="contact-note-dot" aria-hidden="true"></span>
-        We typically reply within a few hours — yes, even weekends.
+      <aside class="ttp-how-aside">
+        <div class="sec-label">Getting started</div>
+        <h3 class="ttp-how-aside-title">Ready in three steps</h3>
+        <ol class="ttp-steps">
+          <li>
+            <div class="ttp-step-num" aria-hidden="true">1</div>
+            <div>
+              <h3>Get Get Bookking</h3>
+              <p>Sign up and open the iOS app on a compatible iPhone.</p>
+            </div>
+          </li>
+          <li>
+            <div class="ttp-step-num" aria-hidden="true">2</div>
+            <div>
+              <h3>Connect Stripe</h3>
+              <p>Finish Stripe Connect setup in Payment settings so you can accept charges and get paid out.</p>
+            </div>
+          </li>
+          <li>
+            <div class="ttp-step-num" aria-hidden="true">3</div>
+            <div>
+              <h3>Start accepting payments</h3>
+              <p>Accept Apple’s Tap to Pay on iPhone terms when prompted, then charge with Tap to Pay on iPhone.</p>
+            </div>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </section>
+
+  <section class="ttp-section ttp-section--alt">
+    <div class="ttp-sec-inner">
+      <div class="ttp-hardware">
+        <div class="ttp-split-copy">
+          <div class="sec-label">No extra hardware</div>
+          <h2>Your iPhone is the reader</h2>
+          <p class="ttp-lead">
+            Accept contactless cards and digital wallets with Tap to Pay on iPhone in Get Bookking.
+            No separate card reader to buy, charge, or carry.
+          </p>
+        </div>
+        <figure class="ttp-still">
+          <video
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            width="1080"
+            height="1080"
+            aria-label="Tap to Pay on iPhone — customer holds their iPhone near a merchant iPhone to pay. No additional hardware required."
+          >
+            <source src="assets/tap-to-pay/iphone-to-iphone-1x1-us-en.mp4" type="video/mp4" />
+          </video>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="ttp-section">
+    <div class="ttp-sec-inner">
+      <div class="sec-label">Privacy and security</div>
+      <h2>Built on Apple and Stripe protections</h2>
+      <p class="ttp-lead">
+        Tap to Pay on iPhone uses the security and privacy features of iPhone. Payment card data is not stored on your device.
+        Stripe handles card processing and Connect payouts for your business.
+      </p>
+      <a
+        class="ttp-stripe-badge"
+        href="https://stripe.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Powered by Stripe — opens stripe.com"
+      >
+        <img
+          src="assets/brand/powered-by-stripe-black.svg?v=2"
+          alt="Powered by Stripe"
+          width="150"
+          height="34"
+          loading="lazy"
+          decoding="async"
+        />
+      </a>
+      <p class="ttp-note">
+        PIN entry on iPhone is supported for eligible transactions when required by the card network.
       </p>
     </div>
   </section>
+
+  <section class="ttp-cta-band">
+    <h2>Start taking payments on iPhone.</h2>
+    <p>Bookings, messages, your site, and Tap to Pay on iPhone — one place for your business.</p>
+    <a href="signup.html" class="ttp-btn-light">Get started free &rarr;</a>
+  </section>
+
+  <p class="ttp-legal">
+    Tap to Pay on iPhone, iPhone, Apple Pay, and related marks are trademarks of Apple Inc.
+    Payment processing is provided by Stripe. Features, eligibility, and card brands may vary by region and device.
+    Get Bookking is a partner app that enables Tap to Pay on iPhone; Apple is not a sponsor of Get Bookking.
+  </p>
 
     <footer>
     <div class="footer-inner">

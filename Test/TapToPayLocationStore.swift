@@ -43,7 +43,9 @@ final class TapToPayLocationStore: ObservableObject {
         let changed = trimmed != merchantDisplayName
         merchantDisplayName = trimmed
         guard changed || forceReconnect else { return }
+        #if TAP_TO_PAY_ENABLED
         scheduleReaderReconnectIfConfigured()
+        #endif
     }
 
     #if TAP_TO_PAY_ENABLED

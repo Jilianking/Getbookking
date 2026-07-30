@@ -319,39 +319,6 @@
 
     .btn-light:hover { opacity: 0.88; }
 
-    footer {
-      background: #1A1208;
-      padding: 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
-    .footer-logo {
-      display: inline-flex;
-      align-items: center;
-      gap: 14px;
-      font-family: var(--brand-wordmark-font);
-      font-weight: var(--brand-wordmark-weight);
-      font-size: 20px;
-      letter-spacing: 0.24em;
-      text-transform: uppercase;
-      color: #B5A695;
-    }
-
-    .footer-logo-mark {
-      width: 48px;
-      height: 48px;
-      object-fit: contain;
-      opacity: 0.92;
-    }
-
-    .footer-links { display: flex; gap: 24px; }
-    .footer-links a { font-size: 13px; color: #5A4E3E; text-decoration: none; }
-    .footer-links a:hover { color: #B5A695; }
-    .footer-copy { font-size: 13px; color: #5A4E3E; }
 
     @media (max-width: 900px) {
       .tpl-showcase-grid {
@@ -362,9 +329,9 @@
       .tpl-showcase--flip .tpl-browser-wrap,
       .tpl-showcase--flip .tpl-detail { order: unset; }
       .footer-cta { padding: 72px 24px; }
-      footer { padding: 28px 24px; flex-direction: column; align-items: flex-start; }
     }
   </style>
+    <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
@@ -597,18 +564,69 @@
     <a href="signup.html" class="btn-light">Get started free &rarr;</a>
   </section>
 
-  <footer>
-    <div class="footer-logo">
-      <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="48" height="48" />
-      <span>Get Bookking</span>
+    <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo" aria-label="Get Bookking — home">
+          <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="44" height="44" />
+          <span>Get Bookking</span>
+        </a>
+        <p class="footer-tagline">Bookings, messages, your site, and Tap to Pay on iPhone — one place for your business.</p>
+        <div class="footer-badges">
+          <a class="footer-badge footer-badge--stripe" href="https://stripe.com" target="_blank" rel="noopener noreferrer" aria-label="Powered by Stripe">
+            <img src="assets/brand/powered-by-stripe-white.svg" alt="Powered by Stripe" width="150" height="34" loading="lazy" decoding="async" />
+          </a>
+          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="signup.html" aria-label="Download on the App Store">
+            <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="120" height="40" loading="lazy" decoding="async" />
+          </a>
+        </div>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div class="footer-col">
+          <h3>Product</h3>
+          <ul>
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="templates.html">Templates</a></li>
+            <li><a href="index.html#pricing">Pricing</a></li>
+            <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
+            <li><a href="messaging.html">Client messaging</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Resources</h3>
+          <ul>
+            <li><a href="index.html#faq">FAQ</a></li>
+            <li><a href="testflight.html">Early access</a></li>
+            <li><a href="login.html">Log in</a></li>
+            <li><a href="signup.html">Sign up</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <ul>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <ul>
+            <li><a href="privacy.html">Privacy</a></li>
+            <li><a href="terms.html">Terms</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Support</h3>
+          <ul>
+            <li><a href="contact.html">Get help</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+      </nav>
     </div>
-    <div class="footer-links">
-      <a href="privacy.html">Privacy</a>
-      <a href="terms.html">Terms</a>
-      <a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a>
-      <a href="contact.html">Contact</a>
+    <div class="footer-bottom">
+      <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
     </div>
-    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

@@ -11,6 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/footer.css?v=2" />
+
   <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
@@ -71,14 +73,14 @@
     <div class="sec-inner">
       <div class="sec-label">Legal</div>
       <h1>Privacy Policy</h1>
-      <p class="legal-meta">Last updated: May 26, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
+      <p class="legal-meta">Last updated: July 23, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
     </div>
   </section>
 
   <section class="legal-body">
     <div class="sec-inner legal-content">
 
-      <p>This Privacy Policy describes how Software by King / Get Bookking collects, uses, discloses, and protects information in connection with your use of our websites, applications, and related services (collectively, the "Services"), including the optional client SMS texting features available to businesses using our platform.</p>
+      <p>This Privacy Policy describes how Software by King / Get Bookking collects, uses, discloses, and protects information in connection with your use of our websites, applications, and related services (collectively, the "Services").</p>
       <p>By using the Services, you agree to the collection and use of information as described in this policy.</p>
 
       <h2>1. Information We Collect</h2>
@@ -87,6 +89,8 @@
       <p><strong>Account and Business Data:</strong> When you register for an account, we collect your name, email address, business name, login credentials, and account settings. Billing information is collected and processed directly by Stripe, Inc.; we do not store full payment card numbers on our servers.</p>
 
       <p><strong>Booking and Customer Data:</strong> Information submitted through booking forms, including customer names, email addresses, phone numbers, service details, appointment notes, and any other fields enabled by the business. This data is provided by customers of the businesses using our platform.</p>
+
+      <p><strong>Mobile App Data:</strong> When you use our iOS application, we may collect account identifiers, names, email addresses, phone numbers, user-provided content such as booking notes and messages, and photos or videos that you choose to upload. We collect precise business location or address information when needed to provide location-based business features, including configuring eligible payment-terminal locations. We do not use this information to track you across other companies' apps or websites.</p>
 
       <p><strong>SMS and Messaging Data:</strong> When a business enables the client texting feature, we collect and process the following in connection with that program:</p>
       <ul>
@@ -97,7 +101,7 @@
         <li>Logs required to operate messaging services and comply with carrier requirements.</li>
       </ul>
 
-      <p><strong>Technical and Usage Data:</strong> Device identifiers, IP addresses, browser type, operating system, pages visited, and other usage data collected via cookies and similar technologies to secure and improve the Services.</p>
+      <p><strong>Technical and Usage Data:</strong> Device identifiers, IP addresses, browser type, operating system, pages visited, application interactions, and other usage data collected via cookies and similar technologies to secure and improve the Services.</p>
 
       <h2>2. How We Use Information</h2>
       <p>We use the information we collect to:</p>
@@ -105,8 +109,10 @@
         <li>Provide, operate, maintain, and improve the Services;</li>
         <li>Process subscription payments and manage billing;</li>
         <li>Enable online booking and appointment scheduling;</li>
+        <li>Enable payment features, including Stripe Connect, Tap to Pay on iPhone, payment receipts, refunds, and payout-related functions;</li>
         <li>Provision and operate business-specific SMS phone numbers;</li>
         <li>Deliver, route, and log text messages on behalf of businesses;</li>
+        <li>Store and display content and media that users choose to upload;</li>
         <li>Enforce usage limits and prevent fraud or abuse;</li>
         <li>Respond to support requests and communicate with users;</li>
         <li>Comply with legal obligations and carrier requirements.</li>
@@ -130,9 +136,10 @@
       <ul>
         <li><strong>Stripe, Inc.</strong> — payment processing;</li>
         <li><strong>Twilio, Inc.</strong> — SMS infrastructure and telecommunications services for message delivery;</li>
-        <li>Cloud hosting, analytics, and security providers.</li>
+        <li>Apple and applicable device services — to operate iOS and Tap to Pay on iPhone features;</li>
+        <li>Cloud hosting, analytics, storage, and security providers.</li>
       </ul>
-      <p>These providers are authorized to use information only as necessary to perform services on our behalf and are prohibited from using it for their own independent purposes.</p>
+      <p>We share information with these providers as necessary to operate the Services. Their handling of information is also governed by their applicable terms and privacy policies.</p>
 
       <div class="no-share-box">
         <p>We do not sell, rent, or share end-customer phone numbers or SMS consent data with any third party for their own marketing or commercial purposes.</p>
@@ -145,7 +152,7 @@
       <p><strong>Business Transfers:</strong> In connection with a merger, acquisition, reorganization, or sale of all or substantially all of our assets, information may be transferred as part of that transaction. We will provide reasonable notice where required by applicable law.</p>
 
       <h2>5. Data Retention</h2>
-      <p>We retain personal information for as long as necessary to provide the Services, fulfill the purposes described in this policy, meet our legal and contractual obligations, resolve disputes, and enforce our agreements. SMS consent records and opt-out logs are retained for the period required by applicable carrier rules and regulations.</p>
+      <p>We retain personal information for as long as necessary to provide the Services, fulfill the purposes described in this policy, meet our legal and contractual obligations, resolve disputes, and enforce our agreements. SMS consent records and opt-out logs are retained for the period required by applicable carrier rules and regulations. We retain uploaded media and user content until it is deleted by the account holder or is no longer needed for these purposes, subject to legal and operational retention needs.</p>
       <p>When information is no longer required, we delete or de-identify it in accordance with our internal data retention procedures.</p>
 
       <h2>6. Security</h2>
@@ -176,18 +183,69 @@
     </div>
   </section>
 
-  <footer>
-    <div class="footer-logo">
-      <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="48" height="48" />
-      <span>Get Bookking</span>
+    <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo" aria-label="Get Bookking — home">
+          <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="44" height="44" />
+          <span>Get Bookking</span>
+        </a>
+        <p class="footer-tagline">Bookings, messages, your site, and Tap to Pay on iPhone — one place for your business.</p>
+        <div class="footer-badges">
+          <a class="footer-badge footer-badge--stripe" href="https://stripe.com" target="_blank" rel="noopener noreferrer" aria-label="Powered by Stripe">
+            <img src="assets/brand/powered-by-stripe-white.svg" alt="Powered by Stripe" width="150" height="34" loading="lazy" decoding="async" />
+          </a>
+          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="signup.html" aria-label="Download on the App Store">
+            <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="120" height="40" loading="lazy" decoding="async" />
+          </a>
+        </div>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div class="footer-col">
+          <h3>Product</h3>
+          <ul>
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="templates.html">Templates</a></li>
+            <li><a href="index.html#pricing">Pricing</a></li>
+            <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
+            <li><a href="messaging.html">Client messaging</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Resources</h3>
+          <ul>
+            <li><a href="index.html#faq">FAQ</a></li>
+            <li><a href="testflight.html">Early access</a></li>
+            <li><a href="login.html">Log in</a></li>
+            <li><a href="signup.html">Sign up</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <ul>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <ul>
+            <li><a href="privacy.html">Privacy</a></li>
+            <li><a href="terms.html">Terms</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Support</h3>
+          <ul>
+            <li><a href="contact.html">Get help</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+      </nav>
     </div>
-    <div class="footer-links">
-      <a href="privacy.html">Privacy</a>
-      <a href="terms.html">Terms</a>
-      <a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a>
-      <a href="contact.html">Contact</a>
+    <div class="footer-bottom">
+      <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
     </div>
-    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

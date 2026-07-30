@@ -47,6 +47,8 @@ function demoConnectAccountStatusResponse(payCtx) {
     usesOwnPayments: payCtx.scope === "user",
     payoutMode: payCtx.payoutMode,
     paymentScope: payCtx.scope,
+    statementDescriptor: "DEMO STUDIO",
+    statementDescriptorPrefix: "DEMO",
     demoShowcase: true,
   };
 }

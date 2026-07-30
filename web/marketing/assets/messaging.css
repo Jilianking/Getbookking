@@ -1,0 +1,435 @@
+/* Client messaging marketing page */
+
+.msg-hero {
+  background: var(--brand-offwhite);
+  padding: 56px 32px 64px;
+  overflow: hidden;
+}
+
+.msg-hero-inner {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  gap: 44px 64px;
+  align-items: center;
+}
+
+.msg-label {
+  margin-bottom: 12px;
+  color: var(--brand-warm);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.msg-hero h1 {
+  max-width: 720px;
+  margin: 0 0 18px;
+  color: var(--text-primary);
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(42px, 5.4vw, 62px);
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.msg-hero h1 em {
+  color: var(--brand-warm);
+  font-style: italic;
+}
+
+.msg-hero-lead {
+  max-width: 36em;
+  margin: 0 0 26px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border: 1px solid var(--brand-dark);
+  border-radius: 8px;
+  color: var(--brand-dark) !important;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none !important;
+}
+
+.msg-btn--primary {
+  background: var(--brand-dark);
+  color: #fff !important;
+}
+
+.msg-btn:hover {
+  opacity: 0.88;
+}
+
+.msg-phone {
+  width: min(350px, 100%);
+  margin: 0 auto;
+  padding: 13px;
+  border: 8px solid #1a1410;
+  border-radius: 42px;
+  background: #f7f4ef;
+  box-shadow:
+    0 28px 60px rgba(26, 20, 16, 0.19),
+    0 0 0 1px rgba(26, 20, 16, 0.12);
+}
+
+.msg-phone-screen {
+  min-height: 560px;
+  padding: 18px 14px 16px;
+  border-radius: 27px;
+  background: #fff;
+}
+
+.msg-phone-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.msg-avatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--brand-cream);
+  color: var(--brand-dark);
+  font-size: 14px;
+  font-weight: 500;
+  place-items: center;
+}
+
+.msg-phone-name {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.msg-phone-status {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.msg-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 22px;
+}
+
+.msg-bubble {
+  max-width: 84%;
+  padding: 11px 13px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.msg-bubble--in {
+  align-self: flex-start;
+  border-bottom-left-radius: 5px;
+  background: #f0ede7;
+  color: var(--text-primary);
+}
+
+.msg-bubble--out {
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+  background: var(--brand-dark);
+  color: #fff;
+}
+
+.msg-payment {
+  align-self: flex-end;
+  width: 88%;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 5px 16px;
+  background: var(--brand-offwhite);
+}
+
+.msg-payment-label {
+  margin-bottom: 5px;
+  color: var(--brand-warm);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.msg-payment-amount {
+  color: var(--text-primary);
+  font-family: "Instrument Serif", serif;
+  font-size: 30px;
+}
+
+.msg-payment-copy {
+  margin: 5px 0 13px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.msg-payment-button {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--brand-dark);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.msg-section {
+  padding: 64px 32px;
+}
+
+.msg-section--alt {
+  background: var(--brand-offwhite);
+}
+
+.msg-inner {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.msg-heading {
+  max-width: 700px;
+  margin-bottom: 34px;
+}
+
+.msg-heading h2,
+.msg-split h2 {
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(32px, 4.2vw, 44px);
+  font-weight: 400;
+  line-height: 1.14;
+}
+
+.msg-heading p,
+.msg-split-copy > p {
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.msg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.msg-card {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.msg-card-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 18px;
+  border-radius: 11px;
+  background: var(--brand-cream);
+  color: var(--brand-warm);
+  font-size: 20px;
+  place-items: center;
+}
+
+.msg-card h3 {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.msg-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.msg-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 390px);
+  gap: 40px 64px;
+  align-items: center;
+}
+
+.msg-deposit-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.msg-check {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  align-items: start;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.msg-check::before {
+  content: "✓";
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-cream);
+  color: var(--brand-warm);
+  font-size: 12px;
+  font-weight: 600;
+  place-items: center;
+}
+
+.msg-deposit-demo {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(26, 20, 16, 0.08);
+}
+
+.msg-deposit-demo .msg-payment {
+  width: 100%;
+}
+
+.msg-trust {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 340px);
+  gap: 32px 56px;
+  align-items: center;
+}
+
+.msg-twilio-panel {
+  justify-self: end;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.msg-twilio-badge {
+  display: block;
+  width: 180px;
+  height: auto;
+  /* Required clearspace: half the displayed badge height. */
+  margin: 24px;
+}
+
+.msg-fine-print {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 22px 32px 30px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.msg-cta {
+  padding: 58px 32px;
+  background: var(--brand-dark);
+  color: #fff;
+  text-align: center;
+}
+
+.msg-cta h2 {
+  margin: 0 0 12px;
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 400;
+}
+
+.msg-cta p {
+  max-width: 34em;
+  margin: 0 auto 22px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.msg-cta .msg-btn {
+  border-color: #fff;
+  background: #fff;
+  color: var(--brand-dark) !important;
+}
+
+@media (max-width: 850px) {
+  .msg-hero-inner,
+  .msg-split,
+  .msg-trust {
+    grid-template-columns: 1fr;
+  }
+
+  .msg-hero-copy {
+    text-align: center;
+  }
+
+  .msg-hero-lead {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .msg-actions {
+    justify-content: center;
+  }
+
+  .msg-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .msg-twilio-panel {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 600px) {
+  .msg-hero,
+  .msg-section {
+    padding: 44px 24px;
+  }
+
+  .msg-phone {
+    width: min(330px, 100%);
+  }
+
+  .msg-phone-screen {
+    min-height: 520px;
+  }
+
+  .msg-twilio-panel {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .msg-twilio-badge {
+    width: min(180px, calc(100% - 48px));
+  }
+}

@@ -1,0 +1,443 @@
+/* Tap to Pay marketing page — Bookking brand, Apple partner content structure */
+
+.ttp-hero {
+  background: var(--brand-offwhite);
+  padding: 48px 32px 56px;
+}
+
+.ttp-hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 320px);
+  gap: 32px 40px;
+  align-items: center;
+}
+
+.ttp-hero-copy .sec-label {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-warm);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.ttp-hero-copy h1 {
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(38px, 5.2vw, 56px);
+  font-weight: 400;
+  line-height: 1.12;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.ttp-hero-copy h1 em {
+  font-style: italic;
+  color: var(--brand-warm);
+}
+
+.ttp-hero-lead {
+  font-size: 18px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  max-width: 34em;
+  margin-bottom: 20px;
+}
+
+.ttp-hero-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ttp-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 8px;
+  background: var(--brand-dark);
+  color: #fff !important;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none !important;
+  transition: opacity 0.15s;
+}
+
+.ttp-btn-primary:hover {
+  opacity: 0.88;
+  color: #fff !important;
+  text-decoration: none !important;
+}
+
+.ttp-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 8px;
+  border: 1px solid var(--brand-dark);
+  color: var(--brand-dark) !important;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none !important;
+  background: transparent;
+}
+
+.ttp-btn-secondary:hover {
+  background: rgba(44, 32, 24, 0.04);
+  text-decoration: none !important;
+  color: var(--brand-dark) !important;
+}
+
+.ttp-hero-trust {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.ttp-hero-media {
+  justify-self: center;
+  width: 100%;
+  max-width: 300px;
+}
+
+.ttp-video-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 28px;
+  overflow: hidden;
+  background: #1a1410;
+  box-shadow:
+    0 24px 48px rgba(26, 20, 16, 0.18),
+    0 0 0 1px rgba(26, 20, 16, 0.08);
+}
+
+.ttp-video-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ttp-section {
+  padding: 48px 32px;
+}
+
+.ttp-section--alt {
+  background: var(--brand-offwhite);
+}
+
+.ttp-sec-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.ttp-sec-inner--wide {
+  max-width: 960px;
+}
+
+.ttp-how {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 36px 48px;
+  align-items: start;
+}
+
+.ttp-how-aside {
+  background: var(--brand-offwhite);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 22px 8px;
+}
+
+.ttp-how-aside-title {
+  font-family: "Instrument Serif", serif;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.ttp-how-aside .ttp-steps {
+  margin-top: 8px;
+}
+
+.ttp-how-aside .ttp-steps li {
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.ttp-how-aside .ttp-step-num {
+  font-size: 26px;
+}
+
+.ttp-hardware {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px 28px;
+  align-items: center;
+}
+
+.ttp-split-copy .ttp-lead {
+  margin-top: 0;
+}
+
+.ttp-still {
+  margin: 0;
+  margin-left: 5.5rem;
+  width: 320px;
+  max-width: 100%;
+  padding: 0;
+  justify-self: end;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #1a1410;
+  box-shadow:
+    0 10px 24px rgba(26, 20, 16, 0.12),
+    0 0 0 1px rgba(26, 20, 16, 0.06);
+}
+
+.ttp-still video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.ttp-section .sec-label {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-warm);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.ttp-section h2 {
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(30px, 4.2vw, 40px);
+  font-weight: 400;
+  line-height: 1.2;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.ttp-section .ttp-lead {
+  font-size: 17px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 40em;
+}
+
+.ttp-points {
+  list-style: none;
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.ttp-points li {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ttp-section--alt .ttp-points li {
+  background: #fff;
+}
+
+.ttp-points strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.ttp-points span {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.ttp-steps {
+  list-style: none;
+  margin-top: 20px;
+  display: grid;
+  gap: 0;
+}
+
+.ttp-steps li {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ttp-steps li:last-child {
+  border-bottom: none;
+}
+
+.ttp-step-num {
+  font-family: "Instrument Serif", serif;
+  font-size: 32px;
+  color: var(--brand-muted);
+  line-height: 1;
+}
+
+.ttp-steps h3 {
+  font-size: 17px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.ttp-steps p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.ttp-note {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+}
+
+.ttp-stripe-badge {
+  display: inline-block;
+  margin-top: 18px;
+  line-height: 0;
+  text-decoration: none !important;
+  opacity: 0.92;
+  transition: opacity 0.15s;
+}
+
+.ttp-stripe-badge:hover {
+  opacity: 1;
+}
+
+.ttp-stripe-badge img {
+  display: block;
+  width: 150px;
+  height: auto;
+}
+
+.ttp-cta-band {
+  background: var(--brand-dark);
+  color: #fff;
+  text-align: center;
+  padding: 56px 32px;
+}
+
+.ttp-cta-band h2 {
+  font-family: "Instrument Serif", serif;
+  font-size: clamp(30px, 4vw, 42px);
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+
+.ttp-cta-band p {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 20px;
+  max-width: 28em;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ttp-cta-band .ttp-btn-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--brand-dark) !important;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none !important;
+}
+
+.ttp-cta-band .ttp-btn-light:hover {
+  opacity: 0.92;
+  text-decoration: none !important;
+}
+
+.ttp-legal {
+  padding: 20px 32px 28px;
+  max-width: 760px;
+  margin: 0 auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+}
+
+@media (max-width: 860px) {
+  .ttp-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    text-align: center;
+  }
+
+  .ttp-hero-lead {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .ttp-hero-ctas {
+    justify-content: center;
+  }
+
+  .ttp-hero-media {
+    max-width: 260px;
+  }
+
+  .ttp-how {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .ttp-how-aside {
+    text-align: left;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .ttp-hardware {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .ttp-hardware .ttp-lead {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .ttp-still {
+    width: 280px;
+    max-width: 280px;
+    margin: 0 auto;
+    justify-self: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .ttp-hero,
+  .ttp-section {
+    padding: 40px 24px;
+  }
+
+  .ttp-cta-band {
+    padding: 48px 24px;
+  }
+}

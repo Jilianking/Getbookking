@@ -715,6 +715,15 @@ struct ManualPaymentSheet: View {
                 CardCheckoutBreakdownView(breakdown: checkout, alwaysShowFeeLines: true)
                     .padding(.horizontal, 24)
 
+                if viewModel.isPreviewingInPersonTax {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.8)
+                        Text("Updating sales tax…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if let localError, !localError.isEmpty {
                     Text(localError)
                         .font(.caption)
@@ -766,6 +775,10 @@ struct ManualPaymentSheet: View {
             .onAppear {
                 localError = nil
                 viewModel.errorMessage = nil
+                Task { await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents) }
+            }
+            .onChange(of: amountText) { _, _ in
+                Task { await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents) }
             }
         }
     }

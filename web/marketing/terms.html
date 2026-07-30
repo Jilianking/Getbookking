@@ -11,6 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/footer.css?v=2" />
+
   <link rel="stylesheet" href="assets/nav.css?v=19" />
 </head>
 <body>
@@ -71,7 +73,7 @@
     <div class="sec-inner">
       <div class="sec-label">Legal</div>
       <h1>Terms of Service</h1>
-      <p class="legal-meta">Last updated: May 26, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
+      <p class="legal-meta">Last updated: July 23, 2026 &nbsp;·&nbsp; Get Bookking is operated by Software by King ("we," "us," "our")</p>
     </div>
   </section>
 
@@ -81,22 +83,23 @@
       <p>These Terms of Service ("Terms") govern your access to and use of the Get Bookking websites, mobile applications, and related services (collectively, the "Services"). By creating an account or otherwise using the Services, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree, you may not use the Services.</p>
 
       <h2>1. Description of Services</h2>
-      <p>Get Bookking provides online scheduling, booking management, point-of-sale, and client communication tools for salons, studios, shops, and small businesses. Features may include appointment scheduling, booking requests, payment processing facilitated by Stripe, Inc., and an optional client SMS messaging program as described below.</p>
+      <p>Get Bookking provides online scheduling, booking management, point-of-sale, payment, and client communication tools for salons, studios, shops, and small businesses. Features may include appointment scheduling, booking requests, payment processing facilitated by Stripe, Inc., Stripe Connect accounts, Tap to Pay on iPhone, and an optional client SMS messaging program as described below.</p>
+      <p>Get Bookking provides software and payment-enablement tools; it is not the provider, seller, or merchant of record for a subscriber's services or products. Each subscriber is solely responsible for its offerings, pricing, taxes, fulfillment, cancellations, refunds, customer service, and compliance with laws applicable to its business.</p>
 
       <h2>2. Client Texting Program (SMS)</h2>
-      <p>Businesses that subscribe to an eligible plan may enable a dedicated SMS phone number to communicate directly with their own customers. The following disclosures apply to that program:</p>
+      <p>Businesses that subscribe to an eligible plan may enable a business-specific SMS sending number to communicate directly with their own customers. Twilio, Inc. provides SMS infrastructure for the program. The following disclosures apply to that program:</p>
 
       <div class="sms-box">
         <p><strong>Program Name:</strong> Get Bookking Client Texting</p>
-        <p><strong>Program Description:</strong> Participating businesses use a dedicated, business-specific phone number to send and receive text messages with customers who have explicitly opted in through that business's online booking form. Messages are used exclusively for appointment confirmations, scheduling reminders, booking follow-up, and customer care communications directly related to an active service request or booking. This program is not used for mass marketing, unsolicited promotional campaigns, or bulk messaging.</p>
-        <p><strong>Who Sends Messages:</strong> Messages are sent by the individual business (the "subscriber"), not by Get Bookking. Each business operates its own dedicated number. Get Bookking provides the technical infrastructure; the business is the identified sender responsible for all message content.</p>
-        <p><strong>Customer Consent (Opt-In):</strong> End customers provide express written consent by submitting their mobile phone number on a business's public booking page and affirmatively agreeing to receive text messages from that business. Consent is collected at the point of booking and is specific to the business whose booking form the customer used. Businesses may not message customers who have not provided this consent.</p>
+        <p><strong>Program Description:</strong> Participating businesses use a business-specific sending number to send and receive text messages with customers who have affirmatively opted in. Messages are limited to appointment confirmations, scheduling reminders, booking follow-up, payment or pickup updates, and customer care communications directly related to an active service request, booking, or purchase. The program may not be used for mass marketing, unsolicited promotional campaigns, or bulk messaging.</p>
+        <p><strong>Who Sends Messages:</strong> Messages are sent by the individual business (the "subscriber"), not by Get Bookking. Get Bookking and Twilio provide technical infrastructure; the business is the identified sender and is responsible for all message content.</p>
+        <p><strong>Customer Consent (Opt-In):</strong> End customers provide express written consent by submitting their mobile phone number on a business's public booking page and affirmatively agreeing to receive appointment-related text messages, or by confirming consent in response to an inbound opt-in prompt. Consent is specific to the business whose booking page or phone number the customer used. Get Bookking records the time and source of consent, and businesses may not message customers without a recorded opt-in.</p>
         <p><strong>Message Frequency:</strong> Varies. Message frequency is typically low and directly tied to booking activity and customer-initiated conversations. No recurring automated marketing messages are sent.</p>
         <p><strong>Message and Data Rates:</strong> Message and data rates may apply. Carriers are not liable for delayed or undelivered messages.</p>
-        <p><strong>Usage Limits:</strong> Each business account is allocated up to 1,000 total outbound client SMS messages unless otherwise specified in your plan or a separate written agreement. Additional messaging capacity may require a plan upgrade.</p>
+        <p><strong>Usage Limits:</strong> Each business account is allocated up to 1,000 client SMS messages per calendar month, including sent and received messages, unless otherwise specified in your plan or a separate written agreement. Additional messaging capacity may require a plan upgrade.</p>
         <p><strong>Opt-Out:</strong> End customers may opt out of receiving messages from a business at any time by replying <strong>STOP</strong> to any message. Upon receipt of a STOP reply, no further messages will be sent to that number, except for a single opt-out confirmation message as permitted under applicable law and carrier guidelines. Opt-out requests are processed promptly and logged.</p>
         <p><strong>Help:</strong> End customers may reply <strong>HELP</strong> to any message for assistance, or contact us directly at <a href="mailto:support@getbookking.com">support@getbookking.com</a>.</p>
-        <p><strong>Business Responsibilities:</strong> Businesses are solely responsible for the content of all messages sent through their account and for compliance with all applicable laws and regulations, including but not limited to the Telephone Consumer Protection Act (TCPA), the CAN-SPAM Act, and applicable carrier guidelines. Get Bookking reserves the right to suspend or terminate messaging access for any account that violates these Terms or applicable messaging policies.</p>
+        <p><strong>Business Responsibilities:</strong> Businesses are solely responsible for the content of all messages sent through their account and for compliance with all applicable messaging, consumer-protection, privacy, telecommunications, carrier, and platform requirements. Get Bookking reserves the right to suspend or terminate messaging access for any account that violates these Terms or applicable messaging policies.</p>
       </div>
 
       <h2>3. Accounts and Acceptable Use</h2>
@@ -110,30 +113,43 @@
         <li>Using the Services in violation of any applicable law or regulation.</li>
       </ul>
 
-      <h2>4. Subscriptions, Billing, and Payments</h2>
-      <p>Access to certain features requires a paid subscription. Subscription plans, pricing, billing cycles, free trial terms, and cancellation procedures are described at the time of signup and within your account settings. All payments are processed securely by Stripe, Inc. Fees are non-refundable except as required by applicable law or as expressly stated in a separate written agreement.</p>
+      <h2>4. Subscriptions and Platform Billing</h2>
+      <p>Access to certain features requires a paid subscription. Subscription plans, pricing, billing cycles, free trial terms, and cancellation procedures are described at the time of signup and within your account settings. Subscription payments are processed securely by Stripe, Inc. Subscription fees are non-refundable except as required by applicable law or as expressly stated in a separate written agreement.</p>
       <p>We reserve the right to modify pricing with reasonable advance notice. Continued use of the Services after a pricing change takes effect constitutes acceptance of the new pricing.</p>
 
-      <h2>5. Intellectual Property</h2>
+      <h2>5. Merchant Payments, Stripe Connect, and Fees</h2>
+      <p>Payment features may be provided through Stripe, including Stripe Connect and Stripe Terminal. To use those features, you may be required to create or connect a Stripe account and agree to Stripe's applicable agreements. You authorize us to share information with Stripe as necessary to provide payment features, and you agree to provide complete, accurate, and current business, identity, tax, bank-account, and transaction information.</p>
+      <p>Subscribers are responsible for all payment activity connected to their business, including payment authorization, customer receipts, refunds, disputes, chargebacks, reversals, negative balances, payout holds, and applicable taxes. Stripe, card networks, financial institutions, or applicable law may delay, reject, reverse, or withhold transactions or payouts. Get Bookking does not guarantee that payments will be authorized, completed, settled, or available for payout by a particular time.</p>
+      <p>Customer-facing payment totals may include disclosed card-processing and platform service fees. Subscribers are responsible for determining whether charging, passing through, or describing any fee is permitted for their business under applicable law, card-network rules, and Stripe requirements. Fees and taxes must be disclosed to customers before payment is submitted.</p>
+
+      <h2>6. Tap to Pay on iPhone</h2>
+      <p>Tap to Pay on iPhone is a payment feature made available through Stripe Terminal and Apple technologies. Availability depends on compatible hardware, software, region, Apple Account status, network access, Stripe account status, and other third-party requirements, and may change or be unavailable at any time. Only authorized business users may enable or use this feature.</p>
+      <p>You must comply with the applicable Stripe, Apple, card-network, and legal requirements when using Tap to Pay on iPhone. You are responsible for obtaining any required customer authorizations and for ensuring that your business information, payment descriptions, receipts, refunds, and customer communications are accurate and lawful.</p>
+
+      <h2>7. iOS Application and Apple Terms</h2>
+      <p>If you access the Services through an iOS application, these Terms are between you and Software by King, not Apple Inc. ("Apple"). Apple is not responsible for the application, its content, maintenance, support, or any claims relating to it, including claims concerning product liability, legal or regulatory compliance, consumer protection, or intellectual-property infringement. You must comply with Apple's applicable usage rules.</p>
+      <p>To the maximum extent permitted by applicable law, Apple and its subsidiaries are third-party beneficiaries of these Terms with respect to your use of the iOS application and may enforce the applicable provisions against you.</p>
+
+      <h2>8. Intellectual Property</h2>
       <p>The Services and all content, features, and functionality thereof — including but not limited to software, text, graphics, logos, and user interface designs — are owned by Software by King or its licensors and are protected by applicable intellectual property laws. Nothing in these Terms grants you any right, title, or interest in the Services beyond the limited license to use them as described herein.</p>
 
-      <h2>6. Disclaimers</h2>
+      <h2>9. Disclaimers</h2>
       <p class="caps">THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS. YOUR USE OF THE SERVICES IS AT YOUR SOLE RISK.</p>
 
-      <h2>7. Limitation of Liability</h2>
+      <h2>10. Limitation of Liability</h2>
       <p class="caps">TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SOFTWARE BY KING AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AND LICENSORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS OPPORTUNITIES, ARISING OUT OF OR RELATING TO THESE TERMS OR YOUR USE OF THE SERVICES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
       <p class="caps">OUR TOTAL CUMULATIVE LIABILITY TO YOU FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICES SHALL NOT EXCEED THE TOTAL FEES YOU PAID TO US IN THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE CLAIM.</p>
 
-      <h2>8. Indemnification</h2>
-      <p>You agree to indemnify, defend, and hold harmless Software by King and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising out of or in any way connected with your access to or use of the Services, your violation of these Terms, or your violation of any applicable law or the rights of any third party.</p>
+      <h2>11. Indemnification</h2>
+      <p>You agree to indemnify, defend, and hold harmless Software by King and its officers, directors, employees, agents, and licensors from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising out of or in any way connected with your access to or use of the Services; your products, services, payments, messages, or customer interactions; your violation of these Terms; or your violation of any applicable law or the rights of any third party.</p>
 
-      <h2>9. Modifications to These Terms</h2>
+      <h2>12. Modifications to These Terms</h2>
       <p>We reserve the right to modify these Terms at any time. We will post the revised Terms on this page with an updated "Last updated" date. For material changes, we may also provide notice through the Services or via email. Your continued use of the Services after any modification constitutes your acceptance of the updated Terms.</p>
 
-      <h2>10. Governing Law</h2>
-      <p>These Terms shall be governed by and construed in accordance with the laws of the State of Florida, without regard to its conflict of law principles. Any disputes arising under these Terms shall be subject to the exclusive jurisdiction of the courts located in Florida.</p>
+      <h2>13. Governing Law</h2>
+      <p>These Terms shall be governed by and construed in accordance with the laws of the State of Florida, without regard to its conflict of law principles. Any disputes arising under these Terms shall be subject to the exclusive jurisdiction of the courts located in Florida, except where applicable law gives you non-waivable rights to bring a claim elsewhere.</p>
 
-      <h2>11. Contact Us</h2>
+      <h2>14. Contact Us</h2>
       <p>If you have any questions about these Terms, please contact us at:</p>
       <p>
         <strong>Software by King / Get Bookking</strong><br>
@@ -144,18 +160,69 @@
     </div>
   </section>
 
-  <footer>
-    <div class="footer-logo">
-      <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="48" height="48" />
-      <span>Get Bookking</span>
+    <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo" aria-label="Get Bookking — home">
+          <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="44" height="44" />
+          <span>Get Bookking</span>
+        </a>
+        <p class="footer-tagline">Bookings, messages, your site, and Tap to Pay on iPhone — one place for your business.</p>
+        <div class="footer-badges">
+          <a class="footer-badge footer-badge--stripe" href="https://stripe.com" target="_blank" rel="noopener noreferrer" aria-label="Powered by Stripe">
+            <img src="assets/brand/powered-by-stripe-white.svg" alt="Powered by Stripe" width="150" height="34" loading="lazy" decoding="async" />
+          </a>
+          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="signup.html" aria-label="Download on the App Store">
+            <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="120" height="40" loading="lazy" decoding="async" />
+          </a>
+        </div>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div class="footer-col">
+          <h3>Product</h3>
+          <ul>
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="templates.html">Templates</a></li>
+            <li><a href="index.html#pricing">Pricing</a></li>
+            <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
+            <li><a href="messaging.html">Client messaging</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Resources</h3>
+          <ul>
+            <li><a href="index.html#faq">FAQ</a></li>
+            <li><a href="testflight.html">Early access</a></li>
+            <li><a href="login.html">Log in</a></li>
+            <li><a href="signup.html">Sign up</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <ul>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <ul>
+            <li><a href="privacy.html">Privacy</a></li>
+            <li><a href="terms.html">Terms</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Support</h3>
+          <ul>
+            <li><a href="contact.html">Get help</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+      </nav>
     </div>
-    <div class="footer-links">
-      <a href="privacy.html">Privacy</a>
-      <a href="terms.html">Terms</a>
-      <a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a>
-      <a href="contact.html">Contact</a>
+    <div class="footer-bottom">
+      <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
     </div>
-    <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
   </footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

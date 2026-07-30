@@ -599,8 +599,10 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Personal training with Jordan", status: "confirmed", dayOffset: 2, price: 85 },
         ],
         sms: [
-          { dir: "inbound", dayOffset: -10, body: "Signed up for strength assessment — what should I bring?" },
-          { dir: "outbound", dayOffset: -10, body: "Athletic shoes + water. We'll screen movement and set baselines" },
+          { dir: "inbound", dayOffset: -9, body: "Hey Jordan, can I book a training session this week?" },
+          { dir: "outbound", dayOffset: -9, body: "Yeah — I’ve got Tue 6pm or Thu 7am. Either work?" },
+          { dir: "inbound", dayOffset: -9, body: "Thursday 7am is perfect" },
+          { dir: "outbound", dayOffset: -8, body: "Locked in. See you Thu at 7" },
         ],
       },
       {
@@ -612,8 +614,10 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Personal training with Jordan", status: "confirmed", dayOffset: -3, price: 85 },
         ],
         sms: [
-          { dir: "inbound", dayOffset: -4, body: "Can we move Thursday session to 6am?" },
-          { dir: "outbound", dayOffset: -4, body: "6am works — see you then" },
+          { dir: "inbound", dayOffset: -5, body: "Something came up — can we reschedule Thursday?" },
+          { dir: "outbound", dayOffset: -5, body: "No problem. Friday 6am or Saturday 9?" },
+          { dir: "inbound", dayOffset: -4, body: "Friday 6am works" },
+          { dir: "outbound", dayOffset: -4, body: "Moved you to Fri 6am. See you then" },
         ],
       },
       {
@@ -624,7 +628,10 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Intro session", status: "NEW", dayOffset: 5, price: 65 },
         ],
         sms: [
-          { dir: "inbound", dayOffset: -1, body: "Interested in barbell basics — total beginner" },
+          { dir: "inbound", dayOffset: -2, body: "Hi, I’m looking to schedule an intro session. Any openings next week?" },
+          { dir: "outbound", dayOffset: -2, body: "I’ve got Mon 5:30pm or Wed 12. Want one of those?" },
+          { dir: "inbound", dayOffset: -1, body: "Wednesday at noon please" },
+          { dir: "outbound", dayOffset: -1, body: "Booked. I’ll confirm once I review your request" },
         ],
       },
       {
@@ -635,7 +642,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Coach-led class", status: "completed", dayOffset: -20, price: 28 },
           { service: "Coach-led class", status: "completed", dayOffset: -6, price: 28 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -7, body: "Can I switch Saturday’s class to Sunday morning?" },
+          { dir: "outbound", dayOffset: -7, body: "Sunday 9am has a spot — want me to move you?" },
+          { dir: "inbound", dayOffset: -6, body: "Yes please" },
+          { dir: "outbound", dayOffset: -6, body: "Done — you’re on Sunday at 9" },
+        ],
       },
       {
         name: "Taylor Brooks",
@@ -644,7 +656,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
         bookings: [
           { service: "Personal training with Jordan", status: "completed", dayOffset: -52, price: 85 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -3, body: "Hey, ready to get back on a weekly schedule. What times do you have?" },
+          { dir: "outbound", dayOffset: -3, body: "Tue/Thu mornings or Mon/Wed evenings. Preference?" },
+          { dir: "inbound", dayOffset: -2, body: "Tue and Thu mornings work best" },
+          { dir: "outbound", dayOffset: -2, body: "Cool — send a booking request for Tue 7am and we’ll lock it" },
+        ],
       },
       {
         name: "Morgan Lee",
@@ -654,7 +671,10 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Nutrition check-in", status: "confirmed", dayOffset: 9, price: 45 },
         ],
         sms: [
-          { dir: "outbound", dayOffset: -3, body: "Nutrition check-in — log meals for 3 days before we meet" },
+          { dir: "inbound", dayOffset: -4, body: "Can we push my nutrition check-in to next week?" },
+          { dir: "outbound", dayOffset: -4, body: "Sure — next Tue 4pm or Wed 11?" },
+          { dir: "inbound", dayOffset: -3, body: "Tuesday 4 works" },
+          { dir: "outbound", dayOffset: -3, body: "Rescheduled to Tue 4pm" },
         ],
       },
       {
@@ -664,7 +684,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
         bookings: [
           { service: "Open gym + coach check-in", status: "completed", dayOffset: -15, price: 18 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -1, body: "Any chance I can grab a coach check-in tomorrow afternoon?" },
+          { dir: "outbound", dayOffset: -1, body: "2:30 or 4:00 open. Which one?" },
+          { dir: "inbound", dayOffset: 0, body: "2:30 please" },
+          { dir: "outbound", dayOffset: 0, body: "You’re set for 2:30" },
+        ],
       },
       {
         name: "Riley Shaw",
@@ -674,7 +699,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Intro session", status: "completed", dayOffset: -38, price: 65 },
           { service: "Personal training with Jordan", status: "NEW", dayOffset: 1, price: 85 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -2, body: "Want to schedule a PT session — do you have anything this weekend?" },
+          { dir: "outbound", dayOffset: -2, body: "Sat 10am or Sun 8am. Either good?" },
+          { dir: "inbound", dayOffset: -1, body: "Saturday 10" },
+          { dir: "outbound", dayOffset: -1, body: "Got it — request is in, I’ll confirm shortly" },
+        ],
       },
       {
         name: "Drew Coleman",
@@ -683,7 +713,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
         bookings: [
           { service: "Coach-led class", status: "confirmed", dayOffset: 4, price: 28 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -3, body: "Running late today — can we move my class to later this week?" },
+          { dir: "outbound", dayOffset: -3, body: "Totally. Thu 6pm still open if that helps" },
+          { dir: "inbound", dayOffset: -2, body: "Yes, Thursday works" },
+          { dir: "outbound", dayOffset: -2, body: "Moved you to Thu 6pm" },
+        ],
       },
       {
         name: "Jamie Ortiz",
@@ -692,7 +727,12 @@ const DEMO_ACTIVITY_BY_SLUG = {
         bookings: [
           { service: "Personal training with Jordan", status: "declined", dayOffset: -12, price: 85 },
         ],
-        sms: [],
+        sms: [
+          { dir: "inbound", dayOffset: -12, body: "Hey, can I schedule something for next Monday evening?" },
+          { dir: "outbound", dayOffset: -12, body: "I’m full Mon — Tue 6:30pm or Wed 7?" },
+          { dir: "inbound", dayOffset: -11, body: "Actually need to hold off for now, sorry" },
+          { dir: "outbound", dayOffset: -11, body: "No worries — text me when you’re ready and we’ll find a time" },
+        ],
       },
     ],
   },

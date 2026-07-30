@@ -251,69 +251,7 @@ body > nav {
   color: var(--text-secondary);
 }
 
-/* ── FOOTER ── */
-footer {
-  background: #1A1208;
-  padding: 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.footer-logo {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  font-family: var(--brand-wordmark-font);
-  font-weight: var(--brand-wordmark-weight);
-  font-size: 20px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: #B5A695;
-  line-height: 1;
-}
-
-.footer-logo-mark {
-  width: 48px;
-  height: 48px;
-  display: block;
-  object-fit: contain;
-  flex-shrink: 0;
-  opacity: 0.92;
-}
-
-.footer-copy {
-  font-size: 13px;
-  color: #5A4E3E;
-}
-
-.footer-links {
-  display: flex;
-  gap: 24px;
-}
-
-.footer-links a {
-  font-size: 13px;
-  color: #5A4E3E;
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.footer-links a:hover {
-  color: #9A8A7A;
-  text-decoration: none;
-}
-
 @media (max-width: 768px) {
   .legal-hero { padding: 56px 24px 44px; }
   .legal-body { padding: 44px 24px 64px; }
-  footer {
-    padding: 28px 24px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
-  }
-  .footer-links { flex-wrap: wrap; gap: 16px; }
 }

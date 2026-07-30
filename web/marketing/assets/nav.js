@@ -33,3 +33,13 @@
     if (e.key === "Escape" && drawer.classList.contains("is-open")) closeMenu();
   });
 })();
+
+(function () {
+  var link = document.getElementById("footer-app-store");
+  if (!link) return;
+  var url = (window.appStoreUrl || "").trim();
+  if (!url) return;
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+})();

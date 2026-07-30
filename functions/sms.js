@@ -607,6 +607,11 @@ async function sendOutboundClientSms({
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
   }
+  if (!(await phoneHasSmsConsent(tenantId, toE164))) {
+    throw new Error(
+      "Recipient has not opted into appointment-related text messages."
+    );
+  }
 
   const master = getMasterTwilioClient();
   const phoneSid = route.phoneSid;
@@ -702,6 +707,11 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
     .get();
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
+  }
+  if (!(await phoneHasSmsConsent(tenantId, toE164))) {
+    throw new Error(
+      "Recipient has not opted into appointment-related text messages."
+    );
   }
   const master = getMasterTwilioClient();
   const from = (tenant.smsPhoneNumber || "").toString().trim();
@@ -1012,7 +1022,8 @@ async function clearPhoneOptOut(tenantId, phone) {
 }
 
 /**
- * True if this phone already has express SMS consent on the customer record.
+ * True only when the customer record contains an affirmative opt-in and
+ * server-recorded evidence of when and how consent was obtained.
  */
 async function phoneHasSmsConsent(tenantId, phone) {
   const last10 = phoneLast10(phone);
@@ -1024,7 +1035,13 @@ async function phoneHasSmsConsent(tenantId, phone) {
     .collection("customers")
     .doc(last10)
     .get();
-  return customerSnap.exists && customerSnap.data().smsOptedIn === true;
+  if (!customerSnap.exists) return false;
+  const customer = customerSnap.data() || {};
+  return customer.smsOptedIn === true
+    && !!customer.smsConsentAt
+    && ["web_booking", "inbound_sms"].includes(
+      (customer.smsConsentSource || "").toString()
+    );
 }
 
 async function grantInboundSmsConsent(tenantId, phone) {

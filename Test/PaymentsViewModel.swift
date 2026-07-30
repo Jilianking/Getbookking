@@ -209,6 +209,12 @@ class PaymentsViewModel: ObservableObject {
     @Published var tapToPayReceiptPreferences = TapToPayReceiptPreferences()
     @Published var isSavingTapToPaySettings = false
     @Published var tapToPaySettingsSaveSuccess = false
+    /// Bank/card statement text from Stripe Connect (`settings.payments.statement_descriptor`).
+    @Published var statementDescriptorDraft: String = ""
+    @Published var statementDescriptorPrefixDraft: String = ""
+    @Published var canEditStatementDescriptor = false
+    @Published var isSavingStatementDescriptor = false
+    @Published var statementDescriptorSaveSuccess = false
     @Published var isLoading = false
     @Published var isConnectingStripe = false
     /// True from tap until Tap to Pay checkout, Safari, or alert finishes launching.
@@ -228,7 +234,12 @@ class PaymentsViewModel: ObservableObject {
     @Published var isCreatingPayout = false
     @Published var isRefunding = false
     @Published var shopTaxEnabled = false
+    @Published var inPersonTaxEnabled = false
     @Published var isSavingShopTax = false
+    @Published var isSavingInPersonTax = false
+    /// Latest Stripe Tax preview for in-person / manual amount entry (cents).
+    @Published var previewedInPersonTaxCents = 0
+    @Published var isPreviewingInPersonTax = false
     @Published var isOpeningStripeDashboard = false
     @Published var selectedTransaction: PaymentTransaction?
 
@@ -699,6 +710,9 @@ class PaymentsViewModel: ObservableObject {
                 isTenantOwner = true
                 canTakePayments = true
                 usesOwnPayments = true
+                canEditStatementDescriptor = true
+                statementDescriptorDraft = "DEMO STUDIO"
+                statementDescriptorPrefixDraft = "DEMO"
                 availableBalance = Double(payments.availableBalanceCents) / 100
                 pendingBalance = Double(payments.pendingBalanceCents) / 100
                 transactions = payments.transactions.compactMap { PaymentTransaction.fromFirestoreDict($0) }
@@ -749,9 +763,11 @@ class PaymentsViewModel: ObservableObject {
                     isTenantOwner = false
                 }
                 shopTaxEnabled = tenant["shopTaxEnabled"] as? Bool ?? false
+                inPersonTaxEnabled = tenant["inPersonTaxEnabled"] as? Bool ?? false
             } else {
                 isTenantOwner = false
                 shopTaxEnabled = false
+                inPersonTaxEnabled = false
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
@@ -821,6 +837,8 @@ class PaymentsViewModel: ObservableObject {
             if let own = data?["usesOwnPayments"] as? Bool {
                 usesOwnPayments = own
             }
+            applyStatementDescriptor(from: data)
+            refreshStatementDescriptorEditAccess(chargesEnabled: chargesEnabled)
             if chargesEnabled {
                 stripeStatusHint = nil
             } else if hasAccount && detailsSubmitted {
@@ -839,8 +857,83 @@ class PaymentsViewModel: ObservableObject {
             stripeConnected = false
             needsStripeConnect = true
             stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
+            canEditStatementDescriptor = false
         }
         hasLoadedStripeStatus = true
+    }
+
+    private func applyStatementDescriptor(from data: [String: Any]?) {
+        if let desc = data?["statementDescriptor"] as? String {
+            statementDescriptorDraft = desc.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let prefix = data?["statementDescriptorPrefix"] as? String {
+            statementDescriptorPrefixDraft = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func refreshStatementDescriptorEditAccess(chargesEnabled: Bool) {
+        guard canTakePayments, chargesEnabled else {
+            canEditStatementDescriptor = false
+            return
+        }
+        if paymentStripeScope == "user" {
+            canEditStatementDescriptor = usesOwnPayments
+        } else {
+            canEditStatementDescriptor = isTenantOwner
+        }
+    }
+
+    func saveStatementDescriptor(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            errorMessage = "Payment settings aren't saved in demo mode."
+            return
+        }
+        guard canEditStatementDescriptor else {
+            errorMessage = "You don’t have permission to edit the statement descriptor."
+            return
+        }
+        let descriptor = statementDescriptorDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        statementDescriptorDraft = descriptor
+
+        if descriptor.count < 5 || descriptor.count > 22 {
+            errorMessage = "Statement descriptor must be 5–22 characters."
+            return
+        }
+        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
+        if descriptor.unicodeScalars.contains(where: { !allowed.contains($0) }) {
+            errorMessage = "Use letters, numbers, and spaces only."
+            return
+        }
+
+        // Stripe card prefix is derived from the descriptor (2–10 chars).
+        let prefix = String(descriptor.prefix(10)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard prefix.count >= 2 else {
+            errorMessage = "Statement descriptor must be at least 5 characters."
+            return
+        }
+
+        isSavingStatementDescriptor = true
+        statementDescriptorSaveSuccess = false
+        errorMessage = nil
+        defer { isSavingStatementDescriptor = false }
+        do {
+            let result = try await functions.httpsCallable("updateStatementDescriptor").call([
+                "statementDescriptor": descriptor,
+                "statementDescriptorPrefix": prefix,
+            ] as [String: Any])
+            let data = result.data as? [String: Any]
+            applyStatementDescriptor(from: data)
+            statementDescriptorSaveSuccess = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                statementDescriptorSaveSuccess = false
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
     }
 
     /// Refreshes just the Stripe balance (used by the refund sheet to pre-check available funds).
@@ -994,6 +1087,7 @@ class PaymentsViewModel: ObservableObject {
         guard !isDemoMode, let tid = tenantId else { return }
         if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
             shopTaxEnabled = tenant["shopTaxEnabled"] as? Bool ?? false
+            inPersonTaxEnabled = tenant["inPersonTaxEnabled"] as? Bool ?? false
         }
     }
 
@@ -1012,6 +1106,50 @@ class PaymentsViewModel: ObservableObject {
             ])
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveInPersonTaxEnabled(isDemoMode: Bool = false) async {
+        if isDemoMode {
+            errorMessage = "Payment settings aren't saved in demo mode."
+            return
+        }
+        guard let tid = tenantId else { return }
+        isSavingInPersonTax = true
+        errorMessage = nil
+        defer { isSavingInPersonTax = false }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "inPersonTaxEnabled": inPersonTaxEnabled,
+            ])
+            if !inPersonTaxEnabled {
+                previewedInPersonTaxCents = 0
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Refresh Stripe Tax preview for manual / Tap to Pay amount entry.
+    func refreshInPersonTaxPreview(serviceCents: Int) async {
+        guard inPersonTaxEnabled, serviceCents >= 50 else {
+            previewedInPersonTaxCents = 0
+            return
+        }
+        isPreviewingInPersonTax = true
+        defer { isPreviewingInPersonTax = false }
+        do {
+            let result = try await functions.httpsCallable("previewInPersonSalesTax").call([
+                "serviceAmountCents": serviceCents,
+            ])
+            let data = result.data as? [String: Any]
+            let enabled = data?["enabled"] as? Bool ?? false
+            previewedInPersonTaxCents = enabled
+                ? max(0, data?["taxCents"] as? Int ?? 0)
+                : 0
+        } catch {
+            // Keep last preview; charge path still calculates authoritative tax.
+            previewedInPersonTaxCents = 0
         }
     }
 
@@ -1048,7 +1186,12 @@ class PaymentsViewModel: ObservableObject {
     }
 
     func checkoutBreakdown(serviceCents: Int, channel: CardCheckoutChannel = .online) -> CardCheckoutBreakdown {
-        CardCheckoutPricing.breakdown(serviceCents: serviceCents, channel: channel)
+        let tax = inPersonTaxEnabled ? previewedInPersonTaxCents : 0
+        return CardCheckoutPricing.breakdown(
+            serviceCents: serviceCents,
+            channel: channel,
+            taxCents: tax
+        )
     }
 
     /// Creates a Stripe Payment Link for the service/deposit amount (fees grossed up server-side).
@@ -1114,12 +1257,15 @@ class PaymentsViewModel: ObservableObject {
             )
         }
         let service = (data?["serviceCents"] as? Int) ?? serviceAmountCents
+        let tax = max(0, data?["taxCents"] as? Int ?? 0)
         let passThrough = (data?["surchargeCents"] as? Int) ?? 0
-        let total = (data?["totalCents"] as? Int) ?? (service + passThrough)
+        let total = (data?["totalCents"] as? Int) ?? (service + tax + passThrough)
         let platformFee = (data?["platformFeeCents"] as? Int)
             ?? CardCheckoutPricing.platformFeeCents(totalCents: total)
+        previewedInPersonTaxCents = tax
         let checkout = CardCheckoutBreakdown(
             serviceCents: service,
+            taxCents: tax,
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee,
             totalCents: total,
@@ -1341,7 +1487,9 @@ class PaymentsViewModel: ObservableObject {
         amountCents: Int,
         includesSignature: Bool = false,
         clientName: String? = nil,
-        note: String? = nil
+        note: String? = nil,
+        taxCents: Int = 0,
+        serviceCents: Int? = nil
     ) -> String {
         let amount = Self.formatUSD(Double(amountCents) / 100)
         var lines: [String] = []
@@ -1352,7 +1500,12 @@ class PaymentsViewModel: ObservableObject {
         lines.append("Payment receipt — \(amount)")
         lines.append("Paid via Tap to Pay on iPhone.")
         if tapToPayReceiptPreferences.itemized {
-            lines.append("Amount: \(amount)")
+            let service = serviceCents ?? max(0, amountCents - max(0, taxCents))
+            lines.append("Service: \(Self.formatUSD(Double(service) / 100))")
+            if taxCents > 0 {
+                lines.append("Sales tax: \(Self.formatUSD(Double(taxCents) / 100))")
+            }
+            lines.append("Total: \(amount)")
         }
         let trimmedClient = (clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedClient.isEmpty {
@@ -1498,12 +1651,15 @@ class PaymentsViewModel: ObservableObject {
         }
         let paymentIntentId = (data?["paymentIntentId"] as? String) ?? ""
         let service = (data?["serviceCents"] as? Int) ?? serviceAmountCents
+        let tax = max(0, data?["taxCents"] as? Int ?? 0)
         let passThrough = (data?["surchargeCents"] as? Int) ?? 0
-        let total = (data?["totalCents"] as? Int) ?? (service + passThrough)
+        let total = (data?["totalCents"] as? Int) ?? (service + tax + passThrough)
         let platformFee = (data?["platformFeeCents"] as? Int)
             ?? CardCheckoutPricing.platformFeeCents(totalCents: total)
+        previewedInPersonTaxCents = tax
         let checkout = CardCheckoutBreakdown(
             serviceCents: service,
+            taxCents: tax,
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee,
             totalCents: total,

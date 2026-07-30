@@ -523,7 +523,7 @@ struct MessageBubble: View {
                 } else {
                     MessageBubbleText(content: message.content, isAdmin: isAdmin)
                         .padding()
-                        .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
+                        .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 Text(message.createdAt, style: .time)
@@ -577,7 +577,7 @@ private struct MessagePaymentBubble: View {
         }
         .padding(16)
         .frame(minWidth: 168, maxWidth: 260, alignment: .leading)
-        .background(isAdmin ? AppDesign.accentBlue : AppDesign.searchBackground)
+        .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }

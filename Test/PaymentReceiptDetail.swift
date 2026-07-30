@@ -262,6 +262,16 @@ struct PaymentReceiptDetail: Equatable {
                 amountCents: checkout.serviceCents
             ),
         ]
+        if checkout.hasSalesTax {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "tax",
+                    name: "Sales tax",
+                    quantity: 1,
+                    amountCents: checkout.taxCents
+                )
+            )
+        }
         if checkout.hasPassThroughFees {
             items.append(
                 PaymentReceiptLineItem(
@@ -335,6 +345,16 @@ struct PaymentReceiptDetail: Equatable {
                 amountCents: checkout.serviceCents
             ),
         ]
+        if checkout.hasSalesTax {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "tax",
+                    name: "Sales tax",
+                    quantity: 1,
+                    amountCents: checkout.taxCents
+                )
+            )
+        }
         if checkout.hasPassThroughFees {
             items.append(
                 PaymentReceiptLineItem(

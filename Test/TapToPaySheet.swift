@@ -25,6 +25,7 @@ struct TapToPaySheet: View {
     @State private var noteText = ""
     @State private var selectedClient: Client?
     @State private var showClientPicker = false
+    @State private var showNoteEditor = false
     @State private var clientSearchText = ""
     @State private var phase: TapToPayCheckoutPhase = .entry
     @State private var showShareReceipt = false
@@ -62,10 +63,7 @@ struct TapToPaySheet: View {
         if serviceAmountCents <= 0 {
             return "Charge $0.00"
         }
-        if checkout.hasPassThroughFees {
-            return "Charge \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
-        }
-        return "Charge \(displayAmount)"
+        return "Charge \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
     }
 
     private var linkedBookingRequestId: String? {
@@ -100,6 +98,49 @@ struct TapToPaySheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { onDismiss() }
                 }
+                if phase == .entry {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button {
+                                showClientPicker = true
+                            } label: {
+                                Label(
+                                    selectedClient == nil ? "Select client" : "Change client",
+                                    systemImage: "person.crop.circle"
+                                )
+                            }
+                            if selectedClient != nil {
+                                Button(role: .destructive) {
+                                    selectedClient = nil
+                                } label: {
+                                    Label("Clear client", systemImage: "person.crop.circle.badge.minus")
+                                }
+                            }
+                            Divider()
+                            Button {
+                                showNoteEditor = true
+                            } label: {
+                                Label(
+                                    noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? "Add note"
+                                        : "Edit note",
+                                    systemImage: "pencil"
+                                )
+                            }
+                            if !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button(role: .destructive) {
+                                    noteText = ""
+                                } label: {
+                                    Label("Clear note", systemImage: "trash")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.body.weight(.medium))
+                        }
+                        .accessibilityLabel("More options")
+                    }
+                }
             }
             .sheet(isPresented: $showShareReceipt) {
                 if let url = shareReceiptURL() {
@@ -116,6 +157,9 @@ struct TapToPaySheet: View {
                         selectedClient = client
                     }
                 )
+            }
+            .sheet(isPresented: $showNoteEditor) {
+                TapToPayNoteEditorSheet(noteText: $noteText)
             }
             .sheet(isPresented: $showReceiptPrompt) {
                 TapToPayReceiptPromptSheet(
@@ -134,9 +178,13 @@ struct TapToPaySheet: View {
             .sheet(isPresented: $showTapToPayReceiptSheet) {
                 tapToPayReceiptSheet
             }
+            .onChange(of: amountCentsInput) { _, _ in
+                Task { await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents) }
+            }
             .task {
                 await sessionStore.loadCustomersIfNeeded(isDemoMode: false)
                 await sessionStore.loadBookingsIfNeeded(isDemoMode: false)
+                await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents)
                 let displayName = TapToPayLocationStore.shared.merchantDisplayName
                 let skipWarmUp = await TapToPayTerminalManager.shared.shouldSkipWarmUp(
                     locationId: locationId,
@@ -184,35 +232,37 @@ struct TapToPaySheet: View {
                     .font(.system(size: 56, weight: .bold, design: .rounded))
                     .foregroundStyle(AppDesign.textPrimary)
                     .monospacedDigit()
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.numericText())
                     .animation(.snappy, value: amountCentsInput)
+                    .frame(maxWidth: .infinity)
 
-                Text("Processing fee paid by client")
-                    .font(.subheadline)
-                    .foregroundStyle(AppDesign.textSecondary)
+                CardCheckoutBreakdownView(
+                    breakdown: checkout,
+                    alwaysShowFeeLines: true
+                )
+                .padding(.horizontal, 20)
+
+                if selectedClient != nil || !trimmedNote.isEmpty {
+                    optionalDetailsSummary
+                        .padding(.horizontal, 20)
+                }
+
+                if let manualCheckoutError, !manualCheckoutError.isEmpty {
+                    Text(manualCheckoutError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+
+                readerStatusBlock
+                    .padding(.horizontal, 20)
             }
             .padding(.top, 12)
-            .padding(.bottom, 20)
-
-            clientChip
-                .padding(.bottom, 16)
-
-            noteField
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-
-            if let manualCheckoutError, !manualCheckoutError.isEmpty {
-                Text(manualCheckoutError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-            }
-
-            readerStatusBlock
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+            .padding(.bottom, 12)
 
             Spacer(minLength: 8)
 
@@ -244,54 +294,36 @@ struct TapToPaySheet: View {
         }
     }
 
-    private var clientChip: some View {
-        HStack(spacing: 10) {
-            AppAvatarView(
-                tenantLogoURL: nil,
-                accountPhotoURL: nil,
-                displayNameFallback: selectedClient?.name ?? "?",
-                size: 36
-            )
-            Text(selectedClient?.name ?? "Select client")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppDesign.textPrimary)
-            Button("Change") {
-                showClientPicker = true
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(AppDesign.accentBlue)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            Capsule()
-                .fill(AppDesign.cardBackground)
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
+    private var trimmedNote: String {
+        noteText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var noteField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "pencil")
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
-            TextField("Add a note (optional)", text: $noteText)
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textPrimary)
+    /// Compact reminder when client/note were set via the ⋯ menu.
+    private var optionalDetailsSummary: some View {
+        HStack(spacing: 8) {
+            if let selectedClient {
+                Button {
+                    showClientPicker = true
+                } label: {
+                    Label(selectedClient.name, systemImage: "person.crop.circle.fill")
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+            }
+            if !trimmedNote.isEmpty {
+                Button {
+                    showNoteEditor = true
+                } label: {
+                    Label(trimmedNote, systemImage: "pencil")
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(AppDesign.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
+        .foregroundStyle(AppDesign.textSecondary)
     }
 
     @ViewBuilder
@@ -396,7 +428,9 @@ struct TapToPaySheet: View {
             amountCents: amountCents,
             includesSignature: !signatureLines.isEmpty,
             clientName: selectedClient?.name,
-            note: noteText
+            note: noteText,
+            taxCents: checkout.taxCents,
+            serviceCents: checkout.serviceCents
         )
         showTapToPayReceiptSheet = true
     }
@@ -725,6 +759,41 @@ private struct TapToPayClientPickerSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct TapToPayNoteEditorSheet: View {
+    @Binding var noteText: String
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Optional note for this payment (shown on the receipt).")
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+                TextField("Add a note", text: $noteText, axis: .vertical)
+                    .lineLimit(3...6)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isFocused)
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .navigationTitle("Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+            .onAppear { isFocused = true }
+        }
+        .presentationDetents([.medium])
     }
 }
 

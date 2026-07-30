@@ -314,6 +314,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     galleryLayoutStyle: "classic_grid",
     shopEnabled: false,
     shopTaxEnabled: false,
+    inPersonTaxEnabled: false,
     aboutText: "",
     contactEmail: email || "",
     contactAddress: "",
@@ -1045,10 +1046,126 @@ exports.getConnectAccountStatus = functions
       tapToPayReceiptItemized: tapToPaySettings.tapToPayReceiptItemized,
       tapToPayReceiptCustomFooter: tapToPaySettings.tapToPayReceiptCustomFooter,
       tapToPayReceiptFooterMessage: tapToPaySettings.tapToPayReceiptFooterMessage,
+      statementDescriptor:
+        (account.settings?.payments?.statement_descriptor || "").toString().trim() ||
+        null,
+      statementDescriptorPrefix:
+        (account.settings?.card_payments?.statement_descriptor_prefix || "")
+          .toString()
+          .trim() || null,
       canTakePayments: true,
       usesOwnPayments: payCtx.scope === "user",
       payoutMode: payCtx.payoutMode,
       paymentScope: payCtx.scope,
+    };
+  });
+
+/**
+ * Updates the connected account statement descriptor (bank/card statement text).
+ * Params: { statementDescriptor: string, statementDescriptorPrefix?: string }
+ * Owner → tenant Connect account; independent member → user Connect account.
+ */
+exports.updateStatementDescriptor = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const uid = context.auth.uid;
+    const payCtx = await assertCanTakePayments(uid);
+    if (payCtx.scope !== "user") {
+      await assertTenantOwner(uid, payCtx.tenantId);
+    }
+
+    const stripeAccountId = (payCtx.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId || isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Connect Stripe before setting a statement descriptor."
+      );
+    }
+
+    const descriptor = (data?.statementDescriptor ?? "")
+      .toString()
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+    if (descriptor.length < 5 || descriptor.length > 22) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Statement descriptor must be 5–22 characters."
+      );
+    }
+    if (!/^[A-Z0-9 ]+$/.test(descriptor)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Use letters, numbers, and spaces only."
+      );
+    }
+
+    let prefix;
+    if (data?.statementDescriptorPrefix !== undefined) {
+      prefix = (data.statementDescriptorPrefix ?? "")
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, " ");
+    } else {
+      prefix = descriptor.slice(0, 10);
+    }
+    if (prefix.length < 2 || prefix.length > 10) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Card prefix must be 2–10 characters."
+      );
+    }
+    if (!/^[A-Z0-9 ]+$/.test(prefix)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Card prefix: use letters, numbers, and spaces only."
+      );
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account.details_submitted) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Finish Stripe setup before setting a statement descriptor."
+      );
+    }
+
+    let updated;
+    try {
+      updated = await stripe.accounts.update(stripeAccountId, {
+        settings: {
+          payments: { statement_descriptor: descriptor },
+          card_payments: { statement_descriptor_prefix: prefix },
+        },
+      });
+    } catch (err) {
+      console.error("updateStatementDescriptor", err);
+      const msg =
+        (err && err.message) ||
+        "Could not update statement descriptor. Try a name closer to your business.";
+      throw new functions.https.HttpsError("invalid-argument", msg);
+    }
+
+    return {
+      statementDescriptor:
+        (updated.settings?.payments?.statement_descriptor || "").toString().trim() ||
+        descriptor,
+      statementDescriptorPrefix:
+        (updated.settings?.card_payments?.statement_descriptor_prefix || "")
+          .toString()
+          .trim() || prefix,
     };
   });
 
@@ -1445,7 +1562,7 @@ async function assertTenantOwner(uid, tenantId) {
   if (!ownerUid || ownerUid !== uid) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Only the studio owner can manage Tap to Pay."
+      "Only the studio owner can manage payment settings."
     );
   }
   return tenantDoc;
@@ -2091,11 +2208,23 @@ exports.createPaymentIntentForManualCheckout = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const feeCents = platformFeeCents(checkout.totalCents);
+    const tenantDoc = tenantId
+      ? await db.collection("tenants").doc(tenantId).get()
+      : null;
+    const tenantData = tenantDoc?.exists ? tenantDoc.data() || {} : {};
+    const tax = await maybeCalculateInPersonSalesTax(
+      stripe,
+      stripeAccountId,
+      tenantData,
+      checkout.serviceCents
+    );
+    const taxCents = tax.taxCents || 0;
+    const totalCents = checkout.totalCents + taxCents;
+    const feeCents = platformFeeCents(totalCents);
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const pi = await stripe.paymentIntents.create(
       {
-        amount: checkout.totalCents,
+        amount: totalCents,
         currency: "usd",
         payment_method_types: ["card"],
         application_fee_amount: feeCents,
@@ -2104,7 +2233,9 @@ exports.createPaymentIntentForManualCheckout = functions
           tenantId: tenantId || "",
           paymentKind,
           serviceAmountCents: String(checkout.serviceCents),
+          taxCents: String(taxCents),
           surchargeCents: String(checkout.surchargeCents),
+          ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
           attributedMemberUid,
@@ -2121,10 +2252,56 @@ exports.createPaymentIntentForManualCheckout = functions
       stripeAccountId,
       platformFeeCents: feeCents,
       serviceCents: checkout.serviceCents,
+      taxCents,
       surchargeCents: checkout.surchargeCents,
-      totalCents: checkout.totalCents,
+      totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
+    };
+  });
+
+/**
+ * Preview in-person sales tax for manual / Tap to Pay amount entry UI.
+ * Params: { serviceAmountCents: number }
+ * Returns: { enabled, taxCents }
+ */
+exports.previewInPersonSalesTax = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const serviceAmount = parseServiceAmountCents(data) ?? 0;
+    if (serviceAmount < 50) {
+      return { enabled: false, taxCents: 0 };
+    }
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = (payCtx.stripeAccountId || "").toString().trim();
+    if (!stripeAccountId || isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      return { enabled: false, taxCents: 0 };
+    }
+    const tenantDoc = await db.collection("tenants").doc(payCtx.tenantId).get();
+    const tenantData = tenantDoc.exists ? tenantDoc.data() || {} : {};
+    if (tenantData.inPersonTaxEnabled !== true) {
+      return { enabled: false, taxCents: 0 };
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe is not configured"
+      );
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const tax = await maybeCalculateInPersonSalesTax(
+      stripe,
+      stripeAccountId,
+      tenantData,
+      serviceAmount
+    );
+    return {
+      enabled: true,
+      taxCents: tax.taxCents || 0,
     };
   });
 
@@ -2298,15 +2475,17 @@ function receiptLineItemsFromAmounts({
   surchargeCents,
   paymentKind,
   grossCents,
+  taxCents = 0,
 }) {
   const service = Math.max(0, Math.round(Number(serviceCents) || 0));
+  const tax = Math.max(0, Math.round(Number(taxCents) || 0));
   const gross = Math.max(
-    service,
+    service + tax,
     Math.round(Number(grossCents) || 0)
   );
   const surcharge = Math.max(
     0,
-    Math.round(Number(surchargeCents) || 0) || gross - service
+    Math.round(Number(surchargeCents) || 0) || Math.max(0, gross - service - tax)
   );
   const items = [
     {
@@ -2315,6 +2494,13 @@ function receiptLineItemsFromAmounts({
       amountCents: service,
     },
   ];
+  if (tax > 0) {
+    items.push({
+      name: "Sales tax",
+      quantity: 1,
+      amountCents: tax,
+    });
+  }
   if (surcharge > 0) {
     items.push({
       name: PROCESSING_SERVICE_FEE_LABEL,
@@ -2428,23 +2614,32 @@ exports.getPaymentReceiptDetail = functions
     const paymentKind = (meta.paymentKind || ledger?.paymentKind || "deposit").toString();
     let serviceCents = parseInt(meta.serviceAmountCents, 10);
     let surchargeCents = parseInt(meta.surchargeCents, 10);
+    let taxCents = parseInt(meta.taxCents, 10);
     let grossCents = charge.amount || 0;
 
     if (ledger) {
       if (ledger.serviceCents > 0) serviceCents = ledger.serviceCents;
       if (ledger.surchargeCents >= 0) surchargeCents = ledger.surchargeCents;
+      if (ledger.taxCents >= 0) taxCents = ledger.taxCents;
       if (ledger.grossCents > 0) grossCents = ledger.grossCents;
     }
+    if (Number.isNaN(taxCents) || taxCents < 0) taxCents = 0;
     if (Number.isNaN(serviceCents) || serviceCents <= 0) {
-      serviceCents = Math.max(0, grossCents - (Number.isNaN(surchargeCents) ? 0 : surchargeCents));
+      serviceCents = Math.max(
+        0,
+        grossCents -
+          (Number.isNaN(surchargeCents) ? 0 : surchargeCents) -
+          taxCents
+      );
     }
     if (Number.isNaN(surchargeCents)) {
-      surchargeCents = Math.max(0, grossCents - serviceCents);
+      surchargeCents = Math.max(0, grossCents - serviceCents - taxCents);
     }
 
     const lineItems = receiptLineItemsFromAmounts({
       serviceCents,
       surchargeCents,
+      taxCents,
       paymentKind,
       grossCents,
     });
@@ -2462,6 +2657,7 @@ exports.getPaymentReceiptDetail = functions
       lineItems,
       totalPaidCents: grossCents,
       serviceCents,
+      taxCents,
       providerReceivedCents: serviceCents,
       stripeReceiptUrl: charge.receipt_url || null,
     };
@@ -2906,6 +3102,8 @@ async function fetchTenantProductsById(tenantId) {
 
 /** Stripe Tax code: general tangible goods (retail shop products). */
 const SHOP_PRODUCT_TAX_CODE = "txcd_99999999";
+/** Stripe Tax code: general services (manual / Tap to Pay charges). */
+const SERVICE_TAX_CODE = "txcd_20030000";
 
 function shopTaxAddressFromTenant(tenantData) {
   const addr = terminalAddressFromTenant(tenantData || {});
@@ -2918,15 +3116,20 @@ function shopTaxAddressFromTenant(tenantData) {
   };
 }
 
-async function calculateShopSalesTax(stripe, stripeAccountId, tenantData, lineItems) {
+async function calculateSalesTaxFromLineItems(
+  stripe,
+  stripeAccountId,
+  tenantData,
+  lineItems
+) {
   const address = shopTaxAddressFromTenant(tenantData);
   const calculation = await stripe.tax.calculations.create(
     {
       currency: "usd",
       line_items: lineItems.map((line) => ({
-        amount: Math.max(0, parseInt(line.lineTotalCents, 10) || 0),
-        reference: (line.productId || "item").toString().slice(0, 200),
-        tax_code: SHOP_PRODUCT_TAX_CODE,
+        amount: Math.max(0, parseInt(line.amount, 10) || 0),
+        reference: (line.reference || "item").toString().slice(0, 200),
+        tax_code: (line.taxCode || SHOP_PRODUCT_TAX_CODE).toString(),
         tax_behavior: "exclusive",
       })),
       customer_details: {
@@ -2944,6 +3147,68 @@ async function calculateShopSalesTax(stripe, stripeAccountId, tenantData, lineIt
     taxCents,
     taxCalculationId: calculation.id,
   };
+}
+
+async function calculateShopSalesTax(stripe, stripeAccountId, tenantData, lineItems) {
+  return calculateSalesTaxFromLineItems(
+    stripe,
+    stripeAccountId,
+    tenantData,
+    lineItems.map((line) => ({
+      amount: line.lineTotalCents,
+      reference: line.productId || "item",
+      taxCode: SHOP_PRODUCT_TAX_CODE,
+    }))
+  );
+}
+
+/** Sales tax for a single service/manual amount (business address). */
+async function calculateServiceSalesTax(
+  stripe,
+  stripeAccountId,
+  tenantData,
+  amountCents
+) {
+  const amount = Math.max(0, Math.round(Number(amountCents) || 0));
+  if (amount <= 0) {
+    return { taxCents: 0, taxCalculationId: null };
+  }
+  return calculateSalesTaxFromLineItems(stripe, stripeAccountId, tenantData, [
+    {
+      amount,
+      reference: "service",
+      taxCode: SERVICE_TAX_CODE,
+    },
+  ]);
+}
+
+/**
+ * When in-person tax is enabled, calculate tax for a service amount.
+ * Returns { taxCents, taxCalculationId } (zeros when disabled).
+ */
+async function maybeCalculateInPersonSalesTax(
+  stripe,
+  stripeAccountId,
+  tenantData,
+  serviceCents
+) {
+  if (tenantData?.inPersonTaxEnabled !== true) {
+    return { taxCents: 0, taxCalculationId: null };
+  }
+  try {
+    return await calculateServiceSalesTax(
+      stripe,
+      stripeAccountId,
+      tenantData,
+      serviceCents
+    );
+  } catch (taxErr) {
+    console.warn("maybeCalculateInPersonSalesTax", taxErr.message || taxErr);
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Could not calculate sales tax. Complete tax setup in Stripe, or turn off In-person sales tax in Payment settings."
+    );
+  }
 }
 
 async function recordShopTaxTransactionFromCalculation(
@@ -3410,7 +3675,7 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
         console.warn("createShopCheckoutPayment tax", taxErr.message || taxErr);
         throw new HttpsError(
           "failed-precondition",
-          "Could not calculate sales tax. Complete tax setup in Stripe, or turn off Collect sales tax in Payment settings."
+          "Could not calculate sales tax. Complete tax setup in Stripe, or turn off Online sales tax in Payment settings."
         );
       }
     }
@@ -3638,11 +3903,23 @@ exports.createPaymentIntentForTapToPay = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const feeCents = platformFeeCents(checkout.totalCents);
+    const tenantDoc = tenantId
+      ? await db.collection("tenants").doc(tenantId).get()
+      : null;
+    const tenantData = tenantDoc?.exists ? tenantDoc.data() || {} : {};
+    const tax = await maybeCalculateInPersonSalesTax(
+      stripe,
+      stripeAccountId,
+      tenantData,
+      checkout.serviceCents
+    );
+    const taxCents = tax.taxCents || 0;
+    const totalCents = checkout.totalCents + taxCents;
+    const feeCents = platformFeeCents(totalCents);
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const pi = await stripe.paymentIntents.create(
       {
-        amount: checkout.totalCents,
+        amount: totalCents,
         currency: "usd",
         payment_method_types: ["card_present"],
         application_fee_amount: feeCents,
@@ -3651,7 +3928,9 @@ exports.createPaymentIntentForTapToPay = functions
           tenantId: tenantId || "",
           paymentKind: "service",
           serviceAmountCents: String(checkout.serviceCents),
+          taxCents: String(taxCents),
           surchargeCents: String(checkout.surchargeCents),
+          ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
           attributedMemberUid,
@@ -3666,8 +3945,9 @@ exports.createPaymentIntentForTapToPay = functions
       paymentIntentId: pi.id,
       platformFeeCents: feeCents,
       serviceCents: checkout.serviceCents,
+      taxCents,
       surchargeCents: checkout.surchargeCents,
-      totalCents: checkout.totalCents,
+      totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
     };
@@ -4307,6 +4587,26 @@ exports.stripeSubscriptionWebhook = functions
           console.error("stripeSubscriptionWebhook deposit confirm", e.message);
         }
       }
+
+      // Record Stripe Tax for service / manual / Tap to Pay when a calculation was created.
+      const taxCalculationId = (meta.taxCalculationId || "").toString().trim();
+      const taxAccountId = (meta.chargeStripeAccountId || "").toString().trim();
+      if (
+        taxCalculationId &&
+        taxAccountId &&
+        (meta.paymentKind || "").toString() !== "shop"
+      ) {
+        try {
+          await recordShopTaxTransactionFromCalculation(
+            stripe,
+            taxAccountId,
+            taxCalculationId,
+            pi.id
+          );
+        } catch (e) {
+          console.error("stripeSubscriptionWebhook tax transaction", e.message);
+        }
+      }
     }
 
     if (
@@ -4771,14 +5071,21 @@ exports.recordTenantPayment = functions
     }
     const serviceCents = parseInt(meta.serviceAmountCents, 10);
     const surchargeCents = parseInt(meta.surchargeCents, 10);
+    const taxCentsMeta = parseInt(meta.taxCents, 10);
+    const resolvedTax = Number.isNaN(taxCentsMeta) ? 0 : Math.max(0, taxCentsMeta);
     const paymentKind = (meta.paymentKind || "service").toString();
     const bookingRequestId = (meta.bookingRequestId || "").toString().trim();
     const resolvedService =
       Number.isNaN(serviceCents) || serviceCents <= 0
-        ? Math.max(0, (pi.amount || 0) - (Number.isNaN(surchargeCents) ? 0 : surchargeCents))
+        ? Math.max(
+            0,
+            (pi.amount || 0) -
+              (Number.isNaN(surchargeCents) ? 0 : surchargeCents) -
+              resolvedTax
+          )
         : serviceCents;
     const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
-    const grossCents = pi.amount || resolvedService + resolvedSurcharge;
+    const grossCents = pi.amount || resolvedService + resolvedTax + resolvedSurcharge;
 
     let stripeFeeCents = 0;
     const chargeId =
@@ -4841,6 +5148,7 @@ exports.recordTenantPayment = functions
       attributedMemberUid: attributedMemberUid || ownerUid,
       paymentKind,
       serviceCents: resolvedService,
+      taxCents: resolvedTax,
       surchargeCents: resolvedSurcharge,
       grossCents,
       stripeFeeCents,

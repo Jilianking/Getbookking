@@ -1,7 +1,8 @@
 //
 //  CardCheckoutPricing.swift
 //
-//  Customer pays service + grossed-up processing fees; provider nets full service amount.
+//  Customer pays service + optional sales tax + grossed-up processing fees;
+//  provider nets full service amount.
 //
 
 import Foundation
@@ -14,6 +15,8 @@ enum CardCheckoutChannel: Equatable {
 
 struct CardCheckoutBreakdown: Equatable {
     let serviceCents: Int
+    /// Sales tax (exclusive), when in-person / applicable tax is enabled.
+    let taxCents: Int
     /// Total pass-through fees added to the customer bill (card processing + platform).
     let passThroughFeeCents: Int
     let platformFeeCents: Int
@@ -25,6 +28,7 @@ struct CardCheckoutBreakdown: Equatable {
     }
 
     var hasPassThroughFees: Bool { passThroughFeeCents > 0 }
+    var hasSalesTax: Bool { taxCents > 0 }
 }
 
 enum CardCheckoutPricing {
@@ -37,12 +41,15 @@ enum CardCheckoutPricing {
 
     static func breakdown(
         serviceCents: Int,
-        channel: CardCheckoutChannel = .online
+        channel: CardCheckoutChannel = .online,
+        taxCents: Int = 0
     ) -> CardCheckoutBreakdown {
         let service = max(0, serviceCents)
+        let tax = max(0, taxCents)
         guard service > 0 else {
             return CardCheckoutBreakdown(
                 serviceCents: 0,
+                taxCents: 0,
                 passThroughFeeCents: 0,
                 platformFeeCents: 0,
                 totalCents: 0,
@@ -61,13 +68,16 @@ enum CardCheckoutPricing {
             stripeFixed = stripeCardPresentFixedCents
         }
 
+        // Fees are grossed up on the service amount only (tax is added on top), matching server.
         let combinedBps = stripeBps + platformFeeBps
-        let total = Int(ceil(Double(service + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
-        let passThrough = total - service
+        let servicePlusFees = Int(ceil(Double(service + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
+        let passThrough = servicePlusFees - service
+        let total = servicePlusFees + tax
         let platformFee = platformFeeCents(totalCents: total)
 
         return CardCheckoutBreakdown(
             serviceCents: service,
+            taxCents: tax,
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee,
             totalCents: total,
@@ -92,6 +102,8 @@ enum CardCheckoutPricing {
 struct CardCheckoutBreakdownView: View {
     let breakdown: CardCheckoutBreakdown
     var alwaysShowFeeLines: Bool = false
+    /// Tighter type/padding for constrained screens (e.g. Tap to Pay entry).
+    var compact: Bool = false
     @State private var showFeeDetails = false
 
     private var showFeeRow: Bool {
@@ -99,16 +111,23 @@ struct CardCheckoutBreakdownView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: compact ? 4 : 8) {
             HStack {
                 Text("Service")
                 Spacer()
                 Text(CardCheckoutPricing.formatUSD(cents: breakdown.serviceCents))
             }
+            if breakdown.hasSalesTax {
+                HStack {
+                    Text("Sales tax")
+                    Spacer()
+                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.taxCents))
+                }
+            }
             if showFeeRow {
                 HStack(alignment: .firstTextBaseline) {
                     HStack(spacing: 4) {
-                        Text("Processing & service fees")
+                        Text(compact ? "Fees" : "Processing & service fees")
                         Button {
                             showFeeDetails.toggle()
                         } label: {
@@ -142,9 +161,9 @@ struct CardCheckoutBreakdownView: View {
                     .fontWeight(.semibold)
             }
         }
-        .font(.subheadline)
+        .font(compact ? .caption : .subheadline)
         .foregroundStyle(.secondary)
-        .padding(12)
+        .padding(compact ? 10 : 12)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
@@ -167,7 +186,7 @@ struct CardCheckoutBreakdownView: View {
                 Text("Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.")
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("The business receives the full product price.")
+            Text("The business receives the full service amount. Sales tax is collected for remittance.")
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }

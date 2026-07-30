@@ -47,6 +47,10 @@ enum AppDesign {
         light: UIColor(hex: 0xC9B8A0),
         dark: UIColor(red: 0.45, green: 0.40, blue: 0.36, alpha: 1)
     )
+    static let messageSentBackground = adaptive(
+        light: UIColor(hex: 0x2C2018),
+        dark: UIColor(hex: 0x8B6F47)
+    )
 
     /// Legacy iOS accents — prefer brandWarm / brandDark in new UI.
     static let calendarAppointmentFill = Color(hex: 0xE8F5F3)

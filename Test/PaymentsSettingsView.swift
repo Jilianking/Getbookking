@@ -60,19 +60,19 @@ struct PaymentsSettingsView: View {
     #if TAP_TO_PAY_ENABLED
     private var tapToPayNameSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Tap to Pay name")
+            Text("Tap to Pay screen name")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppDesign.textSecondary)
                 .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("Customers see “Pay \(viewModel.effectiveTapToPayDisplayName)” on their phone. Does not change your website or business name.")
+                Text("Customers see “Pay \(viewModel.effectiveTapToPayDisplayName)” on their phone during Tap to Pay. This is not the bank statement descriptor.")
                     .font(.caption)
                     .foregroundStyle(AppDesign.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 TextField(
-                    "Name on customer’s phone",
+                    "Name on Tap to Pay screen",
                     text: $viewModel.tapToPayDisplayNameDraft,
                     prompt: Text(viewModel.tapToPayDisplayNamePlaceholder)
                 )
@@ -85,7 +85,9 @@ struct PaymentsSettingsView: View {
                     Task { await viewModel.saveTapToPayDisplayName() }
                 } label: {
                     HStack {
-                        Text("Save name")
+                        Text("Save Tap to Pay screen name")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppDesign.accentGreen)
                         if viewModel.isSavingTapToPayDisplayName {
                             Spacer()
                             ProgressView().scaleEffect(0.9)
@@ -95,7 +97,7 @@ struct PaymentsSettingsView: View {
                 .disabled(viewModel.isSavingTapToPayDisplayName)
 
                 if viewModel.tapToPayDisplayNameSaveSuccess {
-                    Text("Saved — new payments will show Pay \(viewModel.effectiveTapToPayDisplayName).")
+                    Text("Saved — Tap to Pay will show Pay \(viewModel.effectiveTapToPayDisplayName).")
                         .font(.caption)
                         .foregroundStyle(AppDesign.accentGreen)
                 }

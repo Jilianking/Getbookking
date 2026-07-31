@@ -40,6 +40,12 @@
       "cleanUrls": true,
       "trailingSlash": false,
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "redirects": [
+        { "source": "/testflight", "destination": "/", "type": 302 },
+        { "source": "/testflight.html", "destination": "/", "type": 302 },
+        { "source": "/beta", "destination": "/", "type": 302 },
+        { "source": "/beta/**", "destination": "/", "type": 302 }
+      ],
       "rewrites": [
         { "source": "/admin/login", "destination": "/admin/login.html" },
         { "source": "/admin/forgot-password", "destination": "/admin/forgot-password.html" },
@@ -51,12 +57,6 @@
         { "source": "/admin/reports", "destination": "/admin/reports.html" },
         { "source": "/admin/testflight", "destination": "/admin/testflight.html" },
         { "source": "/admin/settings", "destination": "/admin/settings.html" },
-        { "source": "/beta/login", "destination": "/beta/login.html" },
-        { "source": "/beta/welcome", "destination": "/beta/welcome.html" },
-        { "source": "/beta/forgot-password", "destination": "/beta/forgot-password.html" },
-        { "source": "/beta/reset-password", "destination": "/reset-password.html" },
-        { "source": "/beta/report-bug", "destination": "/beta/report-bug.html" },
-        { "source": "/beta", "destination": "/beta/index.html" },
         { "source": "/login", "destination": "/login.html" },
         { "source": "/reset-password", "destination": "/reset-password.html" }
       ],

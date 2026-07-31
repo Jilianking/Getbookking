@@ -3327,6 +3327,14 @@
       grid-template-columns: 1fr;
       gap: 24px;
       align-items: center;
+      /* Empty padding must fall through to `.luxe-hero-image-hit` (photo), not open section color. */
+      pointer-events: none;
+    }
+    .luxe-hero-inner [data-edit-key],
+    .luxe-hero-inner a,
+    .luxe-hero-inner button,
+    .luxe-hero-inner [role="button"] {
+      pointer-events: auto;
     }
     /** Full-bleed invisible tap target for hero photo (native picker in app Quick edit). */
     .bk-hero-image-hit,
@@ -3346,6 +3354,7 @@
       appearance: none;
       -webkit-appearance: none;
     }
+    /* Below text layer (z:3 + pointer-events:auto on keys); above color band (z:0). */
     .luxe-hero-image-hit { z-index: 1; }
     /** Full-bleed tap target for section background color in app Quick edit. */
     [data-bk-color-surface] {
@@ -12122,8 +12131,8 @@
         var luxeHeroCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
-        var hero = '<section class="' + heroClass + '" data-bk-color-surface="hero"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
-          bkHeroBandHitButtonHtml() +
+        /* Luxe hero is a full-bleed photo slot — no section color band (text/CTA still editable). */
+        var hero = '<section class="' + heroClass + '"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
           '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +

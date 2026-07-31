@@ -9,54 +9,82 @@ import Combine
 import FirebaseAuth
 import FirebaseFunctions
 
-enum InsightsTimeRange: String, Hashable, CaseIterable {
-    case days7
-    case days30
-    case days90
-    case all
+enum InsightsTimeRange: String, Hashable, CaseIterable, Identifiable {
+    case thisWeek
+    case thisMonth
+    case thisYear
+    case custom
 
-    var chipLabel: String {
+    var id: String { rawValue }
+
+    var menuLabel: String {
         switch self {
-        case .days7: return "7d"
-        case .days30: return "30d"
-        case .days90: return "90d"
-        case .all: return "All"
+        case .thisWeek: return "This week"
+        case .thisMonth: return "This month"
+        case .thisYear: return "This year"
+        case .custom: return "Custom range"
         }
     }
 
+    /// Short label for chart subtitles and card trails.
     var periodLabel: String {
         switch self {
-        case .days7: return "7d"
-        case .days30: return "30d"
-        case .days90: return "90d"
-        case .all: return "All"
+        case .thisWeek: return "this week"
+        case .thisMonth: return "this month"
+        case .thisYear: return "this year"
+        case .custom: return "custom range"
         }
     }
 
-    /// Start of current period (inclusive). `nil` = all time.
-    func periodStart(relativeTo now: Date = Date()) -> Date? {
+    /// Inclusive period `[start, end]` for metrics and charts.
+    func resolvedBounds(
+        customStart: Date,
+        customEnd: Date,
+        relativeTo now: Date = Date()
+    ) -> (start: Date, end: Date) {
         let cal = Calendar.current
+        let endOfToday = cal.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
         switch self {
-        case .days7: return cal.date(byAdding: .day, value: -7, to: now)
-        case .days30: return cal.date(byAdding: .day, value: -30, to: now)
-        case .days90: return cal.date(byAdding: .day, value: -90, to: now)
-        case .all: return nil
+        case .thisWeek:
+            let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            return (start, endOfToday)
+        case .thisMonth:
+            let start = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+            return (start, endOfToday)
+        case .thisYear:
+            let start = cal.date(from: cal.dateComponents([.year], from: now)) ?? now
+            return (start, endOfToday)
+        case .custom:
+            let start = cal.startOfDay(for: min(customStart, customEnd))
+            let endDay = cal.startOfDay(for: max(customStart, customEnd))
+            let end = cal.date(bySettingHour: 23, minute: 59, second: 59, of: endDay) ?? endDay
+            return (start, end)
         }
     }
 
-    /// Prior period `[priorStart, currentStart)` for trend comparison.
-    func priorPeriodBounds(relativeTo now: Date = Date()) -> (start: Date, end: Date)? {
-        guard let currentStart = periodStart(relativeTo: now) else { return nil }
+    /// Prior period of equal duration ending at current start (for trends).
+    func priorPeriodBounds(
+        customStart: Date,
+        customEnd: Date,
+        relativeTo now: Date = Date()
+    ) -> (start: Date, end: Date) {
         let cal = Calendar.current
-        let days: Int
-        switch self {
-        case .days7: days = 7
-        case .days30: days = 30
-        case .days90: days = 90
-        case .all: return nil
-        }
-        guard let priorStart = cal.date(byAdding: .day, value: -days, to: currentStart) else { return nil }
-        return (priorStart, currentStart)
+        let current = resolvedBounds(customStart: customStart, customEnd: customEnd, relativeTo: now)
+        let duration = current.end.timeIntervalSince(current.start)
+        let priorEnd = current.start
+        let priorStart = priorEnd.addingTimeInterval(-max(duration, 24 * 60 * 60))
+        return (cal.startOfDay(for: priorStart), priorEnd)
+    }
+
+    func suggestedWeeklyMaxWeeks(
+        customStart: Date,
+        customEnd: Date,
+        relativeTo now: Date = Date()
+    ) -> Int {
+        let bounds = resolvedBounds(customStart: customStart, customEnd: customEnd, relativeTo: now)
+        let cal = Calendar.current
+        let weeks = (cal.dateComponents([.weekOfYear], from: bounds.start, to: bounds.end).weekOfYear ?? 0) + 1
+        return min(16, max(1, weeks))
     }
 }
 
@@ -75,7 +103,9 @@ struct InsightsBookingBreakdown {
 }
 
 final class InsightsViewModel: ObservableObject {
-    @Published var selectedRange: InsightsTimeRange = .days30
+    @Published var selectedRange: InsightsTimeRange = .thisMonth
+    @Published var customRangeStart: Date = Calendar.current.date(byAdding: .day, value: -29, to: Date()) ?? Date()
+    @Published var customRangeEnd: Date = Date()
     @Published var useTenantData = false
     @Published var tenantId: String?
     @Published var isLoading = false
@@ -105,6 +135,7 @@ final class InsightsViewModel: ObservableObject {
     // Revenue chart (real Stripe / legacy booking revenue only)
     @Published var revenueWeeklyPoints: [WeeklyRevenuePoint] = []
     @Published var revenueDailyPoints: [DailyRevenuePoint] = []
+    @Published var revenueMonthlyPoints: [MonthlyRevenuePoint] = []
 
     private var cachedTenantBookings: [BookingRequest] = []
     private var cachedLegacyRequests: [Request] = []
@@ -114,6 +145,21 @@ final class InsightsViewModel: ObservableObject {
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+
+    /// Label for chart/card trails (uses formatted dates when custom).
+    var displayPeriodLabel: String {
+        guard selectedRange == .custom else { return selectedRange.periodLabel }
+        let start = customRangeStart.formatted(.dateTime.month(.abbreviated).day().year())
+        let end = customRangeEnd.formatted(.dateTime.month(.abbreviated).day().year())
+        return "\(start) – \(end)"
+    }
+
+    private var currentPeriodBounds: (start: Date, end: Date) {
+        selectedRange.resolvedBounds(
+            customStart: customRangeStart,
+            customEnd: customRangeEnd
+        )
+    }
 
     func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run {
@@ -244,15 +290,16 @@ final class InsightsViewModel: ObservableObject {
     }
 
     func recomputeForSelectedRange() {
-        let range = selectedRange
-        let now = Date()
-        let periodStart = range.periodStart(relativeTo: now)
-        let priorBounds = range.priorPeriodBounds(relativeTo: now)
+        let bounds = currentPeriodBounds
+        let priorBounds = selectedRange.priorPeriodBounds(
+            customStart: customRangeStart,
+            customEnd: customRangeEnd
+        )
 
         if useTenantData {
-            applyTenantMetrics(periodStart: periodStart, priorBounds: priorBounds, now: now)
+            applyTenantMetrics(periodStart: bounds.start, periodEnd: bounds.end, priorBounds: priorBounds)
         } else {
-            applyLegacyMetrics(periodStart: periodStart, priorBounds: priorBounds, now: now)
+            applyLegacyMetrics(periodStart: bounds.start, periodEnd: bounds.end, priorBounds: priorBounds)
         }
     }
 
@@ -283,15 +330,17 @@ final class InsightsViewModel: ObservableObject {
         paymentVolumeInRange = 1200
         revenueWeeklyPoints = []
         revenueDailyPoints = []
+        revenueMonthlyPoints = []
     }
 
-    private func applyTenantMetrics(periodStart: Date?, priorBounds: (start: Date, end: Date)?, now: Date) {
-        let inPeriod = cachedTenantBookings.filter { bookingInPeriod($0, start: periodStart, end: now) }
-        let priorPeriod: [BookingRequest]
-        if let bounds = priorBounds {
-            priorPeriod = cachedTenantBookings.filter { bookingInPeriod($0, start: bounds.start, end: bounds.end) }
-        } else {
-            priorPeriod = []
+    private func applyTenantMetrics(
+        periodStart: Date,
+        periodEnd: Date,
+        priorBounds: (start: Date, end: Date)
+    ) {
+        let inPeriod = cachedTenantBookings.filter { bookingInPeriod($0, start: periodStart, end: periodEnd) }
+        let priorPeriod = cachedTenantBookings.filter {
+            bookingInPeriod($0, start: priorBounds.start, end: priorBounds.end)
         }
 
         bookingsInRange = inPeriod.count
@@ -302,8 +351,8 @@ final class InsightsViewModel: ObservableObject {
         topServiceLabels = Self.topServices(from: inPeriod, limit: 5)
 
         clientsTotal = cachedCustomerDates.count
-        clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: now)
-        let priorNew = priorBounds.map { countDatesInPeriod(cachedCustomerDates, start: $0.start, end: $0.end) } ?? 0
+        clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: periodEnd)
+        let priorNew = countDatesInPeriod(cachedCustomerDates, start: priorBounds.start, end: priorBounds.end)
         clientsTrendText = clientsNewInRange > 0
             ? "↗ \(clientsNewInRange) new"
             : trendText(current: clientsNewInRange, prior: priorNew, sameLabel: "same as prior")
@@ -311,8 +360,8 @@ final class InsightsViewModel: ObservableObject {
         noShowsInRange = 0
         noShowsTrendText = "↗ same as prior"
 
-        let chargesCurrent = filterCharges(start: periodStart, end: now)
-        let chargesPrior = priorBounds.map { filterCharges(start: $0.start, end: $0.end) } ?? []
+        let chargesCurrent = filterCharges(start: periodStart, end: periodEnd)
+        let chargesPrior = filterCharges(start: priorBounds.start, end: priorBounds.end)
         revenueInRange = chargesCurrent.reduce(0) { $0 + $1.amount }
         let priorRevenue = chargesPrior.reduce(0) { $0 + $1.amount }
         revenueTrendText = trendTextDouble(current: revenueInRange, prior: priorRevenue)
@@ -320,16 +369,17 @@ final class InsightsViewModel: ObservableObject {
         paymentChargesInRange = chargesCurrent.count
         paymentVolumeInRange = revenueInRange
 
-        applyRevenueChart(periodStart: periodStart, now: now, range: selectedRange)
+        applyRevenueChart(periodStart: periodStart, periodEnd: periodEnd)
     }
 
-    private func applyLegacyMetrics(periodStart: Date?, priorBounds: (start: Date, end: Date)?, now: Date) {
-        let inPeriod = cachedLegacyRequests.filter { legacyInPeriod($0, start: periodStart, end: now) }
-        let priorPeriod: [Request]
-        if let bounds = priorBounds {
-            priorPeriod = cachedLegacyRequests.filter { legacyInPeriod($0, start: bounds.start, end: bounds.end) }
-        } else {
-            priorPeriod = []
+    private func applyLegacyMetrics(
+        periodStart: Date,
+        periodEnd: Date,
+        priorBounds: (start: Date, end: Date)
+    ) {
+        let inPeriod = cachedLegacyRequests.filter { legacyInPeriod($0, start: periodStart, end: periodEnd) }
+        let priorPeriod = cachedLegacyRequests.filter {
+            legacyInPeriod($0, start: priorBounds.start, end: priorBounds.end)
         }
 
         bookingsInRange = inPeriod.count
@@ -338,8 +388,8 @@ final class InsightsViewModel: ObservableObject {
         topServiceLabels = Self.topLegacyServices(from: inPeriod, limit: 5)
 
         clientsTotal = cachedCustomerDates.count
-        clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: now)
-        let priorNew = priorBounds.map { countDatesInPeriod(cachedCustomerDates, start: $0.start, end: $0.end) } ?? 0
+        clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: periodEnd)
+        let priorNew = countDatesInPeriod(cachedCustomerDates, start: priorBounds.start, end: priorBounds.end)
         clientsTrendText = clientsNewInRange > 0
             ? "↗ \(clientsNewInRange) new"
             : trendText(current: clientsNewInRange, prior: priorNew, sameLabel: "same as prior")
@@ -347,8 +397,8 @@ final class InsightsViewModel: ObservableObject {
         noShowsInRange = 0
         noShowsTrendText = "↗ same as prior"
 
-        let revenueCurrent = filterLegacyRevenue(start: periodStart, end: now)
-        let revenuePrior = priorBounds.map { filterLegacyRevenue(start: $0.start, end: $0.end) } ?? []
+        let revenueCurrent = filterLegacyRevenue(start: periodStart, end: periodEnd)
+        let revenuePrior = filterLegacyRevenue(start: priorBounds.start, end: priorBounds.end)
         revenueInRange = revenueCurrent.reduce(0) { $0 + $1.amount }
         let priorRev = revenuePrior.reduce(0) { $0 + $1.amount }
         revenueTrendText = trendTextDouble(current: revenueInRange, prior: priorRev)
@@ -356,23 +406,32 @@ final class InsightsViewModel: ObservableObject {
         paymentChargesInRange = 0
         paymentVolumeInRange = 0
 
-        applyRevenueChart(periodStart: periodStart, now: now, range: selectedRange)
+        applyRevenueChart(periodStart: periodStart, periodEnd: periodEnd)
     }
 
-    private func applyRevenueChart(periodStart: Date?, now: Date, range: InsightsTimeRange) {
+    private func applyRevenueChart(periodStart: Date, periodEnd: Date) {
         let entries = revenueEntriesForChart()
-        let filtered = RevenueChartMath.filterEntries(entries, start: periodStart, end: now)
+        let filtered = RevenueChartMath.filterEntries(entries, start: periodStart, end: periodEnd)
+        let maxWeeks = selectedRange.suggestedWeeklyMaxWeeks(
+            customStart: customRangeStart,
+            customEnd: customRangeEnd
+        )
         revenueWeeklyPoints = RevenueChartMath.bucketWeekly(
             filtered,
-            maxWeeks: 8,
-            now: now,
+            maxWeeks: maxWeeks,
+            now: periodEnd,
             periodStart: periodStart
         )
         revenueDailyPoints = RevenueChartMath.bucketDaily(
             filtered,
-            range: range,
-            now: now,
+            now: periodEnd,
             periodStart: periodStart
+        )
+        revenueMonthlyPoints = RevenueChartMath.bucketMonthly(
+            filtered,
+            now: periodEnd,
+            periodStart: periodStart,
+            maxMonths: selectedRange == .thisYear ? 12 : 24
         )
     }
 
@@ -386,33 +445,33 @@ final class InsightsViewModel: ObservableObject {
     private func bookingInPeriod(_ r: BookingRequest, start: Date?, end: Date) -> Bool {
         guard let created = r.createdAt else { return start == nil }
         if let start { return created >= start && created <= end }
-        return true
+        return created <= end
     }
 
     private func legacyInPeriod(_ r: Request, start: Date?, end: Date) -> Bool {
         let d = r.submittedAt
         if let start { return d >= start && d <= end }
-        return true
+        return d <= end
     }
 
     private func countDatesInPeriod(_ dates: [Date], start: Date?, end: Date) -> Int {
         dates.filter { d in
             if let start { return d >= start && d <= end }
-            return true
+            return d <= end
         }.count
     }
 
     private func filterCharges(start: Date?, end: Date) -> [(date: Date, amount: Double)] {
         cachedStripeCharges.filter { c in
             if let start { return c.date >= start && c.date <= end }
-            return true
+            return c.date <= end
         }
     }
 
     private func filterLegacyRevenue(start: Date?, end: Date) -> [(date: Date, amount: Double)] {
         cachedLegacyRevenueEntries.filter { e in
             if let start { return e.date >= start && e.date <= end }
-            return true
+            return e.date <= end
         }
     }
 

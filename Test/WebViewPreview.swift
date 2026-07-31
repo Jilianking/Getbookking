@@ -22,6 +22,8 @@ enum WebViewQuickEditEvent {
     case inlineBlur
     /// User tapped a `data-bk-color-surface` band in the preview.
     case openColorSurface(surfaceId: String)
+    /// User tapped CTA chrome (padding outside label) → Background / Text / Button well.
+    case openChromeColor(targetId: String)
 }
 
 /// Native → WebView commands while quick edit is active.
@@ -240,6 +242,9 @@ struct WebViewRepresentable: UIViewRepresentable {
             } else if action == "openColorSurface",
                       let surfaceId = body["surface"] as? String {
                 event = .openColorSurface(surfaceId: surfaceId)
+            } else if action == "openChromeColor",
+                      let targetId = body["target"] as? String {
+                event = .openChromeColor(targetId: targetId)
             } else {
                 guard let key = body["key"] as? String else { return }
                 let text = body["text"] as? String ?? ""
@@ -318,10 +323,13 @@ struct WebViewRepresentable: UIViewRepresentable {
               var sheet = document.createElement('style');
               sheet.id = 'bk-quick-edit-style';
               var bkGroupedTextSelector = '.s12-section-title,.s12-section-label,.s12-info-title,.s12-info-book-title,.s12-test-title,.s12-gallery-title,.s12-phil-title,.luxe-section-heading,.luxe-section-label,.classic-section-eyebrow,.classic-hero-tag,.classic-hero-name,.classic-home .tattoo-featured-inner h2,.classic-services h2,.tattoo-featured-sub,.blade-section-label,.blade-section-title,.blade-book-title,.blade-where-city,.blade-hero-title,.stonecut-heading,.booking-page-title,.booking-page-subtitle,a.blade-service-card[data-edit-key],a.stonecut-service-card[data-edit-key],div.s12-svc-cell[data-edit-key],[data-edit-key^="svc:"][data-edit-key$=":edit"],div.s12-process-cell[data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"]';
+              var bkCtaButtonSelector = 'a.classic-btn-primary,a.classic-btn-ghost,a.luxe-hero-cta,a.luxe-promo-cta,a.tattoo-gallery-link,a.blade-btn-primary,a.blade-btn-ghost,a.blade-nav-book,a.stonecut-btn,a.s12-btn-dark,a.s12-btn-outline,a.s12-nav-book,a.s12-gallery-link';
               sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 bkGroupedTextSelector + '{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
                 bkGroupedTextSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                bkCtaButtonSelector + '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
+                bkCtaButtonSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
@@ -349,8 +357,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-edit-key][data-bk-inline-editing][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
-                'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;}' +
-                'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected],img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
+                'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
+                'img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
                 'button.bk-color-band-hit,button.bk-hero-band-hit{outline:none!important;box-shadow:none!important;cursor:pointer!important;}' +
                 '[data-bk-band-tappable]{position:relative!important;}' +
                 '.bk-band-content,.blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
@@ -382,7 +391,15 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function isHeroImageColumnTarget(el) {
                 if (!el || !el.closest) return false;
-                return !!el.closest('.blade-hero-right,.classic-hero-right,.stonecut-hero-right,.s12-hero-img-col,.bk-hero-image-hit,.luxe-hero-image-hit');
+                return !!el.closest('.blade-hero-right,.classic-hero-right,.stonecut-hero-right,.s12-hero-img-col,.bk-hero-image-hit,.luxe-hero-image-hit,.luxe-hero');
+              }
+              /** Luxe hero is photo-only; never open section color from that band. */
+              function isLuxeHeroPhotoSurface(el) {
+                if (!el || !el.closest) return false;
+                return !!el.closest('.luxe-hero');
+              }
+              function luxeHeroImageHitEl() {
+                return document.querySelector('.luxe-hero .luxe-hero-image-hit[data-edit-key="heroImage"], .luxe-hero .bk-hero-image-hit[data-edit-key="heroImage"]');
               }
               function closestGroupedTextContainer(el) {
                 if (!el || !el.closest) return null;
@@ -443,6 +460,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               function isBandOpenSpaceTap(el) {
                 if (!el || !el.closest) return false;
                 if (isBlueOutlinedTextRegion(el)) return false;
+                if (isLuxeHeroPhotoSurface(el)) return false;
                 if (el.closest('.bk-color-band-hit, .bk-hero-band-hit')) return true;
                 var surf = el.closest('[data-bk-color-surface]');
                 if (!surf) return false;
@@ -460,6 +478,16 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!el || !el.closest) return { type: 'none' };
                 var groupedHit = resolveGroupedTextEditTarget(el);
                 if (groupedHit) return groupedHit;
+                var cta = el.closest(bkCtaButtonSelector);
+                if (cta) {
+                  var ctaKey = el.closest('[data-edit-key]');
+                  if (ctaKey && cta.contains(ctaKey)) {
+                    var ctaTk = ctaKey.getAttribute('data-edit-key');
+                    if (ctaTk && isSheetOnlyKey(ctaTk)) return { type: 'sheet', el: ctaKey };
+                    if (ctaTk && ctaTk.indexOf('color:') !== 0) return { type: 'text', el: ctaKey };
+                  }
+                  return { type: 'buttonColor', el: cta };
+                }
                 if (isBandOpenSpaceTap(el)) {
                   var colorBand = el.closest('[data-bk-color-surface]');
                   if (colorBand) {
@@ -471,10 +499,14 @@ struct WebViewRepresentable: UIViewRepresentable {
                   var heroBtn = el.closest('[data-edit-key="heroImage"]');
                   if (heroBtn) return { type: 'sheet', el: heroBtn };
                 }
+                if (isLuxeHeroPhotoSurface(el) && !isBlueOutlinedTextRegion(el)) {
+                  var luxeHeroBtn = el.closest('[data-edit-key="heroImage"]') || luxeHeroImageHitEl();
+                  if (luxeHeroBtn) return { type: 'sheet', el: luxeHeroBtn };
+                }
                 var surf = el.closest('[data-bk-color-surface]');
                 if (surf && !isEditableQuickEditTarget(el)) {
-                  var sidBand = surf.getAttribute('data-bk-color-surface');
-                  if (sidBand) return { type: 'color', surface: sidBand, el: surf };
+                  var sidBand2 = surf.getAttribute('data-bk-color-surface');
+                  if (sidBand2) return { type: 'color', surface: sidBand2, el: surf };
                 }
                 var textEl = el.closest('[data-edit-key]');
                 if (textEl) {
@@ -491,7 +523,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function resolveHighlightTarget(el) {
                 if (!el || !el.closest) return el;
-                var btn = el.closest('a.classic-btn-primary,a.classic-btn-ghost,a.luxe-hero-cta,a.luxe-promo-cta,a.tattoo-gallery-link,a.blade-btn-primary,a.blade-btn-ghost,a.blade-nav-book,a.stonecut-btn,a.s12-btn-dark,a.s12-btn-outline,a.s12-nav-book,a.s12-gallery-link');
+                var btn = el.closest(bkCtaButtonSelector);
                 if (btn && btn.querySelector('[data-edit-key]')) return btn;
                 var innerKey = el.closest('[data-edit-key]');
                 if (innerKey) {
@@ -653,11 +685,20 @@ struct WebViewRepresentable: UIViewRepresentable {
                   postInlineFocus(t);
                 }, 0);
               }
+              function openChromeColorTarget(targetId, el) {
+                setQuickEditSelected(el);
+                postToNative({ action: 'openChromeColor', target: targetId || 'button' });
+              }
               function activateQuickEditHit(hit) {
                 if (!hit || hit.type === 'none') return;
                 if (hit.type === 'color') {
                   if (inlineEl) finishActiveInlineNoSave();
                   openColorSurface(hit.surface, hit.el);
+                  return;
+                }
+                if (hit.type === 'buttonColor') {
+                  if (inlineEl) finishActiveInlineNoSave();
+                  openChromeColorTarget('button', hit.el);
                   return;
                 }
                 var t = hit.el;
@@ -694,12 +735,16 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var touchTarget = ev.target;
                 while (touchTarget && touchTarget.nodeType !== 1) touchTarget = touchTarget.parentNode;
                 if (hit.type === 'color' && hit.surface === 'hero' && isHeroImageQuickEditTarget(touchTarget)) {
-                  colorLongPressTimer = setTimeout(function() {
-                    colorLongPressFired = true;
-                    if (inlineEl) finishActiveInlineNoSave();
-                    openColorSurface('hero', hit.el);
-                  }, 380);
-                } else if (!isBlueOutlinedTextRegion(touchTarget)) {
+                  if (isLuxeHeroPhotoSurface(touchTarget)) {
+                    /* Luxe hero is photo-only; no long-press color. */
+                  } else {
+                    colorLongPressTimer = setTimeout(function() {
+                      colorLongPressFired = true;
+                      if (inlineEl) finishActiveInlineNoSave();
+                      openColorSurface('hero', hit.el);
+                    }, 380);
+                  }
+                } else if (!isBlueOutlinedTextRegion(touchTarget) && !isLuxeHeroPhotoSurface(touchTarget)) {
                   var bandEl = touchTarget && touchTarget.closest('[data-bk-color-surface]');
                   if (bandEl && bandEl.tagName !== 'NAV' && touchTarget.closest('[data-bk-band-tappable],.booking-page-band,.booking-card,.gallery-page-band')) {
                     colorLongPressTimer = setTimeout(function() {

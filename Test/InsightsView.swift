@@ -1,10 +1,11 @@
 //
 //  InsightsView.swift
 //
-//  Analytics dashboard: range chips, KPI grid, bookings breakdown, top services, clients, payments.
+//  Analytics dashboard: period menu, revenue chart, bookings, services, clients, payments.
 //
 
 import SwiftUI
+import Charts
 
 struct InsightsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -13,33 +14,12 @@ struct InsightsView: View {
     var drawerState: DrawerState
     let sectionTitle: String
 
-    private let kpiColumns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-    ]
-
-    private var currencyFormatter: NumberFormatter {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "USD"
-        f.maximumFractionDigits = revenueShowsCents ? 2 : 0
-        return f
-    }
-
-    private var revenueShowsCents: Bool {
-        viewModel.revenueInRange < 1000 && viewModel.revenueInRange.truncatingRemainder(dividingBy: 1) > 0.01
-    }
-
-    private var rangeChipFilters: [(filter: InsightsTimeRange, title: String)] {
-        InsightsTimeRange.allCases.map { ($0, $0.chipLabel) }
-    }
-
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     AppScreenTitle(title: sectionTitle)
-                    AppFilterChipBar(filters: rangeChipFilters, selection: $viewModel.selectedRange)
+                    insightsRangePicker
 
                     if let err = viewModel.loadError {
                         Text(err)
@@ -53,13 +33,16 @@ struct InsightsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(32)
                     } else {
-                        kpiGrid
                         InsightsRevenueChartCard(
                             weeklyPoints: viewModel.revenueWeeklyPoints,
                             dailyPoints: viewModel.revenueDailyPoints,
+                            monthlyPoints: viewModel.revenueMonthlyPoints,
                             periodTotal: viewModel.revenueInRange,
-                            periodLabel: viewModel.selectedRange.periodLabel,
+                            periodLabel: viewModel.displayPeriodLabel,
                             trendText: viewModel.revenueTrendText,
+                            prefersMonthlyBuckets: viewModel.selectedRange == .thisYear,
+                            prefersDailyBuckets: viewModel.selectedRange == .thisWeek
+                                || viewModel.selectedRange == .thisMonth,
                             showsConnectPrompt: viewModel.useTenantData && !viewModel.stripeConnected,
                             usesLegacyRevenue: !viewModel.useTenantData
                         )
@@ -110,6 +93,14 @@ struct InsightsView: View {
             .onChange(of: viewModel.selectedRange) { _, _ in
                 viewModel.recomputeForSelectedRange()
             }
+            .onChange(of: viewModel.customRangeStart) { _, _ in
+                guard viewModel.selectedRange == .custom else { return }
+                viewModel.recomputeForSelectedRange()
+            }
+            .onChange(of: viewModel.customRangeEnd) { _, _ in
+                guard viewModel.selectedRange == .custom else { return }
+                viewModel.recomputeForSelectedRange()
+            }
         }
         .navigationViewStyle(.stack)
         .task {
@@ -120,61 +111,230 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: - KPI grid
+    // MARK: - Range picker
 
-    private var kpiGrid: some View {
-        LazyVGrid(columns: kpiColumns, spacing: 12) {
-            insightMetric(icon: "calendar", value: "\(viewModel.bookingsInRange)", label: "Bookings", trend: viewModel.bookingsTrendText, trendPositive: viewModel.bookingsTrendText.contains("+"))
-            insightMetric(icon: "dollarsign", value: formatRevenue(viewModel.revenueInRange), label: "Revenue", trend: viewModel.revenueTrendText, trendPositive: !viewModel.revenueTrendText.contains("↘"))
-            insightMetric(icon: "person.2.fill", value: "\(viewModel.clientsTotal)", label: "Clients", trend: viewModel.clientsTrendText, trendPositive: true)
-            insightMetric(icon: "xmark.circle.fill", value: "\(viewModel.noShowsInRange)", label: "No-shows", trend: viewModel.noShowsTrendText, trendPositive: viewModel.noShowsInRange == 0)
+    private var insightsRangePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Menu {
+                ForEach(InsightsTimeRange.allCases) { range in
+                    Button {
+                        viewModel.selectedRange = range
+                    } label: {
+                        if viewModel.selectedRange == range {
+                            Label(range.menuLabel, systemImage: "checkmark")
+                        } else {
+                            Text(range.menuLabel)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(viewModel.selectedRange.menuLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppDesign.cardBackground)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(AppDesign.chipBorder, lineWidth: 1)
+                )
+            }
+
+            if viewModel.selectedRange == .custom {
+                HStack(spacing: 10) {
+                    customDateField(date: $viewModel.customRangeStart)
+                    Text("to")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppDesign.textSecondary)
+                    customDateField(date: $viewModel.customRangeEnd)
+                }
+            }
         }
         .padding(.horizontal, 16)
     }
 
-    private func insightMetric(icon: String, value: String, label: String, trend: String, trendPositive: Bool) -> some View {
-        InsightMetricTile(
-            icon: icon,
-            iconColor: AppDesign.iconTileForeground,
-            iconBackground: AppDesign.iconTileBackground,
-            value: value,
-            label: label,
-            trend: trend,
-            trendPositive: trendPositive
+    private func customDateField(date: Binding<Date>) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+            DatePicker(
+                "",
+                selection: date,
+                displayedComponents: .date
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(AppDesign.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppDesign.chipBorder, lineWidth: 1)
         )
     }
 
     // MARK: - Bookings breakdown
 
-    private var bookingsBreakdownCard: some View {
+    private enum BookingsDisplayStyle: String, CaseIterable, Identifiable {
+        case list
+        case donut
+
+        var id: String { rawValue }
+
+        var menuLabel: String {
+            switch self {
+            case .list: return "List"
+            case .donut: return "Donut chart"
+            }
+        }
+    }
+
+    @State private var bookingsDisplayStyle: BookingsDisplayStyle = .donut
+
+    private struct BookingSlice: Identifiable {
+        let id: String
+        let label: String
+        let count: Int
+        let percent: Int
+        let color: Color
+    }
+
+    private var bookingSlices: [BookingSlice] {
         let b = viewModel.bookingBreakdown
         let total = max(b.total, 1)
-        return InsightCardContainer {
-            InsightCardHeader(
-                icon: "doc.text.fill",
-                iconColor: AppDesign.iconTileForeground,
-                title: "Bookings",
-                trailing: {
-                    Button("View all") {
-                        drawerState.selectedSection = .requests
-                        drawerState.isOpen = false
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppDesign.linkAccent)
-                }
+        var slices: [BookingSlice] = [
+            BookingSlice(id: "new", label: "New", count: b.newCount, percent: b.percent(b.newCount, total: total), color: AppDesign.brandWarm),
+            BookingSlice(id: "confirmed", label: "Confirmed", count: b.confirmed, percent: b.percent(b.confirmed, total: total), color: AppDesign.brandDark),
+            BookingSlice(id: "cancelled", label: "Cancelled", count: b.cancelledOrDeclined, percent: b.percent(b.cancelledOrDeclined, total: total), color: AppDesign.statusCancelled),
+        ]
+        if b.other > 0 {
+            slices.append(
+                BookingSlice(id: "other", label: "Other", count: b.other, percent: b.percent(b.other, total: total), color: AppDesign.textSecondary)
             )
-            VStack(spacing: 0) {
-                breakdownRow(dot: AppDesign.brandWarm, label: "New", count: b.newCount, percent: b.percent(b.newCount, total: total))
-                InsightDivider()
-                breakdownRow(dot: AppDesign.brandDark, label: "Confirmed", count: b.confirmed, percent: b.percent(b.confirmed, total: total))
-                InsightDivider()
-                breakdownRow(dot: AppDesign.statusCancelled, label: "Cancelled", count: b.cancelledOrDeclined, percent: b.percent(b.cancelledOrDeclined, total: total))
-                if b.other > 0 {
-                    InsightDivider()
-                    breakdownRow(dot: AppDesign.textSecondary, label: "Other", count: b.other, percent: b.percent(b.other, total: total))
+        }
+        return slices
+    }
+
+    private var bookingsBreakdownCard: some View {
+        InsightCardContainer {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.text.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(AppDesign.iconTileForeground)
+                    .frame(width: 28, alignment: .center)
+                Text("Bookings")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Spacer(minLength: 8)
+                bookingsStyleMenu
+                Button("View all") {
+                    drawerState.selectedSection = .requests
+                    drawerState.isOpen = false
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppDesign.linkAccent)
+            }
+
+            if viewModel.bookingBreakdown.total == 0 {
+                Text("No bookings in this period")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            } else {
+                switch bookingsDisplayStyle {
+                case .list:
+                    bookingsListView
+                case .donut:
+                    bookingsDonutView
                 }
             }
         }
+    }
+
+    private var bookingsStyleMenu: some View {
+        Menu {
+            ForEach(BookingsDisplayStyle.allCases) { style in
+                Button {
+                    bookingsDisplayStyle = style
+                } label: {
+                    if bookingsDisplayStyle == style {
+                        Label(style.menuLabel, systemImage: "checkmark")
+                    } else {
+                        Text(style.menuLabel)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(bookingsDisplayStyle.menuLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppDesign.searchBackground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(AppDesign.chipBorder.opacity(0.7), lineWidth: 1)
+            )
+        }
+    }
+
+    private var bookingsListView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(bookingSlices.enumerated()), id: \.element.id) { index, slice in
+                if index > 0 { InsightDivider() }
+                breakdownRow(dot: slice.color, label: slice.label, count: slice.count, percent: slice.percent)
+            }
+        }
+    }
+
+    private var bookingsDonutView: some View {
+        HStack(alignment: .center, spacing: 20) {
+            Chart(bookingSlices.filter { $0.count > 0 }) { slice in
+                SectorMark(
+                    angle: .value("Count", slice.count),
+                    innerRadius: .ratio(0.58),
+                    angularInset: 1.5
+                )
+                .foregroundStyle(slice.color)
+                .cornerRadius(3)
+            }
+            .frame(width: 132, height: 132)
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(bookingSlices) { slice in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(slice.color)
+                            .frame(width: 8, height: 8)
+                        Text(slice.label)
+                            .font(.subheadline)
+                            .foregroundStyle(AppDesign.textPrimary)
+                        Spacer(minLength: 4)
+                        Text("\(slice.percent)%")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.top, 4)
     }
 
     private func breakdownRow(dot: Color, label: String, count: Int, percent: Int) -> some View {
@@ -207,9 +367,11 @@ struct InsightsView: View {
                 iconColor: AppDesign.iconTileForeground,
                 title: "Top services",
                 trailing: {
-                    Text(viewModel.selectedRange.periodLabel)
+                    Text(viewModel.displayPeriodLabel)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppDesign.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             )
             VStack(alignment: .leading, spacing: 14) {
@@ -241,7 +403,7 @@ struct InsightsView: View {
                 metricListRow(label: "Total clients", value: "\(viewModel.clientsTotal)", valueColor: AppDesign.textPrimary)
                 InsightDivider()
                 metricListRow(
-                    label: "New (\(viewModel.selectedRange.periodLabel))",
+                    label: "New (\(viewModel.displayPeriodLabel))",
                     value: "\(viewModel.clientsNewInRange)",
                     valueColor: viewModel.clientsNewInRange > 0 ? AppDesign.brandWarm : AppDesign.textPrimary,
                     prefix: viewModel.clientsNewInRange > 0 ? "+" : nil
@@ -300,12 +462,12 @@ struct InsightsView: View {
                     )
                     InsightDivider()
                     metricListRow(
-                        label: "Charges (\(viewModel.selectedRange.periodLabel))",
+                        label: "Charges (\(viewModel.displayPeriodLabel))",
                         value: "\(viewModel.paymentChargesInRange)"
                     )
                     InsightDivider()
                     metricListRow(
-                        label: "Volume (\(viewModel.selectedRange.periodLabel))",
+                        label: "Volume (\(viewModel.displayPeriodLabel))",
                         value: formatVolume(viewModel.paymentVolumeInRange)
                     )
                 }
@@ -342,13 +504,6 @@ struct InsightsView: View {
                 .foregroundStyle(valueColor)
         }
         .padding(.vertical, 12)
-    }
-
-    private func formatRevenue(_ value: Double) -> String {
-        if value >= 1000 {
-            return formatVolume(value)
-        }
-        return currencyFormatter.string(from: NSNumber(value: value)) ?? "$0"
     }
 
     private func formatCurrency(_ value: Double) -> String {

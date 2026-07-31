@@ -43,6 +43,7 @@ struct PreviewQuickEditChrome: View {
     @Binding var inlineFocus: QuickEditInlineFocus?
     @Binding var colorsDirty: Bool
     @Binding var selectedColorSurface: PreviewColorSurface?
+    @Binding var selectedChromeColorTarget: PreviewQuickEditColorTarget?
     @Binding var isChromeCollapsed: Bool
     @AppStorage("quickEditFabPosX") private var storedFabPosX: Double = -1
     @AppStorage("quickEditFabPosY") private var storedFabPosY: Double = -1
@@ -83,6 +84,7 @@ struct PreviewQuickEditChrome: View {
                 onChange: { applyChromeColor(target: target, hex: $0) },
                 onDismiss: {
                     activeColorTarget = nil
+                    selectedChromeColorTarget = nil
                     finishColorSheetDismiss()
                 }
             )
@@ -113,6 +115,10 @@ struct PreviewQuickEditChrome: View {
         .onChange(of: selectedColorSurface) { _, surface in
             guard let surface else { return }
             presentColorSurface(surface)
+        }
+        .onChange(of: selectedChromeColorTarget) { _, target in
+            guard let target else { return }
+            presentChromeColor(target)
         }
         .onChange(of: isChromeCollapsed) { _, collapsed in
             if collapsed {
@@ -365,6 +371,7 @@ struct PreviewQuickEditChrome: View {
         activeColorTarget = nil
         activeColorSurface = nil
         selectedColorSurface = nil
+        selectedChromeColorTarget = nil
         focusedColorEdit = nil
     }
 
@@ -372,6 +379,12 @@ struct PreviewQuickEditChrome: View {
     private func presentColorSurface(_ surface: PreviewColorSurface) {
         activeColorSurface = surface
         selectedColorSurface = nil
+    }
+
+    /// Opens Background / Text / Button color; clears binding so the same CTA can be tapped again after Done.
+    private func presentChromeColor(_ target: PreviewQuickEditColorTarget) {
+        activeColorTarget = target
+        selectedChromeColorTarget = nil
     }
 
     private func fontSizeStepper(focus: QuickEditInlineFocus) -> some View {

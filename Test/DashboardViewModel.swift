@@ -235,8 +235,18 @@ class DashboardViewModel: ObservableObject {
         let thisWeek = demoAmounts.last ?? 0
         let lastWeek = demoAmounts.count >= 2 ? demoAmounts[demoAmounts.count - 2] : 0
         let weekOverWeekPct = RevenueChartMath.percentChange(current: thisWeek, prior: lastWeek)
+        let cal = Calendar.current
+        let endWeekStart = cal.date(
+            from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        ) ?? Date()
+        let firstWeekStart = cal.date(
+            byAdding: .weekOfYear,
+            value: -(demoAmounts.count - 1),
+            to: endWeekStart
+        ) ?? endWeekStart
         let points = demoAmounts.enumerated().map { index, amount in
-            WeeklyRevenuePoint(id: index + 1, label: "Wk \(index + 1)", amount: amount)
+            let weekStart = cal.date(byAdding: .weekOfYear, value: index, to: firstWeekStart) ?? firstWeekStart
+            return WeeklyRevenuePoint(id: index + 1, weekStart: weekStart, amount: amount)
         }
         applyRevenueSnapshot(
             RevenueSnapshot(

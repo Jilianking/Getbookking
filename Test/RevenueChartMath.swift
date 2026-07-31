@@ -5,17 +5,36 @@
 //
 
 import Foundation
+import CoreGraphics
 
 struct WeeklyRevenuePoint: Identifiable, Equatable {
     let id: Int
-    let label: String
+    /// Start of the week bucket (calendar week).
+    let weekStart: Date
     let amount: Double
+
+    /// Short axis / callout label (e.g. "Jul 7").
+    var label: String {
+        weekStart.formatted(.dateTime.month(.abbreviated).day())
+    }
 }
 
 struct DailyRevenuePoint: Identifiable, Equatable {
     let id: Int
     let date: Date
     let amount: Double
+}
+
+struct MonthlyRevenuePoint: Identifiable, Equatable {
+    let id: Int
+    /// First day of the month bucket.
+    let monthStart: Date
+    let amount: Double
+
+    /// Month-only axis / callout label (e.g. "Jul").
+    var label: String {
+        monthStart.formatted(.dateTime.month(.abbreviated))
+    }
 }
 
 enum RevenueChartMath {
@@ -63,14 +82,13 @@ enum RevenueChartMath {
             let total = entries
                 .filter { $0.date >= weekStart && $0.date < weekEnd }
                 .reduce(0) { $0 + $1.amount }
-            return WeeklyRevenuePoint(id: index + 1, label: "Wk \(index + 1)", amount: total)
+            return WeeklyRevenuePoint(id: index + 1, weekStart: weekStart, amount: total)
         }
     }
 
-    /// Daily buckets for the selected insights range (`all` caps at 30 days).
+    /// Daily buckets for the selected insights range.
     static func bucketDaily(
         _ entries: [(date: Date, amount: Double)],
-        range: InsightsTimeRange,
         now: Date = Date(),
         periodStart: Date? = nil
     ) -> [DailyRevenuePoint] {
@@ -96,7 +114,48 @@ enum RevenueChartMath {
         }
     }
 
-    /// X-axis label stride for daily charts (avoids overlapping labels on narrow screens).
+    /// Monthly buckets from `periodStart` through `now` (inclusive months).
+    static func bucketMonthly(
+        _ entries: [(date: Date, amount: Double)],
+        now: Date = Date(),
+        periodStart: Date? = nil,
+        maxMonths: Int = 12
+    ) -> [MonthlyRevenuePoint] {
+        let cal = Calendar.current
+        let endMonthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+
+        let firstMonthStart: Date
+        let monthCount: Int
+        if let periodStart {
+            let rangeStartMonth = cal.date(from: cal.dateComponents([.year, .month], from: periodStart)) ?? periodStart
+            let rawMonths = (cal.dateComponents([.month], from: rangeStartMonth, to: endMonthStart).month ?? 0) + 1
+            monthCount = min(maxMonths, max(1, rawMonths))
+            firstMonthStart = cal.date(byAdding: .month, value: -(monthCount - 1), to: endMonthStart) ?? rangeStartMonth
+        } else {
+            monthCount = maxMonths
+            firstMonthStart = cal.date(byAdding: .month, value: -(maxMonths - 1), to: endMonthStart) ?? now
+        }
+
+        return (0..<monthCount).map { index in
+            let monthStart = cal.date(byAdding: .month, value: index, to: firstMonthStart) ?? firstMonthStart
+            let monthEnd = cal.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
+            let total = entries
+                .filter { $0.date >= monthStart && $0.date < monthEnd }
+                .reduce(0) { $0 + $1.amount }
+            return MonthlyRevenuePoint(id: index + 1, monthStart: monthStart, amount: total)
+        }
+    }
+
+    /// Suggested plot width per day for a horizontally scrollable daily chart.
+    static func dailyScrollDayWidth(dayCount: Int) -> CGFloat {
+        switch dayCount {
+        case ...7: return 44
+        case ...14: return 40
+        default: return 36
+        }
+    }
+
+    /// X-axis label stride for daily charts squeezed into a fixed-width plot (dashboard-style).
     static func dailyAxisStrideDays(dayCount: Int) -> Int {
         switch dayCount {
         case ...7: return 1

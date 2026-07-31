@@ -25,6 +25,7 @@ struct DesignView: View {
     @State private var quickEditInlineFocus: QuickEditInlineFocus?
     @State private var previewColorsDirty = false
     @State private var selectedColorSurface: PreviewColorSurface?
+    @State private var selectedChromeColorTarget: PreviewQuickEditColorTarget?
     @State private var isQuickEditChromeCollapsed = false
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
@@ -581,6 +582,10 @@ struct DesignView: View {
                     if let surface = PreviewColorSurface(surfaceId: surfaceId) {
                         selectedColorSurface = surface
                     }
+                case let .openChromeColor(targetId):
+                    if let target = PreviewQuickEditColorTarget(rawValue: targetId) {
+                        selectedChromeColorTarget = target
+                    }
                 case let .openSheet(key, text):
                     if key == "heroImage" {
                         quickEditHeroImageSheet = true
@@ -661,6 +666,7 @@ struct DesignView: View {
                         inlineFocus: $quickEditInlineFocus,
                         colorsDirty: $previewColorsDirty,
                         selectedColorSurface: $selectedColorSurface,
+                        selectedChromeColorTarget: $selectedChromeColorTarget,
                         isChromeCollapsed: $isQuickEditChromeCollapsed
                     )
                 }
@@ -672,6 +678,7 @@ struct DesignView: View {
                 quickEditInlineFocus = nil
                 previewColorsDirty = false
                 selectedColorSurface = nil
+                selectedChromeColorTarget = nil
                 isQuickEditChromeCollapsed = false
             }
         }

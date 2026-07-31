@@ -38,7 +38,7 @@ enum PreviewColorSurface: String, Identifiable, CaseIterable {
     var hint: String {
         switch self {
         case .page: return "Top bar and page base"
-        case .hero: return "Tap grey area in the hero (not blue text boxes); long-press photo"
+        case .hero: return "Tap grey area in the hero (not blue text boxes); long-press photo. Luxe hero is photo-only."
         case .featured: return "Featured work section"
         case .gallery: return "Full gallery page background"
         case .card: return "Card bands (services, When/Where, booking)"

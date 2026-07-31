@@ -38,6 +38,6 @@ window.appStoreUrl = "";
 
 /**
  * TestFlight public join URL (optional). Example: https://testflight.apple.com/join/AbCdEfGh
- * When set, testflight.html thank-you screen shows a "Join the beta" button.
+ * When set, signup.html shows a direct "Join the beta" button after signup.
  */
-window.testflightPublicJoinUrl = "";
+window.testflightPublicJoinUrl = "https://testflight.apple.com/join/GD8AUjpS";

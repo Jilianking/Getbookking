@@ -67,7 +67,7 @@ struct DashboardRevenueChartCard: View {
             } else {
                 Chart(points) { point in
                     AreaMark(
-                        x: .value("Week", point.label),
+                        x: .value("Week", point.weekStart, unit: .weekOfYear),
                         y: .value("Revenue", point.amount)
                     )
                     .foregroundStyle(
@@ -83,7 +83,7 @@ struct DashboardRevenueChartCard: View {
                     .interpolationMethod(.catmullRom)
 
                     LineMark(
-                        x: .value("Week", point.label),
+                        x: .value("Week", point.weekStart, unit: .weekOfYear),
                         y: .value("Revenue", point.amount)
                     )
                     .foregroundStyle(AppDesign.textPrimary)
@@ -91,7 +91,7 @@ struct DashboardRevenueChartCard: View {
                     .interpolationMethod(.catmullRom)
 
                     PointMark(
-                        x: .value("Week", point.label),
+                        x: .value("Week", point.weekStart, unit: .weekOfYear),
                         y: .value("Revenue", point.amount)
                     )
                     .foregroundStyle(AppDesign.textPrimary)
@@ -111,10 +111,10 @@ struct DashboardRevenueChartCard: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks { value in
+                    AxisMarks(values: points.map(\.weekStart)) { value in
                         AxisValueLabel {
-                            if let label = value.as(String.self) {
-                                Text(label)
+                            if let date = value.as(Date.self) {
+                                Text(date, format: .dateTime.month(.abbreviated).day())
                                     .font(.caption2)
                                     .foregroundStyle(AppDesign.textSecondary)
                             }

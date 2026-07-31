@@ -266,9 +266,9 @@ struct InsightsRevenueChartCard: View {
         seriesKind == .daily && series.count > 7
     }
 
+    /// About a week of days on screen; pan right for the rest of the period.
     private var visibleDomainLength: TimeInterval {
-        let visible = min(7, max(series.count, 1))
-        return TimeInterval(visible) * 24 * 60 * 60
+        TimeInterval(min(7, max(series.count, 1))) * 24 * 60 * 60
     }
 
     private var lineChart: some View {
@@ -312,12 +312,12 @@ struct InsightsRevenueChartCard: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
         }
-        .chartXScale(domain: xDomain)
-        .chartXSelection(value: $selectedDate)
-        .modifier(InsightsChartScrollModifier(
+        .modifier(InsightsChartScrollDomainModifier(
             enabled: shouldScrollHorizontally,
+            xDomain: xDomain,
             visibleDomainLength: visibleDomainLength
         ))
+        .chartXSelection(value: $selectedDate)
         .chartYAxis { revenueYAxis }
         .chartXAxis { revenueXAxis }
         .frame(height: 180)
@@ -340,12 +340,12 @@ struct InsightsRevenueChartCard: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
         }
-        .chartXScale(domain: xDomain)
-        .chartXSelection(value: $selectedDate)
-        .modifier(InsightsChartScrollModifier(
+        .modifier(InsightsChartScrollDomainModifier(
             enabled: shouldScrollHorizontally,
+            xDomain: xDomain,
             visibleDomainLength: visibleDomainLength
         ))
+        .chartXSelection(value: $selectedDate)
         .chartYAxis { revenueYAxis }
         .chartXAxis { revenueXAxis }
         .frame(height: 180)
@@ -436,8 +436,11 @@ struct InsightsRevenueChartCard: View {
     }
 }
 
-private struct InsightsChartScrollModifier: ViewModifier {
+/// When scrolling: use Charts’ scroll APIs (no fixed x-scale — that blocks panning).
+/// When not: pin the full domain. Selection scrubbing stays enabled either way.
+private struct InsightsChartScrollDomainModifier: ViewModifier {
     let enabled: Bool
+    let xDomain: ClosedRange<Date>
     let visibleDomainLength: TimeInterval
 
     @ViewBuilder
@@ -446,8 +449,10 @@ private struct InsightsChartScrollModifier: ViewModifier {
             content
                 .chartScrollableAxes(.horizontal)
                 .chartXVisibleDomain(length: visibleDomainLength)
+                .chartScrollTargetBehavior(.valueAligned(matching: DateComponents(day: 1)))
         } else {
             content
+                .chartXScale(domain: xDomain)
         }
     }
 }

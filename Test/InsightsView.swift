@@ -1,7 +1,7 @@
 //
 //  InsightsView.swift
 //
-//  Analytics dashboard: period menu, revenue chart, bookings, services, clients, payments.
+//  Analytics dashboard: period menu, revenue chart, bookings, services, clients.
 //
 
 import SwiftUI
@@ -52,9 +52,6 @@ struct InsightsView: View {
                             topServicesCard
                         }
                         clientsCard
-                        if viewModel.useTenantData {
-                            paymentsCard
-                        }
                     }
                 }
                 .padding(.bottom, 24)
@@ -237,12 +234,6 @@ struct InsightsView: View {
                     .foregroundStyle(AppDesign.textPrimary)
                 Spacer(minLength: 8)
                 bookingsStyleMenu
-                Button("View all") {
-                    drawerState.selectedSection = .requests
-                    drawerState.isOpen = false
-                }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppDesign.linkAccent)
             }
 
             if viewModel.bookingBreakdown.total == 0 {
@@ -359,171 +350,396 @@ struct InsightsView: View {
 
     // MARK: - Top services
 
+    private enum TopServicesDisplayStyle: String, CaseIterable, Identifiable {
+        case bars
+        case rankedList
+
+        var id: String { rawValue }
+
+        var menuLabel: String {
+            switch self {
+            case .bars: return "Bars"
+            case .rankedList: return "Ranked list"
+            }
+        }
+    }
+
+    @State private var topServicesDisplayStyle: TopServicesDisplayStyle = .bars
+
     private var topServicesCard: some View {
         let maxCount = viewModel.topServiceLabels.map(\.count).max() ?? 1
         return InsightCardContainer {
-            InsightCardHeader(
-                icon: "chart.bar.fill",
-                iconColor: AppDesign.iconTileForeground,
-                title: "Top services",
-                trailing: {
+            HStack(spacing: 10) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(AppDesign.iconTileForeground)
+                    .frame(width: 28, alignment: .center)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Top services")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppDesign.textPrimary)
                     Text(viewModel.displayPeriodLabel)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppDesign.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-            )
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(viewModel.topServiceLabels.enumerated()), id: \.offset) { _, item in
-                    InsightBarRow(label: item.label, value: item.count, maxValue: maxCount)
+                Spacer(minLength: 8)
+                topServicesStyleMenu
+            }
+
+            switch topServicesDisplayStyle {
+            case .bars:
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(viewModel.topServiceLabels.enumerated()), id: \.offset) { _, item in
+                        InsightBarRow(label: item.label, value: item.count, maxValue: maxCount)
+                    }
+                }
+            case .rankedList:
+                VStack(spacing: 0) {
+                    ForEach(Array(viewModel.topServiceLabels.enumerated()), id: \.offset) { index, item in
+                        if index > 0 { InsightDivider() }
+                        topServiceRankedRow(rank: index + 1, label: item.label, count: item.count)
+                    }
                 }
             }
         }
+    }
+
+    private var topServicesStyleMenu: some View {
+        Menu {
+            ForEach(TopServicesDisplayStyle.allCases) { style in
+                Button {
+                    topServicesDisplayStyle = style
+                } label: {
+                    if topServicesDisplayStyle == style {
+                        Label(style.menuLabel, systemImage: "checkmark")
+                    } else {
+                        Text(style.menuLabel)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(topServicesDisplayStyle.menuLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppDesign.searchBackground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(AppDesign.chipBorder.opacity(0.7), lineWidth: 1)
+            )
+        }
+    }
+
+    private func topServiceRankedRow(rank: Int, label: String, count: Int) -> some View {
+        HStack(spacing: 12) {
+            Text("\(rank)")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(AppDesign.textSecondary)
+                .frame(width: 20, alignment: .leading)
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textPrimary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppDesign.textPrimary)
+        }
+        .padding(.vertical, 12)
     }
 
     // MARK: - Clients
 
-    private var clientsCard: some View {
-        InsightCardContainer {
-            InsightCardHeader(
-                icon: "person.2.fill",
-                iconColor: AppDesign.iconTileForeground,
-                title: "Clients",
-                trailing: {
-                    Button("View all") {
-                        drawerState.selectedSection = .clients
-                        drawerState.isOpen = false
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppDesign.linkAccent)
-                }
-            )
-            VStack(spacing: 0) {
-                metricListRow(label: "Total clients", value: "\(viewModel.clientsTotal)", valueColor: AppDesign.textPrimary)
-                InsightDivider()
-                metricListRow(
-                    label: "New (\(viewModel.displayPeriodLabel))",
-                    value: "\(viewModel.clientsNewInRange)",
-                    valueColor: viewModel.clientsNewInRange > 0 ? AppDesign.brandWarm : AppDesign.textPrimary,
-                    prefix: viewModel.clientsNewInRange > 0 ? "+" : nil
-                )
+    private enum ClientsDisplayStyle: String, CaseIterable, Identifiable {
+        case donut
+        case bar
+        case line
+
+        var id: String { rawValue }
+
+        var menuLabel: String {
+            switch self {
+            case .donut: return "Donut chart"
+            case .bar: return "Bar chart"
+            case .line: return "Line chart"
             }
         }
     }
 
-    // MARK: - Payments
+    @State private var clientsDisplayStyle: ClientsDisplayStyle = .donut
 
-    private var paymentsCard: some View {
+    private struct ClientDonutSlice: Identifiable {
+        let id: String
+        let label: String
+        let count: Int
+        let color: Color
+    }
+
+    private var clientsCard: some View {
         InsightCardContainer {
             HStack(spacing: 10) {
-                Image(systemName: "creditcard.fill")
+                Image(systemName: "person.2.fill")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(AppDesign.iconTileForeground)
                     .frame(width: 28, alignment: .center)
-                Text("Payments")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(AppDesign.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clients")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    Text(viewModel.displayPeriodLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
                 Spacer(minLength: 8)
-                if viewModel.stripeConnected {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                        Text("Stripe connected")
-                            .font(.caption2.weight(.semibold))
+                clientsStyleMenu
+            }
+
+            switch clientsDisplayStyle {
+            case .donut:
+                clientsDonutView
+            case .bar:
+                clientsBarChart
+            case .line:
+                clientsLineChart
+            }
+        }
+    }
+
+    private var clientsStyleMenu: some View {
+        Menu {
+            ForEach(ClientsDisplayStyle.allCases) { style in
+                Button {
+                    clientsDisplayStyle = style
+                } label: {
+                    if clientsDisplayStyle == style {
+                        Label(style.menuLabel, systemImage: "checkmark")
+                    } else {
+                        Text(style.menuLabel)
                     }
-                    .foregroundStyle(AppDesign.brandWarm)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(AppDesign.brandCream)
-                    .clipShape(Capsule())
                 }
             }
-            if viewModel.stripeConnected {
-                VStack(spacing: 0) {
-                    metricListRow(
-                        label: "Total balance",
-                        value: formatCurrency(viewModel.availableBalance + viewModel.pendingBalance),
-                        valueColor: AppDesign.brandWarm
+        } label: {
+            HStack(spacing: 6) {
+                Text(clientsDisplayStyle.menuLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppDesign.searchBackground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(AppDesign.chipBorder.opacity(0.7), lineWidth: 1)
+            )
+        }
+    }
+
+    private var clientsDonutView: some View {
+        let slices = [
+            ClientDonutSlice(id: "new", label: "New", count: viewModel.clientsNewInRange, color: AppDesign.brandWarm),
+            ClientDonutSlice(id: "existing", label: "Existing", count: viewModel.clientsExistingInRange, color: AppDesign.brandDark),
+        ]
+        let chartSlices = slices.filter { $0.count > 0 }
+        let total = max(viewModel.clientsTotal, 1)
+
+        return Group {
+            if viewModel.clientsTotal == 0 {
+                Text("No clients yet")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            } else {
+                HStack(alignment: .center, spacing: 20) {
+                    Chart(chartSlices) { slice in
+                        SectorMark(
+                            angle: .value("Count", slice.count),
+                            innerRadius: .ratio(0.58),
+                            angularInset: 1.5
+                        )
+                        .foregroundStyle(slice.color)
+                        .cornerRadius(3)
+                    }
+                    .frame(width: 132, height: 132)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(slices) { slice in
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(slice.color)
+                                    .frame(width: 8, height: 8)
+                                Text(slice.label)
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppDesign.textPrimary)
+                                Spacer(minLength: 4)
+                                Text("\(slice.count)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppDesign.textPrimary)
+                                Text("\(Int((Double(slice.count) / Double(total) * 100).rounded()))%")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppDesign.textSecondary)
+                                    .frame(width: 36, alignment: .trailing)
+                            }
+                        }
+                        Text("Total \(viewModel.clientsTotal)")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppDesign.textSecondary)
+                            .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var clientsUsesMonthlySeries: Bool {
+        viewModel.selectedRange == .thisYear || viewModel.clientsSeriesPoints.count > 45
+    }
+
+    private var clientsBarChart: some View {
+        let points = viewModel.clientsSeriesPoints
+        return Group {
+            if points.isEmpty || points.allSatisfy({ $0.count == 0 }) {
+                Text("No new clients in this period")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 140, alignment: .center)
+            } else {
+                Chart(points) { point in
+                    BarMark(
+                        x: .value("Period", point.date, unit: clientsUsesMonthlySeries ? .month : .day),
+                        y: .value("New clients", point.count)
                     )
-                    InsightDivider()
-                    metricListRow(
-                        label: "Ready to withdraw",
-                        value: formatCurrency(max(0, viewModel.availableBalance))
+                    .foregroundStyle(AppDesign.chartBarFill)
+                    .cornerRadius(4)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(AppDesign.chipBorder.opacity(0.6))
+                        AxisValueLabel {
+                            if let n = value.as(Int.self) {
+                                Text("\(n)")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(
+                                    date,
+                                    format: clientsUsesMonthlySeries
+                                        ? .dateTime.month(.abbreviated)
+                                        : .dateTime.month(.abbreviated).day()
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var clientsLineChart: some View {
+        let points = viewModel.clientsSeriesPoints
+        return Group {
+            if points.isEmpty || points.allSatisfy({ $0.count == 0 }) {
+                Text("No new clients in this period")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 140, alignment: .center)
+            } else {
+                Chart(points) { point in
+                    AreaMark(
+                        x: .value("Period", point.date, unit: clientsUsesMonthlySeries ? .month : .day),
+                        y: .value("New clients", point.count)
                     )
-                    InsightDivider()
-                    metricListRow(
-                        label: "Settling",
-                        value: formatCurrency(
-                            viewModel.availableBalance < 0
-                                ? viewModel.pendingBalance + viewModel.availableBalance
-                                : viewModel.pendingBalance
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                AppDesign.chartBarFill.opacity(0.22),
+                                AppDesign.chartBarFill.opacity(0),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
                     )
-                    InsightDivider()
-                    metricListRow(
-                        label: "Charges (\(viewModel.displayPeriodLabel))",
-                        value: "\(viewModel.paymentChargesInRange)"
+                    .interpolationMethod(.catmullRom)
+
+                    LineMark(
+                        x: .value("Period", point.date, unit: clientsUsesMonthlySeries ? .month : .day),
+                        y: .value("New clients", point.count)
                     )
-                    InsightDivider()
-                    metricListRow(
-                        label: "Volume (\(viewModel.displayPeriodLabel))",
-                        value: formatVolume(viewModel.paymentVolumeInRange)
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.catmullRom)
+
+                    PointMark(
+                        x: .value("Period", point.date, unit: clientsUsesMonthlySeries ? .month : .day),
+                        y: .value("New clients", point.count)
                     )
+                    .foregroundStyle(AppDesign.textPrimary)
+                    .symbolSize(36)
                 }
-            } else {
-                Text("Connect Stripe in Payments to see balances and charges.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(AppDesign.chipBorder.opacity(0.6))
+                        AxisValueLabel {
+                            if let n = value.as(Int.self) {
+                                Text("\(n)")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(
+                                    date,
+                                    format: clientsUsesMonthlySeries
+                                        ? .dateTime.month(.abbreviated)
+                                        : .dateTime.month(.abbreviated).day()
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160)
+                .padding(.top, 4)
             }
         }
     }
 
     // MARK: - Helpers
-
-    private func metricListRow(
-        label: String,
-        value: String,
-        valueColor: Color = AppDesign.textPrimary,
-        prefix: String? = nil
-    ) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
-            Spacer()
-            if let prefix {
-                Text(prefix)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(valueColor)
-            }
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(valueColor)
-        }
-        .padding(.vertical, 12)
-    }
-
-    private func formatCurrency(_ value: Double) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "USD"
-        f.maximumFractionDigits = value >= 100 ? 0 : 2
-        return f.string(from: NSNumber(value: value)) ?? "$0"
-    }
-
-    private func formatVolume(_ value: Double) -> String {
-        if value >= 1000 {
-            let k = value / 1000
-            if k >= 10 {
-                return String(format: "$%.0fK", k)
-            }
-            return String(format: "$%.1fK", k)
-        }
-        return formatCurrency(value)
-    }
 }
 
 // MARK: - Card chrome

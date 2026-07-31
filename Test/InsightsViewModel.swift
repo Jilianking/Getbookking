@@ -102,6 +102,20 @@ struct InsightsBookingBreakdown {
     }
 }
 
+struct InsightsClientSeriesPoint: Identifiable, Equatable {
+    let id: Int
+    let date: Date
+    let count: Int
+
+    var label: String {
+        date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    var monthLabel: String {
+        date.formatted(.dateTime.month(.abbreviated))
+    }
+}
+
 final class InsightsViewModel: ObservableObject {
     @Published var selectedRange: InsightsTimeRange = .thisMonth
     @Published var customRangeStart: Date = Calendar.current.date(byAdding: .day, value: -29, to: Date()) ?? Date()
@@ -118,19 +132,18 @@ final class InsightsViewModel: ObservableObject {
     @Published var revenueTrendText = ""
     @Published var clientsTotal = 0
     @Published var clientsNewInRange = 0
+    @Published var clientsExistingInRange = 0
     @Published var clientsTrendText = ""
+    /// New-client signups over the selected period (for bar / line charts).
+    @Published var clientsSeriesPoints: [InsightsClientSeriesPoint] = []
     @Published var noShowsInRange = 0
     @Published var noShowsTrendText = ""
 
     @Published var bookingBreakdown = InsightsBookingBreakdown()
     @Published var topServiceLabels: [(label: String, count: Int)] = []
 
-    // Clients & payments rows
+    // Clients & Stripe revenue source
     @Published var stripeConnected = false
-    @Published var availableBalance: Double = 0
-    @Published var pendingBalance: Double = 0
-    @Published var paymentChargesInRange = 0
-    @Published var paymentVolumeInRange: Double = 0
 
     // Revenue chart (real Stripe / legacy booking revenue only)
     @Published var revenueWeeklyPoints: [WeeklyRevenuePoint] = []
@@ -191,8 +204,6 @@ final class InsightsViewModel: ObservableObject {
                     cachedStripeCharges = charges
                     cachedLegacyRevenueEntries = []
                     stripeConnected = true
-                    availableBalance = Double(payments?.availableBalanceCents ?? 0) / 100
-                    pendingBalance = Double(payments?.pendingBalanceCents ?? 0) / 100
                     isLoading = false
                     recomputeForSelectedRange()
                 }
@@ -223,10 +234,8 @@ final class InsightsViewModel: ObservableObject {
                 let connected = stripeAccountId != nil && !(stripeAccountId ?? "").isEmpty
 
                 var charges: [(Date, Double)] = []
-                var avail: Double = 0
-                var pend: Double = 0
                 if connected {
-                    (avail, pend, charges) = await loadStripeCharges()
+                    charges = await loadStripeCharges()
                 }
 
                 await MainActor.run {
@@ -238,8 +247,6 @@ final class InsightsViewModel: ObservableObject {
                     cachedStripeCharges = charges
                     cachedLegacyRevenueEntries = []
                     stripeConnected = connected
-                    availableBalance = avail
-                    pendingBalance = pend
                     isLoading = false
                     recomputeForSelectedRange()
                 }
@@ -271,8 +278,6 @@ final class InsightsViewModel: ObservableObject {
                     cachedStripeCharges = []
                     cachedLegacyRevenueEntries = revenueEntries
                     stripeConnected = false
-                    availableBalance = 0
-                    pendingBalance = 0
                     isLoading = false
                     recomputeForSelectedRange()
                 }
@@ -309,15 +314,15 @@ final class InsightsViewModel: ObservableObject {
         useTenantData = true
         tenantId = "demo"
         stripeConnected = true
-        availableBalance = 420
-        pendingBalance = 85
         bookingsInRange = 12
         bookingsTrendText = "↗ +4 vs last period"
         revenueInRange = 840
         revenueTrendText = "↗ +12% vs last period"
         clientsTotal = 24
         clientsNewInRange = 3
+        clientsExistingInRange = 21
         clientsTrendText = "↗ 3 new"
+        clientsSeriesPoints = []
         noShowsInRange = 1
         noShowsTrendText = "↗ same as prior"
         bookingBreakdown = InsightsBookingBreakdown(newCount: 4, confirmed: 7, cancelledOrDeclined: 1, other: 0)
@@ -326,8 +331,6 @@ final class InsightsViewModel: ObservableObject {
             ("Color", 3),
             ("Beard trim", 2)
         ]
-        paymentChargesInRange = 14
-        paymentVolumeInRange = 1200
         revenueWeeklyPoints = []
         revenueDailyPoints = []
         revenueMonthlyPoints = []
@@ -352,10 +355,16 @@ final class InsightsViewModel: ObservableObject {
 
         clientsTotal = cachedCustomerDates.count
         clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: periodEnd)
+        clientsExistingInRange = max(0, clientsTotal - clientsNewInRange)
         let priorNew = countDatesInPeriod(cachedCustomerDates, start: priorBounds.start, end: priorBounds.end)
         clientsTrendText = clientsNewInRange > 0
             ? "↗ \(clientsNewInRange) new"
             : trendText(current: clientsNewInRange, prior: priorNew, sameLabel: "same as prior")
+        clientsSeriesPoints = bucketClientSignups(
+            cachedCustomerDates,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
 
         noShowsInRange = 0
         noShowsTrendText = "↗ same as prior"
@@ -365,9 +374,6 @@ final class InsightsViewModel: ObservableObject {
         revenueInRange = chargesCurrent.reduce(0) { $0 + $1.amount }
         let priorRevenue = chargesPrior.reduce(0) { $0 + $1.amount }
         revenueTrendText = trendTextDouble(current: revenueInRange, prior: priorRevenue)
-
-        paymentChargesInRange = chargesCurrent.count
-        paymentVolumeInRange = revenueInRange
 
         applyRevenueChart(periodStart: periodStart, periodEnd: periodEnd)
     }
@@ -389,10 +395,16 @@ final class InsightsViewModel: ObservableObject {
 
         clientsTotal = cachedCustomerDates.count
         clientsNewInRange = countDatesInPeriod(cachedCustomerDates, start: periodStart, end: periodEnd)
+        clientsExistingInRange = max(0, clientsTotal - clientsNewInRange)
         let priorNew = countDatesInPeriod(cachedCustomerDates, start: priorBounds.start, end: priorBounds.end)
         clientsTrendText = clientsNewInRange > 0
             ? "↗ \(clientsNewInRange) new"
             : trendText(current: clientsNewInRange, prior: priorNew, sameLabel: "same as prior")
+        clientsSeriesPoints = bucketClientSignups(
+            cachedCustomerDates,
+            periodStart: periodStart,
+            periodEnd: periodEnd
+        )
 
         noShowsInRange = 0
         noShowsTrendText = "↗ same as prior"
@@ -402,9 +414,6 @@ final class InsightsViewModel: ObservableObject {
         revenueInRange = revenueCurrent.reduce(0) { $0 + $1.amount }
         let priorRev = revenuePrior.reduce(0) { $0 + $1.amount }
         revenueTrendText = trendTextDouble(current: revenueInRange, prior: priorRev)
-
-        paymentChargesInRange = 0
-        paymentVolumeInRange = 0
 
         applyRevenueChart(periodStart: periodStart, periodEnd: periodEnd)
     }
@@ -459,6 +468,39 @@ final class InsightsViewModel: ObservableObject {
             if let start { return d >= start && d <= end }
             return d <= end
         }.count
+    }
+
+    /// New-client signups bucketed for charts (daily for short ranges, monthly for year).
+    private func bucketClientSignups(
+        _ dates: [Date],
+        periodStart: Date,
+        periodEnd: Date
+    ) -> [InsightsClientSeriesPoint] {
+        let cal = Calendar.current
+        let useMonthly = selectedRange == .thisYear
+            || (cal.dateComponents([.day], from: periodStart, to: periodEnd).day ?? 0) > 60
+
+        if useMonthly {
+            let endMonth = cal.date(from: cal.dateComponents([.year, .month], from: periodEnd)) ?? periodEnd
+            let startMonth = cal.date(from: cal.dateComponents([.year, .month], from: periodStart)) ?? periodStart
+            let monthCount = max(1, (cal.dateComponents([.month], from: startMonth, to: endMonth).month ?? 0) + 1)
+            return (0..<monthCount).map { index in
+                let monthStart = cal.date(byAdding: .month, value: index, to: startMonth) ?? startMonth
+                let monthEnd = cal.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
+                let count = dates.filter { $0 >= monthStart && $0 < monthEnd }.count
+                return InsightsClientSeriesPoint(id: index + 1, date: monthStart, count: count)
+            }
+        }
+
+        let startDay = cal.startOfDay(for: periodStart)
+        let endDay = cal.startOfDay(for: periodEnd)
+        let dayCount = max(1, (cal.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1)
+        return (0..<dayCount).map { offset in
+            let dayStart = cal.date(byAdding: .day, value: offset, to: startDay) ?? startDay
+            let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+            let count = dates.filter { $0 >= dayStart && $0 < dayEnd }.count
+            return InsightsClientSeriesPoint(id: offset + 1, date: dayStart, count: count)
+        }
     }
 
     private func filterCharges(start: Date?, end: Date) -> [(date: Date, amount: Double)] {
@@ -520,13 +562,8 @@ final class InsightsViewModel: ObservableObject {
         return "↗ \(sign)\(Int(pct.rounded()))% vs last period"
     }
 
-    private func loadStripeCharges() async -> (Double, Double, [(Date, Double)]) {
+    private func loadStripeCharges() async -> [(Date, Double)] {
         do {
-            let bal = try await functions.httpsCallable("getConnectBalance").call()
-            let balData = bal.data as? [String: Any]
-            let avail = Double((balData?["availableCents"] as? NSNumber)?.intValue ?? 0) / 100
-            let pend = Double((balData?["pendingCents"] as? NSNumber)?.intValue ?? 0) / 100
-
             let start = Calendar.current.date(byAdding: .day, value: -365, to: Date()) ?? Date()
             let payload: [String: Any] = [
                 "startTimestampSeconds": Int(start.timeIntervalSince1970),
@@ -545,9 +582,9 @@ final class InsightsViewModel: ObservableObject {
                 let amountCents = (t["net"] as? NSNumber)?.intValue ?? (t["amount"] as? NSNumber)?.intValue ?? 0
                 charges.append((d, Double(abs(amountCents)) / 100))
             }
-            return (avail, pend, charges)
+            return charges
         } catch {
-            return (0, 0, [])
+            return []
         }
     }
 

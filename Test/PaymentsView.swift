@@ -10,9 +10,11 @@ struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
     @EnvironmentObject var appTour: AppTourCoordinator
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
     @State private var showManualPaymentSheet = false
+    @State private var showPaidFeatureUpgrade = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
     @State private var showTapToPayEducation = false
@@ -31,10 +33,12 @@ struct PaymentsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if viewModel.isStudioPayroll {
                         studioPayrollBanner
-                    } else if viewModel.needsStripeConnect && viewModel.hasLoadedStripeStatus {
+                    } else if viewModel.hasLoadedStripeStatus &&
+                                (!viewModel.subscriptionPaid || viewModel.needsStripeConnect) {
                         StripeConnectBanner(
                             viewModel: viewModel,
-                            isDemoMode: authViewModel.isDemoMode
+                            isDemoMode: authViewModel.isDemoMode,
+                            onPaidPlanRequired: { showPaidFeatureUpgrade = true }
                         )
                     } else if let err = viewModel.errorMessage {
                         Text(err)
@@ -93,6 +97,10 @@ struct PaymentsView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
             }
             .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
                 DepositLinkSheet(viewModel: viewModel) {
@@ -169,6 +177,16 @@ struct PaymentsView: View {
             }
             #endif
         }
+        .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
+            if viewModel.isTenantOwner {
+                Button("Start paid plan") {
+                    Task { await viewModel.openBillingToStartSubscription() }
+                }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(Constants.App.paidFeatureUpgradeMessage)
+        }
     }
 
     #if TAP_TO_PAY_ENABLED
@@ -193,7 +211,13 @@ struct PaymentsView: View {
                     result,
                     isDemoMode: authViewModel.isDemoMode,
                     showCheckout: { showTapToPaySheet = true },
-                    showAlert: { tapToPayAlertMessage = $0 },
+                    showAlert: { message in
+                        if message == Constants.App.paidFeatureUpgradeMessage {
+                            showPaidFeatureUpgrade = true
+                        } else {
+                            tapToPayAlertMessage = message
+                        }
+                    },
                     showEducation: { showTapToPayEducation = true }
                 )
             }
@@ -341,7 +365,13 @@ struct PaymentsView: View {
                     iconColor: .purple,
                     title: "Manual payment",
                     subtitle: "",
-                    action: { showManualPaymentSheet = true },
+                    action: {
+                        if viewModel.subscriptionPaid {
+                            showManualPaymentSheet = true
+                        } else {
+                            showPaidFeatureUpgrade = true
+                        }
+                    },
                     disabled: !viewModel.stripeConnected,
                     showsDivider: true
                 )
@@ -351,7 +381,13 @@ struct PaymentsView: View {
                     iconColor: .green,
                     title: "Deposit link",
                     subtitle: "Request a deposit via text",
-                    action: { showDepositLinkSheet = true },
+                    action: {
+                        if viewModel.subscriptionPaid {
+                            showDepositLinkSheet = true
+                        } else {
+                            showPaidFeatureUpgrade = true
+                        }
+                    },
                     disabled: !viewModel.stripeConnected,
                     showsDivider: false
                 )
@@ -438,6 +474,7 @@ struct PaymentsView: View {
 private struct StripeConnectBanner: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
+    let onPaidPlanRequired: () -> Void
 
     private var isPendingReview: Bool {
         viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected
@@ -446,6 +483,10 @@ private struct StripeConnectBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: {
+                guard viewModel.subscriptionPaid else {
+                    onPaidPlanRequired()
+                    return
+                }
                 Task {
                     if isPendingReview {
                         await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)

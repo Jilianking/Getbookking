@@ -28,12 +28,8 @@ struct TapToPaySheet: View {
     @State private var showNoteEditor = false
     @State private var clientSearchText = ""
     @State private var phase: TapToPayCheckoutPhase = .entry
-    @State private var showShareReceipt = false
-    @State private var receiptText = ""
     @State private var signatureLines: [[CGPoint]] = []
     @State private var currentSignatureLine: [CGPoint] = []
-    @State private var showReceiptPrompt = false
-    @State private var receiptPhoneDraft = ""
     @State private var manualCheckoutError: String?
     @State private var showTapToPayReceiptSheet = false
     @State private var receiptDetail: PaymentReceiptDetail?
@@ -142,13 +138,6 @@ struct TapToPaySheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showShareReceipt) {
-                if let url = shareReceiptURL() {
-                    ActivityShareSheet(items: [receiptText, url])
-                } else {
-                    ActivityShareSheet(items: [receiptText])
-                }
-            }
             .sheet(isPresented: $showClientPicker) {
                 TapToPayClientPickerSheet(
                     clients: sessionStore.customers,
@@ -160,20 +149,6 @@ struct TapToPaySheet: View {
             }
             .sheet(isPresented: $showNoteEditor) {
                 TapToPayNoteEditorSheet(noteText: $noteText)
-            }
-            .sheet(isPresented: $showReceiptPrompt) {
-                TapToPayReceiptPromptSheet(
-                    phoneText: $receiptPhoneDraft,
-                    receiptText: receiptText,
-                    onSend: { phone in
-                        receiptPhoneDraft = phone
-                        openReceiptViaText(preferredPhone: phone)
-                        showReceiptPrompt = false
-                    },
-                    onSkip: {
-                        showReceiptPrompt = false
-                    }
-                )
             }
             .sheet(isPresented: $showTapToPayReceiptSheet) {
                 tapToPayReceiptSheet
@@ -405,10 +380,10 @@ struct TapToPaySheet: View {
             currentSignatureLine = []
         }
         phase = .approved(amountCents: amountCents)
-        presentOnScreenReceipt(amountCents: amountCents)
+        presentOnScreenReceipt()
     }
 
-    private func presentOnScreenReceipt(amountCents: Int, paymentMethodLabel: String = "Tap to Pay on iPhone") {
+    private func presentOnScreenReceipt(paymentMethodLabel: String = "Tap to Pay on iPhone") {
         let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
             serviceCents: serviceAmountCents,
             channel: .tapToPay
@@ -424,36 +399,7 @@ struct TapToPaySheet: View {
             paymentMethodLabel: paymentMethodLabel
         )
         receiptDetail = detail
-        receiptText = viewModel.tapToPayReceiptBody(
-            amountCents: amountCents,
-            includesSignature: !signatureLines.isEmpty,
-            clientName: selectedClient?.name,
-            note: noteText,
-            taxCents: checkout.taxCents,
-            serviceCents: checkout.serviceCents
-        )
         showTapToPayReceiptSheet = true
-    }
-
-    private func openReceiptViaText(preferredPhone: String?) {
-        let digits = PhoneFormatting.digits(from: preferredPhone ?? receiptPhoneDraft)
-        guard !digits.isEmpty else {
-            showReceiptPrompt = true
-            return
-        }
-        if let url = smsURL(phoneDigits: digits, body: receiptText) {
-            UIApplication.shared.open(url)
-        } else {
-            showShareReceipt = true
-        }
-    }
-
-    private func smsURL(phoneDigits: String, body: String) -> URL? {
-        var components = URLComponents()
-        components.scheme = "sms"
-        components.path = phoneDigits
-        components.queryItems = [URLQueryItem(name: "body", value: body)]
-        return components.url
     }
 
     private var approvedOutcomeContent: some View {
@@ -472,7 +418,7 @@ struct TapToPaySheet: View {
                         .foregroundStyle(AppDesign.textSecondary)
                 }
                 Button("View receipt") {
-                    presentOnScreenReceipt(amountCents: cents)
+                    presentOnScreenReceipt()
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -497,7 +443,6 @@ struct TapToPaySheet: View {
             reason: reason,
             detailMessage: detailMessage
         )
-        receiptText = receiptDetail?.smsBody() ?? ""
         showTapToPayReceiptSheet = true
     }
 
@@ -554,7 +499,7 @@ struct TapToPaySheet: View {
                 phase = .collectSignature(amountCents: totalCents)
             } else {
                 phase = .approved(amountCents: totalCents)
-                presentOnScreenReceipt(amountCents: totalCents)
+                presentOnScreenReceipt()
             }
         } catch {
             let text = TapToPayErrorMapper.userMessage(for: error)
@@ -583,10 +528,7 @@ struct TapToPaySheet: View {
             lastCheckout = intent.checkout
             lastPaidAt = Date()
             phase = .approved(amountCents: intent.checkout.totalCents)
-            presentOnScreenReceipt(
-                amountCents: intent.checkout.totalCents,
-                paymentMethodLabel: "Manual payment"
-            )
+            presentOnScreenReceipt(paymentMethodLabel: "Manual payment")
         case .canceled:
             break
         case .failed(let message):
@@ -601,9 +543,6 @@ struct TapToPaySheet: View {
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 
-    private func shareReceiptURL() -> URL? {
-        URL(string: "https://getbookking.com")
-    }
 }
 
 private struct TapToPaySignaturePad: View {
@@ -650,57 +589,6 @@ private struct TapToPaySignaturePad: View {
                     }
             )
         }
-    }
-}
-
-private struct TapToPayReceiptPromptSheet: View {
-    @Binding var phoneText: String
-    let receiptText: String
-    let onSend: (String) -> Void
-    let onSkip: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Send receipt via text")
-                    .font(.headline)
-                Text("Enter the customer’s mobile number to open Messages with the receipt.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppDesign.textSecondary)
-
-                TextField("Phone number", text: $phoneText)
-                    .keyboardType(.phonePad)
-                    .textFieldStyle(.roundedBorder)
-
-                Button("Send via text") {
-                    onSend(phoneText)
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(PhoneFormatting.digits(from: phoneText).isEmpty)
-
-                Button("Skip", role: .cancel) {
-                    onSkip()
-                    dismiss()
-                }
-                .frame(maxWidth: .infinity)
-
-                Spacer(minLength: 0)
-            }
-            .padding(20)
-            .navigationTitle("Receipt")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        onSkip()
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium])
     }
 }
 
@@ -795,16 +683,6 @@ private struct TapToPayNoteEditorSheet: View {
         }
         .presentationDetents([.medium])
     }
-}
-
-private struct ActivityShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #endif

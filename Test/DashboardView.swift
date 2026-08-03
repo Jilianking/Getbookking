@@ -11,6 +11,7 @@ struct DashboardView: View {
     @State private var selectedBookingRequest: BookingRequest?
     @State private var selectedRequest: Request?
     @State private var profileClient: Client?
+    @State private var showPaidFeatureUpgrade = false
     var drawerState: DrawerState
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
@@ -142,6 +143,16 @@ struct DashboardView: View {
             #endif
         }
         .navigationViewStyle(.stack)
+        .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
+            if paymentsViewModel.isTenantOwner {
+                Button("Start paid plan") {
+                    Task { await paymentsViewModel.openBillingToStartSubscription() }
+                }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(Constants.App.paidFeatureUpgradeMessage)
+        }
         .task {
             requestsViewModel.sessionStore = sessionStore
             await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
@@ -273,7 +284,13 @@ struct DashboardView: View {
                     result,
                     isDemoMode: authViewModel.isDemoMode,
                     showCheckout: { showTapToPaySheet = true },
-                    showAlert: { tapToPayAlertMessage = $0 },
+                    showAlert: { message in
+                        if message == Constants.App.paidFeatureUpgradeMessage {
+                            showPaidFeatureUpgrade = true
+                        } else {
+                            tapToPayAlertMessage = message
+                        }
+                    },
                     showEducation: { showTapToPayEducation = true }
                 )
             }

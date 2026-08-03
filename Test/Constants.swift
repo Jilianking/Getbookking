@@ -31,6 +31,9 @@ struct Constants {
     struct App {
         static let name = "Admin App"
         static let version = "1.0.0"
+        static let paidFeatureUpgradeTitle = "Unlock texting and payments"
+        static let paidFeatureUpgradeMessage =
+            "Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments."
     }
 
     /// Public origin for team invite links: `{bookingWebOrigin}/join?t=…`

@@ -725,6 +725,138 @@
       color: var(--text-secondary);
     }
 
+    .subscription-start-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(26, 20, 16, 0.5);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+    }
+
+    .subscription-start-backdrop[hidden] { display: none !important; }
+
+    .subscription-start-card {
+      position: relative;
+      width: min(100%, 460px);
+      padding: 30px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--brand-cream);
+      box-shadow: 0 24px 70px rgba(26, 20, 16, 0.22);
+      text-align: left;
+    }
+
+    .subscription-start-close {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 26px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .subscription-start-card h2 {
+      margin: 0 38px 12px 0;
+      font-family: 'Instrument Serif', serif;
+      font-size: 32px;
+      font-weight: 400;
+      line-height: 1.1;
+      color: var(--brand-dark);
+    }
+
+    .subscription-start-copy {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .subscription-charge-summary {
+      margin-top: 20px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(139, 111, 71, 0.07);
+    }
+
+    .subscription-charge-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--brand-dark);
+    }
+
+    .subscription-charge-row span { font-size: 14px; font-weight: 600; }
+    .subscription-charge-row strong { font-size: 24px; }
+
+    .subscription-charge-summary small {
+      display: block;
+      margin-top: 5px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .subscription-start-error {
+      display: none;
+      margin: 14px 0 0;
+      color: #b42318;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .subscription-start-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .subscription-start-actions button {
+      min-height: 46px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .subscription-start-cancel {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--brand-dark);
+    }
+
+    .subscription-start-confirm {
+      flex: 1;
+      border: 1px solid var(--brand-dark);
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+    }
+
+    .subscription-start-actions button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    @media (max-width: 520px) {
+      .subscription-start-card { padding: 26px 20px 20px; }
+      .subscription-start-actions { flex-direction: column-reverse; }
+      .subscription-start-actions button { width: 100%; }
+    }
+
     .success-site-link {
       display: block;
       margin-top: 16px;
@@ -894,6 +1026,28 @@
     </div>
   </div>
 
+  <div class="subscription-start-backdrop" id="subscriptionStartModal" hidden>
+    <div class="subscription-start-card" role="dialog" aria-modal="true" aria-labelledby="subscriptionStartTitle" aria-describedby="subscriptionStartCopy">
+      <button type="button" class="subscription-start-close" id="subscriptionStartClose" aria-label="Close">&times;</button>
+      <h2 id="subscriptionStartTitle">Start subscription today?</h2>
+      <p class="subscription-start-copy" id="subscriptionStartCopy">
+        Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments.
+      </p>
+      <div class="subscription-charge-summary">
+        <div class="subscription-charge-row">
+          <span>Charged today</span>
+          <strong id="subscriptionStartPrice">$39</strong>
+        </div>
+        <small id="subscriptionStartRenewal">Then $39 monthly until canceled.</small>
+      </div>
+      <p class="subscription-start-error" id="subscriptionStartError" role="alert"></p>
+      <div class="subscription-start-actions">
+        <button type="button" class="subscription-start-cancel" id="subscriptionStartCancel">Not now</button>
+        <button type="button" class="subscription-start-confirm" id="subscriptionStartConfirm">Yes, start subscription</button>
+      </div>
+    </div>
+  </div>
+
   <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 33.33%"></div></div>
 
   <!-- CARD -->
@@ -1001,7 +1155,7 @@
       <!-- STEP 3 — Plan & pay -->
       <div class="step-panel" id="step3">
         <h2>Choose your plan</h2>
-        <p class="subtitle">30-day free trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.</p>
+        <p class="subtitle">14-day website builder trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.</p>
         <div class="plan-pick-grid">
           <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
             <div class="plan-pick-left">
@@ -1028,7 +1182,8 @@
         <div class="checkout-summary" id="checkoutSummary">
           <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — then <strong id="checkoutPlanPrice">$39</strong>/month after your trial ends.</div>
           <ul class="checkout-bullets">
-            <li><strong>No charge today</strong> for the subscription price. Your card is kept on file with Stripe; the first plan charge happens when the 30-day trial ends unless you cancel first.</li>
+            <li><strong>No charge today</strong> for the subscription price. Your card is kept on file with Stripe; the first plan charge happens when the 14-day trial ends unless you cancel first.</li>
+            <li>Your free trial includes the website builder. Client texting and payments unlock when your paid plan begins.</li>
             <li>Cancel anytime before the trial ends from your account or billing portal to avoid the first subscription charge.</li>
             <li>Billing is monthly in USD. Applicable taxes may be added at checkout or on your invoice where required.</li>
             <li>Your bank statement may show <strong>GETBOOKKING</strong> or our payment processor’s name.</li>
@@ -1060,8 +1215,8 @@
           <h2>You're all set!</h2>
           <p id="signupSuccessAppCopy">Your booking site is live. When the iPhone app is available, sign in with this same email.</p>
           <div class="success-stripe">
-            <p>Want to take payments? Set up Stripe now so deposits are ready when you start accepting bookings.</p>
-            <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payouts →</button>
+            <p>Stripe payments are available on your paid plan. You’ll confirm the price before your card is charged.</p>
+            <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payments →</button>
             <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
           </div>
           <a href="#" class="btn-appstore" id="appStoreLink" hidden>Join the beta</a>
@@ -1554,26 +1709,135 @@
       var statusEl = document.getElementById('stripeSetupStatus');
       if (!btn || btn.dataset.bound === '1') return;
       btn.dataset.bound = '1';
+      // Connect payouts only — do not open “Start subscription today” charge modal.
       btn.addEventListener('click', function() {
-        startStripePayoutSetup(btn, statusEl);
+        if (!auth.currentUser) {
+          setStripeSetupStatus(statusEl, 'Sign in again, then retry Stripe setup.', true);
+          return;
+        }
+        void startStripePayoutSetup(btn, statusEl);
       });
     }
 
-    async function startStripePayoutSetup(btn, statusEl) {
-      function setStatus(msg, isError) {
-        if (!statusEl) return;
-        statusEl.style.display = 'block';
-        statusEl.textContent = msg || '';
-        statusEl.style.color = isError ? '#b42318' : 'var(--text-secondary)';
+    var subscriptionStartTargetButton = null;
+    var subscriptionStartTargetStatus = null;
+
+    function setStripeSetupStatus(statusEl, msg, isError) {
+      if (!statusEl) return;
+      statusEl.style.display = 'block';
+      statusEl.textContent = msg || '';
+      statusEl.style.color = isError ? '#b42318' : 'var(--text-secondary)';
+    }
+
+    function bindSubscriptionStartModal() {
+      var modal = document.getElementById('subscriptionStartModal');
+      var close = document.getElementById('subscriptionStartClose');
+      var cancel = document.getElementById('subscriptionStartCancel');
+      var confirm = document.getElementById('subscriptionStartConfirm');
+      if (!modal || modal.dataset.bound === '1') return;
+      modal.dataset.bound = '1';
+
+      function closeIfIdle() {
+        if (!confirm || !confirm.disabled) closeSubscriptionStartModal();
       }
 
+      if (close) close.addEventListener('click', closeIfIdle);
+      if (cancel) cancel.addEventListener('click', closeIfIdle);
+      if (confirm) {
+        confirm.addEventListener('click', function() {
+          void confirmSubscriptionAndStartStripe();
+        });
+      }
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeIfIdle();
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && !modal.hidden) closeIfIdle();
+      });
+    }
+
+    function openSubscriptionStartModal(btn, statusEl) {
       if (!auth.currentUser) {
-        setStatus('Sign in again, then retry Stripe setup.', true);
+        setStripeSetupStatus(statusEl, 'Sign in again, then retry Stripe setup.', true);
         return;
       }
 
+      var modal = document.getElementById('subscriptionStartModal');
+      var priceEl = document.getElementById('subscriptionStartPrice');
+      var renewalEl = document.getElementById('subscriptionStartRenewal');
+      var errorEl = document.getElementById('subscriptionStartError');
+      var confirm = document.getElementById('subscriptionStartConfirm');
+      var info = PLAN_CHECKOUT_INFO[state.plan || 'solo'] || PLAN_CHECKOUT_INFO.solo;
+      subscriptionStartTargetButton = btn;
+      subscriptionStartTargetStatus = statusEl;
+      if (priceEl) priceEl.textContent = info.price;
+      if (renewalEl) renewalEl.textContent = 'Then ' + info.price + ' monthly until canceled.';
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+      }
+      if (confirm) {
+        confirm.disabled = false;
+        confirm.textContent = 'Yes, start subscription';
+      }
+      modal.hidden = false;
+      modal.removeAttribute('aria-hidden');
+      if (confirm) confirm.focus();
+    }
+
+    function closeSubscriptionStartModal(force) {
+      var modal = document.getElementById('subscriptionStartModal');
+      var confirm = document.getElementById('subscriptionStartConfirm');
+      if (!modal || (!force && confirm && confirm.disabled)) return;
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      if (subscriptionStartTargetButton) subscriptionStartTargetButton.focus();
+    }
+
+    async function confirmSubscriptionAndStartStripe() {
+      var btn = subscriptionStartTargetButton;
+      var statusEl = subscriptionStartTargetStatus;
+      var confirm = document.getElementById('subscriptionStartConfirm');
+      var cancel = document.getElementById('subscriptionStartCancel');
+      var close = document.getElementById('subscriptionStartClose');
+      var errorEl = document.getElementById('subscriptionStartError');
+      if (!btn || !auth.currentUser || !confirm) return;
+
+      confirm.disabled = true;
+      if (cancel) cancel.disabled = true;
+      if (close) close.disabled = true;
+      confirm.textContent = 'Starting subscription…';
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+      }
+
+      try {
+        var started = await fns.httpsCallable('startSubscriptionToday')({});
+        var status = started && started.data && started.data.subscriptionStatus;
+        if (status !== 'active') {
+          throw new Error('Stripe could not activate your subscription. Update your payment method and try again.');
+        }
+        closeSubscriptionStartModal(true);
+        setStripeSetupStatus(statusEl, 'Subscription started. Opening Stripe…');
+        await startStripePayoutSetup(btn, statusEl);
+      } catch (e) {
+        console.error('startSubscriptionToday', e);
+        if (errorEl) {
+          errorEl.textContent = formatFirebaseHttpsError(e);
+          errorEl.style.display = 'block';
+        }
+      } finally {
+        confirm.disabled = false;
+        if (cancel) cancel.disabled = false;
+        if (close) close.disabled = false;
+        confirm.textContent = 'Yes, start subscription';
+      }
+    }
+
+    async function startStripePayoutSetup(btn, statusEl) {
       btn.disabled = true;
-      setStatus('Opening Stripe…');
+      setStripeSetupStatus(statusEl, 'Opening Stripe…');
       try {
         var origin = window.location.origin.replace(/\/$/, '');
         var result = await fns.httpsCallable('createConnectAccountLink')({
@@ -1583,12 +1847,12 @@
         });
         var data = (result && result.data) || {};
         if (data.alreadyConnected) {
-          setStatus('Payouts are already set up. You’re ready to take payments in the app.');
+          setStripeSetupStatus(statusEl, 'Payouts are already set up. You’re ready to take payments in the app.');
           btn.disabled = false;
           return;
         }
         if (data.pendingReview) {
-          setStatus('Stripe is reviewing your account. Check back in the app soon.');
+          setStripeSetupStatus(statusEl, 'Stripe is reviewing your account. Check back in the app soon.');
           btn.disabled = false;
           return;
         }
@@ -1596,11 +1860,11 @@
           window.location.href = data.url;
           return;
         }
-        setStatus('Could not start Stripe setup. Try again or finish in the app.', true);
+        setStripeSetupStatus(statusEl, 'Could not start Stripe setup. Try again or finish in the app.', true);
         btn.disabled = false;
       } catch (e) {
         console.error('createConnectAccountLink', e);
-        setStatus(formatFirebaseHttpsError(e), true);
+        setStripeSetupStatus(statusEl, formatFirebaseHttpsError(e), true);
         btn.disabled = false;
       }
     }
@@ -1701,6 +1965,8 @@
             history.replaceState({}, '', 'signup.html');
             if (loading.parentNode) loading.parentNode.removeChild(loading);
             var slug = (result.data && result.data.slug) || '';
+            var completedPlan = (result.data && result.data.subscriptionPlan) || '';
+            if (PLAN_CHECKOUT_INFO[completedPlan]) state.plan = completedPlan;
             document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
             document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
             showSuccess();

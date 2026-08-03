@@ -9,6 +9,10 @@ import SwiftUI
 struct PaymentSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
+    @State private var showPaidFeatureUpgrade = false
+    #if TAP_TO_PAY_ENABLED
+    @State private var showTapToPayEducation = false
+    #endif
 
     var body: some View {
         ScrollView {
@@ -27,10 +31,9 @@ struct PaymentSettingsView: View {
                     taxReportingSection
                 }
                 #if TAP_TO_PAY_ENABLED
-                // Apple 4.3: merchant education must remain reachable outside onboarding,
-                // including before Stripe Connect finishes.
+                // Apple 4.3: merchant education reachable outside onboarding, including before Connect finishes.
                 if viewModel.canTakePayments {
-                    tapToPaySection
+                    tapToPayHelpSection
                 }
                 #endif
 
@@ -50,6 +53,23 @@ struct PaymentSettingsView: View {
             await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
             await viewModel.reloadShopTaxSetting(isDemoMode: isDemoMode)
         }
+        .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
+            if viewModel.isTenantOwner {
+                Button("Start paid plan") {
+                    Task { await viewModel.openBillingToStartSubscription() }
+                }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(Constants.App.paidFeatureUpgradeMessage)
+        }
+        #if TAP_TO_PAY_ENABLED
+        .sheet(isPresented: $showTapToPayEducation) {
+            TapToPayMerchantEducationView {
+                showTapToPayEducation = false
+            }
+        }
+        #endif
     }
 
     private var stripeAccountSection: some View {
@@ -80,7 +100,11 @@ struct PaymentSettingsView: View {
                 if !viewModel.stripeConnected {
                     Divider().padding(.leading, 14)
                     Button {
-                        Task { _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                        if viewModel.subscriptionPaid {
+                            Task { _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                        } else {
+                            showPaidFeatureUpgrade = true
+                        }
                     } label: {
                         HStack {
                             Text(connectActionTitle)
@@ -319,18 +343,20 @@ struct PaymentSettingsView: View {
     }
 
     #if TAP_TO_PAY_ENABLED
-    private var tapToPaySection: some View {
+    private var tapToPayHelpSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AppSectionHeader(title: "In-person checkout")
+            AppSectionHeader(title: "Help")
 
-            NavigationLink {
-                PaymentsSettingsView(viewModel: viewModel)
+            Button {
+                Task {
+                    await TapToPayMerchantEducationFlow.runFromSettings {
+                        showTapToPayEducation = true
+                    }
+                }
             } label: {
                 paymentSettingsLinkRow(
-                    title: "Tap to Pay settings",
-                    subtitle: viewModel.stripeConnected
-                        ? "Signature, receipts, and how to use"
-                        : "How to use Tap to Pay, and settings after Stripe is connected"
+                    title: "How to use Tap to Pay",
+                    subtitle: "Contactless cards, Apple Pay, and digital wallets"
                 )
             }
             .buttonStyle(.plain)

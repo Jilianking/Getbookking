@@ -37,7 +37,18 @@ enum CardCheckoutPricing {
     private static let stripeOnlineBps = 290
     private static let stripeOnlineFixedCents = 30
     private static let stripeCardPresentBps = 270
-    private static let stripeCardPresentFixedCents = 5
+    /// In-person 5¢ + Tap to Pay authorization 10¢ (Stripe Terminal US pricing).
+    private static let stripeCardPresentFixedCents = 15
+
+    /// User-facing Stripe rate for this channel (e.g. "2.9% + 30¢").
+    static func stripeRateLabel(for channel: CardCheckoutChannel) -> String {
+        switch channel {
+        case .online:
+            return "2.9% + 30¢"
+        case .tapToPay:
+            return "2.7% + 15¢"
+        }
+    }
 
     static func breakdown(
         serviceCents: Int,
@@ -169,10 +180,11 @@ struct CardCheckoutBreakdownView: View {
     }
 
     private var feeDetailsPopover: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: breakdown.channel)
+        return VStack(alignment: .leading, spacing: 6) {
             if breakdown.cardProcessingFeeCents > 0 {
                 feeDetailLine(
-                    title: "Card processing (Stripe)",
+                    title: "Card processing (Stripe \(stripeRate))",
                     amount: breakdown.cardProcessingFeeCents
                 )
             }
@@ -183,17 +195,22 @@ struct CardCheckoutBreakdownView: View {
                 )
             }
             if breakdown.passThroughFeeCents <= 0 {
-                Text("Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.")
+                Text("Includes Stripe card processing (\(stripeRate)) and a 1% platform fee.")
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("The business receives the full service amount. Sales tax is collected for remittance.")
+            Text("The business receives the full service amount.")
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            if breakdown.hasSalesTax {
+                Text("Sales tax is collected for remittance.")
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(12)
-        .frame(width: 248, alignment: .leading)
+        .frame(minWidth: 248, idealWidth: 268, maxWidth: 300, alignment: .leading)
         .presentationCompactAdaptation(.popover)
     }
 

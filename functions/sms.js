@@ -96,29 +96,41 @@ function resolveSubscriptionStatus(tenant, userData) {
   return (u || t || "").toString().trim().toLowerCase();
 }
 
-/** Paid subscription: charged (active). Free trial (trialing) does not qualify. */
+const PAID_FEATURE_UPGRADE_MESSAGE =
+  "Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments.";
+
+/**
+ * TESTING ONLY — when true, payments / SMS / Connect paid-feature gates do not
+ * require an active paid subscription (no charge required).
+ * UI copy can still show “start subscription” / free trial.
+ * Set false and redeploy before real billing enforcement.
+ */
+const BYPASS_SUBSCRIPTION_PAYMENT_GATE = true;
+
+function isSubscriptionPaymentGateBypassed() {
+  return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
+}
+
+/** Paid subscription: charged (active). Free trial (trialing) does not qualify (unless testing bypass). */
 function tenantHasPaidSubscription(tenant, userData) {
   return !paidSubscriptionBlockReason(tenant, userData);
 }
 
 /** Billing-only block reason (provisioning / enable texting). */
 function paidSubscriptionBlockReason(tenant, userData) {
+  if (isSubscriptionPaymentGateBypassed()) {
+    return null;
+  }
   const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
   if (!hasStripe) {
-    return (
-      "Billing is not linked to Stripe. Finish sign-up at getbookking.com/signup.html " +
-      "(complete checkout), or sync billing from Team → Notifications."
-    );
+    return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   const status = resolveSubscriptionStatus(tenant, userData);
   if (status === "trialing") {
-    return (
-      "Client texting starts after your paid subscription begins (not during the free trial). " +
-      "Use Start subscription today in Team → Notifications."
-    );
+    return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   if (status !== "active") {
-    return `Subscription status is "${status || "unknown"}". Update billing in account settings.`;
+    return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   return null;
 }
@@ -1176,6 +1188,7 @@ module.exports = {
   twilioAuthToken,
   masterTwilioMessagingServiceSid,
   toE164US,
+  isSubscriptionPaymentGateBypassed,
   tenantHasPaidSubscription,
   tenantIsTrialing,
   tenantCanUseSms,
@@ -1219,4 +1232,5 @@ module.exports = {
   bookingStatusSmsBody,
   SMS_PRESET_MAX_LEN,
   SMS_QUICK_REPLY_MAX,
+  PAID_FEATURE_UPGRADE_MESSAGE,
 };

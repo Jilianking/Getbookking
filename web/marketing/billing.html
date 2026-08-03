@@ -50,10 +50,10 @@
           <button type="button" class="btn-upgrade hidden" id="resubscribeBtn" style="margin-top:16px;">Resubscribe</button>
           <button type="button" class="btn-secondary hidden" id="keepSubscriptionBtn" style="margin-top:12px;">Keep subscription</button>
           <p class="bill-success hidden" id="startSubSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
-            Subscription started. Return to the Bookking app and pull to refresh on Messaging to enable client texting.
+            Subscription started. Return to the Bookking app to unlock client texting and payments.
           </p>
           <p class="bill-success hidden" id="resubscribeSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
-            Subscription restored. Return to the Bookking app and pull to refresh on Messaging to enable client texting.
+            Subscription restored. Return to the Bookking app to unlock client texting and payments.
           </p>
           <div class="bill-plan-actions hidden" id="planActions">
             <button type="button" class="btn-secondary" id="changePlanBtn">Change plan</button>
@@ -61,8 +61,8 @@
             <button type="button" class="btn-outline-danger" id="cancelSubBtn">Cancel subscription</button>
           </div>
           <p class="bill-stripe-note bill-stripe-note--inset hidden" id="planStripeNote">Payments secured by Stripe</p>
-          <p class="bill-note hidden" id="billingNote">Client texting is not included during your free trial. Start your subscription to enable messaging in the Bookking app.</p>
-          <p class="bill-note hidden" id="resubscribeNote">Your subscription has ended. Resubscribe to pay and restore client texting and plan features.</p>
+          <p class="bill-note hidden" id="billingNote">Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments.</p>
+          <p class="bill-note hidden" id="resubscribeNote">Your subscription has ended. Resubscribe to restore client texting and payments.</p>
           <p class="bill-note hidden" id="cancelPendingNote"></p>
         </div>
       </section>
@@ -102,6 +102,7 @@
       <p style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">If you cancel, you will lose access to:</p>
       <ul class="bill-cancel-list">
         <li>Text messaging and appointment reminders</li>
+        <li>Payments and Tap to Pay on iPhone</li>
         <li>Client no-show protection</li>
         <li>Team scheduling and multi-member access</li>
       </ul>
@@ -121,7 +122,7 @@
         <button type="button" class="acct-modal-close" id="startSubModalClose" aria-label="Close">&times;</button>
       </div>
       <p id="startSubModalBody" style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">
-        Your card on file will be charged today. You’ll skip the rest of your free trial and can enable client texting in the app.
+        Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments.
       </p>
       <div class="acct-modal-actions" style="margin-top:20px;">
         <button type="button" class="btn-secondary" id="startSubModalCancel">Not now</button>
@@ -388,8 +389,11 @@
       document.getElementById('resubscribeSuccess').classList.add('hidden');
 
       if (d.hasStripeCustomer && sub && sub.status === 'trialing') {
-        startBtn.classList.remove('hidden');
-        noteEl.classList.remove('hidden');
+        // Never show “Start subscription today” while subscription payment gate is bypassed (no charge).
+        if (!d.subscriptionPaymentBypass) {
+          startBtn.classList.remove('hidden');
+          noteEl.classList.remove('hidden');
+        }
       } else if (d.hasStripeCustomer && sub && (sub.status === 'active' || sub.status === 'past_due')) {
         planActions.classList.remove('hidden');
         planStripeNote.classList.remove('hidden');
@@ -414,14 +418,16 @@
       renderInvoices(d.invoices, displayPlan);
       refreshConnectStripeButton();
 
-      if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing') {
+      if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing' && !d.subscriptionPaymentBypass) {
         pendingStartTodayPrompt = false;
         history.replaceState({}, '', 'billing.html');
         updateStartSubModalCopy(sub);
         openStartSubModal();
         startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (startParam === 'today' && sub && sub.status !== 'trialing') {
+      } else if (startParam === 'today') {
+        // Bypass on or not trialing — do not open charge modal.
         history.replaceState({}, '', 'billing.html');
+        pendingStartTodayPrompt = false;
       }
     }
 
@@ -433,8 +439,8 @@
         priceText = formatMoney(sub.unitAmount, sub.currency) + ' / ' + intervalLabel;
       }
       body.textContent = priceText
-        ? ('Your card on file will be charged ' + priceText + ' today. You\u2019ll skip the rest of your free trial and can enable client texting in the Bookking app.')
-        : ('Your card on file will be charged today. You\u2019ll skip the rest of your free trial and can enable client texting in the Bookking app.');
+        ? ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments. Your card on file will be charged ' + priceText + ' today.')
+        : ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments. Your card on file will be charged today.');
     }
 
     function connectButtonLabel(status) {
@@ -491,6 +497,7 @@
       btn.disabled = true;
       var origin = window.location.origin.replace(/\/$/, '');
 
+      // Connect onboarding only — never runs subscription charge / startSubscriptionToday.
       function reopenOnboarding() {
         return fns.httpsCallable('createConnectAccountLink')({
           returnBaseUrl: origin,
@@ -499,7 +506,7 @@
         }).then(function(result) {
           var data = (result && result.data) || {};
           if (data.alreadyConnected) {
-            return openExpressDashboard();
+            return openStripeDashboard();
           }
           if (data.pendingReview) {
             if (statusEl) {
@@ -516,7 +523,7 @@
         });
       }
 
-      function openExpressDashboard() {
+      function openStripeDashboard() {
         return fns.httpsCallable('createExpressDashboardLink')({}).then(function(result) {
           var data = (result && result.data) || {};
           if (data.url) {
@@ -528,8 +535,8 @@
       }
 
       var ready = connectStatus && connectStatus.chargesEnabled
-        ? openExpressDashboard().catch(function() {
-            // Dashboard link can fail if Express isn’t ready; fall back to onboarding.
+        ? openStripeDashboard().catch(function() {
+            // Dashboard link can fail if setup isn’t ready; fall back to onboarding.
             return reopenOnboarding();
           })
         : reopenOnboarding();
@@ -606,6 +613,11 @@
     }
 
     function runStartSubscriptionToday() {
+      // Defense in depth: never call charge path when testing bypass is on.
+      if (billingData && billingData.subscriptionPaymentBypass) {
+        closeStartSubModal();
+        return Promise.resolve();
+      }
       var btn = document.getElementById('startSubBtn');
       var confirmBtn = document.getElementById('startSubModalConfirm');
       var errEl = document.getElementById('billingError');

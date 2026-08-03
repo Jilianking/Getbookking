@@ -808,7 +808,7 @@ private struct AccountSettingsDetailView: View {
                 if viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
                         header: Text("Plan & billing"),
-                        footer: Text("Manage subscription, payment method, and invoices in Stripe. Changes sync automatically or use Sync billing.")
+                        footer: Text("Manage your Get Bookking subscription and payment method in Stripe. Client payment Connect is set up separately under Payments.")
                             .font(.caption2)
                     ) {
                         HStack {
@@ -824,37 +824,47 @@ private struct AccountSettingsDetailView: View {
                                 Text(billingStatusLabel)
                                     .foregroundStyle(billingStatusColor)
                             }
-                            Button {
-                                Task { await billingViewModel.openStripeBillingPortal() }
-                            } label: {
-                                HStack {
-                                    if billingViewModel.isOpeningBillingPortal {
-                                        ProgressView()
-                                            .scaleEffect(0.9)
-                                    }
-                                    Text("Manage billing in Stripe")
-                                }
+                            if let billingError = billingViewModel.errorMessage,
+                               !billingError.isEmpty {
+                                Text(billingError)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
                             }
-                            .disabled(
-                                billingViewModel.isOpeningBillingPortal ||
-                                billingViewModel.isSyncingBilling
-                            )
-                            Button {
-                                Task { await billingViewModel.syncBillingFromStripe() }
-                            } label: {
-                                HStack {
-                                    if billingViewModel.isSyncingBilling {
-                                        ProgressView()
-                                            .scaleEffect(0.9)
+                            if billingViewModel.hasStripeBillingCustomer {
+                                Button {
+                                    Task { await billingViewModel.openStripeBillingPortal() }
+                                } label: {
+                                    HStack {
+                                        if billingViewModel.isOpeningBillingPortal {
+                                            ProgressView()
+                                                .scaleEffect(0.9)
+                                        }
+                                        Text("View Stripe account")
                                     }
-                                    Text("Sync billing from Stripe")
                                 }
+                                .disabled(
+                                    billingViewModel.isOpeningBillingPortal ||
+                                    billingViewModel.isOpeningBillingWebsite
+                                )
+                            } else {
+                                Button {
+                                    Task { await billingViewModel.openBillingToStartSubscription() }
+                                } label: {
+                                    HStack {
+                                        if billingViewModel.isOpeningBillingWebsite {
+                                            ProgressView()
+                                                .scaleEffect(0.9)
+                                        }
+                                        Text("Sign up for Stripe")
+                                    }
+                                }
+                                .disabled(
+                                    billingViewModel.isOpeningBillingWebsite ||
+                                    billingViewModel.isOpeningBillingPortal
+                                )
                             }
-                            .disabled(
-                                billingViewModel.isSyncingBilling ||
-                                billingViewModel.isOpeningBillingPortal
-                            )
-                            if billingViewModel.subscriptionTrialing {
+                            if billingViewModel.hasStripeBillingCustomer,
+                               billingViewModel.subscriptionTrialing {
                                 Button {
                                     Task { await billingViewModel.openBillingToStartSubscription() }
                                 } label: {
@@ -868,7 +878,6 @@ private struct AccountSettingsDetailView: View {
                                 }
                                 .disabled(
                                     billingViewModel.isOpeningBillingWebsite ||
-                                    billingViewModel.isSyncingBilling ||
                                     billingViewModel.isOpeningBillingPortal
                                 )
                             }

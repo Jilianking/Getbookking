@@ -1061,7 +1061,7 @@ private struct ShopProductCatalogContent: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
-                    .background(shopAccentPurple)
+                    .background(AppDesign.brandWarm)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -1089,6 +1089,7 @@ private struct ShopProductCatalogContent: View {
                         productFormMode = .new
                     }
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.brandWarm)
                 }
             }
             .frame(maxWidth: .infinity)

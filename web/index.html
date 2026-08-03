@@ -4055,9 +4055,10 @@
     }
     @media (max-width: 520px) {
       .bk-shop-fee-tip {
-        left: auto;
-        right: -8px;
+        left: 0;
+        right: auto;
         transform: none;
+        width: min(260px, calc(100vw - 48px));
       }
     }
     .bk-shop-checkout-payment-section {
@@ -12865,7 +12866,7 @@
         var processing = Math.max(0, stripeState.surchargeCents - platform);
         var html = '';
         if (processing > 0) {
-          html += '<p>Card processing (Stripe): ' + formatMoney(processing / 100) + '</p>';
+          html += '<p>Card processing (Stripe 2.9% + 30\u00a2): ' + formatMoney(processing / 100) + '</p>';
         }
         if (platform > 0) {
           html += '<p>Platform fee (1%): ' + formatMoney(platform / 100) + '</p>';

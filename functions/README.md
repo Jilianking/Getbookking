@@ -35,7 +35,7 @@
    Configure inbound webhook in Twilio Console (or per-number SMS URL) to:
    `https://us-central1-<PROJECT_ID>.cloudfunctions.net/twilioInboundSms`
 
-   Rules: **30-day free trial has no SMS**. Owner must **start paid subscription** (`active`), then **opt in** under Team settings → Notifications → Enable client texting.
+   Rules: **14-day website builder trial has no SMS or payments**. Owner must **start paid subscription** (`active`), then **opt in** under Team settings → Notifications → Enable client texting.
 
 8. **Beta admin portal** (`web/marketing/admin/`):
    - Set **`BETA_ADMIN_UIDS`** in `functions/.env` to your Firebase Auth uid(s), comma-separated.
@@ -58,7 +58,7 @@ A **1%** Connect application fee (`PLATFORM_FEE_BPS = 100` in `index.js`) is col
 - **createDepositLink** — customer deposit payment links
 - **createPaymentIntentForTapToPay** — in-person Tap to Pay
 
-It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). The customer pays the listed amount; the fee is deducted from the provider’s side (minimum 1¢ per charge). Refunds use `refund_application_fee: true`.
+It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). The customer pays the listed amount; the fee is deducted from the provider’s side (minimum 1¢ per charge). Refunds return the application fee (`refund_application_fee: true`).
 
 ### Beta program
 

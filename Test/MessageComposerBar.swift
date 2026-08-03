@@ -180,6 +180,12 @@ struct MessageComposerBar: View {
             get: { actionNotice != nil },
             set: { if !$0 { actionNotice = nil } }
         )) {
+            if actionNotice == Constants.App.paidFeatureUpgradeMessage,
+               paymentsViewModel.isTenantOwner {
+                Button("Start paid plan") {
+                    Task { await paymentsViewModel.openBillingToStartSubscription() }
+                }
+            }
             Button("OK", role: .cancel) { actionNotice = nil }
         } message: {
             Text(actionNotice ?? "")
@@ -380,6 +386,10 @@ struct MessageComposerBar: View {
                 actionNotice = "Deposits aren't available in demo mode."
                 return
             }
+            guard paymentsViewModel.subscriptionPaid else {
+                actionNotice = Constants.App.paidFeatureUpgradeMessage
+                return
+            }
             guard paymentsViewModel.stripeConnected else {
                 actionNotice = paymentsViewModel.stripePaymentsBlockedMessage
                 return
@@ -388,6 +398,10 @@ struct MessageComposerBar: View {
         case .paymentLink:
             if isDemoMode {
                 actionNotice = "Payment links aren't available in demo mode."
+                return
+            }
+            guard paymentsViewModel.subscriptionPaid else {
+                actionNotice = Constants.App.paidFeatureUpgradeMessage
                 return
             }
             guard paymentsViewModel.stripeConnected else {
@@ -419,7 +433,7 @@ struct MessageComposerBar: View {
     private func isActionAvailable(_ icon: MessageComposerIcon) -> Bool {
         switch icon {
         case .deposit, .paymentLink:
-            return !isDemoMode && paymentsViewModel.stripeConnected
+            return !isDemoMode && paymentsViewModel.subscriptionPaid && paymentsViewModel.stripeConnected
         case .bookingLink:
             return !bookingUrl.isEmpty
         case .bookAppointment, .quickReplies:

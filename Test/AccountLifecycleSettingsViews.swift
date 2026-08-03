@@ -59,7 +59,7 @@ struct DeleteAccountSettingsSheet: View {
     @State private var transferSuccessMessage: String?
     @State private var showingTransferOptions = false
 
-    private static let stripeExpressLoginURL = URL(string: "https://connect.stripe.com/express_login")!
+    private static let stripeDashboardLoginURL = URL(string: "https://dashboard.stripe.com/login")!
 
     private var eligibility: AccountDeletionEligibility? {
         viewModel.deletionEligibility
@@ -398,7 +398,7 @@ struct DeleteAccountSettingsSheet: View {
             Text("Sign in at Stripe with the email you used for payouts — not your Bookking password.")
                 .font(.caption)
                 .foregroundStyle(AppDesign.textSecondary)
-            Link("Open Stripe Express login", destination: Self.stripeExpressLoginURL)
+            Link("Open Stripe login", destination: Self.stripeDashboardLoginURL)
                 .font(.caption.weight(.medium))
         }
         .padding(.horizontal, 4)

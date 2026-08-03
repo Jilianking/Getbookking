@@ -43,6 +43,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var subscriptionStatus: String = ""
     @Published var subscriptionPaid: Bool = false
     @Published var subscriptionTrialing: Bool = false
+    /// Tenant has a Stripe Customer for Get Bookking plan billing (Customer Portal).
+    @Published var hasStripeBillingCustomer: Bool = false
     @Published var smsEnabled: Bool = false
     @Published var smsStatus: String = "off"
     @Published var smsPhoneNumber: String = ""
@@ -132,6 +134,13 @@ final class ManagerSettingsViewModel: ObservableObject {
             subscriptionStatus = (data["subscriptionStatus"] as? String) ?? ""
             subscriptionPaid = data["subscriptionPaid"] as? Bool ?? false
             subscriptionTrialing = data["subscriptionTrialing"] as? Bool ?? false
+            if let hasBilling = data["hasStripeBillingCustomer"] as? Bool {
+                hasStripeBillingCustomer = hasBilling
+            } else {
+                let cid = (data["stripeCustomerId"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                hasStripeBillingCustomer = !cid.isEmpty
+            }
             smsEnabled = data["smsEnabled"] as? Bool ?? false
             smsStatus = (data["smsStatus"] as? String) ?? "off"
             smsPhoneNumber = (data["smsPhoneNumber"] as? String) ?? ""
@@ -168,6 +177,10 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     func openStripeBillingPortal() async {
         guard isTenantOwner else { return }
+        if !hasStripeBillingCustomer {
+            errorMessage = "Billing is not set up yet. Use Sign up for Stripe first."
+            return
+        }
         isOpeningBillingPortal = true
         errorMessage = nil
         do {
@@ -198,7 +211,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         await syncBillingFromStripe()
     }
 
-    /// Opens getbookking.com billing to start paid subscription (Apple-safe; payment on web).
+    /// Opens getbookking.com billing to start subscription (Apple-safe; payment on web).
     func openBillingToStartSubscription() async {
         guard isTenantOwner else { return }
         isOpeningBillingWebsite = true

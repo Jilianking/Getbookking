@@ -1,16 +1,13 @@
 //
 //  PaymentsSettingsView.swift
-//  Tap to Pay name, signature, and receipt preferences.
+//  Tap to Pay name, signature, and Stripe account shortcuts.
 //
 
 import SwiftUI
 
 struct PaymentsSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
-    @State private var showReceiptPreferences = false
-    #if TAP_TO_PAY_ENABLED
-    @State private var showTapToPayEducation = false
-    #endif
+    @EnvironmentObject private var authViewModel: AuthViewModel
 
     var body: some View {
         ScrollView {
@@ -20,11 +17,11 @@ struct PaymentsSettingsView: View {
                     tapToPayNameSection
                     checkoutOptionsSection
                 }
-                // Education stays available even when Stripe/display-name editing is not ready.
-                if viewModel.canTakePayments {
-                    helpSection
-                }
                 #endif
+
+                if viewModel.canTakePayments {
+                    stripePayoutsSection
+                }
 
                 if let err = viewModel.errorMessage {
                     Text(err)
@@ -43,18 +40,60 @@ struct PaymentsSettingsView: View {
             .padding(.vertical, 16)
         }
         .appScreenBackground()
-        .navigationTitle("Tap to Pay settings")
+        .navigationTitle("Payment settings")
         .navigationBarTitleDisplayMode(.inline)
-        #if TAP_TO_PAY_ENABLED
-        .navigationDestination(isPresented: $showReceiptPreferences) {
-            ReceiptPreferencesView(viewModel: viewModel)
-        }
-        .sheet(isPresented: $showTapToPayEducation) {
-            TapToPayMerchantEducationView {
-                showTapToPayEducation = false
+    }
+
+    private var stripePayoutsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Account")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppDesign.textSecondary)
+                .padding(.horizontal)
+
+            VStack(spacing: 0) {
+                Button {
+                    Task {
+                        await viewModel.openExpressDashboard(isDemoMode: authViewModel.isDemoMode)
+                    }
+                } label: {
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Payouts & Stripe account")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
+                            Text("Balance, bank account, and account details")
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                        }
+                        Spacer()
+                        if viewModel.isOpeningStripeDashboard {
+                            ProgressView().scaleEffect(0.9)
+                        } else {
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(authViewModel.isDemoMode || viewModel.isOpeningStripeDashboard || !viewModel.stripeConnected)
             }
+            .appCard()
+            .padding(.horizontal)
+
+            Text(
+                viewModel.stripeConnected
+                    ? "Opens your Stripe Dashboard for payouts and account details."
+                    : "Connect Stripe first to open your payout account."
+            )
+            .font(.caption)
+            .foregroundStyle(AppDesign.textSecondary)
+            .padding(.horizontal)
         }
-        #endif
     }
 
     #if TAP_TO_PAY_ENABLED
@@ -128,31 +167,6 @@ struct PaymentsSettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .disabled(viewModel.isSavingTapToPaySettings)
-
-                Divider().padding(.leading, 16)
-
-                Button {
-                    showReceiptPreferences = true
-                } label: {
-                    HStack(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Receipt preferences")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppDesign.textPrimary)
-                            Text(viewModel.tapToPayReceiptPreferences.settingsRowSubtitle)
-                                .font(.caption)
-                                .foregroundStyle(AppDesign.textSecondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
             }
             .appCard()
             .padding(.horizontal)
@@ -170,230 +184,5 @@ struct PaymentsSettingsView: View {
             }
         )
     }
-
-    private var helpSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Help")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppDesign.textSecondary)
-                .padding(.horizontal)
-
-            VStack(spacing: 0) {
-                Button {
-                    Task {
-                        await TapToPayMerchantEducationFlow.runFromSettings {
-                            showTapToPayEducation = true
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("How to use Tap to Pay")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppDesign.textPrimary)
-                            Text("Contactless cards, Apple Pay, and digital wallets")
-                                .font(.caption)
-                                .foregroundStyle(AppDesign.textSecondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            .appCard()
-            .padding(.horizontal)
-        }
-    }
     #endif
-}
-
-struct ReceiptPreferencesView: View {
-    @ObservedObject var viewModel: PaymentsViewModel
-    @State private var draft = TapToPayReceiptPreferences()
-    @State private var didLoadDraft = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                deliverySection
-                contentSection
-
-                if let err = viewModel.errorMessage {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal)
-                }
-
-                Button {
-                    Task {
-                        await viewModel.saveTapToPayReceiptPreferences(draft)
-                        if viewModel.tapToPaySettingsSaveSuccess {
-                            draft = viewModel.tapToPayReceiptPreferences
-                        }
-                    }
-                } label: {
-                    HStack {
-                        if viewModel.isSavingTapToPaySettings {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Save preferences")
-                                .font(.headline.weight(.semibold))
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .foregroundStyle(.white)
-                    .background(AppDesign.brandDark)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSavingTapToPaySettings)
-                .padding(.horizontal)
-
-                if viewModel.tapToPaySettingsSaveSuccess {
-                    Text("Preferences saved.")
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.accentGreen)
-                        .padding(.horizontal)
-                }
-            }
-            .padding(.vertical, 16)
-        }
-        .appScreenBackground()
-        .navigationTitle("Receipt preferences")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            guard !didLoadDraft else { return }
-            draft = viewModel.tapToPayReceiptPreferences
-            didLoadDraft = true
-        }
-    }
-
-    private var deliverySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Delivery method")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppDesign.textSecondary)
-                .padding(.horizontal)
-
-            VStack(spacing: 0) {
-                ForEach(Array(TapToPayReceiptDelivery.allCases.enumerated()), id: \.element.id) { index, mode in
-                    ReceiptPreferenceRadioRow(
-                        title: mode.title,
-                        subtitle: mode.subtitle,
-                        isSelected: draft.delivery == mode
-                    ) {
-                        draft.delivery = mode
-                    }
-                    if index < TapToPayReceiptDelivery.allCases.count - 1 {
-                        Divider().padding(.leading, 52)
-                    }
-                }
-            }
-            .appCard()
-            .padding(.horizontal)
-        }
-    }
-
-    private var contentSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Receipt content")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppDesign.textSecondary)
-                .padding(.horizontal)
-
-            VStack(spacing: 0) {
-                Toggle(isOn: $draft.showBusinessName) {
-                    preferenceToggleLabel(
-                        title: "Show business name",
-                        subtitle: "Appears at top of receipt"
-                    )
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-
-                Divider().padding(.leading, 16)
-
-                Toggle(isOn: $draft.itemized) {
-                    preferenceToggleLabel(
-                        title: "Itemised breakdown",
-                        subtitle: "List amount with payment details"
-                    )
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-
-                Divider().padding(.leading, 16)
-
-                Toggle(isOn: $draft.customFooter) {
-                    preferenceToggleLabel(
-                        title: "Custom footer message",
-                        subtitle: "e.g. “Thanks for visiting!”"
-                    )
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-
-                if draft.customFooter {
-                    Divider().padding(.leading, 16)
-                    TextField("Footer message", text: $draft.footerMessage, axis: .vertical)
-                        .lineLimit(2...4)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 14)
-                }
-            }
-            .appCard()
-            .padding(.horizontal)
-        }
-    }
-
-    private func preferenceToggleLabel(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(AppDesign.textSecondary)
-        }
-    }
-}
-
-private struct ReceiptPreferenceRadioRow: View {
-    let title: String
-    let subtitle: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? AppDesign.brandDark : AppDesign.textSecondary)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppDesign.textPrimary)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 }

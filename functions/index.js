@@ -20,7 +20,8 @@
  * Stripe card fees). Not on subscription checkout.
  *
  * Client texting (Twilio): set secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
- * Paid subscription (active) required; free trial (trialing) cannot enable SMS.
+ * Paid subscription (active) required; free trial (trialing) cannot enable SMS —
+ * unless BYPASS_SUBSCRIPTION_PAYMENT_GATE is true in sms.js (testing only).
  */
 
 const functions = require("firebase-functions");
@@ -256,7 +257,11 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     const tid = existingUser.data().tenantId;
     const tSnap = await db.collection("tenants").doc(tid).get();
     const slug = tSnap.exists ? tSnap.data().slug || "" : "";
-    return { tenantId: tid, slug, alreadyProvisioned: true };
+    const subscriptionPlan = normalizeSubscriptionPlan(
+      (tSnap.exists && tSnap.data().subscriptionPlan) ||
+        existingUser.data().subscriptionPlan
+    );
+    return { tenantId: tid, slug, subscriptionPlan, alreadyProvisioned: true };
   }
 
   const {
@@ -409,7 +414,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     console.error("scheduleTapToPayLaunchEmailAfterSignup", err);
   }
 
-  return { tenantId, slug };
+  return { tenantId, slug, subscriptionPlan };
 }
 
 async function finalizeFromCheckoutSession(stripe, session) {
@@ -438,7 +443,14 @@ async function finalizeFromCheckoutSession(stripe, session) {
       }
       const tid = u.data().tenantId;
       const tSnap = await db.collection("tenants").doc(tid).get();
-      return { tenantId: tid, slug: tSnap.exists ? tSnap.data().slug || "" : "" };
+      const tenantData = tSnap.exists ? tSnap.data() || {} : {};
+      return {
+        tenantId: tid,
+        slug: tenantData.slug || "",
+        subscriptionPlan: normalizeSubscriptionPlan(
+          tenantData.subscriptionPlan || u.data().subscriptionPlan
+        ),
+      };
     }
     console.warn("no pending signup for uid", uid);
     return null;
@@ -572,6 +584,57 @@ function planNormFromStripeSubscription(sub) {
   return planNormFromPriceId(priceId);
 }
 
+async function deactivateTenantPaymentLinks(stripe, tenantId, tenantData) {
+  const accountIds = new Set();
+  const tenantAccountId = (tenantData.stripeAccountId || "").toString().trim();
+  if (tenantAccountId && !isDemoShowcaseStripeAccountId(tenantAccountId)) {
+    accountIds.add(tenantAccountId);
+  }
+
+  const members = await db.collection("users").where("tenantId", "==", tenantId).get();
+  for (const memberDoc of members.docs) {
+    const accountId = (memberDoc.data().stripeAccountId || "").toString().trim();
+    if (accountId && !isDemoShowcaseStripeAccountId(accountId)) {
+      accountIds.add(accountId);
+    }
+  }
+
+  for (const stripeAccountId of accountIds) {
+    try {
+      let startingAfter;
+      do {
+        const page = await stripe.paymentLinks.list(
+          {
+            limit: 100,
+            ...(startingAfter ? { starting_after: startingAfter } : {}),
+          },
+          { stripeAccount: stripeAccountId }
+        );
+        for (const link of page.data) {
+          if (
+            link.active &&
+            (link.metadata?.tenantId || "").toString() === tenantId
+          ) {
+            await stripe.paymentLinks.update(
+              link.id,
+              { active: false },
+              { stripeAccount: stripeAccountId }
+            );
+          }
+        }
+        startingAfter = page.has_more ? page.data[page.data.length - 1]?.id : null;
+      } while (startingAfter);
+    } catch (err) {
+      console.warn(
+        "deactivateTenantPaymentLinks",
+        tenantId,
+        stripeAccountId,
+        err.message || err
+      );
+    }
+  }
+}
+
 /** Find tenant by Stripe customer id and sync subscription + plan to Firestore. */
 async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status, sub) {
   const cid = (stripeCustomerId || "").toString().trim();
@@ -590,6 +653,9 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   const planNorm = planNormFromStripeSubscription(sub);
   if (planNorm) patch.subscriptionPlan = planNorm;
   await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
+  if (normalized !== "active") {
+    await deactivateTenantPaymentLinks(stripe, tenantId, snap.docs[0].data() || {});
+  }
 }
 
 /** Score Connect accounts so we prefer fully enabled over incomplete duplicates. */
@@ -605,7 +671,10 @@ function connectAccountPriority(account) {
   return score;
 }
 
-/** Find the best Express Connect account for an email (handles duplicate onboarding attempts). */
+/**
+ * Find the best Standard Connect account for an email (handles duplicate onboardings).
+ * Express accounts are ignored so we never re-attach the older pricing-owner model.
+ */
 async function findBestConnectAccountForEmail(stripe, email) {
   const normalized = (email || "").toString().trim().toLowerCase();
   if (!normalized) return null;
@@ -619,6 +688,7 @@ async function findBestConnectAccountForEmail(stripe, email) {
     if (startingAfter) params.starting_after = startingAfter;
     const page = await stripe.accounts.list(params);
     for (const acct of page.data) {
+      if ((acct.type || "").toString() === "express") continue;
       const acctEmail = (acct.email || "").toString().trim().toLowerCase();
       if (acctEmail !== normalized) continue;
       const score = connectAccountPriority(acct);
@@ -633,37 +703,49 @@ async function findBestConnectAccountForEmail(stripe, email) {
   return best;
 }
 
+/** Create a Standard Connect account (Stripe is pricing owner for these users). */
+async function createStandardConnectAccount(stripe, email) {
+  // Do not set settings.payouts.debit_negative_balances here: on Standard accounts
+  // Stripe owns loss liability and rejects debit_negative_balances: false
+  // ("Accounts where Stripe owns loss liability can not have their negative debits disabled.").
+  return stripe.accounts.create({
+    type: "standard",
+    email: email || undefined,
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+  });
+}
+
 /**
  * Prefer the best Connect account for this email and persist stripeAccountId on accountRef.
- * Fixes Firestore pointing at an abandoned duplicate while a completed account exists in Stripe.
- * Skips the slow platform-wide account list when there is no saved id (new tenants).
+ * Always considers platform accounts matching the email so we don't stick to incomplete shells
+ * when a completed Standard account exists.
  */
 async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
   const storedIdTrimmed = (storedId || "").toString().trim();
-  if (!storedIdTrimmed) {
-    return null;
-  }
 
   let storedAccount = null;
-  try {
-    storedAccount = await stripe.accounts.retrieve(storedIdTrimmed);
-  } catch (err) {
-    console.warn(
-      "reconcileConnectAccountId retrieve failed",
-      storedIdTrimmed,
-      err.message || err
-    );
-    storedAccount = null;
-  }
-
-  // Fast path: saved account is submitted or fully enabled — skip listing all Connect accounts.
-  if (storedAccount) {
-    if (storedAccount.charges_enabled || storedAccount.details_submitted) {
-      return { stripeAccountId: storedIdTrimmed, account: storedAccount };
+  if (storedIdTrimmed) {
+    try {
+      storedAccount = await stripe.accounts.retrieve(storedIdTrimmed);
+    } catch (err) {
+      console.warn(
+        "reconcileConnectAccountId retrieve failed",
+        storedIdTrimmed,
+        err.message || err
+      );
+      storedAccount = null;
     }
   }
 
-  // Slow path: incomplete or missing stored account — search by email for a better match.
+  // Fully enabled stored account — keep it (no email scan).
+  if (storedAccount && storedAccount.charges_enabled) {
+    return { stripeAccountId: storedIdTrimmed, account: storedAccount };
+  }
+
+  // Incomplete / missing / review: pick best matching Standard account by email.
   const storedScore = connectAccountPriority(storedAccount);
   const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
   const emailScore = connectAccountPriority(bestByEmail);
@@ -682,7 +764,7 @@ async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
   if (chosenId && chosenId !== storedIdTrimmed) {
     await accountRef.set({ stripeAccountId: chosenId }, { merge: true });
     console.log("reconcileConnectAccountId linked account", {
-      from: storedIdTrimmed,
+      from: storedIdTrimmed || null,
       to: chosenId,
       email: (email || "").toString().trim(),
     });
@@ -696,51 +778,115 @@ async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
   return { stripeAccountId: chosenId, account: chosenAccount };
 }
 
+/**
+ * If Firestore still points at a legacy Express account, replace with Standard
+ * so pricing owner is Stripe (per Connect account type).
+ * Reuses an existing Standard account for the email when possible (avoids duplicates).
+ */
+async function replaceExpressWithStandardConnectAccount(
+  stripe,
+  accountRef,
+  email,
+  account
+) {
+  if (!account || (account.type || "").toString() !== "express") {
+    return null;
+  }
+  const existingStandard = await findBestConnectAccountForEmail(stripe, email);
+  if (existingStandard && (existingStandard.type || "").toString() === "standard") {
+    console.log("ensureConnectAccountId Express → reuse existing Standard", {
+      from: account.id,
+      to: existingStandard.id,
+      email: (email || "").toString().trim(),
+    });
+    await accountRef.set({ stripeAccountId: existingStandard.id }, { merge: true });
+    return { stripeAccountId: existingStandard.id, account: existingStandard };
+  }
+  console.log("ensureConnectAccountId replacing Express with Standard", {
+    from: account.id,
+    email: (email || "").toString().trim(),
+  });
+  const standard = await createStandardConnectAccount(stripe, email);
+  await accountRef.set({ stripeAccountId: standard.id }, { merge: true });
+  return { stripeAccountId: standard.id, account: standard };
+}
+
 /** Resolve or create the Connect account id, reconciling duplicates before creating a new one. */
 async function ensureConnectAccountId(stripe, accountRef, email, storedId) {
   const storedIdTrimmed = (storedId || "").toString().trim();
-  if (storedIdTrimmed) {
-    const reconciled = await reconcileConnectAccountId(
+
+  // Always try stored + email reconciliation first (including bare email with no stored id).
+  const reconciled = await reconcileConnectAccountId(
+    stripe,
+    accountRef,
+    storedIdTrimmed,
+    email
+  );
+  if (reconciled) {
+    const migrated = await replaceExpressWithStandardConnectAccount(
       stripe,
       accountRef,
-      storedIdTrimmed,
-      email
+      email,
+      reconciled.account
     );
-    if (reconciled) return reconciled;
+    if (migrated) return migrated;
+    return reconciled;
   }
 
   const freshDoc = await accountRef.get();
   const raceId = (freshDoc.data()?.stripeAccountId || "").toString().trim();
   if (raceId) {
     const account = await stripe.accounts.retrieve(raceId);
+    const migrated = await replaceExpressWithStandardConnectAccount(
+      stripe,
+      accountRef,
+      email,
+      account
+    );
+    if (migrated) return migrated;
     return { stripeAccountId: raceId, account };
   }
 
-  const account = await stripe.accounts.create({
-    type: "express",
-    email: email || undefined,
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true },
-    },
-    settings: {
-      // Recover negative balances (refunds/disputes) from future payouts,
-      // never by debiting the business's bank account.
-      payouts: { debit_negative_balances: false },
-    },
-  });
+  // Last chance: another concurrent call may have linked an account for this email.
+  const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
+  if (bestByEmail) {
+    await accountRef.set({ stripeAccountId: bestByEmail.id }, { merge: true });
+    console.log("ensureConnectAccountId reused by email", {
+      id: bestByEmail.id,
+      email: (email || "").toString().trim(),
+    });
+    const migrated = await replaceExpressWithStandardConnectAccount(
+      stripe,
+      accountRef,
+      email,
+      bestByEmail
+    );
+    if (migrated) return migrated;
+    return { stripeAccountId: bestByEmail.id, account: bestByEmail };
+  }
+
+  const account = await createStandardConnectAccount(stripe, email);
   await accountRef.set({ stripeAccountId: account.id }, { merge: true });
+  console.log("ensureConnectAccountId created Standard", {
+    id: account.id,
+    email: (email || "").toString().trim(),
+  });
   return { stripeAccountId: account.id, account };
 }
 
 /**
- * Best-effort: turn off automatic bank debits for negative balances on an
- * existing Express account. Runs lazily from getConnectAccountStatus so
- * accounts created before this policy get migrated.
+ * Best-effort: turn off automatic bank debits for negative balances on
+ * platform-liable Connect accounts (e.g. legacy Express). Skips Standard /
+ * Stripe-liable accounts — Stripe rejects debit_negative_balances: false there.
+ * Runs lazily from getConnectAccountStatus.
  */
 async function ensureNoNegativeBalanceBankDebits(stripe, account) {
   try {
     if (!account || account.settings?.payouts?.debit_negative_balances !== true) {
+      return account;
+    }
+    const type = (account.type || "").toString();
+    if (type === "standard") {
       return account;
     }
     return await stripe.accounts.update(account.id, {
@@ -818,6 +964,7 @@ exports.createConnectAccountLink = functions
       const tenantRef = db.collection("tenants").doc(tenantId);
       const tenantDoc = await tenantRef.get();
       const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
+      await assertPaidFeatureAccessForTenant(tenantId, tenantData);
       const accountRef =
         payCtx.scope === "user"
           ? db.collection("users").doc(uid)
@@ -891,8 +1038,10 @@ exports.createConnectAccountLink = functions
   });
 
 /**
- * One-time login link to the connected account's Stripe Express dashboard
- * (tax documents, payouts, tax registrations).
+ * Opens the connected account's Stripe dashboard.
+ * - Express (legacy): one-time createLoginLink URL
+ * - Standard (current): Stripe Dashboard login (full Dashboard)
+ * Callable name kept for mobile/web clients.
  */
 exports.createExpressDashboardLink = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -930,14 +1079,33 @@ exports.createExpressDashboardLink = functions
         "Finish Stripe setup before opening the dashboard."
       );
     }
-    const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
-    if (!loginLink?.url) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Stripe did not return a dashboard link."
-      );
+
+    const accountType = (account.type || "").toString();
+    // Standard accounts use the full Stripe Dashboard (no Express login links).
+    if (accountType === "standard") {
+      return {
+        url: "https://dashboard.stripe.com/login",
+        accountType: "standard",
+      };
     }
-    return { url: loginLink.url };
+
+    try {
+      const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+      if (!loginLink?.url) {
+        throw new Error("Stripe did not return a dashboard link.");
+      }
+      return { url: loginLink.url, accountType: accountType || "express" };
+    } catch (err) {
+      console.warn(
+        "createExpressDashboardLink login link failed; using Stripe Dashboard",
+        stripeAccountId,
+        err?.message || err
+      );
+      return {
+        url: "https://dashboard.stripe.com/login",
+        accountType: accountType || "unknown",
+      };
+    }
   });
 
 /**
@@ -975,6 +1143,7 @@ exports.getConnectAccountStatus = functions
     if (demoShowcase) {
       return demoConnectAccountStatusResponse(demoShowcase.payCtx);
     }
+    const paidFeatureAccess = await paidFeatureAccessForTenant(payCtx.tenantId);
 
     const stripe = new Stripe(secretKey, {
       apiVersion: "2024-11-20.acacia",
@@ -990,7 +1159,8 @@ exports.getConnectAccountStatus = functions
         : db.collection("tenants").doc(payCtx.tenantId);
 
     let stripeAccountId = payCtx.stripeAccountId;
-    if (stripeAccountId && !isDemoShowcaseStripeAccountId(stripeAccountId)) {
+    if (!isDemoShowcaseStripeAccountId(stripeAccountId)) {
+      // Reuse best Standard account for this email when possible (fixes multi-shell linking).
       const reconciled = await reconcileConnectAccountId(
         stripe,
         accountRef,
@@ -1009,6 +1179,10 @@ exports.getConnectAccountStatus = functions
         usesOwnPayments: payCtx.scope === "user",
         payoutMode: payCtx.payoutMode,
         paymentScope: payCtx.scope,
+        subscriptionPaid: paidFeatureAccess.paid,
+        subscriptionTrialing: paidFeatureAccess.trialing,
+        subscriptionStatus: paidFeatureAccess.status,
+        paidFeatureUpgradeMessage: paidFeatureAccess.message,
       };
     }
 
@@ -1057,6 +1231,10 @@ exports.getConnectAccountStatus = functions
       usesOwnPayments: payCtx.scope === "user",
       payoutMode: payCtx.payoutMode,
       paymentScope: payCtx.scope,
+      subscriptionPaid: paidFeatureAccess.paid,
+      subscriptionTrialing: paidFeatureAccess.trialing,
+      subscriptionStatus: paidFeatureAccess.status,
+      paidFeatureUpgradeMessage: paidFeatureAccess.message,
     };
   });
 
@@ -1190,7 +1368,8 @@ function platformFeeCents(amountCents) {
 const STRIPE_ONLINE_BPS = 290;
 const STRIPE_ONLINE_FIXED_CENTS = 30;
 const STRIPE_CARD_PRESENT_BPS = 270;
-const STRIPE_CARD_PRESENT_FIXED_CENTS = 5;
+/** In-person 5¢ + Tap to Pay authorization 10¢ (Stripe Terminal US pricing). */
+const STRIPE_CARD_PRESENT_FIXED_CENTS = 15;
 
 /**
  * Gross-up checkout so provider nets the quoted service/deposit after Stripe + platform fees.
@@ -1233,6 +1412,61 @@ function parseServiceAmountCents(data) {
     return Math.round(data.amountCents);
   }
   return null;
+}
+
+async function paidFeatureAccessForTenant(tenantId, providedTenant = null) {
+  const normalizedTenantId = (tenantId || "").toString().trim();
+  if (!normalizedTenantId) {
+    return {
+      paid: false,
+      trialing: false,
+      status: "",
+      message: sms.PAID_FEATURE_UPGRADE_MESSAGE,
+    };
+  }
+
+  let tenant = providedTenant;
+  if (!tenant) {
+    const tenantDoc = await db.collection("tenants").doc(normalizedTenantId).get();
+    tenant = tenantDoc.exists ? tenantDoc.data() || {} : {};
+  }
+
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  let ownerUserData = null;
+  if (ownerUid) {
+    const ownerDoc = await db.collection("users").doc(ownerUid).get();
+    ownerUserData = ownerDoc.exists ? ownerDoc.data() || {} : null;
+  }
+
+  const status = sms.resolveSubscriptionStatus(tenant, ownerUserData);
+  return {
+    paid: sms.tenantHasPaidSubscription(tenant, ownerUserData),
+    trialing: sms.tenantIsTrialing(tenant, ownerUserData),
+    status,
+    message: sms.PAID_FEATURE_UPGRADE_MESSAGE,
+  };
+}
+
+async function assertPaidFeatureAccessForTenant(tenantId, providedTenant = null) {
+  const access = await paidFeatureAccessForTenant(tenantId, providedTenant);
+  if (!access.paid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      sms.PAID_FEATURE_UPGRADE_MESSAGE
+    );
+  }
+  return access;
+}
+
+async function assertPublicPaymentAccessForTenant(tenantId, providedTenant = null) {
+  const access = await paidFeatureAccessForTenant(tenantId, providedTenant);
+  if (!access.paid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Online payments are not available for this business right now."
+    );
+  }
+  return access;
 }
 
 /** Helper: resolve Stripe Connect account + Terminal location for a user. */
@@ -1314,7 +1548,7 @@ async function assertCanTakePayments(uid) {
 }
 
 /**
- * Ensures a Connect account exists for Tap to Pay (creates Express account if needed).
+ * Ensures a Connect account exists for Tap to Pay (creates Standard account if needed).
  * Does not require charges_enabled — used before Apple T&C and Stripe onboarding.
  */
 async function ensureStripeAccountForTapToPayContext(uid, stripe) {
@@ -1467,6 +1701,7 @@ async function assertCanInitiateBookingPayment(uid, payCtx) {
       "No business linked to this account."
     );
   }
+  await assertPaidFeatureAccessForTenant(payCtx.tenantId);
   if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
     const ctx = await getMemberAccessContext(uid);
     const isOwner = ctx.isOwner || ctx.tenant.ownerUid === uid;
@@ -1507,6 +1742,7 @@ async function assertCanTapToPayForBooking(uid, payCtx) {
       "No business linked to this account."
     );
   }
+  await assertPaidFeatureAccessForTenant(payCtx.tenantId);
   if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
     const name = payCtx.attributedMemberName || "The assigned team member";
     throw new functions.https.HttpsError(
@@ -2736,6 +2972,7 @@ exports.createRefund = functions
       );
     }
 
+    // Return the platform 1% application fee with the refund (pro-rata on partials).
     const params = {
       charge: chargeId,
       reason: reason,
@@ -3304,6 +3541,7 @@ async function resolvePublicShopTenant(tenantSlug) {
       "Shop is not enabled for this business"
     );
   }
+  await assertPublicPaymentAccessForTenant(tenantId, tenantData);
   return { tenantId, tenantData };
 }
 
@@ -3591,6 +3829,7 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
       "Shop is not enabled for this business"
     );
   }
+  await assertPublicPaymentAccessForTenant(tenantId, tenantData);
 
   const rawLines = Array.isArray(data?.lineItems) ? data.lineItems : [];
   const productsById = await fetchTenantProductsById(tenantId);
@@ -4073,6 +4312,7 @@ exports.ensureTapToPayTerminalLocation = functions
     const uid = context.auth.uid;
     const payCtx = await assertCanTakePayments(uid);
     const tenantId = payCtx.tenantId;
+    await assertPaidFeatureAccessForTenant(tenantId);
     const tenantDoc = await db.collection("tenants").doc(tenantId).get();
     if (!tenantDoc.exists) {
       throw new functions.https.HttpsError("not-found", "Business not found.");
@@ -4442,7 +4682,7 @@ exports.createProviderSubscriptionCheckout = functions
         line_items: [{ price: priceId, quantity: 1 }],
         metadata: { firebaseUid: uid },
         subscription_data: {
-          trial_period_days: 30,
+          trial_period_days: 14,
           metadata: { firebaseUid: uid },
         },
         return_url: returnUrl,
@@ -7305,6 +7545,7 @@ exports.getBillingSummary = functions
           hasStripeCustomer: false,
           firestorePlan: firestorePlanOnly,
           message: "No business linked to this account yet.",
+          subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
         };
       }
       const tenantSnap = await db.collection("tenants").doc(tenantId).get();
@@ -7322,6 +7563,7 @@ exports.getBillingSummary = functions
           hasStripeCustomer: false,
           firestorePlan,
           message: "Billing is not set up for this business yet.",
+          subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
         };
       }
       const secretKey = stripeSecretKey.value();
@@ -7431,6 +7673,8 @@ exports.getBillingSummary = functions
         paymentMethodExpiry: paymentMethodExpiry || "",
         subscription: subscriptionPayload,
         invoices,
+        // Testing: when true, UI must not offer “start subscription today” (no charge path).
+        subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
       };
     } catch (e) {
       if (e && typeof e.code === "string" && e.code.startsWith("functions/") && e.code !== "functions/ok") {
@@ -7530,10 +7774,13 @@ function serializeMessagingFields(tenant, ownerUserData) {
   const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
   const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
   const usage = sms.smsMonthlyUsageForTenant(tenant);
+  const stripeCustomerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
   return {
     subscriptionStatus,
     subscriptionPaid: paid,
     subscriptionTrialing: trialing,
+    stripeCustomerId,
+    hasStripeBillingCustomer: stripeCustomerId.length > 0,
     smsEnabled: tenant.smsEnabled === true,
     smsStatus: (tenant.smsStatus || "off").toString(),
     smsPhoneNumber: (tenant.smsPhoneNumber || "").toString(),
@@ -7637,6 +7884,13 @@ exports.createResubscribeCheckout = functions
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    // Testing: do not open Checkout that charges a card.
+    if (sms.isSubscriptionPaymentGateBypassed()) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Paid checkout is temporarily disabled for testing. Features are unlocked without paying."
+      );
     }
     const uid = context.auth.uid;
     const ctx = await getMemberAccessContext(uid);
@@ -7795,6 +8049,24 @@ exports.startSubscriptionToday = functions
         "Only the business owner can start the subscription."
       );
     }
+
+    // Testing: UI can still show “Start subscription”; do not end trial / charge.
+    if (sms.isSubscriptionPaymentGateBypassed()) {
+      const status =
+        sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData || ctx.userData) ||
+        "trialing";
+      console.warn(
+        "startSubscriptionToday skipped (BYPASS_SUBSCRIPTION_PAYMENT_GATE)",
+        ctx.tenantId
+      );
+      return {
+        ok: true,
+        subscriptionStatus: status,
+        testingBypass: true,
+        alreadyActive: status === "active",
+      };
+    }
+
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
@@ -7835,6 +8107,12 @@ exports.startSubscriptionToday = functions
     }
     const updated = await stripe.subscriptions.update(subId, { trial_end: "now" });
     await sms.syncSubscriptionStatusForTenant(ctx.tenantId, updated.status);
+    if (updated.status !== "active") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe could not activate the subscription. Update your payment method and try again."
+      );
+    }
     return { ok: true, subscriptionStatus: updated.status };
   });
 

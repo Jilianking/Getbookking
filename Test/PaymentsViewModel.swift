@@ -198,6 +198,10 @@ class PaymentsViewModel: ObservableObject {
     @Published var usesOwnPayments = false
     @Published var isStudioPayroll = false
     @Published var paymentStripeScope = "tenant"
+    @Published var subscriptionStatus = ""
+    @Published var subscriptionPaid = false
+    @Published var subscriptionTrialing = false
+    @Published var isOpeningBillingWebsite = false
     @Published var isEnsuringTapToPayLocation = false
     @Published var isEnsuringTapToPayTerms = false
     @Published var tapToPayDisplayNameDraft: String = ""
@@ -206,7 +210,6 @@ class PaymentsViewModel: ObservableObject {
     @Published var isSavingTapToPayDisplayName = false
     @Published var tapToPayDisplayNameSaveSuccess = false
     @Published var tapToPayRequireSignature = false
-    @Published var tapToPayReceiptPreferences = TapToPayReceiptPreferences()
     @Published var isSavingTapToPaySettings = false
     @Published var tapToPaySettingsSaveSuccess = false
     /// Bank/card statement text from Stripe Connect (`settings.payments.statement_descriptor`).
@@ -298,6 +301,7 @@ class PaymentsViewModel: ObservableObject {
 
     /// Settings row / banner title for current Connect state.
     var stripeConnectStatusLabel: String {
+        if !subscriptionPaid { return "Paid plan required" }
         if stripeConnected { return "Connected" }
         if stripeHasAccount && stripeDetailsSubmitted { return "In review" }
         if stripeHasAccount { return "Finish setup" }
@@ -306,6 +310,7 @@ class PaymentsViewModel: ObservableObject {
 
     /// Alert when payments are blocked from Messages or similar.
     var stripePaymentsBlockedMessage: String {
+        if !subscriptionPaid { return paidFeatureUpgradeMessage }
         if stripeConnected { return "" }
         if stripeHasAccount && stripeDetailsSubmitted {
             return "Stripe is reviewing your payout account. Pull to refresh on Payments, or check back soon."
@@ -317,6 +322,7 @@ class PaymentsViewModel: ObservableObject {
     }
 
     var stripeConnectBannerTitle: String {
+        if !subscriptionPaid { return "Start your paid plan" }
         if stripeHasAccount && stripeDetailsSubmitted {
             return "Stripe account in review"
         }
@@ -324,6 +330,21 @@ class PaymentsViewModel: ObservableObject {
             return "Finish Stripe setup"
         }
         return "Connect Stripe to accept payments"
+    }
+
+    var paidFeatureUpgradeMessage: String {
+        Constants.App.paidFeatureUpgradeMessage
+    }
+
+    func openBillingToStartSubscription() async {
+        guard isTenantOwner else {
+            errorMessage = "Ask your business owner to start the paid Get Bookking plan."
+            return
+        }
+        guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
+        isOpeningBillingWebsite = true
+        defer { isOpeningBillingWebsite = false }
+        await UIApplication.shared.open(url)
     }
 
     func refresh(isDemoMode: Bool = false) async {
@@ -355,6 +376,7 @@ class PaymentsViewModel: ObservableObject {
     /// Fetches a Stripe Connect onboarding URL in the background so Take payment opens Safari faster.
     func prewarmConnectLinkIfNeeded(isDemoMode: Bool = false) async {
         if isDemoMode { return }
+        guard subscriptionPaid else { return }
         guard Auth.auth().currentUser != nil else { return }
         guard canTakePayments, !stripeConnected, needsStripeConnect else { return }
         guard !(stripeHasAccount && stripeDetailsSubmitted) else { return }
@@ -403,6 +425,7 @@ class PaymentsViewModel: ObservableObject {
         if !UserDefaults.standard.bool(forKey: Self.tapToPayHeroBannerSeenKey) {
             showTapToPayHeroBanner = true
         }
+        guard subscriptionPaid else { return }
 
         if let prepareData = await TapToPayAppLifecycle.prewarm() {
             applyPrepareTapToPayResponse(prepareData)
@@ -580,6 +603,9 @@ class PaymentsViewModel: ObservableObject {
 
     /// Stripe Connect + checkout only after Apple T&C and merchant education.
     func continueTapToPayLaunchAfterEducation(isDemoMode: Bool) async -> TapToPayLaunchResult {
+        guard subscriptionPaid else {
+            return .showAlert(paidFeatureUpgradeMessage)
+        }
         if !stripeConnected,
            hasLoadedStripeStatus,
            stripeHasAccount,
@@ -686,7 +712,9 @@ class PaymentsViewModel: ObservableObject {
         if let chargesEnabled = data["chargesEnabled"] as? Bool {
             stripeConnected = chargesEnabled
             needsStripeConnect = canTakePayments && !chargesEnabled
-            if chargesEnabled {
+            if !subscriptionPaid {
+                stripeStatusHint = paidFeatureUpgradeMessage
+            } else if chargesEnabled {
                 stripeStatusHint = nil
                 invalidateConnectLinkPrefetch()
             } else if stripeHasAccount && stripeDetailsSubmitted {
@@ -710,6 +738,9 @@ class PaymentsViewModel: ObservableObject {
                 isTenantOwner = true
                 canTakePayments = true
                 usesOwnPayments = true
+                subscriptionStatus = "active"
+                subscriptionPaid = true
+                subscriptionTrialing = false
                 canEditStatementDescriptor = true
                 statementDescriptorDraft = "DEMO STUDIO"
                 statementDescriptorPrefixDraft = "DEMO"
@@ -734,6 +765,9 @@ class PaymentsViewModel: ObservableObject {
             stripeHasAccount = false
             stripeDetailsSubmitted = false
             needsStripeConnect = true
+            subscriptionStatus = ""
+            subscriptionPaid = false
+            subscriptionTrialing = false
             hasLoadedStripeStatus = true
             isLoading = false
             return
@@ -747,6 +781,9 @@ class PaymentsViewModel: ObservableObject {
                 stripeDetailsSubmitted = false
                 needsStripeConnect = true
                 stripeStatusHint = "Complete business setup before connecting payments."
+                subscriptionStatus = ""
+                subscriptionPaid = false
+                subscriptionTrialing = false
                 hasLoadedStripeStatus = true
                 isLoading = false
                 return
@@ -764,10 +801,19 @@ class PaymentsViewModel: ObservableObject {
                 }
                 shopTaxEnabled = tenant["shopTaxEnabled"] as? Bool ?? false
                 inPersonTaxEnabled = tenant["inPersonTaxEnabled"] as? Bool ?? false
+                let status = (tenant["subscriptionStatus"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                subscriptionStatus = status
+                subscriptionPaid = status == "active"
+                subscriptionTrialing = status == "trialing"
             } else {
                 isTenantOwner = false
                 shopTaxEnabled = false
                 inPersonTaxEnabled = false
+                subscriptionStatus = ""
+                subscriptionPaid = false
+                subscriptionTrialing = false
             }
             await refreshStripeStatus()
             await reloadTapToPayLocationFromTenant()
@@ -797,6 +843,15 @@ class PaymentsViewModel: ObservableObject {
             let chargesEnabled = data?["chargesEnabled"] as? Bool ?? false
             let detailsSubmitted = data?["detailsSubmitted"] as? Bool ?? false
             let payoutsEnabled = data?["payoutsEnabled"] as? Bool ?? false
+            if let status = data?["subscriptionStatus"] as? String {
+                subscriptionStatus = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            }
+            if let paid = data?["subscriptionPaid"] as? Bool {
+                subscriptionPaid = paid
+            }
+            if let trialing = data?["subscriptionTrialing"] as? Bool {
+                subscriptionTrialing = trialing
+            }
 
             stripeHasAccount = hasAccount
             stripeDetailsSubmitted = detailsSubmitted
@@ -822,7 +877,6 @@ class PaymentsViewModel: ObservableObject {
             if let requireSig = data?["tapToPayRequireSignature"] as? Bool {
                 tapToPayRequireSignature = requireSig
             }
-            applyTapToPayReceiptPreferences(from: data)
             if data?["studioPayroll"] as? Bool == true {
                 isStudioPayroll = true
                 canTakePayments = false
@@ -839,7 +893,9 @@ class PaymentsViewModel: ObservableObject {
             }
             applyStatementDescriptor(from: data)
             refreshStatementDescriptorEditAccess(chargesEnabled: chargesEnabled)
-            if chargesEnabled {
+            if !subscriptionPaid {
+                stripeStatusHint = paidFeatureUpgradeMessage
+            } else if chargesEnabled {
                 stripeStatusHint = nil
             } else if hasAccount && detailsSubmitted {
                 stripeStatusHint = "Stripe is reviewing your account. Return to the app after setup — status updates automatically."
@@ -856,7 +912,9 @@ class PaymentsViewModel: ObservableObject {
             stripeDetailsSubmitted = false
             stripeConnected = false
             needsStripeConnect = true
-            stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
+            stripeStatusHint = subscriptionPaid
+                ? (hasId ? "Finish Stripe setup to accept payments." : nil)
+                : paidFeatureUpgradeMessage
             canEditStatementDescriptor = false
         }
         hasLoadedStripeStatus = true
@@ -975,6 +1033,10 @@ class PaymentsViewModel: ObservableObject {
     func createConnectAccountLink(isDemoMode: Bool = false) async -> ConnectAccountLinkOutcome {
         if isDemoMode {
             errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
+            return .noAction
+        }
+        guard subscriptionPaid else {
+            errorMessage = paidFeatureUpgradeMessage
             return .noAction
         }
         guard Auth.auth().currentUser != nil else {
@@ -1153,6 +1215,7 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Opens Stripe Dashboard for the connected account (Standard login or legacy Express link).
     func openExpressDashboard(isDemoMode: Bool = false) async {
         if isDemoMode {
             errorMessage = "Stripe dashboard isn't available in demo mode."
@@ -1166,6 +1229,7 @@ class PaymentsViewModel: ObservableObject {
         errorMessage = nil
         defer { isOpeningStripeDashboard = false }
         do {
+            // Callable name kept for compatibility; serves Standard + legacy Express.
             let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
             let data = result.data as? [String: Any]
             guard let urlString = data?["url"] as? String,
@@ -1410,7 +1474,6 @@ class PaymentsViewModel: ObservableObject {
             canEditTapToPayDisplayName = false
             tapToPayDisplayNameDraft = ""
             tapToPayRequireSignature = false
-            tapToPayReceiptPreferences = TapToPayReceiptPreferences()
             return
         }
         guard let tid = tenantId else {
@@ -1432,7 +1495,6 @@ class PaymentsViewModel: ObservableObject {
             tapToPayDisplayNameDraft = (userData?["tapToPayDisplayName"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             tapToPayRequireSignature = userData?["tapToPayRequireSignature"] as? Bool ?? false
-            tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(userData)
         } else {
             canEditTapToPayDisplayName = isTenantOwner
             guard isTenantOwner else {
@@ -1442,89 +1504,8 @@ class PaymentsViewModel: ObservableObject {
             tapToPayDisplayNameDraft = (tenant?["tapToPayDisplayName"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             tapToPayRequireSignature = tenant?["tapToPayRequireSignature"] as? Bool ?? false
-            tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(tenant)
         }
         applyTapToPayMerchantDisplayNameToStore()
-    }
-
-    private func applyTapToPayReceiptPreferences(from data: [String: Any]?) {
-        if let parsed = TapToPayReceiptPreferences.fromCallableResponse(data) {
-            tapToPayReceiptPreferences = parsed
-            return
-        }
-        tapToPayReceiptPreferences = TapToPayReceiptPreferences.fromFirestore(data)
-    }
-
-    func saveTapToPayReceiptPreferences(_ preferences: TapToPayReceiptPreferences) async {
-        guard canEditTapToPayDisplayName else { return }
-        isSavingTapToPaySettings = true
-        tapToPaySettingsSaveSuccess = false
-        errorMessage = nil
-        defer { isSavingTapToPaySettings = false }
-        do {
-            let result = try await functions.httpsCallable("updateTapToPayDisplayName").call([
-                "receiptPreferences": [
-                    "delivery": preferences.delivery.rawValue,
-                    "showBusinessName": preferences.showBusinessName,
-                    "itemized": preferences.itemized,
-                    "customFooter": preferences.customFooter,
-                    "footerMessage": preferences.footerMessage,
-                ] as [String: Any]
-            ])
-            let data = result.data as? [String: Any]
-            applyTapToPayReceiptPreferences(from: data)
-            tapToPaySettingsSaveSuccess = true
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                tapToPaySettingsSaveSuccess = false
-            }
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-        }
-    }
-
-    func tapToPayReceiptBody(
-        amountCents: Int,
-        includesSignature: Bool = false,
-        clientName: String? = nil,
-        note: String? = nil,
-        taxCents: Int = 0,
-        serviceCents: Int? = nil
-    ) -> String {
-        let amount = Self.formatUSD(Double(amountCents) / 100)
-        var lines: [String] = []
-        if tapToPayReceiptPreferences.showBusinessName {
-            let name = effectiveTapToPayDisplayName
-            if !name.isEmpty { lines.append(name) }
-        }
-        lines.append("Payment receipt — \(amount)")
-        lines.append("Paid via Tap to Pay on iPhone.")
-        if tapToPayReceiptPreferences.itemized {
-            let service = serviceCents ?? max(0, amountCents - max(0, taxCents))
-            lines.append("Service: \(Self.formatUSD(Double(service) / 100))")
-            if taxCents > 0 {
-                lines.append("Sales tax: \(Self.formatUSD(Double(taxCents) / 100))")
-            }
-            lines.append("Total: \(amount)")
-        }
-        let trimmedClient = (clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedClient.isEmpty {
-            lines.append("Client: \(trimmedClient)")
-        }
-        let trimmedNote = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedNote.isEmpty {
-            lines.append(trimmedNote)
-        }
-        if includesSignature {
-            lines.append("Customer signature: on file")
-        }
-        if tapToPayReceiptPreferences.customFooter {
-            let footer = tapToPayReceiptPreferences.footerMessage
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !footer.isEmpty { lines.append(footer) }
-        }
-        lines.append("Thank you for your business.")
-        return lines.joined(separator: "\n")
     }
 
     private func applyTapToPayMerchantDisplayNameToStore(forceReconnect: Bool = false) {
@@ -1584,7 +1565,6 @@ class PaymentsViewModel: ObservableObject {
             if let sig = data?["requireSignature"] as? Bool {
                 tapToPayRequireSignature = sig
             }
-            applyTapToPayReceiptPreferences(from: data)
             tapToPaySettingsSaveSuccess = true
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 2_000_000_000)

@@ -61,11 +61,7 @@ struct TeamClientMessagingSettingsView: View {
     }
 
     private var startSubscriptionConfirmMessage: String {
-        let price = viewModel.tenantSubscriptionPlan.monthlyPriceLabel
-        return """
-        You’ll finish on getbookking.com. Your card on file will be charged \(price) today, \
-        skipping your free trial. Return to the app afterward to enable client texting.
-        """
+        Constants.App.paidFeatureUpgradeMessage
     }
 
     private func syncPresetDraftsFromViewModel() {
@@ -187,10 +183,10 @@ struct TeamClientMessagingSettingsView: View {
                 Text("If texts fail to send, use Refresh texting number.")
                     .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.subscriptionTrialing {
-                Text("Client texting is not included during the free trial. Payment completes on getbookking.com.")
+                Text(Constants.App.paidFeatureUpgradeMessage)
                     .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode {
-                Text("Already paid on the website? Pull to refresh or use Sync billing below.")
+                Text("Manage your plan under Account → Plan & billing.")
                     .font(.caption2)
             } else {
                 Text("Dedicated local number for appointment texts to clients.")
@@ -201,7 +197,7 @@ struct TeamClientMessagingSettingsView: View {
 
     private var billingLinkContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Link your Stripe subscription to unlock client texting.")
+            Text(Constants.App.paidFeatureUpgradeMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             startSubscriptionPrimaryButton
@@ -211,7 +207,7 @@ struct TeamClientMessagingSettingsView: View {
 
     private var trialingPaywallContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Client texting starts after your paid subscription begins.")
+            Text(Constants.App.paidFeatureUpgradeMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             startSubscriptionPrimaryButton
@@ -231,7 +227,7 @@ struct TeamClientMessagingSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Start subscription today")
                         .font(.headline)
-                    Text("Skip free trial · \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel) · Unlock texting")
+                    Text("Skip free trial · \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel) · Unlock texting and payments")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -249,35 +245,35 @@ struct TeamClientMessagingSettingsView: View {
 
     private var billingSecondaryLinks: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                Task { await viewModel.syncBillingFromStripe() }
-            } label: {
-                HStack {
-                    if viewModel.isSyncingBilling { ProgressView().scaleEffect(0.9) }
-                    Text("Sync billing from Stripe")
-                        .font(.subheadline)
+            if viewModel.hasStripeBillingCustomer {
+                Button {
+                    Task { await viewModel.openStripeBillingPortal() }
+                } label: {
+                    HStack {
+                        if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
+                        Text("View Stripe account")
+                            .font(.subheadline)
+                    }
                 }
-            }
-            .disabled(
-                viewModel.isSyncingBilling ||
-                viewModel.isOpeningBillingWebsite ||
-                viewModel.isOpeningBillingPortal
-            )
-
-            Button {
-                Task { await viewModel.openStripeBillingPortal() }
-            } label: {
-                HStack {
-                    if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
-                    Text("Manage billing in Stripe")
-                        .font(.subheadline)
+                .disabled(
+                    viewModel.isOpeningBillingPortal ||
+                    viewModel.isOpeningBillingWebsite
+                )
+            } else {
+                Button {
+                    Task { await viewModel.openBillingToStartSubscription() }
+                } label: {
+                    HStack {
+                        if viewModel.isOpeningBillingWebsite { ProgressView().scaleEffect(0.9) }
+                        Text("Sign up for Stripe")
+                            .font(.subheadline)
+                    }
                 }
+                .disabled(
+                    viewModel.isOpeningBillingWebsite ||
+                    viewModel.isOpeningBillingPortal
+                )
             }
-            .disabled(
-                viewModel.isOpeningBillingPortal ||
-                viewModel.isSyncingBilling ||
-                viewModel.isOpeningBillingWebsite
-            )
         }
         .foregroundStyle(.secondary)
         .padding(.top, 4)

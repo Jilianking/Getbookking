@@ -59,6 +59,17 @@ enum SubscriptionPlan: String, CaseIterable {
         }
     }
 
+    /// Free client texting lines included (studio number + optional personal lines).
+    var freeIncludedSmsLines: Int {
+        switch self {
+        case .solo: return 1
+        case .studio, .shop: return 2
+        }
+    }
+
+    /// Max texting lines = seat cap (Studio 5, Shop 10, Solo 1).
+    var maxSmsLines: Int { maxSeats }
+
     /// Aligns with `normalizeSubscriptionPlan` in Cloud Functions / web sign-up.
     static func normalized(fromFirestore raw: String?) -> SubscriptionPlan {
         let p = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

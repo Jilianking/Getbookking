@@ -899,7 +899,9 @@ struct ManageBookTabContent: View {
                 if teamAccess.canManageBookingFormStyle {
                     ManageNavigationRow(
                         title: "Form style",
-                        subtitle: resolvedFormStyle.subtitle,
+                        subtitle: resolvedFormStyle == .guided
+                            ? resolvedFormStyle.subtitle
+                            : "Used for form Booking types.",
                         value: resolvedFormStyle.displayName
                     ) {
                         showFormStylePicker = true
@@ -1064,7 +1066,7 @@ private struct ManageBookingFormStylePickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(BookingFormStyle.allCases) { style in
+                ForEach(BookingFormStyle.formCases) { style in
                     Button {
                         viewModel.bookingFormStyleId = style.rawValue
                         Task {
@@ -1785,6 +1787,7 @@ private struct ManageTeamMemberVisibilityCard: View {
             smsEnabled: false,
             smsStatus: "off",
             smsPhoneNumber: "",
+            smsLineRequestPending: false,
             memberSettings: settings,
             personalConfirmationType: nil,
             effectiveConfirmationType: nil

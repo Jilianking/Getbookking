@@ -156,7 +156,7 @@ private struct TeamMemberOverviewContent: View {
                         }
                     } label: {
                         Label(
-                            authViewModel.teamAccess.usesOwnSms ? "My texting line" : "Set up texting line",
+                            authViewModel.teamAccess.usesOwnSms ? "Messaging" : "Request phone number",
                             systemImage: "message.fill"
                         )
                     }

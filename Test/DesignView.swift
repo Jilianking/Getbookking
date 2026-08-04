@@ -1301,16 +1301,16 @@ struct DesignView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Booking form style")
                 .font(.headline)
-            Text("Layout for your /book page. Colors follow your Template tab preset.")
+            Text("Layout when Booking type is Instant / Request + approve / Deposit (form). Calendar / slots is a Booking type in Booking settings and always uses the calendar on /book.")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if authViewModel.teamAccess.canManageBookingFormStyle {
                 Picker("Booking form style", selection: $viewModel.bookingFormStyleId) {
-                    ForEach(BookingFormStyle.allCases) { style in
+                    ForEach(BookingFormStyle.formCases) { style in
                         Text(style.displayName).tag(style.rawValue)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .disabled(!viewModel.hasTenant || viewModel.isLoading)
                 .onChange(of: viewModel.bookingFormStyleId) { _, _ in
                     Task { await viewModel.saveBookingFormStyle() }
@@ -1329,7 +1329,7 @@ struct DesignView: View {
                 .padding()
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(8)
-                Text("Only the owner or a manager with “Manage booking form style” can change Standard vs Guided.")
+                Text("Only the owner or a manager with “Manage booking form style” can change Standard or Guided.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

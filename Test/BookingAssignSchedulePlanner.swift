@@ -118,7 +118,8 @@ enum BookingAssignSchedulePlanner {
     static func bookableSlotLabels(
         on date: Date,
         availability: ProviderAvailability,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        durationMinutes: Int? = nil
     ) -> [String] {
         var cal = calendar
         let tzId = availability.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -126,7 +127,12 @@ enum BookingAssignSchedulePlanner {
             cal.timeZone = tz
         }
         let dayStart = cal.startOfDay(for: date)
-        let starts = generateSlotStarts(on: dayStart, availability: availability, calendar: cal)
+        let starts = generateSlotStarts(
+            on: dayStart,
+            availability: availability,
+            calendar: cal,
+            durationMinutes: durationMinutes
+        )
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -137,19 +143,23 @@ enum BookingAssignSchedulePlanner {
     static func generateSlotStarts(
         on dayStart: Date,
         availability: ProviderAvailability,
-        calendar: Calendar
+        calendar: Calendar,
+        durationMinutes: Int? = nil
     ) -> [Date] {
         guard staffStatus(on: dayStart, availability: availability, calendar: calendar) != "Day off" else {
             return []
         }
         let schedule = availability.daySchedule(on: dayStart, calendar: calendar)
         guard !schedule.isClosed else { return [] }
+        let step = max(5, durationMinutes ?? availability.onlineSlotStepMinutes)
+        let key = dateKey(dayStart, calendar: calendar)
         var merged: [Date] = []
         for range in schedule.ranges where range.endMinutes > range.startMinutes {
             merged.append(contentsOf: steppedSlots(
                 dayStart: dayStart,
                 startMinutes: range.startMinutes,
                 endMinutes: range.endMinutes,
+                stepMinutes: step,
                 calendar: calendar
             ))
         }
@@ -157,6 +167,9 @@ enum BookingAssignSchedulePlanner {
         return merged.filter { d in
             let m = minutesSinceMidnight(d, calendar: calendar)
             guard !seen.contains(m) else { return false }
+            if availability.isStartBlockedByPartial(dateYmd: key, startMin: m, durationMin: step) {
+                return false
+            }
             seen.insert(m)
             return true
         }.sorted()
@@ -166,9 +179,11 @@ enum BookingAssignSchedulePlanner {
         dayStart: Date,
         startMinutes: Int,
         endMinutes: Int,
+        stepMinutes: Int,
         calendar: Calendar
     ) -> [Date] {
         var out: [Date] = []
+        let step = max(5, stepMinutes)
         let openHour = startMinutes / 60
         let openMinute = startMinutes % 60
         let closeHour = endMinutes / 60
@@ -177,7 +192,7 @@ enum BookingAssignSchedulePlanner {
         let end = calendar.date(bySettingHour: closeHour, minute: closeMinute, second: 0, of: dayStart) ?? dayStart
         while cursor < end {
             out.append(cursor)
-            guard let next = calendar.date(byAdding: .minute, value: slotIntervalMinutes, to: cursor) else { break }
+            guard let next = calendar.date(byAdding: .minute, value: step, to: cursor) else { break }
             cursor = next
         }
         return out

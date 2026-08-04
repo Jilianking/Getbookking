@@ -4,7 +4,8 @@
  *   firebase functions:secrets:set STRIPE_SECRET_KEY
  *   firebase functions:secrets:set OPENAI_API_KEY
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
- *     (JSON map solo/studio/shop → price_…; copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
+ *     (JSON map solo/studio/shop → price_… and optional smsExtra $5/mo add-on;
+ *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
  *
@@ -52,7 +53,7 @@ const {
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
-/** JSON map: solo, studio, shop → Stripe Price id (recurring subscription). */
+/** JSON map: solo, studio, shop → Stripe Price id; optional smsExtra ($5/mo per extra SMS line). */
 const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
 /** Stripe Dashboard → Webhooks → Signing secret (whsec_…). */
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
@@ -167,6 +168,60 @@ function stripePriceIdForPlan(planNorm) {
     );
   }
   return id.trim();
+}
+
+/** Optional $5/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
+function stripeSmsExtraPriceId() {
+  const map = parseStripeSubscriptionPriceIds();
+  const id =
+    map.smsExtra ||
+    map.sms_extra ||
+    map.extraSms ||
+    map.smsLine ||
+    map.sms_line;
+  if (!id || typeof id !== "string" || !String(id).trim()) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      'Set "smsExtra":"price_..." in secret STRIPE_SUBSCRIPTION_PRICE_IDS ' +
+        "for the $5/mo extra texting number (Stripe Test product)."
+    );
+  }
+  const trimmed = String(id).trim();
+  if (trimmed.includes("REPLACE") || !trimmed.startsWith("price_")) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      'Create a $5/mo Stripe Price for extra SMS lines and set "smsExtra" in STRIPE_SUBSCRIPTION_PRICE_IDS.'
+    );
+  }
+  return trimmed;
+}
+
+function smsExtraQuantityFromSubscription(sub, extraPriceId) {
+  if (!sub || !extraPriceId) return 0;
+  const items = (sub.items && sub.items.data) || [];
+  let qty = 0;
+  for (const item of items) {
+    const price = item.price;
+    const pid =
+      (price && typeof price === "object" && price.id) ||
+      (typeof price === "string" ? price : null);
+    if ((pid || "").toString().trim() === extraPriceId) {
+      qty += Math.max(0, Math.floor(Number(item.quantity) || 0));
+    }
+  }
+  return qty;
+}
+
+async function syncSmsExtraLineQuantityToTenant(tenantId, quantity) {
+  const q = Math.max(0, Math.floor(Number(quantity) || 0));
+  await db.collection("tenants").doc(tenantId).set(
+    {
+      smsExtraLineQuantity: q,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return q;
 }
 
 /**
@@ -575,13 +630,32 @@ function planNormFromStripeSubscription(sub) {
   if (!sub || typeof sub !== "object") return null;
   const metaPlan = sub.metadata && sub.metadata.plan;
   if (metaPlan) return normalizeSubscriptionPlan(metaPlan);
-  const item0 = sub.items && sub.items.data && sub.items.data[0];
-  if (!item0) return null;
-  const price = item0.price;
-  const priceId =
-    (price && typeof price === "object" && price.id) ||
-    (typeof price === "string" ? price : null);
-  return planNormFromPriceId(priceId);
+  const items = (sub.items && sub.items.data) || [];
+  // Prefer plan price ids; ignore smsExtra add-on item.
+  try {
+    const map = parseStripeSubscriptionPriceIds();
+    const planKeys = ["solo", "studio", "shop"];
+    for (const item of items) {
+      const price = item.price;
+      const priceId =
+        (price && typeof price === "object" && price.id) ||
+        (typeof price === "string" ? price : null);
+      if (!priceId) continue;
+      const fromMap = planNormFromPriceId(priceId);
+      if (fromMap && planKeys.includes(fromMap)) return fromMap;
+    }
+  } catch (_) {
+    /* */
+  }
+  for (const item of items) {
+    const price = item.price;
+    const priceId =
+      (price && typeof price === "object" && price.id) ||
+      (typeof price === "string" ? price : null);
+    const fromMap = planNormFromPriceId(priceId);
+    if (fromMap) return fromMap;
+  }
+  return null;
 }
 
 async function deactivateTenantPaymentLinks(stripe, tenantId, tenantData) {
@@ -652,6 +726,24 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   patch.stripeCustomerId = cid;
   const planNorm = planNormFromStripeSubscription(sub);
   if (planNorm) patch.subscriptionPlan = planNorm;
+  try {
+    const map = parseStripeSubscriptionPriceIds();
+    const extraPriceId = (
+      map.smsExtra ||
+      map.sms_extra ||
+      map.extraSms ||
+      map.smsLine ||
+      map.sms_line ||
+      ""
+    )
+      .toString()
+      .trim();
+    if (sub && extraPriceId && extraPriceId.startsWith("price_")) {
+      patch.smsExtraLineQuantity = smsExtraQuantityFromSubscription(sub, extraPriceId);
+    }
+  } catch (_) {
+    /* optional */
+  }
   await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
   if (normalized !== "active") {
     await deactivateTenantPaymentLinks(stripe, tenantId, snap.docs[0].data() || {});
@@ -4755,7 +4847,7 @@ exports.completeProviderSubscriptionCheckout = functions
  * Stripe webhook: completes provisioning when Checkout succeeds (backup if user closes tab before client completes).
  */
 exports.stripeSubscriptionWebhook = functions
-  .runWith({ secrets: [stripeSecretKey, stripeWebhookSecret] })
+  .runWith({ secrets: [stripeSecretKey, stripeWebhookSecret, stripeSubscriptionPriceIds] })
   .https.onRequest(async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
@@ -4920,6 +5012,7 @@ const DEFAULT_MANAGER_PERMISSIONS = {
 const DEFAULT_TENANT_WORKFLOW = {
   confirmationType: "request_approve",
   responseTimeHours: 24,
+  bookingMode: "form",
 };
 
 function bookingRequiresApproval(confirmationType) {
@@ -5723,6 +5816,7 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     smsEnabled: d.smsEnabled === true,
     smsStatus: (d.smsStatus || "off").toString(),
     smsPhoneNumber: (d.smsPhoneNumber || "").toString(),
+    smsLineRequestPending: d.smsLineRequestPending === true,
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
@@ -6287,7 +6381,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
   };
 });
 
-/** Owner-only: business-wide booking confirmation policy (Settings). */
+/** Owner-only: business-wide booking mode + confirmation policy (Settings). */
 exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -6314,7 +6408,27 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
     managersApproveAppointments: managersApprove,
   };
 
-  if (managersApprove && data && data.confirmationType != null) {
+  if (data && data.bookingMode != null) {
+    const modeRaw = (data.bookingMode || "").toString().trim().toLowerCase();
+    const modeAllowed = [
+      "form",
+      "calendar_slots",
+      "calendar",
+      "slots",
+      "slot_booking",
+      "inquiry",
+      "request",
+    ];
+    if (!modeAllowed.includes(modeRaw)) {
+      throw new functions.https.HttpsError("invalid-argument", "Invalid booking mode.");
+    }
+    workflow.bookingMode =
+      modeRaw === "form" || modeRaw === "inquiry" || modeRaw === "request"
+        ? "form"
+        : "calendar_slots";
+  }
+
+  if (data && data.confirmationType != null) {
     const confirmationType = (data.confirmationType || "").toString().trim().toLowerCase();
     const allowed = [
       "instant_book",
@@ -6326,7 +6440,10 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
     if (!allowed.includes(confirmationType)) {
       throw new functions.https.HttpsError("invalid-argument", "Invalid confirmation type.");
     }
-    workflow.confirmationType = confirmationType;
+    // When owner does not set team type, still allow writing type for solo/calendar default policy.
+    if (managersApprove || workflow.bookingMode === "calendar_slots" || data.bookingMode != null) {
+      workflow.confirmationType = confirmationType;
+    }
     if (data.depositAmount != null && !Number.isNaN(Number(data.depositAmount))) {
       const dep = Number(data.depositAmount);
       if (dep > 0) workflow.depositAmount = dep;
@@ -6334,15 +6451,29 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
     }
   }
 
+  const resolvedBookingMode =
+    workflow.bookingMode || existingWf.bookingMode || DEFAULT_TENANT_WORKFLOW.bookingMode || "form";
+  workflow.bookingMode = resolvedBookingMode;
+
+  // workflow.bookingMode is authoritative for /book; top-level bookingMode mirrors for simple clients.
   await db.collection("tenants").doc(ctx.tenantId).update({
     workflow,
+    bookingMode: resolvedBookingMode,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+  const userWorkflow = {
+    managersApproveAppointments: managersApprove,
+    bookingMode: resolvedBookingMode,
+  };
+  if (workflow.confirmationType) {
+    userWorkflow.confirmationType = workflow.confirmationType;
+  }
+  if (workflow.depositAmount != null && !Number.isNaN(Number(workflow.depositAmount))) {
+    userWorkflow.depositAmount = Number(workflow.depositAmount);
+  }
   await db.collection("users").doc(uid).set(
     {
-      workflow: {
-        managersApproveAppointments: managersApprove,
-      },
+      workflow: userWorkflow,
     },
     { merge: true }
   );
@@ -6352,6 +6483,7 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
     ok: true,
     bookingRequiresApproval: bookingRequiresApproval(effectiveType),
     managersApproveAppointments: managersApprove,
+    bookingMode: resolvedBookingMode,
   };
 });
 
@@ -6496,7 +6628,7 @@ exports.listTenantMembers = functions.https.onCall(async (data, context) => {
   const notifs = tenant.managerNotifications || DEFAULT_MANAGER_NOTIFICATIONS;
   const workflow = resolveTenantWorkflow(tenant, ownerData);
   const confirmationType = workflow.confirmationType;
-  const messaging = serializeMessagingFields(tenant, ownerData);
+  const messaging = await messagingFieldsWithLineCount(tenantId, tenant, ownerData);
   return {
     tenantId,
     industry: tenant.industry || "custom",
@@ -7522,7 +7654,7 @@ exports.createBillingPortalSession = functions
  * Marketing account page: read-only subscription status, plan label, renewal, card mask, recent invoices.
  */
 exports.getBillingSummary = functions
-  .runWith({ secrets: [stripeSecretKey] })
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -7625,14 +7757,60 @@ exports.getBillingSummary = functions
       paymentMethodExpiry = pmDetails.expiry || "";
 
       let subscriptionPayload = null;
+      let tenantForMessaging = tenantData;
       if (sub) {
-        const item0 = sub.items && sub.items.data && sub.items.data[0];
+        const items = (sub.items && sub.items.data) || [];
+        let planItem = items[0];
+        try {
+          const map = parseStripeSubscriptionPriceIds();
+          const planIds = new Set(
+            ["solo", "studio", "shop"]
+              .map((k) => (map[k] || "").toString().trim())
+              .filter(Boolean)
+          );
+          const extraId = (
+            map.smsExtra ||
+            map.sms_extra ||
+            map.extraSms ||
+            map.smsLine ||
+            map.sms_line ||
+            ""
+          )
+            .toString()
+            .trim();
+          planItem =
+            items.find((it) => {
+              const price = it.price;
+              const pid =
+                (price && typeof price === "object" && price.id) ||
+                (typeof price === "string" ? price : "");
+              return planIds.has((pid || "").toString().trim());
+            }) ||
+            items.find((it) => {
+              const price = it.price;
+              const pid =
+                (price && typeof price === "object" && price.id) ||
+                (typeof price === "string" ? price : "");
+              return (pid || "").toString().trim() !== extraId;
+            }) ||
+            items[0];
+          if (extraId && extraId.startsWith("price_")) {
+            const qty = smsExtraQuantityFromSubscription(sub, extraId);
+            if (qty !== sms.smsExtraPaidQuantity(tenantData)) {
+              await syncSmsExtraLineQuantityToTenant(tenantId, qty);
+              tenantForMessaging = { ...tenantData, smsExtraLineQuantity: qty };
+            }
+          }
+        } catch (_) {
+          /* price map optional when only listing billing */
+        }
+
         let planName = "";
         let unitAmount = null;
         let currency = "usd";
         let interval = "";
-        if (item0 && item0.price) {
-          const price = item0.price;
+        if (planItem && planItem.price) {
+          const price = planItem.price;
           const product = price.product;
           if (typeof product === "object" && product && product.name) {
             planName = String(product.name);
@@ -7642,6 +7820,11 @@ exports.getBillingSummary = functions
           unitAmount = price.unit_amount;
           currency = (price.currency || "usd").toString();
           interval = price.recurring && price.recurring.interval ? String(price.recurring.interval) : "";
+        }
+        // Prefer canonical Firestore plan labels for marketing UI.
+        if (firestorePlan) {
+          planName =
+            firestorePlan.charAt(0).toUpperCase() + firestorePlan.slice(1);
         }
         subscriptionPayload = {
           id: sub.id,
@@ -7665,6 +7848,12 @@ exports.getBillingSummary = functions
         hostedInvoiceUrl: inv.hosted_invoice_url || "",
       }));
 
+      const messaging = await messagingFieldsWithLineCount(
+        tenantId,
+        tenantForMessaging,
+        userData
+      );
+
       return {
         ok: true,
         hasStripeCustomer: true,
@@ -7673,6 +7862,7 @@ exports.getBillingSummary = functions
         paymentMethodExpiry: paymentMethodExpiry || "",
         subscription: subscriptionPayload,
         invoices,
+        messaging,
         // Testing: when true, UI must not offer “start subscription today” (no charge path).
         subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
       };
@@ -7757,6 +7947,14 @@ async function linkAndSyncTenantStripeBilling(stripe, tenantId, tenant, ownerEma
     stripeSubscriptionId: subscriptionId || undefined,
   };
   if (planNorm) syncPatch.subscriptionPlan = planNorm;
+  try {
+    const extraPriceId = stripeSmsExtraPriceId();
+    if (sub && extraPriceId) {
+      syncPatch.smsExtraLineQuantity = smsExtraQuantityFromSubscription(sub, extraPriceId);
+    }
+  } catch (_) {
+    /* smsExtra price optional during sync */
+  }
   await sms.syncSubscriptionStatusForTenant(tenantId, status, syncPatch);
 
   const refreshed = await db.collection("tenants").doc(tenantId).get();
@@ -7768,13 +7966,20 @@ async function linkAndSyncTenantStripeBilling(stripe, tenantId, tenant, ownerEma
   };
 }
 
-function serializeMessagingFields(tenant, ownerUserData) {
+function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
   const subscriptionStatus = sms.resolveSubscriptionStatus(tenant, ownerUserData);
   const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
   const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
   const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
   const usage = sms.smsMonthlyUsageForTenant(tenant);
   const stripeCustomerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
+  const plan = normalizeSubscriptionPlan(
+    (tenant && tenant.subscriptionPlan) ||
+      (ownerUserData && ownerUserData.subscriptionPlan)
+  );
+  const lines =
+    lineSummary ||
+    sms.buildSmsLineSummary(tenant, plan, 0);
   return {
     subscriptionStatus,
     subscriptionPaid: paid,
@@ -7792,7 +7997,29 @@ function serializeMessagingFields(tenant, ownerUserData) {
     smsMonthlyUsageRemaining: usage.remaining,
     smsUsagePeriod: usage.period,
     ...sms.tenantSmsPresets(tenant),
+    smsFreeIncluded: lines.freeIncluded,
+    smsMaxLines: lines.maxLines,
+    smsLinesUsed: lines.used,
+    smsLineCapacity: lines.capacity,
+    smsExtraPaid: lines.paidExtras,
+    smsFreeRemaining: lines.freeRemaining,
+    smsNeedsPurchaseForNextLine: lines.needsPurchaseForNext,
+    smsAtMaxLines: lines.atMax,
+    smsCanAddWithoutPurchase: lines.canAddWithoutPurchase,
+    smsCanPurchaseExtra: lines.canPurchaseExtra,
+    smsExtraMonthlyPriceCents: lines.extraMonthlyPriceCents,
+    smsExtraMonthlyPriceLabel: lines.extraMonthlyPriceLabel,
+    smsNextLineIsFree: lines.nextIsFree,
   };
+}
+
+async function messagingFieldsWithLineCount(tenantId, tenant, ownerUserData) {
+  const plan = normalizeSubscriptionPlan(
+    (tenant && tenant.subscriptionPlan) ||
+      (ownerUserData && ownerUserData.subscriptionPlan)
+  );
+  const lineSummary = await sms.getSmsLineSummaryForTenant(tenantId, tenant, plan);
+  return serializeMessagingFields(tenant, ownerUserData, lineSummary);
 }
 
 /** Owner: SMS message presets (confirm / decline / quick replies). */
@@ -7838,7 +8065,7 @@ exports.updateTenantMessagingPresets = functions.https.onCall(async (data, conte
 
 /** Owner: pull Stripe customer/subscription into Firestore (fixes dashboard vs app mismatch). */
 exports.syncTenantBillingFromStripe = functions
-  .runWith({ secrets: [stripeSecretKey] })
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -7866,7 +8093,11 @@ exports.syncTenantBillingFromStripe = functions
       ctx.tenant,
       ownerEmail
     );
-    const messaging = serializeMessagingFields(linked.tenant, ctx.ownerUserData);
+    const messaging = await messagingFieldsWithLineCount(
+      ctx.tenantId,
+      linked.tenant,
+      ctx.ownerUserData
+    );
     return {
       ok: true,
       stripeCustomerId: linked.stripeCustomerId,
@@ -8050,23 +8281,8 @@ exports.startSubscriptionToday = functions
       );
     }
 
-    // Testing: UI can still show “Start subscription”; do not end trial / charge.
-    if (sms.isSubscriptionPaymentGateBypassed()) {
-      const status =
-        sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData || ctx.userData) ||
-        "trialing";
-      console.warn(
-        "startSubscriptionToday skipped (BYPASS_SUBSCRIPTION_PAYMENT_GATE)",
-        ctx.tenantId
-      );
-      return {
-        ok: true,
-        subscriptionStatus: status,
-        testingBypass: true,
-        alreadyActive: status === "active",
-      };
-    }
-
+    // Always end trial when owner confirms — needed to unlock client texting even if
+    // testing paid-feature bypass is on. Coupons on the sub still apply to the invoice.
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
@@ -8116,6 +8332,155 @@ exports.startSubscriptionToday = functions
     return { ok: true, subscriptionStatus: updated.status };
   });
 
+/**
+ * Owner: add one paid SMS line capacity ($5/mo) on the existing subscription.
+ * Free included slots must be used first (or left free for app provisioning).
+ * Does not provision a number — capacity unlocks the next in-app / member line.
+ */
+exports.purchaseSmsExtraLine = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can purchase extra texting numbers."
+      );
+    }
+    const tenant = ctx.tenant;
+    const ownerData = ctx.ownerUserData || ctx.userData;
+    const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+    if (plan === "solo") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Solo includes 1 texting number. Upgrade to Studio or Shop for team lines."
+      );
+    }
+    const paidBlock = sms.paidSubscriptionBlockReason(tenant, ownerData);
+    // Allow purchase while active; trialing may still buy capacity for after start.
+    // If not bypass and not active/trialing with customer, block.
+    if (paidBlock && !sms.tenantIsTrialing(tenant, ownerData)) {
+      throw new functions.https.HttpsError("failed-precondition", paidBlock);
+    }
+
+    const lineSummary = await sms.getSmsLineSummaryForTenant(ctx.tenantId, tenant, plan);
+    if (lineSummary.atMax) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Your ${plan} plan allows up to ${lineSummary.maxLines} texting numbers.`
+      );
+    }
+    if (lineSummary.canAddWithoutPurchase) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        lineSummary.freeRemaining > 0
+          ? "You still have an included texting number. Enable it in the Bookking app under Messaging."
+          : "You already paid for an unused texting slot. Set up the next number in the Bookking app."
+      );
+    }
+    if (!lineSummary.needsPurchaseForNext) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Extra texting numbers are not available right now."
+      );
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const extraPriceId = stripeSmsExtraPriceId();
+
+    const subId = (tenant.stripeSubscriptionId || "").toString().trim();
+    const customerId = (tenant.stripeCustomerId || "").toString().trim();
+    if (!customerId || !subId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Billing is not set up. Complete subscription checkout first."
+      );
+    }
+
+    let sub;
+    try {
+      sub = await stripe.subscriptions.retrieve(subId, {
+        expand: ["items.data.price"],
+      });
+    } catch (e) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Could not load subscription: ${stripeErrorMessage(e)}`
+      );
+    }
+    if (!["active", "trialing", "past_due"].includes(sub.status)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Subscription is ${sub.status}. Update billing before adding a texting number.`
+      );
+    }
+
+    const currentQty = smsExtraQuantityFromSubscription(sub, extraPriceId);
+    const nextQty = currentQty + 1;
+    const free = sms.freeIncludedSmsLinesForPlan(plan);
+    const max = sms.maxSmsLinesForPlan(plan);
+    if (free + nextQty > max) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Your ${plan} plan allows up to ${max} texting numbers.`
+      );
+    }
+
+    const items = (sub.items && sub.items.data) || [];
+    const existingItem = items.find((it) => {
+      const price = it.price;
+      const pid =
+        (price && typeof price === "object" && price.id) ||
+        (typeof price === "string" ? price : "");
+      return (pid || "").toString().trim() === extraPriceId;
+    });
+
+    try {
+      if (existingItem) {
+        await stripe.subscriptionItems.update(existingItem.id, {
+          quantity: nextQty,
+          proration_behavior: "create_prorations",
+        });
+      } else {
+        await stripe.subscriptionItems.create({
+          subscription: subId,
+          price: extraPriceId,
+          quantity: nextQty,
+          proration_behavior: "create_prorations",
+        });
+      }
+    } catch (e) {
+      console.error("purchaseSmsExtraLine stripe", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Could not add texting number to subscription: ${stripeErrorMessage(e)}`
+      );
+    }
+
+    await syncSmsExtraLineQuantityToTenant(ctx.tenantId, nextQty);
+    const freshTenant = {
+      ...tenant,
+      smsExtraLineQuantity: nextQty,
+    };
+    const updatedSummary = await sms.getSmsLineSummaryForTenant(
+      ctx.tenantId,
+      freshTenant,
+      plan
+    );
+    return {
+      ok: true,
+      paidExtras: nextQty,
+      messaging: serializeMessagingFields(freshTenant, ownerData, updatedSummary),
+    };
+  });
+
 /** Owner: opt in to client texting (provisions Twilio after paid subscription). */
 exports.requestTenantSmsProvisioning = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
@@ -8144,6 +8509,15 @@ exports.requestTenantSmsProvisioning = functions
         smsPhoneNumber: tenant.smsPhoneNumber,
         alreadyActive: true,
       };
+    }
+    const alreadyOccupiesSlot = sms.countsAsOccupiedSmsLine(tenant.smsStatus);
+    if (!alreadyOccupiesSlot && !(forceReprovision && tenant.smsPhoneNumberSid)) {
+      const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+      const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
+      const block = sms.newSmsLineBlockReason(tenant, plan, lineCount);
+      if (block) {
+        throw new functions.https.HttpsError("failed-precondition", block);
+      }
     }
     const consent = data && data.smsConsentAccepted === true;
     const hadPriorConsent = !!tenant.smsConsentAt;
@@ -8255,6 +8629,15 @@ exports.requestMemberSmsProvisioning = functions
         alreadyActive: true,
       };
     }
+    const alreadyOccupiesSlot = sms.countsAsOccupiedSmsLine(memberData.smsStatus);
+    if (!alreadyOccupiesSlot && !(forceReprovision && memberData.smsPhoneNumberSid)) {
+      const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+      const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
+      const block = sms.newSmsLineBlockReason(tenant, plan, lineCount);
+      if (block) {
+        throw new functions.https.HttpsError("failed-precondition", block);
+      }
+    }
     const consent = data && data.smsConsentAccepted === true;
     const hadPriorConsent = !!memberData.smsConsentAt;
     if (!consent && !(forceReprovision && hadPriorConsent)) {
@@ -8270,6 +8653,8 @@ exports.requestMemberSmsProvisioning = functions
         smsStatus: "pending",
         smsConsentAt:
           memberData.smsConsentAt || admin.firestore.FieldValue.serverTimestamp(),
+        smsLineRequestPending: admin.firestore.FieldValue.delete(),
+        smsLineRequestedAt: admin.firestore.FieldValue.delete(),
         smsProvisionError: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
@@ -8308,6 +8693,165 @@ exports.requestMemberSmsProvisioning = functions
     }
     return { ok: true, smsStatus: "pending" };
   });
+
+/**
+ * Independent member (or owner for a member): request a personal SMS number.
+ * Free / already-paid capacity → starts provisioning.
+ * Needs $5 capacity → marks request pending for the owner.
+ */
+exports.requestSmsPhoneNumber = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    const targetUid = ((data && data.memberUid) || context.auth.uid).toString().trim();
+    if (!targetUid) {
+      throw new functions.https.HttpsError("invalid-argument", "memberUid is required.");
+    }
+    if (targetUid !== context.auth.uid && !ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can request a number for another member."
+      );
+    }
+    const tenant = ctx.tenant;
+    const ownerData = ctx.ownerUserData || ctx.userData;
+    const paidBlock = sms.paidSubscriptionBlockReason(tenant, ownerData);
+    if (paidBlock) {
+      throw new functions.https.HttpsError("failed-precondition", paidBlock);
+    }
+    if (!sms.tenantStudioSmsActive(tenant)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Your studio must enable client texting before members can request a personal number."
+      );
+    }
+    const memberRef = db.collection("users").doc(targetUid);
+    const memberSnap = await memberRef.get();
+    if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+      throw new functions.https.HttpsError("not-found", "Team member not found.");
+    }
+    const memberData = memberSnap.data();
+    if (targetUid === tenant.ownerUid) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Owners use the studio texting line under Messaging."
+      );
+    }
+    if (sms.memberPayoutMode(memberData) !== "independent") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Personal texting numbers are for independent team members."
+      );
+    }
+    if (memberData.smsStatus === "active" && memberData.smsPhoneNumber) {
+      return {
+        ok: true,
+        smsStatus: "active",
+        smsPhoneNumber: memberData.smsPhoneNumber,
+        alreadyActive: true,
+      };
+    }
+    if (sms.countsAsOccupiedSmsLine(memberData.smsStatus)) {
+      return {
+        ok: true,
+        smsStatus: (memberData.smsStatus || "pending").toString(),
+        alreadyPending: true,
+      };
+    }
+
+    const consent = data && data.smsConsentAccepted === true;
+    const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+    const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
+    const summary = sms.buildSmsLineSummary(tenant, plan, lineCount);
+
+    if (summary.atMax) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `This studio has reached its maximum of ${summary.maxLines} texting numbers.`
+      );
+    }
+
+    if (summary.needsPurchaseForNext) {
+      await memberRef.set(
+        {
+          smsLineRequestPending: true,
+          smsLineRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+          smsLineRequestConsentAccepted: consent === true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return {
+        ok: true,
+        needsOwnerPurchase: true,
+        smsLineRequestPending: true,
+        message:
+          targetUid === context.auth.uid
+            ? "Request sent. Your studio owner can add a number for $5/mo under Billing or Messaging."
+            : "This member needs a paid texting slot. Add a number for $5/mo on billing, then enable their line.",
+      };
+    }
+
+    if (!consent) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Accept the client texting terms to continue."
+      );
+    }
+    await memberRef.set(
+      {
+        smsEnabled: true,
+        smsStatus: "pending",
+        smsConsentAt: memberData.smsConsentAt || admin.firestore.FieldValue.serverTimestamp(),
+        smsLineRequestPending: admin.firestore.FieldValue.delete(),
+        smsLineRequestedAt: admin.firestore.FieldValue.delete(),
+        smsProvisionError: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return {
+      ok: true,
+      smsStatus: "pending",
+      provisioned: true,
+      usedIncluded: summary.nextIsFree === true,
+    };
+  });
+
+/** Owner: clear a pending phone-number request without provisioning. */
+exports.clearSmsLineRequest = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can clear texting number requests."
+    );
+  }
+  const targetUid = ((data && data.memberUid) || "").toString().trim();
+  if (!targetUid) {
+    throw new functions.https.HttpsError("invalid-argument", "memberUid is required.");
+  }
+  const memberRef = db.collection("users").doc(targetUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  await memberRef.set(
+    {
+      smsLineRequestPending: admin.firestore.FieldValue.delete(),
+      smsLineRequestedAt: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return { ok: true };
+});
 
 /** Team: send an appointment-related SMS from the tenant number. */
 exports.sendClientSms = functions
@@ -8418,8 +8962,23 @@ exports.onTenantSmsProvisionRequested = functions
       );
       return null;
     }
-
     try {
+      const plan = normalizeSubscriptionPlan(after.subscriptionPlan);
+      const lineCount = await sms.countOccupiedSmsLines(tenantId, after);
+      // Line is already pending (included in count). Capacity must cover used lines.
+      const summary = sms.buildSmsLineSummary(after, plan, lineCount);
+      if (lineCount > summary.capacity) {
+        await db.collection("tenants").doc(tenantId).set(
+          {
+            smsStatus: "failed",
+            smsProvisionError: sms.newSmsLineBlockReason(after, plan, lineCount - 1) ||
+              "No texting line capacity remaining.",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        return null;
+      }
       await provisionTenantSms(tenantId, after);
     } catch (e) {
       console.error("onTenantSmsProvisionRequested", tenantId, e);
@@ -8501,6 +9060,22 @@ exports.onUserMemberSmsProvisionRequested = functions
     }
 
     try {
+      const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+      const lineCount = await sms.countOccupiedSmsLines(tenantId, tenant);
+      const summary = sms.buildSmsLineSummary(tenant, plan, lineCount);
+      if (lineCount > summary.capacity) {
+        await db.collection("users").doc(memberUid).set(
+          {
+            smsStatus: "failed",
+            smsProvisionError:
+              sms.newSmsLineBlockReason(tenant, plan, lineCount - 1) ||
+              "No texting line capacity remaining.",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        return null;
+      }
       await provisionMemberSms(tenantId, tenant, memberUid, after);
     } catch (e) {
       console.error("onUserMemberSmsProvisionRequested", memberUid, e);

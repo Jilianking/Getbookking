@@ -10,11 +10,13 @@
    ```
    Paste your Stripe secret key when prompted (e.g. `sk_test_...` for test mode)
 
-3. **Set subscription price IDs secret** (JSON map `solo` / `studio` / `shop` → Stripe Price id). Example for the Get Bookking test products is committed as `stripe-subscription-price-ids.example.json` (copy price IDs from Stripe if yours differ). Paste the one-line JSON when prompted, or pipe the file:
+3. **Set subscription price IDs secret** (JSON map `solo` / `studio` / `shop` → Stripe Price id, plus optional **`smsExtra`** for $5/mo extra texting lines). Example for the Get Bookking test products is committed as `stripe-subscription-price-ids.example.json` (copy price IDs from Stripe if yours differ). Paste the one-line JSON when prompted, or pipe the file:
    ```bash
    firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS --project test-app-96812 < functions/stripe-subscription-price-ids.example.json
    ```
    Hand-typing price ids can mix up `I` vs `l`; prefer copy from Stripe or this file.
+
+   **Extra SMS line ($5/mo):** Create a recurring monthly Price in Stripe Test, then add `"smsExtra":"price_…"` to the secret JSON. Owners buy capacity on `billing.html#messaging`; free lines (Solo 1 · Studio/Shop 2) stay free and provision from the iOS app.
 
 4. **Optional — publishable key for marketing signup** (lets `signup.html` load Stripe without putting `pk_…` in static hosting): set the string param **`STRIPE_PUBLISHABLE_KEY`** (e.g. in `functions/.env` as `STRIPE_PUBLISHABLE_KEY=pk_test_…`, or via Firebase/Google Cloud params for the function). The callable `createProviderSubscriptionCheckout` returns it as `publishableKey` when set.
 

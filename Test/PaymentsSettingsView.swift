@@ -1,6 +1,6 @@
 //
 //  PaymentsSettingsView.swift
-//  Tap to Pay name, signature, and Stripe account shortcuts.
+//  Tap to Pay name and Stripe account shortcuts.
 //
 
 import SwiftUI
@@ -15,7 +15,6 @@ struct PaymentsSettingsView: View {
                 #if TAP_TO_PAY_ENABLED
                 if viewModel.canEditTapToPayDisplayName {
                     tapToPayNameSection
-                    checkoutOptionsSection
                 }
                 #endif
 
@@ -27,13 +26,6 @@ struct PaymentsSettingsView: View {
                     Text(err)
                         .font(.caption)
                         .foregroundStyle(.red)
-                        .padding(.horizontal)
-                }
-
-                if viewModel.tapToPaySettingsSaveSuccess {
-                    Text("Settings saved.")
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.accentGreen)
                         .padding(.horizontal)
                 }
             }
@@ -54,7 +46,11 @@ struct PaymentsSettingsView: View {
             VStack(spacing: 0) {
                 Button {
                     Task {
-                        await viewModel.openExpressDashboard(isDemoMode: authViewModel.isDemoMode)
+                        if viewModel.stripeConnected {
+                            await viewModel.openExpressDashboard(isDemoMode: authViewModel.isDemoMode)
+                        } else {
+                            _ = await viewModel.createConnectAccountLink(isDemoMode: authViewModel.isDemoMode)
+                        }
                     }
                 } label: {
                     HStack(spacing: 14) {
@@ -67,7 +63,7 @@ struct PaymentsSettingsView: View {
                                 .foregroundStyle(AppDesign.textSecondary)
                         }
                         Spacer()
-                        if viewModel.isOpeningStripeDashboard {
+                        if viewModel.isOpeningStripeDashboard || viewModel.isConnectingStripe {
                             ProgressView().scaleEffect(0.9)
                         } else {
                             Image(systemName: "arrow.up.right")
@@ -80,7 +76,11 @@ struct PaymentsSettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(authViewModel.isDemoMode || viewModel.isOpeningStripeDashboard || !viewModel.stripeConnected)
+                .disabled(
+                    authViewModel.isDemoMode
+                        || viewModel.isOpeningStripeDashboard
+                        || viewModel.isConnectingStripe
+                )
             }
             .appCard()
             .padding(.horizontal)
@@ -145,44 +145,6 @@ struct PaymentsSettingsView: View {
             .appCard()
             .padding(.horizontal)
         }
-    }
-
-    private var checkoutOptionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Checkout")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppDesign.textSecondary)
-                .padding(.horizontal)
-
-            VStack(spacing: 0) {
-                Toggle(isOn: requireSignatureBinding) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Require signature")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Ask for a customer signature after payment")
-                            .font(.caption)
-                            .foregroundStyle(AppDesign.textSecondary)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .disabled(viewModel.isSavingTapToPaySettings)
-            }
-            .appCard()
-            .padding(.horizontal)
-        }
-    }
-
-    private var requireSignatureBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.tapToPayRequireSignature },
-            set: { newValue in
-                viewModel.tapToPayRequireSignature = newValue
-                Task {
-                    await viewModel.saveTapToPayPaymentSettings(requireSignature: newValue)
-                }
-            }
-        )
     }
     #endif
 }

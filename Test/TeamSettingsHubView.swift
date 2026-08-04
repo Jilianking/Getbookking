@@ -59,6 +59,15 @@ struct TeamSettingsHubView: View {
                     )
                 }
 
+                NavigationLink {
+                    BusinessServicesSettingsView(viewModel: settingsViewModel)
+                } label: {
+                    settingsRow(
+                        title: "Services",
+                        subtitle: "Name, duration, and pricing for booking"
+                    )
+                }
+
                 if includeTeamManagementSections {
                     NavigationLink {
                         TeamDesignServicesSettingsView(

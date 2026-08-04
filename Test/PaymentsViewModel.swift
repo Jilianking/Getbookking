@@ -209,9 +209,6 @@ class PaymentsViewModel: ObservableObject {
     @Published var canEditTapToPayDisplayName = false
     @Published var isSavingTapToPayDisplayName = false
     @Published var tapToPayDisplayNameSaveSuccess = false
-    @Published var tapToPayRequireSignature = false
-    @Published var isSavingTapToPaySettings = false
-    @Published var tapToPaySettingsSaveSuccess = false
     /// Bank/card statement text from Stripe Connect (`settings.payments.statement_descriptor`).
     @Published var statementDescriptorDraft: String = ""
     @Published var statementDescriptorPrefixDraft: String = ""
@@ -301,7 +298,6 @@ class PaymentsViewModel: ObservableObject {
 
     /// Settings row / banner title for current Connect state.
     var stripeConnectStatusLabel: String {
-        if !subscriptionPaid { return "Paid plan required" }
         if stripeConnected { return "Connected" }
         if stripeHasAccount && stripeDetailsSubmitted { return "In review" }
         if stripeHasAccount { return "Finish setup" }
@@ -310,7 +306,6 @@ class PaymentsViewModel: ObservableObject {
 
     /// Alert when payments are blocked from Messages or similar.
     var stripePaymentsBlockedMessage: String {
-        if !subscriptionPaid { return paidFeatureUpgradeMessage }
         if stripeConnected { return "" }
         if stripeHasAccount && stripeDetailsSubmitted {
             return "Stripe is reviewing your payout account. Pull to refresh on Payments, or check back soon."
@@ -322,7 +317,6 @@ class PaymentsViewModel: ObservableObject {
     }
 
     var stripeConnectBannerTitle: String {
-        if !subscriptionPaid { return "Start your paid plan" }
         if stripeHasAccount && stripeDetailsSubmitted {
             return "Stripe account in review"
         }
@@ -376,7 +370,6 @@ class PaymentsViewModel: ObservableObject {
     /// Fetches a Stripe Connect onboarding URL in the background so Take payment opens Safari faster.
     func prewarmConnectLinkIfNeeded(isDemoMode: Bool = false) async {
         if isDemoMode { return }
-        guard subscriptionPaid else { return }
         guard Auth.auth().currentUser != nil else { return }
         guard canTakePayments, !stripeConnected, needsStripeConnect else { return }
         guard !(stripeHasAccount && stripeDetailsSubmitted) else { return }
@@ -425,7 +418,6 @@ class PaymentsViewModel: ObservableObject {
         if !UserDefaults.standard.bool(forKey: Self.tapToPayHeroBannerSeenKey) {
             showTapToPayHeroBanner = true
         }
-        guard subscriptionPaid else { return }
 
         if let prepareData = await TapToPayAppLifecycle.prewarm() {
             applyPrepareTapToPayResponse(prepareData)
@@ -603,9 +595,7 @@ class PaymentsViewModel: ObservableObject {
 
     /// Stripe Connect + checkout only after Apple T&C and merchant education.
     func continueTapToPayLaunchAfterEducation(isDemoMode: Bool) async -> TapToPayLaunchResult {
-        guard subscriptionPaid else {
-            return .showAlert(paidFeatureUpgradeMessage)
-        }
+        // Subscription billing is bypassed for testing — Connect only gates payment capture.
         if !stripeConnected,
            hasLoadedStripeStatus,
            stripeHasAccount,
@@ -712,9 +702,7 @@ class PaymentsViewModel: ObservableObject {
         if let chargesEnabled = data["chargesEnabled"] as? Bool {
             stripeConnected = chargesEnabled
             needsStripeConnect = canTakePayments && !chargesEnabled
-            if !subscriptionPaid {
-                stripeStatusHint = paidFeatureUpgradeMessage
-            } else if chargesEnabled {
+            if chargesEnabled {
                 stripeStatusHint = nil
                 invalidateConnectLinkPrefetch()
             } else if stripeHasAccount && stripeDetailsSubmitted {
@@ -874,9 +862,6 @@ class PaymentsViewModel: ObservableObject {
             } else {
                 applyTapToPayMerchantDisplayNameToStore()
             }
-            if let requireSig = data?["tapToPayRequireSignature"] as? Bool {
-                tapToPayRequireSignature = requireSig
-            }
             if data?["studioPayroll"] as? Bool == true {
                 isStudioPayroll = true
                 canTakePayments = false
@@ -893,9 +878,7 @@ class PaymentsViewModel: ObservableObject {
             }
             applyStatementDescriptor(from: data)
             refreshStatementDescriptorEditAccess(chargesEnabled: chargesEnabled)
-            if !subscriptionPaid {
-                stripeStatusHint = paidFeatureUpgradeMessage
-            } else if chargesEnabled {
+            if chargesEnabled {
                 stripeStatusHint = nil
             } else if hasAccount && detailsSubmitted {
                 stripeStatusHint = "Stripe is reviewing your account. Return to the app after setup — status updates automatically."
@@ -912,9 +895,7 @@ class PaymentsViewModel: ObservableObject {
             stripeDetailsSubmitted = false
             stripeConnected = false
             needsStripeConnect = true
-            stripeStatusHint = subscriptionPaid
-                ? (hasId ? "Finish Stripe setup to accept payments." : nil)
-                : paidFeatureUpgradeMessage
+            stripeStatusHint = hasId ? "Finish Stripe setup to accept payments." : nil
             canEditStatementDescriptor = false
         }
         hasLoadedStripeStatus = true
@@ -1033,10 +1014,6 @@ class PaymentsViewModel: ObservableObject {
     func createConnectAccountLink(isDemoMode: Bool = false) async -> ConnectAccountLinkOutcome {
         if isDemoMode {
             errorMessage = "Stripe Connect isn't available in demo mode. Sign in with a real account."
-            return .noAction
-        }
-        guard subscriptionPaid else {
-            errorMessage = paidFeatureUpgradeMessage
             return .noAction
         }
         guard Auth.auth().currentUser != nil else {
@@ -1473,7 +1450,6 @@ class PaymentsViewModel: ObservableObject {
         guard canTakePayments else {
             canEditTapToPayDisplayName = false
             tapToPayDisplayNameDraft = ""
-            tapToPayRequireSignature = false
             return
         }
         guard let tid = tenantId else {
@@ -1494,7 +1470,6 @@ class PaymentsViewModel: ObservableObject {
             let userData = try? await firebaseService.fetchUserDocument(uid: uid)
             tapToPayDisplayNameDraft = (userData?["tapToPayDisplayName"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            tapToPayRequireSignature = userData?["tapToPayRequireSignature"] as? Bool ?? false
         } else {
             canEditTapToPayDisplayName = isTenantOwner
             guard isTenantOwner else {
@@ -1503,7 +1478,6 @@ class PaymentsViewModel: ObservableObject {
             }
             tapToPayDisplayNameDraft = (tenant?["tapToPayDisplayName"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            tapToPayRequireSignature = tenant?["tapToPayRequireSignature"] as? Bool ?? false
         }
         applyTapToPayMerchantDisplayNameToStore()
     }
@@ -1542,33 +1516,6 @@ class PaymentsViewModel: ObservableObject {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 tapToPayDisplayNameSaveSuccess = false
-            }
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-        }
-    }
-
-    func saveTapToPayPaymentSettings(requireSignature: Bool? = nil) async {
-        guard canEditTapToPayDisplayName else { return }
-        isSavingTapToPaySettings = true
-        tapToPaySettingsSaveSuccess = false
-        errorMessage = nil
-        defer { isSavingTapToPaySettings = false }
-        var payload: [String: Any] = [:]
-        if let requireSignature {
-            payload["requireSignature"] = requireSignature
-        }
-        guard !payload.isEmpty else { return }
-        do {
-            let result = try await functions.httpsCallable("updateTapToPayDisplayName").call(payload)
-            let data = result.data as? [String: Any]
-            if let sig = data?["requireSignature"] as? Bool {
-                tapToPayRequireSignature = sig
-            }
-            tapToPaySettingsSaveSuccess = true
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                tapToPaySettingsSaveSuccess = false
             }
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)

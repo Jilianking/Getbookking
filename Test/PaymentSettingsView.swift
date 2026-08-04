@@ -9,7 +9,6 @@ import SwiftUI
 struct PaymentSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
-    @State private var showPaidFeatureUpgrade = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPayEducation = false
     #endif
@@ -53,16 +52,6 @@ struct PaymentSettingsView: View {
             await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
             await viewModel.reloadShopTaxSetting(isDemoMode: isDemoMode)
         }
-        .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
-            if viewModel.isTenantOwner {
-                Button("Start paid plan") {
-                    Task { await viewModel.openBillingToStartSubscription() }
-                }
-            }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text(Constants.App.paidFeatureUpgradeMessage)
-        }
         #if TAP_TO_PAY_ENABLED
         .sheet(isPresented: $showTapToPayEducation) {
             TapToPayMerchantEducationView {
@@ -100,11 +89,7 @@ struct PaymentSettingsView: View {
                 if !viewModel.stripeConnected {
                     Divider().padding(.leading, 14)
                     Button {
-                        if viewModel.subscriptionPaid {
-                            Task { _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
-                        } else {
-                            showPaidFeatureUpgrade = true
-                        }
+                        Task { _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
                     } label: {
                         HStack {
                             Text(connectActionTitle)

@@ -60,6 +60,19 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var shouldSyncBillingAfterWeb = false
     @Published var isProvisioningSms = false
     @Published var isProvisioningMemberSms = false
+    /// SMS line entitlements from listTenantMembers
+    @Published var smsFreeIncluded: Int = 1
+    @Published var smsMaxLines: Int = 1
+    @Published var smsLinesUsed: Int = 0
+    @Published var smsLineCapacity: Int = 1
+    @Published var smsExtraPaid: Int = 0
+    @Published var smsFreeRemaining: Int = 1
+    @Published var smsNeedsPurchaseForNextLine: Bool = false
+    @Published var smsAtMaxLines: Bool = false
+    @Published var smsCanAddWithoutPurchase: Bool = true
+    @Published var smsCanPurchaseExtra: Bool = false
+    @Published var smsExtraMonthlyPriceLabel: String = "$5/mo"
+    @Published var smsNextLineIsFree: Bool = true
 
     @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
     @Published var smsPresetDeclined: String = ManagerSettingsViewModel.defaultPresetDeclined
@@ -78,6 +91,22 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     var smsPhoneDisplay: String {
         PhoneFormatting.displayUS(smsPhoneNumber)
+    }
+
+    /// Independent members without an active/pending line (eligible for add/request).
+    var membersEligibleForPersonalSms: [TenantTeamMember] {
+        members.filter { member in
+            guard member.accessRole != .owner else { return false }
+            guard member.memberSettings.payoutMode == .independent else { return false }
+            let status = member.smsStatus.lowercased()
+            if status == "active" || status == "pending" { return false }
+            if !member.smsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+            return true
+        }
+    }
+
+    var membersWithPendingSmsLineRequest: [TenantTeamMember] {
+        members.filter { $0.smsLineRequestPending && $0.accessRole != .owner }
     }
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -156,6 +185,18 @@ final class ManagerSettingsViewModel: ObservableObject {
             } else {
                 smsQuickPresets = Self.defaultQuickReplyPresets
             }
+            smsFreeIncluded = (data["smsFreeIncluded"] as? Int) ?? tenantSubscriptionPlan.freeIncludedSmsLines
+            smsMaxLines = (data["smsMaxLines"] as? Int) ?? tenantSubscriptionPlan.maxSmsLines
+            smsLinesUsed = (data["smsLinesUsed"] as? Int) ?? 0
+            smsLineCapacity = (data["smsLineCapacity"] as? Int) ?? smsFreeIncluded
+            smsExtraPaid = (data["smsExtraPaid"] as? Int) ?? 0
+            smsFreeRemaining = (data["smsFreeRemaining"] as? Int) ?? max(0, smsFreeIncluded - smsLinesUsed)
+            smsNeedsPurchaseForNextLine = data["smsNeedsPurchaseForNextLine"] as? Bool ?? false
+            smsAtMaxLines = data["smsAtMaxLines"] as? Bool ?? false
+            smsCanAddWithoutPurchase = data["smsCanAddWithoutPurchase"] as? Bool ?? true
+            smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
+            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$5/mo"
+            smsNextLineIsFree = data["smsNextLineIsFree"] as? Bool ?? (smsLinesUsed < smsFreeIncluded)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -222,6 +263,17 @@ final class ManagerSettingsViewModel: ObservableObject {
         await UIApplication.shared.open(url)
     }
 
+    /// Opens marketing billing Client texting section to purchase a $5 extra number.
+    func openBillingForExtraSmsLine() async {
+        guard isTenantOwner else { return }
+        isOpeningBillingWebsite = true
+        errorMessage = nil
+        defer { isOpeningBillingWebsite = false }
+        guard let url = URL(string: Constants.Hosting.marketingBillingMessagingURL) else { return }
+        shouldSyncBillingAfterWeb = true
+        await UIApplication.shared.open(url)
+    }
+
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
         guard isTenantOwner else { return }
         if !forceReprovision {
@@ -280,6 +332,71 @@ final class ManagerSettingsViewModel: ObservableObject {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isProvisioningMemberSms = false
+    }
+
+    /// Member (or owner for a member): request a personal number — free capacity provisions; paid needs owner purchase.
+    @discardableResult
+    func requestSmsPhoneNumber(memberUid: String?, consentAccepted: Bool) async -> Bool {
+        guard consentAccepted else {
+            errorMessage = "Accept the client texting terms to continue."
+            return false
+        }
+        isProvisioningMemberSms = true
+        errorMessage = nil
+        var didProvision = false
+        do {
+            var payload: [String: Any] = ["smsConsentAccepted": true]
+            if let memberUid, !memberUid.isEmpty {
+                payload["memberUid"] = memberUid
+            }
+            let result = try await functions.httpsCallable("requestSmsPhoneNumber").call(payload)
+            let data = result.data as? [String: Any] ?? [:]
+            if data["needsOwnerPurchase"] as? Bool == true {
+                errorMessage = (data["message"] as? String)
+                    ?? "Request sent. Your studio owner can add a number for $5/mo under Messaging or billing."
+                await load(isDemoMode: false)
+                isProvisioningMemberSms = false
+                return false
+            }
+            if data["alreadyActive"] as? Bool == true {
+                await load(isDemoMode: false)
+                isProvisioningMemberSms = false
+                return true
+            }
+            didProvision = true
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await load(isDemoMode: false)
+                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                   let member = members.first(where: { $0.uid == uid }),
+                   member.smsStatus == "active" { break }
+                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                   let member = members.first(where: { $0.uid == uid }),
+                   member.smsStatus == "failed" { break }
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isProvisioningMemberSms = false
+        return didProvision
+    }
+
+    func clearSmsLineRequest(memberUid: String) async {
+        guard isTenantOwner, !memberUid.isEmpty else { return }
+        isUpdatingMember = true
+        errorMessage = nil
+        do {
+            _ = try await functions.httpsCallable("clearSmsLineRequest").call(["memberUid": memberUid])
+            await load(isDemoMode: false)
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isUpdatingMember = false
+    }
+
+    /// Owner: after free capacity — start personal line for a teammate (delegates to request SMS phone number).
+    func ownerEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async {
+        _ = await requestSmsPhoneNumber(memberUid: memberUid, consentAccepted: consentAccepted)
     }
 
     func saveMessagingPresets() async {
@@ -400,6 +517,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 smsEnabled: member.smsEnabled,
                 smsStatus: member.smsStatus,
                 smsPhoneNumber: member.smsPhoneNumber,
+                smsLineRequestPending: member.smsLineRequestPending,
                 memberSettings: member.memberSettings,
                 personalConfirmationType: member.personalConfirmationType,
                 effectiveConfirmationType: member.effectiveConfirmationType
@@ -528,6 +646,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                     smsEnabled: row["smsEnabled"] as? Bool ?? false,
                     smsStatus: (row["smsStatus"] as? String) ?? "off",
                     smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
+                    smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
                     effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -550,6 +669,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 smsEnabled: row["smsEnabled"] as? Bool ?? false,
                 smsStatus: (row["smsStatus"] as? String) ?? "off",
                 smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
+                smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
                 effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -579,9 +699,9 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, showOnTeamPage: false, showOnTeamHome: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, showOnTeamPage: false, showOnTeamHome: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
     }
 }

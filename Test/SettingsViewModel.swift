@@ -11,6 +11,8 @@ import FirebaseFunctions
 
 class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     /// Studio-wide booking policy (owner edits in Business → Booking settings).
+    /// Form request vs calendar / slots on public /book.
+    @Published var bookingMode: BookingMode = .form
     @Published var confirmationType: BookingConfirmationType = .requestApprove
     @Published var managersApproveAppointments: Bool = true
     @Published var depositAmount: Double?
@@ -28,6 +30,15 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     @Published var timeZoneId: String = TimeZone.current.identifier
     @Published var blockedDates: Set<String> = []
     @Published var availableDates: Set<String> = []
+    /// Legacy online windows / patterns (no longer edited on availability calendar).
+    @Published var onlineBookableWeekly: BusinessHoursWeekly = .defaultOfficeHours
+    @Published var onlineSlotsConfigured: Bool = false
+    @Published var onlineSlotStepMinutes: Int = 30
+    @Published var onlineSlotPatterns: [OnlineBookableSlotPattern] = []
+    /// Partial-day blocks for availability calendar.
+    @Published var blockedTimeRanges: [BlockedTimeRange] = []
+    /// Tenant services for Business settings.
+    @Published var services: [TenantService] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var saveSuccess = false
@@ -231,6 +242,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         await MainActor.run { isLoading = true; errorMessage = nil; teamInviteError = nil }
         if isDemoMode {
             await MainActor.run {
+                bookingMode = .form
                 confirmationType = .requestApprove
                 personalConfirmationType = .requestApprove
                 usesStudioBookingPolicy = false
@@ -244,6 +256,12 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 timeZoneId = TimeZone.current.identifier
                 blockedDates = []
                 availableDates = []
+                onlineBookableWeekly = .defaultOfficeHours
+                onlineSlotsConfigured = false
+                onlineSlotStepMinutes = 30
+                onlineSlotPatterns = []
+                blockedTimeRanges = []
+                services = []
                 hasProfile = false
                 tenantId = nil
                 selectedIndustry = BookingTemplate.custom.rawValue
@@ -275,6 +293,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             var resolvedTenantRequiresApproval = true
             var tenantDeposit: Double?
             var tenantManagersApprove = true
+            var resolvedBookingMode = BookingMode.form
             var memberSettings = TeamMemberSettings()
             var resolvedBusinessName = profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             var loadedTenant: [String: Any]?
@@ -288,13 +307,22 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     planResolved = SubscriptionPlan.normalized(fromFirestore: tenant["subscriptionPlan"] as? String)
                     if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                         ownerMatch = (ownerUid == uid)
+                    } else {
+                        // Legacy tenants without ownerUid: signed-in member linked to this tenant.
+                        ownerMatch = true
                     }
                     if resolvedBusinessName.isEmpty {
                         let tenantName = (tenant["businessName"] as? String ?? tenant["displayName"] as? String ?? "")
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if !tenantName.isEmpty { resolvedBusinessName = tenantName }
                     }
-                    if let wf = tenant["workflow"] as? [String: Any],
+                    let styleId = tenant["bookingFormStyleId"] as? String
+                    let wf = tenant["workflow"] as? [String: Any]
+                    resolvedBookingMode = BookingMode.resolved(
+                        workflowMode: wf?["bookingMode"] as? String,
+                        bookingFormStyleId: styleId
+                    )
+                    if let wf,
                        let typeRaw = wf["confirmationType"] as? String,
                        let type = BookingConfirmationType(rawValue: typeRaw) {
                         resolvedTenantType = type
@@ -325,6 +353,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     personalConfirmationType = p.workflow.confirmationType
                     personalDepositAmount = p.workflow.depositAmount
                     usesStudioBookingPolicy = memberSettings.useStudioBookingPolicy
+                    bookingMode = resolvedBookingMode
                     if ownerMatch {
                         confirmationType = resolvedTenantType
                         managersApproveAppointments = tenantManagersApprove
@@ -338,6 +367,25 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     )
                     blockedDates = Set(p.availability.blockedDates)
                     availableDates = Set(p.availability.availableDates)
+                    onlineSlotsConfigured = p.availability.onlineSlotsConfigured
+                    onlineSlotStepMinutes = max(5, min(p.availability.onlineSlotStepMinutes, 180))
+                    onlineSlotPatterns = p.availability.onlineSlotPatterns
+                    blockedTimeRanges = p.availability.blockedTimeRanges
+                    if let online = p.availability.onlineBookableWeekly {
+                        onlineBookableWeekly = online
+                    } else if !p.availability.onlineSlotsConfigured {
+                        onlineBookableWeekly = businessHoursWeekly
+                    }
+                    // Prefer tenant-level blocks when owner mirrored them for /book.
+                    if let tenant = loadedTenant {
+                        if let dates = tenant["blockedDates"] as? [String], !dates.isEmpty, blockedDates.isEmpty {
+                            blockedDates = Set(dates)
+                        }
+                        let tenantBlocks = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
+                        if blockedTimeRanges.isEmpty, !tenantBlocks.isEmpty {
+                            blockedTimeRanges = tenantBlocks
+                        }
+                    }
                 } else {
                     hasProfile = false
                     tenantId = nil
@@ -352,6 +400,11 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     businessNameDraft = ""
                 }
                 isLoading = false
+            }
+            // Load services after main profile (owner or member with tenant).
+            if let tid = tid {
+                let svc = (try? await firebaseService.fetchTenantServices(tenantId: tid)) ?? []
+                await MainActor.run { services = svc }
             }
         } catch {
             await MainActor.run {
@@ -472,24 +525,73 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
+    /// Writes form vs calendar to the **tenant** doc so public `/book` updates.
+    /// Direct client write is primary (hosting reads Firestore); CF keeps server policy in sync.
+    private func persistPublicBookingModeToTenant(
+        tenantId tid: String,
+        managersApprove: Bool
+    ) async throws {
+        let modeRaw = bookingMode.rawValue
+        var workflowPatch: [String: Any] = [
+            "bookingMode": modeRaw,
+            "managersApproveAppointments": managersApprove,
+        ]
+        if managersApprove || bookingMode == .calendarSlots {
+            workflowPatch["confirmationType"] = confirmationType.rawValue
+            if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
+                workflowPatch["depositAmount"] = amount
+            }
+        }
+        // Public fields /book loads from tenants/{id}. Deep-merge under workflow.
+        try await firebaseService.updateTenant(tenantId: tid, updates: [
+            "bookingMode": modeRaw,
+            "workflow": workflowPatch,
+        ])
+    }
+
+    private func markBookingSettingsSaved() {
+        isLoading = false
+        saveSuccess = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            saveSuccess = false
+        }
+    }
+
     func saveWorkflow(isOwner: Bool) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        guard isOwner else {
+        guard isOwner || isTenantOwner else {
             await MainActor.run {
                 errorMessage = "Only the business owner can update booking workflow."
             }
             return
         }
-        await MainActor.run { errorMessage = nil; saveSuccess = false }
+        guard let tid = tenantId else {
+            await MainActor.run {
+                errorMessage = "No business linked. Pull to refresh Settings, then try again."
+            }
+            return
+        }
+        await MainActor.run { errorMessage = nil; saveSuccess = false; isLoading = true }
         do {
-            if tenantId != nil {
-                var callable: [String: Any] = [
-                    "managersApproveAppointments": managersApproveAppointments,
-                ]
-                if managersApproveAppointments {
-                    callable["confirmationType"] = confirmationType.rawValue
-                    if let amount = depositAmount { callable["depositAmount"] = amount }
+            // 1) Public /book source of truth — must succeed.
+            try await persistPublicBookingModeToTenant(
+                tenantId: tid,
+                managersApprove: managersApproveAppointments
+            )
+
+            // 2) Cloud Function — refresh serverside policy / user.merge (best effort if owner).
+            var callable: [String: Any] = [
+                "managersApproveAppointments": managersApproveAppointments,
+                "bookingMode": bookingMode.rawValue,
+            ]
+            if managersApproveAppointments || bookingMode == .calendarSlots {
+                callable["confirmationType"] = confirmationType.rawValue
+                if let amount = depositAmount, amount > 0 {
+                    callable["depositAmount"] = amount
                 }
+            }
+            do {
                 let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
                 if let data = result.data as? [String: Any] {
                     await MainActor.run {
@@ -499,51 +601,90 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                         if let ma = data["managersApproveAppointments"] as? Bool {
                             managersApproveAppointments = ma
                         }
+                        if let modeRaw = data["bookingMode"] as? String {
+                            bookingMode = BookingMode.resolved(stored: modeRaw)
+                        }
                         tenantConfirmationType = confirmationType
+                        isTenantOwner = true
                     }
+                    // Re-mirror after CF in case CF wiped nested keys unexpectedly.
+                    try await persistPublicBookingModeToTenant(
+                        tenantId: tid,
+                        managersApprove: managersApproveAppointments
+                    )
+                }
+            } catch {
+                // Public write already succeeded; surface CF issues without blocking /book.
+                await MainActor.run {
+                    errorMessage = "Saved for /book. Policy sync: \(error.localizedDescription)"
+                }
+            }
+
+            var workflowData: [String: Any] = [
+                "managersApproveAppointments": managersApproveAppointments,
+                "bookingMode": bookingMode.rawValue,
+            ]
+            if managersApproveAppointments || bookingMode == .calendarSlots {
+                workflowData["confirmationType"] = confirmationType.rawValue
+                if let amount = depositAmount, amount > 0 {
+                    workflowData["depositAmount"] = amount
                 }
             }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
-                "workflow": [
-                    "managersApproveAppointments": managersApproveAppointments,
-                ] as [String: Any]
+                "workflow": workflowData
             ])
-            await MainActor.run {
-                saveSuccess = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    saveSuccess = false
-                }
-            }
+            await MainActor.run { markBookingSettingsSaved() }
         } catch {
-            await MainActor.run { errorMessage = error.localizedDescription }
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     /// Solo owner: tenant + personal workflow (no manager policy).
     func saveSoloBusinessBookingWorkflow() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        guard isTenantOwner, tenantId != nil else {
+        guard let tid = tenantId else {
             await MainActor.run {
-                errorMessage = "Only the business owner can update booking settings."
+                errorMessage = "No business linked. Pull to refresh Settings, then try again."
             }
             return
         }
-        await MainActor.run { errorMessage = nil; saveSuccess = false }
+        await MainActor.run { errorMessage = nil; saveSuccess = false; isLoading = true }
         do {
+            // Force public calendar/form mode onto the tenant first (what /book reads).
+            try await persistPublicBookingModeToTenant(tenantId: tid, managersApprove: true)
+
             var callable: [String: Any] = [
                 "managersApproveAppointments": true,
                 "confirmationType": confirmationType.rawValue,
+                "bookingMode": bookingMode.rawValue,
             ]
             if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
                 callable["depositAmount"] = amount
             }
-            let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
-            if let data = result.data as? [String: Any] {
-                await MainActor.run {
-                    if let requires = data["bookingRequiresApproval"] as? Bool {
-                        tenantBookingRequiresApproval = requires
+            do {
+                let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
+                if let data = result.data as? [String: Any] {
+                    await MainActor.run {
+                        if let requires = data["bookingRequiresApproval"] as? Bool {
+                            tenantBookingRequiresApproval = requires
+                        }
+                        if let modeRaw = data["bookingMode"] as? String {
+                            bookingMode = BookingMode.resolved(stored: modeRaw)
+                        }
+                        managersApproveAppointments = true
+                        tenantConfirmationType = confirmationType
+                        personalConfirmationType = confirmationType
+                        personalDepositAmount = depositAmount
+                        isTenantOwner = true
                     }
+                    try await persistPublicBookingModeToTenant(tenantId: tid, managersApprove: true)
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Saved for /book. Policy sync: \(error.localizedDescription)"
                     managersApproveAppointments = true
                     tenantConfirmationType = confirmationType
                     personalConfirmationType = confirmationType
@@ -554,6 +695,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 "confirmationType": confirmationType.rawValue,
                 "responseTimeHours": ProviderWorkflow.default.responseTimeHours,
                 "managersApproveAppointments": true,
+                "bookingMode": bookingMode.rawValue,
             ]
             if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
                 workflowData["depositAmount"] = amount
@@ -561,15 +703,12 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "workflow": workflowData
             ])
-            await MainActor.run {
-                saveSuccess = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    saveSuccess = false
-                }
-            }
+            await MainActor.run { markBookingSettingsSaved() }
         } catch {
-            await MainActor.run { errorMessage = error.localizedDescription }
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -604,15 +743,31 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         await MainActor.run { errorMessage = nil; saveSuccess = false }
         do {
             let resolvedTimeZone = Self.normalizedTimeZoneId(timeZoneId)
+            let sortedBlocks = blockedTimeRanges.sorted {
+                if $0.dateYmd != $1.dateYmd { return $0.dateYmd < $1.dateYmd }
+                return $0.startMinutes < $1.startMinutes
+            }
+            let availPayload: [String: Any] = [
+                "daysOpen": Array(daysOpen).sorted(),
+                "timeZone": resolvedTimeZone,
+                "blockedDates": Array(blockedDates).sorted(),
+                "availableDates": Array(availableDates).sorted(),
+                "blockedTimeRanges": sortedBlocks.map { $0.firestoreMap() },
+                "onlineSlotsConfigured": false,
+                "onlineSlotStepMinutes": onlineSlotStepMinutes,
+            ]
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
-                "availability": [
-                    "daysOpen": Array(daysOpen).sorted(),
-                    "timeZone": resolvedTimeZone,
-                    "blockedDates": Array(blockedDates).sorted(),
-                    "availableDates": Array(availableDates).sorted()
-                ]
+                "availability": availPayload
             ])
+            // Public /book reads tenant for blocks + uses businessHoursWeekly for open windows.
+            if isTenantOwner || tenantId != nil, let tid = tenantId {
+                try await firebaseService.updateTenant(tenantId: tid, updates: [
+                    "blockedDates": Array(blockedDates).sorted(),
+                    "blockedTimeRanges": sortedBlocks.map { $0.firestoreMap() },
+                ])
+            }
             await MainActor.run {
+                blockedTimeRanges = sortedBlocks
                 timeZoneId = resolvedTimeZone
                 saveSuccess = true
                 Task { @MainActor in
@@ -623,6 +778,37 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
+    }
+
+    func blockedTimeRanges(on date: Date) -> [BlockedTimeRange] {
+        let key = dateString(from: date)
+        return blockedTimeRanges.filter { $0.dateYmd == key }.sorted { $0.startMinutes < $1.startMinutes }
+    }
+
+    func hasPartialBlocks(on date: Date) -> Bool {
+        !blockedTimeRanges(on: date).isEmpty
+    }
+
+    func setFullDayBlocked(_ date: Date, blocked: Bool) {
+        let key = dateString(from: date)
+        if blocked {
+            blockedDates.insert(key)
+            // Clear partials on that day — full day off supersedes.
+            blockedTimeRanges.removeAll { $0.dateYmd == key }
+        } else {
+            blockedDates.remove(key)
+        }
+    }
+
+    func addBlockedTimeRange(on date: Date, startMinutes: Int, endMinutes: Int) {
+        let key = dateString(from: date)
+        blockedDates.remove(key)
+        let block = BlockedTimeRange(dateYmd: key, startMinutes: startMinutes, endMinutes: endMinutes)
+        blockedTimeRanges.append(block)
+    }
+
+    func removeBlockedTimeRange(id: String) {
+        blockedTimeRanges.removeAll { $0.id == id }
     }
 
     func toggleDay(_ day: Int) {
@@ -653,6 +839,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             blockedDates.remove(key)
         } else {
             blockedDates.insert(key)
+            blockedTimeRanges.removeAll { $0.dateYmd == key }
         }
     }
 
@@ -666,6 +853,78 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             availableDates.remove(key)
         } else {
             availableDates.insert(key)
+        }
+    }
+
+    func reloadServices() async {
+        guard let tid = tenantId else {
+            await MainActor.run { services = [] }
+            return
+        }
+        let svc = (try? await firebaseService.fetchTenantServices(tenantId: tid)) ?? []
+        await MainActor.run { services = svc }
+    }
+
+    func addService(
+        name: String,
+        durationMinutes: Int?,
+        description: String? = nil,
+        startingPrice: Double? = nil
+    ) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        let nextOrder = (services.map(\.sortOrder).max() ?? -1) + 1
+        do {
+            _ = try await firebaseService.createTenantService(
+                tenantId: tid,
+                name: name,
+                durationMinutes: durationMinutes,
+                description: description,
+                sortOrder: nextOrder,
+                startingPrice: startingPrice
+            )
+            await reloadServices()
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func updateService(
+        serviceId: String,
+        name: String,
+        description: String?,
+        durationMinutes: Int?,
+        startingPrice: Double?
+    ) async -> Bool {
+        guard let tid = tenantId else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        await MainActor.run { errorMessage = nil }
+        do {
+            let slug = firebaseService.slug(from: trimmed)
+            let updates = firebaseService.tenantServiceDisplayUpdates(
+                name: trimmed,
+                slug: slug,
+                durationMinutes: durationMinutes,
+                description: description,
+                startingPrice: startingPrice
+            )
+            try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
+            await reloadServices()
+            return true
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+            return false
+        }
+    }
+
+    func deleteService(_ service: TenantService) async {
+        guard let tid = tenantId else { return }
+        do {
+            try await firebaseService.deleteTenantService(tenantId: tid, serviceId: service.id)
+            await reloadServices()
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
         }
     }
 

@@ -1205,6 +1205,16 @@ class FirebaseService: ObservableObject {
             availability.timeZone = avail["timeZone"] as? String ?? availability.timeZone
             availability.blockedDates = avail["blockedDates"] as? [String] ?? []
             availability.availableDates = avail["availableDates"] as? [String] ?? []
+            if let onlineWeekly = BusinessHoursWeekly.fromFirestore(avail["onlineBookableWeekly"]) {
+                availability.onlineBookableWeekly = onlineWeekly
+            }
+            availability.onlineSlotsConfigured = avail["onlineSlotsConfigured"] as? Bool == true
+                || availability.onlineBookableWeekly != nil
+            if let step = avail["onlineSlotStepMinutes"] as? Int, step >= 5, step <= 180 {
+                availability.onlineSlotStepMinutes = step
+            }
+            availability.onlineSlotPatterns = OnlineBookableSlotPattern.parseList(avail["onlineSlotPatterns"])
+            availability.blockedTimeRanges = BlockedTimeRange.parseList(avail["blockedTimeRanges"])
         }
 
         var workflow = ProviderWorkflow.default

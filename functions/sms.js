@@ -410,6 +410,130 @@ function tenantStudioSmsActive(tenant) {
   );
 }
 
+/** `active` or `pending` occupies a line slot (counts toward free + paid capacity). */
+function countsAsOccupiedSmsLine(smsStatus) {
+  const s = (smsStatus || "off").toString().trim().toLowerCase();
+  return s === "active" || s === "pending";
+}
+
+/**
+ * Canonical SMS line free allotments: Solo 1 · Studio/Shop 2.
+ * Plan slug should already be normalized (solo|studio|shop).
+ */
+function freeIncludedSmsLinesForPlan(planNorm) {
+  const p = (planNorm || "solo").toString().trim().toLowerCase();
+  if (p === "studio" || p === "shop") return 2;
+  return 1;
+}
+
+/** Hard caps match seat limits: Solo 1 · Studio 5 · Shop 10. */
+function maxSmsLinesForPlan(planNorm) {
+  const p = (planNorm || "solo").toString().trim().toLowerCase();
+  if (p === "solo") return 1;
+  if (p === "studio") return 5;
+  if (p === "shop") return 10;
+  return 1;
+}
+
+function smsExtraPaidQuantity(tenant) {
+  const n = Number(tenant && tenant.smsExtraLineQuantity);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+function smsLineCapacity(tenant, planNorm) {
+  const free = freeIncludedSmsLinesForPlan(planNorm);
+  const max = maxSmsLinesForPlan(planNorm);
+  const paid = smsExtraPaidQuantity(tenant);
+  return Math.min(max, free + paid);
+}
+
+/**
+ * Studio line (tenant) + personal member lines (users except owner).
+ */
+async function countOccupiedSmsLines(tenantId, tenant) {
+  let n = 0;
+  if (countsAsOccupiedSmsLine(tenant && tenant.smsStatus)) n += 1;
+  const snap = await getDb().collection("users").where("tenantId", "==", tenantId).get();
+  const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
+  for (const doc of snap.docs) {
+    if (ownerUid && doc.id === ownerUid) continue;
+    const d = doc.data() || {};
+    if (countsAsOccupiedSmsLine(d.smsStatus)) n += 1;
+  }
+  return n;
+}
+
+/**
+ * Snapshot for API / UI: free included, paid extras, max, and whether the next
+ * new line is free, already paid, needs a $5 purchase, or is blocked at max.
+ */
+function buildSmsLineSummary(tenant, planNorm, lineCount) {
+  const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
+  const freeIncluded = freeIncludedSmsLinesForPlan(plan);
+  const maxLines = maxSmsLinesForPlan(plan);
+  const paidExtras = smsExtraPaidQuantity(tenant);
+  const capacity = smsLineCapacity(tenant, plan);
+  const used = Math.max(0, Number(lineCount) || 0);
+  const freeRemaining = Math.max(0, freeIncluded - used);
+  const unusedPaidCapacity = Math.max(0, capacity - Math.max(used, freeIncluded));
+  const slotsRemaining = Math.max(0, capacity - used);
+  const atMax = used >= maxLines;
+  const nextIsFree = used < freeIncluded;
+  const nextUsesPaidCapacity = !nextIsFree && used < capacity;
+  const needsPurchaseForNext = !atMax && used >= capacity;
+  const canAddWithoutPurchase = !atMax && used < capacity;
+  const canPurchaseExtra = plan !== "solo" && !atMax;
+  return {
+    plan,
+    freeIncluded,
+    maxLines,
+    paidExtras,
+    capacity,
+    used,
+    freeRemaining,
+    unusedPaidCapacity,
+    slotsRemaining,
+    atMax,
+    nextIsFree,
+    nextUsesPaidCapacity,
+    needsPurchaseForNext,
+    canAddWithoutPurchase,
+    canPurchaseExtra,
+    extraMonthlyPriceCents: 500,
+    extraMonthlyPriceLabel: "$5/mo",
+  };
+}
+
+/**
+ * Block provisioning a brand-new line when over free+paid capacity.
+ * Returns null if allowed, else a human-readable error.
+ */
+function newSmsLineBlockReason(tenant, planNorm, lineCount) {
+  const summary = buildSmsLineSummary(tenant, planNorm, lineCount);
+  if (summary.atMax) {
+    if (summary.plan === "solo") {
+      return "Solo includes 1 texting number.";
+    }
+    return (
+      `Your ${summary.plan} plan allows up to ${summary.maxLines} texting numbers. ` +
+      "Remove a line or upgrade your plan for more seats."
+    );
+  }
+  if (summary.needsPurchaseForNext) {
+    return (
+      "You've used your included texting numbers. " +
+      "Add another number for $5/mo under Account → Plan & billing on getbookking.com."
+    );
+  }
+  return null;
+}
+
+async function getSmsLineSummaryForTenant(tenantId, tenant, planNorm) {
+  const used = await countOccupiedSmsLines(tenantId, tenant);
+  return buildSmsLineSummary(tenant, planNorm, used);
+}
+
 /** Studio must have texting on before members can provision personal lines. */
 function tenantSmsMustBeActiveForMemberLine(tenant) {
   if (!tenantStudioSmsActive(tenant)) {
@@ -1212,6 +1336,15 @@ module.exports = {
   memberPersonalSmsBlockReason,
   memberPayoutMode,
   tenantStudioSmsActive,
+  countsAsOccupiedSmsLine,
+  freeIncludedSmsLinesForPlan,
+  maxSmsLinesForPlan,
+  smsExtraPaidQuantity,
+  smsLineCapacity,
+  countOccupiedSmsLines,
+  buildSmsLineSummary,
+  newSmsLineBlockReason,
+  getSmsLineSummaryForTenant,
   resolveOutboundSmsRoute,
   canSendClientSms,
   suspendTenantSms,

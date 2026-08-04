@@ -38,15 +38,167 @@ struct TimeSlot: Identifiable, Codable, Equatable {
     }
 }
 
+/// One bookable slot pattern on Edit availability: optional service link + duration + space between.
+struct OnlineBookableSlotPattern: Identifiable, Equatable {
+    var id: String
+    /// Tenant service id when linked; nil = custom / duration-only.
+    var serviceId: String?
+    /// Display name when not linked to a service (or cache of service name).
+    var label: String
+    var durationMinutes: Int
+    /// Minutes free after the appointment before the next start.
+    var bufferMinutes: Int
+
+    init(
+        id: String = UUID().uuidString,
+        serviceId: String? = nil,
+        label: String = "",
+        durationMinutes: Int = 30,
+        bufferMinutes: Int = 0
+    ) {
+        self.id = id
+        self.serviceId = serviceId
+        self.label = label
+        self.durationMinutes = max(5, durationMinutes)
+        self.bufferMinutes = max(0, bufferMinutes)
+    }
+
+    var stepMinutes: Int { durationMinutes + bufferMinutes }
+
+    var summaryLine: String {
+        let name = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = name.isEmpty ? "Custom slot" : name
+        if bufferMinutes > 0 {
+            return "\(title) · \(durationMinutes) min · \(bufferMinutes) min between"
+        }
+        return "\(title) · \(durationMinutes) min"
+    }
+
+    func firestoreMap() -> [String: Any] {
+        var m: [String: Any] = [
+            "id": id,
+            "label": label,
+            "durationMinutes": durationMinutes,
+            "bufferMinutes": bufferMinutes
+        ]
+        if let sid = serviceId, !sid.isEmpty {
+            m["serviceId"] = sid
+        }
+        return m
+    }
+
+    static func fromFirestore(_ raw: Any?) -> OnlineBookableSlotPattern? {
+        guard let m = raw as? [String: Any] else { return nil }
+        let id = (m["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uid = (id?.isEmpty == false) ? id! : UUID().uuidString
+        let sid = (m["serviceId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = (m["label"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let dur: Int = {
+            if let n = m["durationMinutes"] as? Int { return n }
+            if let n = m["durationMinutes"] as? Double { return Int(n) }
+            return 30
+        }()
+        let buf: Int = {
+            if let n = m["bufferMinutes"] as? Int { return n }
+            if let n = m["bufferMinutes"] as? Double { return Int(n) }
+            return 0
+        }()
+        return OnlineBookableSlotPattern(
+            id: uid,
+            serviceId: (sid?.isEmpty == false) ? sid : nil,
+            label: label,
+            durationMinutes: dur,
+            bufferMinutes: buf
+        )
+    }
+
+    static func parseList(_ raw: Any?) -> [OnlineBookableSlotPattern] {
+        guard let arr = raw as? [Any] else { return [] }
+        return arr.compactMap { fromFirestore($0) }
+    }
+}
+
+/// Partial-day block on the availability calendar (minutes from midnight).
+struct BlockedTimeRange: Identifiable, Equatable {
+    var id: String
+    /// `yyyy-MM-dd`
+    var dateYmd: String
+    var startMinutes: Int
+    var endMinutes: Int
+
+    init(
+        id: String = UUID().uuidString,
+        dateYmd: String,
+        startMinutes: Int,
+        endMinutes: Int
+    ) {
+        self.id = id
+        self.dateYmd = dateYmd
+        self.startMinutes = max(0, min(startMinutes, 24 * 60 - 1))
+        self.endMinutes = max(0, min(endMinutes, 24 * 60))
+        if self.endMinutes <= self.startMinutes {
+            self.endMinutes = min(self.startMinutes + 30, 24 * 60)
+        }
+    }
+
+    var summaryLine: String {
+        let a = BusinessHoursWeekly.formatTime(minutes: startMinutes)
+        let b = BusinessHoursWeekly.formatTime(minutes: endMinutes)
+        return "\(a) – \(b)"
+    }
+
+    func firestoreMap() -> [String: Any] {
+        [
+            "id": id,
+            "date": dateYmd,
+            "startMin": startMinutes,
+            "endMin": endMinutes,
+        ]
+    }
+
+    static func fromFirestore(_ any: Any?) -> BlockedTimeRange? {
+        guard let m = any as? [String: Any] else { return nil }
+        let date = (m["date"] as? String ?? m["dateYmd"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !date.isEmpty else { return nil }
+        let start: Int = {
+            if let n = m["startMin"] as? Int { return n }
+            if let n = m["startMinutes"] as? Int { return n }
+            if let n = m["startMin"] as? Double { return Int(n) }
+            return 0
+        }()
+        let end: Int = {
+            if let n = m["endMin"] as? Int { return n }
+            if let n = m["endMinutes"] as? Int { return n }
+            if let n = m["endMin"] as? Double { return Int(n) }
+            return start + 60
+        }()
+        let id = (m["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
+        return BlockedTimeRange(id: id, dateYmd: date, startMinutes: start, endMinutes: end)
+    }
+
+    static func parseList(_ raw: Any?) -> [BlockedTimeRange] {
+        guard let arr = raw as? [Any] else { return [] }
+        return arr.compactMap { fromFirestore($0) }
+    }
+}
+
 struct ProviderAvailability {
     var timeSlots: [TimeSlot]     // Legacy; prefer `businessHoursWeekly` when set
     var daysOpen: [Int]          // 0=Sun, 1=Mon, ..., 6=Sat – shop hours
     var timeZone: String
-    var blockedDates: [String]   // "yyyy-MM-dd" – block from shop hours (approval mode)
-    var availableDates: [String] // "yyyy-MM-dd" – selected for appointments (fixed slots mode)
+    var blockedDates: [String]   // "yyyy-MM-dd" – full day off
+    var availableDates: [String] // "yyyy-MM-dd" – legacy fixed-slot opt-in days
     /// Tenant weekly hours (Mon–Sun); drives booking slots when present.
     var businessHoursWeekly: BusinessHoursWeekly?
     var businessHoursExceptions: [BusinessHoursException]
+    /// Legacy online windows (no longer edited in Availability calendar).
+    var onlineBookableWeekly: BusinessHoursWeekly?
+    var onlineSlotsConfigured: Bool
+    var onlineSlotStepMinutes: Int
+    var onlineSlotPatterns: [OnlineBookableSlotPattern]
+    /// Partial-day unavailability (inside shop hours).
+    var blockedTimeRanges: [BlockedTimeRange]
 
     static let `default` = ProviderAvailability(
         timeSlots: [TimeSlot(open: 9, close: 18)],
@@ -55,7 +207,12 @@ struct ProviderAvailability {
         blockedDates: [],
         availableDates: [],
         businessHoursWeekly: nil,
-        businessHoursExceptions: []
+        businessHoursExceptions: [],
+        onlineBookableWeekly: nil,
+        onlineSlotsConfigured: false,
+        onlineSlotStepMinutes: 30,
+        onlineSlotPatterns: [],
+        blockedTimeRanges: []
     )
 
     static func mergingTenantBusinessHours(_ tenant: [String: Any]?, into base: ProviderAvailability) -> ProviderAvailability {
@@ -66,6 +223,16 @@ struct ProviderAvailability {
            let weekly = BusinessHoursWeekly.fromFirestore(weeklyRaw) {
             merged.businessHoursWeekly = weekly
             merged.daysOpen = daysOpen(from: weekly)
+        }
+        // Owner blocks mirrored on tenant for public /book
+        if let dates = tenant["blockedDates"] as? [String], !dates.isEmpty {
+            // Prefer user availability when non-empty; tenant is backup for web only.
+        }
+        if merged.blockedTimeRanges.isEmpty {
+            let fromTenant = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
+            if !fromTenant.isEmpty {
+                merged.blockedTimeRanges = fromTenant
+            }
         }
         return merged
     }
@@ -78,7 +245,7 @@ struct ProviderAvailability {
         }
     }
 
-    /// Resolved schedule for a calendar day (exception overrides weekly; legacy time slots as fallback).
+    /// Open windows for a calendar day: shop hours + exceptions (not online autofill).
     func daySchedule(on dayStart: Date, calendar: Calendar) -> DaySchedule {
         let key = Self.dateKey(dayStart, calendar: calendar)
         if let ex = businessHoursExceptions.first(where: { $0.dateYmd == key }) {
@@ -94,6 +261,14 @@ struct ProviderAvailability {
                 return weekly.days[index]
             }
         }
+        // Legacy online windows only if shop weekly missing
+        if onlineSlotsConfigured, let online = onlineBookableWeekly {
+            let weekday = calendar.component(.weekday, from: dayStart) - 1
+            let index = weekday == 0 ? 6 : weekday - 1
+            if online.days.indices.contains(index) {
+                return online.days[index]
+            }
+        }
         let legacyRanges = timeSlots
             .filter { $0.close > $0.open }
             .map { BusinessHourTimeRange(startMinutes: $0.open * 60, endMinutes: $0.close * 60) }
@@ -103,7 +278,29 @@ struct ProviderAvailability {
         return DaySchedule(isClosed: false, ranges: legacyRanges)
     }
 
+    func isFullDayBlocked(on dayStart: Date, calendar: Calendar) -> Bool {
+        blockedDates.contains(Self.dateKey(dayStart, calendar: calendar))
+    }
+
+    func partialBlocks(on dayStart: Date, calendar: Calendar) -> [BlockedTimeRange] {
+        let key = Self.dateKey(dayStart, calendar: calendar)
+        return blockedTimeRanges.filter { $0.dateYmd == key }
+    }
+
+    /// Whether a start at `startMin` with duration `durationMin` is covered by a partial block.
+    func isStartBlockedByPartial(dateYmd: String, startMin: Int, durationMin: Int) -> Bool {
+        let end = startMin + max(5, durationMin)
+        for b in blockedTimeRanges where b.dateYmd == dateYmd {
+            // Overlap: start < blockEnd && end > blockStart
+            if startMin < b.endMinutes && end > b.startMinutes {
+                return true
+            }
+        }
+        return false
+    }
+
     func isBookableDay(on dayStart: Date, calendar: Calendar) -> Bool {
+        if isFullDayBlocked(on: dayStart, calendar: calendar) { return false }
         let sched = daySchedule(on: dayStart, calendar: calendar)
         return !sched.isClosed && !sched.ranges.isEmpty
     }

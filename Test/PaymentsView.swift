@@ -14,7 +14,6 @@ struct PaymentsView: View {
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
     @State private var showManualPaymentSheet = false
-    @State private var showPaidFeatureUpgrade = false
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
     @State private var showTapToPayEducation = false
@@ -33,12 +32,10 @@ struct PaymentsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if viewModel.isStudioPayroll {
                         studioPayrollBanner
-                    } else if viewModel.hasLoadedStripeStatus &&
-                                (!viewModel.subscriptionPaid || viewModel.needsStripeConnect) {
+                    } else if viewModel.hasLoadedStripeStatus && viewModel.needsStripeConnect {
                         StripeConnectBanner(
                             viewModel: viewModel,
-                            isDemoMode: authViewModel.isDemoMode,
-                            onPaidPlanRequired: { showPaidFeatureUpgrade = true }
+                            isDemoMode: authViewModel.isDemoMode
                         )
                     } else if let err = viewModel.errorMessage {
                         Text(err)
@@ -177,16 +174,6 @@ struct PaymentsView: View {
             }
             #endif
         }
-        .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
-            if viewModel.isTenantOwner {
-                Button("Start paid plan") {
-                    Task { await viewModel.openBillingToStartSubscription() }
-                }
-            }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text(Constants.App.paidFeatureUpgradeMessage)
-        }
     }
 
     #if TAP_TO_PAY_ENABLED
@@ -212,11 +199,7 @@ struct PaymentsView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     showCheckout: { showTapToPaySheet = true },
                     showAlert: { message in
-                        if message == Constants.App.paidFeatureUpgradeMessage {
-                            showPaidFeatureUpgrade = true
-                        } else {
-                            tapToPayAlertMessage = message
-                        }
+                        tapToPayAlertMessage = message
                     },
                     showEducation: { showTapToPayEducation = true }
                 )
@@ -366,11 +349,7 @@ struct PaymentsView: View {
                     title: "Manual payment",
                     subtitle: "",
                     action: {
-                        if viewModel.subscriptionPaid {
-                            showManualPaymentSheet = true
-                        } else {
-                            showPaidFeatureUpgrade = true
-                        }
+                        showManualPaymentSheet = true
                     },
                     disabled: !viewModel.stripeConnected,
                     showsDivider: true
@@ -382,11 +361,7 @@ struct PaymentsView: View {
                     title: "Deposit link",
                     subtitle: "Request a deposit via text",
                     action: {
-                        if viewModel.subscriptionPaid {
-                            showDepositLinkSheet = true
-                        } else {
-                            showPaidFeatureUpgrade = true
-                        }
+                        showDepositLinkSheet = true
                     },
                     disabled: !viewModel.stripeConnected,
                     showsDivider: false
@@ -474,7 +449,6 @@ struct PaymentsView: View {
 private struct StripeConnectBanner: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
-    let onPaidPlanRequired: () -> Void
 
     private var isPendingReview: Bool {
         viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected
@@ -483,10 +457,6 @@ private struct StripeConnectBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: {
-                guard viewModel.subscriptionPaid else {
-                    onPaidPlanRequired()
-                    return
-                }
                 Task {
                     if isPendingReview {
                         await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)

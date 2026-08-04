@@ -14,10 +14,15 @@ struct TeamClientMessagingSettingsView: View {
     @State private var draftQuickReplies: [String] = []
     @State private var presetsLoaded = false
     @State private var showStartSubscriptionConfirm = false
+    @State private var showAddNumberSheet = false
+    @State private var addNumberConsent = false
 
     var body: some View {
         List {
             clientMessagingSection
+            if viewModel.isTenantOwner, !authViewModel.isDemoMode {
+                smsLinesSection
+            }
             usageSection
             presetsSection
             if viewModel.isTenantOwner {
@@ -31,6 +36,12 @@ struct TeamClientMessagingSettingsView: View {
         .appListSurface()
         .navigationTitle("Messaging")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showAddNumberSheet) {
+            NavigationStack {
+                addNumberSheetContent
+            }
+            .presentationDetents([.medium, .large])
+        }
         .task {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)
             syncPresetDraftsFromViewModel()
@@ -299,6 +310,211 @@ struct TeamClientMessagingSettingsView: View {
                     Text("Refresh texting number")
                         .font(.subheadline)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var smsLinesSection: some View {
+        Section {
+            HStack {
+                Text("Numbers in use")
+                Spacer()
+                Text("\(viewModel.smsLinesUsed) of \(viewModel.smsLineCapacity)")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            HStack {
+                Text("Included free")
+                Spacer()
+                Text("\(viewModel.smsFreeIncluded)")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            if viewModel.smsExtraPaid > 0 {
+                HStack {
+                    Text("Paid extras")
+                    Spacer()
+                    Text("\(viewModel.smsExtraPaid) × \(viewModel.smsExtraMonthlyPriceLabel)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if viewModel.tenantSubscriptionPlan != .solo,
+               viewModel.smsStatus == "active" {
+                Button {
+                    if viewModel.smsAtMaxLines {
+                        return
+                    }
+                    if viewModel.smsNeedsPurchaseForNextLine {
+                        Task { await viewModel.openBillingForExtraSmsLine() }
+                    } else {
+                        addNumberConsent = false
+                        showAddNumberSheet = true
+                    }
+                } label: {
+                    HStack {
+                        if viewModel.isOpeningBillingWebsite || viewModel.isProvisioningMemberSms {
+                            ProgressView().scaleEffect(0.9)
+                        }
+                        Image(systemName: "phone.badge.plus")
+                        Text(
+                            viewModel.smsNeedsPurchaseForNextLine
+                                ? "Add a new number — \(viewModel.smsExtraMonthlyPriceLabel)"
+                                : "Add a new number"
+                        )
+                    }
+                }
+                .disabled(
+                    viewModel.smsAtMaxLines ||
+                    viewModel.isOpeningBillingWebsite ||
+                    viewModel.isProvisioningMemberSms
+                )
+            }
+
+            if viewModel.smsAtMaxLines {
+                Text("You’ve reached the max of \(viewModel.smsMaxLines) numbers on \(viewModel.tenantSubscriptionPlan.displayName).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Texting lines")
+        } footer: {
+            Text(
+                viewModel.tenantSubscriptionPlan == .solo
+                    ? "Solo includes 1 texting number."
+                    : "\(viewModel.tenantSubscriptionPlan.displayName): \(viewModel.smsFreeIncluded) free numbers, then \(viewModel.smsExtraMonthlyPriceLabel) each, up to \(viewModel.smsMaxLines) (matches plan seats)."
+            )
+            .font(.caption2)
+        }
+
+        if !viewModel.membersWithPendingSmsLineRequest.isEmpty {
+            Section {
+                ForEach(viewModel.membersWithPendingSmsLineRequest) { member in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(member.displayName)
+                            .font(.subheadline.weight(.medium))
+                        Text("Requested a personal texting number.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            if viewModel.smsCanAddWithoutPurchase {
+                                Button("Enable line") {
+                                    Task {
+                                        await viewModel.ownerEnablePersonalSmsLine(
+                                            for: member.uid,
+                                            consentAccepted: true
+                                        )
+                                    }
+                                }
+                                .disabled(viewModel.isProvisioningMemberSms)
+                            } else {
+                                Button("Add \(viewModel.smsExtraMonthlyPriceLabel)") {
+                                    Task { await viewModel.openBillingForExtraSmsLine() }
+                                }
+                                .disabled(viewModel.isOpeningBillingWebsite)
+                            }
+                            Button("Dismiss", role: .destructive) {
+                                Task { await viewModel.clearSmsLineRequest(memberUid: member.uid) }
+                            }
+                        }
+                        .font(.subheadline)
+                    }
+                    .padding(.vertical, 4)
+                }
+            } header: {
+                Text("Number requests")
+            } footer: {
+                Text("Teammates use Messaging → Request phone number. Included lines are free; extras bill to your plan.")
+                    .font(.caption2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var addNumberSheetContent: some View {
+        List {
+            Section {
+                Text(
+                    viewModel.smsNextLineIsFree
+                        ? "An included number is available. Choose an independent teammate to enable their personal line (no extra charge)."
+                        : "A paid slot is ready. Choose an independent teammate to enable their personal line."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                Toggle("I agree clients may receive appointment-related texts on their line.", isOn: $addNumberConsent)
+                    .font(.caption)
+            }
+
+            Section {
+                let eligible = viewModel.membersEligibleForPersonalSms
+                if eligible.isEmpty {
+                    Text("No independent teammates without a number. Invite a member or set their payout mode to Independent under Team.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(eligible) { member in
+                        Button {
+                            Task {
+                                await viewModel.ownerEnablePersonalSmsLine(
+                                    for: member.uid,
+                                    consentAccepted: addNumberConsent
+                                )
+                                if viewModel.errorMessage == nil {
+                                    showAddNumberSheet = false
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(member.displayName)
+                                        .foregroundStyle(.primary)
+                                    Text(member.badgeLabel)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if viewModel.isProvisioningMemberSms {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "plus.circle.fill")
+                                }
+                            }
+                        }
+                        .disabled(!addNumberConsent || viewModel.isProvisioningMemberSms)
+                    }
+                }
+            } header: {
+                Text("Team members")
+            }
+
+            if viewModel.smsNeedsPurchaseForNextLine || viewModel.membersEligibleForPersonalSms.isEmpty {
+                Section {
+                    Button {
+                        showAddNumberSheet = false
+                        Task { await viewModel.openBillingForExtraSmsLine() }
+                    } label: {
+                        Label(
+                            "Pay \(viewModel.smsExtraMonthlyPriceLabel) for an extra number",
+                            systemImage: "creditcard"
+                        )
+                    }
+                }
+            }
+
+            if let msg = viewModel.errorMessage, !msg.isEmpty {
+                Section {
+                    Text(msg)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .navigationTitle("Add a number")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { showAddNumberSheet = false }
             }
         }
     }

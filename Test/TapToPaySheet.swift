@@ -10,7 +10,6 @@ import SwiftUI
 private enum TapToPayCheckoutPhase: Equatable {
     case entry
     case processing
-    case collectSignature(amountCents: Int)
     case approved(amountCents: Int)
 }
 
@@ -28,8 +27,6 @@ struct TapToPaySheet: View {
     @State private var showNoteEditor = false
     @State private var clientSearchText = ""
     @State private var phase: TapToPayCheckoutPhase = .entry
-    @State private var signatureLines: [[CGPoint]] = []
-    @State private var currentSignatureLine: [CGPoint] = []
     @State private var manualCheckoutError: String?
     @State private var showTapToPayReceiptSheet = false
     @State private var receiptDetail: PaymentReceiptDetail?
@@ -78,9 +75,6 @@ struct TapToPaySheet: View {
                     entryContent
                 case .processing:
                     processingContent
-                    Spacer(minLength: 0)
-                case .collectSignature:
-                    signatureContent
                     Spacer(minLength: 0)
                 case .approved:
                     approvedOutcomeContent
@@ -334,55 +328,6 @@ struct TapToPaySheet: View {
         .padding(.horizontal, 20)
     }
 
-    @ViewBuilder
-    private var signatureContent: some View {
-        let amountCents: Int = {
-            if case .collectSignature(let cents) = phase { return cents }
-            return 0
-        }()
-
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Customer signature")
-                .font(.headline)
-            Text("Have the customer sign below to confirm payment of \(formatCurrency(Double(amountCents) / 100)).")
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
-
-            TapToPaySignaturePad(
-                lines: $signatureLines,
-                currentLine: $currentSignatureLine
-            )
-            .frame(height: 180)
-
-            HStack(spacing: 12) {
-                Button("Clear") {
-                    signatureLines = []
-                    currentSignatureLine = []
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button("Continue") {
-                    finishSignatureStep(amountCents: amountCents)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(signatureLines.isEmpty && currentSignatureLine.isEmpty)
-            }
-        }
-        .padding(.top, 32)
-        .padding(.horizontal, 20)
-    }
-
-    private func finishSignatureStep(amountCents: Int) {
-        if !currentSignatureLine.isEmpty {
-            signatureLines.append(currentSignatureLine)
-            currentSignatureLine = []
-        }
-        phase = .approved(amountCents: amountCents)
-        presentOnScreenReceipt()
-    }
-
     private func presentOnScreenReceipt(paymentMethodLabel: String = "Tap to Pay on iPhone") {
         let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
             serviceCents: serviceAmountCents,
@@ -394,7 +339,7 @@ struct TapToPaySheet: View {
             customerName: selectedClient?.name,
             note: noteText,
             paymentIntentId: lastPaymentIntentId,
-            includesSignature: !signatureLines.isEmpty,
+            includesSignature: false,
             paidAt: lastPaidAt,
             paymentMethodLabel: paymentMethodLabel
         )
@@ -412,11 +357,6 @@ struct TapToPaySheet: View {
             if case .approved(let cents) = phase {
                 Text(formatCurrency(Double(cents) / 100))
                     .font(.title2.weight(.semibold))
-                if !signatureLines.isEmpty {
-                    Text("Signature captured")
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
-                }
                 Button("View receipt") {
                     presentOnScreenReceipt()
                 }
@@ -492,15 +432,9 @@ struct TapToPaySheet: View {
             lastPaymentIntentId = intent.paymentIntentId
             lastCheckout = intent.checkout
             lastPaidAt = Date()
-            signatureLines = []
-            currentSignatureLine = []
             let totalCents = intent.checkout.totalCents
-            if viewModel.tapToPayRequireSignature {
-                phase = .collectSignature(amountCents: totalCents)
-            } else {
-                phase = .approved(amountCents: totalCents)
-                presentOnScreenReceipt()
-            }
+            phase = .approved(amountCents: totalCents)
+            presentOnScreenReceipt()
         } catch {
             let text = TapToPayErrorMapper.userMessage(for: error)
             manualCheckoutError = nil
@@ -543,53 +477,6 @@ struct TapToPaySheet: View {
         return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 
-}
-
-private struct TapToPaySignaturePad: View {
-    @Binding var lines: [[CGPoint]]
-    @Binding var currentLine: [CGPoint]
-
-    var body: some View {
-        GeometryReader { geometry in
-            Canvas { context, size in
-                var path = Path()
-                for line in lines {
-                    guard let first = line.first else { continue }
-                    path.move(to: first)
-                    for point in line.dropFirst() {
-                        path.addLine(to: point)
-                    }
-                }
-                if !currentLine.isEmpty {
-                    path.move(to: currentLine[0])
-                    for point in currentLine.dropFirst() {
-                        path.addLine(to: point)
-                    }
-                }
-                context.stroke(path, with: .color(.primary), lineWidth: 2)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
-            )
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        currentLine.append(value.location)
-                    }
-                    .onEnded { _ in
-                        if !currentLine.isEmpty {
-                            lines.append(currentLine)
-                            currentLine = []
-                        }
-                    }
-            )
-        }
-    }
 }
 
 private struct TapToPayClientPickerSheet: View {

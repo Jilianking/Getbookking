@@ -20,7 +20,12 @@ struct PersonalBookingSettingsView: View {
         List {
             if ownerControlsTeam {
                 Section {
-                    LabeledContent("Booking type", value: viewModel.tenantConfirmationType.displayName)
+                    if viewModel.bookingMode == .calendarSlots {
+                        LabeledContent("Booking type", value: "Calendar / slots")
+                        LabeledContent("Confirmation", value: viewModel.tenantConfirmationType.displayName)
+                    } else {
+                        LabeledContent("Booking type", value: viewModel.tenantConfirmationType.displayName)
+                    }
                 } footer: {
                     Text("Your owner set the team booking type in Settings → Booking settings. Turn that off there to choose your own.")
                         .font(.caption2)
@@ -36,8 +41,12 @@ struct PersonalBookingSettingsView: View {
                         depositAmountField
                     }
                 } footer: {
-                    Text("Choose how clients book with you. Only applies to your calendar and requests.")
-                        .font(.caption2)
+                    Text(
+                        viewModel.bookingMode == .calendarSlots
+                            ? "Studio public /book uses Calendar / slots. This is how your appointments confirm after a client picks a time."
+                            : "Choose how clients book with you. Only applies to your calendar and requests."
+                    )
+                    .font(.caption2)
                 }
 
                 Section {
@@ -75,7 +84,10 @@ struct PersonalBookingSettingsView: View {
         .appListSurface()
         .navigationTitle("My booking type")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { syncDepositAmountTextFromModel() }
+        // Load studio mode once so members understand calendar UI is studio-wide.
+        .onAppear {
+            syncDepositAmountTextFromModel()
+        }
         .onChange(of: viewModel.personalConfirmationType) { _, _ in
             syncDepositAmountTextFromModel()
         }

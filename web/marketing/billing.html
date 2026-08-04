@@ -61,9 +61,41 @@
             <button type="button" class="btn-outline-danger" id="cancelSubBtn">Cancel subscription</button>
           </div>
           <p class="bill-stripe-note bill-stripe-note--inset hidden" id="planStripeNote">Payments secured by Stripe</p>
-          <p class="bill-note hidden" id="billingNote">Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments.</p>
+          <p class="bill-note hidden" id="billingNote">Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting. Any coupon on your subscription applies when you are charged.</p>
           <p class="bill-note hidden" id="resubscribeNote">Your subscription has ended. Resubscribe to restore client texting and payments.</p>
           <p class="bill-note hidden" id="cancelPendingNote"></p>
+        </div>
+      </section>
+
+      <section class="bill-section" id="messagingSection">
+        <div class="bill-section-label">Client texting</div>
+        <div class="bill-card">
+          <div class="bill-kv">
+            <span class="bill-kv-label">Numbers in use</span>
+            <span class="bill-kv-value" id="smsLinesUsed">—</span>
+          </div>
+          <div class="bill-kv">
+            <span class="bill-kv-label">Included</span>
+            <span class="bill-kv-value" id="smsLinesFree">—</span>
+          </div>
+          <div class="bill-kv">
+            <span class="bill-kv-label">Paid extras</span>
+            <span class="bill-kv-value" id="smsLinesPaid">—</span>
+          </div>
+          <div class="bill-kv">
+            <span class="bill-kv-label">Max on plan</span>
+            <span class="bill-kv-value" id="smsLinesMax">—</span>
+          </div>
+          <p class="bill-note" id="smsLinesNote" style="margin-top:12px;">
+            Studio and Shop include 2 texting numbers. Additional numbers are $5/month each (up to your plan seat limit). Enable free numbers in the Bookking app.
+          </p>
+          <button type="button" class="btn-upgrade hidden" id="addSmsLineBtn" style="margin-top:14px;width:100%;">
+            Add a texting number — $5/mo
+          </button>
+          <p class="bill-success hidden" id="addSmsLineSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
+            Paid line added. In the Bookking app, set up the next personal number under Team → member → My texting.
+          </p>
+          <p class="bill-note hidden" id="smsLineActionNote" style="margin-top:10px;"></p>
         </div>
       </section>
 
@@ -110,6 +142,23 @@
       <div class="acct-modal-actions" style="margin-top:20px;">
         <button type="button" class="btn-secondary" id="cancelModalKeep">Keep subscription</button>
         <button type="button" class="btn-outline-danger" id="cancelModalConfirm" style="flex:1;">Continue in Stripe</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="acct-modal-backdrop hidden" id="addSmsLineModalBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="addSmsLineModal" role="dialog" aria-modal="true" aria-labelledby="addSmsLineModalTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="addSmsLineModalTitle">Add a texting number?</h2>
+        <button type="button" class="acct-modal-close" id="addSmsLineModalClose" aria-label="Close">&times;</button>
+      </div>
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">
+        We’ll add <strong>$5/month</strong> to your Get Bookking subscription for one extra client texting number (prorated for this period). Then an independent team member can set up their line in the Bookking app.
+      </p>
+      <div class="acct-modal-actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="addSmsLineModalCancel">Not now</button>
+        <button type="button" class="btn-upgrade" id="addSmsLineModalConfirm" style="flex:1;">Yes, add $5/mo</button>
       </div>
     </div>
   </div>
@@ -389,11 +438,9 @@
       document.getElementById('resubscribeSuccess').classList.add('hidden');
 
       if (d.hasStripeCustomer && sub && sub.status === 'trialing') {
-        // Never show “Start subscription today” while subscription payment gate is bypassed (no charge).
-        if (!d.subscriptionPaymentBypass) {
-          startBtn.classList.remove('hidden');
-          noteEl.classList.remove('hidden');
-        }
+        // Always offer end-trial so owners can unlock client texting (coupon may make charge $0).
+        startBtn.classList.remove('hidden');
+        noteEl.classList.remove('hidden');
       } else if (d.hasStripeCustomer && sub && (sub.status === 'active' || sub.status === 'past_due')) {
         planActions.classList.remove('hidden');
         planStripeNote.classList.remove('hidden');
@@ -417,15 +464,15 @@
       document.getElementById('billingEmail').textContent = (user && user.email) ? user.email : '—';
       renderInvoices(d.invoices, displayPlan);
       refreshConnectStripeButton();
+      renderMessagingSection(d);
 
-      if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing' && !d.subscriptionPaymentBypass) {
+      if (pendingStartTodayPrompt && d.hasStripeCustomer && sub && sub.status === 'trialing') {
         pendingStartTodayPrompt = false;
         history.replaceState({}, '', 'billing.html');
         updateStartSubModalCopy(sub);
         openStartSubModal();
         startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (startParam === 'today') {
-        // Bypass on or not trialing — do not open charge modal.
         history.replaceState({}, '', 'billing.html');
         pendingStartTodayPrompt = false;
       }
@@ -439,8 +486,8 @@
         priceText = formatMoney(sub.unitAmount, sub.currency) + ' / ' + intervalLabel;
       }
       body.textContent = priceText
-        ? ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments. Your card on file will be charged ' + priceText + ' today.')
-        : ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments. Your card on file will be charged today.');
+        ? ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting. Your card on file will be charged ' + priceText + ' (less any coupon on your subscription).')
+        : ('Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting. Your card on file will be charged today (less any coupon on your subscription).');
     }
 
     function connectButtonLabel(status) {
@@ -582,6 +629,93 @@
       });
     }
 
+    function renderMessagingSection(d) {
+      var m = (d && d.messaging) || {};
+      var used = m.smsLinesUsed != null ? m.smsLinesUsed : 0;
+      var free = m.smsFreeIncluded != null ? m.smsFreeIncluded : 1;
+      var paid = m.smsExtraPaid != null ? m.smsExtraPaid : 0;
+      var max = m.smsMaxLines != null ? m.smsMaxLines : 1;
+      var capacity = m.smsLineCapacity != null ? m.smsLineCapacity : free;
+      document.getElementById('smsLinesUsed').textContent = used + ' / ' + capacity;
+      document.getElementById('smsLinesFree').textContent = free + ' included';
+      document.getElementById('smsLinesPaid').textContent =
+        paid > 0 ? (paid + ' × $5/mo') : 'None';
+      document.getElementById('smsLinesMax').textContent = String(max);
+
+      var btn = document.getElementById('addSmsLineBtn');
+      var note = document.getElementById('smsLineActionNote');
+      var success = document.getElementById('addSmsLineSuccess');
+      if (!success.classList.contains('was-shown')) {
+        success.classList.add('hidden');
+      }
+      note.classList.add('hidden');
+      btn.classList.add('hidden');
+
+      var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
+      if (plan === 'solo') {
+        note.textContent = 'Solo includes 1 studio texting number. Enable it in the Bookking app under Messaging.';
+        note.classList.remove('hidden');
+        return;
+      }
+
+      if (m.smsAtMaxLines) {
+        note.textContent = 'You’ve reached the max of ' + max + ' texting numbers on this plan.';
+        note.classList.remove('hidden');
+        return;
+      }
+
+      if (m.smsNeedsPurchaseForNextLine) {
+        btn.classList.remove('hidden');
+        note.textContent = 'Included numbers are in use. Add another number for $5/mo, then set it up in the app for an independent teammate.';
+        note.classList.remove('hidden');
+        return;
+      }
+
+      if (m.smsCanAddWithoutPurchase) {
+        note.textContent = m.smsNextLineIsFree
+          ? 'You have an included line available. Enable it in the Bookking app (Messaging for the studio line, or Team → member for a personal line).'
+          : 'You have a paid slot ready. Set up the next personal line in the Bookking app under Team.';
+        note.classList.remove('hidden');
+      }
+    }
+
+    function openAddSmsLineModal() {
+      document.getElementById('addSmsLineModalBackdrop').classList.remove('hidden');
+      document.getElementById('addSmsLineModal').classList.remove('hidden');
+      document.getElementById('addSmsLineModal').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('acct-modal-open');
+    }
+
+    function closeAddSmsLineModal() {
+      document.getElementById('addSmsLineModalBackdrop').classList.add('hidden');
+      document.getElementById('addSmsLineModal').classList.add('hidden');
+      document.getElementById('addSmsLineModal').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('acct-modal-open');
+    }
+
+    function runPurchaseSmsExtraLine() {
+      var btn = document.getElementById('addSmsLineBtn');
+      var confirmBtn = document.getElementById('addSmsLineModalConfirm');
+      var errEl = document.getElementById('billingError');
+      var successEl = document.getElementById('addSmsLineSuccess');
+      btn.disabled = true;
+      if (confirmBtn) confirmBtn.disabled = true;
+      errEl.classList.add('hidden');
+      successEl.classList.add('hidden');
+      return fns.httpsCallable('purchaseSmsExtraLine')({}).then(function() {
+        closeAddSmsLineModal();
+        successEl.classList.remove('hidden');
+        successEl.classList.add('was-shown');
+        return loadBilling();
+      }).catch(function(err) {
+        errEl.textContent = formatFirebaseHttpsError(err);
+        errEl.classList.remove('hidden');
+      }).finally(function() {
+        btn.disabled = false;
+        if (confirmBtn) confirmBtn.disabled = false;
+      });
+    }
+
     function openCancelModal() {
       document.getElementById('cancelModalBackdrop').classList.remove('hidden');
       document.getElementById('cancelModal').classList.remove('hidden');
@@ -613,11 +747,6 @@
     }
 
     function runStartSubscriptionToday() {
-      // Defense in depth: never call charge path when testing bypass is on.
-      if (billingData && billingData.subscriptionPaymentBypass) {
-        closeStartSubModal();
-        return Promise.resolve();
-      }
       var btn = document.getElementById('startSubBtn');
       var confirmBtn = document.getElementById('startSubModalConfirm');
       var errEl = document.getElementById('billingError');
@@ -651,6 +780,12 @@
       runStartSubscriptionToday();
     });
 
+    document.getElementById('addSmsLineBtn').addEventListener('click', openAddSmsLineModal);
+    document.getElementById('addSmsLineModalConfirm').addEventListener('click', runPurchaseSmsExtraLine);
+    document.getElementById('addSmsLineModalClose').addEventListener('click', closeAddSmsLineModal);
+    document.getElementById('addSmsLineModalCancel').addEventListener('click', closeAddSmsLineModal);
+    document.getElementById('addSmsLineModalBackdrop').addEventListener('click', closeAddSmsLineModal);
+
     document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
     document.getElementById('changePaymentBtn').addEventListener('click', openBillingPortal);
     document.getElementById('updateEmailBtn').addEventListener('click', openBillingPortal);
@@ -673,6 +808,8 @@
           closeCancelModal();
         } else if (!document.getElementById('startSubModal').classList.contains('hidden')) {
           closeStartSubModal();
+        } else if (!document.getElementById('addSmsLineModal').classList.contains('hidden')) {
+          closeAddSmsLineModal();
         }
       }
     });
@@ -714,7 +851,12 @@
       if (startParam === 'today') {
         pendingStartTodayPrompt = true;
       }
-      loadBilling();
+      loadBilling().then(function() {
+        if (window.location.hash === '#messaging') {
+          var el = document.getElementById('messagingSection');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
     });
   </script>
 </body>

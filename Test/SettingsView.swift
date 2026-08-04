@@ -382,22 +382,8 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if viewModel.isTenantOwner {
-                        Divider().padding(.leading, 52)
-                        NavigationLink {
-                            TeamNotificationsSettingsView(
-                                viewModel: teamPolicyViewModel,
-                                isSoloBusinessSettings: viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub
-                            )
-                            .environmentObject(authViewModel)
-                        } label: {
-                            AppSettingsRow(icon: "bell.fill", iconColor: AppDesign.accentBlue, title: "Notifications")
-                        }
-                        .buttonStyle(.plain)
-                    }
-
                     Divider().padding(.leading, 52)
-                    Link(destination: URL(string: Constants.Hosting.marketingWebOrigin)!) {
+                    Link(destination: URL(string: Constants.Hosting.marketingContactURL)!) {
                         AppSettingsRow(icon: "info.circle.fill", iconColor: .gray, title: "Support")
                     }
                     .buttonStyle(.plain)
@@ -547,16 +533,22 @@ struct PersonalSchedulingSettingsView: View {
     }
 
     private var schedulingSettingsFooter: String {
+        let calNote: String
+        if viewModel.bookingMode == .calendarSlots {
+            calNote = "Booking type is Calendar / slots — these hours and the availability calendar power public /book times."
+        } else {
+            calNote = "Choose Booking type Calendar / slots in Booking settings to use this calendar for public online booking."
+        }
         if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.usesBusinessSettingsHub {
-            return "Your time zone and calendar. Booking type is in Business settings → Booking settings."
+            return "\(calNote) Booking type & confirmation are in Business settings → Booking settings."
         }
         if viewModel.isTenantOwner {
-            return "Your time zone and calendar. Studio booking policy is in Team settings → Booking settings."
+            return "\(calNote) Studio booking policy is in Team settings → Booking settings."
         }
         if !viewModel.managersApproveAppointments {
-            return "Your time zone and calendar. Booking type is in Settings → My booking type."
+            return "\(calNote) Your confirmation type is in Settings → My booking type."
         }
-        return "Your time zone and calendar. Your owner sets booking type in Team settings → Booking settings."
+        return "\(calNote) Your owner sets confirmation in Team settings → Booking settings."
     }
 }
 
@@ -1019,14 +1011,8 @@ private struct AccountSettingsDetailView: View {
 struct DaysOpenCalendarSheet: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var displayDate = Date()
+    @State private var dayDraft: Date?
     @Environment(\.dismiss) var dismiss
-
-    private var calendarModeHint: String {
-        if viewModel.effectiveBookingConfirmationType.usesFixedSlots {
-            return "Tap dates when you accept appointments. Weekly hours still apply on those days."
-        }
-        return "Tap dates to block time off. Clients can book on open days during your weekly hours."
-    }
 
     private var monthYearText: String {
         let formatter = DateFormatter()
@@ -1038,7 +1024,7 @@ struct DaysOpenCalendarSheet: View {
         let cal = Calendar.current
         guard let range = cal.range(of: .day, in: .month, for: displayDate),
               let first = cal.date(from: cal.dateComponents([.year, .month], from: displayDate)) else { return [] }
-        let weekday = cal.component(.weekday, from: first) - 1 // 0=Sun
+        let weekday = cal.component(.weekday, from: first) - 1
         let count = range.count
         var out: [Date?] = Array(repeating: nil, count: weekday)
         for day in 1...count {
@@ -1054,13 +1040,14 @@ struct DaysOpenCalendarSheet: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text(calendarModeHint)
+                    Text("Open hours follow weekly shop hours. Tap a day to take the whole day off or block part of the day.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
+
                     HStack {
                         Button(action: previousMonth) {
                             Image(systemName: "chevron.left")
@@ -1075,20 +1062,24 @@ struct DaysOpenCalendarSheet: View {
                         }
                     }
                     .padding(.horizontal, 24)
+
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+                        ForEach(Array(["S", "M", "T", "W", "T", "F", "S"].enumerated()), id: \.offset) { _, label in
+                            Text(label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundColor(.secondary)
+                                .frame(height: 20)
+                        }
                         ForEach(Array(calendarDays.enumerated()), id: \.offset) { _, dateOpt in
                             if let date = dateOpt {
                                 CalendarDateCell(
                                     date: date,
-                                    isBlocked: !viewModel.effectiveBookingConfirmationType.usesFixedSlots && viewModel.isDateBlocked(date),
-                                    isAvailable: viewModel.effectiveBookingConfirmationType.usesFixedSlots && viewModel.isDateAvailable(date),
+                                    isBlocked: viewModel.isDateBlocked(date),
+                                    isPartialBlock: viewModel.hasPartialBlocks(on: date),
+                                    isAvailable: false,
                                     isToday: Calendar.current.isDateInToday(date)
                                 ) {
-                                    if viewModel.effectiveBookingConfirmationType.usesFixedSlots {
-                                        viewModel.toggleAvailableDate(date)
-                                    } else {
-                                        viewModel.toggleBlockedDate(date)
-                                    }
+                                    dayDraft = date
                                 }
                             } else {
                                 Color.clear
@@ -1097,6 +1088,14 @@ struct DaysOpenCalendarSheet: View {
                         }
                     }
                     .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        legendRow(color: Color.red.opacity(0.3), text: "Full day off")
+                        legendRow(color: Color.orange.opacity(0.35), text: "Part of day blocked")
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
                 }
             }
             .appScreenBackground()
@@ -1105,13 +1104,33 @@ struct DaysOpenCalendarSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        dismiss()
+                        Task {
+                            await viewModel.saveAvailability()
+                            dismiss()
+                        }
                     }
                 }
+            }
+            .sheet(item: Binding(
+                get: { dayDraft.map { DayEditIdent(date: $0) } },
+                set: { dayDraft = $0?.date }
+            )) { wrap in
+                DayAvailabilityEditSheet(date: wrap.date, viewModel: viewModel)
             }
         }
         .onAppear {
             displayDate = Date()
+        }
+    }
+
+    private func legendRow(color: Color, text: String) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(color)
+                .frame(width: 16, height: 16)
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -1126,13 +1145,121 @@ struct DaysOpenCalendarSheet: View {
             displayDate = d
         }
     }
+}
 
+private struct DayEditIdent: Identifiable {
+    let date: Date
+    var id: TimeInterval { date.timeIntervalSince1970 }
+}
+
+// MARK: - Day off / partial block editor
+private struct DayAvailabilityEditSheet: View {
+    let date: Date
+    @ObservedObject var viewModel: SettingsViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var startDate: Date
+    @State private var endDate: Date
+
+    init(date: Date, viewModel: SettingsViewModel) {
+        self.date = date
+        self.viewModel = viewModel
+        let cal = Calendar.current
+        let noon = cal.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+        let two = cal.date(bySettingHour: 14, minute: 0, second: 0, of: date) ?? date
+        _startDate = State(initialValue: noon)
+        _endDate = State(initialValue: two)
+    }
+
+    private var titleText: String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        return f.string(from: date)
+    }
+
+    private var isDayOff: Bool {
+        viewModel.isDateBlocked(date)
+    }
+
+    private var partials: [BlockedTimeRange] {
+        viewModel.blockedTimeRanges(on: date)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("Day off (closed all day)", isOn: Binding(
+                        get: { isDayOff },
+                        set: { viewModel.setFullDayBlocked(date, blocked: $0) }
+                    ))
+                } footer: {
+                    Text("Shop weekly hours still apply on other days. Blocks only change this date.")
+                        .font(.caption2)
+                }
+
+                if !isDayOff {
+                    Section {
+                        if partials.isEmpty {
+                            Text("No partial blocks")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(partials) { block in
+                                HStack {
+                                    Text(block.summaryLine)
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        viewModel.removeBlockedTimeRange(id: block.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Blocked times")
+                    }
+
+                    Section {
+                        DatePicker("Start", selection: $startDate, displayedComponents: .hourAndMinute)
+                        DatePicker("End", selection: $endDate, displayedComponents: .hourAndMinute)
+                        Button("Add blocked time") {
+                            let s = minutes(from: startDate)
+                            let e = minutes(from: endDate)
+                            guard e > s else { return }
+                            viewModel.addBlockedTimeRange(on: date, startMinutes: s, endMinutes: e)
+                        }
+                    } header: {
+                        Text("Block part of day")
+                    } footer: {
+                        Text("Clients cannot book starts that overlap this range. Open hours still come from weekly shop hours.")
+                            .font(.caption2)
+                    }
+                }
+            }
+            .navigationTitle(titleText)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func minutes(from d: Date) -> Int {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
 }
 
 struct CalendarDateCell: View {
     let date: Date
-    let isBlocked: Bool   // Approval mode: blocked (vacation)
-    let isAvailable: Bool // Fixed slots: selected for appointments
+    let isBlocked: Bool
+    var isPartialBlock: Bool = false
+    let isAvailable: Bool
     let isToday: Bool
     let onTap: () -> Void
 
@@ -1161,6 +1288,7 @@ struct CalendarDateCell: View {
 
     private var backgroundColor: Color {
         if isBlocked { return Color.red.opacity(0.3) }
+        if isPartialBlock { return Color.orange.opacity(0.35) }
         if isAvailable { return Color.green.opacity(0.4) }
         if isToday { return AppDesign.searchBackground }
         return Color.clear

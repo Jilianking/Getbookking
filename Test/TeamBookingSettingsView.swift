@@ -11,6 +11,29 @@ struct TeamBookingSettingsView: View {
     /// Solo Business settings: owner booking type only (no manager sections).
     var isSoloBusinessSettings: Bool = false
 
+    /// Single Booking type picker: classic types + Calendar / slots.
+    private var bookingTypeSelection: Binding<StudioBookingTypeOption> {
+        Binding(
+            get: {
+                StudioBookingTypeOption.from(
+                    mode: settingsViewModel.bookingMode,
+                    confirmation: settingsViewModel.confirmationType
+                )
+            },
+            set: { option in
+                var mode = settingsViewModel.bookingMode
+                var conf = settingsViewModel.confirmationType
+                option.apply(toMode: &mode, confirmation: &conf)
+                settingsViewModel.bookingMode = mode
+                settingsViewModel.confirmationType = conf
+            }
+        )
+    }
+
+    private var isCalendarType: Bool {
+        settingsViewModel.bookingMode == .calendarSlots
+    }
+
     var body: some View {
         List {
             if isSoloBusinessSettings {
@@ -19,6 +42,10 @@ struct TeamBookingSettingsView: View {
                 studioBookingPolicySection
                 managerAccessSection
                 managerAlertsSection
+            }
+
+            if isCalendarType {
+                availabilitySection
             }
 
             saveSection
@@ -36,33 +63,42 @@ struct TeamBookingSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    // MARK: Solo
+
     private var soloBookingSection: some View {
         Section(
             header: Text("How clients book"),
-            footer: Text("Choose how clients book appointments with you.")
+            footer: Text(soloBookingFooter)
                 .font(.caption2)
         ) {
-            Picker("Booking type", selection: $settingsViewModel.confirmationType) {
-                ForEach(BookingConfirmationType.allCases, id: \.self) { type in
-                    Text(type.displayName).tag(type)
+            Picker("Booking type", selection: bookingTypeSelection) {
+                ForEach(StudioBookingTypeOption.allCases) { option in
+                    Text(option.displayName).tag(option)
                 }
             }
-            if settingsViewModel.confirmationType.requiresDeposit {
-                HStack {
-                    Text("Deposit amount")
-                    TextField("0", value: Binding(
-                        get: { settingsViewModel.depositAmount ?? 0 },
-                        set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
-                    ), format: .number)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                    Text("USD")
-                        .foregroundStyle(.secondary)
+
+            if isCalendarType {
+                Picker("Confirmation", selection: $settingsViewModel.confirmationType) {
+                    ForEach(BookingConfirmationType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
                 }
+            }
+
+            if settingsViewModel.confirmationType.requiresDeposit {
+                depositAmountRow
             }
         }
     }
+
+    private var soloBookingFooter: String {
+        if isCalendarType {
+            return "Clients pick a day and time on /book. Confirmation is what happens after they book. Set hours and availability under Availability below."
+        }
+        return "Choose how clients book appointments with you. Layout for form types is Standard or Guided in Design."
+    }
+
+    // MARK: Team
 
     private var studioBookingPolicySection: some View {
         Section(
@@ -76,25 +112,66 @@ struct TeamBookingSettingsView: View {
                     }
                 }
 
-            if settingsViewModel.managersApproveAppointments {
-                Picker("Booking confirmation", selection: $settingsViewModel.confirmationType) {
-                    ForEach(BookingConfirmationType.allCases, id: \.self) { type in
-                        Text(type.displayName).tag(type)
-                    }
+            // Always owner-controlled: form vs calendar on public /book.
+            Picker("Booking type", selection: bookingTypeSelection) {
+                ForEach(StudioBookingTypeOption.allCases) { option in
+                    Text(option.displayName).tag(option)
                 }
-                if settingsViewModel.confirmationType.requiresDeposit {
-                    HStack {
-                        Text("Deposit amount")
-                        TextField("0", value: Binding(
-                            get: { settingsViewModel.depositAmount ?? 0 },
-                            set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
-                        ), format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("USD")
-                            .foregroundStyle(.secondary)
+            }
+
+            if isCalendarType {
+                if settingsViewModel.managersApproveAppointments {
+                    Picker("Confirmation", selection: $settingsViewModel.confirmationType) {
+                        ForEach(BookingConfirmationType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
                     }
+                    if settingsViewModel.confirmationType.requiresDeposit {
+                        depositAmountRow
+                    }
+                } else {
+                    Text("Each person chooses Instant / Request + approve / Deposit in Settings → My booking type.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if settingsViewModel.managersApproveAppointments {
+                if settingsViewModel.confirmationType.requiresDeposit {
+                    depositAmountRow
+                }
+            }
+        }
+    }
+
+    private var depositAmountRow: some View {
+        HStack {
+            Text("Deposit amount")
+            TextField("0", value: Binding(
+                get: { settingsViewModel.depositAmount ?? 0 },
+                set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
+            ), format: .number)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 80)
+            Text("USD")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var availabilitySection: some View {
+        Section(
+            header: Text("Availability"),
+            footer: Text("Weekly shop hours set when you’re open on public /book. Availability calendar is only for days off and blocked times of day.")
+                .font(.caption2)
+        ) {
+            NavigationLink {
+                PersonalSchedulingSettingsView(viewModel: settingsViewModel)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Scheduling & hours")
+                    Text(settingsViewModel.businessHoursSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
         }
@@ -161,7 +238,12 @@ struct TeamBookingSettingsView: View {
             .disabled(settingsViewModel.isLoading || teamPolicyViewModel.isSavingPolicy)
 
             if settingsViewModel.saveSuccess || teamPolicyViewModel.saveSuccess {
-                Label("Saved", systemImage: "checkmark.circle.fill")
+                Label(
+                    settingsViewModel.bookingMode == .calendarSlots
+                        ? "Saved — public /book uses calendar"
+                        : "Saved — public /book uses form",
+                    systemImage: "checkmark.circle.fill"
+                )
                     .foregroundStyle(.green)
                     .font(.subheadline)
             }
@@ -170,10 +252,16 @@ struct TeamBookingSettingsView: View {
 
     private var clientBookingFooter: some View {
         Group {
-            if settingsViewModel.managersApproveAppointments {
+            if isCalendarType {
+                if settingsViewModel.managersApproveAppointments {
+                    Text("Public /book uses the calendar. Confirmation below applies to the whole team.")
+                } else {
+                    Text("Public /book uses the calendar. Each person sets confirmation in My booking type.")
+                }
+            } else if settingsViewModel.managersApproveAppointments {
                 Text("Your booking type applies to everyone on the team. Turn off to let each person choose their own in Settings → My booking type.")
             } else {
-                Text("Each person chooses their booking type in Settings → My booking type.")
+                Text("Booking type still controls public Form vs Calendar. Each person sets Instant / Request + approve / Deposit in My booking type.")
             }
         }
         .font(.caption2)
@@ -183,9 +271,14 @@ struct TeamBookingSettingsView: View {
         if isSoloBusinessSettings {
             await settingsViewModel.saveSoloBusinessBookingWorkflow()
         } else {
+            // Always attempt save — persistPublicBookingModeToTenant is owner/manager-rule gated server-side.
             await settingsViewModel.saveWorkflow(isOwner: true)
-            await teamPolicyViewModel.saveManagerPolicy()
-            await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
+            let publicOk = settingsViewModel.saveSuccess
+                || (settingsViewModel.errorMessage ?? "").hasPrefix("Saved for /book")
+            if publicOk {
+                await teamPolicyViewModel.saveManagerPolicy()
+                await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
+            }
         }
         await authViewModel.refreshTeamAccess()
     }

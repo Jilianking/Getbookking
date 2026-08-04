@@ -946,6 +946,347 @@
     .booking-guided-contact-fields textarea.field-input:last-child {
       margin-bottom: 0;
     }
+    /* Online booking (calendar form style) */
+    .booking-shell--calendar {
+      width: 100%;
+      max-width: 560px;
+      min-width: 0;
+      margin: 0 auto;
+      padding: 16px 18px 32px;
+      box-sizing: border-box;
+      align-items: stretch;
+      justify-content: flex-start;
+      overflow-x: clip;
+    }
+    @media (min-width: 768px) {
+      .booking-shell--calendar {
+        max-width: 600px;
+        padding: 24px 28px 40px;
+      }
+    }
+    .booking-shell--calendar .booking-page-header,
+    .booking-shell--calendar .booking-page-header--branded {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding-left: 0;
+      padding-right: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-form--calendar {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-step-labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      opacity: 0.55;
+      min-width: 0;
+    }
+    .booking-cal-step-labels span.is-active {
+      opacity: 1;
+      font-weight: 600;
+    }
+    .booking-cal-panel {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-panel[hidden] { display: none !important; }
+    .booking-cal-staff-grid,
+    .booking-cal-service-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+    }
+    .booking-cal-card {
+      text-align: left;
+      border: 1px solid rgba(0,0,0,0.1);
+      background: var(--bk-surface, #fff);
+      color: inherit;
+      border-radius: 14px;
+      padding: 14px 16px;
+      cursor: pointer;
+      font: inherit;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-card:hover { border-color: rgba(0,0,0,0.22); }
+    .booking-cal-card.is-active {
+      border-color: var(--bk-accent, #111);
+      box-shadow: 0 0 0 1px var(--bk-accent, #111);
+    }
+    .booking-cal-card .name { font-weight: 600; display: block; }
+    .booking-cal-card .meta { font-size: 13px; opacity: 0.65; margin-top: 4px; }
+    /* Full month calendar */
+    .booking-cal-month {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-month-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .booking-cal-month-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 0;
+      text-align: center;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .booking-cal-month-nav {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 12px;
+      background: var(--bk-surface, #fff);
+      color: inherit;
+      font: inherit;
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .booking-cal-month-nav:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .booking-cal-month-dows {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 2px;
+      margin-bottom: 4px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      opacity: 0.5;
+    }
+    .booking-cal-month-dows span {
+      padding: 6px 0;
+    }
+    .booking-cal-month-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+      width: 100%;
+      min-width: 0;
+    }
+    .booking-cal-mday {
+      aspect-ratio: 1;
+      min-width: 0;
+      min-height: 0;
+      border: none;
+      background: transparent;
+      border-radius: 12px;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .booking-cal-mday.is-outside {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .booking-cal-mday.is-today:not(.is-active) {
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);
+    }
+    .booking-cal-mday.is-active {
+      background: var(--bk-accent, #111);
+      color: var(--bk-accent-fg, #fff);
+      font-weight: 600;
+    }
+    .booking-cal-mday.is-closed,
+    .booking-cal-mday.is-past {
+      opacity: 0.32;
+      cursor: not-allowed;
+    }
+    .booking-cal-mday.is-closed:not(.is-outside)::after {
+      content: '';
+      position: absolute;
+      width: 55%;
+      height: 1px;
+      background: currentColor;
+      opacity: 0.7;
+    }
+    .booking-cal-mday:not(.is-closed):not(.is-past):not(.is-outside):hover {
+      background: rgba(0,0,0,0.06);
+    }
+    .booking-cal-mday.is-active:hover {
+      background: var(--bk-accent, #111);
+    }
+    .booking-cal-times-block {
+      margin-top: 16px;
+      width: 100%;
+      min-width: 0;
+    }
+    .booking-cal-times-block[hidden] {
+      display: none !important;
+    }
+    .booking-cal-day-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 4px 0 12px;
+      font-family: inherit;
+      word-wrap: break-word;
+    }
+    .booking-cal-slots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-slot {
+      border: 1px solid rgba(0,0,0,0.12);
+      background: var(--bk-surface, #fff);
+      border-radius: 12px;
+      padding: 12px 10px;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-slot.is-active {
+      border-color: var(--bk-accent, #111);
+      background: var(--bk-accent, #111);
+      color: var(--bk-accent-fg, #fff);
+    }
+    .booking-cal-slot:disabled,
+    .booking-cal-slot.is-closed {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .booking-cal-empty {
+      grid-column: 1 / -1;
+      font-size: 14px;
+      opacity: 0.65;
+      padding: 12px 0;
+    }
+    .booking-cal-hint { font-size: 13px; opacity: 0.6; margin: 8px 0 0; }
+    .booking-cal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-actions .booking-submit {
+      width: 100%;
+      max-width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--bk-accent, #c4a574);
+      color: var(--bk-accent-fg, #1a1510);
+      box-sizing: border-box;
+    }
+    .booking-cal-back {
+      background: none;
+      border: none;
+      font: inherit;
+      color: inherit;
+      opacity: 0.65;
+      cursor: pointer;
+      text-align: left;
+      padding: 4px 0;
+    }
+    .booking-cal-summary {
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,0.08);
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .booking-cal-summary dt { opacity: 0.55; font-size: 12px; margin-top: 8px; }
+    .booking-cal-summary dd { margin: 2px 0 0; font-weight: 500; word-wrap: break-word; }
+    .booking-cal-summary dt:first-child { margin-top: 0; }
+    .booking-form--calendar .field-input {
+      width: 100%;
+      max-width: 100%;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+    .booking-cal-details-fields {
+      width: 100%;
+      min-width: 0;
+    }
+    .booking-cal-field {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    /* Safari fallback when overflow-x: clip is unsupported */
+    @supports not (overflow-x: clip) {
+      .booking-shell--calendar {
+        overflow-x: hidden;
+      }
+    }
+    .booking-page-band:has(.booking-shell--calendar),
+    .booking-page-band:has(.booking-shell--calendar) .bk-band-content {
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: clip;
+      box-sizing: border-box;
+    }
+    @supports not (overflow-x: clip) {
+      .booking-page-band:has(.booking-shell--calendar),
+      .booking-page-band:has(.booking-shell--calendar) .bk-band-content {
+        overflow-x: hidden;
+      }
+    }
     .booking-guided-step-panel .booking-guided-pill-row {
       margin-bottom: 0;
     }
@@ -9515,14 +9856,676 @@
         }
         return tenantPageStyle(tenant, 'featured');
       }
-      /** Matches `BookingFormStyle` in the app. */
+      /** Calendar / slots when booking mode is calendar_slots (or legacy form style calendar). */
+      function bookingModeResolved(tenant) {
+        function isCalendarToken(raw) {
+          var m = String(raw || '').trim().toLowerCase();
+          return m === 'calendar_slots' || m === 'calendar' || m === 'slots'
+            || m === 'slot_booking' || m === 'online_booking' || m === 'online';
+        }
+        function isFormToken(raw) {
+          var m = String(raw || '').trim().toLowerCase();
+          return m === 'form' || m === 'inquiry' || m === 'request';
+        }
+        if (!tenant) return 'form';
+        // Any of these fields can flip calendar — do not let a stale "form" win over calendar_slots.
+        var candidates = [];
+        if (tenant.workflow && tenant.workflow.bookingMode != null && tenant.workflow.bookingMode !== '') {
+          candidates.push(tenant.workflow.bookingMode);
+        }
+        if (tenant.bookingMode != null && tenant.bookingMode !== '') {
+          candidates.push(tenant.bookingMode);
+        }
+        var i;
+        for (i = 0; i < candidates.length; i++) {
+          if (isCalendarToken(candidates[i])) return 'calendar_slots';
+        }
+        for (i = 0; i < candidates.length; i++) {
+          if (isFormToken(candidates[i])) return 'form';
+        }
+        var style = String(tenant.bookingFormStyleId || '').trim().toLowerCase();
+        if (style === 'calendar' || style === 'online' || style === 'online_booking' || style === 'appointments') {
+          return 'calendar_slots';
+        }
+        return 'form';
+      }
+      /** Form layout only when booking mode is form. Calendar forced by bookingMode. */
       function bookingFormStyleResolved(tenant) {
+        if (bookingModeResolved(tenant) === 'calendar_slots') return 'calendar';
         var raw = String((tenant && tenant.bookingFormStyleId) || '').trim().toLowerCase();
         return raw === 'guided' ? 'guided' : 'standard';
       }
       function usesGuidedBookingForm(tenant) {
         return bookingFormStyleResolved(tenant) === 'guided';
       }
+      function usesCalendarBookingForm(tenant) {
+        return bookingFormStyleResolved(tenant) === 'calendar';
+      }
+
+      /** Mon=0 … Sun=6 (matches app / businessHoursWeekly keys). */
+      function calendarWeekdayIndex(date) {
+        var d = date.getDay();
+        return d === 0 ? 6 : d - 1;
+      }
+      function calendarParseDaySchedule(dayMap) {
+        if (!dayMap || typeof dayMap !== 'object') return { closed: true, ranges: [] };
+        var closed = dayMap.closed === true;
+        var ranges = Array.isArray(dayMap.ranges) ? dayMap.ranges : [];
+        if (!ranges.length && dayMap.openMin != null && dayMap.closeMin != null) {
+          ranges = [{ openMin: dayMap.openMin, closeMin: dayMap.closeMin }];
+        }
+        function intMin(v) {
+          if (v == null) return 0;
+          if (typeof v === 'number') return Math.max(0, Math.min(Math.floor(v), 24 * 60 - 1));
+          var n = parseInt(String(v), 10);
+          return isNaN(n) ? 0 : Math.max(0, Math.min(n, 24 * 60 - 1));
+        }
+        if (closed || !ranges.length) return { closed: true, ranges: [] };
+        return {
+          closed: false,
+          ranges: ranges.map(function(r) {
+            return {
+              openMin: intMin(r.openMin != null ? r.openMin : r.startMin),
+              closeMin: intMin(r.closeMin != null ? r.closeMin : r.endMin)
+            };
+          })
+        };
+      }
+      /** Day schedule from shop businessHoursWeekly (not online autofill). */
+      function calendarDaySchedule(tenant, date) {
+        var keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        var idx = calendarWeekdayIndex(date);
+        var w = tenant && tenant.businessHoursWeekly;
+        if (w && typeof w === 'object' && Object.keys(w).length) {
+          return calendarParseDaySchedule(w[keys[idx]]);
+        }
+        // Fallback: Sat/Sun closed, weekdays 9–17.
+        if (idx >= 5) return { closed: true, ranges: [] };
+        return { closed: false, ranges: [{ openMin: 9 * 60, closeMin: 17 * 60 }] };
+      }
+      function calendarIsoDate(date) {
+        var y = date.getFullYear();
+        var m = date.getMonth() + 1;
+        var d = date.getDate();
+        return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+      }
+      function calendarIsFullDayBlocked(tenant, date) {
+        var key = calendarIsoDate(date);
+        var blocked = tenant && Array.isArray(tenant.blockedDates) ? tenant.blockedDates : [];
+        return blocked.indexOf(key) >= 0;
+      }
+      function calendarPartialBlocksForDay(tenant, date) {
+        var key = calendarIsoDate(date);
+        var list = tenant && Array.isArray(tenant.blockedTimeRanges) ? tenant.blockedTimeRanges : [];
+        return list.filter(function(b) {
+          var d = (b && (b.date || b.dateYmd)) ? String(b.date || b.dateYmd) : '';
+          return d === key;
+        }).map(function(b) {
+          var s = parseInt(b.startMin != null ? b.startMin : b.startMinutes, 10);
+          var e = parseInt(b.endMin != null ? b.endMin : b.endMinutes, 10);
+          if (isNaN(s)) s = 0;
+          if (isNaN(e)) e = s + 30;
+          return { startMin: s, endMin: e };
+        });
+      }
+      function calendarStartOverlapsBlock(startMin, durationMin, blocks) {
+        var end = startMin + Math.max(5, durationMin || 30);
+        for (var i = 0; i < blocks.length; i++) {
+          var b = blocks[i];
+          if (startMin < b.endMin && end > b.startMin) return true;
+        }
+        return false;
+      }
+      function calendarFormatMin(m) {
+        var h = Math.floor(m / 60);
+        var min = m % 60;
+        var d = new Date(2000, 0, 1, h, min);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      }
+      function calendarSlotsForDay(tenant, date, stepMin) {
+        var step = stepMin || (tenant && tenant.onlineSlotStepMinutes) || 30;
+        if (typeof step !== 'number' || step < 5) step = 30;
+        if (calendarIsFullDayBlocked(tenant, date)) return [];
+        var day = calendarDaySchedule(tenant, date);
+        if (day.closed || !day.ranges.length) return [];
+        var blocks = calendarPartialBlocksForDay(tenant, date);
+        var slots = [];
+        var now = new Date();
+        var isToday =
+          date.getFullYear() === now.getFullYear() &&
+          date.getMonth() === now.getMonth() &&
+          date.getDate() === now.getDate();
+        var nowMin = now.getHours() * 60 + now.getMinutes();
+        for (var ri = 0; ri < day.ranges.length; ri++) {
+          var open = day.ranges[ri].openMin;
+          var close = day.ranges[ri].closeMin;
+          for (var t = open; t + step <= close; t += step) {
+            if (isToday && t <= nowMin) continue;
+            if (calendarStartOverlapsBlock(t, step, blocks)) continue;
+            slots.push({ min: t, label: calendarFormatMin(t) });
+          }
+        }
+        return slots;
+      }
+      function calendarPrettyDate(date) {
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      }
+      function calendarLongDate(date) {
+        return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      }
+      function calendarServiceMetaLine(s) {
+        return guidedServiceMetaLine(s);
+      }
+      function formCalendarWizardHtml(tenant, fields, services, presel, provider) {
+        var providers = (isTeamPlan(tenant) && tenant._bookProviders && tenant._bookProviders.length)
+          ? tenant._bookProviders
+          : [];
+        var hasStaff = providers.length > 0 && !(provider && provider.memberSlug);
+        var preStaff = provider && provider.memberSlug
+          ? String(provider.memberSlug).toLowerCase()
+          : '';
+        var preStaffName = provider && provider.displayName ? String(provider.displayName) : '';
+        var staffCards = providers.map(function(p) {
+          var slug = String(p.memberSlug || '').toLowerCase();
+          var active = preStaff && preStaff === slug ? ' is-active' : '';
+          var sub = teamMemberPickerSubtitle(p);
+          return '<button type="button" class="booking-cal-card' + active + '" data-cal-staff="' + esc(slug) + '" data-cal-staff-name="' + esc(p.displayName || slug) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+            '<span class="name">' + esc(p.displayName || slug) + '</span>' +
+            (sub ? '<span class="meta">' + esc(sub) + '</span>' : '') +
+            '</button>';
+        }).join('');
+        var initService = presel ? presel.id : '';
+        var initServiceName = presel ? (presel.name || '') : '';
+        var initServiceSlug = presel ? (presel.slug || '') : '';
+        var serviceCards = (services || []).map(function(s) {
+          var active = (presel && presel.id === s.id) ? ' is-active' : '';
+          return '<button type="button" class="booking-cal-card' + active + '" data-cal-service-id="' + esc(s.id) + '" data-cal-service-name="' + esc(s.name) + '" data-cal-service-slug="' + esc(s.slug || '') + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+            '<span class="name">' + esc(s.name) + '</span>' +
+            '<span class="meta">' + esc(calendarServiceMetaLine(s)) + '</span>' +
+            '</button>';
+        }).join('');
+        var skipKeys = {
+          service: true,
+          preferredDays: true,
+          preferredTime: true,
+          preferredTimeOfDay: true
+        };
+        var detailFields = (fields || []).filter(function(f) {
+          return f && f.key && !skipKeys[f.key];
+        });
+        var detailsHtml = detailFields.map(function(f) {
+          var raw = field(f, services, presel);
+          // Promote inputs for calendar spacing class without rewriting field().
+          return '<div class="booking-cal-field">' + raw
+            .replace(/<(input|select|textarea)\b/g, '<$1 class="field-input"')
+            .replace(/class="field-input" class="/g, 'class="field-input ') +
+            '</div>';
+        }).join('');
+        // Month calendar + times filled in setupCalendarBookingForm
+        var labels = [];
+        if (hasStaff) labels.push('Staff');
+        labels.push('Service', 'Date & time', 'Details', 'Summary');
+        var labelsHtml = labels.map(function(lab, i) {
+          return '<span data-cal-step-label="' + i + '"' + (i === 0 ? ' class="is-active"' : '') + '>' + esc(lab) + '</span>';
+        }).join('');
+        var panelIdx = 0;
+        var panels = '';
+        if (hasStaff) {
+          panels +=
+            '<div class="booking-cal-panel" data-cal-panel="' + panelIdx + '" data-cal-kind="staff">' +
+              '<p class="booking-cal-day-title">Who would you like to book?</p>' +
+              '<div class="booking-cal-staff-grid" data-cal-staff-grid>' + staffCards + '</div>' +
+            '</div>';
+          panelIdx++;
+        }
+        panels +=
+          '<div class="booking-cal-panel" data-cal-panel="' + panelIdx + '" data-cal-kind="service"' + (hasStaff ? ' hidden' : '') + '>' +
+            '<p class="booking-cal-day-title">Choose a service</p>' +
+            '<div class="booking-cal-service-grid" data-cal-service-grid>' + serviceCards + '</div>' +
+          '</div>';
+        panelIdx++;
+        var schedIdx = panelIdx;
+        panels +=
+          '<div class="booking-cal-panel" data-cal-panel="' + panelIdx + '" data-cal-kind="schedule" hidden>' +
+            '<p class="booking-cal-day-title">Choose a day</p>' +
+            '<div class="booking-cal-month" data-cal-month>' +
+              '<div class="booking-cal-month-header">' +
+                '<button type="button" class="booking-cal-month-nav" data-cal-month-prev aria-label="Previous month">‹</button>' +
+                '<p class="booking-cal-month-title" data-cal-month-title>Month</p>' +
+                '<button type="button" class="booking-cal-month-nav" data-cal-month-next aria-label="Next month">›</button>' +
+              '</div>' +
+              '<div class="booking-cal-month-dows" aria-hidden="true">' +
+                '<span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>' +
+              '</div>' +
+              '<div class="booking-cal-month-grid" data-cal-month-grid role="grid" aria-label="Calendar"></div>' +
+            '</div>' +
+            '<div class="booking-cal-times-block" data-cal-times-block hidden>' +
+              '<p class="booking-cal-day-title" data-cal-day-heading>Pick a time</p>' +
+              '<div class="booking-cal-slots" data-cal-slots></div>' +
+              '<p class="booking-cal-hint">Times follow studio hours. We’ll confirm your appointment after you request.</p>' +
+            '</div>' +
+          '</div>';
+        panelIdx++;
+        panels +=
+          '<div class="booking-cal-panel" data-cal-panel="' + panelIdx + '" data-cal-kind="details" hidden>' +
+            '<p class="booking-cal-day-title">Your details</p>' +
+            '<div class="booking-cal-details-fields">' + detailsHtml + '</div>' +
+          '</div>';
+        panelIdx++;
+        var confirmIdx = panelIdx;
+        panels +=
+          '<div class="booking-cal-panel" data-cal-panel="' + panelIdx + '" data-cal-kind="summary" hidden>' +
+            '<p class="booking-cal-day-title">Review</p>' +
+            '<dl class="booking-cal-summary" data-cal-summary></dl>' +
+            '<p class="booking-cal-hint" data-cal-deposit-note>No payment is collected on this step — we confirm by message. Deposits (if required) are arranged after we accept.</p>' +
+          '</div>';
+
+        return {
+          html: panels,
+          hasStaff: hasStaff,
+          confirmStep: String(confirmIdx),
+          scheduleStep: String(schedIdx),
+          preStaff: preStaff,
+          preStaffName: preStaffName,
+          initService: initService,
+          initServiceName: initServiceName,
+          initServiceSlug: initServiceSlug,
+          labelsHtml: labelsHtml
+        };
+      }
+      function setupCalendarBookingForm(fm, tenant, services) {
+        if (!fm || !fm.hasAttribute('data-cal-wizard-form')) return;
+        var monthGrid = fm.querySelector('[data-cal-month-grid]');
+        var monthTitle = fm.querySelector('[data-cal-month-title]');
+        var monthPrev = fm.querySelector('[data-cal-month-prev]');
+        var monthNext = fm.querySelector('[data-cal-month-next]');
+        var timesBlock = fm.querySelector('[data-cal-times-block]');
+        var slotsEl = fm.querySelector('[data-cal-slots]');
+        var dayHeading = fm.querySelector('[data-cal-day-heading]');
+        var summaryEl = fm.querySelector('[data-cal-summary]');
+        var backBtn = fm.querySelector('[data-cal-back]');
+        var nextBtn = fm.querySelector('[data-cal-next]');
+        var submitBtn = fm.querySelector('[data-cal-submit]');
+        var errEl = fm.querySelector('#form-error') || document.getElementById('form-error');
+        var serviceInput = fm.querySelector('[data-key="service"]');
+        var daysInput = fm.querySelector('[data-key="preferredDays"]');
+        var timeInput = fm.querySelector('[data-key="preferredTime"]');
+        var staffInput = fm.querySelector('[data-cal-member-slug]');
+        var staffNameInput = fm.querySelector('[data-cal-member-name]');
+        var panels = fm.querySelectorAll('[data-cal-panel]');
+        var labels = fm.querySelectorAll('[data-cal-step-label]');
+        var maxStep = panels.length ? panels.length - 1 : 0;
+        var step = 0;
+        var selectedIso = '';
+        var selectedPretty = '';
+        var selectedTime = '';
+        var MONTH_HORIZON = 4; // current month + next 4
+        var now = new Date();
+        var viewYear = now.getFullYear();
+        var viewMonth = now.getMonth(); // 0-based
+        var minMonthKey = viewYear * 12 + viewMonth;
+        var maxMonthKey = minMonthKey + MONTH_HORIZON;
+
+        function showError(msg) {
+          if (!errEl) return;
+          if (!msg) {
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+            return;
+          }
+          errEl.textContent = msg;
+          errEl.style.display = 'block';
+        }
+
+        function monthLabel(y, m) {
+          return new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        }
+
+        function startOfDay(d) {
+          var x = new Date(d);
+          x.setHours(0, 0, 0, 0);
+          return x;
+        }
+
+        function isPastDay(date) {
+          return startOfDay(date).getTime() < startOfDay(new Date()).getTime();
+        }
+
+        function isToday(date) {
+          var t = new Date();
+          return date.getFullYear() === t.getFullYear() &&
+            date.getMonth() === t.getMonth() &&
+            date.getDate() === t.getDate();
+        }
+
+        function dayIsBookable(date) {
+          if (isPastDay(date)) return false;
+          var slots = calendarSlotsForDay(tenant, date, 30);
+          return slots.length > 0;
+        }
+
+        function selectDay(iso, pretty, longLabel) {
+          selectedIso = iso || '';
+          selectedPretty = pretty || iso || '';
+          selectedTime = '';
+          if (timeInput) timeInput.value = '';
+          if (daysInput) daysInput.value = selectedPretty;
+          if (timesBlock) timesBlock.hidden = !selectedIso;
+          paintMonthGrid();
+          paintSlots(longLabel || selectedPretty);
+          showError('');
+          if (timesBlock && selectedIso) {
+            try {
+              timesBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (e) { /* ignore */ }
+          }
+        }
+
+        function paintMonthGrid() {
+          if (!monthGrid) return;
+          if (monthTitle) monthTitle.textContent = monthLabel(viewYear, viewMonth);
+          var curKey = viewYear * 12 + viewMonth;
+          if (monthPrev) monthPrev.disabled = curKey <= minMonthKey;
+          if (monthNext) monthNext.disabled = curKey >= maxMonthKey;
+
+          var first = new Date(viewYear, viewMonth, 1, 12, 0, 0, 0);
+          var startPad = first.getDay(); // Su=0
+          var daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+          var html = '';
+          for (var p = 0; p < startPad; p++) {
+            html += '<button type="button" class="booking-cal-mday is-outside" tabindex="-1" disabled aria-hidden="true"></button>';
+          }
+          for (var day = 1; day <= daysInMonth; day++) {
+            var d = new Date(viewYear, viewMonth, day, 12, 0, 0, 0);
+            var iso = calendarIsoDate(d);
+            var past = isPastDay(d);
+            var bookable = dayIsBookable(d);
+            var closed = !bookable && !past;
+            var cls = 'booking-cal-mday';
+            if (past) cls += ' is-past';
+            if (closed) cls += ' is-closed';
+            if (isToday(d)) cls += ' is-today';
+            if (selectedIso === iso) cls += ' is-active';
+            var disabled = past || !bookable;
+            html += '<button type="button" class="' + cls + '" data-cal-day="' + esc(iso) +
+              '" data-cal-day-label="' + esc(calendarPrettyDate(d)) +
+              '" data-cal-day-long="' + esc(calendarLongDate(d)) + '"' +
+              (disabled ? ' disabled aria-disabled="true"' : '') +
+              ' aria-label="' + esc(calendarLongDate(d)) + '"' +
+              (selectedIso === iso ? ' aria-pressed="true"' : ' aria-pressed="false"') +
+              '>' + day + '</button>';
+          }
+          // trailing cells to complete weeks
+          var totalCells = startPad + daysInMonth;
+          var trail = (7 - (totalCells % 7)) % 7;
+          for (var t = 0; t < trail; t++) {
+            html += '<button type="button" class="booking-cal-mday is-outside" tabindex="-1" disabled aria-hidden="true"></button>';
+          }
+          monthGrid.innerHTML = html;
+          var buttons = monthGrid.querySelectorAll('[data-cal-day]');
+          for (var bi = 0; bi < buttons.length; bi++) {
+            (function(btn) {
+              btn.addEventListener('click', function() {
+                if (btn.disabled) return;
+                selectDay(
+                  btn.getAttribute('data-cal-day') || '',
+                  btn.getAttribute('data-cal-day-label') || '',
+                  btn.getAttribute('data-cal-day-long') || ''
+                );
+              });
+            })(buttons[bi]);
+          }
+
+          // Keep times panel if a day is already selected (even when browsing another month)
+          if (selectedIso) {
+            var sp = selectedIso.split('-');
+            var sd = new Date(parseInt(sp[0], 10), parseInt(sp[1], 10) - 1, parseInt(sp[2], 10), 12, 0, 0, 0);
+            paintSlots(calendarLongDate(sd));
+            if (timesBlock) timesBlock.hidden = false;
+          } else {
+            if (timesBlock) timesBlock.hidden = true;
+            if (slotsEl) slotsEl.innerHTML = '';
+          }
+        }
+
+        function paintSlots(longLabel) {
+          if (!slotsEl) return;
+          if (!selectedIso) {
+            if (timesBlock) timesBlock.hidden = true;
+            slotsEl.innerHTML = '';
+            return;
+          }
+          if (timesBlock) timesBlock.hidden = false;
+          if (dayHeading) {
+            dayHeading.textContent = longLabel
+              ? ('Times on ' + longLabel)
+              : 'Pick a time';
+          }
+          var parts = selectedIso.split('-');
+          var date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0, 0);
+          var slots = calendarSlotsForDay(tenant, date, 30);
+          if (!slots.length) {
+            slotsEl.innerHTML = '<p class="booking-cal-empty">No open times this day.</p>';
+            return;
+          }
+          var html = slots.map(function(s) {
+            var active = selectedTime === s.label ? ' is-active' : '';
+            return '<button type="button" class="booking-cal-slot' + active + '" data-cal-slot="' + esc(s.label) + '">' + esc(s.label) + '</button>';
+          }).join('');
+          slotsEl.innerHTML = html;
+          var btns = slotsEl.querySelectorAll('[data-cal-slot]');
+          for (var si = 0; si < btns.length; si++) {
+            (function(btn) {
+              btn.addEventListener('click', function() {
+                selectedTime = btn.getAttribute('data-cal-slot') || '';
+                if (timeInput) timeInput.value = selectedTime;
+                for (var k = 0; k < btns.length; k++) {
+                  btns[k].classList.toggle('is-active', btns[k] === btn);
+                }
+                showError('');
+              });
+            })(btns[si]);
+          }
+        }
+
+        if (monthPrev) {
+          monthPrev.addEventListener('click', function() {
+            var key = viewYear * 12 + viewMonth;
+            if (key <= minMonthKey) return;
+            viewMonth -= 1;
+            if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+            paintMonthGrid();
+          });
+        }
+        if (monthNext) {
+          monthNext.addEventListener('click', function() {
+            var key = viewYear * 12 + viewMonth;
+            if (key >= maxMonthKey) return;
+            viewMonth += 1;
+            if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+            paintMonthGrid();
+          });
+        }
+
+        function panelKind(panel) {
+          return panel ? (panel.getAttribute('data-cal-kind') || '') : '';
+        }
+        function activePanel() {
+          return fm.querySelector('[data-cal-panel="' + step + '"]');
+        }
+        function staffSelected() {
+          return !!(staffInput && staffInput.value);
+        }
+        function serviceSelected() {
+          return !!(serviceInput && serviceInput.value);
+        }
+        function scheduleSelected() {
+          return !!(selectedIso && selectedTime);
+        }
+        function validateDetails() {
+          var panel = activePanel();
+          if (!panel || panelKind(panel) !== 'details') return true;
+          var required = panel.querySelectorAll('[required]');
+          for (var i = 0; i < required.length; i++) {
+            var el = required[i];
+            if (el.getAttribute('data-type') === 'file') continue;
+            var v = (el.value || '').trim();
+            if (!v) {
+              el.focus && el.focus();
+              return false;
+            }
+          }
+          return true;
+        }
+        function buildSummary() {
+          if (!summaryEl) return;
+          var svcName = (serviceInput && serviceInput.getAttribute('data-name')) || '';
+          var staffName = (staffNameInput && staffNameInput.value) || '';
+          var nameEl = fm.querySelector('[data-key="name"]');
+          var emailEl = fm.querySelector('[data-key="email"]');
+          var phoneEl = fm.querySelector('[data-key="phone"]');
+          var notesEl = fm.querySelector('[data-key="notes"]');
+          function row(dt, dd) {
+            if (!dd) return '';
+            return '<dt>' + esc(dt) + '</dt><dd>' + esc(dd) + '</dd>';
+          }
+          summaryEl.innerHTML =
+            row('Staff', staffName) +
+            row('Service', svcName) +
+            row('Date', selectedPretty) +
+            row('Time', selectedTime) +
+            row('Name', nameEl && nameEl.value) +
+            row('Email', emailEl && emailEl.value) +
+            row('Phone', phoneEl && phoneEl.value) +
+            row('Notes', notesEl && notesEl.value);
+        }
+        function renderStep() {
+          showError('');
+          for (var i = 0; i < panels.length; i++) {
+            var p = panels[i];
+            var idx = parseInt(p.getAttribute('data-cal-panel'), 10);
+            p.hidden = idx !== step;
+          }
+          for (var li = 0; li < labels.length; li++) {
+            labels[li].classList.toggle('is-active', parseInt(labels[li].getAttribute('data-cal-step-label'), 10) === step);
+          }
+          if (backBtn) backBtn.hidden = step === 0;
+          var atConfirm = step >= maxStep;
+          if (nextBtn) nextBtn.hidden = atConfirm;
+          if (submitBtn) submitBtn.hidden = !atConfirm;
+          fm.dataset.calStep = String(step);
+          var kind = panelKind(activePanel());
+          if (kind === 'schedule') paintMonthGrid();
+          if (kind === 'summary') buildSummary();
+          var smsBlock = fm.querySelector('[data-sms-consent-cal]');
+          if (smsBlock) smsBlock.hidden = !(kind === 'details' || kind === 'summary');
+        }
+        function canAdvance() {
+          var kind = panelKind(activePanel());
+          if (kind === 'staff') {
+            if (!staffSelected()) {
+              showError('Please choose who you’d like to book.');
+              return false;
+            }
+          } else if (kind === 'service') {
+            if (!serviceSelected()) {
+              showError('Please select a service.');
+              return false;
+            }
+          } else if (kind === 'schedule') {
+            if (!scheduleSelected()) {
+              showError('Please pick a day and time.');
+              return false;
+            }
+          } else if (kind === 'details') {
+            if (!validateDetails()) {
+              showError('Please fill in the required fields.');
+              return false;
+            }
+          }
+          return true;
+        }
+        function goNext() {
+          if (!canAdvance()) return;
+          if (step < maxStep) {
+            step += 1;
+            renderStep();
+          }
+        }
+        function goBack() {
+          showError('');
+          if (step > 0) {
+            step -= 1;
+            renderStep();
+          }
+        }
+
+        // Staff cards
+        var staffCards = fm.querySelectorAll('[data-cal-staff]');
+        for (var sc = 0; sc < staffCards.length; sc++) {
+          (function(btn) {
+            btn.addEventListener('click', function() {
+              var slug = btn.getAttribute('data-cal-staff') || '';
+              var name = btn.getAttribute('data-cal-staff-name') || slug;
+              if (staffInput) staffInput.value = slug;
+              if (staffNameInput) staffNameInput.value = name;
+              if (slug) {
+                tenant._activeProvider = tenant._activeProvider || {};
+                tenant._activeProvider.memberSlug = slug;
+                tenant._activeProvider.displayName = name;
+              }
+              for (var i = 0; i < staffCards.length; i++) {
+                var on = staffCards[i] === btn;
+                staffCards[i].classList.toggle('is-active', on);
+                staffCards[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+              }
+              showError('');
+            });
+          })(staffCards[sc]);
+        }
+        // Service cards
+        var svcCards = fm.querySelectorAll('[data-cal-service-id]');
+        for (var sv = 0; sv < svcCards.length; sv++) {
+          (function(btn) {
+            btn.addEventListener('click', function() {
+              var id = btn.getAttribute('data-cal-service-id') || '';
+              var name = btn.getAttribute('data-cal-service-name') || '';
+              var slug = btn.getAttribute('data-cal-service-slug') || '';
+              if (serviceInput) {
+                serviceInput.value = id;
+                serviceInput.setAttribute('data-name', name);
+                serviceInput.setAttribute('data-slug', slug);
+              }
+              for (var i = 0; i < svcCards.length; i++) {
+                var on = svcCards[i] === btn;
+                svcCards[i].classList.toggle('is-active', on);
+                svcCards[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+              }
+              showError('');
+            });
+          })(svcCards[sv]);
+        }
+
+        if (nextBtn) nextBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          goNext();
+        });
+        if (backBtn) backBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          goBack();
+        });
+
+        // Seed preselected staff/service
+        if (staffInput && staffInput.value && tenant) {
+          tenant._activeProvider = tenant._activeProvider || {};
+          tenant._activeProvider.memberSlug = staffInput.value;
+          if (staffNameInput && staffNameInput.value) {
+            tenant._activeProvider.displayName = staffNameInput.value;
+          }
+        }
+        renderStep();
+      }
+
       function guidedBookingInlineStyle(tenant) {
         var parts = [];
         var tc = tenantColors(tenant);
@@ -10189,7 +11192,10 @@
             '<a href="' + BOOK_TERMS_URL + '" target="_blank" rel="noopener noreferrer">Terms</a>.' +
             '</span>' +
           '</label>';
-        ensurePhoneInSmsConsentBox(fm, block);
+        var isCalWizard = fm.hasAttribute('data-cal-wizard-form');
+        if (!isCalWizard) {
+          ensurePhoneInSmsConsentBox(fm, block);
+        }
         var anchor = bookingSmsConsentAnchor(fm);
         if (anchor && anchor.parentNode) {
           anchor.parentNode.insertBefore(block, anchor);
@@ -10198,6 +11204,10 @@
         }
         if (fm.hasAttribute('data-guided-wizard-form')) {
           block.setAttribute('data-sms-consent-wizard', '1');
+          block.hidden = true;
+        }
+        if (isCalWizard) {
+          block.setAttribute('data-sms-consent-cal', '1');
           block.hidden = true;
         }
         if (tenantClientSmsActive(tenant)) {
@@ -10610,6 +11620,40 @@
         else if (isLuxeTheme(tenant)) bookSiteFooter = luxeContactSectionHtml(tenant);
         else if (isClassicTheme(tenant)) bookSiteFooter = classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio'));
         if (!bookSiteFooter) bookSiteFooter = minimalBookLegalFooterHtml(tenant);
+        if (usesCalendarBookingForm(tenant)) {
+          var calWizard = formCalendarWizardHtml(tenant, fields, services, presel, provider);
+          var calVars = guidedBookingInlineStyle(tenant);
+          var calInner =
+            bookingPageHeaderHtml +
+            '<div class="booking-cal">' +
+              '<div class="booking-cal-step-labels">' + calWizard.labelsHtml + '</div>' +
+              '<form id="book-form" class="booking-form booking-form--calendar" data-cal-wizard-form data-cal-confirm-step="' + calWizard.confirmStep + '">' +
+                '<input type="hidden" data-key="service" value="' + esc(calWizard.initService) + '" data-name="' + esc(calWizard.initServiceName) + '" data-slug="' + esc(calWizard.initServiceSlug) + '" required>' +
+                '<input type="hidden" data-key="preferredDays" value="">' +
+                '<input type="hidden" data-key="preferredTime" value="">' +
+                '<input type="hidden" data-cal-member-slug value="' + esc(calWizard.preStaff) + '">' +
+                '<input type="hidden" data-cal-member-name value="' + esc(calWizard.preStaffName) + '">' +
+                calWizard.html +
+                '<div class="booking-cal-actions">' +
+                  '<p id="form-error" class="error" style="display:none"></p>' +
+                  '<button type="button" class="booking-cal-back" data-cal-back hidden>← Back</button>' +
+                  '<button type="button" class="booking-cal-next booking-submit" data-cal-next>Continue</button>' +
+                  '<button type="submit" class="booking-submit" data-accent data-cal-submit hidden>Request booking</button>' +
+                '</div>' +
+              '</form>' +
+            '</div>';
+          return '' +
+            '<div class="' + wrapClass + '">' +
+              nav +
+              '<div class="booking-page-band" data-bk-color-surface="page" data-bk-band-tappable' + (bookPageStyle ? ' style="' + bookPageStyle + '"' : '') + '>' +
+              bkColorBandInnerWrap('<div class="booking-shell booking-shell--calendar"' + (calVars ? ' style="' + calVars + '"' : '') + '>' +
+                calInner +
+              '</div>') +
+              '</div>' +
+              bookSiteFooter +
+              sidebar +
+            '</div>';
+        }
         if (usesGuidedBookingForm(tenant)) {
           var guidedWizard = formGuidedWizardPanelsHtml(fields, services, presel);
           var guidedPanelsHtml = guidedWizard.html;
@@ -10787,7 +11831,7 @@
               galleryImages: data.galleryImages || [], galleryGridLayout: data.galleryGridLayout || '3x1',
               galleryLayoutStyle: data.galleryLayoutStyle,
               aboutText: data.aboutText || '',
-              reviews: data.reviews || [], address: data.address || '', contactAddress: data.contactAddress || '', contactAddressSuite: data.contactAddressSuite || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
+              reviews: data.reviews || [], address: data.address || '', contactAddress: data.contactAddress || '', contactAddressSuite: data.contactAddressSuite || '', serviceArea: data.serviceArea || '', businessHours: data.businessHours || '', businessHoursWeekly: data.businessHoursWeekly || null, onlineBookableWeekly: data.onlineBookableWeekly || null, onlineSlotsConfigured: data.onlineSlotsConfigured === true, onlineSlotStepMinutes: (typeof data.onlineSlotStepMinutes === 'number' ? data.onlineSlotStepMinutes : 30), onlineSlotPatterns: Array.isArray(data.onlineSlotPatterns) ? data.onlineSlotPatterns : [], blockedDates: Array.isArray(data.blockedDates) ? data.blockedDates : [], blockedTimeRanges: Array.isArray(data.blockedTimeRanges) ? data.blockedTimeRanges : [], showBusinessHoursOnPage: data.showBusinessHoursOnPage !== false, instagramHandle: data.instagramHandle || '',
               mapEmbedLat: (typeof data.mapEmbedLat === 'number' && !isNaN(data.mapEmbedLat)) ? data.mapEmbedLat : null,
               mapEmbedLng: (typeof data.mapEmbedLng === 'number' && !isNaN(data.mapEmbedLng)) ? data.mapEmbedLng : null,
               mapCaptureImageUrl: data.mapCaptureImageUrl || '',
@@ -10806,6 +11850,19 @@
               heroFont: data.heroFont || '',
               webThemeId: data.webThemeId || '',
               bookingFormStyleId: data.bookingFormStyleId || '',
+              // Prefer calendar when either field says so (see bookingModeResolved).
+              bookingMode: (function() {
+                var w = data.workflow && data.workflow.bookingMode;
+                var t = data.bookingMode;
+                var cal = function(v) {
+                  var m = String(v || '').trim().toLowerCase();
+                  return m === 'calendar_slots' || m === 'calendar' || m === 'slots'
+                    || m === 'slot_booking' || m === 'online_booking' || m === 'online';
+                };
+                if (cal(w) || cal(t)) return 'calendar_slots';
+                return w || t || '';
+              })(),
+              workflow: data.workflow || null,
               guidedStepTitles: data.guidedStepTitles || {},
               guidedStepOrder: data.guidedStepOrder || [],
               luxeHeroTagline: data.luxeHeroTagline || '',
@@ -14175,6 +15232,7 @@
               setupDropzones(fm);
               setupPreferredDaysDropdown(fm);
               setupGuidedBookingForm(fm, setupDropzones);
+              setupCalendarBookingForm(fm, tenant, services);
               injectBookingSmsConsent(fm, tenant);
               attachTitleCaseNameInputs(fm);
               fm.addEventListener('submit', function(ev){
@@ -14182,6 +15240,10 @@
                 if (fm.dataset.guidedStep) {
                   var confirmAt = fm.getAttribute('data-guided-confirm-step') || '3';
                   if (fm.dataset.guidedStep !== confirmAt) return;
+                }
+                if (fm.dataset.calStep != null && fm.hasAttribute('data-cal-wizard-form')) {
+                  var calConfirm = fm.getAttribute('data-cal-confirm-step') || '0';
+                  if (String(fm.dataset.calStep) !== String(calConfirm)) return;
                 }
                 var errEl = document.getElementById('form-error');
                 errEl.style.display = 'none';
@@ -14248,11 +15310,15 @@
                   if (!preferredTime) preferredTime = null;
                   var serviceId = null, serviceSlugVal = null, serviceName = null;
                   var sel = fm.querySelector('[data-key="service"]');
-                  if (sel && sel.options && sel.options[sel.selectedIndex]) {
+                  if (sel && sel.tagName === 'SELECT' && sel.options && sel.options[sel.selectedIndex]) {
                     var opt = sel.options[sel.selectedIndex];
                     serviceId = opt.value;
                     serviceSlugVal = opt.dataset.slug || null;
                     serviceName = opt.dataset.name || null;
+                  } else if (sel && sel.value) {
+                    serviceId = sel.value;
+                    serviceSlugVal = sel.getAttribute('data-slug') || sel.dataset.slug || null;
+                    serviceName = sel.getAttribute('data-name') || sel.dataset.name || null;
                   }
                   if (!serviceId) {
                     errEl.textContent = 'Please select a service.';
@@ -14260,6 +15326,13 @@
                     btn.disabled = false;
                     btn.textContent = origText;
                     return;
+                  }
+                  var calMemberEl = fm.querySelector('[data-cal-member-slug]');
+                  if (calMemberEl && calMemberEl.value) {
+                    tenant._activeProvider = tenant._activeProvider || {};
+                    tenant._activeProvider.memberSlug = calMemberEl.value;
+                    var calNameEl = fm.querySelector('[data-cal-member-name]');
+                    if (calNameEl && calNameEl.value) tenant._activeProvider.displayName = calNameEl.value;
                   }
                   var smsConsentAccepted = false;
                   var smsConsentEl = fm.querySelector('[data-sms-consent-checkbox]');

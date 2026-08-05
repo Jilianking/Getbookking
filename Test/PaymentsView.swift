@@ -813,6 +813,7 @@ struct DepositLinkSheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
     var onDismiss: () -> Void
     @State private var amountText = ""
+    @State private var didCopyLink = false
     @FocusState private var isAmountFocused: Bool
 
     private static let suggestionAmounts: [(label: String, cents: Int)] = [
@@ -835,95 +836,122 @@ struct DepositLinkSheet: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                Text("Enter deposit amount")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Customers pay the deposit plus a processing fee at checkout. You receive the full deposit amount.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-
-                TextField("0.00", text: $amountText)
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.title2.monospacedDigit())
-                    .multilineTextAlignment(.center)
-                    .focused($isAmountFocused)
-                    .padding(.horizontal, 24)
-
-                if canCreate {
-                    CardCheckoutBreakdownView(breakdown: checkout)
-                        .padding(.horizontal, 24)
-                }
-
-                if let err = viewModel.errorMessage {
-                    Text(err)
+            ScrollView {
+                VStack(spacing: 24) {
+                    Text("Enter deposit amount")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text("Customers pay the deposit plus a processing fee at checkout. You receive the full deposit amount.")
                         .font(.caption)
-                        .foregroundColor(.red)
-                }
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
 
-                if let urlString = viewModel.depositLinkUrl, let url = URL(string: urlString) {
-                    VStack(spacing: 16) {
-                        Text("Link ready")
-                            .font(.subheadline.weight(.semibold))
-                        Text(urlString)
+                    TextField("0.00", text: $amountText)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title2.monospacedDigit())
+                        .multilineTextAlignment(.center)
+                        .focused($isAmountFocused)
+                        .padding(.horizontal, 24)
+
+                    if canCreate {
+                        CardCheckoutBreakdownView(breakdown: checkout)
+                            .padding(.horizontal, 24)
+                    }
+
+                    if let err = viewModel.errorMessage {
+                        Text(err)
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                            .padding(.horizontal)
-                        ShareLink(item: url, subject: Text("Deposit link"), message: Text("Pay your deposit")) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                                .font(.body.weight(.medium))
-                        }
-                        .buttonStyle(.borderedProminent)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
                     }
-                    .padding()
-                } else {
-                    Button(action: {
-                        Task { await viewModel.createDepositLink(serviceAmountCents: serviceAmountCents) }
-                    }) {
-                        HStack {
-                            if viewModel.isCreatingDepositLink {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Text(checkout.hasPassThroughFees
-                                    ? "Create link · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
-                                    : "Create link")
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canCreate ? Color.green : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .disabled(!canCreate || viewModel.isCreatingDepositLink)
-                }
 
-                Spacer(minLength: 0)
+                    if let urlString = viewModel.depositLinkUrl, let url = URL(string: urlString) {
+                        VStack(spacing: 16) {
+                            Text("Link ready")
+                                .font(.subheadline.weight(.semibold))
+                            Text(urlString)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                                .padding(.horizontal)
+                            HStack(spacing: 12) {
+                                Button {
+                                    UIPasteboard.general.string = urlString
+                                    didCopyLink = true
+                                } label: {
+                                    Label(didCopyLink ? "Copied" : "Copy", systemImage: didCopyLink ? "checkmark" : "doc.on.doc")
+                                        .font(.body.weight(.medium))
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                ShareLink(item: url, subject: Text("Deposit link"), message: Text("Pay your deposit")) {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                        .font(.body.weight(.medium))
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        Button(action: {
+                            isAmountFocused = false
+                            Task { await viewModel.createDepositLink(serviceAmountCents: serviceAmountCents) }
+                        }) {
+                            HStack {
+                                if viewModel.isCreatingDepositLink {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Text(checkout.hasPassThroughFees
+                                        ? "Create link · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
+                                        : "Create link")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(canCreate ? Color.green : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                        }
+                        .disabled(!canCreate || viewModel.isCreatingDepositLink)
+                        .padding(.horizontal, 24)
+                    }
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 20)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Deposit Link")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { onDismiss() }
                 }
-                ToolbarItem(placement: .keyboard) {
-                    HStack(spacing: 12) {
-                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
-                            Button(item.label) {
-                                amountText = String(format: "%.2f", Double(item.cents) / 100)
-                            }
-                            .buttonStyle(.bordered)
+                ToolbarItemGroup(placement: .keyboard) {
+                    ForEach(Self.suggestionAmounts, id: \.cents) { item in
+                        Button(item.label) {
+                            amountText = String(format: "%.2f", Double(item.cents) / 100)
                         }
                     }
-                    .padding(.vertical, 8)
+                    Spacer()
+                    Button("Done") { isAmountFocused = false }
                 }
+            }
+            .onChange(of: viewModel.depositLinkUrl) { _, newValue in
+                if newValue != nil {
+                    isAmountFocused = false
+                    didCopyLink = false
+                }
+            }
+            .onChange(of: amountText) { _, _ in
+                didCopyLink = false
             }
         }
     }

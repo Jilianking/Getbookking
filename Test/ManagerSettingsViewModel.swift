@@ -56,10 +56,13 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var isOpeningBillingWebsite = false
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
+    @Published var isStartingSubscription = false
     /// Set before opening web billing; triggers sync when app becomes active again.
     @Published var shouldSyncBillingAfterWeb = false
     @Published var isProvisioningSms = false
     @Published var isProvisioningMemberSms = false
+    /// UID of the member currently being provisioned (so UI can spin only that row).
+    @Published var provisioningMemberUid: String? = nil
     /// SMS line entitlements from listTenantMembers
     @Published var smsFreeIncluded: Int = 1
     @Published var smsMaxLines: Int = 1
@@ -71,8 +74,29 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsAtMaxLines: Bool = false
     @Published var smsCanAddWithoutPurchase: Bool = true
     @Published var smsCanPurchaseExtra: Bool = false
-    @Published var smsExtraMonthlyPriceLabel: String = "$5/mo"
+    @Published var smsExtraMonthlyPriceLabel: String = "$10/mo"
     @Published var smsNextLineIsFree: Bool = true
+    /// After lifetime free Twilio buys (Solo 1 · Studio/Shop 2), refresh charges $10.
+    @Published var smsRefreshNeedsPurchase: Bool = false
+    @Published var isRefreshingSmsLine = false
+    @Published var refreshingSmsLineId: String? = nil
+    @Published var isReleasingSmsLine = false
+    @Published var releasingSmsLineId: String? = nil
+
+    /// Never under-charge: treat next add as paid when server says so OR local
+    /// occupied lines already meet/exceed free included (guards stale flags).
+    var smsMustChargeForNextLine: Bool {
+        if smsAtMaxLines { return false }
+        if smsNeedsPurchaseForNextLine { return true }
+        let localOccupied = smsLineAssignments.filter { row in
+            guard row.kind != .open else { return false }
+            let status = row.status.lowercased()
+            if status == "active" || status == "pending" { return true }
+            return !row.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+        let used = max(smsLinesUsed, localOccupied)
+        return used >= smsFreeIncluded
+    }
 
     @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
     @Published var smsPresetDeclined: String = ManagerSettingsViewModel.defaultPresetDeclined
@@ -107,6 +131,77 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     var membersWithPendingSmsLineRequest: [TenantTeamMember] {
         members.filter { $0.smsLineRequestPending && $0.accessRole != .owner }
+    }
+
+    /// Studio + personal lines currently occupying capacity (for Messaging roster).
+    var smsLineAssignments: [SmsLineAssignmentRow] {
+        var rows: [SmsLineAssignmentRow] = []
+        let studioStatus = smsStatus.lowercased()
+        let studioPhone = smsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        if studioStatus == "active" || studioStatus == "pending" || studioStatus == "failed" || !studioPhone.isEmpty {
+            rows.append(
+                SmsLineAssignmentRow(
+                    id: "studio",
+                    kind: .studio,
+                    name: "Studio",
+                    roleLabel: "Business line",
+                    phone: studioPhone,
+                    status: studioStatus.isEmpty ? "off" : studioStatus,
+                    memberUid: nil,
+                    usageCount: smsMonthlyUsageCount,
+                    usageLimit: smsMonthlyLimit
+                )
+            )
+        }
+        for member in members where member.accessRole != .owner {
+            let status = member.smsStatus.lowercased()
+            let phone = member.smsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            let requestPending = member.smsLineRequestPending
+            let occupies = status == "active" || status == "pending" || status == "failed" || !phone.isEmpty
+            if !occupies && !requestPending { continue }
+            let displayStatus: String
+            if requestPending && status != "active" && status != "pending" {
+                displayStatus = "requested"
+            } else {
+                displayStatus = status.isEmpty ? "off" : status
+            }
+            rows.append(
+                SmsLineAssignmentRow(
+                    id: member.uid,
+                    kind: .personal,
+                    name: member.displayName.isEmpty ? "Team member" : member.displayName,
+                    roleLabel: "Personal line",
+                    phone: phone,
+                    status: displayStatus,
+                    memberUid: member.uid,
+                    usageCount: member.smsMonthlyUsageCount,
+                    usageLimit: member.smsMonthlyLimit > 0 ? member.smsMonthlyLimit : 1000
+                )
+            )
+        }
+        let open = max(0, smsLineCapacity - smsLinesUsed)
+        if open > 0 {
+            for i in 0..<open {
+                rows.append(
+                    SmsLineAssignmentRow(
+                        id: "open-\(i)",
+                        kind: .open,
+                        name: "Unassigned slot",
+                        roleLabel: "Available capacity",
+                        phone: "",
+                        status: "open",
+                        memberUid: nil,
+                        usageCount: 0,
+                        usageLimit: 1000
+                    )
+                )
+            }
+        }
+        return rows
+    }
+
+    func isProvisioningMember(uid: String) -> Bool {
+        isProvisioningMemberSms && provisioningMemberUid == uid
     }
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
@@ -195,8 +290,17 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsAtMaxLines = data["smsAtMaxLines"] as? Bool ?? false
             smsCanAddWithoutPurchase = data["smsCanAddWithoutPurchase"] as? Bool ?? true
             smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
-            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$5/mo"
+            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$10/mo"
             smsNextLineIsFree = data["smsNextLineIsFree"] as? Bool ?? (smsLinesUsed < smsFreeIncluded)
+            smsRefreshNeedsPurchase = data["smsRefreshNeedsPurchase"] as? Bool
+                ?? (smsLinesUsed >= smsFreeIncluded)
+            // Local safety: if occupied lines already used the free allotment, force paid path
+            // even when a stale server flag says the next line is free.
+            if !smsAtMaxLines && smsLinesUsed >= smsFreeIncluded {
+                smsNeedsPurchaseForNextLine = true
+                smsCanAddWithoutPurchase = false
+                smsNextLineIsFree = false
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -252,7 +356,38 @@ final class ManagerSettingsViewModel: ObservableObject {
         await syncBillingFromStripe()
     }
 
-    /// Opens getbookking.com billing to start subscription (Apple-safe; payment on web).
+    /// Ends free trial now and activates paid plan via Stripe (card already on file).
+    /// Prefer this over opening the Customer Portal — the portal cannot end a trial early.
+    @discardableResult
+    func startSubscriptionToday() async -> Bool {
+        guard isTenantOwner else { return false }
+        if !hasStripeBillingCustomer {
+            await openBillingToStartSubscription()
+            return false
+        }
+        isStartingSubscription = true
+        errorMessage = nil
+        defer { isStartingSubscription = false }
+        do {
+            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
+            let data = result.data as? [String: Any] ?? [:]
+            let status = ((data["subscriptionStatus"] as? String) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            await load(isDemoMode: false)
+            if status == "active" || subscriptionPaid {
+                return true
+            }
+            // Sync once more from Stripe in case Firestore lagged.
+            await syncBillingFromStripe()
+            return subscriptionPaid
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
+    }
+
+    /// Opens getbookking.com billing (fallback when no Stripe customer / web signup).
     func openBillingToStartSubscription() async {
         guard isTenantOwner else { return }
         isOpeningBillingWebsite = true
@@ -263,7 +398,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         await UIApplication.shared.open(url)
     }
 
-    /// Opens marketing billing Client texting section to purchase a $5 extra number.
+    /// Opens marketing billing Client texting section to purchase an extra number.
     func openBillingForExtraSmsLine() async {
         guard isTenantOwner else { return }
         isOpeningBillingWebsite = true
@@ -307,8 +442,14 @@ final class ManagerSettingsViewModel: ObservableObject {
             errorMessage = "Accept the client texting terms to continue."
             return
         }
+        let targetUid = (memberUid?.isEmpty == false ? memberUid : Auth.auth().currentUser?.uid)
         isProvisioningMemberSms = true
+        provisioningMemberUid = targetUid
         errorMessage = nil
+        defer {
+            isProvisioningMemberSms = false
+            provisioningMemberUid = nil
+        }
         do {
             var payload: [String: Any] = ["smsConsentAccepted": true]
             if let memberUid, !memberUid.isEmpty {
@@ -321,63 +462,72 @@ final class ManagerSettingsViewModel: ObservableObject {
             for _ in 0..<12 {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 await load(isDemoMode: false)
-                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                if let uid = targetUid,
                    let member = members.first(where: { $0.uid == uid }),
                    member.smsStatus == "active" { break }
-                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                if let uid = targetUid,
                    let member = members.first(where: { $0.uid == uid }),
                    member.smsStatus == "failed" { break }
             }
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
-        isProvisioningMemberSms = false
     }
 
     /// Member (or owner for a member): request a personal number — free capacity provisions; paid needs owner purchase.
     @discardableResult
-    func requestSmsPhoneNumber(memberUid: String?, consentAccepted: Bool) async -> Bool {
+    func requestSmsPhoneNumber(
+        memberUid: String?,
+        consentAccepted: Bool,
+        paidPurchaseAuthorizationId: String? = nil
+    ) async -> Bool {
         guard consentAccepted else {
             errorMessage = "Accept the client texting terms to continue."
             return false
         }
+        let targetUid = (memberUid?.isEmpty == false ? memberUid : Auth.auth().currentUser?.uid)
         isProvisioningMemberSms = true
+        provisioningMemberUid = targetUid
         errorMessage = nil
+        defer {
+            isProvisioningMemberSms = false
+            provisioningMemberUid = nil
+        }
         var didProvision = false
         do {
             var payload: [String: Any] = ["smsConsentAccepted": true]
             if let memberUid, !memberUid.isEmpty {
                 payload["memberUid"] = memberUid
             }
+            if let paidPurchaseAuthorizationId, !paidPurchaseAuthorizationId.isEmpty {
+                payload["smsPaidLinePurchaseAuthorizationId"] = paidPurchaseAuthorizationId
+            }
             let result = try await functions.httpsCallable("requestSmsPhoneNumber").call(payload)
             let data = result.data as? [String: Any] ?? [:]
             if data["needsOwnerPurchase"] as? Bool == true {
                 errorMessage = (data["message"] as? String)
-                    ?? "Request sent. Your studio owner can add a number for $5/mo under Messaging or billing."
+                    ?? "Request sent. Your studio owner can add a number under Messaging or billing."
                 await load(isDemoMode: false)
-                isProvisioningMemberSms = false
                 return false
             }
             if data["alreadyActive"] as? Bool == true {
                 await load(isDemoMode: false)
-                isProvisioningMemberSms = false
                 return true
             }
             didProvision = true
             for _ in 0..<12 {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 await load(isDemoMode: false)
-                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                if let uid = targetUid,
                    let member = members.first(where: { $0.uid == uid }),
                    member.smsStatus == "active" { break }
-                if let uid = memberUid ?? Auth.auth().currentUser?.uid,
+                if let uid = targetUid,
                    let member = members.first(where: { $0.uid == uid }),
                    member.smsStatus == "failed" { break }
             }
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
-        isProvisioningMemberSms = false
         return didProvision
     }
 
@@ -396,7 +546,114 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     /// Owner: after free capacity — start personal line for a teammate (delegates to request SMS phone number).
     func ownerEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async {
+        if smsMustChargeForNextLine {
+            errorMessage = "This texting number requires a \(smsExtraMonthlyPriceLabel) purchase first."
+            return
+        }
         _ = await requestSmsPhoneNumber(memberUid: memberUid, consentAccepted: consentAccepted)
+    }
+
+    /// Owner: charge the saved Stripe method, then use the one-time server authorization
+    /// to provision this teammate's personal number.
+    @discardableResult
+    func purchaseAndEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async -> Bool {
+        guard isTenantOwner, consentAccepted, !memberUid.isEmpty else { return false }
+        isProvisioningMemberSms = true
+        provisioningMemberUid = memberUid
+        errorMessage = nil
+        defer {
+            isProvisioningMemberSms = false
+            provisioningMemberUid = nil
+        }
+        do {
+            let purchase = try await functions.httpsCallable("purchaseSmsExtraLine").call([
+                "memberUid": memberUid
+            ])
+            let data = purchase.data as? [String: Any] ?? [:]
+            guard let authorizationId = data["smsPaidLinePurchaseAuthorizationId"] as? String,
+                  !authorizationId.isEmpty else {
+                errorMessage = "Stripe did not confirm the texting-number payment. No number was set up."
+                return false
+            }
+            return await requestSmsPhoneNumber(
+                memberUid: memberUid,
+                consentAccepted: true,
+                paidPurchaseAuthorizationId: authorizationId
+            )
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
+    }
+
+    /// Owner: permanently release a studio or personal texting number.
+    func releaseSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
+        guard isTenantOwner else { return false }
+        isReleasingSmsLine = true
+        if scope == "studio" {
+            releasingSmsLineId = "studio"
+        } else if let memberUid {
+            releasingSmsLineId = memberUid
+        } else {
+            releasingSmsLineId = nil
+        }
+        errorMessage = nil
+        defer {
+            isReleasingSmsLine = false
+            releasingSmsLineId = nil
+        }
+        do {
+            var payload: [String: Any] = ["scope": scope]
+            if let memberUid, !memberUid.isEmpty {
+                payload["memberUid"] = memberUid
+            }
+            _ = try await functions.httpsCallable("releaseSmsPhoneNumber").call(payload)
+            await load(isDemoMode: false)
+            return true
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
+    }
+
+    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $10 after lifetime free allotment.
+    @discardableResult
+    func refreshSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
+        guard isTenantOwner else { return false }
+        isRefreshingSmsLine = true
+        if scope == "studio" {
+            refreshingSmsLineId = "studio"
+        } else if let memberUid {
+            refreshingSmsLineId = memberUid
+        } else {
+            refreshingSmsLineId = nil
+        }
+        errorMessage = nil
+        defer {
+            isRefreshingSmsLine = false
+            refreshingSmsLineId = nil
+        }
+        do {
+            var payload: [String: Any] = ["scope": scope]
+            if let memberUid, !memberUid.isEmpty {
+                payload["memberUid"] = memberUid
+            }
+            _ = try await functions.httpsCallable("refreshSmsPhoneNumber").call(payload)
+            for _ in 0..<16 {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await load(isDemoMode: false)
+                if scope == "studio" {
+                    if smsStatus == "active" || smsStatus == "failed" { break }
+                } else if let memberUid,
+                          let member = members.first(where: { $0.uid == memberUid }) {
+                    if member.smsStatus == "active" || member.smsStatus == "failed" { break }
+                }
+            }
+            return true
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
     }
 
     func saveMessagingPresets() async {
@@ -518,6 +775,8 @@ final class ManagerSettingsViewModel: ObservableObject {
                 smsStatus: member.smsStatus,
                 smsPhoneNumber: member.smsPhoneNumber,
                 smsLineRequestPending: member.smsLineRequestPending,
+                smsMonthlyUsageCount: member.smsMonthlyUsageCount,
+                smsMonthlyLimit: member.smsMonthlyLimit,
                 memberSettings: member.memberSettings,
                 personalConfirmationType: member.personalConfirmationType,
                 effectiveConfirmationType: member.effectiveConfirmationType
@@ -647,6 +906,8 @@ final class ManagerSettingsViewModel: ObservableObject {
                     smsStatus: (row["smsStatus"] as? String) ?? "off",
                     smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                     smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
+                    smsMonthlyUsageCount: (row["smsMonthlyUsageCount"] as? Int) ?? 0,
+                    smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
                     effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -670,6 +931,8 @@ final class ManagerSettingsViewModel: ObservableObject {
                 smsStatus: (row["smsStatus"] as? String) ?? "off",
                 smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                 smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
+                smsMonthlyUsageCount: (row["smsMonthlyUsageCount"] as? Int) ?? 0,
+                smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
                 effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
@@ -699,9 +962,60 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private var demoMembers: [TenantTeamMember] {
         [
-            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, showOnTeamPage: false, showOnTeamHome: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
-            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-owner", displayName: "Josh Torres", email: "", phone: "", profilePhotoUrl: "", accessRole: .owner, jobTitle: "", memberSlug: "josh-torres", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, smsMonthlyUsageCount: 0, smsMonthlyLimit: 1000, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-mgr", displayName: "Maya Rodriguez", email: "maya@studio.com", phone: "", profilePhotoUrl: "", accessRole: .manager, jobTitle: "", memberSlug: "", isBookable: false, showOnTeamPage: false, showOnTeamHome: false, providerAboutText: "", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, smsMonthlyUsageCount: 0, smsMonthlyLimit: 1000, memberSettings: TeamMemberSettings(), personalConfirmationType: "request_approve", effectiveConfirmationType: "request_approve"),
+            TenantTeamMember(uid: "demo-art", displayName: "Alex Lee", email: "alex@studio.com", phone: "(555) 010-0002", profilePhotoUrl: "", accessRole: .member, jobTitle: "Artist", memberSlug: "alex-lee", isBookable: true, showOnTeamPage: true, showOnTeamHome: true, providerAboutText: "Fine line and blackwork.", providerGalleryImages: [], smsEnabled: false, smsStatus: "off", smsPhoneNumber: "", smsLineRequestPending: false, smsMonthlyUsageCount: 0, smsMonthlyLimit: 1000, memberSettings: TeamMemberSettings(), personalConfirmationType: "instant_book", effectiveConfirmationType: "request_approve"),
         ]
+    }
+}
+
+// MARK: - SMS line roster (Messaging)
+
+struct SmsLineAssignmentRow: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case studio
+        case personal
+        case open
+    }
+
+    let id: String
+    let kind: Kind
+    let name: String
+    let roleLabel: String
+    let phone: String
+    let status: String
+    let memberUid: String?
+    let usageCount: Int
+    let usageLimit: Int
+
+    var phoneDisplay: String {
+        let trimmed = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "—" }
+        return PhoneFormatting.displayUS(trimmed)
+    }
+
+    var statusLabel: String {
+        switch status.lowercased() {
+        case "active": return "Active"
+        case "pending": return "Setting up"
+        case "requested": return "Requested"
+        case "open": return "Open — assign below"
+        case "failed": return "Failed"
+        default: return status.capitalized
+        }
+    }
+
+    var usageLabel: String {
+        "\(usageCount) of \(usageLimit)"
+    }
+
+    var canRelease: Bool {
+        kind == .studio || kind == .personal
+    }
+
+    var canRefresh: Bool {
+        guard kind == .studio || kind == .personal else { return false }
+        let status = status.lowercased()
+        return status == "active" || !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

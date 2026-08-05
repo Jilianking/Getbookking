@@ -292,6 +292,147 @@
 
 .bill-cancel-list li { margin-bottom: 4px; }
 
+.bill-sms-assignments {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+}
+
+.bill-sms-assignments-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.bill-sms-line-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bill-sms-line-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.06));
+}
+
+.bill-sms-line-item.is-clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 0 -6px;
+  padding: 8px 6px;
+}
+
+.bill-sms-line-item.is-clickable:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.bill-sms-line-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bill-sms-copy-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.bill-sms-assign-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.bill-sms-assign-btn {
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  background: transparent;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.bill-sms-assign-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.bill-sms-status-panel {
+  margin-top: 18px;
+  text-align: center;
+  padding: 20px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.bill-sms-status-spinner {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 12px;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-top-color: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  animation: bill-sms-spin 0.8s linear infinite;
+}
+
+@keyframes bill-sms-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bill-sms-status-check {
+  font-size: 28px;
+  color: #2f7d4a;
+  margin-bottom: 8px;
+}
+
+.bill-sms-status-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.bill-sms-status-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.bill-sms-line-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a1a);
+  line-height: 1.35;
+}
+
+.bill-sms-line-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* Stack confirm dialogs above the add/detail modals */
+#smsPurchaseConfirmBackdrop,
+#smsRemoveConfirmBackdrop {
+  z-index: 319;
+}
+
+#smsPurchaseConfirmModal,
+#smsRemoveConfirmModal {
+  z-index: 320;
+}
+
 @media (max-width: 520px) {
   .bill-plan-actions { flex-direction: column; }
   .bill-invoice-right { flex-wrap: wrap; justify-content: flex-end; }

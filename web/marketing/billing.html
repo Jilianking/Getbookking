@@ -8,8 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/account.css?v=4" />
-  <link rel="stylesheet" href="assets/billing.css?v=3" />
+  <meta name="billing-copy" content="sms-billing-assign-v3" />
+  <link rel="stylesheet" href="assets/account.css?v=5" />
+  <link rel="stylesheet" href="assets/billing.css?v=6" />
 </head>
 <body>
   <header class="acct-header">
@@ -50,10 +51,10 @@
           <button type="button" class="btn-upgrade hidden" id="resubscribeBtn" style="margin-top:16px;">Resubscribe</button>
           <button type="button" class="btn-secondary hidden" id="keepSubscriptionBtn" style="margin-top:12px;">Keep subscription</button>
           <p class="bill-success hidden" id="startSubSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
-            Subscription started. Return to the Bookking app to unlock client texting and payments.
+            Subscription started. Return to the Get Bookking app to unlock client texting and payments.
           </p>
           <p class="bill-success hidden" id="resubscribeSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
-            Subscription restored. Return to the Bookking app to unlock client texting and payments.
+            Subscription restored. Return to the Get Bookking app to unlock client texting and payments.
           </p>
           <div class="bill-plan-actions hidden" id="planActions">
             <button type="button" class="btn-secondary" id="changePlanBtn">Change plan</button>
@@ -75,25 +76,25 @@
             <span class="bill-kv-value" id="smsLinesUsed">—</span>
           </div>
           <div class="bill-kv">
-            <span class="bill-kv-label">Included</span>
+            <span class="bill-kv-label">Included free</span>
             <span class="bill-kv-value" id="smsLinesFree">—</span>
           </div>
-          <div class="bill-kv">
-            <span class="bill-kv-label">Paid extras</span>
-            <span class="bill-kv-value" id="smsLinesPaid">—</span>
+          <div class="bill-kv" id="smsLinesPaidRow">
+            <span class="bill-kv-label">Additional numbers</span>
+            <span class="bill-kv-value" id="smsLinesPaid">$10/mo each</span>
           </div>
-          <div class="bill-kv">
-            <span class="bill-kv-label">Max on plan</span>
-            <span class="bill-kv-value" id="smsLinesMax">—</span>
+          <div id="smsLineAssignmentsWrap" class="bill-sms-assignments hidden">
+            <div class="bill-sms-assignments-label">Who has a number</div>
+            <ul class="bill-sms-line-list" id="smsLineList"></ul>
           </div>
           <p class="bill-note" id="smsLinesNote" style="margin-top:12px;">
-            Studio and Shop include 2 texting numbers. Additional numbers are $5/month each (up to your plan seat limit). Enable free numbers in the Bookking app.
+            Studio and Shop include 2 texting numbers. Any additional phone number is <span id="smsExtraPriceNote">$10/mo</span> (up to your plan seat limit). Tap a person to manage their line. Add or assign numbers below.
           </p>
           <button type="button" class="btn-upgrade hidden" id="addSmsLineBtn" style="margin-top:14px;width:100%;">
-            Add a texting number — $5/mo
+            Add a texting number
           </button>
           <p class="bill-success hidden" id="addSmsLineSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
-            Paid line added. In the Bookking app, set up the next personal number under Team → member → My texting.
+            Number capacity updated. Choose a teammate below to set up their line.
           </p>
           <p class="bill-note hidden" id="smsLineActionNote" style="margin-top:10px;"></p>
         </div>
@@ -148,17 +149,103 @@
 
   <div class="acct-modal-backdrop hidden" id="addSmsLineModalBackdrop" aria-hidden="true"></div>
   <div class="acct-modal hidden" id="addSmsLineModal" role="dialog" aria-modal="true" aria-labelledby="addSmsLineModalTitle" aria-hidden="true">
-    <div class="acct-modal-card">
+    <div class="acct-modal-card" style="max-height:min(90vh,640px);overflow:auto;">
       <div class="acct-modal-head">
-        <h2 id="addSmsLineModalTitle">Add a texting number?</h2>
+        <h2 id="addSmsLineModalTitle">Add a texting number</h2>
         <button type="button" class="acct-modal-close" id="addSmsLineModalClose" aria-label="Close">&times;</button>
       </div>
+      <div id="addSmsLineFormBody">
+      <p id="addSmsLineModalIntro" style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">
+        Choose a teammate to enable their personal texting number.
+      </p>
+      <p id="addSmsLinePayNote" class="hidden" style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin:12px 0 0;">
+        This will charge your card <strong>now</strong> (prorated <span id="addSmsLineModalPrice">$10/mo</span>) for one additional number, then set up their line.
+      </p>
+      <label class="bill-sms-consent" style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--text-secondary);line-height:1.45;">
+        <input type="checkbox" id="addSmsLineConsent" style="margin-top:3px;" />
+        <span>I agree clients may receive appointment-related texts on their line.</span>
+      </label>
+      <div class="bill-sms-assign-label" style="margin-top:16px;font-size:12px;font-weight:500;letter-spacing:0.02em;text-transform:uppercase;color:var(--text-secondary);">Team members</div>
+      <ul class="bill-sms-assign-list" id="addSmsLineMemberList"></ul>
+      <p class="bill-note hidden" id="addSmsLineAssignEmpty" style="margin-top:10px;">No independent teammates without a number. Invite a member or set their payout to Independent under Team in the app.</p>
+      <p class="bill-error hidden" id="addSmsLineModalError" style="margin-top:12px;"></p>
+      <div class="acct-modal-actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="addSmsLineModalCancel" style="width:100%;">Cancel</button>
+      </div>
+      </div>
+      <div id="addSmsLineWorking" class="bill-sms-status-panel hidden">
+        <div class="bill-sms-status-spinner"></div>
+        <div id="addSmsLineWorkingTitle" class="bill-sms-status-title">Working…</div>
+        <div id="addSmsLineWorkingSub" class="bill-sms-status-sub">Please wait.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="acct-modal-backdrop hidden" id="smsPurchaseConfirmBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="smsPurchaseConfirmModal" role="dialog" aria-modal="true" aria-labelledby="smsPurchaseConfirmTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="smsPurchaseConfirmTitle">Confirm</h2>
+        <button type="button" class="acct-modal-close" id="smsPurchaseConfirmClose" aria-label="Close">&times;</button>
+      </div>
+      <p id="smsPurchaseConfirmBody" style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;"></p>
+      <p class="bill-error hidden" id="smsPurchaseConfirmError" style="margin-top:12px;"></p>
+      <div class="acct-modal-actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="smsPurchaseConfirmCancel">Cancel</button>
+        <button type="button" class="btn-upgrade" id="smsPurchaseConfirmOk" style="flex:1;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="acct-modal-backdrop hidden" id="smsLineDetailModalBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="smsLineDetailModal" role="dialog" aria-modal="true" aria-labelledby="smsLineDetailTitle" aria-hidden="true">
+    <div class="acct-modal-card" style="max-height:min(90vh,640px);overflow:auto;">
+      <div class="acct-modal-head">
+        <h2 id="smsLineDetailTitle">Line</h2>
+        <button type="button" class="acct-modal-close" id="smsLineDetailClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="bill-kv"><span class="bill-kv-label">Name</span><span class="bill-kv-value" id="smsDetailName">—</span></div>
+      <div class="bill-kv"><span class="bill-kv-label">Type</span><span class="bill-kv-value" id="smsDetailType">—</span></div>
+      <div class="bill-kv">
+        <span class="bill-kv-label">Number</span>
+        <button type="button" class="bill-kv-value bill-sms-copy-btn" id="smsDetailNumberBtn" title="Copy number">—</button>
+      </div>
+      <div class="bill-kv"><span class="bill-kv-label">Status</span><span class="bill-kv-value" id="smsDetailStatus">—</span></div>
+      <div class="bill-kv" style="margin-top:8px;"><span class="bill-kv-label">Used this month</span><span class="bill-kv-value" id="smsDetailUsage">—</span></div>
+      <p class="bill-note" style="margin-top:8px;">Each number has 1,000 texts per month (sent + received). Resets monthly (UTC). Tap the number to copy.</p>
+      <p class="bill-success hidden" id="smsDetailCopied" style="margin-top:8px;">Copied</p>
+      <p class="bill-error hidden" id="smsDetailError" style="margin-top:12px;"></p>
+      <div id="smsDetailRemoving" class="bill-sms-status-panel hidden">
+        <div class="bill-sms-status-spinner"></div>
+        <div id="smsDetailRemovingTitle" class="bill-sms-status-title">Removing…</div>
+        <div class="bill-sms-status-sub">Releasing this texting number. Please wait.</div>
+      </div>
+      <div id="smsDetailRemoved" class="bill-sms-status-panel hidden">
+        <div class="bill-sms-status-check">✓</div>
+        <div id="smsDetailRemovedTitle" class="bill-sms-status-title">Removed</div>
+        <div class="bill-sms-status-sub">Their texting number has been released.</div>
+        <button type="button" class="btn-upgrade" id="smsDetailRemovedDone" style="margin-top:14px;width:100%;">Done</button>
+      </div>
+      <div class="acct-modal-actions" id="smsDetailActions" style="margin-top:20px;flex-direction:column;gap:10px;">
+        <button type="button" class="btn-outline-danger hidden" id="smsDetailRemoveBtn" style="width:100%;">Remove number</button>
+        <button type="button" class="btn-secondary" id="smsDetailCancel" style="width:100%;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="acct-modal-backdrop hidden" id="smsRemoveConfirmBackdrop" aria-hidden="true"></div>
+  <div class="acct-modal hidden" id="smsRemoveConfirmModal" role="dialog" aria-modal="true" aria-labelledby="smsRemoveConfirmTitle" aria-hidden="true">
+    <div class="acct-modal-card">
+      <div class="acct-modal-head">
+        <h2 id="smsRemoveConfirmTitle">Remove number?</h2>
+        <button type="button" class="acct-modal-close" id="smsRemoveConfirmClose" aria-label="Close">&times;</button>
+      </div>
       <p style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin:0;">
-        We’ll add <strong>$5/month</strong> to your Get Bookking subscription for one extra client texting number (prorated for this period). Then an independent team member can set up their line in the Bookking app.
+        Releases this Twilio number permanently. Texts will stop. This cannot be undone.
       </p>
       <div class="acct-modal-actions" style="margin-top:20px;">
-        <button type="button" class="btn-secondary" id="addSmsLineModalCancel">Not now</button>
-        <button type="button" class="btn-upgrade" id="addSmsLineModalConfirm" style="flex:1;">Yes, add $5/mo</button>
+        <button type="button" class="btn-secondary" id="smsRemoveConfirmCancel">Cancel</button>
+        <button type="button" class="btn-outline-danger" id="smsRemoveConfirmOk" style="flex:1;">Remove number</button>
       </div>
     </div>
   </div>
@@ -510,7 +597,7 @@
       btn.textContent = connectButtonLabel(connectStatus);
       btn.classList.remove('hidden');
       if (statusEl && connectStatus && connectStatus.chargesEnabled) {
-        statusEl.textContent = 'Payouts are connected. You can accept payments in the Bookking app.';
+        statusEl.textContent = 'Payouts are connected. You can accept payments in the Get Bookking app.';
         statusEl.classList.remove('hidden');
       } else if (statusEl && connectStatus && connectStatus.hasAccount && connectStatus.detailsSubmitted && !connectStatus.chargesEnabled) {
         statusEl.textContent = 'Stripe is reviewing your account or needs more details. Tap below to continue setup.';
@@ -525,7 +612,7 @@
     }
 
     function loadConnectStatus() {
-      return fns.httpsCallable('getConnectAccountStatus')({}).then(function(res) {
+      return fns.httpsCallable('getConnectAccountStatus')({ skipEmailReconcile: true }).then(function(res) {
         connectStatus = res.data || null;
         refreshConnectStripeButton();
         return connectStatus;
@@ -599,13 +686,11 @@
     function loadBilling() {
       var errEl = document.getElementById('billingError');
       errEl.classList.add('hidden');
-      return Promise.all([
-        fns.httpsCallable('getBillingSummary')({}).then(function(res) {
-          return res.data || {};
-        }),
-        loadConnectStatus(),
-      ]).then(function(results) {
-        renderBilling(results[0], auth.currentUser);
+      // Render plan / invoices as soon as getBillingSummary returns; Connect loads in parallel
+      // without blocking the main billing UI.
+      loadConnectStatus();
+      return fns.httpsCallable('getBillingSummary')({}).then(function(res) {
+        renderBilling(res.data || {}, auth.currentUser);
       }).catch(function(err) {
         document.getElementById('billingLoading').classList.add('hidden');
         errEl.textContent = (err && err.message) ? err.message : String(err);
@@ -629,18 +714,108 @@
       });
     }
 
+    var selectedSmsLineDetail = null;
+    var assigningMemberUid = null;
+    var pendingAssignMember = null;
+
+    function formatSmsPhoneDisplay(raw) {
+      var s = (raw || '').toString().trim();
+      if (!s) return '—';
+      var digits = s.replace(/\D/g, '');
+      if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
+      if (digits.length === 10) {
+        return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+      }
+      return s;
+    }
+
+    function smsStatusLabel(status) {
+      var s = (status || '').toString();
+      if (s === 'active') return 'Active';
+      if (s === 'pending') return 'Setting up';
+      if (s === 'requested') return 'Requested';
+      if (s === 'open') return 'Open — assign';
+      if (s === 'failed') return 'Failed';
+      return s ? (s.charAt(0).toUpperCase() + s.slice(1)) : '—';
+    }
+
+    function messagingFromBilling() {
+      return (billingData && billingData.messaging) || {};
+    }
+
+    function renderSmsLineAssignments(list) {
+      var wrap = document.getElementById('smsLineAssignmentsWrap');
+      var ul = document.getElementById('smsLineList');
+      if (!wrap || !ul) return;
+      ul.innerHTML = '';
+      var rows = Array.isArray(list) ? list : [];
+      if (!rows.length) {
+        wrap.classList.add('hidden');
+        return;
+      }
+      wrap.classList.remove('hidden');
+      rows.forEach(function(row) {
+        var li = document.createElement('li');
+        li.className = 'bill-sms-line-item';
+        var canOpen = row && (row.kind === 'studio' || row.kind === 'personal' || row.kind === 'open');
+        if (canOpen) {
+          li.classList.add('is-clickable');
+          li.setAttribute('role', 'button');
+          li.tabIndex = 0;
+          li.addEventListener('click', function() {
+            if (row.kind === 'open') {
+              openAddSmsLineModal();
+              return;
+            }
+            openSmsLineDetail(row);
+          });
+          li.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              li.click();
+            }
+          });
+        }
+        var name = document.createElement('div');
+        name.className = 'bill-sms-line-name';
+        name.textContent = (row && row.name) ? row.name : 'Line';
+        var meta = document.createElement('div');
+        meta.className = 'bill-sms-line-meta';
+        var role = (row && row.role) ? row.role : '';
+        var phone = formatSmsPhoneDisplay(row && row.phone);
+        var statusLabel = smsStatusLabel(row && row.status);
+        meta.textContent = [role, phone !== '—' ? phone : null, statusLabel].filter(Boolean).join(' · ');
+        li.appendChild(name);
+        li.appendChild(meta);
+        ul.appendChild(li);
+      });
+    }
+
+    function smsExtraPriceLabel(m) {
+      var label = (m && m.smsExtraMonthlyPriceLabel) ? String(m.smsExtraMonthlyPriceLabel).trim() : '';
+      return label || '$10/mo';
+    }
+
+    function applySmsExtraPriceCopy(m) {
+      var label = smsExtraPriceLabel(m);
+      var note = document.getElementById('smsExtraPriceNote');
+      if (note) note.textContent = label;
+      var modalPrice = document.getElementById('addSmsLineModalPrice');
+      if (modalPrice) modalPrice.textContent = label;
+      var paidEl = document.getElementById('smsLinesPaid');
+      if (paidEl) paidEl.textContent = label + ' each';
+    }
+
     function renderMessagingSection(d) {
       var m = (d && d.messaging) || {};
       var used = m.smsLinesUsed != null ? m.smsLinesUsed : 0;
       var free = m.smsFreeIncluded != null ? m.smsFreeIncluded : 1;
-      var paid = m.smsExtraPaid != null ? m.smsExtraPaid : 0;
       var max = m.smsMaxLines != null ? m.smsMaxLines : 1;
-      var capacity = m.smsLineCapacity != null ? m.smsLineCapacity : free;
-      document.getElementById('smsLinesUsed').textContent = used + ' / ' + capacity;
-      document.getElementById('smsLinesFree').textContent = free + ' included';
-      document.getElementById('smsLinesPaid').textContent =
-        paid > 0 ? (paid + ' × $5/mo') : 'None';
-      document.getElementById('smsLinesMax').textContent = String(max);
+      var priceLabel = smsExtraPriceLabel(m);
+      applySmsExtraPriceCopy(m);
+      document.getElementById('smsLinesUsed').textContent = used + ' / ' + max;
+      document.getElementById('smsLinesFree').textContent = String(free);
+      renderSmsLineAssignments(m.smsLineAssignments);
 
       var btn = document.getElementById('addSmsLineBtn');
       var note = document.getElementById('smsLineActionNote');
@@ -652,10 +827,23 @@
       btn.classList.add('hidden');
 
       var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
+      var paidRow = document.getElementById('smsLinesPaidRow');
+      var linesNote = document.getElementById('smsLinesNote');
       if (plan === 'solo') {
-        note.textContent = 'Solo includes 1 studio texting number. Enable it in the Bookking app under Messaging.';
+        if (paidRow) paidRow.classList.add('hidden');
+        if (linesNote) {
+          linesNote.textContent = 'Solo includes 1 studio texting number. Enable it in the Get Bookking app under Messaging.';
+        }
+        note.textContent = 'Solo includes 1 studio texting number. Enable it in the Get Bookking app under Messaging.';
         note.classList.remove('hidden');
         return;
+      }
+      if (paidRow) paidRow.classList.remove('hidden');
+      if (linesNote) {
+        linesNote.innerHTML =
+          'Studio and Shop include 2 texting numbers. Any additional phone number is <span id="smsExtraPriceNote">' +
+          priceLabel +
+          '</span> (up to your plan seat limit). Tap a person to manage their line. Add or assign numbers below.';
       }
 
       if (m.smsAtMaxLines) {
@@ -664,56 +852,392 @@
         return;
       }
 
-      if (m.smsNeedsPurchaseForNextLine) {
+      var eligible = Array.isArray(m.smsEligibleMembers) ? m.smsEligibleMembers : [];
+      var needsPayNext =
+        !!m.smsNeedsPurchaseForNextLine ||
+        (!!m.smsAtMaxLines === false &&
+          Number(m.smsLinesUsed || 0) >= Number(m.smsFreeIncluded || 2));
+      if (needsPayNext || m.smsCanAddWithoutPurchase) {
         btn.classList.remove('hidden');
-        note.textContent = 'Included numbers are in use. Add another number for $5/mo, then set it up in the app for an independent teammate.';
-        note.classList.remove('hidden');
-        return;
-      }
-
-      if (m.smsCanAddWithoutPurchase) {
-        note.textContent = m.smsNextLineIsFree
-          ? 'You have an included line available. Enable it in the Bookking app (Messaging for the studio line, or Team → member for a personal line).'
-          : 'You have a paid slot ready. Set up the next personal line in the Bookking app under Team.';
+        if (needsPayNext) {
+          note.textContent =
+            'All included and paid slots are in use. Add another number for ' + priceLabel +
+            ' each — choose a teammate to assign it.';
+        } else if (!eligible.length) {
+          note.textContent =
+            'You have capacity available, but no independent teammates without a number. Invite a member or set payout to Independent in the app.';
+        } else {
+          note.textContent = m.smsNextLineIsFree
+            ? 'You have an included slot available. Choose a teammate to enable their personal line.'
+            : 'Confirm purchase for the next number ($10/mo), then choose a teammate.';
+        }
         note.classList.remove('hidden');
       }
     }
 
+    function smsNeedsPayForNext(m) {
+      m = m || messagingFromBilling();
+      if (m.smsAtMaxLines) return false;
+      if (m.smsNeedsPurchaseForNextLine) return true;
+      return Number(m.smsLinesUsed || 0) >= Number(m.smsFreeIncluded || 2);
+    }
+
     function openAddSmsLineModal() {
+      var m = messagingFromBilling();
+      var err = document.getElementById('addSmsLineModalError');
+      err.classList.add('hidden');
+      err.textContent = '';
+      document.getElementById('addSmsLineConsent').checked = false;
+      assigningMemberUid = null;
+      pendingAssignMember = null;
+      setAddSmsLineWorking(false);
+      closeSmsPurchaseConfirm();
+      var needsPay = smsNeedsPayForNext(m);
+      var payNote = document.getElementById('addSmsLinePayNote');
+      if (needsPay) payNote.classList.remove('hidden');
+      else payNote.classList.add('hidden');
+      document.getElementById('addSmsLineModalIntro').textContent = needsPay
+        ? 'Choose who gets the new number. You’ll confirm the charge before we set up their line.'
+        : 'Choose a teammate to enable their personal texting number.';
+      renderAddSmsMemberList(m.smsEligibleMembers || []);
       document.getElementById('addSmsLineModalBackdrop').classList.remove('hidden');
       document.getElementById('addSmsLineModal').classList.remove('hidden');
       document.getElementById('addSmsLineModal').setAttribute('aria-hidden', 'false');
       document.body.classList.add('acct-modal-open');
     }
 
+    function renderAddSmsMemberList(list) {
+      var ul = document.getElementById('addSmsLineMemberList');
+      var empty = document.getElementById('addSmsLineAssignEmpty');
+      ul.innerHTML = '';
+      var rows = Array.isArray(list) ? list : [];
+      if (!rows.length) {
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      rows.forEach(function(member) {
+        var li = document.createElement('li');
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bill-sms-assign-btn';
+        var title = document.createElement('div');
+        title.className = 'bill-sms-line-name';
+        title.textContent = member.name || 'Team member';
+        var sub = document.createElement('div');
+        sub.className = 'bill-sms-line-meta';
+        sub.textContent = [member.jobTitle, member.accessRole].filter(Boolean).join(' · ') || 'Independent';
+        btn.appendChild(title);
+        btn.appendChild(sub);
+        btn.addEventListener('click', function() {
+          assignSmsLineToMember(member);
+        });
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+    }
+
     function closeAddSmsLineModal() {
+      if (assigningMemberUid) return;
+      closeSmsPurchaseConfirm();
+      document.getElementById('addSmsLineWorking').classList.add('hidden');
       document.getElementById('addSmsLineModalBackdrop').classList.add('hidden');
       document.getElementById('addSmsLineModal').classList.add('hidden');
       document.getElementById('addSmsLineModal').setAttribute('aria-hidden', 'true');
       document.body.classList.remove('acct-modal-open');
+      assigningMemberUid = null;
+      pendingAssignMember = null;
     }
 
-    function runPurchaseSmsExtraLine() {
-      var btn = document.getElementById('addSmsLineBtn');
-      var confirmBtn = document.getElementById('addSmsLineModalConfirm');
-      var errEl = document.getElementById('billingError');
-      var successEl = document.getElementById('addSmsLineSuccess');
-      btn.disabled = true;
-      if (confirmBtn) confirmBtn.disabled = true;
-      errEl.classList.add('hidden');
-      successEl.classList.add('hidden');
-      return fns.httpsCallable('purchaseSmsExtraLine')({}).then(function() {
-        closeAddSmsLineModal();
-        successEl.classList.remove('hidden');
-        successEl.classList.add('was-shown');
-        return loadBilling();
-      }).catch(function(err) {
-        errEl.textContent = formatFirebaseHttpsError(err);
-        errEl.classList.remove('hidden');
-      }).finally(function() {
-        btn.disabled = false;
-        if (confirmBtn) confirmBtn.disabled = false;
-      });
+    function openSmsPurchaseConfirm(member, needsPay) {
+      pendingAssignMember = member;
+      var name = (member && member.name) || 'this teammate';
+      var priceLabel = smsExtraPriceLabel(messagingFromBilling());
+      var title = document.getElementById('smsPurchaseConfirmTitle');
+      var body = document.getElementById('smsPurchaseConfirmBody');
+      var okBtn = document.getElementById('smsPurchaseConfirmOk');
+      var err = document.getElementById('smsPurchaseConfirmError');
+      err.classList.add('hidden');
+      err.textContent = '';
+      if (needsPay) {
+        title.textContent = 'Confirm purchase';
+        body.innerHTML =
+          'Charge your card <strong>now</strong> for one additional texting number (' +
+          priceLabel +
+          ', prorated), then set up a line for <strong>' +
+          escapeHtml(name) +
+          '</strong>?';
+        okBtn.textContent = 'Charge & assign';
+      } else {
+        title.textContent = 'Assign number?';
+        body.innerHTML =
+          'Assign a texting number to <strong>' +
+          escapeHtml(name) +
+          '</strong>? No extra charge — you still have available capacity.';
+        okBtn.textContent = 'Assign number';
+      }
+      document.getElementById('smsPurchaseConfirmBackdrop').classList.remove('hidden');
+      document.getElementById('smsPurchaseConfirmModal').classList.remove('hidden');
+      document.getElementById('smsPurchaseConfirmModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function closeSmsPurchaseConfirm() {
+      document.getElementById('smsPurchaseConfirmBackdrop').classList.add('hidden');
+      document.getElementById('smsPurchaseConfirmModal').classList.add('hidden');
+      document.getElementById('smsPurchaseConfirmModal').setAttribute('aria-hidden', 'true');
+      if (!assigningMemberUid) pendingAssignMember = null;
+    }
+
+    function setAddSmsLineWorking(visible, title, sub) {
+      var panel = document.getElementById('addSmsLineWorking');
+      var form = document.getElementById('addSmsLineFormBody');
+      if (visible) {
+        document.getElementById('addSmsLineWorkingTitle').textContent = title || 'Working…';
+        document.getElementById('addSmsLineWorkingSub').textContent = sub || 'Please wait.';
+        panel.classList.remove('hidden');
+        form.classList.add('hidden');
+      } else {
+        panel.classList.add('hidden');
+        form.classList.remove('hidden');
+      }
+    }
+
+    /** After teammate pick: confirm charge (or free assign), then purchase + provision. */
+    function assignSmsLineToMember(member) {
+      var consent = document.getElementById('addSmsLineConsent').checked;
+      var err = document.getElementById('addSmsLineModalError');
+      var m = messagingFromBilling();
+      err.classList.add('hidden');
+      if (!consent) {
+        err.textContent = 'Turn on the consent checkbox before enabling a line.';
+        err.classList.remove('hidden');
+        return;
+      }
+      if (!member || !member.memberUid) return;
+      if (assigningMemberUid || pendingAssignMember) return;
+      openSmsPurchaseConfirm(member, smsNeedsPayForNext(m));
+    }
+
+    function confirmSmsPurchaseAndAssign() {
+      var member = pendingAssignMember;
+      var err = document.getElementById('smsPurchaseConfirmError');
+      var modalErr = document.getElementById('addSmsLineModalError');
+      if (!member || !member.memberUid) return;
+      if (assigningMemberUid) return;
+      assigningMemberUid = member.memberUid;
+      err.classList.add('hidden');
+      modalErr.classList.add('hidden');
+      closeSmsPurchaseConfirm();
+      pendingAssignMember = member;
+
+      var needsPay = smsNeedsPayForNext();
+      var name = member.name || 'your teammate';
+      var paidPurchaseAuthorizationId = '';
+      setAddSmsLineWorking(
+        true,
+        needsPay ? 'Charging card…' : 'Setting up number…',
+        needsPay
+          ? 'Confirming purchase for ' + name + ', then provisioning their line.'
+          : 'Provisioning a texting number for ' + name + '.'
+      );
+
+      // Refresh summary so we don't skip charge on stale client flags.
+      return fns
+        .httpsCallable('getBillingSummary')({})
+        .then(function(res) {
+          billingData = res.data || billingData;
+          var m = messagingFromBilling();
+          needsPay = smsNeedsPayForNext(m);
+          if (needsPay) {
+            setAddSmsLineWorking(
+              true,
+              'Charging card…',
+              'Adding ' + smsExtraPriceLabel(m) + ' to your subscription, then setting up ' + name + '.'
+            );
+            return fns.httpsCallable('purchaseSmsExtraLine')({
+              memberUid: member.memberUid,
+            }).then(function(result) {
+              var data = (result && result.data) || {};
+              paidPurchaseAuthorizationId =
+                String(data.smsPaidLinePurchaseAuthorizationId || '').trim();
+              if (!paidPurchaseAuthorizationId) {
+                throw new Error(
+                  'Stripe did not confirm the texting-number payment. No number was set up.'
+                );
+              }
+              setAddSmsLineWorking(
+                true,
+                'Setting up number…',
+                'Purchase confirmed. Provisioning a line for ' + name + '.'
+              );
+            });
+          }
+          setAddSmsLineWorking(
+            true,
+            'Setting up number…',
+            'Provisioning a texting number for ' + name + '.'
+          );
+        })
+        .then(function() {
+          var payload = {
+            memberUid: member.memberUid,
+            smsConsentAccepted: true,
+          };
+          if (paidPurchaseAuthorizationId) {
+            payload.smsPaidLinePurchaseAuthorizationId = paidPurchaseAuthorizationId;
+          }
+          return fns.httpsCallable('requestSmsPhoneNumber')(payload);
+        })
+        .then(function(res) {
+          var data = (res && res.data) || {};
+          if (data.needsOwnerPurchase) {
+            throw new Error(
+              data.message ||
+                'This line needs a paid slot. Confirm purchase and try again.'
+            );
+          }
+          assigningMemberUid = null;
+          pendingAssignMember = null;
+          closeAddSmsLineModal();
+          setAddSmsLineWorking(false);
+          var successEl = document.getElementById('addSmsLineSuccess');
+          successEl.textContent =
+            'Setting up a number for ' + name + '. This can take a moment — refresh if it is not listed yet.';
+          successEl.classList.remove('hidden');
+          successEl.classList.add('was-shown');
+          return loadBilling();
+        })
+        .catch(function(e) {
+          setAddSmsLineWorking(false);
+          // Restore pay note visibility from current messaging flags.
+          var m = messagingFromBilling();
+          var payNote = document.getElementById('addSmsLinePayNote');
+          if (smsNeedsPayForNext(m)) payNote.classList.remove('hidden');
+          else payNote.classList.add('hidden');
+          else payNote.classList.add('hidden');
+          modalErr.textContent = formatFirebaseHttpsError(e);
+          modalErr.classList.remove('hidden');
+        })
+        .finally(function() {
+          assigningMemberUid = null;
+          pendingAssignMember = null;
+        });
+    }
+
+    function openSmsLineDetail(row) {
+      selectedSmsLineDetail = row || null;
+      if (!selectedSmsLineDetail) return;
+      document.getElementById('smsDetailError').classList.add('hidden');
+      document.getElementById('smsDetailCopied').classList.add('hidden');
+      document.getElementById('smsDetailRemoving').classList.add('hidden');
+      document.getElementById('smsDetailRemoved').classList.add('hidden');
+      document.getElementById('smsDetailActions').classList.remove('hidden');
+      document.getElementById('smsLineDetailTitle').textContent = row.name || 'Line';
+      document.getElementById('smsDetailName').textContent = row.name || '—';
+      document.getElementById('smsDetailType').textContent = row.role || '—';
+      var phoneDisplay = formatSmsPhoneDisplay(row.phone);
+      var numBtn = document.getElementById('smsDetailNumberBtn');
+      numBtn.textContent = phoneDisplay;
+      numBtn.disabled = !row.phone;
+      document.getElementById('smsDetailStatus').textContent = smsStatusLabel(row.status);
+      var used = row.smsMonthlyUsageCount != null ? row.smsMonthlyUsageCount : 0;
+      var limit = row.smsMonthlyLimit != null ? row.smsMonthlyLimit : 1000;
+      document.getElementById('smsDetailUsage').textContent = used + ' of ' + limit;
+      var removeBtn = document.getElementById('smsDetailRemoveBtn');
+      if (row.kind === 'studio' || row.kind === 'personal') {
+        removeBtn.classList.remove('hidden');
+        removeBtn.textContent = row.kind === 'studio' ? 'Remove studio number' : 'Remove number';
+      } else {
+        removeBtn.classList.add('hidden');
+      }
+      document.getElementById('smsLineDetailModalBackdrop').classList.remove('hidden');
+      document.getElementById('smsLineDetailModal').classList.remove('hidden');
+      document.getElementById('smsLineDetailModal').setAttribute('aria-hidden', 'false');
+      document.body.classList.add('acct-modal-open');
+    }
+
+    function closeSmsLineDetail() {
+      document.getElementById('smsLineDetailModalBackdrop').classList.add('hidden');
+      document.getElementById('smsLineDetailModal').classList.add('hidden');
+      document.getElementById('smsLineDetailModal').setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('acct-modal-open');
+      selectedSmsLineDetail = null;
+    }
+
+    function copySmsDetailNumber() {
+      var row = selectedSmsLineDetail;
+      if (!row || !row.phone) return;
+      var raw = String(row.phone).trim();
+      var digits = raw.replace(/\D/g, '');
+      var value = raw;
+      if (digits.length === 10) value = '+1' + digits;
+      else if (digits.length === 11 && digits.charAt(0) === '1') value = '+' + digits;
+      else if (raw.charAt(0) === '+') value = raw;
+      function showCopied() {
+        var el = document.getElementById('smsDetailCopied');
+        el.classList.remove('hidden');
+        setTimeout(function() { el.classList.add('hidden'); }, 1200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(showCopied).catch(showCopied);
+      } else {
+        showCopied();
+      }
+    }
+
+    function openSmsRemoveConfirm() {
+      var row = selectedSmsLineDetail;
+      if (!row) return;
+      document.getElementById('smsRemoveConfirmTitle').textContent =
+        'Remove number for ' + (row.name || 'this line') + '?';
+      document.getElementById('smsRemoveConfirmBackdrop').classList.remove('hidden');
+      document.getElementById('smsRemoveConfirmModal').classList.remove('hidden');
+      document.getElementById('smsRemoveConfirmModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function closeSmsRemoveConfirm() {
+      document.getElementById('smsRemoveConfirmBackdrop').classList.add('hidden');
+      document.getElementById('smsRemoveConfirmModal').classList.add('hidden');
+      document.getElementById('smsRemoveConfirmModal').setAttribute('aria-hidden', 'true');
+    }
+
+    function runReleaseSmsLine() {
+      var row = selectedSmsLineDetail;
+      if (!row) return;
+      closeSmsRemoveConfirm();
+      document.getElementById('smsDetailActions').classList.add('hidden');
+      document.getElementById('smsDetailError').classList.add('hidden');
+      document.getElementById('smsDetailRemoving').classList.remove('hidden');
+      document.getElementById('smsDetailRemovingTitle').textContent =
+        'Removing ' + (row.name || 'number') + '…';
+      var payload =
+        row.kind === 'studio'
+          ? { scope: 'studio' }
+          : { scope: 'personal', memberUid: row.memberUid };
+      return fns
+        .httpsCallable('releaseSmsPhoneNumber')(payload)
+        .then(function() {
+          document.getElementById('smsDetailRemoving').classList.add('hidden');
+          document.getElementById('smsDetailRemoved').classList.remove('hidden');
+          document.getElementById('smsDetailRemovedTitle').textContent =
+            'Removed ' + (row.name || 'number');
+          return loadBilling();
+        })
+        .catch(function(err) {
+          document.getElementById('smsDetailRemoving').classList.add('hidden');
+          document.getElementById('smsDetailActions').classList.remove('hidden');
+          var errEl = document.getElementById('smsDetailError');
+          errEl.textContent = formatFirebaseHttpsError(err);
+          errEl.classList.remove('hidden');
+        });
     }
 
     function openCancelModal() {
@@ -781,10 +1305,24 @@
     });
 
     document.getElementById('addSmsLineBtn').addEventListener('click', openAddSmsLineModal);
-    document.getElementById('addSmsLineModalConfirm').addEventListener('click', runPurchaseSmsExtraLine);
     document.getElementById('addSmsLineModalClose').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalCancel').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalBackdrop').addEventListener('click', closeAddSmsLineModal);
+    document.getElementById('smsPurchaseConfirmClose').addEventListener('click', closeSmsPurchaseConfirm);
+    document.getElementById('smsPurchaseConfirmCancel').addEventListener('click', closeSmsPurchaseConfirm);
+    document.getElementById('smsPurchaseConfirmBackdrop').addEventListener('click', closeSmsPurchaseConfirm);
+    document.getElementById('smsPurchaseConfirmOk').addEventListener('click', confirmSmsPurchaseAndAssign);
+
+    document.getElementById('smsLineDetailClose').addEventListener('click', closeSmsLineDetail);
+    document.getElementById('smsDetailCancel').addEventListener('click', closeSmsLineDetail);
+    document.getElementById('smsLineDetailModalBackdrop').addEventListener('click', closeSmsLineDetail);
+    document.getElementById('smsDetailNumberBtn').addEventListener('click', copySmsDetailNumber);
+    document.getElementById('smsDetailRemoveBtn').addEventListener('click', openSmsRemoveConfirm);
+    document.getElementById('smsDetailRemovedDone').addEventListener('click', closeSmsLineDetail);
+    document.getElementById('smsRemoveConfirmClose').addEventListener('click', closeSmsRemoveConfirm);
+    document.getElementById('smsRemoveConfirmCancel').addEventListener('click', closeSmsRemoveConfirm);
+    document.getElementById('smsRemoveConfirmBackdrop').addEventListener('click', closeSmsRemoveConfirm);
+    document.getElementById('smsRemoveConfirmOk').addEventListener('click', runReleaseSmsLine);
 
     document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
     document.getElementById('changePaymentBtn').addEventListener('click', openBillingPortal);
@@ -804,7 +1342,13 @@
     document.getElementById('startSubModalBackdrop').addEventListener('click', closeStartSubModal);
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        if (!document.getElementById('cancelModal').classList.contains('hidden')) {
+        if (!document.getElementById('smsPurchaseConfirmModal').classList.contains('hidden')) {
+          closeSmsPurchaseConfirm();
+        } else if (!document.getElementById('smsRemoveConfirmModal').classList.contains('hidden')) {
+          closeSmsRemoveConfirm();
+        } else if (!document.getElementById('smsLineDetailModal').classList.contains('hidden')) {
+          closeSmsLineDetail();
+        } else if (!document.getElementById('cancelModal').classList.contains('hidden')) {
           closeCancelModal();
         } else if (!document.getElementById('startSubModal').classList.contains('hidden')) {
           closeStartSubModal();
@@ -839,7 +1383,7 @@
         history.replaceState({}, '', 'billing.html');
         var okEl = document.getElementById('connectStripeStatus');
         if (okEl) {
-          okEl.textContent = 'Stripe application submitted. Status updates here and in the Bookking app when payouts are enabled.';
+          okEl.textContent = 'Stripe application submitted. Status updates here and in the Get Bookking app when payouts are enabled.';
           okEl.classList.remove('hidden');
         }
       } else if (stripeParam === 'refresh') {

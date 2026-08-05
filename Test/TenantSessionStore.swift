@@ -271,7 +271,9 @@ final class TenantSessionStore: ObservableObject {
                     return message.content
                 }(),
                 lastMessageAt: message.createdAt,
-                assignedMemberUid: thread.assignedMemberUid
+                assignedMemberUid: thread.assignedMemberUid,
+                smsLineScope: thread.smsLineScope,
+                counterpartPhone: thread.counterpartPhone
             )
         }
     }
@@ -630,6 +632,8 @@ final class TenantSessionStore: ObservableObject {
                     smsStatus: (row["smsStatus"] as? String) ?? "off",
                     smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                     smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
+                    smsMonthlyUsageCount: (row["smsMonthlyUsageCount"] as? Int) ?? 0,
+                    smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
                     effectiveConfirmationType: parseEffectiveConfirmationType(row)
@@ -653,6 +657,8 @@ final class TenantSessionStore: ObservableObject {
                 smsStatus: (row["smsStatus"] as? String) ?? "off",
                 smsPhoneNumber: (row["smsPhoneNumber"] as? String) ?? "",
                 smsLineRequestPending: row["smsLineRequestPending"] as? Bool ?? false,
+                smsMonthlyUsageCount: (row["smsMonthlyUsageCount"] as? Int) ?? 0,
+                smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
                 effectiveConfirmationType: parseEffectiveConfirmationType(row)

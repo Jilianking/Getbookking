@@ -40,26 +40,32 @@ const FIREBASE_CLI_CLIENT_ID =
 const FIREBASE_CLI_CLIENT_SECRET =
   process.env.FIREBASE_CLIENT_SECRET || "j9iVZfS8kkCEFUPaAeJV0sAi";
 
-const MEMBER_PRESETS = [
-  {
-    email: "alex.team.test1000@example.com",
-    firstName: "Alex",
-    lastName: "Rivera",
-    phone: "(555) 201-1001",
-  },
-  {
-    email: "jordan.team.test1000@example.com",
-    firstName: "Jordan",
-    lastName: "Lee",
-    phone: "(555) 201-1002",
-  },
-  {
-    email: "sam.team.test1000@example.com",
-    firstName: "Sam",
-    lastName: "Patel",
-    phone: "(555) 201-1003",
-  },
+/**
+ * Name pool — emails become {first}.team.{ownerLocal}@domain.
+ * Do not reuse first names already seeded on other test tenants
+ * (alex/jordan/sam, nina/drew/harper/blake/skyler/reese, etc.).
+ */
+const MEMBER_NAME_PRESETS = [
+  { firstName: "Cameron", lastName: "Walsh", phone: "(555) 401-4001" },
+  { firstName: "Parker", lastName: "Singh", phone: "(555) 401-4002" },
+  { firstName: "Finley", lastName: "Cruz", phone: "(555) 401-4003" },
+  { firstName: "Kai", lastName: "Mendoza", phone: "(555) 401-4004" },
+  { firstName: "Elena", lastName: "Soto", phone: "(555) 401-4005" },
+  { firstName: "Miles", lastName: "Chen", phone: "(555) 401-4006" },
+  { firstName: "Ivy", lastName: "Torres", phone: "(555) 401-4007" },
+  { firstName: "Noah", lastName: "Bennett", phone: "(555) 401-4008" },
+  { firstName: "Lena", lastName: "Pratt", phone: "(555) 401-4009" },
 ];
+
+/** Build member emails like alex.team.test3000@example.com from owner email. */
+function memberPresetsForOwner(ownerEmail, count) {
+  const local = (ownerEmail || "owner").split("@")[0].replace(/[^a-z0-9._-]/gi, "");
+  const domain = (ownerEmail || "x@example.com").split("@")[1] || "example.com";
+  return MEMBER_NAME_PRESETS.slice(0, count).map((m) => ({
+    ...m,
+    email: `${m.firstName.toLowerCase()}.team.${local}@${domain}`,
+  }));
+}
 
 function firebaseToolsRefreshToken() {
   const cfgPath = path.join(
@@ -302,16 +308,6 @@ Default password: ${DEFAULT_PASSWORD}
   console.log(`Industry: ${industry} → job title: ${jobTitle}`);
   console.log(`Plan: ${plan}`);
 
-  if (plan === "solo") {
-    await db.collection("tenants").doc(tenant.id).update({
-      subscriptionPlan: "studio",
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    tenant.data.subscriptionPlan = "studio";
-    plan = "studio";
-    console.log("Upgraded tenant subscriptionPlan to studio (team seats).");
-  }
-
   const rosterSnap = await db
     .collection("users")
     .where("tenantId", "==", tenant.id)
@@ -320,12 +316,38 @@ Default password: ${DEFAULT_PASSWORD}
     rosterSnap.docs.map((d) => (d.data().email || "").toLowerCase()).filter(Boolean)
   );
 
-  const members = MEMBER_PRESETS.slice(0, args.count);
+  const ownerEmail =
+    args.email ||
+    (rosterSnap.docs
+      .map((d) => d.data())
+      .find((u) => (u.accessRole || u.role) === "owner") || {}).email ||
+    `owner@example.com`;
+  const members = memberPresetsForOwner(ownerEmail, args.count);
   const toAdd = members.filter((m) => !existingEmails.has(m.email.toLowerCase()));
-  if (rosterSnap.size + toAdd.length > maxSeats(plan)) {
-    throw new Error(
-      `Seat limit ${maxSeats(plan)} on plan ${plan}; roster ${rosterSnap.size}, adding ${toAdd.length}.`
-    );
+  const neededSeats = rosterSnap.size + toAdd.length;
+
+  if (neededSeats > maxSeats(plan)) {
+    const targetPlan = neededSeats > 5 ? "shop" : "studio";
+    if (maxSeats(targetPlan) < neededSeats) {
+      throw new Error(
+        `Seat limit ${maxSeats(plan)} on plan ${plan}; roster ${rosterSnap.size}, adding ${toAdd.length}.`
+      );
+    }
+    await db.collection("tenants").doc(tenant.id).update({
+      subscriptionPlan: targetPlan,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    tenant.data.subscriptionPlan = targetPlan;
+    plan = targetPlan;
+    console.log(`Upgraded tenant subscriptionPlan to ${targetPlan} (team seats).`);
+  } else if (plan === "solo") {
+    await db.collection("tenants").doc(tenant.id).update({
+      subscriptionPlan: "studio",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    tenant.data.subscriptionPlan = "studio";
+    plan = "studio";
+    console.log("Upgraded tenant subscriptionPlan to studio (team seats).");
   }
 
   console.log(`\nProcessing ${members.length} invite signup(s)…\n`);

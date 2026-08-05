@@ -858,10 +858,10 @@ private struct AccountSettingsDetailView: View {
                             if billingViewModel.hasStripeBillingCustomer,
                                billingViewModel.subscriptionTrialing {
                                 Button {
-                                    Task { await billingViewModel.openBillingToStartSubscription() }
+                                    Task { _ = await billingViewModel.startSubscriptionToday() }
                                 } label: {
                                     HStack {
-                                        if billingViewModel.isOpeningBillingWebsite {
+                                        if billingViewModel.isStartingSubscription {
                                             ProgressView()
                                                 .scaleEffect(0.9)
                                         }
@@ -869,6 +869,7 @@ private struct AccountSettingsDetailView: View {
                                     }
                                 }
                                 .disabled(
+                                    billingViewModel.isStartingSubscription ||
                                     billingViewModel.isOpeningBillingWebsite ||
                                     billingViewModel.isOpeningBillingPortal
                                 )

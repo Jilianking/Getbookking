@@ -148,7 +148,7 @@ struct CardCheckoutBreakdownView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Processing fee details")
-                        .popover(isPresented: $showFeeDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
+                        .popover(isPresented: $showFeeDetails, arrowEdge: .bottom) {
                             feeDetailsPopover
                         }
                     }
@@ -177,6 +177,9 @@ struct CardCheckoutBreakdownView: View {
         .padding(compact ? 10 : 12)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onChange(of: breakdown) { _, _ in
+            showFeeDetails = false
+        }
     }
 
     private var feeDetailsPopover: some View {
@@ -211,7 +214,8 @@ struct CardCheckoutBreakdownView: View {
         .foregroundStyle(.secondary)
         .padding(12)
         .frame(minWidth: 248, idealWidth: 268, maxWidth: 300, alignment: .leading)
-        .presentationCompactAdaptation(.popover)
+        // Use the system sheet on iPhone so a compact popover can't float over controls.
+        .presentationCompactAdaptation(.sheet)
     }
 
     private func feeDetailLine(title: String, amount: Int) -> some View {

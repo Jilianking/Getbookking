@@ -8,6 +8,30 @@ struct SmsThreadSummary: Identifiable, Equatable {
     let lastMessageBody: String
     let lastMessageAt: Date?
     let assignedMemberUid: String?
+    let smsLineScope: String?
+    let counterpartPhone: String?
+
+    /// Studio / owner inbox threads (not a teammate personal line).
+    var isStudioLine: Bool {
+        let scope = (smsLineScope ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if scope == "member" { return false }
+        if let assigned = assignedMemberUid,
+           !assigned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return false
+        }
+        if PhoneFormatting.isLineScopedThreadId(threadId) { return false }
+        return true
+    }
+
+    var clientPhoneForSend: String {
+        if let counterpart = counterpartPhone?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !counterpart.isEmpty,
+           let e164 = PhoneFormatting.e164US(counterpart) {
+            return e164
+        }
+        return PhoneFormatting.clientPhoneFromThreadId(threadId)
+            ?? threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     static func fromFirestore(document: QueryDocumentSnapshot) -> SmsThreadSummary? {
         let data = document.data()
@@ -24,12 +48,18 @@ struct SmsThreadSummary: Identifiable, Equatable {
         let lastMessageAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
         let assignedMemberUid = (data["assignedMemberUid"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let smsLineScope = (data["smsLineScope"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let counterpartPhone = (data["counterpartPhone"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return SmsThreadSummary(
             threadId: threadId,
             clientName: clientName,
             lastMessageBody: lastMessageBody,
             lastMessageAt: lastMessageAt,
-            assignedMemberUid: assignedMemberUid?.isEmpty == false ? assignedMemberUid : nil
+            assignedMemberUid: assignedMemberUid?.isEmpty == false ? assignedMemberUid : nil,
+            smsLineScope: smsLineScope?.isEmpty == false ? smsLineScope : nil,
+            counterpartPhone: counterpartPhone?.isEmpty == false ? counterpartPhone : nil
         )
     }
 }

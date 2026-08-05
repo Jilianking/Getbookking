@@ -168,26 +168,42 @@ class MessagesViewModel: ObservableObject {
         amountCents: Int? = nil,
         paymentUrl: String? = nil,
         isDemoMode: Bool = false,
-        sessionStore: TenantSessionStore? = nil
+        sessionStore: TenantSessionStore? = nil,
+        memberLinePhone: String? = nil
     ) async -> Bool {
         let normalizedThreadId = PhoneFormatting.smsThreadId(threadId)
-        var finalClientId = clientId.map { PhoneFormatting.smsThreadId($0) }
+        let summary = summary(for: normalizedThreadId)
+        var finalClientId = clientId.flatMap { PhoneFormatting.e164US($0) }
+            ?? summary.map { $0.clientPhoneForSend }
         var finalClientName = clientName?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if finalClientId == nil || (finalClientName ?? "").isEmpty {
             if let existingMessages = messages[normalizedThreadId], let firstMessage = existingMessages.first {
-                finalClientId = finalClientId ?? PhoneFormatting.smsThreadId(firstMessage.clientId)
+                finalClientId = finalClientId ?? PhoneFormatting.e164US(firstMessage.clientId)
                 if (finalClientName ?? "").isEmpty {
                     finalClientName = firstMessage.clientName
                 }
             }
         }
 
-        guard let clientId = finalClientId ?? PhoneFormatting.e164US(threadId) else {
+        if finalClientId == nil {
+            finalClientId = PhoneFormatting.clientPhoneFromThreadId(normalizedThreadId)
+        }
+
+        guard let clientId = finalClientId else {
             await MainActor.run {
                 lastError = "Enter a valid phone number."
             }
             return false
+        }
+
+        // New compose from a personal line: use line-scoped thread id up front.
+        var outboundThreadId = normalizedThreadId
+        if !PhoneFormatting.isLineScopedThreadId(outboundThreadId),
+           let linePhone = memberLinePhone?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !linePhone.isEmpty,
+           let scoped = PhoneFormatting.lineScopedThreadId(linePhone: linePhone, clientPhone: clientId) {
+            outboundThreadId = scoped
         }
 
         let resolvedName: String = {
@@ -220,7 +236,7 @@ class MessagesViewModel: ObservableObject {
             sender: .admin,
             createdAt: Date(),
             read: false,
-            threadId: normalizedThreadId,
+            threadId: outboundThreadId,
             paymentKind: resolvedPaymentKind,
             amountCents: resolvedPaymentKind != nil ? amountCents : nil,
             paymentUrl: resolvedPaymentKind != nil ? trimmedUrl : nil
@@ -232,16 +248,16 @@ class MessagesViewModel: ObservableObject {
         }
 
         if isDemoMode, let sessionStore, sessionStore.isDemoSession {
-            sessionStore.appendDemoOutboundMessage(threadId: normalizedThreadId, message: message)
-            _ = await loadMessages(for: normalizedThreadId, isDemoMode: true, sessionStore: sessionStore)
+            sessionStore.appendDemoOutboundMessage(threadId: outboundThreadId, message: message)
+            _ = await loadMessages(for: outboundThreadId, isDemoMode: true, sessionStore: sessionStore)
             await loadThreads(isDemoMode: true, sessionStore: sessionStore)
             await MainActor.run { isSending = false }
             return true
         }
 
         do {
-            try await firebaseService.sendMessage(message)
-            _ = await loadMessages(for: normalizedThreadId)
+            let returnedThreadId = try await firebaseService.sendMessage(message)
+            _ = await loadMessages(for: returnedThreadId)
             await loadThreads()
             await MainActor.run {
                 isSending = false

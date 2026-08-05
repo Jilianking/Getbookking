@@ -175,7 +175,11 @@ enum DemoSnapshotParser {
             clientName: clientName,
             lastMessageBody: (dict["lastMessageBody"] as? String) ?? "",
             lastMessageAt: parseDate(dict["lastMessageAt"]),
-            assignedMemberUid: assignedRaw?.isEmpty == false ? assignedRaw : nil
+            assignedMemberUid: assignedRaw?.isEmpty == false ? assignedRaw : nil,
+            smsLineScope: (dict["smsLineScope"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            counterpartPhone: (dict["counterpartPhone"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

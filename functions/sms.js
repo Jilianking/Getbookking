@@ -13,9 +13,12 @@ const masterTwilioMessagingServiceSid = defineString("MASTER_TWILIO_MESSAGING_SE
   default: "",
   description: "Twilio Messaging Service SID for the approved US A2P 10DLC campaign",
 });
-const MAX_TENANT_SMS_PER_MONTH = 1000;
+/** Per texting line (studio or personal): 1,000 inbound+outbound / calendar month UTC. */
+const MAX_SMS_PER_LINE_PER_MONTH = 1000;
+/** @deprecated alias — kept for existing imports */
+const MAX_TENANT_SMS_PER_MONTH = MAX_SMS_PER_LINE_PER_MONTH;
 const SMS_MONTHLY_LIMIT_MESSAGE =
-  "Monthly SMS limit reached (1,000 messages including sent and received). Resets next calendar month (UTC).";
+  "Monthly SMS limit reached for this texting number (1,000 messages including sent and received). Resets next calendar month (UTC).";
 
 function currentSmsUsagePeriodUtc() {
   const d = new Date();
@@ -24,32 +27,50 @@ function currentSmsUsagePeriodUtc() {
   return `${y}-${m}`;
 }
 
-/** Inbound + outbound messages counted toward the monthly cap. */
-function smsMonthlyUsageForTenant(tenant) {
+/** Usage snapshot for a document that stores smsUsageCount / smsUsagePeriod. */
+function smsMonthlyUsageFromDoc(docData) {
   const period = currentSmsUsagePeriodUtc();
-  const storedPeriod = (tenant && tenant.smsUsagePeriod) || "";
+  const storedPeriod = (docData && docData.smsUsagePeriod) || "";
   if (storedPeriod === period) {
+    const count = Number(docData.smsUsageCount || 0);
     return {
       period,
-      count: Number(tenant.smsUsageCount || 0),
-      limit: MAX_TENANT_SMS_PER_MONTH,
-      remaining: Math.max(0, MAX_TENANT_SMS_PER_MONTH - Number(tenant.smsUsageCount || 0)),
+      count,
+      limit: MAX_SMS_PER_LINE_PER_MONTH,
+      remaining: Math.max(0, MAX_SMS_PER_LINE_PER_MONTH - count),
     };
   }
   return {
     period,
     count: 0,
-    limit: MAX_TENANT_SMS_PER_MONTH,
-    remaining: MAX_TENANT_SMS_PER_MONTH,
+    limit: MAX_SMS_PER_LINE_PER_MONTH,
+    remaining: MAX_SMS_PER_LINE_PER_MONTH,
   };
 }
 
+/** Studio line monthly usage (tenant fields). */
+function smsMonthlyUsageForTenant(tenant) {
+  return smsMonthlyUsageFromDoc(tenant);
+}
+
+/** Personal line monthly usage (user fields). */
+function smsMonthlyUsageForMember(memberData) {
+  return smsMonthlyUsageFromDoc(memberData);
+}
+
 /**
- * Reserve one message against the tenant monthly cap (atomic). Throws if at limit.
+ * Reserve one message against the line's monthly cap (atomic).
+ * @param {string} tenantId
+ * @param {{ memberUid?: string|null }} [opts] — if memberUid set, count against personal line; else studio.
  */
-async function consumeSmsMonthlySlot(tenantId) {
+async function consumeSmsMonthlySlot(tenantId, opts) {
+  const memberUid = (opts && opts.memberUid) || "";
   const period = currentSmsUsagePeriodUtc();
-  const ref = getDb().collection("tenants").doc(tenantId);
+  const isPersonal = !!(memberUid && String(memberUid).trim());
+  const ref = isPersonal
+    ? getDb().collection("users").doc(String(memberUid).trim())
+    : getDb().collection("tenants").doc(tenantId);
+
   await getDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() : {};
@@ -57,7 +78,7 @@ async function consumeSmsMonthlySlot(tenantId) {
     if ((data.smsUsagePeriod || "").toString() === period) {
       count = Number(data.smsUsageCount || 0);
     }
-    if (count >= MAX_TENANT_SMS_PER_MONTH) {
+    if (count >= MAX_SMS_PER_LINE_PER_MONTH) {
       throw new Error(SMS_MONTHLY_LIMIT_MESSAGE);
     }
     tx.set(
@@ -209,6 +230,49 @@ function threadIdFromPhone(phone) {
   return normalized || (phone || "").toString().trim();
 }
 
+/**
+ * Conversation id scoped to the Twilio number that was texted.
+ * Studio (tenant) keeps legacy client-phone ids for backward compatibility.
+ * Personal lines: l{lineDigits}_c{clientDigits} so owner/studio inbox stays separate.
+ */
+function lineScopedThreadId({ linePhone, clientPhone, lineScope, memberUid }) {
+  const client = threadIdFromPhone(clientPhone);
+  if (!client) return "";
+  const scope = (lineScope || "tenant").toString();
+  if (scope === "member" || (memberUid || "").toString().trim()) {
+    const line = threadIdFromPhone(linePhone);
+    const lineDigits = (line || "").replace(/\D/g, "");
+    const clientDigits = (client || "").replace(/\D/g, "");
+    if (lineDigits && clientDigits) {
+      return `l${lineDigits}_c${clientDigits}`;
+    }
+  }
+  return client;
+}
+
+function isLineScopedThreadId(threadId) {
+  return /^l\d+_c\d+$/.test((threadId || "").toString().trim());
+}
+
+function clientPhoneFromThreadId(threadId) {
+  const tid = (threadId || "").toString().trim();
+  if (isLineScopedThreadId(tid)) {
+    const clientDigits = tid.split("_c")[1] || "";
+    return toE164US(clientDigits) || "";
+  }
+  return threadIdFromPhone(tid);
+}
+
+function isStudioSmsThread(threadData) {
+  if (!threadData || typeof threadData !== "object") return true;
+  const scope = (threadData.smsLineScope || "").toString().trim().toLowerCase();
+  if (scope === "member") return false;
+  const assigned = (threadData.assignedMemberUid || "").toString().trim();
+  if (assigned) return false;
+  if (isLineScopedThreadId(threadData.threadId || "")) return false;
+  return true;
+}
+
 async function upsertSmsThread(tenantId, threadId, patch) {
   if (!tenantId || !threadId) return;
   await getDb()
@@ -278,25 +342,72 @@ async function detachNumberFromMasterMessagingService(master, messagingServiceSi
 }
 
 /**
- * Release a team member's personal Twilio number (best effort). Caller clears Firestore SMS fields.
+ * Release a Twilio number SID (detach messaging service + delete resource). Best effort.
  */
-async function releaseMemberSms(memberData) {
-  const phoneSid = (memberData.smsPhoneNumberSid || "").toString().trim();
-  if (!phoneSid) return { released: false };
+async function releaseTwilioPhoneSid(phoneSid) {
+  const sid = (phoneSid || "").toString().trim();
+  if (!sid) return { released: false };
   try {
     const master = getMasterTwilioClient();
     const messagingServiceSid = getMasterMessagingServiceSid();
-    await detachNumberFromMasterMessagingService(master, messagingServiceSid, phoneSid);
+    await detachNumberFromMasterMessagingService(master, messagingServiceSid, sid);
     try {
-      await master.incomingPhoneNumbers(phoneSid).remove();
+      await master.incomingPhoneNumbers(sid).remove();
     } catch (e) {
-      console.warn("releaseMemberSms: remove incoming number", phoneSid, e.message || e);
+      console.warn("releaseTwilioPhoneSid: remove incoming number", sid, e.message || e);
     }
     return { released: true };
   } catch (e) {
-    console.warn("releaseMemberSms: twilio release failed", e.message || e);
+    console.warn("releaseTwilioPhoneSid: twilio release failed", e.message || e);
     return { released: false };
   }
+}
+
+/**
+ * Release a team member's personal Twilio number (best effort). Caller clears Firestore SMS fields.
+ */
+async function releaseMemberSms(memberData) {
+  return releaseTwilioPhoneSid(memberData && memberData.smsPhoneNumberSid);
+}
+
+/**
+ * Release the tenant (studio) Twilio number (best effort). Caller clears Firestore fields.
+ */
+async function releaseTenantSms(tenant) {
+  return releaseTwilioPhoneSid(tenant && tenant.smsPhoneNumberSid);
+}
+
+/** Firestore fields to clear after releasing a personal SMS line. */
+function personalSmsClearedFields() {
+  return {
+    smsPhoneNumber: admin.firestore.FieldValue.delete(),
+    smsPhoneNumberSid: admin.firestore.FieldValue.delete(),
+    smsStatus: "off",
+    smsEnabled: false,
+    smsEnabledAt: admin.firestore.FieldValue.delete(),
+    smsProvisionError: admin.firestore.FieldValue.delete(),
+    smsSuspendedAt: admin.firestore.FieldValue.delete(),
+    smsSuspendReason: admin.firestore.FieldValue.delete(),
+    smsLineRequestPending: admin.firestore.FieldValue.delete(),
+    smsLineRequestedAt: admin.firestore.FieldValue.delete(),
+    smsLineRequestConsentAccepted: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+/** Firestore fields to clear after releasing the studio line. */
+function tenantSmsClearedFields() {
+  return {
+    smsPhoneNumber: admin.firestore.FieldValue.delete(),
+    smsPhoneNumberSid: admin.firestore.FieldValue.delete(),
+    smsStatus: "off",
+    smsEnabled: false,
+    smsEnabledAt: admin.firestore.FieldValue.delete(),
+    smsProvisionError: admin.firestore.FieldValue.delete(),
+    smsSuspendedAt: admin.firestore.FieldValue.delete(),
+    smsSuspendReason: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
 }
 
 async function ensureMasterIncomingNumber(master, tenant, webhook) {
@@ -362,8 +473,10 @@ async function provisionTenantSms(tenantId, tenant) {
   const webhook = inboundWebhookUrl();
 
   let numberResource = await ensureMasterIncomingNumber(master, tenant, webhook);
+  let boughtNew = false;
   if (!numberResource) {
     numberResource = await buyMasterLocalNumber(master, areaCode);
+    boughtNew = true;
     if (webhook) {
       await master.incomingPhoneNumbers(numberResource.sid).update({
         smsUrl: webhook,
@@ -375,23 +488,24 @@ async function provisionTenantSms(tenantId, tenant) {
   await attachNumberToMasterMessagingService(master, messagingServiceSid, numberResource.sid);
 
   const e164 = numberResource.phoneNumber;
-  await getDb().collection("tenants").doc(tenantId).set(
-    {
-      twilioMessagingServiceSid: messagingServiceSid,
-      twilioSubaccountSid: admin.firestore.FieldValue.delete(),
-      smsPhoneNumber: e164,
-      smsPhoneNumberSid: numberResource.sid,
-      smsAreaCode: areaCode,
-      smsStatus: "active",
-      smsEnabled: true,
-      smsEnabledAt: admin.firestore.FieldValue.serverTimestamp(),
-      smsProvisionError: admin.firestore.FieldValue.delete(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const patch = {
+    twilioMessagingServiceSid: messagingServiceSid,
+    twilioSubaccountSid: admin.firestore.FieldValue.delete(),
+    smsPhoneNumber: e164,
+    smsPhoneNumberSid: numberResource.sid,
+    smsAreaCode: areaCode,
+    smsStatus: "active",
+    smsEnabled: true,
+    smsEnabledAt: admin.firestore.FieldValue.serverTimestamp(),
+    smsProvisionError: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (boughtNew) {
+    patch.smsLifetimeNumbersBought = admin.firestore.FieldValue.increment(1);
+  }
+  await getDb().collection("tenants").doc(tenantId).set(patch, { merge: true });
 
-  return { phoneNumber: e164, messagingServiceSid };
+  return { phoneNumber: e164, messagingServiceSid, boughtNew };
 }
 
 function memberPayoutMode(memberData) {
@@ -417,6 +531,18 @@ function countsAsOccupiedSmsLine(smsStatus) {
 }
 
 /**
+ * True when this record holds (or is setting up) a Twilio inventory slot.
+ * Includes phone/SID leftovers so UI and billing never under-count vs Twilio.
+ */
+function occupiesSmsLineSlot(record) {
+  if (!record || typeof record !== "object") return false;
+  if (countsAsOccupiedSmsLine(record.smsStatus)) return true;
+  const phone = (record.smsPhoneNumber || "").toString().trim();
+  const sid = (record.smsPhoneNumberSid || "").toString().trim();
+  return !!(phone || sid);
+}
+
+/**
  * Canonical SMS line free allotments: Solo 1 · Studio/Shop 2.
  * Plan slug should already be normalized (solo|studio|shop).
  */
@@ -424,6 +550,36 @@ function freeIncludedSmsLinesForPlan(planNorm) {
   const p = (planNorm || "solo").toString().trim().toLowerCase();
   if (p === "studio" || p === "shop") return 2;
   return 1;
+}
+
+/**
+ * Lifetime free Twilio numbers per account: Solo 1 · Studio/Shop 2.
+ * Same as free included — no separate visible counter; used to gate refresh.
+ */
+function lifetimeFreeSmsNumbersForPlan(planNorm) {
+  return freeIncludedSmsLinesForPlan(planNorm);
+}
+
+function smsLifetimeNumbersBought(tenant) {
+  const n = Number(tenant && tenant.smsLifetimeNumbersBought);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+/**
+ * Effective lifetime buys. Backfills from current occupied lines so accounts
+ * that already have numbers don't get unlimited free refreshes.
+ */
+function resolveLifetimeNumbersBought(tenant, occupiedCount) {
+  const stored = smsLifetimeNumbersBought(tenant);
+  const occupied = Math.max(0, Math.floor(Number(occupiedCount) || 0));
+  return Math.max(stored, occupied);
+}
+
+function smsRefreshNeedsPurchase(tenant, planNorm, occupiedCount) {
+  const free = lifetimeFreeSmsNumbersForPlan(planNorm);
+  const lifetime = resolveLifetimeNumbersBought(tenant, occupiedCount);
+  return lifetime >= free;
 }
 
 /** Hard caps match seat limits: Solo 1 · Studio 5 · Shop 10. */
@@ -450,23 +606,36 @@ function smsLineCapacity(tenant, planNorm) {
 
 /**
  * Studio line (tenant) + personal member lines (users except owner).
+ * `userDocs` may be Firestore QueryDocumentSnapshots (or { id, data() }).
+ * Counts status + any leftover Twilio phone/SID so free slots cannot be
+ * overstated when a failed/orphaned line still holds inventory.
  */
-async function countOccupiedSmsLines(tenantId, tenant) {
+function countOccupiedSmsLinesFromDocs(tenant, userDocs) {
   let n = 0;
-  if (countsAsOccupiedSmsLine(tenant && tenant.smsStatus)) n += 1;
-  const snap = await getDb().collection("users").where("tenantId", "==", tenantId).get();
+  if (occupiesSmsLineSlot(tenant)) n += 1;
   const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
-  for (const doc of snap.docs) {
+  const docs = userDocs || [];
+  for (const doc of docs) {
     if (ownerUid && doc.id === ownerUid) continue;
-    const d = doc.data() || {};
-    if (countsAsOccupiedSmsLine(d.smsStatus)) n += 1;
+    const d = typeof doc.data === "function" ? doc.data() || {} : doc || {};
+    if (occupiesSmsLineSlot(d)) n += 1;
   }
   return n;
 }
 
+async function countOccupiedSmsLines(tenantId, tenant) {
+  const snap = await getDb().collection("users").where("tenantId", "==", tenantId).get();
+  return countOccupiedSmsLinesFromDocs(tenant, snap.docs);
+}
+
 /**
- * Snapshot for API / UI: free included, paid extras, max, and whether the next
- * new line is free, already paid, needs a $5 purchase, or is blocked at max.
+ * Snapshot for API / UI.
+ *
+ * Product rule: first `freeIncluded` numbers are free (Studio/Shop = 2).
+ * When numbers in use >= freeIncluded, the next add always requires a Stripe
+ * $10 purchase — leftover prepaid qty must not skip the charge UI.
+ * Provisioning after a successful purchase is allowed when paidExtras covers
+ * the next line (paid >= used + 1 - free).
  */
 function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
@@ -476,13 +645,21 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const capacity = smsLineCapacity(tenant, plan);
   const used = Math.max(0, Number(lineCount) || 0);
   const freeRemaining = Math.max(0, freeIncluded - used);
-  const unusedPaidCapacity = Math.max(0, capacity - Math.max(used, freeIncluded));
+  const overage = Math.max(0, used - freeIncluded);
+  const paidNeededForNextLine = Math.max(0, used + 1 - freeIncluded);
+  const unusedPaidCapacity = Math.max(0, paidExtras - overage);
   const slotsRemaining = Math.max(0, capacity - used);
   const atMax = used >= maxLines;
   const nextIsFree = used < freeIncluded;
-  const nextUsesPaidCapacity = !nextIsFree && used < capacity;
-  const needsPurchaseForNext = !atMax && used >= capacity;
-  const canAddWithoutPurchase = !atMax && used < capacity;
+  // Always charge when at/above free included (2/5 → add 3rd = pay).
+  // Leftover Stripe qty must NEVER clear this flag — purchase UI is required.
+  const needsPurchaseForNext = !atMax && used >= freeIncluded;
+  // Free add only while under included allotment (ignore leftover paid qty).
+  const canAddWithoutPurchase = !atMax && used < freeIncluded;
+  // Free slots only. Paid 3rd+ lines require Stripe auth in the callables —
+  // leftover paidExtras alone must not unlock Twilio.
+  const canProvisionNext = canAddWithoutPurchase;
+  const nextUsesPaidCapacity = false;
   const canPurchaseExtra = plan !== "solo" && !atMax;
   return {
     plan,
@@ -492,6 +669,8 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     capacity,
     used,
     freeRemaining,
+    overage,
+    paidNeededForNextLine,
     unusedPaidCapacity,
     slotsRemaining,
     atMax,
@@ -499,14 +678,22 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     nextUsesPaidCapacity,
     needsPurchaseForNext,
     canAddWithoutPurchase,
+    canProvisionNext,
     canPurchaseExtra,
-    extraMonthlyPriceCents: 500,
-    extraMonthlyPriceLabel: "$5/mo",
+    extraMonthlyPriceCents: 1000,
+    extraMonthlyPriceLabel: "$10/mo",
   };
 }
 
+/** Paid extras that should be on the sub for the current occupied count. */
+function smsExtraNeededForUsage(planNorm, lineCount) {
+  const free = freeIncludedSmsLinesForPlan(planNorm);
+  const used = Math.max(0, Number(lineCount) || 0);
+  return Math.max(0, used - free);
+}
+
 /**
- * Block provisioning a brand-new line when over free+paid capacity.
+ * Block provisioning a brand-new line when over free allotment without paid capacity.
  * Returns null if allowed, else a human-readable error.
  */
 function newSmsLineBlockReason(tenant, planNorm, lineCount) {
@@ -520,10 +707,10 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
       "Remove a line or upgrade your plan for more seats."
     );
   }
-  if (summary.needsPurchaseForNext) {
+  if (!summary.canProvisionNext) {
     return (
       "You've used your included texting numbers. " +
-      "Add another number for $5/mo under Account → Plan & billing on getbookking.com."
+      "Add another number for $10/mo under Account → Plan & billing on getbookking.com."
     );
   }
   return null;
@@ -611,8 +798,10 @@ async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
   const webhook = inboundWebhookUrl();
 
   let numberResource = await ensureMemberIncomingNumber(master, memberData, webhook);
+  let boughtNew = false;
   if (!numberResource) {
     numberResource = await buyMasterLocalNumber(master, areaCode);
+    boughtNew = true;
     if (webhook) {
       await master.incomingPhoneNumbers(numberResource.sid).update({
         smsUrl: webhook,
@@ -636,8 +825,17 @@ async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
     },
     { merge: true }
   );
+  if (boughtNew) {
+    await getDb().collection("tenants").doc(tenantId).set(
+      {
+        smsLifetimeNumbersBought: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
 
-  return { phoneNumber: e164, messagingServiceSid };
+  return { phoneNumber: e164, messagingServiceSid, boughtNew };
 }
 
 function resolveOutboundSmsRoute({
@@ -647,7 +845,33 @@ function resolveOutboundSmsRoute({
   isOwner,
   accessRole,
   managerPermissions,
+  threadData,
 }) {
+  const threadScope = ((threadData && threadData.smsLineScope) || "")
+    .toString()
+    .trim()
+    .toLowerCase();
+  const threadMemberUid = ((threadData && threadData.assignedMemberUid) || "")
+    .toString()
+    .trim();
+  // Replies stay on the line that owns the thread (number that was texted).
+  if (threadScope === "member" || threadMemberUid) {
+    if (
+      memberPayoutMode(senderUserData) === "independent" &&
+      senderUserData &&
+      senderUserData.smsStatus === "active" &&
+      (senderUserData.smsPhoneNumber || "").toString().trim() &&
+      senderUid === threadMemberUid
+    ) {
+      return {
+        lineType: "member",
+        from: (senderUserData.smsPhoneNumber || "").toString().trim(),
+        phoneSid: (senderUserData.smsPhoneNumberSid || "").toString().trim(),
+        memberUid: senderUid,
+      };
+    }
+    return null;
+  }
   if (isOwner || accessRole === "manager") {
     return {
       lineType: "tenant",
@@ -713,6 +937,7 @@ async function sendOutboundClientSms({
     isOwner,
     accessRole,
     managerPermissions,
+    threadData: meta && meta.threadData,
   });
   if (!route || !route.from) {
     throw new Error("You do not have permission to send client texts.");
@@ -761,7 +986,9 @@ async function sendOutboundClientSms({
     }
   }
 
-  await consumeSmsMonthlySlot(tenantId);
+  await consumeSmsMonthlySlot(tenantId, {
+    memberUid: route.lineType === "member" ? route.memberUid : null,
+  });
   const messagingServiceSid = getMasterMessagingServiceSid();
   const msg = await master.messages.create({
     to: toE164,
@@ -770,7 +997,14 @@ async function sendOutboundClientSms({
     from: route.from,
   });
 
-  const threadId = (meta && meta.threadId) || threadIdFromPhone(toE164);
+  const threadId =
+    (meta && meta.threadId) ||
+    lineScopedThreadId({
+      linePhone: route.from,
+      clientPhone: toE164,
+      lineScope: route.lineType,
+      memberUid: route.memberUid,
+    });
   const logRef = getDb()
     .collection("tenants")
     .doc(tenantId)
@@ -788,23 +1022,24 @@ async function sendOutboundClientSms({
     status: msg.status,
     bookingRequestId: (meta && meta.bookingRequestId) || null,
     assignedMemberUid: route.memberUid || null,
-    smsLineScope: route.lineType,
+    smsLineScope: route.lineType === "member" ? "member" : "tenant",
     ...paymentMeta,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   await upsertSmsThread(tenantId, threadId, {
     counterpartPhone: toE164,
+    linePhone: route.from,
     clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
     lastDirection: "outbound",
     lastMessageBody: (threadPreview || body).slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageStatus: (msg.status || "").toString(),
     assignedMemberUid: route.memberUid || null,
-    smsLineScope: route.lineType,
+    smsLineScope: route.lineType === "member" ? "member" : "tenant",
   });
 
-  return msg;
+  return { msg, threadId, from: route.from, lineType: route.lineType };
 }
 
 /** Optional structured payment fields for in-app message bubbles. */
@@ -868,7 +1103,7 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
         "In Team → Notifications, tap Refresh texting number, then try again."
     );
   }
-  await consumeSmsMonthlySlot(tenantId);
+  await consumeSmsMonthlySlot(tenantId, { memberUid: null });
 
   const messagingServiceSid = getMasterMessagingServiceSid();
   const msg = await master.messages.create({
@@ -892,6 +1127,8 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
     body: body.slice(0, 500),
     status: msg.status,
     bookingRequestId: (meta && meta.bookingRequestId) || null,
+    assignedMemberUid: null,
+    smsLineScope: "tenant",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -905,11 +1142,14 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   );
   await upsertSmsThread(tenantId, (meta && meta.threadId) || threadIdFromPhone(toE164), {
     counterpartPhone: toE164,
+    linePhone: from,
     clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
     lastDirection: "outbound",
     lastMessageBody: body.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageStatus: (msg.status || "").toString(),
+    assignedMemberUid: null,
+    smsLineScope: "tenant",
   });
 
   return msg;
@@ -922,13 +1162,22 @@ async function recordInboundTenantSms(tenantId, inbound) {
   const from = (inbound && inbound.from) || "";
   const to = (inbound && inbound.to) || "";
   const body = ((inbound && inbound.body) || "").toString();
-  const threadId = (inbound && inbound.threadId) || threadIdFromPhone(from);
   const assignedMemberUid = (inbound && inbound.assignedMemberUid) || null;
   const smsLineScope = (inbound && inbound.smsLineScope) || "tenant";
+  const threadId =
+    (inbound && inbound.threadId) ||
+    lineScopedThreadId({
+      linePhone: to,
+      clientPhone: from,
+      lineScope: smsLineScope,
+      memberUid: assignedMemberUid,
+    });
   if (!tenantId || !from || !to) return false;
 
   try {
-    await consumeSmsMonthlySlot(tenantId);
+    await consumeSmsMonthlySlot(tenantId, {
+      memberUid: smsLineScope === "member" ? assignedMemberUid : null,
+    });
   } catch (e) {
     if (String(e.message || e).includes("Monthly SMS limit")) {
       console.warn("recordInboundTenantSms: monthly cap", tenantId);
@@ -953,6 +1202,7 @@ async function recordInboundTenantSms(tenantId, inbound) {
     });
   await upsertSmsThread(tenantId, threadId, {
     counterpartPhone: from,
+    linePhone: to,
     clientName: ((inbound && inbound.clientName) || "").toString().slice(0, 120),
     lastDirection: "inbound",
     lastMessageBody: body.slice(0, 500),
@@ -1128,8 +1378,50 @@ function inboundConsentPromptBody(businessName) {
   );
 }
 
+/** After STOP: prompt on next inbound so they can re-confirm consent. */
+function inboundResubscribePromptBody(businessName) {
+  const biz = (businessName || "us").toString().trim() || "us";
+  return (
+    `You're unsubscribed from ${biz} appointment texts. ` +
+    `Reply YES or START to opt back in. Msg & data rates may apply. Reply STOP to opt out.`
+  );
+}
+
 function inboundConsentConfirmedBody() {
   return "You're opted in to appointment-related texts. Reply STOP to opt out.";
+}
+
+/** Allow a fresh consent / re-subscribe prompt after STOP. */
+async function clearSmsConsentPromptSent(tenantId, phone, opts) {
+  const linePhone = opts && opts.linePhone;
+  const lineScope = (opts && opts.lineScope) || "tenant";
+  const memberUid = (opts && opts.memberUid) || null;
+  const threadId = lineScopedThreadId({
+    linePhone: linePhone || "",
+    clientPhone: phone,
+    lineScope,
+    memberUid,
+  });
+  // Also clear legacy phone-only thread gate.
+  const legacyId = threadIdFromPhone(phone);
+  const ids = [threadId, legacyId].filter(Boolean);
+  await Promise.all(
+    ids.map((id) =>
+      getDb()
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsThreads")
+        .doc(id)
+        .set(
+          {
+            smsConsentPromptSentAt: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        )
+        .catch(() => {})
+    )
+  );
 }
 
 async function isPhoneOptedOut(tenantId, phone) {
@@ -1220,7 +1512,9 @@ async function grantInboundSmsConsent(tenantId, phone) {
 async function recordSystemOutboundSms(tenantId, { from, to, body, threadId, assignedMemberUid, smsLineScope }) {
   if (!tenantId || !from || !to || !body) return false;
   try {
-    await consumeSmsMonthlySlot(tenantId);
+    await consumeSmsMonthlySlot(tenantId, {
+      memberUid: smsLineScope === "member" ? assignedMemberUid : null,
+    });
   } catch (e) {
     if (String(e.message || e).includes("Monthly SMS limit")) {
       console.warn("recordSystemOutboundSms: monthly cap", tenantId);
@@ -1248,6 +1542,7 @@ async function recordSystemOutboundSms(tenantId, { from, to, body, threadId, ass
     });
   await upsertSmsThread(tenantId, tid, {
     counterpartPhone: to,
+    linePhone: from,
     lastDirection: "outbound",
     lastMessageBody: body.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1259,8 +1554,10 @@ async function recordSystemOutboundSms(tenantId, { from, to, body, threadId, ass
 }
 
 /**
- * If the sender has no SMS consent yet, send a one-time YES opt-in prompt.
- * Returns TwiML string to reply with, or null when no prompt should be sent.
+ * If the sender has no SMS consent yet (or previously opted out), send a
+ * one-time YES/START opt-in prompt. Returns TwiML or null.
+ * After STOP, clearSmsConsentPromptSent resets the gate so the next inbound
+ * can get a fresh re-subscribe prompt.
  */
 async function maybeSendInboundConsentPrompt(tenantId, {
   from,
@@ -1270,10 +1567,15 @@ async function maybeSendInboundConsentPrompt(tenantId, {
   smsLineScope,
 }) {
   if (!tenantId || !from || !to) return null;
-  if (await isPhoneOptedOut(tenantId, from)) return null;
-  if (await phoneHasSmsConsent(tenantId, from)) return null;
+  const optedOut = await isPhoneOptedOut(tenantId, from);
+  if (!optedOut && (await phoneHasSmsConsent(tenantId, from))) return null;
 
-  const threadId = threadIdFromPhone(from);
+  const threadId = lineScopedThreadId({
+    linePhone: to,
+    clientPhone: from,
+    lineScope: smsLineScope || "tenant",
+    memberUid: assignedMemberUid,
+  });
   const threadRef = getDb()
     .collection("tenants")
     .doc(tenantId)
@@ -1282,8 +1584,23 @@ async function maybeSendInboundConsentPrompt(tenantId, {
   const threadSnap = await threadRef.get();
   const threadData = threadSnap.exists ? threadSnap.data() || {} : {};
   if (threadData.smsConsentPromptSentAt) return null;
+  // Legacy gate: don't re-prompt if old phone-only thread already prompted.
+  const legacyId = threadIdFromPhone(from);
+  if (legacyId && legacyId !== threadId) {
+    const legacySnap = await getDb()
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("smsThreads")
+      .doc(legacyId)
+      .get();
+    if (legacySnap.exists && legacySnap.data().smsConsentPromptSentAt) {
+      return null;
+    }
+  }
 
-  const prompt = inboundConsentPromptBody(businessName);
+  const prompt = optedOut
+    ? inboundResubscribePromptBody(businessName)
+    : inboundConsentPromptBody(businessName);
   const logged = await recordSystemOutboundSms(tenantId, {
     from: to,
     to: from,
@@ -1298,7 +1615,10 @@ async function maybeSendInboundConsentPrompt(tenantId, {
     {
       threadId,
       counterpartPhone: from,
+      linePhone: to,
       smsConsentPromptSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      assignedMemberUid: assignedMemberUid || null,
+      smsLineScope: smsLineScope || "tenant",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -1322,13 +1642,20 @@ module.exports = {
   provisionTenantSms,
   provisionMemberSms,
   releaseMemberSms,
+  releaseTenantSms,
+  releaseTwilioPhoneSid,
+  personalSmsClearedFields,
+  tenantSmsClearedFields,
   sendTenantSms,
   sendOutboundClientSms,
   recordInboundTenantSms,
   grantInboundSmsConsent,
   maybeSendInboundConsentPrompt,
   isInboundConsentAffirmation,
+  inboundConsentPromptBody,
+  inboundResubscribePromptBody,
   inboundConsentConfirmedBody,
+  clearSmsConsentPromptSent,
   recordSystemOutboundSms,
   twimlMessage,
   phoneHasSmsConsent,
@@ -1337,12 +1664,19 @@ module.exports = {
   memberPayoutMode,
   tenantStudioSmsActive,
   countsAsOccupiedSmsLine,
+  occupiesSmsLineSlot,
   freeIncludedSmsLinesForPlan,
+  lifetimeFreeSmsNumbersForPlan,
+  smsLifetimeNumbersBought,
+  resolveLifetimeNumbersBought,
+  smsRefreshNeedsPurchase,
   maxSmsLinesForPlan,
   smsExtraPaidQuantity,
   smsLineCapacity,
   countOccupiedSmsLines,
+  countOccupiedSmsLinesFromDocs,
   buildSmsLineSummary,
+  smsExtraNeededForUsage,
   newSmsLineBlockReason,
   getSmsLineSummaryForTenant,
   resolveOutboundSmsRoute,
@@ -1352,9 +1686,16 @@ module.exports = {
   extractCustomerPhone,
   inboundWebhookUrl,
   threadIdFromPhone,
+  lineScopedThreadId,
+  isLineScopedThreadId,
+  clientPhoneFromThreadId,
+  isStudioSmsThread,
   MAX_TENANT_SMS_PER_MONTH,
+  MAX_SMS_PER_LINE_PER_MONTH,
   SMS_MONTHLY_LIMIT_MESSAGE,
   smsMonthlyUsageForTenant,
+  smsMonthlyUsageForMember,
+  smsMonthlyUsageFromDoc,
   currentSmsUsagePeriodUtc,
   defaultSmsPresetConfirmed,
   defaultSmsPresetDeclined,

@@ -60,8 +60,41 @@ enum PhoneFormatting {
     }
 
     /// Thread id for SMS collections; prefers E.164, falls back to trimmed input.
+    /// Line-scoped ids (`l{lineDigits}_c{clientDigits}`) must pass through unchanged.
     static func smsThreadId(_ raw: String) -> String {
-        e164US(raw) ?? raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isLineScopedThreadId(trimmed) { return trimmed }
+        return e164US(trimmed) ?? trimmed
+    }
+
+    static func isLineScopedThreadId(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("l"), trimmed.contains("_c") else { return false }
+        let parts = trimmed.split(separator: "_", maxSplits: 1)
+        guard parts.count == 2,
+              parts[0].dropFirst().allSatisfy(\.isNumber),
+              parts[1].hasPrefix("c"),
+              parts[1].dropFirst().allSatisfy(\.isNumber) else { return false }
+        return true
+    }
+
+    /// Build personal-line conversation id matching Cloud Functions `lineScopedThreadId`.
+    static func lineScopedThreadId(linePhone: String, clientPhone: String) -> String? {
+        guard let line = e164US(linePhone), let client = e164US(clientPhone) else { return nil }
+        let lineDigits = digits(from: line)
+        let clientDigits = digits(from: client)
+        guard !lineDigits.isEmpty, !clientDigits.isEmpty else { return nil }
+        return "l\(lineDigits)_c\(clientDigits)"
+    }
+
+    static func clientPhoneFromThreadId(_ threadId: String) -> String? {
+        let trimmed = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isLineScopedThreadId(trimmed),
+           let clientPart = trimmed.split(separator: "_").last,
+           clientPart.hasPrefix("c") {
+            return e164US(String(clientPart.dropFirst()))
+        }
+        return e164US(trimmed)
     }
 
     /// Incremental US mask while typing (max 10 digits): (555) 123-4567

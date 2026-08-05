@@ -151,7 +151,7 @@
       '<aside class="admin-sidebar">' +
         '<div class="admin-brand">' +
           '<img src="/assets/brand/logo-dark-128.png?v=12" alt="" width="36" height="36" />' +
-          '<div><div class="admin-brand-text">Bookking</div></div>' +
+          '<div><div class="admin-brand-text">Get Bookking</div></div>' +
           '<span class="admin-pill">Admin</span>' +
         '</div>' +
         '<div><div class="admin-nav-group-label">BETA</div><nav class="admin-nav">' +

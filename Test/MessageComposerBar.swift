@@ -183,7 +183,7 @@ struct MessageComposerBar: View {
             if actionNotice == Constants.App.paidFeatureUpgradeMessage,
                paymentsViewModel.isTenantOwner {
                 Button("Start paid plan") {
-                    Task { await paymentsViewModel.openBillingToStartSubscription() }
+                    Task { _ = await paymentsViewModel.startSubscriptionToday() }
                 }
             }
             Button("OK", role: .cancel) { actionNotice = nil }
@@ -603,6 +603,7 @@ struct MessageInsertPaymentLinkSheet: View {
                     .padding()
                 } else {
                     Button {
+                        isAmountFocused = false
                         Task {
                             viewModel.depositLinkUrl = nil
                             await viewModel.createDepositLink(
@@ -640,21 +641,24 @@ struct MessageInsertPaymentLinkSheet: View {
                         onDismiss()
                     }
                 }
-                ToolbarItem(placement: .keyboard) {
-                    HStack(spacing: 12) {
-                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
-                            Button(item.label) {
-                                amountText = String(format: "%.2f", Double(item.cents) / 100)
-                            }
-                            .buttonStyle(.bordered)
+                ToolbarItemGroup(placement: .keyboard) {
+                    ForEach(Self.suggestionAmounts, id: \.cents) { item in
+                        Button(item.label) {
+                            amountText = String(format: "%.2f", Double(item.cents) / 100)
                         }
                     }
-                    .padding(.vertical, 8)
+                    Spacer()
+                    Button("Done") { isAmountFocused = false }
                 }
             }
             .onAppear {
                 viewModel.depositLinkUrl = nil
                 viewModel.errorMessage = nil
+            }
+            .onChange(of: viewModel.depositLinkUrl) { _, newValue in
+                if newValue != nil {
+                    isAmountFocused = false
+                }
             }
         }
     }

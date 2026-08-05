@@ -371,12 +371,13 @@ class FirebaseService: ObservableObject {
         return snapshot.documents.map { mapSmsLogDocument($0, threadId: queryThreadId) }
     }
 
-    func sendMessage(_ message: Message) async throws {
+    func sendMessage(_ message: Message) async throws -> String {
         let toPhone = PhoneFormatting.e164US(message.clientId) ?? message.clientId
         var payload: [String: Any] = [
             "to": toPhone,
             "body": message.content,
-            "clientName": message.clientName
+            "clientName": message.clientName,
+            "threadId": message.threadId
         ]
         if let kind = message.paymentKind {
             payload["paymentKind"] = kind.rawValue
@@ -393,7 +394,13 @@ class FirebaseService: ObservableObject {
             payload["threadPreview"] = preview
         }
         do {
-            _ = try await functions.httpsCallable("sendClientSms").call(payload)
+            let result = try await functions.httpsCallable("sendClientSms").call(payload)
+            let data = result.data as? [String: Any] ?? [:]
+            if let returnedThreadId = data["threadId"] as? String,
+               !returnedThreadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return PhoneFormatting.smsThreadId(returnedThreadId)
+            }
+            return PhoneFormatting.smsThreadId(message.threadId)
         } catch {
             let msg = FirebaseFunctionsErrorHelper.message(from: error)
             throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])

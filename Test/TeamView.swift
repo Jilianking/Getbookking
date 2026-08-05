@@ -167,7 +167,7 @@ private struct TeamMemberOverviewContent: View {
                         )
                     }
                 } footer: {
-                    Text("Text clients from your own number. Counts toward your studio’s monthly SMS limit.")
+                    Text("Text clients from your own number. Each personal line has its own monthly SMS limit.")
                         .font(.caption2)
                 }
             }

@@ -1788,6 +1788,8 @@ private struct ManageTeamMemberVisibilityCard: View {
             smsStatus: "off",
             smsPhoneNumber: "",
             smsLineRequestPending: false,
+            smsMonthlyUsageCount: 0,
+            smsMonthlyLimit: 1000,
             memberSettings: settings,
             personalConfirmationType: nil,
             effectiveConfirmationType: nil

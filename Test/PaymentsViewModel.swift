@@ -202,6 +202,7 @@ class PaymentsViewModel: ObservableObject {
     @Published var subscriptionPaid = false
     @Published var subscriptionTrialing = false
     @Published var isOpeningBillingWebsite = false
+    @Published var isStartingSubscription = false
     @Published var isEnsuringTapToPayLocation = false
     @Published var isEnsuringTapToPayTerms = false
     @Published var tapToPayDisplayNameDraft: String = ""
@@ -330,6 +331,34 @@ class PaymentsViewModel: ObservableObject {
         Constants.App.paidFeatureUpgradeMessage
     }
 
+    /// Ends free trial now via Stripe (card on file). Portal cannot end a trial early.
+    @discardableResult
+    func startSubscriptionToday() async -> Bool {
+        guard isTenantOwner else {
+            errorMessage = "Ask your business owner to start the paid Get Bookking plan."
+            return false
+        }
+        isStartingSubscription = true
+        errorMessage = nil
+        defer { isStartingSubscription = false }
+        do {
+            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
+            let data = result.data as? [String: Any] ?? [:]
+            let status = ((data["subscriptionStatus"] as? String) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            await refresh(isDemoMode: false)
+            if status == "active" || subscriptionPaid {
+                return true
+            }
+            return subscriptionPaid
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
+    }
+
+    /// Opens getbookking.com billing (web fallback / signup).
     func openBillingToStartSubscription() async {
         guard isTenantOwner else {
             errorMessage = "Ask your business owner to start the paid Get Bookking plan."
@@ -1088,6 +1117,17 @@ class PaymentsViewModel: ObservableObject {
                 ] as [String: Any])
                 stripeStatusHint = "Stripe is reviewing your account. You'll be notified when charges are enabled."
                 invalidateConnectLinkPrefetch()
+                // Prefer opening Stripe so "Check status" actually opens a page.
+                if openInSafari,
+                   let urlString = data?["url"] as? String,
+                   let url = URL(string: urlString) {
+                    let opened = await UIApplication.shared.open(url)
+                    if opened { return .openedInSafari }
+                }
+                if openInSafari {
+                    let openedDashboard = await openStripeDashboardLink(isDemoMode: isDemoMode)
+                    return openedDashboard ? .openedInSafari : .pendingReview
+                }
                 return .pendingReview
             }
 
@@ -1194,13 +1234,18 @@ class PaymentsViewModel: ObservableObject {
 
     /// Opens Stripe Dashboard for the connected account (Standard login or legacy Express link).
     func openExpressDashboard(isDemoMode: Bool = false) async {
+        _ = await openStripeDashboardLink(isDemoMode: isDemoMode)
+    }
+
+    @discardableResult
+    private func openStripeDashboardLink(isDemoMode: Bool) async -> Bool {
         if isDemoMode {
             errorMessage = "Stripe dashboard isn't available in demo mode."
-            return
+            return false
         }
         guard Auth.auth().currentUser != nil else {
             errorMessage = "You must be signed in."
-            return
+            return false
         }
         isOpeningStripeDashboard = true
         errorMessage = nil
@@ -1220,9 +1265,12 @@ class PaymentsViewModel: ObservableObject {
             let opened = await UIApplication.shared.open(url)
             if !opened {
                 errorMessage = "Could not open Stripe. Check that Safari is available."
+                return false
             }
+            return true
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
         }
     }
 

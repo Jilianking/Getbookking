@@ -54,17 +54,38 @@ struct MemberPersonalSmsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if viewModel.isTenantOwner || ownerEditingMember {
-                        Button {
-                            Task { await viewModel.openBillingForExtraSmsLine() }
-                        } label: {
-                            HStack {
-                                if viewModel.isOpeningBillingWebsite {
-                                    ProgressView().scaleEffect(0.9)
+                        if viewModel.isTenantOwner, viewModel.smsMustChargeForNextLine {
+                            Button {
+                                Task {
+                                    _ = await viewModel.purchaseAndEnablePersonalSmsLine(
+                                        for: member.uid,
+                                        consentAccepted: true
+                                    )
+                                    await authViewModel.refreshTeamAccess()
                                 }
-                                Text("Add a number on website")
+                            } label: {
+                                HStack {
+                                    if viewModel.isProvisioningMember(uid: member.uid) {
+                                        ProgressView().scaleEffect(0.9)
+                                    }
+                                    Text("Charge \(viewModel.smsExtraMonthlyPriceLabel) & enable")
+                                }
                             }
+                            .disabled(viewModel.isProvisioningMemberSms)
+                        } else if viewModel.isTenantOwner, !viewModel.smsMustChargeForNextLine {
+                            Button {
+                                Task {
+                                    await viewModel.ownerEnablePersonalSmsLine(
+                                        for: member.uid,
+                                        consentAccepted: true
+                                    )
+                                    await authViewModel.refreshTeamAccess()
+                                }
+                            } label: {
+                                Text("Enable line")
+                            }
+                            .disabled(viewModel.isProvisioningMemberSms)
                         }
-                        .disabled(viewModel.isOpeningBillingWebsite)
                         Button("Dismiss request", role: .destructive) {
                             Task { await viewModel.clearSmsLineRequest(memberUid: member.uid) }
                         }
@@ -99,7 +120,7 @@ struct MemberPersonalSmsView: View {
 
     @ViewBuilder
     private var requestPhoneNumberForm: some View {
-        if viewModel.smsNeedsPurchaseForNextLine {
+        if viewModel.smsMustChargeForNextLine {
             Text("Included texting numbers are used. Extra numbers are \(viewModel.smsExtraMonthlyPriceLabel) each — the owner pays on the studio plan.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -112,17 +133,33 @@ struct MemberPersonalSmsView: View {
             .font(.subheadline)
         Button {
             Task {
-                _ = await viewModel.requestSmsPhoneNumber(
-                    memberUid: ownerEditingMember ? member.uid : nil,
-                    consentAccepted: smsConsentAccepted
-                )
+                if viewModel.isTenantOwner, ownerEditingMember, viewModel.smsMustChargeForNextLine {
+                    _ = await viewModel.purchaseAndEnablePersonalSmsLine(
+                        for: member.uid,
+                        consentAccepted: smsConsentAccepted
+                    )
+                } else if viewModel.isTenantOwner, ownerEditingMember {
+                    await viewModel.ownerEnablePersonalSmsLine(
+                        for: member.uid,
+                        consentAccepted: smsConsentAccepted
+                    )
+                } else {
+                    _ = await viewModel.requestSmsPhoneNumber(
+                        memberUid: ownerEditingMember ? member.uid : nil,
+                        consentAccepted: smsConsentAccepted
+                    )
+                }
                 await authViewModel.refreshTeamAccess()
             }
         } label: {
             HStack {
                 if viewModel.isProvisioningMemberSms { ProgressView().scaleEffect(0.9) }
                 Image(systemName: "phone.badge.plus")
-                Text("Request phone number")
+                Text(
+                    viewModel.isTenantOwner && ownerEditingMember && viewModel.smsMustChargeForNextLine
+                        ? "Charge \(viewModel.smsExtraMonthlyPriceLabel) & enable"
+                        : (viewModel.isTenantOwner && ownerEditingMember ? "Enable phone number" : "Request phone number")
+                )
             }
         }
         .disabled(!smsConsentAccepted || viewModel.isProvisioningMemberSms || !viewModel.smsCanUse)
@@ -137,7 +174,7 @@ struct MemberPersonalSmsView: View {
         if isRequestPending {
             return "Your request is waiting on owner capacity or a \(viewModel.smsExtraMonthlyPriceLabel) add-on."
         }
-        if viewModel.smsNeedsPurchaseForNextLine {
+        if viewModel.smsMustChargeForNextLine {
             return "Request notifies your owner. After they add a slot, you can set up your number here."
         }
         if viewModel.smsNextLineIsFree {

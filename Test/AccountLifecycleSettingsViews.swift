@@ -423,7 +423,7 @@ struct DeleteAccountSettingsSheet: View {
             let business = eligibility.businessName.isEmpty ? "this business" : eligibility.businessName
             (Text("You will leave ")
                 + Text(business).fontWeight(.semibold)
-                + Text(" and your Bookking account will be permanently deleted. The business will keep running."))
+                + Text(" and your Get Bookking account will be permanently deleted. The business will keep running."))
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
         }

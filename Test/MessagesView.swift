@@ -20,7 +20,8 @@ struct MessagesView: View {
     private var visibleSummaries: [SmsThreadSummary] {
         let access = authViewModel.teamAccess
         if access.isOwner || access.accessRole == .manager {
-            return viewModel.threadSummaries
+            // Studio inbox only — personal-line texts stay with that teammate.
+            return viewModel.threadSummaries.filter(\.isStudioLine)
         }
         if access.usesOwnSms, let uid = authViewModel.currentUserUid {
             return viewModel.threadSummaries.filter { summary in
@@ -28,7 +29,7 @@ struct MessagesView: View {
                 return assigned == uid
             }
         }
-        return viewModel.threadSummaries
+        return []
     }
 
     private var filteredSummaries: [SmsThreadSummary] {
@@ -469,9 +470,12 @@ struct MessageThreadView: View {
         guard !body.isEmpty else { return }
         isLoading = true
         Task {
+            let summary = viewModel.summary(for: threadId)
             let ok = await viewModel.sendMessage(
                 threadId: threadId,
                 content: body,
+                clientName: summary?.clientName,
+                clientId: summary?.clientPhoneForSend,
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
@@ -488,9 +492,12 @@ struct MessageThreadView: View {
     private func sendPaymentRequest(kind: MessagePaymentSheetKind, amountCents: Int, url: String) {
         isLoading = true
         Task {
+            let summary = viewModel.summary(for: threadId)
             let ok = await viewModel.sendMessage(
                 threadId: threadId,
                 content: "",
+                clientName: summary?.clientName,
+                clientId: summary?.clientPhoneForSend,
                 paymentKind: kind.paymentKind,
                 amountCents: amountCents,
                 paymentUrl: url,
@@ -864,16 +871,30 @@ struct ComposeMessageView: View {
             }
         }
         Task {
+            let memberLine: String? = {
+                let access = authViewModel.teamAccess
+                guard access.usesOwnSms else { return nil }
+                let phone = access.memberSmsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                return phone.isEmpty ? nil : phone
+            }()
             let ok = await viewModel.sendMessage(
                 threadId: e164Phone,
                 content: trimmedMessage,
                 clientName: name.isEmpty ? nil : name,
                 clientId: e164Phone,
                 isDemoMode: authViewModel.isDemoMode,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                memberLinePhone: memberLine
             )
             if ok {
-                onSent?(e164Phone)
+                let openId: String = {
+                    if let memberLine,
+                       let scoped = PhoneFormatting.lineScopedThreadId(linePhone: memberLine, clientPhone: e164Phone) {
+                        return scoped
+                    }
+                    return e164Phone
+                }()
+                onSent?(openId)
                 dismiss()
             }
         }
@@ -893,6 +914,12 @@ struct ComposeMessageView: View {
             }
         }
         Task {
+            let memberLine: String? = {
+                let access = authViewModel.teamAccess
+                guard access.usesOwnSms else { return nil }
+                let phone = access.memberSmsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                return phone.isEmpty ? nil : phone
+            }()
             let ok = await viewModel.sendMessage(
                 threadId: e164Phone,
                 content: "",
@@ -902,10 +929,18 @@ struct ComposeMessageView: View {
                 amountCents: amountCents,
                 paymentUrl: url,
                 isDemoMode: authViewModel.isDemoMode,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                memberLinePhone: memberLine
             )
             if ok {
-                onSent?(e164Phone)
+                let openId: String = {
+                    if let memberLine,
+                       let scoped = PhoneFormatting.lineScopedThreadId(linePhone: memberLine, clientPhone: e164Phone) {
+                        return scoped
+                    }
+                    return e164Phone
+                }()
+                onSent?(openId)
                 dismiss()
             }
         }

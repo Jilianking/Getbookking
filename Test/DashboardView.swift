@@ -146,7 +146,7 @@ struct DashboardView: View {
         .alert(Constants.App.paidFeatureUpgradeTitle, isPresented: $showPaidFeatureUpgrade) {
             if paymentsViewModel.isTenantOwner {
                 Button("Start paid plan") {
-                    Task { await paymentsViewModel.openBillingToStartSubscription() }
+                    Task { _ = await paymentsViewModel.startSubscriptionToday() }
                 }
             }
             Button("Not now", role: .cancel) {}

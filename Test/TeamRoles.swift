@@ -306,8 +306,11 @@ struct TenantTeamMember: Identifiable, Equatable {
     let smsEnabled: Bool
     let smsStatus: String
     let smsPhoneNumber: String
-    /// Member asked for a personal line and is waiting on owner capacity / $5 purchase.
+    /// Member asked for a personal line and is waiting on owner capacity / paid line purchase.
     let smsLineRequestPending: Bool
+    /// Personal line usage this calendar month (UTC). Studio limit is on tenant, not members.
+    let smsMonthlyUsageCount: Int
+    let smsMonthlyLimit: Int
     let memberSettings: TeamMemberSettings
     /// From `users/{uid}.workflow.confirmationType` when self-managed.
     let personalConfirmationType: String?

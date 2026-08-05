@@ -70,10 +70,10 @@
       <h1 id="stripeSuccessTitle">Stripe application submitted</h1>
       <p id="stripeSuccessLead" class="pending">We received your payout details.</p>
       <p id="stripeSuccessBody">Stripe may need up to 1–2 business days to verify your identity before you can accept payments. Some accounts are approved within minutes.</p>
-      <p id="stripeSuccessNext">Open the <strong>Bookking</strong> app again. On <strong>Payments</strong>, pull to refresh — when payments are enabled, <strong>Tap to Pay on iPhone</strong> will be ready.</p>
+      <p id="stripeSuccessNext">Open the <strong>Get Bookking</strong> app again. On <strong>Payments</strong>, pull to refresh — when payments are enabled, <strong>Tap to Pay on iPhone</strong> will be ready.</p>
       <p id="stripeSuccessLoading" class="acct-stripe-loading hidden">Checking your payout status…</p>
       <div class="acct-stripe-actions">
-        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Bookking app</a>
+        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Get Bookking app</a>
         <a href="index.html" class="acct-stripe-btn acct-stripe-btn--secondary">Visit website</a>
         <p class="acct-stripe-actions-hint">If the app is already installed, switch back from your home screen or app switcher.</p>
       </div>
@@ -81,9 +81,9 @@
 
     <div id="stripeRefreshPanel" class="acct-stripe-panel hidden">
       <h1>Continue Stripe setup</h1>
-      <p>Your onboarding link expired or was interrupted. Open the Bookking app and tap <strong>Connect Stripe</strong> again to continue.</p>
+      <p>Your onboarding link expired or was interrupted. Open the Get Bookking app and tap <strong>Connect Stripe</strong> again to continue.</p>
       <div class="acct-stripe-actions">
-        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Bookking app</a>
+        <a href="#" class="acct-stripe-btn acct-stripe-btn--primary" data-open-app-link>Open Get Bookking app</a>
         <a href="index.html" class="acct-stripe-btn acct-stripe-btn--secondary">Visit website</a>
         <p class="acct-stripe-actions-hint">If the app is already installed, switch back from your home screen or app switcher.</p>
       </div>
@@ -272,7 +272,7 @@
           bodyEl.textContent = 'You can take deposits, payment links, and in-person payments with Tap to Pay on iPhone.';
         }
         if (nextEl) {
-          nextEl.innerHTML = 'Open the <strong>Bookking</strong> app → <strong>Payments</strong> → <strong>Tap to Pay on iPhone</strong> to accept your first contactless payment.';
+          nextEl.innerHTML = 'Open the <strong>Get Bookking</strong> app → <strong>Payments</strong> → <strong>Tap to Pay on iPhone</strong> to accept your first contactless payment.';
         }
         return;
       }
@@ -284,12 +284,12 @@
           bodyEl.textContent = 'Stripe is reviewing your identity and payout details. This usually takes a few minutes, but can take up to 1–2 business days. We will not enable charges until Stripe approves your account.';
         }
         if (nextEl) {
-          nextEl.innerHTML = 'Open the <strong>Bookking</strong> app and go to <strong>Payments</strong>. Pull to refresh to see when you are approved. You will get Tap to Pay on iPhone once payments are enabled.';
+          nextEl.innerHTML = 'Open the <strong>Get Bookking</strong> app and go to <strong>Payments</strong>. Pull to refresh to see when you are approved. You will get Tap to Pay on iPhone once payments are enabled.';
         }
         return;
       }
 
-      if (titleEl) titleEl.textContent = 'Continue in the Bookking app';
+      if (titleEl) titleEl.textContent = 'Continue in the Get Bookking app';
       setStripeSuccessLead('Stripe setup is not finished yet.', 'pending');
       if (bodyEl) {
         bodyEl.textContent = 'Return to the app and tap Connect Stripe or Tap to Pay on iPhone to complete payout setup.';
@@ -554,7 +554,7 @@
         } else if (d.isOwner) {
           deleteHelp.textContent = 'This permanently deletes your business, cancels your subscription, removes your booking site, and deletes your account. This cannot be undone.';
         } else {
-          deleteHelp.textContent = 'You will leave ' + business + ' and your Bookking account will be permanently deleted. The business will keep running.';
+          deleteHelp.textContent = 'You will leave ' + business + ' and your Get Bookking account will be permanently deleted. The business will keep running.';
         }
         if (d.stripeBalanceBlocksDeletion) {
           deleteHelp.textContent = (d.stripeBalanceBlockMessage || 'Withdraw your Stripe payout balance in Payments before deleting your account.');

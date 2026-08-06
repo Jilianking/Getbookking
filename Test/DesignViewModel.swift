@@ -53,7 +53,13 @@ struct Studio12ProcessStep: Identifiable, Equatable {
 class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var tenantId: String?
     @Published var tenantSlug: String?
+    /// In-app Design WebView always loads the Bookking-hosted subdomain so edits show the app template
+    /// (custom domains may still point at old DNS until cutover).
     @Published var bookingUrl: String = ""
+    /// Customer-facing URL when a custom domain is connected (active).
+    @Published var publicSiteUrl: String = ""
+    @Published var customDomain: String? = nil
+    @Published var customDomainStatus: String = "none"
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var saveSuccess = false
@@ -851,6 +857,37 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
+    /// Public URL for Safari / share: custom domain when active, else Bookking subdomain.
+    var safariSiteUrl: String {
+        let custom = (customDomain ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !custom.isEmpty, customDomainStatus.lowercased() == "active" {
+            return publicSiteUrl.isEmpty ? "https://\(custom)" : publicSiteUrl
+        }
+        return bookingUrl
+    }
+
+    private func applyPublicDomain(fromTenant tenant: [String: Any]?, slug: String) {
+        let status = (tenant?["customDomainStatus"] as? String ?? "none")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        customDomainStatus = status.isEmpty ? "none" : status
+        let domain = (tenant?["customDomain"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if !domain.isEmpty, status != "none" {
+            customDomain = domain
+            publicSiteUrl = "https://\(domain)"
+        } else if let active = PublicBookingSite.activeCustomDomain(fromTenant: tenant) {
+            customDomain = active
+            publicSiteUrl = PublicBookingSite.urlString(forSlug: slug, customDomain: active)
+        } else {
+            customDomain = nil
+            publicSiteUrl = slug.isEmpty
+                ? ""
+                : PublicBookingSite.urlString(forSlug: slug, customDomain: nil)
+        }
+    }
+
     func loadData(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         await MainActor.run { isLoading = true; errorMessage = nil }
         if isDemoMode {
@@ -860,7 +897,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 await MainActor.run {
                     tenantId = sessionStore.tenantId
                     tenantSlug = slug.isEmpty ? nil : slug
-                    bookingUrl = slug.isEmpty ? "" : PublicBookingSite.urlString(forSlug: slug)
+                    bookingUrl = slug.isEmpty
+                        ? ""
+                        : PublicBookingSite.urlString(forSlug: slug, customDomain: nil)
+                    applyPublicDomain(fromTenant: tenant, slug: slug)
                     industry = tenant["industry"] as? String
                     webThemeId = tenant["webThemeId"] as? String ?? ""
                     serviceArea = tenant["serviceArea"] as? String ?? ""
@@ -887,6 +927,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 tenantId = nil
                 tenantSlug = nil
                 bookingUrl = ""
+                publicSiteUrl = ""
+                customDomain = nil
+                customDomainStatus = "none"
                 formFields = FormField.defaultFields
                 services = []
                 industry = nil
@@ -910,6 +953,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     tenantId = nil
                     tenantSlug = nil
                     bookingUrl = ""
+                    publicSiteUrl = ""
+                    customDomain = nil
+                    customDomainStatus = "none"
                     formFields = FormField.defaultFields
                     services = []
                     industry = nil
@@ -928,7 +974,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 isDemoReadOnly = false
                 tenantId = tid
                 tenantSlug = slug
-                bookingUrl = PublicBookingSite.urlString(forSlug: slug)
+                bookingUrl = PublicBookingSite.urlString(forSlug: slug, customDomain: nil)
+                applyPublicDomain(fromTenant: tenant, slug: slug)
                 appBusinessName = (tenant?["businessName"] as? String ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if appBusinessName.isEmpty {

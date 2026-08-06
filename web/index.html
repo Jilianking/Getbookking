@@ -7548,6 +7548,30 @@
         return '';
       }
 
+      function isBookkingPlatformHost(host) {
+        host = (host || '').toLowerCase();
+        var apexes = ['getbookking.com', 'getbooking.com'];
+        for (var i = 0; i < apexes.length; i++) {
+          var apex = apexes[i];
+          if (host === apex || host === ('www.' + apex) || host.endsWith('.' + apex)) return true;
+        }
+        return false;
+      }
+
+      /** Resolve Bookking-managed custom domain → slug (domainMappings, status=active). */
+      function resolveCustomDomainSlug(host) {
+        host = (host || '').toLowerCase();
+        if (!host || isBookkingPlatformHost(host)) return Promise.resolve('');
+        return db.collection('domainMappings').doc(host).get()
+          .then(function(snap) {
+            if (!snap.exists) return '';
+            var d = snap.data() || {};
+            if ((d.status || '') !== 'active') return '';
+            return (d.slug || '').toString().toLowerCase();
+          })
+          .catch(function() { return ''; });
+      }
+
       function tenantBookingPlatformHost(host) {
         host = (host || '').toLowerCase();
         return host.indexOf('getbooking.com') !== -1 ? 'getbooking.com' : 'getbookking.com';
@@ -7583,11 +7607,11 @@
       /** Supports subdomain (`{tenant}.getbookking.com/home`, `{tenant}.getbooking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
       var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1 };
 
-      function parsePath() {
+      function parsePath(customHostSlug) {
         var path = (location.pathname || '').replace(/^\/+|\/+$/g, '');
         var parts = path ? path.split('/') : [];
         var host = (location.hostname || '').toLowerCase();
-        var hostTenant = tenantSlugFromBookingHost(host);
+        var hostTenant = tenantSlugFromBookingHost(host) || (customHostSlug || '');
 
         var tenantSlug = '';
         var memberSlug = '';
@@ -8193,6 +8217,8 @@
         var protocol = location.protocol || 'https:';
         var platform = tenantBookingPlatformHost(host);
         if (host === slug + '.' + platform) return location.origin;
+        // Bookking-managed custom domain (or any non-platform host already serving this tenant).
+        if (!isBookkingPlatformHost(host)) return location.origin;
         if (host === platform || host === ('www.' + platform) || host.endsWith('.' + platform)) {
           return protocol + '//' + slug + '.' + platform;
         }
@@ -14698,7 +14724,12 @@
       }
 
       function init() {
-        var p = parsePath();
+        var host = (location.hostname || '').toLowerCase();
+        var ready = isBookkingPlatformHost(host)
+          ? Promise.resolve('')
+          : resolveCustomDomainSlug(host);
+        ready.then(function(customSlug) {
+        var p = parsePath(customSlug);
         var bookRedirect = memberBookPathRedirectTarget(p);
         if (bookRedirect) {
           location.replace(bookRedirect + location.hash);
@@ -15412,6 +15443,10 @@
             }
             renderTenantSite();
           });
+        }).catch(function(e){
+          console.error(e);
+          document.getElementById('root').innerHTML = '<div class="container">'+err(e && e.message ? e.message : 'Failed to load.')+'</div>';
+        });
         }).catch(function(e){
           console.error(e);
           document.getElementById('root').innerHTML = '<div class="container">'+err(e && e.message ? e.message : 'Failed to load.')+'</div>';

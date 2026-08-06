@@ -356,4 +356,6 @@ extension Notification.Name {
     static let tenantLogoDidChange = Notification.Name("tenantLogoDidChange")
     /// Posted with `userInfo["businessName"]` when the studio business name changes in Firestore from this app.
     static let tenantBusinessNameDidChange = Notification.Name("tenantBusinessNameDidChange")
+    /// Posted after custom domain buy/transfer so Design reloads blank template + domain.
+    static let customDomainDidChange = Notification.Name("customDomainDidChange")
 }

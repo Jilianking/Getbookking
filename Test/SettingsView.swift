@@ -262,6 +262,21 @@ struct SettingsView: View {
                     }
 
                     Divider().padding(.leading, 52)
+
+                    NavigationLink {
+                        DomainSettingsView()
+                            .environmentObject(authViewModel)
+                    } label: {
+                        AppSettingsRow(
+                            icon: "globe",
+                            iconColor: AppDesign.accentBlue,
+                            title: "Domain",
+                            value: "Buy or transfer"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().padding(.leading, 52)
                 }
 
                 if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.allowsTeamInvites,

@@ -23,6 +23,11 @@
  * Client texting (Twilio): set secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
  * Paid subscription (active) required; free trial (trialing) cannot enable SMS —
  * unless BYPASS_SUBSCRIPTION_PAYMENT_GATE is true in sms.js (testing only).
+ *
+ * Custom domains (Namecheap): set secret NAMECHEAP_API_KEY and params
+ * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
+ * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
+ * Buy/transfer only — no DIY DNS connect.
  */
 
 const functions = require("firebase-functions");
@@ -5153,7 +5158,14 @@ exports.completeProviderSubscriptionCheckout = functions
  * Stripe webhook: completes provisioning when Checkout succeeds (backup if user closes tab before client completes).
  */
 exports.stripeSubscriptionWebhook = functions
-  .runWith({ secrets: [stripeSecretKey, stripeWebhookSecret, stripeSubscriptionPriceIds] })
+  .runWith({
+    secrets: [
+      stripeSecretKey,
+      stripeWebhookSecret,
+      stripeSubscriptionPriceIds,
+      require("./customDomain").namecheapApiKey,
+    ],
+  })
   .https.onRequest(async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
@@ -5210,6 +5222,16 @@ exports.stripeSubscriptionWebhook = functions
           );
         } catch (e) {
           console.error("stripeSubscriptionWebhook shop order finalize", e.message);
+        }
+      } else if (
+        (meta.paymentKind || "").toString() === "domain_purchase" ||
+        (meta.paymentKind || "").toString() === "domain_transfer"
+      ) {
+        try {
+          const { fulfillDomainPaymentIntent } = require("./customDomain");
+          await fulfillDomainPaymentIntent(pi.id);
+        } catch (e) {
+          console.error("stripeSubscriptionWebhook domain finalize", e.message || e);
         }
       } else if (
         (meta.paymentKind || "").toString() === "deposit" &&
@@ -10553,3 +10575,6 @@ registerBetaAdminFunctions(exports);
 
 const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");
 registerTapToPayLaunchEmailFunctions(exports);
+
+const { registerCustomDomainFunctions } = require("./customDomain");
+registerCustomDomainFunctions(exports);

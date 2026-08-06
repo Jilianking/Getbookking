@@ -58,6 +58,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Public host → tenant slug for custom domains (written only by Cloud Functions).
+    match /domainMappings/{host} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if true;
 

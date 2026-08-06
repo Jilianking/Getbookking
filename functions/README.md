@@ -39,7 +39,21 @@
 
    Rules: **14-day website builder trial has no SMS or payments**. Owner must **start paid subscription** (`active`), then **opt in** under Team settings → Notifications → Enable client texting.
 
-8. **Beta admin portal** (`web/marketing/admin/`):
+8. **Namecheap custom domains (sandbox first)**:
+   ```bash
+   # String params in functions/.env.test-app-96812 (gitignored):
+   # NAMECHEAP_API_USER=your_sandbox_username
+   # NAMECHEAP_CLIENT_IP=35.252.212.83   # free e2-micro proxy in us-west1
+   # NAMECHEAP_PROXY_URL=http://35.252.212.83:8080
+   # NAMECHEAP_PROXY_TOKEN=bookking-namecheap-proxy
+   # NAMECHEAP_API_HOST=https://api.sandbox.namecheap.com/xml.response
+
+   firebase functions:secrets:set NAMECHEAP_API_KEY --project test-app-96812
+   ```
+   Paste the sandbox ApiKey when prompted. Whitelist **`35.252.212.83`** in sandbox Profile → Tools → API Access (Cloud Functions call Namecheap via this free static-IP proxy).
+   Deploy domain callables: `firebase deploy --only functions:getCustomDomainStatus,functions:checkDomainAvailability,functions:searchDomains,functions:startDomainTransfer,functions:startDomainPurchase,functions:prepareDomainTransferOut,functions:confirmDomainTransferOut,functions:removeCustomDomain,functions:resolveTenantDomain,firestore:rules`
+
+9. **Beta admin portal** (`web/marketing/admin/`):
    - Set **`BETA_ADMIN_UIDS`** in `functions/.env` to your Firebase Auth uid(s), comma-separated.
    - Optional email (Resend): **`RESEND_API_KEY`**, **`BETA_EMAIL_FROM`** (outbound From), **`BETA_SUPPORT_EMAIL`** (Reply-To; default **`support@getbookking.com`** via admin settings).
    - Tap to Pay partner launch email (Apple 6.1): same Resend vars; auto-sent after signup provision; callable **`sendTapToPayLaunchEmail`** for owner test/resend (`force: true`).

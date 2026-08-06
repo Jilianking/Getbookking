@@ -4,6 +4,10 @@
  * brandonsmith.getbookking.com/gallery  →  https://test-app-96812.web.app/brandonsmith/gallery
  * brandonsmith.getbookking.com/js/...   →  https://test-app-96812.web.app/js/...  (no tenant prefix)
  *
+ * Custom domains (Bookking-managed via Namecheap):
+ *   Resolve host → slug from Cloud Function resolveTenantDomain (domainMappings).
+ *   Only status=active domains are served. No hardcoded domain map.
+ *
  * Team invites:
  *   - Apex / www: getbookking.com/join* → Firebase (when apex is proxied through Cloudflare).
  *   - Recommended: join.getbookking.com/join* (covered by *.getbookking.com/*): same upstream;
@@ -14,6 +18,8 @@
  */
 const UPSTREAM = "https://test-app-96812.web.app";
 const TENANT_DOMAIN = "getbookking.com";
+const RESOLVE_DOMAIN_URL =
+  "https://us-central1-test-app-96812.cloudfunctions.net/resolveTenantDomain";
 
 const RESERVED = new Set([
   "www",
@@ -76,6 +82,37 @@ function proxyToUpstream(request, pathname, search) {
   );
 }
 
+/** Proxy like a tenant subdomain: prefix non-static paths with /{slug}. */
+function proxyTenantPath(request, slug, pathname, search) {
+  let upstreamPath;
+  if (isStaticPath(pathname)) {
+    upstreamPath = pathname;
+  } else {
+    upstreamPath =
+      "/" + encodeURIComponent(slug) + (pathname === "/" ? "" : pathname);
+  }
+  return proxyToUpstream(request, upstreamPath, search);
+}
+
+async function resolveCustomDomainSlug(hostname) {
+  const host = (hostname || "").toLowerCase();
+  if (!host || host.endsWith("." + TENANT_DOMAIN) || host === TENANT_DOMAIN) {
+    return null;
+  }
+  try {
+    const url = RESOLVE_DOMAIN_URL + "?host=" + encodeURIComponent(host);
+    const res = await fetch(url, {
+      cf: { cacheTtl: 60, cacheEverything: true },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const slug = data && data.slug ? String(data.slug).toLowerCase() : "";
+    return slug || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
@@ -94,17 +131,15 @@ export default {
     }
 
     const sub = extractSubdomain(url.hostname);
-    if (!sub) {
-      return fetch(request);
+    if (sub) {
+      return proxyTenantPath(request, sub, pathname, url.search);
     }
 
-    let upstreamPath;
-    if (isStaticPath(pathname)) {
-      upstreamPath = pathname;
-    } else {
-      upstreamPath = "/" + encodeURIComponent(sub) + (pathname === "/" ? "" : pathname);
+    const customSlug = await resolveCustomDomainSlug(url.hostname);
+    if (customSlug) {
+      return proxyTenantPath(request, customSlug, pathname, url.search);
     }
 
-    return proxyToUpstream(request, upstreamPath, url.search);
+    return fetch(request);
   },
 };

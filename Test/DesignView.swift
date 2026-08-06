@@ -102,7 +102,7 @@ struct DesignView: View {
                                     .designWebsite,
                                     isActive: appTour.isStepActive(.designWebsite) && !isShowingManage
                                 )
-                                if viewModel.hasTenant, URL(string: viewModel.bookingUrl) != nil {
+                                if viewModel.hasTenant, URL(string: viewModel.safariSiteUrl) != nil {
                                     Button(action: openInSafari) {
                                         Image(systemName: "safari")
                                     }
@@ -129,6 +129,15 @@ struct DesignView: View {
             .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
                 if let url = note.userInfo?["logoUrl"] as? String {
                     viewModel.syncLogoUrlFromExternal(url)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .customDomainDidChange)) { _ in
+                Task {
+                    await viewModel.loadData(
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
+                    )
+                    viewModel.invalidateWebPreview()
                 }
             }
             .sheet(item: $quickEditSheet) { payload in
@@ -543,6 +552,26 @@ struct DesignView: View {
 
     private var previewContent: some View {
         VStack(spacing: 0) {
+            if let domain = viewModel.customDomain, !domain.isEmpty,
+               viewModel.customDomainStatus.lowercased() != "none" {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe")
+                        .font(.caption.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(domain)
+                            .font(.subheadline.weight(.semibold))
+                        Text("Blank starter ready — build here. Visitors will use this domain when DNS is live.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(AppDesign.brandDark)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground))
+            }
             if viewModel.hasTenant, !authViewModel.isDemoMode {
                 DesignThemePickerBar(
                     viewModel: viewModel,
@@ -1541,7 +1570,7 @@ struct DesignView: View {
     }
 
     private func openInSafari() {
-        guard let url = URL(string: viewModel.bookingUrl) else { return }
+        guard let url = URL(string: viewModel.safariSiteUrl) else { return }
         UIApplication.shared.open(url)
     }
 

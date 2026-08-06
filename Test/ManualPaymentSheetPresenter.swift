@@ -79,7 +79,7 @@ enum ManualPaymentSheetPresenter {
     }
 }
 
-private extension UIApplication {
+extension UIApplication {
     @MainActor
     static var manualPaymentTopViewController: UIViewController? {
         let scenes = shared.connectedScenes.compactMap { $0 as? UIWindowScene }

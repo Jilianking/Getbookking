@@ -766,6 +766,10 @@ struct DomainTransferInstructionsView: View {
                 dontKnowWhere
                 vercelNote
                 afterYouStart
+                Text("Need help? domainsupport@getbookking.com")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(16)
             .padding(.bottom, 40)

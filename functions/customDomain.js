@@ -963,14 +963,14 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     throw new functions.https.HttpsError(
       "failed-precondition",
       namecheapErrorMessage(createRaw) ||
-        "Payment received, but domain registration failed. Contact support@getbookking.com."
+        "Payment received, but domain registration failed. Contact domainsupport@getbookking.com."
     );
   }
   const created = parseDomainCreateSuccess(createRaw);
   if (!created.registered) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Payment received, but domain was not registered. Contact support@getbookking.com."
+      "Payment received, but domain was not registered. Contact domainsupport@getbookking.com."
     );
   }
 
@@ -1049,7 +1049,7 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
     throw new functions.https.HttpsError(
       "failed-precondition",
       namecheapErrorMessage(transferRaw) ||
-        "Payment received, but transfer could not start. Contact support@getbookking.com."
+        "Payment received, but transfer could not start. Contact domainsupport@getbookking.com."
     );
   }
 

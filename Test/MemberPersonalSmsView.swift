@@ -121,11 +121,11 @@ struct MemberPersonalSmsView: View {
     @ViewBuilder
     private var requestPhoneNumberForm: some View {
         if viewModel.smsMustChargeForNextLine {
-            Text("Included texting numbers are used. Extra numbers are \(viewModel.smsExtraMonthlyPriceLabel) each — the owner pays on the studio plan.")
+            Text("Additional numbers beyond your plan allotment are \(viewModel.smsExtraMonthlyPriceLabel). The owner pays on the studio plan.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         } else if viewModel.smsNextLineIsFree {
-            Text("A free included number is available for your personal line.")
+            Text("A texting number is available for your personal line.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

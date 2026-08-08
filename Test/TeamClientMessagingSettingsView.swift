@@ -19,22 +19,15 @@ struct TeamClientMessagingSettingsView: View {
     @State private var addNumberConsent = false
     @State private var selectedSmsLine: SmsLineAssignmentRow?
     @State private var showRemoveNumberConfirm = false
+    @State private var showSoloEnableChargeConfirm = false
     @State private var pendingAssignMember: TenantTeamMember?
     @State private var showAssignNumberConfirm = false
     @State private var removeLinePhase: RemoveLinePhase = .idle
-    @State private var refreshLinePhase: RefreshLinePhase = .idle
-    @State private var showRefreshNumberConfirm = false
     @State private var didCopySmsPhone = false
 
     private enum RemoveLinePhase: Equatable {
         case idle
         case removing
-        case success
-    }
-
-    private enum RefreshLinePhase: Equatable {
-        case idle
-        case refreshing
         case success
     }
 
@@ -57,26 +50,58 @@ struct TeamClientMessagingSettingsView: View {
         .appListSurface()
         .navigationTitle("Messaging")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showAddNumberSheet) {
+        .sheet(isPresented: $showAddNumberSheet, onDismiss: {
+            showAssignNumberConfirm = false
+            pendingAssignMember = nil
+        }) {
             NavigationStack {
                 addNumberSheetContent
             }
             .presentationDetents([.medium, .large])
+            .interactiveDismissDisabled(viewModel.isProvisioningMemberSms)
+            // Dialog must sit on the sheet root — nested List dialogs often never appear.
+            .confirmationDialog(
+                assignConfirmTitle,
+                isPresented: $showAssignNumberConfirm,
+                titleVisibility: .visible
+            ) {
+                Button(assignConfirmActionTitle) {
+                    guard let member = pendingAssignMember else { return }
+                    Task {
+                        if viewModel.smsMustChargeForNextLine {
+                            _ = await viewModel.purchaseAndEnablePersonalSmsLine(
+                                for: member.uid,
+                                consentAccepted: true
+                            )
+                        } else {
+                            await viewModel.ownerEnablePersonalSmsLine(
+                                for: member.uid,
+                                consentAccepted: true
+                            )
+                        }
+                        if viewModel.errorMessage == nil {
+                            showAddNumberSheet = false
+                        }
+                        pendingAssignMember = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingAssignMember = nil
+                }
+            } message: {
+                Text(assignConfirmMessage)
+            }
         }
         .sheet(item: $selectedSmsLine, onDismiss: {
             removeLinePhase = .idle
-            refreshLinePhase = .idle
             showRemoveNumberConfirm = false
-            showRefreshNumberConfirm = false
             didCopySmsPhone = false
         }) { row in
             NavigationStack {
                 smsLineDetailSheet(row)
             }
             .presentationDetents([.medium, .large])
-            .interactiveDismissDisabled(
-                removeLinePhase == .removing || refreshLinePhase == .refreshing
-            )
+            .interactiveDismissDisabled(removeLinePhase == .removing)
             .confirmationDialog(
                 "Remove number for \(row.name)?",
                 isPresented: $showRemoveNumberConfirm,
@@ -87,19 +112,7 @@ struct TeamClientMessagingSettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Releases this Twilio number permanently. Texts will stop. This cannot be undone.")
-            }
-            .confirmationDialog(
-                refreshConfirmTitle(for: row),
-                isPresented: $showRefreshNumberConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(refreshConfirmButtonTitle) {
-                    Task { await runRefreshSmsLine(row) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(refreshConfirmMessage)
+                Text(removeNumberConfirmMessage)
             }
         }
         .task {
@@ -129,6 +142,27 @@ struct TeamClientMessagingSettingsView: View {
         } message: {
             Text(startSubscriptionConfirmMessage)
         }
+        .confirmationDialog(
+            "Purchase a new texting number?",
+            isPresented: $showSoloEnableChargeConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Charge \(viewModel.smsExtraOneTimeReplacementLabel)") {
+                Task { await viewModel.requestSmsProvisioning(consentAccepted: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "A \(viewModel.smsExtraOneTimeReplacementLabel) fee will be charged to your card on file. This is not added to your monthly subscription."
+            )
+        }
+    }
+
+    private var removeNumberConfirmMessage: String {
+        if viewModel.tenantSubscriptionPlan == .solo {
+            return "Releases this Twilio number permanently. Texts will stop. Your included number is used. Getting another later costs $12. This cannot be undone."
+        }
+        return "Releases this Twilio number permanently. Texts will stop. This cannot be undone."
     }
 
     private var startSubscriptionConfirmMessage: String {
@@ -251,7 +285,7 @@ struct TeamClientMessagingSettingsView: View {
             Text("Your number")
         } footer: {
             if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.smsStatus == "active" {
-                Text("If texts fail to send, use Refresh texting number.")
+                Text("Dedicated local number for appointment texts to clients.")
                     .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.subscriptionTrialing {
                 Text(Constants.App.paidFeatureUpgradeMessage)
@@ -382,34 +416,19 @@ struct TeamClientMessagingSettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Opens number details and refresh")
+                .accessibilityHint("Opens number details")
             } else {
                 Text(viewModel.smsPhoneDisplay)
                     .font(.body.monospacedDigit())
             }
-            if viewModel.isProvisioningSms || viewModel.isRefreshingSmsLine {
+            if viewModel.isProvisioningSms {
                 HStack {
                     ProgressView()
-                    Text("Refreshing your texting number…")
+                    Text("Setting up your texting number…")
                         .font(.subheadline)
                 }
             }
         }
-    }
-
-    private func refreshConfirmTitle(for row: SmsLineAssignmentRow) -> String {
-        "Refresh number for \(row.name)?"
-    }
-
-    private var refreshConfirmButtonTitle: String {
-        viewModel.smsRefreshNeedsPurchase ? "Charge $10 & refresh" : "Refresh number"
-    }
-
-    private var refreshConfirmMessage: String {
-        if viewModel.smsRefreshNeedsPurchase {
-            return "Gets a new Twilio number and charges your card $10 once. Your old number is released."
-        }
-        return "Gets a new Twilio number. Your old number is released. This cannot be undone."
     }
 
     @ViewBuilder
@@ -422,14 +441,15 @@ struct TeamClientMessagingSettingsView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            HStack {
-                Text("Included free")
-                Spacer()
-                Text("\(viewModel.smsFreeIncluded)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            if viewModel.tenantSubscriptionPlan != .solo {
+            if viewModel.tenantSubscriptionPlan == .solo {
+                HStack {
+                    Text("Included")
+                    Spacer()
+                    Text("\(viewModel.smsFreeIncluded)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            } else {
                 HStack {
                     Text("Additional numbers")
                     Spacer()
@@ -487,8 +507,8 @@ struct TeamClientMessagingSettingsView: View {
         } footer: {
             Text(
                 viewModel.tenantSubscriptionPlan == .solo
-                    ? "Solo includes 1 texting number."
-                    : "\(viewModel.tenantSubscriptionPlan.displayName): \(viewModel.smsFreeIncluded) free numbers, then \(viewModel.smsExtraMonthlyPriceLabel) each, up to \(viewModel.smsMaxLines) (matches plan seats)."
+                    ? "Solo includes 1 texting number. After you remove it, getting another costs $12 (not monthly)."
+                    : "Additional numbers beyond your plan allotment are \(viewModel.smsExtraMonthlyPriceLabel)."
             )
             .font(.caption2)
         }
@@ -645,33 +665,6 @@ struct TeamClientMessagingSettingsView: View {
                         .font(.caption2)
                 }
 
-                if row.canRefresh {
-                    Section {
-                        Button {
-                            showRefreshNumberConfirm = true
-                        } label: {
-                            if viewModel.smsRefreshNeedsPurchase {
-                                Text("Refresh number — $10")
-                            } else {
-                                Text("Refresh number")
-                            }
-                        }
-                        .disabled(
-                            removeLinePhase != .idle ||
-                            refreshLinePhase != .idle ||
-                            viewModel.isRefreshingSmsLine ||
-                            viewModel.isReleasingSmsLine
-                        )
-                    } footer: {
-                        Text(
-                            viewModel.smsRefreshNeedsPurchase
-                                ? "Releases this number and buys a new one. Charges $10 once after your included free numbers."
-                                : "Releases this number and buys a new one."
-                        )
-                        .font(.caption2)
-                    }
-                }
-
                 if row.canRelease {
                     Section {
                         Button(role: .destructive) {
@@ -681,18 +674,20 @@ struct TeamClientMessagingSettingsView: View {
                         }
                         .disabled(
                             removeLinePhase != .idle ||
-                            refreshLinePhase != .idle ||
-                            viewModel.isReleasingSmsLine ||
-                            viewModel.isRefreshingSmsLine
+                            viewModel.isReleasingSmsLine
                         )
                     } footer: {
-                        Text("Releases the number from Twilio. The person keeps their Bookking login; they can get a new number later if capacity allows.")
-                            .font(.caption2)
+                        Text(
+                            viewModel.tenantSubscriptionPlan == .solo
+                                ? "Releases the number from Twilio. Your included number is used. Getting another later costs $12 (not monthly)."
+                                : "Releases the number from Twilio. The person keeps their Bookking login; they can get a new number later if capacity allows."
+                        )
+                        .font(.caption2)
                     }
                 }
 
                 if let msg = viewModel.errorMessage, !msg.isEmpty,
-                   removeLinePhase == .idle, refreshLinePhase == .idle {
+                   removeLinePhase == .idle {
                     Section {
                         Text(msg)
                             .font(.caption)
@@ -715,24 +710,6 @@ struct TeamClientMessagingSettingsView: View {
                     showSpinner: false,
                     showDoneButton: true
                 )
-            } else if refreshLinePhase == .refreshing {
-                removeLineStatusOverlay(
-                    title: "Refreshing \(row.name)…",
-                    subtitle: viewModel.smsRefreshNeedsPurchase
-                        ? "Charging $10 and setting up a new number. Please wait."
-                        : "Setting up a new texting number. Please wait.",
-                    showSpinner: true,
-                    showDoneButton: false
-                )
-            } else if refreshLinePhase == .success {
-                removeLineStatusOverlay(
-                    title: "Number refreshed",
-                    subtitle: row.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? "A new texting number is ready."
-                        : "New number: \(row.phoneDisplay)",
-                    showSpinner: false,
-                    showDoneButton: true
-                )
             }
         }
         .navigationTitle(row.name)
@@ -740,7 +717,7 @@ struct TeamClientMessagingSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") { selectedSmsLine = nil }
-                    .disabled(removeLinePhase == .removing || refreshLinePhase == .refreshing)
+                    .disabled(removeLinePhase == .removing)
             }
         }
     }
@@ -825,29 +802,6 @@ struct TeamClientMessagingSettingsView: View {
         }
     }
 
-    private func runRefreshSmsLine(_ row: SmsLineAssignmentRow) async {
-        refreshLinePhase = .refreshing
-        viewModel.errorMessage = nil
-        let ok: Bool
-        if row.kind == .studio {
-            ok = await viewModel.refreshSmsPhoneNumber(scope: "studio", memberUid: nil)
-        } else {
-            ok = await viewModel.refreshSmsPhoneNumber(
-                scope: "personal",
-                memberUid: row.memberUid
-            )
-        }
-        if ok {
-            // Keep sheet item in sync with the new number after load.
-            if let updated = viewModel.smsLineAssignments.first(where: { $0.id == row.id }) {
-                selectedSmsLine = updated
-            }
-            refreshLinePhase = .success
-        } else {
-            refreshLinePhase = .idle
-        }
-    }
-
     @ViewBuilder
     private var addNumberSheetContent: some View {
         List {
@@ -924,38 +878,8 @@ struct TeamClientMessagingSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { showAddNumberSheet = false }
+                    .disabled(viewModel.isProvisioningMemberSms)
             }
-        }
-        .confirmationDialog(
-            assignConfirmTitle,
-            isPresented: $showAssignNumberConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(assignConfirmActionTitle) {
-                guard let member = pendingAssignMember else { return }
-                Task {
-                    if viewModel.smsMustChargeForNextLine {
-                        _ = await viewModel.purchaseAndEnablePersonalSmsLine(
-                            for: member.uid,
-                            consentAccepted: true
-                        )
-                    } else {
-                        await viewModel.ownerEnablePersonalSmsLine(
-                            for: member.uid,
-                            consentAccepted: true
-                        )
-                    }
-                    if viewModel.errorMessage == nil {
-                        showAddNumberSheet = false
-                    }
-                    pendingAssignMember = nil
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                pendingAssignMember = nil
-            }
-        } message: {
-            Text(assignConfirmMessage)
         }
     }
 
@@ -989,9 +913,15 @@ struct TeamClientMessagingSettingsView: View {
                 : viewModel.smsProvisionError)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Try again") {
+            Button(viewModel.smsMustPaySoloReplacementFee
+                   ? "Charge \(viewModel.smsExtraOneTimeReplacementLabel) & try again"
+                   : "Try again") {
                 smsConsentAccepted = false
-                Task { await viewModel.requestSmsProvisioning(consentAccepted: true) }
+                if viewModel.smsMustPaySoloReplacementFee {
+                    showSoloEnableChargeConfirm = true
+                } else {
+                    Task { await viewModel.requestSmsProvisioning(consentAccepted: true) }
+                }
             }
             .disabled(viewModel.isProvisioningSms)
         }
@@ -999,17 +929,29 @@ struct TeamClientMessagingSettingsView: View {
 
     private var enableSmsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Get a dedicated local number for appointment texts.")
+            Text(
+                viewModel.smsMustPaySoloReplacementFee
+                    ? "Your included number is used. Getting another costs \(viewModel.smsExtraOneTimeReplacementLabel). This fee is not added to your monthly subscription."
+                    : "Get a dedicated local number for appointment texts."
+            )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Toggle("I agree clients may receive appointment-related texts.", isOn: $smsConsentAccepted)
                 .font(.caption)
             Button {
-                Task { await viewModel.requestSmsProvisioning(consentAccepted: smsConsentAccepted) }
+                if viewModel.smsMustPaySoloReplacementFee {
+                    showSoloEnableChargeConfirm = true
+                } else {
+                    Task { await viewModel.requestSmsProvisioning(consentAccepted: smsConsentAccepted) }
+                }
             } label: {
                 HStack {
                     if viewModel.isProvisioningSms { ProgressView().scaleEffect(0.9) }
-                    Text("Enable client texting")
+                    Text(
+                        viewModel.smsMustPaySoloReplacementFee
+                            ? "Purchase texting number — \(viewModel.smsExtraOneTimeReplacementLabel)"
+                            : "Enable client texting"
+                    )
                 }
             }
             .disabled(!smsConsentAccepted || viewModel.isProvisioningSms)

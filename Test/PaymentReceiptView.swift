@@ -229,6 +229,8 @@ struct PaymentReceiptSheet: View {
     let detail: PaymentReceiptDetail
     var drawerState: DrawerState
     var onDismissAll: (() -> Void)?
+    /// When set, Done uses this instead of dismissing the nearest presentation.
+    var onDone: (() -> Void)? = nil
     var outcomeBanner: PaymentReceiptOutcomeBanner?
     var onTryAgain: (() -> Void)?
     var onManualPayment: (() -> Void)?
@@ -261,7 +263,13 @@ struct PaymentReceiptSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        if let onDone {
+                            onDone()
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -334,7 +342,13 @@ struct PaymentReceiptSheet: View {
     }
 
     private func sendInMessages() {
-        drawerState.messagesComposeBody = detail.smsBody()
+        let shareText = detail.messagesShareLinkOrBody()
+        UIPasteboard.general.string = shareText
+        // Leave To: empty so user can type a name/client; put link in the composer.
+        drawerState.messagesComposePhone = nil
+        drawerState.messagesComposeClientName = nil
+        drawerState.messagesComposeBookingRequestId = nil
+        drawerState.messagesComposeBody = shareText
         drawerState.messagesShouldOpenCompose = true
         drawerState.selectedSection = .messages
         drawerState.isOpen = false

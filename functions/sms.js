@@ -363,6 +363,74 @@ async function releaseTwilioPhoneSid(phoneSid) {
   }
 }
 
+/** True if SID still exists in Twilio. Transient errors return true (do not wipe). */
+async function twilioIncomingNumberExists(phoneSid) {
+  const sid = (phoneSid || "").toString().trim();
+  if (!sid) return false;
+  try {
+    await getMasterTwilioClient().incomingPhoneNumbers(sid).fetch();
+    return true;
+  } catch (e) {
+    const status = e.status || e.statusCode || e.code;
+    const msg = String(e.message || e).toLowerCase();
+    if (
+      status === 404 ||
+      msg.includes("not found") ||
+      msg.includes("404") ||
+      msg.includes("was not found")
+    ) {
+      return false;
+    }
+    console.warn("twilioIncomingNumberExists transient", sid, e.message || e);
+    return true;
+  }
+}
+
+/**
+ * Clear Firestore SMS lines whose Twilio SIDs no longer exist (orphans).
+ * Returns updated tenant snapshot fields and how many lines were cleared.
+ */
+async function reconcileStaleSmsLinesInFirestore(tenantId, tenant, userDocs) {
+  let cleared = 0;
+  let tenantOut = tenant || {};
+  const studioSid = (tenantOut.smsPhoneNumberSid || "").toString().trim();
+  const studioPhone = (tenantOut.smsPhoneNumber || "").toString().trim();
+  if (studioSid || studioPhone) {
+    const ok = studioSid ? await twilioIncomingNumberExists(studioSid) : false;
+    if (!ok) {
+      await getDb()
+        .collection("tenants")
+        .doc(tenantId)
+        .set(tenantSmsClearedFields(), { merge: true });
+      tenantOut = {
+        ...tenantOut,
+        smsPhoneNumber: "",
+        smsPhoneNumberSid: "",
+        smsStatus: "off",
+        smsEnabled: false,
+      };
+      cleared += 1;
+      console.log("reconcileStaleSmsLines: cleared studio", tenantId, studioSid || studioPhone);
+    }
+  }
+
+  for (const doc of userDocs || []) {
+    const d = typeof doc.data === "function" ? doc.data() || {} : {};
+    const sid = (d.smsPhoneNumberSid || "").toString().trim();
+    const phone = (d.smsPhoneNumber || "").toString().trim();
+    if (!sid && !phone) continue;
+    if (!sid) continue; // phone-only rows: cannot verify without SID
+    const ok = await twilioIncomingNumberExists(sid);
+    if (!ok) {
+      await doc.ref.set(personalSmsClearedFields(), { merge: true });
+      cleared += 1;
+      console.log("reconcileStaleSmsLines: cleared member", doc.id, sid);
+    }
+  }
+
+  return { tenant: tenantOut, cleared };
+}
+
 /**
  * Release a team member's personal Twilio number (best effort). Caller clears Firestore SMS fields.
  */
@@ -391,6 +459,11 @@ function personalSmsClearedFields() {
     smsLineRequestPending: admin.firestore.FieldValue.delete(),
     smsLineRequestedAt: admin.firestore.FieldValue.delete(),
     smsLineRequestConsentAccepted: admin.firestore.FieldValue.delete(),
+    smsLineIsPaidExtra: admin.firestore.FieldValue.delete(),
+    smsPaidLinePurchaseAuthorizationId: admin.firestore.FieldValue.delete(),
+    smsPaidLinePurchaseInvoiceId: admin.firestore.FieldValue.delete(),
+    smsPaidLinePurchaseAuthorizedAt: admin.firestore.FieldValue.delete(),
+    smsPaidLinePurchaseExpiresAt: admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -406,6 +479,14 @@ function tenantSmsClearedFields() {
     smsProvisionError: admin.firestore.FieldValue.delete(),
     smsSuspendedAt: admin.firestore.FieldValue.delete(),
     smsSuspendReason: admin.firestore.FieldValue.delete(),
+    smsLineIsPaidExtra: admin.firestore.FieldValue.delete(),
+    smsLastSoloReplacementInvoiceId: admin.firestore.FieldValue.delete(),
+    smsLastSoloReplacementAt: admin.firestore.FieldValue.delete(),
+    smsSoloReplacementAuthorizationId: admin.firestore.FieldValue.delete(),
+    smsSoloReplacementAuthorizationInvoiceId: admin.firestore.FieldValue.delete(),
+    smsSoloReplacementAuthorizationState: admin.firestore.FieldValue.delete(),
+    smsSoloReplacementAuthorizationExpiresAt: admin.firestore.FieldValue.delete(),
+    smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -466,7 +547,7 @@ async function buyMasterLocalNumber(master, areaCode) {
 /**
  * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
  */
-async function provisionTenantSms(tenantId, tenant) {
+async function provisionTenantSms(tenantId, tenant, opts) {
   const master = getMasterTwilioClient();
   const messagingServiceSid = getMasterMessagingServiceSid();
   const areaCode = pickAreaCode(tenant);
@@ -503,6 +584,11 @@ async function provisionTenantSms(tenantId, tenant) {
   if (boughtNew) {
     patch.smsLifetimeNumbersBought = admin.firestore.FieldValue.increment(1);
   }
+  if (opts && opts.isPaidExtra === true) {
+    patch.smsLineIsPaidExtra = true;
+  } else if (opts && opts.isPaidExtra === false) {
+    patch.smsLineIsPaidExtra = false;
+  }
   await getDb().collection("tenants").doc(tenantId).set(patch, { merge: true });
 
   return { phoneNumber: e164, messagingServiceSid, boughtNew };
@@ -512,7 +598,14 @@ function memberPayoutMode(memberData) {
   const raw = memberData && memberData.memberSettings;
   const d = raw && typeof raw === "object" ? raw : {};
   const mode = (d.payoutMode || "independent").toString().trim().toLowerCase();
-  return mode === "studio_payroll" ? "studio_payroll" : "independent";
+  if (mode === "shop_split" || mode === "studio_payroll") return "shop_split";
+  return "independent";
+}
+
+/** Personal Stripe / SMS: any non-legacy-blocked mode (everyone uses own Connect now). */
+function memberUsesOwnConnect(memberData) {
+  const mode = memberPayoutMode(memberData);
+  return mode === "independent" || mode === "shop_split";
 }
 
 function tenantStudioSmsActive(tenant) {
@@ -540,6 +633,31 @@ function occupiesSmsLineSlot(record) {
   const phone = (record.smsPhoneNumber || "").toString().trim();
   const sid = (record.smsPhoneNumberSid || "").toString().trim();
   return !!(phone || sid);
+}
+
+/** True when this occupied line was acquired as a paid Extra SMS seat. */
+function isPaidSmsLineExtra(record) {
+  return !!(record && record.smsLineIsPaidExtra === true);
+}
+
+/**
+ * Count occupied lines tagged as paid extras (studio + personal except owner).
+ */
+function countPaidSmsLinesFromDocs(tenant, userDocs) {
+  let n = 0;
+  if (occupiesSmsLineSlot(tenant) && isPaidSmsLineExtra(tenant)) n += 1;
+  const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
+  for (const doc of userDocs || []) {
+    if (ownerUid && doc.id === ownerUid) continue;
+    const d = typeof doc.data === "function" ? doc.data() || {} : doc || {};
+    if (occupiesSmsLineSlot(d) && isPaidSmsLineExtra(d)) n += 1;
+  }
+  return n;
+}
+
+async function countPaidSmsLines(tenantId, tenant) {
+  const snap = await getDb().collection("users").where("tenantId", "==", tenantId).get();
+  return countPaidSmsLinesFromDocs(tenant, snap.docs);
 }
 
 /**
@@ -631,11 +749,9 @@ async function countOccupiedSmsLines(tenantId, tenant) {
 /**
  * Snapshot for API / UI.
  *
- * Product rule: first `freeIncluded` numbers are free (Studio/Shop = 2).
- * When numbers in use >= freeIncluded, the next add always requires a Stripe
- * $10 purchase — leftover prepaid qty must not skip the charge UI.
- * Provisioning after a successful purchase is allowed when paidExtras covers
- * the next line (paid >= used + 1 - free).
+ * Concurrent free seats: Solo 1 · Studio/Shop 2.
+ * Lifetime free gets: same counts — after lifetime free are used, the next
+ * new number costs $12 even if a free concurrent seat was freed by a delete.
  */
 function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
@@ -644,23 +760,22 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const paidExtras = smsExtraPaidQuantity(tenant);
   const capacity = smsLineCapacity(tenant, plan);
   const used = Math.max(0, Number(lineCount) || 0);
+  const lifetime = resolveLifetimeNumbersBought(tenant, used);
   const freeRemaining = Math.max(0, freeIncluded - used);
   const overage = Math.max(0, used - freeIncluded);
   const paidNeededForNextLine = Math.max(0, used + 1 - freeIncluded);
   const unusedPaidCapacity = Math.max(0, paidExtras - overage);
   const slotsRemaining = Math.max(0, capacity - used);
   const atMax = used >= maxLines;
-  const nextIsFree = used < freeIncluded;
-  // Always charge when at/above free included (2/5 → add 3rd = pay).
-  // Leftover Stripe qty must NEVER clear this flag — purchase UI is required.
-  const needsPurchaseForNext = !atMax && used >= freeIncluded;
-  // Free add only while under included allotment (ignore leftover paid qty).
-  const canAddWithoutPurchase = !atMax && used < freeIncluded;
-  // Free slots only. Paid 3rd+ lines require Stripe auth in the callables —
-  // leftover paidExtras alone must not unlock Twilio.
+  // Free only while under concurrent free AND lifetime free allotment remains.
+  const nextIsFree = !atMax && used < freeIncluded && lifetime < freeIncluded;
+  const needsPurchaseForNext = !atMax && !nextIsFree;
+  const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
+  // Studio/Shop: recurring Extra SMS seats. Solo: one-time $12 replacement only (max 1).
   const canPurchaseExtra = plan !== "solo" && !atMax;
+  const canPurchaseSoloReplacement = plan === "solo" && needsPurchaseForNext;
   return {
     plan,
     freeIncluded,
@@ -668,6 +783,7 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     paidExtras,
     capacity,
     used,
+    lifetimeNumbersBought: lifetime,
     freeRemaining,
     overage,
     paidNeededForNextLine,
@@ -680,12 +796,15 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     canAddWithoutPurchase,
     canProvisionNext,
     canPurchaseExtra,
-    extraMonthlyPriceCents: 1000,
-    extraMonthlyPriceLabel: "$10/mo",
+    canPurchaseSoloReplacement,
+    extraMonthlyPriceCents: 1200,
+    extraMonthlyPriceLabel: "$12/mo",
+    extraOneTimeReplacementCents: 1200,
+    extraOneTimeReplacementLabel: "$12",
   };
 }
 
-/** Paid extras that should be on the sub for the current occupied count. */
+/** Paid extras that should be on the sub = currently active paid-tagged lines. */
 function smsExtraNeededForUsage(planNorm, lineCount) {
   const free = freeIncludedSmsLinesForPlan(planNorm);
   const used = Math.max(0, Number(lineCount) || 0);
@@ -708,9 +827,15 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
     );
   }
   if (!summary.canProvisionNext) {
+    if (summary.plan === "solo") {
+      return (
+        "You've used your included Solo texting number. " +
+        "Getting another costs a $12 fee (not monthly)."
+      );
+    }
     return (
       "You've used your included texting numbers. " +
-      "Add another number for $10/mo under Account → Plan & billing on getbookking.com."
+      "Add another number for $12/mo under Account → Plan & billing on getbookking.com."
     );
   }
   return null;
@@ -736,7 +861,7 @@ function memberPersonalSmsBlockReason(tenant, ownerUserData, memberData) {
   if (billingBlock) return billingBlock;
   const studioBlock = tenantSmsMustBeActiveForMemberLine(tenant);
   if (studioBlock) return studioBlock;
-  if (memberPayoutMode(memberData) !== "independent") {
+  if (!memberUsesOwnConnect(memberData)) {
     return "Personal texting lines are for independent team members.";
   }
   if (memberData.smsEnabled !== true) {
@@ -784,12 +909,12 @@ async function ensureMemberIncomingNumber(master, memberData, webhook) {
 /**
  * Provision a personal SMS number for an independent team member.
  */
-async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
+async function provisionMemberSms(tenantId, tenant, memberUid, memberData, opts) {
   const studioBlock = tenantSmsMustBeActiveForMemberLine(tenant);
   if (studioBlock) {
     throw new Error(studioBlock);
   }
-  if (memberPayoutMode(memberData) !== "independent") {
+  if (!memberUsesOwnConnect(memberData)) {
     throw new Error("Personal texting lines are for independent team members.");
   }
   const master = getMasterTwilioClient();
@@ -813,18 +938,21 @@ async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
   await attachNumberToMasterMessagingService(master, messagingServiceSid, numberResource.sid);
 
   const e164 = numberResource.phoneNumber;
-  await getDb().collection("users").doc(memberUid).set(
-    {
-      smsPhoneNumber: e164,
-      smsPhoneNumberSid: numberResource.sid,
-      smsStatus: "active",
-      smsEnabled: true,
-      smsEnabledAt: admin.firestore.FieldValue.serverTimestamp(),
-      smsProvisionError: admin.firestore.FieldValue.delete(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const memberPatch = {
+    smsPhoneNumber: e164,
+    smsPhoneNumberSid: numberResource.sid,
+    smsStatus: "active",
+    smsEnabled: true,
+    smsEnabledAt: admin.firestore.FieldValue.serverTimestamp(),
+    smsProvisionError: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (opts && opts.isPaidExtra === true) {
+    memberPatch.smsLineIsPaidExtra = true;
+  } else {
+    memberPatch.smsLineIsPaidExtra = false;
+  }
+  await getDb().collection("users").doc(memberUid).set(memberPatch, { merge: true });
   if (boughtNew) {
     await getDb().collection("tenants").doc(tenantId).set(
       {
@@ -857,7 +985,7 @@ function resolveOutboundSmsRoute({
   // Replies stay on the line that owns the thread (number that was texted).
   if (threadScope === "member" || threadMemberUid) {
     if (
-      memberPayoutMode(senderUserData) === "independent" &&
+      memberUsesOwnConnect(senderUserData) &&
       senderUserData &&
       senderUserData.smsStatus === "active" &&
       (senderUserData.smsPhoneNumber || "").toString().trim() &&
@@ -881,7 +1009,7 @@ function resolveOutboundSmsRoute({
     };
   }
   if (
-    memberPayoutMode(senderUserData) === "independent" &&
+    memberUsesOwnConnect(senderUserData) &&
     senderUserData &&
     senderUserData.smsStatus === "active" &&
     (senderUserData.smsPhoneNumber || "").toString().trim()
@@ -907,7 +1035,7 @@ function canSendClientSms({
     return true;
   }
   if (
-    memberPayoutMode(senderUserData) === "independent" &&
+    memberUsesOwnConnect(senderUserData) &&
     senderUserData &&
     senderUserData.smsStatus === "active" &&
     (senderUserData.smsPhoneNumber || "").toString().trim()
@@ -1644,6 +1772,8 @@ module.exports = {
   releaseMemberSms,
   releaseTenantSms,
   releaseTwilioPhoneSid,
+  twilioIncomingNumberExists,
+  reconcileStaleSmsLinesInFirestore,
   personalSmsClearedFields,
   tenantSmsClearedFields,
   sendTenantSms,
@@ -1662,9 +1792,13 @@ module.exports = {
   clearPhoneOptOut,
   memberPersonalSmsBlockReason,
   memberPayoutMode,
+  memberUsesOwnConnect,
   tenantStudioSmsActive,
   countsAsOccupiedSmsLine,
   occupiesSmsLineSlot,
+  isPaidSmsLineExtra,
+  countPaidSmsLinesFromDocs,
+  countPaidSmsLines,
   freeIncludedSmsLinesForPlan,
   lifetimeFreeSmsNumbersForPlan,
   smsLifetimeNumbersBought,

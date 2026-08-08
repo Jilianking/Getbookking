@@ -191,7 +191,7 @@ struct DashboardView: View {
                 showTapToPayEducation = false
             }
         }
-        .alert("Tap to Pay", isPresented: Binding(
+        .alert("Tap to Pay on iPhone", isPresented: Binding(
             get: { tapToPayAlertMessage != nil },
             set: { if !$0 { tapToPayAlertMessage = nil } }
         )) {

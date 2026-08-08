@@ -134,7 +134,7 @@ final class TapToPayTerminalManager {
     private func warmUpReaderUnlocked(locationId: String, merchantDisplayName: String?) async {
         guard !locationId.isEmpty else {
             await MainActor.run {
-                TapToPayReaderSession.shared.markFailed("Tap to Pay location is not configured.")
+                TapToPayReaderSession.shared.markFailed("Tap to Pay on iPhone location is not configured.")
             }
             return
         }
@@ -396,11 +396,11 @@ final class TapToPayTerminalManager {
         var errorDescription: String? {
             switch self {
             case .missingLocationId:
-                return "Tap to Pay is not configured. Add a Terminal location in Stripe Dashboard."
+                return "Tap to Pay on iPhone is not configured. Add a Terminal location in Stripe Dashboard."
             case .noReadersFound:
-                return "No Tap to Pay reader is available on this device."
+                return "No Tap to Pay on iPhone reader is available on this device."
             case .terminalConnectionFailed:
-                return "Could not connect to Tap to Pay."
+                return "Could not connect to Tap to Pay on iPhone."
             case .message(let text):
                 return text
             }

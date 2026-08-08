@@ -43,9 +43,13 @@ const FIREBASE_CLI_CLIENT_SECRET =
 /**
  * Name pool — emails become {first}.team.{ownerLocal}@domain.
  * Do not reuse first names already seeded on other test tenants
- * (alex/jordan/sam, nina/drew/harper/blake/skyler/reese, etc.).
+ * (alex/jordan/sam, nina/drew/harper/blake/skyler/reese,
+ * cameron/parker/finley, etc.).
  */
 const MEMBER_NAME_PRESETS = [
+  { firstName: "Remy", lastName: "Ortega", phone: "(555) 401-4010" },
+  { firstName: "Quinn", lastName: "Hale", phone: "(555) 401-4011" },
+  { firstName: "Theo", lastName: "Brooks", phone: "(555) 401-4012" },
   { firstName: "Cameron", lastName: "Walsh", phone: "(555) 401-4001" },
   { firstName: "Parker", lastName: "Singh", phone: "(555) 401-4002" },
   { firstName: "Finley", lastName: "Cruz", phone: "(555) 401-4003" },

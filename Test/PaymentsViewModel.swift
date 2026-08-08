@@ -13,7 +13,7 @@ import UserNotifications
 
 struct PaymentTransaction: Identifiable, Hashable {
     let id: String
-    let type: String // charge, payment, payout, refund, adjustment, etc.
+    let type: String // charge, payment, payout, refund, adjustment, studio_share, etc.
     let amount: Double
     let grossAmount: Double
     let feeAmount: Double
@@ -24,6 +24,15 @@ struct PaymentTransaction: Identifiable, Hashable {
     let reportingCategory: String?
     /// Stripe charge ID when available; used for receipt and refund.
     let chargeId: String?
+    /// Team member who originated a studio-share split (owner credit / member debit).
+    let attributedMemberName: String?
+    let attributedMemberUid: String?
+    /// Full customer charge for the underlying payment (studio-share rows).
+    let sourcePaymentTotal: Double?
+    /// Service amount before pass-through fees (studio-share rows).
+    let sourcePaymentService: Double?
+    /// Pass-through fee cents on the underlying payment (studio-share rows).
+    let sourcePassThroughFee: Double?
 
     /// Platform fee credits from partial/full refunds — not customer-facing activity.
     var isApplicationFeeRefundLine: Bool {
@@ -35,7 +44,46 @@ struct PaymentTransaction: Identifiable, Hashable {
 
     var showsInActivityFeed: Bool { !isApplicationFeeRefundLine }
 
+    var isStudioShareLine: Bool {
+        if type == "studio_share" { return true }
+        let desc = (customerName ?? "").lowercased()
+        return desc.contains("studio share")
+    }
+
+    /// Bank / Instant withdraw from Stripe balance (not a customer charge).
+    var isPayoutLine: Bool {
+        type == "payout" || (reportingCategory ?? "").lowercased() == "payout"
+    }
+
+    /// Fee to show on payment detail — Stripe BT fee, else estimated pass-through on received amount.
+    /// Payouts never invent card fees: Standard withdraw is free; Instant only shows Stripe-reported fees.
+    var displayedProcessingFee: Double {
+        if isPayoutLine {
+            return feeAmount > 0 ? feeAmount : 0
+        }
+        if feeAmount > 0 { return feeAmount }
+        if let sourcePassThroughFee, sourcePassThroughFee > 0 { return sourcePassThroughFee }
+        let serviceCents: Int = {
+            if let sourcePaymentService, sourcePaymentService > 0 {
+                return Int(round(sourcePaymentService * 100))
+            }
+            return Int(round(amount * 100))
+        }()
+        guard serviceCents > 0 else { return 0 }
+        return Double(CardCheckoutPricing.breakdown(serviceCents: serviceCents, channel: .online).passThroughFeeCents) / 100.0
+    }
+
+    /// True when fees were passed through to the customer (merchant BT fee is usually $0).
+    /// Never for payouts — there is no client on a withdraw.
+    var processingFeePaidByClient: Bool {
+        if isPayoutLine { return false }
+        return feeAmount <= 0 && displayedProcessingFee > 0
+    }
+
     var displayTitle: String {
+        if isStudioShareLine {
+            return "Studio share"
+        }
         if type == "refund" || isCustomerRefundLine {
             return "Refund"
         }
@@ -49,29 +97,50 @@ struct PaymentTransaction: Identifiable, Hashable {
     }
 
     var channelLabel: String {
-        if type == "refund" || isCustomerRefundLine {
-            return "Refund"
-        }
+        if isStudioShareLine { return "Studio share" }
+        if type == "refund" || isCustomerRefundLine { return "Refund" }
         let desc = (customerName ?? "").lowercased()
         if desc.contains("deposit") { return "Deposit" }
-        if desc.contains("tap to pay") || desc.contains("terminal") { return "Tap to Pay" }
+        if desc.contains("tap to pay") || desc.contains("terminal") { return "Tap to Pay on iPhone" }
         switch type {
         case "charge", "payment": return "Payment"
         case "payout": return "Payout"
+        case "studio_share": return "Studio share"
         default:
             if type == "adjustment" { return "Adjustment" }
             return type.capitalized
         }
     }
 
+    /// e.g. "From Maya" on owner credits, "To studio" on member debits.
+    var studioSharePartyLabel: String? {
+        guard isStudioShareLine else { return nil }
+        let name = (attributedMemberName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if isCredit {
+            return name.isEmpty ? nil : "From \(name)"
+        }
+        return "To studio"
+    }
+
     var subtitleText: String {
-        guard let createdAt else { return channelLabel }
-        let datePart = Self.relativeDateString(for: createdAt)
+        let datePart: String = {
+            guard let createdAt else { return "" }
+            return Self.relativeDateString(for: createdAt)
+        }()
+        if let party = studioSharePartyLabel {
+            if datePart.isEmpty { return party }
+            return "\(party) · \(datePart)"
+        }
+        guard !datePart.isEmpty else { return channelLabel }
         return "\(channelLabel) · \(datePart)"
     }
 
     var initials: String {
-        Self.initials(from: displayTitle)
+        if isStudioShareLine, let name = attributedMemberName?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return Self.initials(from: name)
+        }
+        return Self.initials(from: displayTitle)
     }
 
     var isPaid: Bool { isCredit && status != "pending" }
@@ -105,6 +174,13 @@ struct PaymentTransaction: Identifiable, Hashable {
             if typeStr == "charge", let sourceId, !sourceId.isEmpty { return sourceId }
             return nil
         }()
+        let attributedMemberName = (t["attributedMemberName"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let attributedMemberUid = (t["attributedMemberUid"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceGross = (t["sourceGrossCents"] as? NSNumber)?.intValue
+        let sourceService = (t["sourceServiceCents"] as? NSNumber)?.intValue
+        let sourceSurcharge = (t["sourceSurchargeCents"] as? NSNumber)?.intValue
         return PaymentTransaction(
             id: id,
             type: typeStr,
@@ -116,7 +192,12 @@ struct PaymentTransaction: Identifiable, Hashable {
             createdAt: createdAt,
             status: statusRaw,
             reportingCategory: reportingCategory?.isEmpty == false ? reportingCategory : nil,
-            chargeId: chargeId
+            chargeId: chargeId,
+            attributedMemberName: attributedMemberName?.isEmpty == false ? attributedMemberName : nil,
+            attributedMemberUid: attributedMemberUid?.isEmpty == false ? attributedMemberUid : nil,
+            sourcePaymentTotal: sourceGross.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
+            sourcePaymentService: sourceService.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
+            sourcePassThroughFee: sourceSurcharge.flatMap { $0 > 0 ? Double($0) / 100.0 : nil }
         )
     }
 
@@ -156,18 +237,22 @@ struct TapToPayPaymentIntent {
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
     @Published var pendingBalance: Double = 0
-    /// Stripe `instant_available` (USD) — funds eligible for Instant Payouts.
+    /// Stripe Instant-eligible (USD), net of platform Instant pricing when returned by `getConnectBalance`.
     @Published var instantAvailableBalance: Double = 0
     /// True when Stripe reports Instant-eligible destination + enough instant_available.
     @Published var instantPayoutEligible: Bool = false
+    /// PCI-safe default payout destination, e.g. "Chase ····1234".
+    @Published var standardPayoutDestinationLabel: String?
+    /// Instant-capable destination label when different / present.
+    @Published var instantPayoutDestinationLabel: String?
 
     /// Stripe available + pending (matches Connect “Total balance”).
     var totalBalance: Double { availableBalance + pendingBalance }
 
-    /// Amount shown as withdrawable — never negative (negative Stripe available is a ledger quirk).
+    /// Amount shown as available to pay out — never negative (negative Stripe available is a ledger quirk).
     var readyToWithdrawDisplay: Double { max(0, availableBalance) }
 
-    /// Settling / future funds. When available is negative, fold that adjustment into settling so Ready + Settling = Total.
+    /// Available soon (Stripe pending). When available is negative, fold that adjustment in so Available + Soon ≈ Total.
     var settlingDisplay: Double {
         if availableBalance < 0 {
             return pendingBalance + availableBalance
@@ -424,8 +509,8 @@ class PaymentsViewModel: ObservableObject {
     }
 
     var tapToPayLaunchOverlayMessage: String {
-        if isEnsuringTapToPayTerms { return "Preparing Apple Tap to Pay terms…" }
-        if isEnsuringTapToPayLocation { return "Configuring Tap to Pay…" }
+        if isEnsuringTapToPayTerms { return "Preparing Apple Tap to Pay on iPhone terms…" }
+        if isEnsuringTapToPayLocation { return "Configuring Tap to Pay on iPhone…" }
         return "Loading…"
     }
 
@@ -530,7 +615,7 @@ class PaymentsViewModel: ObservableObject {
             throw NSError(
                 domain: "TapToPay",
                 code: 11,
-                userInfo: [NSLocalizedDescriptionKey: "Tap to Pay could not be set up. Try again."]
+                userInfo: [NSLocalizedDescriptionKey: "Tap to Pay on iPhone could not be set up. Try again."]
             )
         }
         applyPrepareTapToPayResponse(data)
@@ -544,7 +629,7 @@ class PaymentsViewModel: ObservableObject {
                 code: 11,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Tap to Pay could not be set up. Add your business address under Website Design, then try again.",
+                        "Tap to Pay on iPhone could not be set up. Add your business address under Website Design, then try again.",
                 ]
             )
         }
@@ -577,10 +662,10 @@ class PaymentsViewModel: ObservableObject {
     /// Never starts Stripe Connect onboarding until Apple T&C (and first education) are done.
     func launchTapToPayFlow(isDemoMode: Bool) async -> TapToPayLaunchResult {
         if isDemoMode {
-            return .showAlert("Tap to Pay isn't available in demo mode.")
+            return .showAlert("Tap to Pay on iPhone isn't available in demo mode.")
         }
         if !canTakePayments {
-            return .showAlert("Your studio collects payments for you. Ask your admin to enable independent payouts.")
+            return .showAlert("Connect your Stripe account in Payments to take payments.")
         }
         if let block = TapToPayEligibility.blockingMessage() {
             return .showAlert(block)
@@ -588,11 +673,8 @@ class PaymentsViewModel: ObservableObject {
 
         TapToPayTerminalManager.shared.prepareTerminalSDK()
 
-        // Apple req 3.8.1: only the account owner/admin may accept Tap to Pay T&C.
-        if !TapToPayReaderSession.shared.termsAcceptedOnDevice && !isTenantOwner {
-            return .showAlert("Contact your account admin to enable Tap to Pay on iPhone.")
-        }
-
+        // Each payer with their own Connect account (owner or shop/independent member)
+        // accepts Apple Tap to Pay T&C for that merchant account on this device.
         let termsWereAcceptedBefore = TapToPayReaderSession.shared.termsAcceptedOnDevice
         isLaunchingTapToPay = true
 
@@ -687,7 +769,7 @@ class PaymentsViewModel: ObservableObject {
             }
         }
         if resolvedTapToPayLocationId.isEmpty {
-            return .showAlert("Tap to Pay could not be set up. Add your business address under Website Design, then try again.")
+            return .showAlert("Tap to Pay on iPhone could not be set up. Add your business address under Website Design, then try again.")
         }
         return .showCheckout
     }
@@ -765,6 +847,7 @@ class PaymentsViewModel: ObservableObject {
                 pendingBalance = Double(payments.pendingBalanceCents) / 100
                 transactions = payments.transactions.compactMap { PaymentTransaction.fromFirestoreDict($0) }
                 hasLoadedStripeStatus = true
+                stripeStatusHint = "Demo — not real money"
                 isLoading = false
                 return
             }
@@ -809,7 +892,7 @@ class PaymentsViewModel: ObservableObject {
             let teamAccess = await TenantTeamAccessService.fetchCurrentAccess(isDemoMode: false)
             canTakePayments = teamAccess.canTakePayments
             usesOwnPayments = teamAccess.usesOwnPayments
-            isStudioPayroll = !teamAccess.isOwner && teamAccess.payoutMode == .studioPayroll
+            isStudioPayroll = false
             if let tenant = try? await firebaseService.fetchTenant(tenantId: tid) {
                 if let ownerUid = tenant["ownerUid"] as? String, !ownerUid.isEmpty {
                     isTenantOwner = (ownerUid == uid)
@@ -843,6 +926,8 @@ class PaymentsViewModel: ObservableObject {
                 pendingBalance = 0
                 instantAvailableBalance = 0
                 instantPayoutEligible = false
+                standardPayoutDestinationLabel = nil
+                instantPayoutDestinationLabel = nil
                 transactions = []
             }
             isLoading = false
@@ -892,15 +977,11 @@ class PaymentsViewModel: ObservableObject {
                 applyTapToPayMerchantDisplayNameToStore()
             }
             if data?["studioPayroll"] as? Bool == true {
-                isStudioPayroll = true
-                canTakePayments = false
-                needsStripeConnect = false
+                // Legacy flag — all payment-taking members now use their own Connect.
+                isStudioPayroll = false
             }
             if let canTake = data?["canTakePayments"] as? Bool {
                 canTakePayments = canTake
-                if !canTake {
-                    needsStripeConnect = false
-                }
             }
             if let own = data?["usesOwnPayments"] as? Bool {
                 usesOwnPayments = own
@@ -1020,11 +1101,19 @@ class PaymentsViewModel: ObservableObject {
             pendingBalance = Double(pendingCents) / 100
             instantAvailableBalance = Double(max(0, instantCents)) / 100
             instantPayoutEligible = (data?["instantPayoutEligible"] as? Bool) ?? false
+            let stdLabel = (data?["standardPayoutDestinationLabel"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let instLabel = (data?["instantPayoutDestinationLabel"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            standardPayoutDestinationLabel = stdLabel.isEmpty ? nil : stdLabel
+            instantPayoutDestinationLabel = instLabel.isEmpty ? nil : instLabel
         } catch {
             availableBalance = 0
             pendingBalance = 0
             instantAvailableBalance = 0
             instantPayoutEligible = false
+            standardPayoutDestinationLabel = nil
+            instantPayoutDestinationLabel = nil
         }
     }
 
@@ -1175,6 +1264,10 @@ class PaymentsViewModel: ObservableObject {
             errorMessage = "Payment settings aren't saved in demo mode."
             return
         }
+        guard isTenantOwner else {
+            errorMessage = "Only the account owner can change tax settings."
+            return
+        }
         guard let tid = tenantId else { return }
         isSavingShopTax = true
         errorMessage = nil
@@ -1191,6 +1284,10 @@ class PaymentsViewModel: ObservableObject {
     func saveInPersonTaxEnabled(isDemoMode: Bool = false) async {
         if isDemoMode {
             errorMessage = "Payment settings aren't saved in demo mode."
+            return
+        }
+        guard isTenantOwner else {
+            errorMessage = "Only the account owner can change tax settings."
             return
         }
         guard let tid = tenantId else { return }
@@ -1386,13 +1483,18 @@ class PaymentsViewModel: ObservableObject {
             )
             switch sheetResult {
             case .completed:
+                // Return immediately so UI can show the receipt; settle ledger in background.
                 if !intent.paymentIntentId.isEmpty {
-                    await recordTenantPayment(
-                        paymentIntentId: intent.paymentIntentId,
-                        bookingRequestId: bookingRequestId
-                    )
+                    Task {
+                        await recordTenantPayment(
+                            paymentIntentId: intent.paymentIntentId,
+                            bookingRequestId: bookingRequestId
+                        )
+                        await loadData(isDemoMode: false)
+                    }
+                } else {
+                    Task { await loadData(isDemoMode: false) }
                 }
-                await loadData(isDemoMode: false)
                 return .success(intent)
             case .canceled:
                 return .canceled
@@ -1593,7 +1695,7 @@ class PaymentsViewModel: ObservableObject {
             throw NSError(
                 domain: "TapToPay",
                 code: 10,
-                userInfo: [NSLocalizedDescriptionKey: "Could not set up Tap to Pay. Add your business address in Website Design, then try again."]
+                userInfo: [NSLocalizedDescriptionKey: "Could not set up Tap to Pay on iPhone. Add your business address in Website Design, then try again."]
             )
         }
         return resolvedTapToPayLocationId
@@ -1697,14 +1799,43 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Remaining refundable cents for a charge (reflects app + Stripe Dashboard/API refunds).
+    func fetchRemainingRefundableCents(chargeId: String) async -> Int? {
+        do {
+            let result = try await functions.httpsCallable("getChargeRefundStatus").call([
+                "chargeId": chargeId,
+            ])
+            let data = result.data as? [String: Any]
+            if let n = data?["remainingRefundableCents"] as? NSNumber {
+                return max(0, n.intValue)
+            }
+            if let n = data?["remainingRefundableCents"] as? Int {
+                return max(0, n)
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
     /// Refund a charge. Pass nil amountCents for full refund. Returns true on success.
+    /// Pass a stable `idempotencyKey` per user attempt so network retries do not double-refund.
     @discardableResult
-    func createRefund(chargeId: String, amountCents: Int? = nil, reason: String = "requested_by_customer") async -> Bool {
+    func createRefund(
+        chargeId: String,
+        amountCents: Int? = nil,
+        reason: String = "requested_by_customer",
+        idempotencyKey: String
+    ) async -> Bool {
         isRefunding = true
         errorMessage = nil
         defer { isRefunding = false }
         do {
-            var params: [String: Any] = ["chargeId": chargeId, "reason": reason]
+            var params: [String: Any] = [
+                "chargeId": chargeId,
+                "reason": reason,
+                "idempotencyKey": idempotencyKey,
+            ]
             if let amount = amountCents, amount > 0 { params["amountCents"] = amount }
             _ = try await functions.httpsCallable("createRefund").call(params)
             await loadBalance()

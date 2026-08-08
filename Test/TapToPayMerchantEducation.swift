@@ -153,7 +153,7 @@ struct TapToPayMerchantEducationView: View {
                 .padding(.bottom, 24)
             }
             .appScreenBackground()
-            .navigationTitle("How to use Tap to Pay")
+            .navigationTitle("How to use Tap to Pay on iPhone")
             .navigationBarTitleDisplayMode(.inline)
         }
     }

@@ -25,7 +25,7 @@ final class TapToPayConnectionTokenProvider: ConnectionTokenProvider {
             completion(nil, NSError(
                 domain: "TapToPayConnectionTokenProvider",
                 code: 401,
-                userInfo: [NSLocalizedDescriptionKey: "You must be signed in to accept Tap to Pay payments."]
+                userInfo: [NSLocalizedDescriptionKey: "You must be signed in to accept Tap to Pay on iPhone payments."]
             ))
             return
         }

@@ -3,6 +3,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct PaymentTransactionDetailSheet: View {
     let transaction: PaymentTransaction
@@ -17,6 +18,7 @@ struct PaymentTransactionDetailSheet: View {
     @State private var receiptPDFURL: URL?
     @State private var isLoadingReceipt = false
     @State private var isPreparingShare = false
+    @State private var showFeeDetails = false
 
     private var businessName: String {
         let fromTenant = (sessionStore.tenant?["businessName"] as? String
@@ -29,6 +31,25 @@ struct PaymentTransactionDetailSheet: View {
         let trimmed = (transaction.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
         return transaction.channelLabel
+    }
+
+    private var teamMemberLabel: String {
+        let n = (transaction.attributedMemberName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "Team member" : n
+    }
+
+    private var feeBreakdownForPopover: CardCheckoutBreakdown {
+        let serviceCents: Int = {
+            if let s = transaction.sourcePaymentService, s > 0 {
+                return Int(round(s * 100))
+            }
+            if let total = transaction.sourcePaymentTotal, total > 0,
+               let fee = transaction.sourcePassThroughFee, fee > 0 {
+                return max(0, Int(round((total - fee) * 100)))
+            }
+            return Int(round(transaction.amount * 100))
+        }()
+        return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: .online)
     }
 
     var body: some View {
@@ -60,7 +81,7 @@ struct PaymentTransactionDetailSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
 
-                    detailCard(title: "Client") {
+                    detailCard(title: transaction.isStudioShareLine ? "Team member" : "Client") {
                         HStack(spacing: 14) {
                             Circle()
                                 .fill(Color.orange.opacity(0.18))
@@ -71,38 +92,33 @@ struct PaymentTransactionDetailSheet: View {
                                         .foregroundStyle(.orange)
                                 )
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(transaction.displayTitle)
-                                    .font(.headline)
-                                Text(transaction.subtitleText)
-                                    .font(.caption)
-                                    .foregroundStyle(AppDesign.textSecondary)
+                                if transaction.isStudioShareLine {
+                                    Text(teamMemberLabel)
+                                        .font(.headline)
+                                    Text(transaction.studioSharePartyLabel ?? "Studio share")
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                } else {
+                                    Text(transaction.displayTitle)
+                                        .font(.headline)
+                                    Text(transaction.subtitleText)
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
                             }
                             Spacer(minLength: 0)
                         }
                     }
 
                     detailCard(title: "Breakdown") {
-                        breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
-                        Divider()
-                        breakdownRow(label: "Subtotal", value: PaymentsViewModel.formatUSD(transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount))
-                        Divider()
-                        breakdownRow(
-                            label: "Processing fee",
-                            value: transaction.feeAmount > 0 ? PaymentsViewModel.formatUSD(transaction.feeAmount) : "Paid by client",
-                            valueIsText: transaction.feeAmount <= 0
-                        )
-                        Divider()
-                        HStack {
-                            Text("You received")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Text(PaymentsViewModel.formatUSD(transaction.amount))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.green)
+                        if transaction.isStudioShareLine {
+                            studioShareBreakdown
+                        } else {
+                            paymentBreakdown
                         }
                     }
 
-                    if transaction.chargeId != nil {
+                    if !transaction.isStudioShareLine, transaction.chargeId != nil {
                         HStack(spacing: 12) {
                             Button {
                                 Task { await openReceipt() }
@@ -187,6 +203,151 @@ struct PaymentTransactionDetailSheet: View {
     }
 
     @ViewBuilder
+    private var studioShareBreakdown: some View {
+        breakdownRow(
+            label: transaction.isCredit ? "From" : "Sent to",
+            value: transaction.isCredit ? teamMemberLabel : "Studio",
+            valueIsText: true
+        )
+        if let total = transaction.sourcePaymentTotal, total > 0 {
+            Divider()
+            breakdownRow(label: "Total charged", value: PaymentsViewModel.formatUSD(total))
+        } else if let service = transaction.sourcePaymentService, service > 0 {
+            Divider()
+            breakdownRow(label: "Total charged", value: PaymentsViewModel.formatUSD(service))
+        }
+        Divider()
+        processingFeeRow
+        Divider()
+        HStack {
+            Text(transaction.isCredit ? "Your split" : "Studio split")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Text(PaymentsViewModel.formatUSD(transaction.amount))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(transaction.isCredit ? .green : AppDesign.textPrimary)
+        }
+    }
+
+    @ViewBuilder
+    private var paymentBreakdown: some View {
+        if transaction.isPayoutLine {
+            payoutBreakdown
+        } else {
+            breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
+            Divider()
+            breakdownRow(
+                label: "Subtotal",
+                value: PaymentsViewModel.formatUSD(transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount)
+            )
+            Divider()
+            processingFeeRow
+            Divider()
+            HStack {
+                Text("You received")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(PaymentsViewModel.formatUSD(transaction.amount))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    /// Standard Instant/bank withdraw — no card “Paid by client” fee estimate.
+    @ViewBuilder
+    private var payoutBreakdown: some View {
+        breakdownRow(label: "Service", value: "Payout", valueIsText: true)
+        Divider()
+        breakdownRow(
+            label: "Amount",
+            value: PaymentsViewModel.formatUSD(transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount)
+        )
+        let payoutFee = transaction.displayedProcessingFee
+        if payoutFee > 0 {
+            Divider()
+            HStack {
+                Text("Instant fee")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                Spacer()
+                Text(PaymentsViewModel.formatUSD(payoutFee))
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textPrimary)
+            }
+        }
+        Divider()
+        HStack {
+            Text(transaction.isCredit ? "Credited" : "Withdrawn")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Text(PaymentsViewModel.formatUSD(transaction.amount))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(transaction.isCredit ? .green : AppDesign.textPrimary)
+        }
+    }
+
+    private var processingFeeRow: some View {
+        let fee = transaction.displayedProcessingFee
+        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: .online)
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Processing fee")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+                Button {
+                    showFeeDetails.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.brandWarm)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Processing fee details")
+                .popover(isPresented: $showFeeDetails, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if feeBreakdownForPopover.cardProcessingFeeCents > 0 {
+                            HStack {
+                                Text("Card processing (Stripe \(stripeRate))")
+                                Spacer(minLength: 8)
+                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.cardProcessingFeeCents))
+                            }
+                        }
+                        if feeBreakdownForPopover.platformFeeCents > 0 {
+                            HStack {
+                                Text("Platform fee (1%)")
+                                Spacer(minLength: 8)
+                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.platformFeeCents))
+                            }
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .padding(12)
+                    .frame(minWidth: 248, idealWidth: 268, maxWidth: 300, alignment: .leading)
+                    .background(.ultraThinMaterial)
+                    .presentationBackground(.ultraThinMaterial)
+                    .presentationCompactAdaptation(.popover)
+                }
+            }
+            Spacer(minLength: 12)
+            HStack(spacing: 4) {
+                if fee > 0 {
+                    Text(PaymentsViewModel.formatUSD(fee))
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                }
+                if fee > 0 || transaction.processingFeePaidByClient {
+                    Text(fee > 0 ? "(Paid by client)" : "Paid by client")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
+        }
+    }
+
+    @ViewBuilder
     private func detailCard(title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
@@ -241,31 +402,23 @@ struct PaymentTransactionDetailSheet: View {
         } else {
             detail = await loadReceiptDetail()
         }
-        guard let detail else { return }
-        guard let url = viewModel.receiptPDFURL(for: detail) else { return }
+        guard let detail,
+              let url = PaymentReceiptPDFExporter.writePDF(detail: detail) else { return }
         receiptPDFURL = url
         showReceiptShare = true
     }
 
-    @MainActor
     private func sendReceiptInMessages() async {
-        isPreparingShare = true
-        defer { isPreparingShare = false }
-        let detail: PaymentReceiptDetail?
-        if let receiptDetail {
-            detail = receiptDetail
-        } else {
-            detail = await loadReceiptDetail()
-        }
-        guard let detail else { return }
-        openMessagesCompose(with: detail)
-        dismiss()
-    }
-
-    private func openMessagesCompose(with detail: PaymentReceiptDetail) {
-        drawerState.messagesComposeBody = detail.smsBody()
+        guard let detail = await loadReceiptDetail() else { return }
+        let shareText = detail.messagesShareLinkOrBody()
+        UIPasteboard.general.string = shareText
+        drawerState.messagesComposePhone = nil
+        drawerState.messagesComposeClientName = nil
+        drawerState.messagesComposeBookingRequestId = nil
+        drawerState.messagesComposeBody = shareText
         drawerState.messagesShouldOpenCompose = true
         drawerState.selectedSection = .messages
         drawerState.isOpen = false
+        dismiss()
     }
 }

@@ -25,7 +25,7 @@ final class TapToPayReaderSession: ObservableObject {
 
     func resetForWarmUp() {
         preparationProgress = nil
-        statusMessage = "Preparing Tap to Pay…"
+        statusMessage = "Preparing Tap to Pay on iPhone…"
         isReaderReady = false
     }
 
@@ -46,7 +46,7 @@ final class TapToPayReaderSession: ObservableObject {
 
     func markReady() {
         preparationProgress = 1
-        statusMessage = "Ready for Tap to Pay"
+        statusMessage = "Ready for Tap to Pay on iPhone"
         isReaderReady = true
     }
 

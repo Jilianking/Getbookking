@@ -44,7 +44,7 @@ struct TeamView: View {
             .appScreenBackground()
             .appNavigationChrome()
             .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(showsOwnerTeamUI ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
@@ -109,6 +109,7 @@ private struct TeamMemberOverviewContent: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
     var drawerState: DrawerState
+    @State private var selectedDirectoryMember: TenantTeamMember?
 
     private var currentMember: TenantTeamMember? {
         guard let uid = Auth.auth().currentUser?.uid else { return nil }
@@ -119,10 +120,16 @@ private struct TeamMemberOverviewContent: View {
         List {
             if authViewModel.teamAccess.canAccessWebsiteProfile {
                 Section {
-                    Label("Website profile", systemImage: "globe")
+                    Label {
+                        Text("Website profile")
+                            .foregroundStyle(AppDesign.textPrimary)
+                    } icon: {
+                        Image(systemName: "globe")
+                            .foregroundStyle(AppDesign.brandWarm)
+                    }
                     Text("Your owner enabled editing for your public page. Preview your team page, then tap Manage to update Gallery or Bio.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppDesign.textSecondary)
                 }
             }
 
@@ -132,10 +139,17 @@ private struct TeamMemberOverviewContent: View {
                         PaymentsView(drawerState: drawerState, sectionTitle: "Payments")
                             .environmentObject(authViewModel)
                     } label: {
-                        Label(
-                            authViewModel.teamAccess.canTakePayments ? "My payments" : "Set up payments",
-                            systemImage: "creditcard"
-                        )
+                        Label {
+                            Text(
+                                authViewModel.teamAccess.canTakePayments
+                                    ? "My payments"
+                                    : "Set up payments"
+                            )
+                            .foregroundStyle(AppDesign.textPrimary)
+                        } icon: {
+                            Image(systemName: "creditcard")
+                                .foregroundStyle(AppDesign.brandWarm)
+                        }
                     }
                 } footer: {
                     Text("You take your own payments. Connect Stripe to accept deposits and Tap to Pay for your bookings.")
@@ -155,10 +169,17 @@ private struct TeamMemberOverviewContent: View {
                             .environmentObject(authViewModel)
                         }
                     } label: {
-                        Label(
-                            authViewModel.teamAccess.usesOwnSms ? "Messaging" : "Request phone number",
-                            systemImage: "message.fill"
-                        )
+                        Label {
+                            Text(
+                                authViewModel.teamAccess.usesOwnSms
+                                    ? "Messaging"
+                                    : "Request phone number"
+                            )
+                            .foregroundStyle(AppDesign.textPrimary)
+                        } icon: {
+                            Image(systemName: "message.fill")
+                                .foregroundStyle(AppDesign.brandWarm)
+                        }
                     }
                     if authViewModel.teamAccess.usesOwnSms {
                         LabeledContent(
@@ -177,7 +198,7 @@ private struct TeamMemberOverviewContent: View {
                     LabeledContent("Share link", value: PublicBookingSite.memberBookPath(memberSlug: me.memberSlug))
                     Text("Clients can book you directly from your studio website.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppDesign.textSecondary)
                 }
             }
 
@@ -187,9 +208,10 @@ private struct TeamMemberOverviewContent: View {
                 } label: {
                     HStack {
                         Text("Access")
+                            .foregroundStyle(AppDesign.textPrimary)
                         Spacer()
                         Text(authViewModel.teamAccess.accessRole.displayName)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppDesign.textSecondary)
                     }
                 }
             } header: {
@@ -202,7 +224,12 @@ private struct TeamMemberOverviewContent: View {
             if !viewModel.members.isEmpty {
                 Section(header: Text("Team members")) {
                     ForEach(viewModel.members) { member in
-                        TeamMemberDirectoryRow(member: member)
+                        Button {
+                            selectedDirectoryMember = member
+                        } label: {
+                            TeamMemberDirectoryRow(member: member)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -214,6 +241,13 @@ private struct TeamMemberOverviewContent: View {
                         .foregroundStyle(.red)
                 }
             }
+        }
+        .tint(AppDesign.brandWarm)
+        .listStyle(.insetGrouped)
+        .appListSurface()
+        .contentMargins(.top, 8, for: .scrollContent)
+        .sheet(item: $selectedDirectoryMember) { member in
+            TeamMemberContactSheet(member: member)
         }
     }
 
@@ -244,10 +278,52 @@ private struct TeamMemberOverviewContent: View {
     }
 }
 
-// MARK: - Staff roster: name, role, contact only
+// MARK: - Staff roster: name + role; tap for contact
 
 struct TeamMemberDirectoryRow: View {
     let member: TenantTeamMember
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            AppAvatarView(
+                tenantLogoURL: nil,
+                accountPhotoURL: member.profilePhotoUrl.isEmpty ? nil : member.profilePhotoUrl,
+                displayNameFallback: member.displayName,
+                size: 44
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                Text(member.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppDesign.textPrimary)
+                Text(member.badgeLabel)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(roleColor.opacity(0.15))
+                    .foregroundStyle(roleColor)
+                    .clipShape(Capsule())
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppDesign.textSecondary.opacity(0.55))
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var roleColor: Color {
+        switch member.accessRole {
+        case .owner: return AppDesign.brandDark
+        case .manager: return AppDesign.brandWarm
+        case .member: return AppDesign.textSecondary
+        }
+    }
+}
+
+private struct TeamMemberContactSheet: View {
+    let member: TenantTeamMember
+    @Environment(\.dismiss) private var dismiss
 
     private var emailTrimmed: String {
         member.email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -263,55 +339,73 @@ struct TeamMemberDirectoryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            AppAvatarView(
-                tenantLogoURL: nil,
-                accountPhotoURL: member.profilePhotoUrl.isEmpty ? nil : member.profilePhotoUrl,
-                displayNameFallback: member.displayName,
-                size: 44
-            )
-            VStack(alignment: .leading, spacing: 4) {
-                Text(member.displayName)
-                    .font(.subheadline.weight(.semibold))
-                Text(member.badgeLabel)
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(roleColor.opacity(0.15))
-                    .foregroundStyle(roleColor)
-                    .clipShape(Capsule())
-                if !emailTrimmed.isEmpty {
-                    if let url = URL(string: "mailto:\(emailTrimmed)") {
-                        Link(emailTrimmed, destination: url)
-                            .font(.caption)
-                    } else {
-                        Text(emailTrimmed)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        NavigationStack {
+            List {
+                Section {
+                    HStack(spacing: 14) {
+                        AppAvatarView(
+                            tenantLogoURL: nil,
+                            accountPhotoURL: member.profilePhotoUrl.isEmpty ? nil : member.profilePhotoUrl,
+                            displayNameFallback: member.displayName,
+                            size: 56
+                        )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(member.displayName)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
+                            Text(member.badgeLabel)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppDesign.brandWarm)
+                        }
+                        Spacer(minLength: 0)
                     }
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.clear)
                 }
-                if !phoneTrimmed.isEmpty {
-                    if let e164 = PhoneFormatting.e164US(phoneTrimmed),
-                       let url = URL(string: "tel:\(e164)") {
-                        Link(phoneDisplay, destination: url)
-                            .font(.caption)
+
+                Section {
+                    LabeledContent("Name", value: member.displayName)
+                    if !phoneTrimmed.isEmpty {
+                        if let e164 = PhoneFormatting.e164US(phoneTrimmed),
+                           let url = URL(string: "tel:\(e164)") {
+                            Link(destination: url) {
+                                LabeledContent("Phone", value: phoneDisplay)
+                            }
+                            .foregroundStyle(AppDesign.linkAccent)
+                        } else {
+                            LabeledContent("Phone", value: phoneDisplay)
+                        }
                     } else {
-                        Text(phoneDisplay)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        LabeledContent("Phone", value: "Not shared")
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
+                    if !emailTrimmed.isEmpty {
+                        if let url = URL(string: "mailto:\(emailTrimmed)") {
+                            Link(destination: url) {
+                                LabeledContent("Email", value: emailTrimmed)
+                            }
+                            .foregroundStyle(AppDesign.linkAccent)
+                        } else {
+                            LabeledContent("Email", value: emailTrimmed)
+                        }
+                    } else {
+                        LabeledContent("Email", value: "Not shared")
+                            .foregroundStyle(AppDesign.textSecondary)
                     }
                 }
             }
-            Spacer(minLength: 0)
+            .listStyle(.insetGrouped)
+            .tint(AppDesign.brandWarm)
+            .navigationTitle("Contact")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppDesign.brandDark)
+                }
+            }
         }
-        .padding(.vertical, 4)
-    }
-
-    private var roleColor: Color {
-        switch member.accessRole {
-        case .owner: return .primary
-        case .manager: return .blue
-        case .member: return .secondary
-        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }

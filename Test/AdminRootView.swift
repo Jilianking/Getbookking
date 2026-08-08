@@ -141,6 +141,13 @@ struct AdminRootView: View {
             if !authViewModel.teamAccess.canAccessWebsiteProfile {
                 sections = sections.filter { $0 != .websiteProfile }
             }
+            let access = authViewModel.teamAccess
+            let showPayments =
+                access.canTakePayments
+                || (access.accessRole == .manager && access.permissions.viewEarningsReports)
+            if !showPayments {
+                sections = sections.filter { $0 != .payments }
+            }
         }
         return sections
     }

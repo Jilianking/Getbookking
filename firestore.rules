@@ -26,8 +26,90 @@ service cloud.firestore {
       return userTenantIdMatches(tenantId) || isTenantOwnerUid(tenantId);
     }
 
+    // Money / access / SMS inventory fields must only change via Admin SDK
+    // (Cloud Functions). Client messaging copy remains editable.
+    function userProtectedKeysUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny([
+          'memberSettings',
+          'role',
+          'accessRole',
+          'tenantId',
+          'stripeAccountId',
+          'stripeTerminalLocationId',
+          'smsEnabled',
+          'smsStatus',
+          'smsPhoneNumber',
+          'smsPhoneNumberSid',
+          'smsEnabledAt',
+          'smsProvisionError',
+          'smsSuspendedAt',
+          'smsSuspendReason',
+          'smsLineIsPaidExtra',
+          'smsLineRequestPending',
+          'smsLineRequestedAt',
+          'smsLineRequestConsentAccepted',
+          'smsPaidLinePurchaseAuthorizationId',
+          'smsPaidLinePurchaseInvoiceId',
+          'smsPaidLinePurchaseAuthorizedAt',
+          'smsPaidLinePurchaseExpiresAt',
+          'smsMonthlyUsageCount',
+          'smsMonthlyUsagePeriod'
+        ]);
+    }
+
+    // Stripe / billing / tax — owner only on the tenant document.
+    function tenantMoneyKeysUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny([
+          'stripeAccountId',
+          'stripeTerminalLocationId',
+          'stripeCustomerId',
+          'stripeSubscriptionId',
+          'shopTaxEnabled',
+          'inPersonTaxEnabled',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'ownerUid',
+          'smsEnabled',
+          'smsStatus',
+          'smsPhoneNumber',
+          'smsPhoneNumberSid',
+          'smsAreaCode',
+          'twilioMessagingServiceSid',
+          'twilioSubaccountSid',
+          'smsEnabledAt',
+          'smsProvisionError',
+          'smsSuspendedAt',
+          'smsSuspendReason',
+          'smsLifetimeNumbersBought',
+          'smsExtraLineQuantity',
+          'smsLineIsPaidExtra',
+          'smsMonthlyUsageCount',
+          'smsMonthlyUsagePeriod',
+          'smsLastSoloReplacementInvoiceId',
+          'smsLastSoloReplacementAt',
+          'smsSoloReplacementAuthorizationId',
+          'smsSoloReplacementAuthorizationInvoiceId',
+          'smsSoloReplacementAuthorizationState',
+          'smsSoloReplacementAuthorizationExpiresAt',
+          'smsSoloReplacementInFlightAt'
+        ]);
+    }
+
     match /users/{uid} {
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && userProtectedKeysUnchanged();
+      allow delete: if false;
+
+      // FCM/APNs tokens written by the signed-in client (PushNotificationManager).
+      // Parent rules do not cover subcollections — this match is required.
+      match /deviceTokens/{tokenId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
     }
 
     match /tenantInvites/{inviteId} {
@@ -70,10 +152,12 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid;
 
+      // Owners may update any non-ownerUid field; teammates may update non-money fields only.
       allow update: if canManageTenant(tenantId)
-        && (!('ownerUid' in resource.data) || request.resource.data.ownerUid == resource.data.ownerUid);
+        && (!('ownerUid' in resource.data) || request.resource.data.ownerUid == resource.data.ownerUid)
+        && (isTenantOwnerUid(tenantId) || tenantMoneyKeysUnchanged());
 
-      allow delete: if canManageTenant(tenantId);
+      allow delete: if isTenantOwnerUid(tenantId);
 
       match /services/{serviceId} {
         allow read: if true;
@@ -111,6 +195,11 @@ service cloud.firestore {
       match /smsOptOuts/{optId} {
         allow read: if canManageTenant(tenantId);
         allow write: if false;
+      }
+
+      // Ledger is Functions-only (settlement / reporting).
+      match /paymentLedger/{ledgerId} {
+        allow read, write: if false;
       }
     }
   }

@@ -98,7 +98,19 @@ struct TeamMemberDetailView: View {
                 }
                 jobTitleSection
                 bookingSection
-                paymentSection
+                if viewModel.tenantSubscriptionPlan == .studio
+                    || viewModel.tenantSubscriptionPlan == .shop {
+                    paymentSection
+                } else {
+                    Section(
+                        footer: Text("Payment splits are available on Studio and Shop plans.")
+                            .font(.caption2)
+                    ) {
+                        Text("Team payment splits aren’t included on Solo.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 personalSmsSection
                 actionsSection
             } else {
@@ -260,9 +272,21 @@ struct TeamMemberDetailView: View {
             footer: Text(paymentSectionFooter)
                 .font(.caption2)
         ) {
+            Toggle("Can take payments", isOn: $memberSettings.canTakePayments)
             Picker("Payout mode", selection: $memberSettings.payoutMode) {
                 ForEach(MemberPayoutMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
+                }
+            }
+            .disabled(!memberSettings.canTakePayments)
+            .onChange(of: memberSettings.payoutMode) { _, mode in
+                if mode == .shopSplit {
+                    if !memberSettings.paymentSplitEnabled {
+                        memberSettings.paymentSplitEnabled = true
+                    }
+                    if memberSettings.paymentSplitPercent < 5 {
+                        memberSettings.paymentSplitPercent = 70
+                    }
                 }
             }
         }
@@ -284,12 +308,15 @@ struct TeamMemberDetailView: View {
                     step: 5
                 ) {
                     HStack {
-                        Text("Artist share")
+                        Text("Artist keeps")
                         Spacer()
                         Text("\(memberSettings.paymentSplitPercent)%")
                             .foregroundStyle(.secondary)
                     }
                 }
+                Text("Studio receives \(max(0, 100 - memberSettings.paymentSplitPercent))%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker("Applies to", selection: $memberSettings.paymentSplitAppliesTo) {
                     ForEach(PaymentSplitAppliesTo.allCases) { opt in
                         Text(opt.displayName).tag(opt)
@@ -302,15 +329,16 @@ struct TeamMemberDetailView: View {
     private var paymentSectionFooter: String {
         switch memberSettings.payoutMode {
         case .independent:
-            return "They connect their own Stripe and can use Tap to Pay. Deposits for their assigned bookings go to their account."
-        case .studioPayroll:
-            return "Charges go to the studio Connect account. Use payment split for revenue reporting."
+            return "They connect their own Stripe and can use Tap to Pay. Turn on payment split below to send a studio share to your account after each charge."
+        case .shopSplit:
+            return "They connect their own Stripe. Customer payments go to them; the payment split below is transferred to the studio after Stripe and Bookking fees."
         }
     }
 
     @ViewBuilder
     private var personalSmsSection: some View {
-        if memberSettings.payoutMode == .independent, viewModel.smsCanUse {
+        if memberSettings.payoutMode == .independent || memberSettings.payoutMode == .shopSplit,
+           viewModel.smsCanUse {
             Section(header: Text("Personal texting")) {
                 NavigationLink {
                     MemberPersonalSmsView(

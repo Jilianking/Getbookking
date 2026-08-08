@@ -149,6 +149,14 @@ struct PaymentReceiptDetail: Equatable {
         }
     }
 
+    /// Prefer Stripe receipt URL for Messages / clipboard; fall back to full SMS body.
+    func messagesShareLinkOrBody() -> String {
+        if let stripeReceiptUrl, !stripeReceiptUrl.isEmpty {
+            return stripeReceiptUrl
+        }
+        return smsBody()
+    }
+
     static func fromFirestoreDict(_ data: [String: Any]) -> PaymentReceiptDetail? {
         guard let businessName = data["businessName"] as? String else { return nil }
         let paidAt: Date = {
@@ -327,7 +335,7 @@ struct PaymentReceiptDetail: Equatable {
         )
     }
 
-    /// Payment notice for declined, timed-out, or otherwise incomplete Tap to Pay attempts (Apple 5.10).
+    /// Payment notice for declined, timed-out, or otherwise incomplete card attempts (Apple 5.10).
     static func fromTapToPayUnsuccessful(
         checkout: CardCheckoutBreakdown,
         businessName: String,
@@ -335,12 +343,13 @@ struct PaymentReceiptDetail: Equatable {
         note: String?,
         reason: PaymentReceiptDocumentKind.UnpaidAttemptReason,
         detailMessage: String? = nil,
-        attemptedAt: Date = Date()
+        attemptedAt: Date = Date(),
+        paymentMethodLabel: String = "Tap to Pay on iPhone"
     ) -> PaymentReceiptDetail {
         var items: [PaymentReceiptLineItem] = [
             PaymentReceiptLineItem(
                 id: "service",
-                name: "Tap to Pay on iPhone",
+                name: paymentMethodLabel,
                 quantity: 1,
                 amountCents: checkout.serviceCents
             ),
@@ -396,7 +405,7 @@ struct PaymentReceiptDetail: Equatable {
             paidAt: attemptedAt,
             customerName: trimmedCustomer.isEmpty ? nil : trimmedCustomer,
             customerEmail: nil,
-            serviceLabel: "Tap to Pay on iPhone",
+            serviceLabel: paymentMethodLabel,
             lineItems: items,
             totalPaidCents: checkout.totalCents,
             serviceCents: checkout.serviceCents,

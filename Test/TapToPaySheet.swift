@@ -82,7 +82,7 @@ struct TapToPaySheet: View {
                 }
             }
             .appScreenBackground()
-            .navigationTitle("Tap to Pay")
+            .navigationTitle("Tap to Pay on iPhone")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -381,7 +381,25 @@ struct TapToPaySheet: View {
             customerName: selectedClient?.name,
             note: noteText,
             reason: reason,
-            detailMessage: detailMessage
+            detailMessage: detailMessage,
+            paymentMethodLabel: "Tap to Pay on iPhone"
+        )
+        showTapToPayReceiptSheet = true
+    }
+
+    private func presentManualPaymentNotice(detailMessage: String) {
+        let checkout = lastCheckout ?? viewModel.checkoutBreakdown(
+            serviceCents: serviceAmountCents,
+            channel: .online
+        )
+        receiptDetail = PaymentReceiptDetail.fromTapToPayUnsuccessful(
+            checkout: checkout,
+            businessName: viewModel.effectiveTapToPayDisplayName,
+            customerName: selectedClient?.name,
+            note: noteText,
+            reason: unpaidAttemptReason(for: detailMessage),
+            detailMessage: detailMessage,
+            paymentMethodLabel: "Manual payment"
         )
         showTapToPayReceiptSheet = true
     }
@@ -466,7 +484,11 @@ struct TapToPaySheet: View {
         case .canceled:
             break
         case .failed(let message):
-            manualCheckoutError = message
+            lastCheckout = viewModel.checkoutBreakdown(
+                serviceCents: serviceAmountCents,
+                channel: .online
+            )
+            presentManualPaymentNotice(detailMessage: message)
         }
     }
 

@@ -35,7 +35,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// From tenant booking policy (`request_approve`, etc.).
     @Published var tenantBookingRequiresApproval: Bool = true
     @Published var tenantDefaultConfirmationType: String = BookingConfirmationType.requestApprove.rawValue
-    @Published var managersApproveAppointments: Bool = true
+    @Published var managersApproveAppointments: Bool = false
     /// Set by parent toolbar or in-list invite button.
     @Published var presentInviteSheet = false
 
@@ -74,17 +74,20 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsAtMaxLines: Bool = false
     @Published var smsCanAddWithoutPurchase: Bool = true
     @Published var smsCanPurchaseExtra: Bool = false
-    @Published var smsExtraMonthlyPriceLabel: String = "$10/mo"
+    @Published var smsCanPurchaseSoloReplacement: Bool = false
+    @Published var smsExtraMonthlyPriceLabel: String = "$12/mo"
+    @Published var smsExtraOneTimeReplacementLabel: String = "$12"
     @Published var smsNextLineIsFree: Bool = true
-    /// After lifetime free Twilio buys (Solo 1 · Studio/Shop 2), refresh charges $10.
+    /// Lifetime Twilio number acquisitions (free allotment Solo 1 · Studio/Shop 2).
+    @Published var smsLifetimeNumbersBought: Int = 0
+    /// After lifetime free Twilio buys (Solo 1 · Studio/Shop 2), refresh charges $12.
     @Published var smsRefreshNeedsPurchase: Bool = false
     @Published var isRefreshingSmsLine = false
     @Published var refreshingSmsLineId: String? = nil
     @Published var isReleasingSmsLine = false
     @Published var releasingSmsLineId: String? = nil
 
-    /// Never under-charge: treat next add as paid when server says so OR local
-    /// occupied lines already meet/exceed free included (guards stale flags).
+    /// Charge when server says so, concurrent free is full, or lifetime free is used.
     var smsMustChargeForNextLine: Bool {
         if smsAtMaxLines { return false }
         if smsNeedsPurchaseForNextLine { return true }
@@ -95,7 +98,13 @@ final class ManagerSettingsViewModel: ObservableObject {
             return !row.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }.count
         let used = max(smsLinesUsed, localOccupied)
-        return used >= smsFreeIncluded
+        let lifetime = max(smsLifetimeNumbersBought, used)
+        return used >= smsFreeIncluded || lifetime >= smsFreeIncluded
+    }
+
+    /// Solo only: one-time $12 to get another number after the included lifetime get (not monthly).
+    var smsMustPaySoloReplacementFee: Bool {
+        tenantSubscriptionPlan == .solo && smsMustChargeForNextLine && !smsAtMaxLines
     }
 
     @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
@@ -121,7 +130,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     var membersEligibleForPersonalSms: [TenantTeamMember] {
         members.filter { member in
             guard member.accessRole != .owner else { return false }
-            guard member.memberSettings.payoutMode == .independent else { return false }
+            guard member.memberSettings.payoutMode == .independent
+                || member.memberSettings.payoutMode == .shopSplit else { return false }
             let status = member.smsStatus.lowercased()
             if status == "active" || status == "pending" { return false }
             if !member.smsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
@@ -179,7 +189,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 )
             )
         }
-        let open = max(0, smsLineCapacity - smsLinesUsed)
+        // Unassigned = unused free included only (0–1 buys left under allotment).
+        // Never show open slots from paid prepaid capacity.
+        let open = max(0, smsFreeIncluded - smsLinesUsed)
         if open > 0 {
             for i in 0..<open {
                 rows.append(
@@ -247,7 +259,7 @@ final class ManagerSettingsViewModel: ObservableObject {
             tenantBookingRequiresApproval = data["bookingRequiresApproval"] as? Bool ?? true
             tenantDefaultConfirmationType = (data["confirmationType"] as? String)
                 ?? BookingConfirmationType.requestApprove.rawValue
-            managersApproveAppointments = data["managersApproveAppointments"] as? Bool ?? true
+            managersApproveAppointments = data["managersApproveAppointments"] as? Bool ?? false
             if !managersApproveAppointments || !tenantBookingRequiresApproval {
                 permissions.approveRejectRequests = false
             }
@@ -290,16 +302,23 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsAtMaxLines = data["smsAtMaxLines"] as? Bool ?? false
             smsCanAddWithoutPurchase = data["smsCanAddWithoutPurchase"] as? Bool ?? true
             smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
-            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$10/mo"
+            smsCanPurchaseSoloReplacement = data["smsCanPurchaseSoloReplacement"] as? Bool
+                ?? (tenantSubscriptionPlan == .solo && smsNeedsPurchaseForNextLine)
+            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$12/mo"
+            smsExtraOneTimeReplacementLabel = (data["smsExtraOneTimeReplacementLabel"] as? String) ?? "$12"
             smsNextLineIsFree = data["smsNextLineIsFree"] as? Bool ?? (smsLinesUsed < smsFreeIncluded)
+            smsLifetimeNumbersBought = (data["smsLifetimeNumbersBought"] as? Int) ?? 0
             smsRefreshNeedsPurchase = data["smsRefreshNeedsPurchase"] as? Bool
-                ?? (smsLinesUsed >= smsFreeIncluded)
-            // Local safety: if occupied lines already used the free allotment, force paid path
-            // even when a stale server flag says the next line is free.
-            if !smsAtMaxLines && smsLinesUsed >= smsFreeIncluded {
+                ?? (smsLifetimeNumbersBought >= smsFreeIncluded)
+            // Local safety: force paid path when concurrent free or lifetime free is exhausted.
+            if !smsAtMaxLines &&
+                (smsLinesUsed >= smsFreeIncluded || smsLifetimeNumbersBought >= smsFreeIncluded) {
                 smsNeedsPurchaseForNextLine = true
                 smsCanAddWithoutPurchase = false
                 smsNextLineIsFree = false
+                if tenantSubscriptionPlan == .solo {
+                    smsCanPurchaseSoloReplacement = true
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -616,7 +635,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         }
     }
 
-    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $10 after lifetime free allotment.
+    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $12 after lifetime free allotment.
     @discardableResult
     func refreshSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
         guard isTenantOwner else { return false }

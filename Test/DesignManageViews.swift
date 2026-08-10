@@ -2203,20 +2203,12 @@ struct ManageShopTabContent: View {
 
                 ManageCardDivider()
                 NavigationLink {
-                    ShopComingSoonView(
-                        title: "Shipping",
-                        tint: .gray,
-                        bullets: [
-                            "Shipping zones & rates",
-                            "Flat rate and free shipping",
-                            "Local delivery options",
-                        ]
-                    )
+                    ShopShippingSettingsView(viewModel: viewModel)
                 } label: {
                     ManageNavigationRow(
-                        title: "Shipping",
-                        subtitle: "Zones, rates, and delivery",
-                        value: "Set up"
+                        title: "Shipping & pickup",
+                        subtitle: "Shippo live rates and local pickup",
+                        value: viewModel.shopShippingEnabled ? "On" : "Set up"
                     )
                 }
                 .buttonStyle(.plain)
@@ -2224,19 +2216,19 @@ struct ManageShopTabContent: View {
                 ManageCardDivider()
                 NavigationLink {
                     ShopComingSoonView(
-                        title: "Local pickup",
+                        title: "Local pickup details",
                         tint: .gray,
                         bullets: [
-                            "Pickup location & hours",
+                            "Pickup hours (coming soon)",
                             "Ready-for-pickup notifications",
                             "In-store handoff",
                         ]
                     )
                 } label: {
                     ManageNavigationRow(
-                        title: "Local pickup",
-                        subtitle: "Let clients collect in person",
-                        value: "Set up"
+                        title: "Pickup extras",
+                        subtitle: "Hours and notifications",
+                        value: "Soon"
                     )
                 }
                 .buttonStyle(.plain)

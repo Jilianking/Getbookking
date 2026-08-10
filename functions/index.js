@@ -3,6 +3,8 @@
  * Set secrets:
  *   firebase functions:secrets:set STRIPE_SECRET_KEY
  *   firebase functions:secrets:set OPENAI_API_KEY
+ *   firebase functions:secrets:set SHIPPO_API_TOKEN
+ *     (Shippo API token — use shippo_test_… while developing shop shipping)
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
  *     (JSON map solo/studio/shop → price_… and optional smsExtra $10/mo add-on;
  *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
@@ -33,6 +35,7 @@
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
+const shippoShop = require("./shippoShop");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const Stripe = require("stripe");
@@ -58,6 +61,8 @@ const {
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
+/** Shippo API token (shippo_test_… or live). Required for shop shipping rates/labels. */
+const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
 /** JSON map: solo, studio, shop → Stripe Price id; optional smsExtra ($10/mo per extra SMS line). */
 const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
 /** Stripe Dashboard → Webhooks → Signing secret (whsec_…). */
@@ -4004,11 +4009,12 @@ function shopOrderReceiptResponse(tenantData, orderId, order, totals = {}) {
     order?.subtotalCents ??
     lineItems.reduce((sum, line) => sum + (line.lineTotalCents || 0), 0);
   const taxCents = totals.taxCents ?? order?.taxCents ?? 0;
+  const shippingCents = totals.shippingCents ?? order?.shippingCents ?? 0;
   const surchargeCents = totals.surchargeCents ?? order?.surchargeCents ?? 0;
   const totalCents =
     totals.totalCents ??
     order?.totalCents ??
-    subtotalCents + Math.max(0, taxCents) + Math.max(0, surchargeCents);
+    subtotalCents + Math.max(0, shippingCents) + Math.max(0, taxCents) + Math.max(0, surchargeCents);
   const customerEmail = (order?.customerEmail || "").toString().trim().toLowerCase();
   const paidAt =
     totals.paidAt ||
@@ -4030,8 +4036,11 @@ function shopOrderReceiptResponse(tenantData, orderId, order, totals = {}) {
         lineTotalCents: Math.max(0, parseInt(line.lineTotalCents, 10) || 0),
       })),
       subtotalCents,
+      shippingCents: Math.max(0, shippingCents),
       taxCents: Math.max(0, taxCents),
       surchargeCents: Math.max(0, surchargeCents),
+      fulfillmentMethod: (order?.fulfillmentMethod || "pickup").toString(),
+      trackingNumber: order?.trackingNumber || null,
       totalCents,
       paidAt,
     },
@@ -4083,12 +4092,16 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
   const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
   const taxCentsMeta = parseInt(meta.taxCents, 10);
   const resolvedTax = Number.isNaN(taxCentsMeta) ? 0 : Math.max(0, taxCentsMeta);
+  const shippingCentsMeta = parseInt(meta.shippingCents, 10);
+  const resolvedShipping = Number.isNaN(shippingCentsMeta)
+    ? Math.max(0, parseInt(order.shippingCents, 10) || 0)
+    : Math.max(0, shippingCentsMeta);
   const serviceCents = parseInt(meta.serviceAmountCents, 10);
   const resolvedSubtotal =
     Number.isNaN(serviceCents) || serviceCents <= 0
-      ? Math.max(0, (pi.amount || 0) - resolvedSurcharge - resolvedTax)
+      ? Math.max(0, (pi.amount || 0) - resolvedSurcharge - resolvedTax - resolvedShipping)
       : serviceCents;
-  const grossCents = pi.amount || resolvedSubtotal + resolvedTax + resolvedSurcharge;
+  const grossCents = pi.amount || resolvedSubtotal + resolvedShipping + resolvedTax + resolvedSurcharge;
   const platformFee = platformFeeCents(grossCents);
   const taxCalculationId = (meta.taxCalculationId || order.taxCalculationId || "")
     .toString()
@@ -4100,6 +4113,7 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
       paidAt: admin.firestore.FieldValue.serverTimestamp(),
       stripePaymentIntentId: paymentIntentId,
       subtotalCents: resolvedSubtotal,
+      shippingCents: resolvedShipping,
       taxCents: resolvedTax,
       surchargeCents: resolvedSurcharge,
       totalCents: grossCents,
@@ -4172,13 +4186,53 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
   }
 
   const paidAtIso = new Date().toISOString();
+
+  // Buy Shippo label after payment (best-effort; order stays paid if label fails).
+  const rateId = (order.shippoRateId || meta.shippoRateId || "").toString().trim();
+  const fulfillment = (order.fulfillmentMethod || meta.fulfillmentMethod || "pickup").toString();
+  if (fulfillment === "shipping" && rateId && !order.shippoTransactionId) {
+    try {
+      const token = (shippoApiToken.value() || "").toString().trim();
+      if (token) {
+        const label = await shippoShop.purchaseLabel(token, rateId);
+        await orderRef.set(
+          {
+            shippoTransactionId: label.transactionId || null,
+            shippoLabelStatus: label.status || null,
+            trackingNumber: label.trackingNumber || null,
+            trackingUrl: label.trackingUrl || null,
+            labelUrl: label.labelUrl || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        order.trackingNumber = label.trackingNumber || order.trackingNumber;
+        order.trackingUrl = label.trackingUrl || order.trackingUrl;
+        order.labelUrl = label.labelUrl || order.labelUrl;
+      }
+    } catch (labelErr) {
+      console.warn("markShopOrderPaid Shippo label", labelErr.message || labelErr);
+      await orderRef.set(
+        {
+          shippoLabelError: (labelErr.message || "label_failed").toString().slice(0, 500),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  }
+
   return shopOrderReceiptResponse(tenantData, orderId, {
     ...order,
     subtotalCents: resolvedSubtotal,
+    shippingCents: resolvedShipping,
+    taxCents: resolvedTax,
     surchargeCents: resolvedSurcharge,
     totalCents: grossCents,
   }, {
     subtotalCents: resolvedSubtotal,
+    shippingCents: resolvedShipping,
+    taxCents: resolvedTax,
     surchargeCents: resolvedSurcharge,
     totalCents: grossCents,
     paidAt: paidAtIso,
@@ -4272,11 +4326,98 @@ const publicWebCallableOptions = {
   region: "us-central1",
 };
 
+/** Shop checkout + shipping (Stripe Connect + optional Shippo). */
+const publicShopCallableOptions = {
+  secrets: [stripeSecretKey, shippoApiToken],
+  invoker: "public",
+  cors: true,
+  region: "us-central1",
+};
+
+function readShippoTokenOrThrow() {
+  let token = "";
+  try {
+    token = (shippoApiToken.value() || "").toString().trim();
+  } catch (_) {
+    token = "";
+  }
+  if (!token) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Shipping is not configured yet. Add SHIPPO_API_TOKEN to Cloud Functions secrets."
+    );
+  }
+  return token;
+}
+
+/**
+ * Public web: live Shippo rates for cart + destination address.
+ * Params: { tenantSlug, lineItems, addressTo: { name, street1, street2?, city, state, zip, country?, phone?, email? } }
+ */
+exports.getShopShippingRates = onCall(publicShopCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  if (!tenantSlug) {
+    throw new HttpsError("invalid-argument", "tenantSlug is required");
+  }
+  const { tenantId, tenantData } = await resolvePublicShopTenant(tenantSlug);
+  if (tenantData.shopShippingEnabled !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Shipping is not enabled for this shop. Choose pickup or ask the studio to enable shipping."
+    );
+  }
+  const token = readShippoTokenOrThrow();
+  const rawLines = Array.isArray(data.lineItems) ? data.lineItems : [];
+  const productsById = await fetchTenantProductsById(tenantId);
+  const { lineItems } = buildValidatedShopLineItems(rawLines, productsById);
+  const defaults = tenantData.shopDefaultParcel && typeof tenantData.shopDefaultParcel === "object"
+    ? tenantData.shopDefaultParcel
+    : {};
+  const parcel = shippoShop.buildParcelFromProducts(lineItems, productsById, defaults);
+  const addressFrom = shippoShop.shipFromAddressFromTenant(tenantData, terminalAddressFromTenant);
+  let addressTo;
+  try {
+    addressTo = shippoShop.normalizeShipAddress(
+      data.addressTo,
+      (data.customerName || "").toString().trim() || "Customer"
+    );
+  } catch (addrErr) {
+    throw new HttpsError("invalid-argument", addrErr.message || "Invalid shipping address");
+  }
+  try {
+    const result = await shippoShop.createShipmentRates(token, {
+      addressFrom,
+      addressTo,
+      parcel,
+    });
+    if (!result.rates.length) {
+      throw new HttpsError(
+        "failed-precondition",
+        "No shipping rates available for this address. Try a different address or choose pickup."
+      );
+    }
+    return {
+      shipmentId: result.shipmentId,
+      rates: result.rates,
+      parcel,
+    };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    console.error("getShopShippingRates", err);
+    throw new HttpsError(
+      "failed-precondition",
+      err.message || "Could not get shipping rates"
+    );
+  }
+});
+
 /**
  * Public web: create shop order + Stripe PaymentIntent for embedded checkout.
- * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes? }
+ * Params: { tenantSlug, lineItems, customerName, customerEmail, customerPhone?, notes?,
+ *   fulfillmentMethod?: 'pickup'|'shipping', shippoRateId?, shippoShipmentId?, shippingAddress? }
  */
-exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (request) => {
+exports.createShopCheckoutPayment = onCall(publicShopCallableOptions, async (request) => {
     const data = request.data;
     try {
     const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
@@ -4300,6 +4441,60 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
 
+    const pickupEnabled = tenantData.shopPickupEnabled !== false;
+    const shippingEnabled = tenantData.shopShippingEnabled === true;
+    let fulfillmentMethod = (data?.fulfillmentMethod || "pickup").toString().trim().toLowerCase();
+    if (fulfillmentMethod !== "shipping") fulfillmentMethod = "pickup";
+    if (fulfillmentMethod === "pickup" && !pickupEnabled) {
+      if (shippingEnabled) fulfillmentMethod = "shipping";
+      else {
+        throw new HttpsError("failed-precondition", "This shop is not accepting orders right now.");
+      }
+    }
+    if (fulfillmentMethod === "shipping" && !shippingEnabled) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Shipping is not enabled. Choose pickup instead."
+      );
+    }
+
+    let shippingCents = 0;
+    let shippoRateId = null;
+    let shippoShipmentId = null;
+    let shippingAddress = null;
+    let shippingProvider = null;
+    let shippingService = null;
+
+    if (fulfillmentMethod === "shipping") {
+      shippoRateId = (data?.shippoRateId || "").toString().trim();
+      shippoShipmentId = (data?.shippoShipmentId || "").toString().trim() || null;
+      if (!shippoRateId) {
+        throw new HttpsError("invalid-argument", "Select a shipping rate before paying.");
+      }
+      const token = readShippoTokenOrThrow();
+      try {
+        shippingAddress = shippoShop.normalizeShipAddress(
+          data?.shippingAddress,
+          (data?.customerName || "").toString().trim() || "Customer"
+        );
+      } catch (addrErr) {
+        throw new HttpsError("invalid-argument", addrErr.message || "Invalid shipping address");
+      }
+      let rate;
+      try {
+        rate = await shippoShop.retrieveRate(token, shippoRateId);
+      } catch (rateErr) {
+        console.error("createShopCheckoutPayment shippo rate", rateErr);
+        throw new HttpsError(
+          "failed-precondition",
+          "That shipping rate expired. Get new rates and try again."
+        );
+      }
+      shippingCents = Math.max(0, rate.amountCents || 0);
+      shippingProvider = rate.provider || null;
+      shippingService = rate.service || null;
+    }
+
     const shopTaxEnabled = tenantData.shopTaxEnabled === true;
     let taxCents = 0;
     let taxCalculationId = null;
@@ -4322,8 +4517,9 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       }
     }
 
-    const checkout = computeCardCheckoutAmounts(subtotalCents, "online");
-    const piAmount = subtotalCents + taxCents + checkout.surchargeCents;
+    const merchandiseCents = subtotalCents + shippingCents;
+    const checkout = computeCardCheckoutAmounts(merchandiseCents, "online");
+    const piAmount = merchandiseCents + taxCents + checkout.surchargeCents;
     if (piAmount < 50) {
       throw new HttpsError(
         "failed-precondition",
@@ -4353,9 +4549,12 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
           tenantId,
           paymentKind: "shop",
           shopOrderId: orderId,
-          serviceAmountCents: String(checkout.serviceCents),
+          serviceAmountCents: String(subtotalCents),
+          shippingCents: String(shippingCents),
           taxCents: String(taxCents),
           surchargeCents: String(checkout.surchargeCents),
+          fulfillmentMethod,
+          ...(shippoRateId ? { shippoRateId } : {}),
           ...(taxCalculationId ? { taxCalculationId } : {}),
           chargeStripeAccountId: stripeAccountId,
           chargeStripeScope: "tenant",
@@ -4371,13 +4570,20 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       customerName,
       customerEmail,
       lineItems,
-      subtotalCents: checkout.serviceCents,
+      subtotalCents,
+      shippingCents,
       taxCents,
       surchargeCents: checkout.surchargeCents,
       totalCents: piAmount,
+      fulfillmentMethod,
       stripePaymentIntentId: pi.id,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (shippoRateId) orderData.shippoRateId = shippoRateId;
+    if (shippoShipmentId) orderData.shippoShipmentId = shippoShipmentId;
+    if (shippingAddress) orderData.shippingAddress = shippingAddress;
+    if (shippingProvider) orderData.shippingProvider = shippingProvider;
+    if (shippingService) orderData.shippingService = shippingService;
     if (taxCalculationId) orderData.taxCalculationId = taxCalculationId;
     if (customerPhone) orderData.customerPhone = customerPhone;
     if (notes) orderData.notes = notes;
@@ -4392,11 +4598,13 @@ exports.createShopCheckoutPayment = onCall(publicWebCallableOptions, async (requ
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       stripeAccountId,
-      subtotalCents: checkout.serviceCents,
+      subtotalCents,
+      shippingCents,
       taxCents,
       surchargeCents: checkout.surchargeCents,
       platformFeeCents: feeCents,
       totalCents: piAmount,
+      fulfillmentMethod,
     };
     if (pkOut) out.publishableKey = pkOut;
     return out;
@@ -4479,7 +4687,7 @@ exports.updateShopCheckoutContact = onCall(publicWebCallableOptions, async (requ
  * Public web: mark shop order paid after Stripe PaymentIntent succeeds.
  * Params: { tenantSlug, orderId, paymentIntentId }
  */
-exports.finalizeShopOrderPayment = onCall(publicWebCallableOptions, async (request) => {
+exports.finalizeShopOrderPayment = onCall(publicShopCallableOptions, async (request) => {
     const data = request.data;
     const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
     const orderId = (data?.orderId || "").toString().trim();

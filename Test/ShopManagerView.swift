@@ -786,12 +786,44 @@ private struct ShopSettingsSheet: View {
                         Divider().padding(.leading, 14)
 
                         NavigationLink {
+                            ShopShippingSettingsView(viewModel: viewModel)
+                        } label: {
+                            HStack(alignment: .center, spacing: 12) {
+                                Image(systemName: "shippingbox.fill")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, alignment: .center)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Shipping & pickup")
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(Color.primary)
+                                    Text(
+                                        viewModel.shopShippingEnabled
+                                            ? "Shippo live rates on"
+                                            : "Pickup and Shippo rates"
+                                    )
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider().padding(.leading, 14)
+
+                        NavigationLink {
                             ShopComingSoonView(
                                 title: "Store settings",
                                 tint: .gray,
                                 bullets: [
                                     "Currency & locale",
-                                    "Shipping zones & rates",
                                     "Policies (returns, privacy)",
                                     "Shop URL & branding",
                                 ]
@@ -806,7 +838,7 @@ private struct ShopSettingsSheet: View {
                                     Text("Store settings")
                                         .font(.body.weight(.medium))
                                         .foregroundStyle(Color.primary)
-                                    Text("Currency, shipping, policies")
+                                    Text("Currency, policies")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -930,6 +962,71 @@ private struct ShopInlineComingSoon: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .appCard()
+    }
+}
+
+// MARK: - Shipping settings
+
+struct ShopShippingSettingsView: View {
+    @ObservedObject var viewModel: DesignViewModel
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Local pickup", isOn: $viewModel.shopPickupEnabled)
+                    .disabled(controlsDisabled)
+                Toggle("Shipping (Shippo live rates)", isOn: $viewModel.shopShippingEnabled)
+                    .disabled(controlsDisabled)
+            } footer: {
+                Text("Customers pay carrier rates at checkout. Add a Shippo API token to Cloud Functions (SHIPPO_API_TOKEN) before enabling shipping.")
+            }
+
+            Section {
+                TextField("Business name", text: $viewModel.shopShipFromName)
+                TextField("Street", text: $viewModel.shopShipFromStreet)
+                TextField("City", text: $viewModel.shopShipFromCity)
+                TextField("State", text: $viewModel.shopShipFromState)
+                    .textInputAutocapitalization(.characters)
+                TextField("ZIP", text: $viewModel.shopShipFromZip)
+                    .keyboardType(.numbersAndPunctuation)
+            } header: {
+                Text("Ship from")
+            } footer: {
+                Text("If blank, we use your business contact address and service area.")
+            }
+
+            Section {
+                TextField("Weight (oz)", text: $viewModel.shopDefaultWeightOz)
+                    .keyboardType(.decimalPad)
+                TextField("Length (in)", text: $viewModel.shopDefaultLengthIn)
+                    .keyboardType(.decimalPad)
+                TextField("Width (in)", text: $viewModel.shopDefaultWidthIn)
+                    .keyboardType(.decimalPad)
+                TextField("Height (in)", text: $viewModel.shopDefaultHeightIn)
+                    .keyboardType(.decimalPad)
+            } header: {
+                Text("Default package")
+            } footer: {
+                Text("Used when a product has no weight or dimensions. Set weight on each product for accurate rates.")
+            }
+        }
+        .navigationTitle("Shipping & pickup")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    Task { await viewModel.saveShopShippingSettings() }
+                }
+                .disabled(controlsDisabled)
+            }
+        }
+        .onDisappear {
+            Task { await viewModel.saveShopShippingSettings() }
+        }
     }
 }
 
@@ -1313,6 +1410,10 @@ private struct ShopProductFormSheet: View {
     @State private var category: String
     @State private var description: String
     @State private var price: String
+    @State private var weightOz: String
+    @State private var lengthIn: String
+    @State private var widthIn: String
+    @State private var heightIn: String
     @State private var isVisible: Bool
     @State private var imageItem: PhotosPickerItem? = nil
     @State private var imageData: Data? = nil
@@ -1330,6 +1431,10 @@ private struct ShopProductFormSheet: View {
         _category = State(initialValue: editingProduct?.category ?? "")
         _description = State(initialValue: editingProduct?.description ?? "")
         _price = State(initialValue: editingProduct.map { String(format: "%.2f", $0.price) } ?? "")
+        _weightOz = State(initialValue: editingProduct?.weightOz.map { String(format: "%g", $0) } ?? "")
+        _lengthIn = State(initialValue: editingProduct?.lengthIn.map { String(format: "%g", $0) } ?? "")
+        _widthIn = State(initialValue: editingProduct?.widthIn.map { String(format: "%g", $0) } ?? "")
+        _heightIn = State(initialValue: editingProduct?.heightIn.map { String(format: "%g", $0) } ?? "")
         _isVisible = State(initialValue: editingProduct?.isActive ?? true)
     }
 
@@ -1385,6 +1490,29 @@ private struct ShopProductFormSheet: View {
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .appCard()
+
+                    shopSheetSectionHeader("Shipping")
+                    VStack(spacing: 0) {
+                        shopSheetLabeledField(title: "Weight (oz)") {
+                            TextField("e.g. 16", text: $weightOz)
+                                .keyboardType(.decimalPad)
+                        }
+                        Divider().padding(.leading, 16)
+                        shopSheetLabeledField(title: "L × W × H (in)") {
+                            HStack(spacing: 8) {
+                                TextField("L", text: $lengthIn)
+                                    .keyboardType(.decimalPad)
+                                TextField("W", text: $widthIn)
+                                    .keyboardType(.decimalPad)
+                                TextField("H", text: $heightIn)
+                                    .keyboardType(.decimalPad)
+                            }
+                        }
+                    }
+                    .appCard()
+                    Text("Needed for accurate USPS/UPS rates at checkout.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     Toggle(isOn: $isVisible) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -1533,6 +1661,10 @@ private struct ShopProductFormSheet: View {
 
     private func save() async {
         let parsedPrice = Double(price.trimmingCharacters(in: .whitespaces)) ?? 0
+        let wOz = Double(weightOz.trimmingCharacters(in: .whitespaces))
+        let lIn = Double(lengthIn.trimmingCharacters(in: .whitespaces))
+        let wIn = Double(widthIn.trimmingCharacters(in: .whitespaces))
+        let hIn = Double(heightIn.trimmingCharacters(in: .whitespaces))
         if let product = editingProduct {
             await viewModel.updateProduct(
                 product,
@@ -1542,7 +1674,11 @@ private struct ShopProductFormSheet: View {
                 price: parsedPrice,
                 salePrice: product.salePrice,
                 imageData: imageData,
-                isActive: isVisible
+                isActive: isVisible,
+                weightOz: wOz,
+                lengthIn: lIn,
+                widthIn: wIn,
+                heightIn: hIn
             )
         } else {
             await viewModel.addProduct(
@@ -1552,7 +1688,11 @@ private struct ShopProductFormSheet: View {
                 price: parsedPrice,
                 salePrice: nil,
                 imageData: imageData,
-                isActive: isVisible
+                isActive: isVisible,
+                weightOz: wOz,
+                lengthIn: lIn,
+                widthIn: wIn,
+                heightIn: hIn
             )
         }
         onDismiss()

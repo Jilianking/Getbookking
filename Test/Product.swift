@@ -16,4 +16,10 @@ struct Product: Identifiable {
     var salePrice: Double?
     var imageUrl: String
     var isActive: Bool
+    /// Shipping weight in ounces (Shippo). Nil → shop default / 16 oz.
+    var weightOz: Double?
+    /// Parcel dimensions in inches (Shippo).
+    var lengthIn: Double?
+    var widthIn: Double?
+    var heightIn: Double?
 }

@@ -200,6 +200,20 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     // Products (shop section)
     @Published var shopEnabled: Bool = false
+    /// Offer local pickup at checkout (default on).
+    @Published var shopPickupEnabled: Bool = true
+    /// Offer Shippo live rates at checkout (requires SHIPPO_API_TOKEN on Functions).
+    @Published var shopShippingEnabled: Bool = false
+    @Published var shopShipFromName: String = ""
+    @Published var shopShipFromStreet: String = ""
+    @Published var shopShipFromCity: String = ""
+    @Published var shopShipFromState: String = ""
+    @Published var shopShipFromZip: String = ""
+    /// Default parcel when a product has no weight (ounces).
+    @Published var shopDefaultWeightOz: String = "16"
+    @Published var shopDefaultLengthIn: String = "8"
+    @Published var shopDefaultWidthIn: String = "6"
+    @Published var shopDefaultHeightIn: String = "4"
     /// Public `/gallery` route and gallery nav links (default on).
     @Published var showGalleryPage: Bool = true
     /// Public `/book` route and booking nav / primary CTAs (default on).
@@ -1194,6 +1208,27 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 showContactOnPage = tenant?["showContactOnPage"] as? Bool ?? true
                 showBusinessHoursOnPage = tenant?["showBusinessHoursOnPage"] as? Bool ?? true
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
+                shopPickupEnabled = tenant?["shopPickupEnabled"] as? Bool ?? true
+                shopShippingEnabled = tenant?["shopShippingEnabled"] as? Bool ?? false
+                if let shipFrom = tenant?["shopShipFrom"] as? [String: Any] {
+                    shopShipFromName = shipFrom["name"] as? String ?? ""
+                    shopShipFromStreet = shipFrom["street1"] as? String ?? shipFrom["line1"] as? String ?? ""
+                    shopShipFromCity = shipFrom["city"] as? String ?? ""
+                    shopShipFromState = shipFrom["state"] as? String ?? ""
+                    shopShipFromZip = shipFrom["zip"] as? String ?? shipFrom["postal_code"] as? String ?? ""
+                } else {
+                    shopShipFromName = ""
+                    shopShipFromStreet = ""
+                    shopShipFromCity = ""
+                    shopShipFromState = ""
+                    shopShipFromZip = ""
+                }
+                if let parcel = tenant?["shopDefaultParcel"] as? [String: Any] {
+                    if let w = parcel["weightOz"] as? Double { shopDefaultWeightOz = String(format: "%g", w) }
+                    if let l = parcel["lengthIn"] as? Double { shopDefaultLengthIn = String(format: "%g", l) }
+                    if let w = parcel["widthIn"] as? Double { shopDefaultWidthIn = String(format: "%g", w) }
+                    if let h = parcel["heightIn"] as? Double { shopDefaultHeightIn = String(format: "%g", h) }
+                }
                 showGalleryPage = tenant?["showGalleryPage"] as? Bool ?? true
                 showBookPage = tenant?["showBookPage"] as? Bool ?? true
                 showAboutPage = tenant?["showAboutPage"] as? Bool ?? true
@@ -2353,6 +2388,53 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         await savePublicPageVisibility()
     }
 
+    /// Pickup / Shippo shipping toggles, ship-from address, and default parcel.
+    func saveShopShippingSettings() async {
+        guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
+        var shipFrom: [String: Any] = [:]
+        let name = shopShipFromName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let street = shopShipFromStreet.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = shopShipFromCity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let state = shopShipFromState.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let zip = shopShipFromZip.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { shipFrom["name"] = name }
+        if !street.isEmpty { shipFrom["street1"] = street }
+        if !city.isEmpty { shipFrom["city"] = city }
+        if !state.isEmpty { shipFrom["state"] = state }
+        if !zip.isEmpty { shipFrom["zip"] = zip }
+
+        var parcel: [String: Any] = [:]
+        if let w = Double(shopDefaultWeightOz.trimmingCharacters(in: .whitespaces)), w > 0 {
+            parcel["weightOz"] = w
+        }
+        if let l = Double(shopDefaultLengthIn.trimmingCharacters(in: .whitespaces)), l > 0 {
+            parcel["lengthIn"] = l
+        }
+        if let w = Double(shopDefaultWidthIn.trimmingCharacters(in: .whitespaces)), w > 0 {
+            parcel["widthIn"] = w
+        }
+        if let h = Double(shopDefaultHeightIn.trimmingCharacters(in: .whitespaces)), h > 0 {
+            parcel["heightIn"] = h
+        }
+
+        var updates: [String: Any] = [
+            "shopPickupEnabled": shopPickupEnabled,
+            "shopShippingEnabled": shopShippingEnabled,
+        ]
+        if shipFrom.isEmpty {
+            updates["shopShipFrom"] = FieldValue.delete()
+        } else {
+            updates["shopShipFrom"] = shipFrom
+        }
+        if parcel.isEmpty {
+            updates["shopDefaultParcel"] = FieldValue.delete()
+        } else {
+            updates["shopDefaultParcel"] = parcel
+        }
+        await saveTenantUpdates(tid, updates)
+    }
+
     /// Persists team page visibility toggles and per-member roster fields.
     func saveTeamPageSettings() async {
         guard let tid = tenantId else { return }
@@ -2448,7 +2530,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         price: Double,
         salePrice: Double?,
         imageData: Data?,
-        isActive: Bool
+        isActive: Bool,
+        weightOz: Double? = nil,
+        lengthIn: Double? = nil,
+        widthIn: Double? = nil,
+        heightIn: Double? = nil
     ) async {
         guard let tid = tenantId else { return }
         if blockIfDemoReadOnly() { return }
@@ -2466,7 +2552,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 price: price,
                 salePrice: salePrice,
                 imageUrl: imageUrl,
-                isActive: isActive
+                isActive: isActive,
+                weightOz: weightOz,
+                lengthIn: lengthIn,
+                widthIn: widthIn,
+                heightIn: heightIn
             )
             let descTrim = description.trimmingCharacters(in: .whitespacesAndNewlines)
             let product = Product(
@@ -2477,7 +2567,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 price: price,
                 salePrice: salePrice,
                 imageUrl: imageUrl,
-                isActive: isActive
+                isActive: isActive,
+                weightOz: weightOz,
+                lengthIn: lengthIn,
+                widthIn: widthIn,
+                heightIn: heightIn
             )
             await MainActor.run { products.append(product); isUploadingProduct = false; invalidateWebPreview() }
         } catch {
@@ -2493,7 +2587,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         price: Double,
         salePrice: Double?,
         imageData: Data?,
-        isActive: Bool
+        isActive: Bool,
+        weightOz: Double? = nil,
+        lengthIn: Double? = nil,
+        widthIn: Double? = nil,
+        heightIn: Double? = nil
     ) async {
         guard let tid = tenantId else { return }
         if blockIfDemoReadOnly() { return }
@@ -2512,7 +2610,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 price: price,
                 salePrice: salePrice,
                 imageUrl: imageUrl,
-                isActive: isActive
+                isActive: isActive,
+                weightOz: weightOz,
+                lengthIn: lengthIn,
+                widthIn: widthIn,
+                heightIn: heightIn
             )
             let descTrim = description.trimmingCharacters(in: .whitespacesAndNewlines)
             let updated = Product(
@@ -2523,7 +2625,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 price: price,
                 salePrice: salePrice,
                 imageUrl: imageUrl ?? product.imageUrl,
-                isActive: isActive
+                isActive: isActive,
+                weightOz: weightOz,
+                lengthIn: lengthIn,
+                widthIn: widthIn,
+                heightIn: heightIn
             )
             await MainActor.run {
                 if let idx = products.firstIndex(where: { $0.id == product.id }) {

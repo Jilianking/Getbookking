@@ -97,10 +97,13 @@ service cloud.firestore {
         allow read, write: if canManageTenant(tenantId);
       }
 
-      // Client texting (written by Cloud Functions; team app reads threads + log)
+      // Client texting (log is CF-only; threads allow clientName patches when a customer is saved)
       match /smsThreads/{threadId} {
         allow read: if canManageTenant(tenantId);
-        allow write: if false;
+        allow create, delete: if false;
+        allow update: if canManageTenant(tenantId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['clientName', 'updatedAt']);
       }
 
       match /smsLog/{logId} {

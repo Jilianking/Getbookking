@@ -485,6 +485,14 @@ final class ClientProfileViewModel: ObservableObject {
                 allergies: cleanedAllergies.isEmpty ? nil : cleanedAllergies
             )
             saveError = nil
+            do {
+                try await firebaseService.updateSmsThreadsClientName(
+                    phone: client.phone,
+                    name: client.name
+                )
+            } catch {
+                print("Error syncing SMS thread names: \(error)")
+            }
         } catch {
             saveError = error.localizedDescription
         }

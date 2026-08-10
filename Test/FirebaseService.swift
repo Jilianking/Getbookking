@@ -660,6 +660,40 @@ class FirebaseService: ObservableObject {
         try await db.collection("tenants").document(tenantId).collection("customers").document(customerId).setData(data, merge: true)
     }
 
+    /// Patches `clientName` on SMS threads that match the customer's phone (inbox + thread titles).
+    func updateSmsThreadsClientName(phone: String?, name: String) async throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty,
+              let target = PhoneFormatting.last10Digits(from: phone) else { return }
+        let tenantId = try await currentTenantId()
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("smsThreads")
+            .getDocuments()
+        let batch = db.batch()
+        var writes = 0
+        for doc in snapshot.documents {
+            let data = doc.data()
+            let threadId = ((data["threadId"] as? String) ?? doc.documentID)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let counterpart = (data["counterpartPhone"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let clientPhone = PhoneFormatting.clientPhoneFromThreadId(threadId)
+                ?? (counterpart.isEmpty ? threadId : counterpart)
+            guard PhoneFormatting.last10Digits(from: clientPhone) == target else { continue }
+            batch.setData(
+                [
+                    "clientName": trimmedName,
+                    "updatedAt": Timestamp(date: Date()),
+                ],
+                forDocument: doc.reference,
+                merge: true
+            )
+            writes += 1
+        }
+        guard writes > 0 else { return }
+        try await batch.commit()
+    }
+
     // MARK: - Provider Profile
     func createProviderProfile(
         uid: String,
@@ -965,7 +999,11 @@ class FirebaseService: ObservableObject {
                 price: d["price"] as? Double ?? 0,
                 salePrice: d["salePrice"] as? Double,
                 imageUrl: d["imageUrl"] as? String ?? "",
-                isActive: d["isActive"] as? Bool ?? true
+                isActive: d["isActive"] as? Bool ?? true,
+                weightOz: d["weightOz"] as? Double,
+                lengthIn: d["lengthIn"] as? Double,
+                widthIn: d["widthIn"] as? Double,
+                heightIn: d["heightIn"] as? Double
             )
         }
     }
@@ -978,7 +1016,11 @@ class FirebaseService: ObservableObject {
         price: Double,
         salePrice: Double?,
         imageUrl: String,
-        isActive: Bool
+        isActive: Bool,
+        weightOz: Double? = nil,
+        lengthIn: Double? = nil,
+        widthIn: Double? = nil,
+        heightIn: Double? = nil
     ) async throws -> String {
         var data: [String: Any] = [
             "name": name,
@@ -990,6 +1032,10 @@ class FirebaseService: ObservableObject {
         let desc = description.trimmingCharacters(in: .whitespacesAndNewlines)
         if !desc.isEmpty { data["description"] = desc }
         if let sp = salePrice { data["salePrice"] = sp }
+        if let weightOz { data["weightOz"] = weightOz }
+        if let lengthIn { data["lengthIn"] = lengthIn }
+        if let widthIn { data["widthIn"] = widthIn }
+        if let heightIn { data["heightIn"] = heightIn }
         let ref = try await db.collection("tenants").document(tenantId).collection("products").addDocument(data: data)
         return ref.documentID
     }
@@ -1003,7 +1049,11 @@ class FirebaseService: ObservableObject {
         price: Double,
         salePrice: Double?,
         imageUrl: String?,
-        isActive: Bool
+        isActive: Bool,
+        weightOz: Double? = nil,
+        lengthIn: Double? = nil,
+        widthIn: Double? = nil,
+        heightIn: Double? = nil
     ) async throws {
         var data: [String: Any] = [
             "name": name,
@@ -1024,6 +1074,26 @@ class FirebaseService: ObservableObject {
         }
         if let imageUrl {
             data["imageUrl"] = imageUrl
+        }
+        if let weightOz {
+            data["weightOz"] = weightOz
+        } else {
+            data["weightOz"] = FieldValue.delete()
+        }
+        if let lengthIn {
+            data["lengthIn"] = lengthIn
+        } else {
+            data["lengthIn"] = FieldValue.delete()
+        }
+        if let widthIn {
+            data["widthIn"] = widthIn
+        } else {
+            data["widthIn"] = FieldValue.delete()
+        }
+        if let heightIn {
+            data["heightIn"] = heightIn
+        } else {
+            data["heightIn"] = FieldValue.delete()
         }
         try await db.collection("tenants").document(tenantId).collection("products").document(productId).updateData(data)
     }

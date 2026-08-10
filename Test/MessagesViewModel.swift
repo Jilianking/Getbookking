@@ -208,8 +208,18 @@ class MessagesViewModel: ObservableObject {
 
         let resolvedName: String = {
             let trimmed = (finalClientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return trimmed }
-            return PhoneFormatting.displayUS(clientId)
+            if !trimmed.isEmpty {
+                return ClientsViewModel.displayName(
+                    stored: trimmed,
+                    phone: clientId,
+                    clients: composeClients
+                )
+            }
+            return ClientsViewModel.displayName(
+                stored: "",
+                phone: clientId,
+                clients: composeClients
+            )
         }()
 
         let trimmedUrl = paymentUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -306,6 +316,23 @@ class MessagesViewModel: ObservableObject {
         return threadSummaries.first {
             PhoneFormatting.smsThreadId($0.threadId) == normalized
         }
+    }
+
+    /// Inbox / thread title: prefer a saved customer name over a phone-only thread label.
+    func resolvedDisplayName(for summary: SmsThreadSummary) -> String {
+        ClientsViewModel.displayName(
+            stored: summary.clientName,
+            phone: summary.clientPhoneForSend,
+            clients: composeClients
+        )
+    }
+
+    func resolvedDisplayName(stored: String, phone: String) -> String {
+        ClientsViewModel.displayName(
+            stored: stored,
+            phone: phone,
+            clients: composeClients
+        )
     }
 
     deinit {

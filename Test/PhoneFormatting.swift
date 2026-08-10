@@ -12,6 +12,14 @@ enum PhoneFormatting {
         raw.filter(\.isNumber)
     }
 
+    /// Last 10 national digits when available (US match key for customers ↔ SMS threads).
+    static func last10Digits(from raw: String?) -> String? {
+        guard let raw else { return nil }
+        let d = digits(from: raw)
+        guard d.count >= 10 else { return nil }
+        return String(d.suffix(10))
+    }
+
     /// Format for display or storage when possible; matches public web `normalizePhone`.
     static func displayUS(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -38,7 +38,9 @@ struct MessagesView: View {
         guard !q.isEmpty else { return base }
         let qDigits = PhoneFormatting.digits(from: searchText)
         return base.filter { summary in
-            summary.clientName.lowercased().contains(q)
+            let displayName = viewModel.resolvedDisplayName(for: summary)
+            return displayName.lowercased().contains(q)
+                || summary.clientName.lowercased().contains(q)
                 || summary.lastMessageBody.lowercased().contains(q)
                 || (!qDigits.isEmpty && PhoneFormatting.digits(from: summary.threadId).contains(qDigits))
         }
@@ -109,6 +111,10 @@ struct MessagesView: View {
                             isDemoMode: authViewModel.isDemoMode,
                             sessionStore: sessionStore
                         )
+                        await viewModel.loadComposeClients(
+                            isDemoMode: authViewModel.isDemoMode,
+                            sessionStore: sessionStore
+                        )
                     }
                 }
             }
@@ -172,6 +178,15 @@ struct MessagesView: View {
             } message: {
                 Text(viewModel.lastError ?? "")
             }
+            .onChange(of: selectedThreadId) { _, threadId in
+                guard threadId == nil else { return }
+                Task {
+                    await viewModel.loadComposeClients(
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
+                    )
+                }
+            }
             .onChange(of: drawerState.messagesShouldOpenCompose) { _, shouldOpen in
                 guard shouldOpen else { return }
                 applyMessagesComposePrefill(from: drawerState)
@@ -197,6 +212,10 @@ struct MessagesView: View {
                     sessionStore: sessionStore
                 )
                 await viewModel.loadThreads(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                await viewModel.loadComposeClients(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
@@ -241,17 +260,21 @@ struct ThreadRow: View {
     @ObservedObject var viewModel: MessagesViewModel
     var showsDivider: Bool = true
 
+    private var displayName: String {
+        viewModel.resolvedDisplayName(for: summary)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 AppAvatarView(
                     tenantLogoURL: nil,
                     accountPhotoURL: nil,
-                    displayNameFallback: summary.clientName,
+                    displayNameFallback: displayName,
                     size: 44
                 )
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(summary.clientName)
+                    Text(displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppDesign.textPrimary)
                     if !summary.lastMessageBody.isEmpty {
@@ -390,8 +413,8 @@ struct MessageThreadView: View {
         }
         .task {
             if let summary = viewModel.summary(for: threadId) {
-                clientName = summary.clientName
-                clientPhone = PhoneFormatting.displayUS(summary.threadId)
+                clientPhone = PhoneFormatting.displayUS(summary.clientPhoneForSend)
+                clientName = viewModel.resolvedDisplayName(for: summary)
             }
             await sessionStore.loadBookingsIfNeeded(isDemoMode: authViewModel.isDemoMode)
             let phoneForLookup = clientPhone.isEmpty ? threadId : clientPhone
@@ -403,8 +426,16 @@ struct MessageThreadView: View {
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
+            await viewModel.loadComposeClients(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            refreshClientDisplayName()
             await loadMessages()
             await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
+        }
+        .onChange(of: viewModel.threadSummaries) { _, _ in
+            refreshClientDisplayName()
         }
         .onChange(of: viewModel.lastError) { _, err in
             showThreadError = err != nil
@@ -420,7 +451,19 @@ struct MessageThreadView: View {
         .onDisappear {
             viewModel.stopListeningToMessages(threadId: threadId)
         }
-        .sheet(isPresented: $showClientProfile) {
+        .sheet(isPresented: $showClientProfile, onDismiss: {
+            Task {
+                await clientsViewModel.refreshClients(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                await viewModel.loadComposeClients(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                refreshClientDisplayName()
+            }
+        }) {
             NavigationStack {
                 ClientProfileView(
                     client: clientsViewModel.resolveClient(
@@ -446,16 +489,35 @@ struct MessageThreadView: View {
         showClientProfile = true
     }
 
+    private func refreshClientDisplayName() {
+        let phone = clientPhone.isEmpty
+            ? (viewModel.summary(for: threadId)?.clientPhoneForSend ?? threadId)
+            : clientPhone
+        if clientPhone.isEmpty {
+            clientPhone = PhoneFormatting.displayUS(phone)
+        }
+        let stored = viewModel.summary(for: threadId)?.clientName
+            ?? messages.first?.clientName
+            ?? clientName
+        clientName = ClientsViewModel.displayName(
+            stored: stored,
+            phone: phone,
+            clients: clientsViewModel.clients.isEmpty
+                ? viewModel.composeClients
+                : clientsViewModel.clients
+        )
+    }
+
     private func loadMessages() async {
         messages = await viewModel.loadMessages(
             for: threadId,
             isDemoMode: authViewModel.isDemoMode,
             sessionStore: sessionStore
         )
-        if let first = messages.first {
-            clientName = first.clientName
+        if clientPhone.isEmpty, let first = messages.first {
             clientPhone = PhoneFormatting.displayUS(first.clientId)
         }
+        refreshClientDisplayName()
     }
 
     private func startListening() {
@@ -474,7 +536,7 @@ struct MessageThreadView: View {
             let ok = await viewModel.sendMessage(
                 threadId: threadId,
                 content: body,
-                clientName: summary?.clientName,
+                clientName: clientName,
                 clientId: summary?.clientPhoneForSend,
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
@@ -496,7 +558,7 @@ struct MessageThreadView: View {
             let ok = await viewModel.sendMessage(
                 threadId: threadId,
                 content: "",
-                clientName: summary?.clientName,
+                clientName: clientName,
                 clientId: summary?.clientPhoneForSend,
                 paymentKind: kind.paymentKind,
                 amountCents: amountCents,

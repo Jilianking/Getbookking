@@ -90,6 +90,7 @@ class ClientsViewModel: ObservableObject {
                 email: client.email,
                 phone: client.phone
             )
+            await syncSmsThreadNames(phone: client.phone, name: client.name)
             await loadClients()
             return docId
         }
@@ -111,6 +112,25 @@ class ClientsViewModel: ObservableObject {
             return String(safe.prefix(120))
         }
         return UUID().uuidString
+    }
+
+    /// Customer whose phone matches (last 10 digits), if any.
+    static func clientMatchingPhone(in clients: [Client], phone: String) -> Client? {
+        guard let target = PhoneFormatting.last10Digits(from: phone) else { return nil }
+        return clients.first { client in
+            PhoneFormatting.last10Digits(from: client.phone) == target
+        }
+    }
+
+    /// Prefer a saved customer's name over a phone-only SMS thread title.
+    static func displayName(stored: String, phone: String, clients: [Client]) -> String {
+        if let match = clientMatchingPhone(in: clients, phone: phone) {
+            let name = match.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { return name }
+        }
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return PhoneFormatting.displayUS(phone)
     }
 
     /// Best matching saved customer, or a lightweight client for message/request phone contacts.
@@ -152,14 +172,27 @@ class ClientsViewModel: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
+            let existingPhone = clients.first(where: { $0.id == clientId })?.phone
             if let tid = profile?.tenantId {
                 try await firebaseService.updateTenantCustomer(tenantId: tid, customerId: clientId, updates: updates)
             } else {
                 try await firebaseService.updateClient(clientId, updates: updates)
             }
+            if let name = updates["name"] as? String {
+                let phone = (updates["phone"] as? String) ?? existingPhone
+                await syncSmsThreadNames(phone: phone, name: name)
+            }
             await loadClients()
         } catch {
             print("Error updating client: \(error)")
+        }
+    }
+
+    private func syncSmsThreadNames(phone: String?, name: String) async {
+        do {
+            try await firebaseService.updateSmsThreadsClientName(phone: phone, name: name)
+        } catch {
+            print("Error syncing SMS thread names: \(error)")
         }
     }
 }

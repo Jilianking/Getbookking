@@ -190,12 +190,6 @@ struct MessageComposerBar: View {
         } message: {
             Text(actionNotice ?? "")
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { fieldFocused = false }
-            }
-        }
     }
 
     private var composerBackground: Color {

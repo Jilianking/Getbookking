@@ -40,7 +40,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .messages: return "Messages"
         case .clients: return "Clients"
         case .team: return "Team"
-        case .design: return "Design"
+        case .design: return "Website Builder"
         case .websiteProfile: return "Website profile"
         case .shop: return "Shop"
         case .insights: return "Insights"

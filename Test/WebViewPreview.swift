@@ -315,13 +315,44 @@ struct WebViewRepresentable: UIViewRepresentable {
             (function(){
               if (window.__bkQuickEditCleanup) { try { window.__bkQuickEditCleanup(false); } catch(e) {} }
               var dirty = {};
+              var inlinePrevText = '';
+              // Button labels must stay non-empty so the blue text hit target never collapses.
+              var requiredCtaDefaults = {
+                'wc.luxe.heroCta': 'Book Appointment',
+                'wc.luxe.promoCta': 'Book Now',
+                'wc.blade.navBook': 'Book now',
+                'wc.blade.bookPanelPrimary': 'Book now',
+                'wc.blade.heroBook': 'Book appointment',
+                'wc.stonecut.navBook': 'Book',
+                'wc.stonecut.heroBook': 'Book a session',
+                'wc.classic.heroBook': 'Book now',
+                'wc.classic.galleryLink': 'View full gallery \\u2192',
+                'wc.s12.navBook': 'Book now',
+                'wc.s12.bookSectionCta': 'Request appointment',
+                'wc.s12.galleryViewLink': 'View gallery'
+              };
+              function isRequiredCtaKey(k) {
+                return !!(k && Object.prototype.hasOwnProperty.call(requiredCtaDefaults, k));
+              }
               function currentText(el) {
                 var raw = (el.innerText != null ? el.innerText : el.textContent) || '';
                 return raw.replace(/^\\s+|\\s+$/g, '');
               }
+              function ensureRequiredCtaLabel(el) {
+                if (!el || !el.getAttribute) return;
+                var k = el.getAttribute('data-edit-key') || '';
+                if (!isRequiredCtaKey(k)) return;
+                if (currentText(el)) return;
+                var fallback = (inlinePrevText && inlinePrevText.replace(/^\\s+|\\s+$/g, '')) || requiredCtaDefaults[k] || 'Book now';
+                el.textContent = fallback;
+                el.removeAttribute('data-bk-empty-slot');
+                el.removeAttribute('data-bk-empty-slot-label');
+                el.classList.remove('bk-copy-empty');
+              }
               function noteDirtyFrom(el) {
                 var k = el.getAttribute('data-edit-key');
                 if (!k || isSheetOnlyKey(k)) return;
+                ensureRequiredCtaLabel(el);
                 dirty[k] = currentText(el);
               }
               var sheet = document.createElement('style');
@@ -337,8 +368,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                 bkCtaButtonSelector + ' [data-edit-key]{cursor:text!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 bkCtaButtonSelector + ' [data-edit-key][data-bk-inline-editing]{outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
-                // Empty restored CTA labels stay compact so button padding remains tappable for color.
-                bkCtaButtonSelector + ' [data-edit-key][data-bk-empty-slot]{min-width:0!important;width:auto!important;max-width:100%!important;}' +
+                // Keep empty / T+ CTA labels large enough to type into; padding outside still hits button color.
+                bkCtaButtonSelector + ' [data-edit-key][data-bk-empty-slot]{min-width:7em!important;width:auto!important;max-width:100%!important;}' +
 
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
@@ -511,6 +542,14 @@ struct WebViewRepresentable: UIViewRepresentable {
                       }
                     }
                   }
+                  // Empty required CTA labels: any tap on the button opens text (avoid stuck color-only).
+                  if (!label) {
+                    var emptyLabel = cta.querySelector('[data-edit-key]');
+                    if (emptyLabel) {
+                      var emptyKey = emptyLabel.getAttribute('data-edit-key') || '';
+                      if (isRequiredCtaKey(emptyKey) && !currentText(emptyLabel)) label = emptyLabel;
+                    }
+                  }
                   if (label) {
                     var ctaTk = label.getAttribute('data-edit-key');
                     if (ctaTk && isSheetOnlyKey(ctaTk)) return { type: 'sheet', el: label };
@@ -676,6 +715,13 @@ struct WebViewRepresentable: UIViewRepresentable {
                   var key = el.getAttribute('data-edit-key') || '';
                   if (!key || isSheetOnlyKey(key) || key.indexOf('color:') === 0) return;
                   if (currentText(el)) return;
+                  // Required CTAs: put the default back instead of an empty slot (always typeable).
+                  if (isRequiredCtaKey(key)) {
+                    el.textContent = requiredCtaDefaults[key] || 'Book now';
+                    el.classList.remove('bk-copy-empty');
+                    dirty[key] = currentText(el);
+                    return;
+                  }
                   el.setAttribute('data-bk-empty-slot', '1');
                   el.textContent = 'Tap to add text';
                   el.setAttribute('data-bk-empty-slot-label', '1');
@@ -721,10 +767,21 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function startInline(t) {
                 if (inlineEl && inlineEl !== t) finishActiveInlineNoSave();
+                inlinePrevText = currentText(t);
                 if (t.getAttribute('data-bk-empty-slot-label') === '1') {
-                  t.textContent = '';
+                  // Required CTA: seed the default so the box never collapses mid-edit.
+                  var slotKey = t.getAttribute('data-edit-key') || '';
+                  if (isRequiredCtaKey(slotKey)) {
+                    t.textContent = requiredCtaDefaults[slotKey] || 'Book now';
+                    inlinePrevText = currentText(t);
+                  } else {
+                    t.textContent = '';
+                  }
                   t.removeAttribute('data-bk-empty-slot-label');
                   t.removeAttribute('data-bk-empty-slot');
+                } else if (isRequiredCtaKey(t.getAttribute('data-edit-key') || '') && !currentText(t)) {
+                  t.textContent = requiredCtaDefaults[t.getAttribute('data-edit-key')] || 'Book now';
+                  inlinePrevText = currentText(t);
                 }
                 inlineEl = t;
                 setQuickEditSelected(t);

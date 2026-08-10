@@ -505,13 +505,35 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         return ""
     }
 
+    /// Button / CTA labels that must never persist as blank (empty label collapses the editable hit target).
+    private static let requiredWebCopyCtaDefaults: [String: String] = [
+        "wc.luxe.heroCta": "Book Appointment",
+        "wc.luxe.promoCta": "Book Now",
+        "wc.blade.navBook": "Book now",
+        "wc.blade.bookPanelPrimary": "Book now",
+        "wc.blade.heroBook": "Book appointment",
+        "wc.stonecut.navBook": "Book",
+        "wc.stonecut.heroBook": "Book a session",
+        "wc.classic.heroBook": "Book now",
+        "wc.classic.galleryLink": "View full gallery →",
+        "wc.s12.navBook": "Book now",
+        "wc.s12.bookSectionCta": "Request appointment",
+        "wc.s12.galleryViewLink": "View gallery",
+    ]
+
     /// Persists one `wc.*` quick-edit slot into `webCopyOverrides`.
-    /// Empty value keeps `""` in the map so the slot stays intentionally blank (does not restore the template default).
+    /// Empty value keeps `""` in the map so the slot stays intentionally blank (does not restore the template default),
+    /// except required CTA labels which snap back to their template default.
     private func persistWebCopyOverride(tenantId: String, key: String, value: String) async throws {
         guard key.hasPrefix("wc.") else { return }
         guard let doc = try await firebaseService.fetchTenant(tenantId: tenantId) else { return }
         var map = Self.coercedStringMap(doc["webCopyOverrides"])
-        map[key] = value
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty, let fallback = Self.requiredWebCopyCtaDefaults[key] {
+            map[key] = fallback
+        } else {
+            map[key] = value
+        }
         try await firebaseService.updateTenant(tenantId: tenantId, updates: ["webCopyOverrides": map])
     }
 

@@ -3,8 +3,8 @@
 //  Test
 //
 //  Slot-specific aspect presets, then a fixed-aspect crop window (Instagram-style):
-//  pan and pinch the photo behind the mask; optional 90° rotate. Multi-select still
-//  uses center crop per image with the chosen aspect.
+//  pan and pinch the photo behind the mask; optional 90° rotate. Multi-select pages
+//  through each photo with the same interactive editor and per-image export.
 //
 
 import SwiftUI
@@ -29,10 +29,10 @@ enum UploadImageAdvice {
     /// Luxe full-bleed wide hero (Design → Home + crop sheet when Luxe is selected).
     static let heroLuxe = "Luxe hero is a wide fixed frame. Move and zoom your photo behind the border; keep the subject clear of the left where your text sits."
     static let studioAux = "Side images use a fixed frame (philosophy 4:5, CTA 4:3). Move and zoom your photo behind the border. Simple backgrounds keep nearby text readable."
-    static let gallery = "Gallery uses a fixed cell shape. Move and zoom behind the border. Several photos at once use the same framing with a center crop on each."
+    static let gallery = "Gallery uses a fixed cell shape. Move and zoom behind the border. With several photos, use Previous / Next under the preview to crop each one."
     /// Studio 12 live site shows the full uploaded bitmap inside gallery tiles (no second browser crop).
-    static let galleryStudio12 = "Studio 12 tiles show your whole upload (letterboxed if needed). Portrait 4:5 is closest to strip tiles—compose inside the border. Several photos at once use center crop with the same framing."
-    static let featured = "Strong single shots for the home strip. Move and zoom inside the border; multi-select uses center crop on each with the same framing."
+    static let galleryStudio12 = "Studio 12 tiles show your whole upload (letterboxed if needed). Portrait 4:5 is closest to strip tiles—compose inside the border. With several photos, use Previous / Next to crop each one."
+    static let featured = "Strong single shots for the home strip. Move and zoom inside the border. With several photos, use Previous / Next under the preview to crop each one."
     static let product = "Clear product on a simple background; square or centered framing reads best in the shop grid."
     static let profile = "Face-forward or logo-style image; square framing matches the round avatar on your account."
     static let teamMember = "Portrait 4:5 matches team cards on /team and your home page. Center face and shoulders inside the frame."
@@ -418,39 +418,52 @@ private struct FixedMaskImageEditor: View {
     }
 }
 
+// MARK: - Per-image crop draft
+
+private struct UploadImageCropDraft {
+    var workingImage: UIImage
+    var userScale: CGFloat = 1
+    var offset: CGSize = .zero
+}
+
 // MARK: - Export
 
 enum UploadImageCropExport {
-    static func jpegDataList(
-        from images: [UIImage],
+    /// Exports each draft with its own interactive crop (or original / center-crop fallback).
+    fileprivate static func jpegDataList(
+        from drafts: [UploadImageCropDraft],
         choice: UploadCropAspectChoice,
-        interactive: InteractiveCropParameters?,
+        editorSize: CGSize,
         allowsInteractive: Bool
     ) -> [Data] {
-        if choice == .original {
-            return images.compactMap { $0.normalizedForUploadCrop().jpegDataForUploadCropExport() }
+        if choice == .original || choice.aspectWidthOverHeight == nil {
+            return drafts.compactMap { $0.workingImage.normalizedForUploadCrop().jpegDataForUploadCropExport() }
         }
-        guard let aspect = choice.aspectWidthOverHeight else {
-            return images.compactMap { $0.normalizedForUploadCrop().jpegDataForUploadCropExport() }
-        }
+        guard let aspect = choice.aspectWidthOverHeight else { return [] }
 
-        if images.count > 1 {
-            return images.compactMap { $0.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport() }
+        return drafts.compactMap { draft in
+            let img = draft.workingImage.normalizedForUploadCrop()
+            guard allowsInteractive, let cg = img.cgImage else {
+                return img.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport()
+            }
+            let params = InteractiveCropParameters(
+                editorWidth: editorSize.width,
+                editorHeight: editorSize.height,
+                maskAspectWidthOverHeight: aspect,
+                userScale: draft.userScale,
+                offsetWidth: draft.offset.width,
+                offsetHeight: draft.offset.height,
+                imagePixelWidth: CGFloat(cg.width),
+                imagePixelHeight: CGFloat(cg.height)
+            )
+            let cropRect = FixedMaskCropExport.pixelCropRect(parameters: params)
+            guard cropRect.width > 1, cropRect.height > 1,
+                  let cropped = img.croppedToPixelRect(cropRect)
+            else {
+                return img.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport()
+            }
+            return cropped.jpegDataForUploadCropExport()
         }
-
-        guard let img = images.first,
-              allowsInteractive,
-              let p = interactive
-        else {
-            return images.compactMap { $0.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport() }
-        }
-        let cropRect = FixedMaskCropExport.pixelCropRect(parameters: p)
-        guard cropRect.width > 1, cropRect.height > 1,
-              let cropped = img.normalizedForUploadCrop().croppedToPixelRect(cropRect)
-        else {
-            return images.compactMap { $0.centerCropped(toAspectWidthOverHeight: aspect).jpegDataForUploadCropExport() }
-        }
-        return [cropped].compactMap { $0.jpegDataForUploadCropExport() }
     }
 }
 
@@ -470,10 +483,8 @@ struct UploadImagePreparationSheet: View {
     let onUseJPEGData: ([Data]) -> Void
 
     @State private var choice: UploadCropAspectChoice
-    /// Upright pixel bitmap shown in the editor (rotates in-place for 90° steps).
-    @State private var workingImageForCrop = UIImage()
-    @State private var editorUserScale: CGFloat = 1
-    @State private var editorOffset: CGSize = .zero
+    @State private var currentIndex: Int = 0
+    @State private var drafts: [UploadImageCropDraft] = []
 
     init(
         images: [UIImage],
@@ -499,19 +510,24 @@ struct UploadImagePreparationSheet: View {
         _choice = State(initialValue: resolvedDefault)
     }
 
-    private var previewImage: UIImage { images.first ?? UIImage() }
-
     private var previewAspect: CGFloat? { choice.aspectWidthOverHeight }
 
     private var contentWidth: CGFloat {
         max(200, UIScreen.main.bounds.width - 40)
     }
 
+    private var currentDraftImage: UIImage {
+        guard drafts.indices.contains(currentIndex) else {
+            return images[safe: currentIndex] ?? images.first ?? UIImage()
+        }
+        return drafts[currentIndex].workingImage
+    }
+
     private func previewHeight(forContentWidth w: CGFloat) -> CGFloat {
         if let asp = previewAspect {
             return min(340, max(120, w / asp))
         }
-        let im = previewImage.normalizedForUploadCrop()
+        let im = currentDraftImage.normalizedForUploadCrop()
         guard let cg = im.cgImage, cg.width > 0 else { return 220 }
         let iw = CGFloat(cg.width)
         let ih = CGFloat(cg.height)
@@ -535,21 +551,108 @@ struct UploadImagePreparationSheet: View {
     }
 
     private var useInteractiveEditor: Bool {
-        images.count == 1 && previewAspect != nil
+        previewAspect != nil && !drafts.isEmpty
     }
 
-    private func resetEditorFromPreview() {
-        workingImageForCrop = previewImage.normalizedForUploadCrop()
-        editorUserScale = 1
-        editorOffset = .zero
+    private func makeDraftsFromSourceImages() -> [UploadImageCropDraft] {
+        images.map { UploadImageCropDraft(workingImage: $0.normalizedForUploadCrop()) }
+    }
+
+    private func resetAllDraftsFromSourceImages() {
+        drafts = makeDraftsFromSourceImages()
+        currentIndex = min(currentIndex, max(0, drafts.count - 1))
+    }
+
+    private func goToPreviousPhoto() {
+        guard currentIndex > 0 else { return }
+        currentIndex -= 1
+    }
+
+    private func goToNextPhoto() {
+        guard currentIndex < drafts.count - 1 else { return }
+        currentIndex += 1
+    }
+
+    private var workingImageBinding: Binding<UIImage> {
+        Binding(
+            get: {
+                guard drafts.indices.contains(currentIndex) else { return UIImage() }
+                return drafts[currentIndex].workingImage
+            },
+            set: { newValue in
+                guard drafts.indices.contains(currentIndex) else { return }
+                drafts[currentIndex].workingImage = newValue
+            }
+        )
+    }
+
+    private var userScaleBinding: Binding<CGFloat> {
+        Binding(
+            get: {
+                guard drafts.indices.contains(currentIndex) else { return 1 }
+                return drafts[currentIndex].userScale
+            },
+            set: { newValue in
+                guard drafts.indices.contains(currentIndex) else { return }
+                drafts[currentIndex].userScale = newValue
+            }
+        )
+    }
+
+    private var offsetBinding: Binding<CGSize> {
+        Binding(
+            get: {
+                guard drafts.indices.contains(currentIndex) else { return .zero }
+                return drafts[currentIndex].offset
+            },
+            set: { newValue in
+                guard drafts.indices.contains(currentIndex) else { return }
+                drafts[currentIndex].offset = newValue
+            }
+        )
     }
 
     private func previewOriginal(width w: CGFloat, height h: CGFloat) -> some View {
-        let im = previewImage.normalizedForUploadCrop()
+        let im = currentDraftImage.normalizedForUploadCrop()
         return Image(uiImage: im)
             .resizable()
             .scaledToFit()
             .frame(maxWidth: w, maxHeight: h)
+    }
+
+    @ViewBuilder
+    private var photoPagerControls: some View {
+        if drafts.count > 1 {
+            HStack(spacing: 16) {
+                Button {
+                    goToPreviousPhoto()
+                } label: {
+                    Label("Previous", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 36)
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentIndex <= 0)
+
+                Text("Photo \(currentIndex + 1) of \(drafts.count)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+
+                Button {
+                    goToNextPhoto()
+                } label: {
+                    Label("Next", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 36)
+                }
+                .buttonStyle(.bordered)
+                .disabled(currentIndex >= drafts.count - 1)
+            }
+            .accessibilityElement(children: .contain)
+        }
     }
 
     var body: some View {
@@ -564,12 +667,16 @@ struct UploadImagePreparationSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
-                        if images.count > 1 {
-                            Text("Several photos: the same framing is center-cropped on each. Add one photo at a time to move and zoom inside the border.")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        } else if previewAspect != nil {
-                            Text("Move your photo behind the border; pinch to zoom. Rotate if needed—what’s inside the border is what uploads.")
+                        if previewAspect != nil {
+                            Text(
+                                drafts.count > 1
+                                    ? "Move each photo behind the border; pinch to zoom. Use Previous / Next to crop every photo—what’s inside the border is what uploads."
+                                    : "Move your photo behind the border; pinch to zoom. Rotate if needed—what’s inside the border is what uploads."
+                            )
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        } else if drafts.count > 1 {
+                            Text("Use Previous / Next to preview each photo before uploading.")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -578,38 +685,29 @@ struct UploadImagePreparationSheet: View {
                     VStack(spacing: 12) {
                         if useInteractiveEditor, let asp = previewAspect {
                             FixedMaskImageEditor(
-                                workingImage: $workingImageForCrop,
+                                workingImage: workingImageBinding,
                                 aspectWidthOverHeight: asp,
-                                userScale: $editorUserScale,
-                                offset: $editorOffset
+                                userScale: userScaleBinding,
+                                offset: offsetBinding
                             )
                             .frame(width: editorContainerSize.width, height: editorContainerSize.height)
+                            .id(currentIndex)
+
+                            photoPagerControls
 
                             HStack {
                                 Button {
-                                    workingImageForCrop = workingImageForCrop.rotatedClockwise90ForUpload()
-                                    editorUserScale = 1
-                                    editorOffset = .zero
+                                    guard drafts.indices.contains(currentIndex) else { return }
+                                    drafts[currentIndex].workingImage =
+                                        drafts[currentIndex].workingImage.rotatedClockwise90ForUpload()
+                                    drafts[currentIndex].userScale = 1
+                                    drafts[currentIndex].offset = .zero
                                 } label: {
                                     Label("Rotate 90°", systemImage: "rotate.right")
                                 }
                                 .buttonStyle(.bordered)
                                 Spacer()
                             }
-                        } else if previewAspect != nil {
-                            let w = contentWidth
-                            let h = previewHeight(forContentWidth: w)
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Color(.secondarySystemGroupedBackground))
-                                Image(uiImage: previewImage.applyingUploadCropChoice(choice))
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: w, height: h)
-                                    .clipped()
-                            }
-                            .frame(width: w, height: h)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         } else {
                             let w = contentWidth
                             let h = previewHeight(forContentWidth: w)
@@ -619,6 +717,9 @@ struct UploadImagePreparationSheet: View {
                                 previewOriginal(width: w, height: h)
                             }
                             .frame(width: w, height: h)
+                            .id(currentIndex)
+
+                            photoPagerControls
                         }
 
                         if allowedChoices.count > 1 {
@@ -642,43 +743,33 @@ struct UploadImagePreparationSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirmButtonTitle) {
-                        let interactive: InteractiveCropParameters? = {
-                            guard useInteractiveEditor,
-                                  let asp = choice.aspectWidthOverHeight,
-                                  let cg = workingImageForCrop.normalizedForUploadCrop().cgImage
-                            else { return nil }
-                            let pw = CGFloat(cg.width)
-                            let ph = CGFloat(cg.height)
-                            return InteractiveCropParameters(
-                                editorWidth: editorContainerSize.width,
-                                editorHeight: editorContainerSize.height,
-                                maskAspectWidthOverHeight: asp,
-                                userScale: editorUserScale,
-                                offsetWidth: editorOffset.width,
-                                offsetHeight: editorOffset.height,
-                                imagePixelWidth: pw,
-                                imagePixelHeight: ph
-                            )
-                        }()
-                        let exportImages = useInteractiveEditor ? [workingImageForCrop] : images
                         let list = UploadImageCropExport.jpegDataList(
-                            from: exportImages,
+                            from: drafts,
                             choice: choice,
-                            interactive: interactive,
+                            editorSize: editorContainerSize,
                             allowsInteractive: useInteractiveEditor
                         )
                         guard !list.isEmpty else { return }
                         onUseJPEGData(list)
                         dismiss()
                     }
+                    .disabled(drafts.isEmpty)
                 }
             }
             .onAppear {
-                resetEditorFromPreview()
+                if drafts.isEmpty {
+                    resetAllDraftsFromSourceImages()
+                }
             }
             .onChange(of: choice) { _, _ in
-                resetEditorFromPreview()
+                resetAllDraftsFromSourceImages()
             }
         }
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

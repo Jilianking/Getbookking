@@ -46,6 +46,10 @@ final class WebViewQuickEditBridge {
         coordinator?.evaluateQuickEdit("window.__bkQuickEditCommitDirty&&window.__bkQuickEditCommitDirty()")
     }
 
+    func showEmptyTextSlots() {
+        coordinator?.evaluateQuickEdit("window.__bkQuickEditShowEmptyTextSlots&&window.__bkQuickEditShowEmptyTextSlots()")
+    }
+
     func schedulePreviewColorPatch(_ payload: [String: String], full: Bool = false) {
         coordinator?.schedulePreviewColorPatch(payload, full: full)
     }
@@ -328,9 +332,14 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 bkGroupedTextSelector + '{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
                 bkGroupedTextSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
-                bkCtaButtonSelector + '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
-                bkCtaButtonSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
+                // CTA chrome is for color; the nested label keeps the blue text outline (Featured Work–style).
+                bkCtaButtonSelector + '{cursor:pointer!important;outline:none!important;box-shadow:none!important;}' +
+                bkCtaButtonSelector + ' [data-edit-key]{cursor:text!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
+                bkCtaButtonSelector + ' [data-edit-key][data-bk-inline-editing]{outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
+                // Empty restored CTA labels stay compact so button padding remains tappable for color.
+                bkCtaButtonSelector + ' [data-edit-key][data-bk-empty-slot]{min-width:0!important;width:auto!important;max-width:100%!important;}' +
+
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
                 '[data-edit-key="aboutText"],[data-edit-key="bladeHeroDescription"]{display:inline-block!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;vertical-align:top!important;}' +
                 '.s12-address [data-edit-key],.s12-phone [data-edit-key],.s12-hours-block [data-edit-key],.s12-phil-body [data-edit-key]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:8px 0!important;}' +
@@ -357,6 +366,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-edit-key][data-bk-inline-editing][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
+                '[data-edit-key][data-bk-empty-slot]{display:inline-flex!important;align-items:center!important;box-sizing:border-box!important;min-width:132px!important;max-width:100%!important;min-height:30px!important;padding:4px 8px!important;border:1px dashed rgba(0,122,255,0.72)!important;border-radius:5px!important;background:rgba(0,122,255,0.12)!important;color:#007aff!important;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif!important;line-height:20px!important;vertical-align:middle!important;cursor:text!important;}' +
                 'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
                 'img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
@@ -476,15 +486,35 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var el = ev.target;
                 while (el && el.nodeType !== 1) el = el.parentNode;
                 if (!el || !el.closest) return { type: 'none' };
+                // Restored template slots must take precedence over surrounding hero/image hit targets.
+                var emptySlot = el.closest('[data-bk-empty-slot]');
+                if (emptySlot) return { type: 'text', el: emptySlot };
                 var groupedHit = resolveGroupedTextEditTarget(el);
                 if (groupedHit) return groupedHit;
                 var cta = el.closest(bkCtaButtonSelector);
                 if (cta) {
+                  var label = null;
                   var ctaKey = el.closest('[data-edit-key]');
-                  if (ctaKey && cta.contains(ctaKey)) {
-                    var ctaTk = ctaKey.getAttribute('data-edit-key');
-                    if (ctaTk && isSheetOnlyKey(ctaTk)) return { type: 'sheet', el: ctaKey };
-                    if (ctaTk && ctaTk.indexOf('color:') !== 0) return { type: 'text', el: ctaKey };
+                  // Prefer nested label only — never treat the CTA <a> itself as the text key.
+                  if (ctaKey && cta.contains(ctaKey) && ctaKey !== cta) label = ctaKey;
+                  if (!label) {
+                    var innerLabel = cta.querySelector('[data-edit-key]');
+                    if (innerLabel && (el === innerLabel || innerLabel.contains(el))) label = innerLabel;
+                  }
+                  // Hit landed on <a> chrome but coordinates sit inside the blue label → edit text.
+                  if (!label && typeof ev.clientX === 'number') {
+                    var geoLabel = cta.querySelector('[data-edit-key]');
+                    if (geoLabel) {
+                      var gr = geoLabel.getBoundingClientRect();
+                      if (ev.clientX >= gr.left && ev.clientX <= gr.right && ev.clientY >= gr.top && ev.clientY <= gr.bottom) {
+                        label = geoLabel;
+                      }
+                    }
+                  }
+                  if (label) {
+                    var ctaTk = label.getAttribute('data-edit-key');
+                    if (ctaTk && isSheetOnlyKey(ctaTk)) return { type: 'sheet', el: label };
+                    if (ctaTk && ctaTk.indexOf('color:') !== 0) return { type: 'text', el: label };
                   }
                   return { type: 'buttonColor', el: cta };
                 }
@@ -626,6 +656,31 @@ struct WebViewRepresentable: UIViewRepresentable {
                   window.webkit.messageHandlers.\(messageHandlerName).postMessage(payload);
                 } catch (e) {}
               }
+              function clearEmptyTextSlots() {
+                [].forEach.call(document.querySelectorAll('[data-bk-empty-slot]'), function(el) {
+                  el.removeAttribute('data-bk-empty-slot');
+                  if (el.getAttribute('data-bk-empty-slot-label') === '1') {
+                    el.textContent = '';
+                    el.removeAttribute('data-bk-empty-slot-label');
+                  }
+                });
+              }
+              window.__bkQuickEditShowEmptyTextSlots = function() {
+                if (inlineEl) finishActiveInlineNoSave();
+                if (document.querySelector('[data-bk-empty-slot]')) {
+                  clearEmptyTextSlots();
+                  return;
+                }
+                clearEmptyTextSlots();
+                [].forEach.call(document.querySelectorAll('[data-edit-key]'), function(el) {
+                  var key = el.getAttribute('data-edit-key') || '';
+                  if (!key || isSheetOnlyKey(key) || key.indexOf('color:') === 0) return;
+                  if (currentText(el)) return;
+                  el.setAttribute('data-bk-empty-slot', '1');
+                  el.textContent = 'Tap to add text';
+                  el.setAttribute('data-bk-empty-slot-label', '1');
+                });
+              };
               function deliverOpenSheet(t) {
                 var key = t.getAttribute('data-edit-key');
                 if (!key) return;
@@ -666,6 +721,11 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function startInline(t) {
                 if (inlineEl && inlineEl !== t) finishActiveInlineNoSave();
+                if (t.getAttribute('data-bk-empty-slot-label') === '1') {
+                  t.textContent = '';
+                  t.removeAttribute('data-bk-empty-slot-label');
+                  t.removeAttribute('data-bk-empty-slot');
+                }
                 inlineEl = t;
                 setQuickEditSelected(t);
                 t.setAttribute('contenteditable', 'true');
@@ -914,6 +974,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                 delete window.__bkQuickEditSetInlineColor;
                 delete window.__bkQuickEditSetFontSize;
                 delete window.__bkQuickEditCommitDirty;
+                clearEmptyTextSlots();
+                delete window.__bkQuickEditShowEmptyTextSlots;
                 delete window.__bkApplyPreviewColorPatch;
                 delete window.__bkQuickEditCleanup;
               };

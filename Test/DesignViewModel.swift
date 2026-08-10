@@ -466,17 +466,68 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         await MainActor.run { errorMessage = nil }
     }
 
-    /// Persists one `wc.*` quick-edit slot into `webCopyOverrides` (empty value removes override).
+    /// Stored when the user clears optional site copy so legacy `""` can still mean “use default”.
+    /// Zero-width space: invisible even if an older web build renders the raw field.
+    private static let siteTextBlankSentinel = "\u{200B}"
+    /// Previous readable sentinel — still treated as intentional blank.
+    private static let siteTextBlankSentinelLegacy = "__blank__"
+
+    private static func isSiteTextBlank(_ raw: String) -> Bool {
+        raw == siteTextBlankSentinel || raw == siteTextBlankSentinelLegacy
+    }
+
+    private static func encodeOptionalSiteText(_ trimmed: String) -> String {
+        trimmed.isEmpty ? siteTextBlankSentinel : trimmed
+    }
+
+    private static func decodeOptionalSiteText(_ raw: Any?, missingDefault: String = "") -> String {
+        guard raw != nil else { return missingDefault }
+        let s = (raw as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Don't trim the ZWSP sentinel away before the blank check — compare raw string too.
+        if let rawString = raw as? String, isSiteTextBlank(rawString) { return "" }
+        if isSiteTextBlank(s) { return "" }
+        if s.isEmpty { return missingDefault }
+        return s
+    }
+
+    /// Preserve companion optional fields when updating a sibling (do not turn legacy "" into blank sentinel).
+    private static func passthroughOptionalSiteText(_ raw: Any?) -> String {
+        (raw as? String) ?? ""
+    }
+
+    /// Preserve quick-edit blank sentinel on bulk Design saves when the in-memory field is empty.
+    private static func bulkSaveOptionalSiteText(_ published: String, existingFirestore: Any?) -> String {
+        let trimmed = published.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        if let existing = existingFirestore as? String, isSiteTextBlank(existing) {
+            return siteTextBlankSentinel
+        }
+        return ""
+    }
+
+    /// Persists one `wc.*` quick-edit slot into `webCopyOverrides`.
+    /// Empty value keeps `""` in the map so the slot stays intentionally blank (does not restore the template default).
     private func persistWebCopyOverride(tenantId: String, key: String, value: String) async throws {
         guard key.hasPrefix("wc.") else { return }
         guard let doc = try await firebaseService.fetchTenant(tenantId: tenantId) else { return }
         var map = Self.coercedStringMap(doc["webCopyOverrides"])
-        if value.isEmpty {
-            map.removeValue(forKey: key)
-        } else {
-            map[key] = value
-        }
+        map[key] = value
         try await firebaseService.updateTenant(tenantId: tenantId, updates: ["webCopyOverrides": map])
+    }
+
+    private func persistOptionalSiteTextField(
+        tenantId: String,
+        field: String,
+        trimmed: String,
+        assign: @MainActor @escaping (String) -> Void,
+        invalidatePreview: Bool
+    ) async throws {
+        let stored = Self.encodeOptionalSiteText(trimmed)
+        try await firebaseService.updateTenant(tenantId: tenantId, updates: [field: stored])
+        await MainActor.run {
+            assign(trimmed)
+            if invalidatePreview { invalidateWebPreview() }
+        }
     }
 
     /// Inline quick edit from the in-app WKWebView preview (`data-edit-key` in `web/index.html`).
@@ -496,185 +547,161 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 }
             case "luxeHeroTagline":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHeroTagline": trimmed])
-                await MainActor.run {
-                    luxeHeroTagline = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxeHeroTagline", trimmed: trimmed,
+                    assign: { self.luxeHeroTagline = $0 }, invalidatePreview: invalidatePreview
+                )
             case "bladeHeroTagline":
                 guard fam == .blade else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["bladeHeroTagline": trimmed])
-                await MainActor.run {
-                    bladeHeroTagline = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "bladeHeroTagline", trimmed: trimmed,
+                    assign: { self.bladeHeroTagline = $0 }, invalidatePreview: invalidatePreview
+                )
             case "bladeHeroDescription":
                 guard fam == .blade else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["bladeHeroDescription": trimmed])
-                await MainActor.run {
-                    bladeHeroDescription = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "bladeHeroDescription", trimmed: trimmed,
+                    assign: { self.bladeHeroDescription = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicAboutEyebrow":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicAboutEyebrow": trimmed])
-                await MainActor.run {
-                    classicAboutEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicAboutEyebrow", trimmed: trimmed,
+                    assign: { self.classicAboutEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicAboutHeading":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicAboutHeading": trimmed])
-                await MainActor.run {
-                    classicAboutHeading = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicAboutHeading", trimmed: trimmed,
+                    assign: { self.classicAboutHeading = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatYearsValue":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatYearsValue": trimmed])
-                await MainActor.run {
-                    classicStatYearsValue = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatYearsValue", trimmed: trimmed,
+                    assign: { self.classicStatYearsValue = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatYearsLabel":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatYearsLabel": trimmed])
-                await MainActor.run {
-                    classicStatYearsLabel = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatYearsLabel", trimmed: trimmed,
+                    assign: { self.classicStatYearsLabel = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatClientsValue":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatClientsValue": trimmed])
-                await MainActor.run {
-                    classicStatClientsValue = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatClientsValue", trimmed: trimmed,
+                    assign: { self.classicStatClientsValue = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatClientsLabel":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatClientsLabel": trimmed])
-                await MainActor.run {
-                    classicStatClientsLabel = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatClientsLabel", trimmed: trimmed,
+                    assign: { self.classicStatClientsLabel = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatRatedValue":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatRatedValue": trimmed])
-                await MainActor.run {
-                    classicStatRatedValue = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatRatedValue", trimmed: trimmed,
+                    assign: { self.classicStatRatedValue = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicStatRatedLabel":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicStatRatedLabel": trimmed])
-                await MainActor.run {
-                    classicStatRatedLabel = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicStatRatedLabel", trimmed: trimmed,
+                    assign: { self.classicStatRatedLabel = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicFeaturedWorkEyebrow":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkEyebrow": trimmed])
-                await MainActor.run {
-                    classicFeaturedWorkEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicFeaturedWorkEyebrow", trimmed: trimmed,
+                    assign: { self.classicFeaturedWorkEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicFeaturedWorkHeading":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkHeading": trimmed])
-                await MainActor.run {
-                    classicFeaturedWorkHeading = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicFeaturedWorkHeading", trimmed: trimmed,
+                    assign: { self.classicFeaturedWorkHeading = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicFeaturedWorkSub":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkSub": trimmed])
-                await MainActor.run {
-                    classicFeaturedWorkSub = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicFeaturedWorkSub", trimmed: trimmed,
+                    assign: { self.classicFeaturedWorkSub = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicFeaturedWorkEmpty":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicFeaturedWorkEmpty": trimmed])
-                await MainActor.run {
-                    classicFeaturedWorkEmpty = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicFeaturedWorkEmpty", trimmed: trimmed,
+                    assign: { self.classicFeaturedWorkEmpty = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicServicesEyebrow":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicServicesEyebrow": trimmed])
-                await MainActor.run {
-                    classicServicesEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicServicesEyebrow", trimmed: trimmed,
+                    assign: { self.classicServicesEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "classicServicesHeading":
                 guard fam == .classic else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["classicServicesHeading": trimmed])
-                await MainActor.run {
-                    classicServicesHeading = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "classicServicesHeading", trimmed: trimmed,
+                    assign: { self.classicServicesHeading = $0 }, invalidatePreview: invalidatePreview
+                )
             case "luxePromoHeadline":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxePromoHeadline": trimmed])
-                await MainActor.run {
-                    luxePromoHeadline = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxePromoHeadline", trimmed: trimmed,
+                    assign: { self.luxePromoHeadline = $0 }, invalidatePreview: invalidatePreview
+                )
             case "luxeFeaturedWorkEyebrow":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeFeaturedWorkEyebrow": trimmed])
-                await MainActor.run {
-                    luxeFeaturedWorkEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxeFeaturedWorkEyebrow", trimmed: trimmed,
+                    assign: { self.luxeFeaturedWorkEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "luxeFeaturedWorkHeading":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeFeaturedWorkHeading": trimmed])
-                await MainActor.run {
-                    luxeFeaturedWorkHeading = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxeFeaturedWorkHeading", trimmed: trimmed,
+                    assign: { self.luxeFeaturedWorkHeading = $0 }, invalidatePreview: invalidatePreview
+                )
             case "luxeHomeServicesEyebrow":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHomeServicesEyebrow": trimmed])
-                await MainActor.run {
-                    luxeHomeServicesEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxeHomeServicesEyebrow", trimmed: trimmed,
+                    assign: { self.luxeHomeServicesEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "luxeHomeServicesHeading":
                 guard fam == .luxe else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["luxeHomeServicesHeading": trimmed])
-                await MainActor.run {
-                    luxeHomeServicesHeading = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "luxeHomeServicesHeading", trimmed: trimmed,
+                    assign: { self.luxeHomeServicesHeading = $0 }, invalidatePreview: invalidatePreview
+                )
             case "heroTagline":
                 guard fam == .studio12 else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["heroTagline": trimmed])
-                await MainActor.run {
-                    heroTagline = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "heroTagline", trimmed: trimmed,
+                    assign: { self.heroTagline = $0 }, invalidatePreview: invalidatePreview
+                )
             case "studio12HeroEyebrow":
                 guard fam == .studio12 else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12HeroEyebrow": trimmed])
-                await MainActor.run {
-                    studio12HeroEyebrow = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "studio12HeroEyebrow", trimmed: trimmed,
+                    assign: { self.studio12HeroEyebrow = $0 }, invalidatePreview: invalidatePreview
+                )
             case "studio12HeroLine1":
                 guard fam == .studio12 else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
-                let line2: String
+                let line2Stored: String
                 if !mergedHero.isEmpty {
-                    line2 = Self.splitStudio12HeroHeadline(mergedHero).line2
+                    line2Stored = Self.encodeOptionalSiteText(Self.splitStudio12HeroHeadline(mergedHero).line2)
                 } else {
-                    line2 = Self.trimmedFirestoreString(doc, key: "studio12HeroLine2")
+                    line2Stored = Self.passthroughOptionalSiteText(doc["studio12HeroLine2"])
                 }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12HeroLine1": trimmed,
-                    "studio12HeroLine2": line2,
+                    "studio12HeroLine1": Self.encodeOptionalSiteText(trimmed),
+                    "studio12HeroLine2": line2Stored,
                     "studio12HeroHeadline": "",
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
@@ -682,15 +709,15 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 guard fam == .studio12 else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
-                let line1: String
+                let line1Stored: String
                 if !mergedHero.isEmpty {
-                    line1 = Self.splitStudio12HeroHeadline(mergedHero).line1
+                    line1Stored = Self.encodeOptionalSiteText(Self.splitStudio12HeroHeadline(mergedHero).line1)
                 } else {
-                    line1 = Self.trimmedFirestoreString(doc, key: "studio12HeroLine1")
+                    line1Stored = Self.passthroughOptionalSiteText(doc["studio12HeroLine1"])
                 }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12HeroLine1": line1,
-                    "studio12HeroLine2": trimmed,
+                    "studio12HeroLine1": line1Stored,
+                    "studio12HeroLine2": Self.encodeOptionalSiteText(trimmed),
                     "studio12HeroHeadline": "",
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
@@ -698,16 +725,16 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 guard fam == .studio12 else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
-                let italic: String
+                let italicStored: String
                 if !mergedBook.isEmpty {
                     let parts = Self.studio12SplitMiddleDotParts(mergedBook, count: 2)
-                    italic = parts.count > 1 ? parts[1] : ""
+                    italicStored = Self.encodeOptionalSiteText(parts.count > 1 ? parts[1] : "")
                 } else {
-                    italic = Self.trimmedFirestoreString(doc, key: "studio12BookCtaItalic")
+                    italicStored = Self.passthroughOptionalSiteText(doc["studio12BookCtaItalic"])
                 }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12BookCtaLine1": trimmed,
-                    "studio12BookCtaItalic": italic,
+                    "studio12BookCtaLine1": Self.encodeOptionalSiteText(trimmed),
+                    "studio12BookCtaItalic": italicStored,
                     "studio12BookCtaHeadline": "",
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
@@ -715,30 +742,29 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 guard fam == .studio12 else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
-                let bookLine1: String
+                let bookLine1Stored: String
                 if !mergedBook.isEmpty {
                     let parts = Self.studio12SplitMiddleDotParts(mergedBook, count: 2)
-                    bookLine1 = parts.first ?? ""
+                    bookLine1Stored = Self.encodeOptionalSiteText(parts.first ?? "")
                 } else {
-                    bookLine1 = Self.trimmedFirestoreString(doc, key: "studio12BookCtaLine1")
+                    bookLine1Stored = Self.passthroughOptionalSiteText(doc["studio12BookCtaLine1"])
                 }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12BookCtaLine1": bookLine1,
-                    "studio12BookCtaItalic": trimmed,
+                    "studio12BookCtaLine1": bookLine1Stored,
+                    "studio12BookCtaItalic": Self.encodeOptionalSiteText(trimmed),
                     "studio12BookCtaHeadline": "",
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
             case "studio12BookCtaBody":
                 guard fam == .studio12 else { return }
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["studio12BookCtaBody": trimmed])
-                await MainActor.run {
-                    studio12BookCtaBody = trimmed
-                    if invalidatePreview { invalidateWebPreview() }
-                }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "studio12BookCtaBody", trimmed: trimmed,
+                    assign: { self.studio12BookCtaBody = $0 }, invalidatePreview: invalidatePreview
+                )
             case "studio12PhilosophyHeadLine1":
                 guard fam == .studio12 else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12PhilosophyHeadLine1": trimmed,
+                    "studio12PhilosophyHeadLine1": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
                 ])
                 await MainActor.run {
@@ -748,7 +774,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             case "studio12PhilosophyHeadLine2":
                 guard fam == .studio12 else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12PhilosophyHeadLine2": trimmed,
+                    "studio12PhilosophyHeadLine2": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
                 ])
                 await MainActor.run {
@@ -758,7 +784,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             case "studio12PhilosophyHeadItalic":
                 guard fam == .studio12 else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
-                    "studio12PhilosophyHeadItalic": trimmed,
+                    "studio12PhilosophyHeadItalic": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
                 ])
                 await MainActor.run {
@@ -1019,27 +1045,27 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 successColorHex = tenant?["successColor"] as? String ?? "#22C55E"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
                 tagline = tenant?["tagline"] as? String ?? ""
-                luxeHeroTagline = tenant?["luxeHeroTagline"] as? String ?? ""
-                luxePromoHeadline = tenant?["luxePromoHeadline"] as? String ?? ""
-                luxeFeaturedWorkEyebrow = tenant?["luxeFeaturedWorkEyebrow"] as? String ?? ""
-                luxeFeaturedWorkHeading = tenant?["luxeFeaturedWorkHeading"] as? String ?? ""
+                luxeHeroTagline = Self.decodeOptionalSiteText(tenant?["luxeHeroTagline"])
+                luxePromoHeadline = Self.decodeOptionalSiteText(tenant?["luxePromoHeadline"])
+                luxeFeaturedWorkEyebrow = Self.decodeOptionalSiteText(tenant?["luxeFeaturedWorkEyebrow"])
+                luxeFeaturedWorkHeading = Self.decodeOptionalSiteText(tenant?["luxeFeaturedWorkHeading"])
                 luxeShowFeaturedWorkStrip = tenant?["luxeShowFeaturedWorkStrip"] as? Bool ?? true
-                luxeHomeServicesEyebrow = tenant?["luxeHomeServicesEyebrow"] as? String ?? ""
-                luxeHomeServicesHeading = tenant?["luxeHomeServicesHeading"] as? String ?? ""
+                luxeHomeServicesEyebrow = Self.decodeOptionalSiteText(tenant?["luxeHomeServicesEyebrow"])
+                luxeHomeServicesHeading = Self.decodeOptionalSiteText(tenant?["luxeHomeServicesHeading"])
                 luxeShowHomeServicesSection = tenant?["luxeShowHomeServicesSection"] as? Bool ?? false
                 luxeHomeServicesExpandableCard = tenant?["luxeHomeServicesExpandableCard"] as? Bool ?? false
-                bladeHeroTagline = tenant?["bladeHeroTagline"] as? String ?? ""
-                bladeHeroDescription = tenant?["bladeHeroDescription"] as? String ?? ""
-                let ht = tenant?["heroTagline"] as? String ?? ""
-                let hs = tenant?["heroSubtitle"] as? String ?? ""
+                bladeHeroTagline = Self.decodeOptionalSiteText(tenant?["bladeHeroTagline"])
+                bladeHeroDescription = Self.decodeOptionalSiteText(tenant?["bladeHeroDescription"])
+                let ht = Self.decodeOptionalSiteText(tenant?["heroTagline"])
+                let hs = Self.decodeOptionalSiteText(tenant?["heroSubtitle"])
                 heroTagline = ht.isEmpty ? hs : ht
-                studio12HeroEyebrow = tenant?["studio12HeroEyebrow"] as? String ?? ""
+                studio12HeroEyebrow = Self.decodeOptionalSiteText(tenant?["studio12HeroEyebrow"])
                 let heroHeadNew = (tenant?["studio12HeroHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !heroHeadNew.isEmpty {
                     studio12HeroHeadline = tenant?["studio12HeroHeadline"] as? String ?? ""
                 } else {
-                    let l1 = (tenant?["studio12HeroLine1"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    let l2 = (tenant?["studio12HeroLine2"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let l1 = Self.decodeOptionalSiteText(tenant?["studio12HeroLine1"])
+                    let l2 = Self.decodeOptionalSiteText(tenant?["studio12HeroLine2"])
                     studio12HeroHeadline = [l1, l2].filter { !$0.isEmpty }.joined(separator: " ")
                 }
                 studio12PhilosophyImageUrl = tenant?["studio12PhilosophyImageUrl"] as? String ?? ""
@@ -1057,9 +1083,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     studio12PhilosophyHeadline = tenant?["studio12PhilosophyHeadline"] as? String ?? ""
                 } else {
                     studio12PhilosophyHeadline = Studio12IndustryCopy.joinPhilosophyHeadline(
-                        line1: tenant?["studio12PhilosophyHeadLine1"] as? String ?? "",
-                        line2: tenant?["studio12PhilosophyHeadLine2"] as? String ?? "",
-                        italic: tenant?["studio12PhilosophyHeadItalic"] as? String ?? ""
+                        line1: Self.decodeOptionalSiteText(tenant?["studio12PhilosophyHeadLine1"]),
+                        line2: Self.decodeOptionalSiteText(tenant?["studio12PhilosophyHeadLine2"]),
+                        italic: Self.decodeOptionalSiteText(tenant?["studio12PhilosophyHeadItalic"])
                     )
                 }
                 let bookHeadNew = (tenant?["studio12BookCtaHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1067,11 +1093,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     studio12BookCtaHeadline = tenant?["studio12BookCtaHeadline"] as? String ?? ""
                 } else {
                     studio12BookCtaHeadline = Studio12IndustryCopy.joinBookCtaHeadline(
-                        line1: tenant?["studio12BookCtaLine1"] as? String ?? "",
-                        italic: tenant?["studio12BookCtaItalic"] as? String ?? ""
+                        line1: Self.decodeOptionalSiteText(tenant?["studio12BookCtaLine1"]),
+                        italic: Self.decodeOptionalSiteText(tenant?["studio12BookCtaItalic"])
                     )
                 }
-                studio12BookCtaBody = tenant?["studio12BookCtaBody"] as? String ?? ""
+                studio12BookCtaBody = Self.decodeOptionalSiteText(tenant?["studio12BookCtaBody"])
                 studio12BookCtaImageUrl = tenant?["studio12BookCtaImageUrl"] as? String ?? ""
                 if let w = Self.intFromFirestore(tenant?["studio12BookCtaImagePixelWidth"]),
                    let h = Self.intFromFirestore(tenant?["studio12BookCtaImagePixelHeight"]),
@@ -1085,22 +1111,22 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 studio12ShowServicesSection = tenant?["studio12ShowServicesSection"] as? Bool ?? true
                 studio12ShowProcessSection = tenant?["studio12ShowProcessSection"] as? Bool ?? true
                 classicShowServiceDuration = tenant?["classicShowServiceDuration"] as? Bool ?? true
-                classicFeaturedWorkEyebrow = tenant?["classicFeaturedWorkEyebrow"] as? String ?? ""
-                classicFeaturedWorkHeading = tenant?["classicFeaturedWorkHeading"] as? String ?? ""
-                classicFeaturedWorkSub = tenant?["classicFeaturedWorkSub"] as? String ?? ""
-                classicFeaturedWorkEmpty = tenant?["classicFeaturedWorkEmpty"] as? String ?? ""
-                classicServicesEyebrow = tenant?["classicServicesEyebrow"] as? String ?? ""
-                classicServicesHeading = tenant?["classicServicesHeading"] as? String ?? ""
+                classicFeaturedWorkEyebrow = Self.decodeOptionalSiteText(tenant?["classicFeaturedWorkEyebrow"])
+                classicFeaturedWorkHeading = Self.decodeOptionalSiteText(tenant?["classicFeaturedWorkHeading"])
+                classicFeaturedWorkSub = Self.decodeOptionalSiteText(tenant?["classicFeaturedWorkSub"])
+                classicFeaturedWorkEmpty = Self.decodeOptionalSiteText(tenant?["classicFeaturedWorkEmpty"])
+                classicServicesEyebrow = Self.decodeOptionalSiteText(tenant?["classicServicesEyebrow"])
+                classicServicesHeading = Self.decodeOptionalSiteText(tenant?["classicServicesHeading"])
                 classicServicesExpandableCard = tenant?["classicServicesExpandableCard"] as? Bool ?? false
                 classicShowAboutStats = tenant?["classicShowAboutStats"] as? Bool ?? true
-                classicStatYearsValue = (tenant?["classicStatYearsValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "8+"
-                classicStatYearsLabel = (tenant?["classicStatYearsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Years exp."
-                classicStatClientsValue = (tenant?["classicStatClientsValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "500+"
-                classicStatClientsLabel = (tenant?["classicStatClientsLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Clients"
-                classicStatRatedValue = (tenant?["classicStatRatedValue"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "5★"
-                classicStatRatedLabel = (tenant?["classicStatRatedLabel"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Rated"
-                classicAboutEyebrow = tenant?["classicAboutEyebrow"] as? String ?? ""
-                classicAboutHeading = tenant?["classicAboutHeading"] as? String ?? ""
+                classicStatYearsValue = Self.decodeOptionalSiteText(tenant?["classicStatYearsValue"], missingDefault: "8+")
+                classicStatYearsLabel = Self.decodeOptionalSiteText(tenant?["classicStatYearsLabel"], missingDefault: "Years exp.")
+                classicStatClientsValue = Self.decodeOptionalSiteText(tenant?["classicStatClientsValue"], missingDefault: "500+")
+                classicStatClientsLabel = Self.decodeOptionalSiteText(tenant?["classicStatClientsLabel"], missingDefault: "Clients")
+                classicStatRatedValue = Self.decodeOptionalSiteText(tenant?["classicStatRatedValue"], missingDefault: "5★")
+                classicStatRatedLabel = Self.decodeOptionalSiteText(tenant?["classicStatRatedLabel"], missingDefault: "Rated")
+                classicAboutEyebrow = Self.decodeOptionalSiteText(tenant?["classicAboutEyebrow"])
+                classicAboutHeading = Self.decodeOptionalSiteText(tenant?["classicAboutHeading"])
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
@@ -1224,6 +1250,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             sidebarIconColorHome = ""
             sidebarIconColorBooking = ""
         }
+        let existingDoc = try? await firebaseService.fetchTenant(tenantId: tid)
         var updates: [String: Any] = [
             "displayName": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             "logoUrl": logoUrl,
@@ -1242,8 +1269,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             "successColor": successColorHex,
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
-            "luxeHeroTagline": luxeHeroTagline,
-            "luxePromoHeadline": luxePromoHeadline,
+            "luxeHeroTagline": Self.bulkSaveOptionalSiteText(luxeHeroTagline, existingFirestore: existingDoc?["luxeHeroTagline"]),
+            "luxePromoHeadline": Self.bulkSaveOptionalSiteText(luxePromoHeadline, existingFirestore: existingDoc?["luxePromoHeadline"]),
             "sidebarIconColorHome": sidebarIconColorHome,
             "sidebarIconColorBooking": sidebarIconColorBooking,
             "featuredWorkBackgroundColor": featuredWorkBackgroundColorHex,
@@ -1257,33 +1284,33 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["galleryPageTextColor"] = featuredWorkTextColorHex
         }
         if fam == .blade || fam == .stonecut {
-            updates["bladeHeroTagline"] = bladeHeroTagline
-            updates["bladeHeroDescription"] = bladeHeroDescription
+            updates["bladeHeroTagline"] = Self.bulkSaveOptionalSiteText(bladeHeroTagline, existingFirestore: existingDoc?["bladeHeroTagline"])
+            updates["bladeHeroDescription"] = Self.bulkSaveOptionalSiteText(bladeHeroDescription, existingFirestore: existingDoc?["bladeHeroDescription"])
         }
         if fam == .classic {
             updates["classicShowServiceDuration"] = classicShowServiceDuration
-            updates["classicFeaturedWorkEyebrow"] = classicFeaturedWorkEyebrow
-            updates["classicFeaturedWorkHeading"] = classicFeaturedWorkHeading
-            updates["classicFeaturedWorkSub"] = classicFeaturedWorkSub
-            updates["classicFeaturedWorkEmpty"] = classicFeaturedWorkEmpty
-            updates["classicServicesEyebrow"] = classicServicesEyebrow
-            updates["classicServicesHeading"] = classicServicesHeading
+            updates["classicFeaturedWorkEyebrow"] = Self.bulkSaveOptionalSiteText(classicFeaturedWorkEyebrow, existingFirestore: existingDoc?["classicFeaturedWorkEyebrow"])
+            updates["classicFeaturedWorkHeading"] = Self.bulkSaveOptionalSiteText(classicFeaturedWorkHeading, existingFirestore: existingDoc?["classicFeaturedWorkHeading"])
+            updates["classicFeaturedWorkSub"] = Self.bulkSaveOptionalSiteText(classicFeaturedWorkSub, existingFirestore: existingDoc?["classicFeaturedWorkSub"])
+            updates["classicFeaturedWorkEmpty"] = Self.bulkSaveOptionalSiteText(classicFeaturedWorkEmpty, existingFirestore: existingDoc?["classicFeaturedWorkEmpty"])
+            updates["classicServicesEyebrow"] = Self.bulkSaveOptionalSiteText(classicServicesEyebrow, existingFirestore: existingDoc?["classicServicesEyebrow"])
+            updates["classicServicesHeading"] = Self.bulkSaveOptionalSiteText(classicServicesHeading, existingFirestore: existingDoc?["classicServicesHeading"])
             updates["classicServicesExpandableCard"] = classicServicesExpandableCard
-            updates["classicAboutEyebrow"] = classicAboutEyebrow
-            updates["classicAboutHeading"] = classicAboutHeading
+            updates["classicAboutEyebrow"] = Self.bulkSaveOptionalSiteText(classicAboutEyebrow, existingFirestore: existingDoc?["classicAboutEyebrow"])
+            updates["classicAboutHeading"] = Self.bulkSaveOptionalSiteText(classicAboutHeading, existingFirestore: existingDoc?["classicAboutHeading"])
         }
         if fam == .luxe {
-            updates["luxeFeaturedWorkEyebrow"] = luxeFeaturedWorkEyebrow
-            updates["luxeFeaturedWorkHeading"] = luxeFeaturedWorkHeading
+            updates["luxeFeaturedWorkEyebrow"] = Self.bulkSaveOptionalSiteText(luxeFeaturedWorkEyebrow, existingFirestore: existingDoc?["luxeFeaturedWorkEyebrow"])
+            updates["luxeFeaturedWorkHeading"] = Self.bulkSaveOptionalSiteText(luxeFeaturedWorkHeading, existingFirestore: existingDoc?["luxeFeaturedWorkHeading"])
             updates["luxeShowFeaturedWorkStrip"] = luxeShowFeaturedWorkStrip
-            updates["luxeHomeServicesEyebrow"] = luxeHomeServicesEyebrow
-            updates["luxeHomeServicesHeading"] = luxeHomeServicesHeading
+            updates["luxeHomeServicesEyebrow"] = Self.bulkSaveOptionalSiteText(luxeHomeServicesEyebrow, existingFirestore: existingDoc?["luxeHomeServicesEyebrow"])
+            updates["luxeHomeServicesHeading"] = Self.bulkSaveOptionalSiteText(luxeHomeServicesHeading, existingFirestore: existingDoc?["luxeHomeServicesHeading"])
             updates["luxeShowHomeServicesSection"] = luxeShowHomeServicesSection
             updates["luxeHomeServicesExpandableCard"] = luxeHomeServicesExpandableCard
         }
         if fam == .studio12 {
-            updates["heroTagline"] = heroTagline
-            updates["studio12HeroEyebrow"] = studio12HeroEyebrow
+            updates["heroTagline"] = Self.bulkSaveOptionalSiteText(heroTagline, existingFirestore: existingDoc?["heroTagline"])
+            updates["studio12HeroEyebrow"] = Self.bulkSaveOptionalSiteText(studio12HeroEyebrow, existingFirestore: existingDoc?["studio12HeroEyebrow"])
             updates["studio12HeroHeadline"] = studio12HeroHeadline
             updates["studio12HeroLine1"] = ""
             updates["studio12HeroLine2"] = ""
@@ -1298,7 +1325,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["studio12BookCtaHeadline"] = studio12BookCtaHeadline
             updates["studio12BookCtaLine1"] = ""
             updates["studio12BookCtaItalic"] = ""
-            updates["studio12BookCtaBody"] = studio12BookCtaBody
+            updates["studio12BookCtaBody"] = Self.bulkSaveOptionalSiteText(studio12BookCtaBody, existingFirestore: existingDoc?["studio12BookCtaBody"])
             updates["studio12BookCtaImageUrl"] = studio12BookCtaImageUrl
             updates["studio12BookCtaImagePixelWidth"] = studio12BookCtaImagePixelWidth
             updates["studio12BookCtaImagePixelHeight"] = studio12BookCtaImagePixelHeight
@@ -1382,19 +1409,20 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             "businessHoursExceptions": businessHoursExceptions.map { $0.toFirestore() }
         ]
         updates.merge(contactAddressFirestoreUpdates()) { _, new in new }
+        let existingDoc = try? await firebaseService.fetchTenant(tenantId: tid)
         if (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .classic {
             updates["classicShowAboutStats"] = classicShowAboutStats
-            updates["classicStatYearsValue"] = classicStatYearsValue
-            updates["classicStatYearsLabel"] = classicStatYearsLabel
-            updates["classicStatClientsValue"] = classicStatClientsValue
-            updates["classicStatClientsLabel"] = classicStatClientsLabel
-            updates["classicStatRatedValue"] = classicStatRatedValue
-            updates["classicStatRatedLabel"] = classicStatRatedLabel
-            updates["classicAboutEyebrow"] = classicAboutEyebrow
-            updates["classicAboutHeading"] = classicAboutHeading
+            updates["classicStatYearsValue"] = Self.bulkSaveOptionalSiteText(classicStatYearsValue, existingFirestore: existingDoc?["classicStatYearsValue"])
+            updates["classicStatYearsLabel"] = Self.bulkSaveOptionalSiteText(classicStatYearsLabel, existingFirestore: existingDoc?["classicStatYearsLabel"])
+            updates["classicStatClientsValue"] = Self.bulkSaveOptionalSiteText(classicStatClientsValue, existingFirestore: existingDoc?["classicStatClientsValue"])
+            updates["classicStatClientsLabel"] = Self.bulkSaveOptionalSiteText(classicStatClientsLabel, existingFirestore: existingDoc?["classicStatClientsLabel"])
+            updates["classicStatRatedValue"] = Self.bulkSaveOptionalSiteText(classicStatRatedValue, existingFirestore: existingDoc?["classicStatRatedValue"])
+            updates["classicStatRatedLabel"] = Self.bulkSaveOptionalSiteText(classicStatRatedLabel, existingFirestore: existingDoc?["classicStatRatedLabel"])
+            updates["classicAboutEyebrow"] = Self.bulkSaveOptionalSiteText(classicAboutEyebrow, existingFirestore: existingDoc?["classicAboutEyebrow"])
+            updates["classicAboutHeading"] = Self.bulkSaveOptionalSiteText(classicAboutHeading, existingFirestore: existingDoc?["classicAboutHeading"])
         }
-        if let doc = try? await firebaseService.fetchTenant(tenantId: tid),
-           let clearedOverrides = Self.webCopyOverridesWithoutContactHours(doc) {
+        if let existingDoc,
+           let clearedOverrides = Self.webCopyOverridesWithoutContactHours(existingDoc) {
             updates["webCopyOverrides"] = clearedOverrides
         }
         await saveTenantUpdates(tid, updates)

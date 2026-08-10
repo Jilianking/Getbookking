@@ -524,6 +524,8 @@ struct DesignView: View {
               var components = URLComponents(string: viewModel.bookingUrl) else { return nil }
         var q = components.queryItems ?? []
         q.append(URLQueryItem(name: "_cb", value: String(viewModel.webPreviewReloadToken)))
+        // Keep structural template controls visible in the in-app editor even when their public page is disabled.
+        q.append(URLQueryItem(name: "bk_template_preview", value: "1"))
         components.queryItems = q
         return components.url
     }

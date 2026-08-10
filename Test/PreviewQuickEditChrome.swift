@@ -186,31 +186,53 @@ struct PreviewQuickEditChrome: View {
                         fabDragStartPosition = nil
                     }
             )
-            .onTapGesture {
-                isChromeCollapsed = false
-            }
             .accessibilityLabel(colorsDirty ? "Show edit tools, unsaved colors" : "Show edit tools")
             .accessibilityAddTraits(.isButton)
     }
 
-    private var collapsedFabButton: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: "chevron.up")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: collapsedFabSize, height: collapsedFabSize)
-                .background(Color(.systemBackground))
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-
-            if colorsDirty {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 1.5))
-                    .offset(x: 4, y: -4)
+    private var addTextButton: some View {
+        Button {
+            bridge.showEmptyTextSlots()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "text.badge.plus")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
+                Text("Text")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show empty text slots")
+    }
+
+    private var collapsedFabButton: some View {
+        Button {
+            isChromeCollapsed = false
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: collapsedFabSize, height: collapsedFabSize)
+                    .background(Color(.systemBackground))
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+
+                if colorsDirty {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().strokeBorder(Color.white, lineWidth: 1.5))
+                        .offset(x: 4, y: -4)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(colorsDirty ? "Show edit tools, unsaved colors" : "Show edit tools")
     }
 
     private func defaultFabPosition(in size: CGSize) -> CGPoint {
@@ -272,6 +294,7 @@ struct PreviewQuickEditChrome: View {
     private var controlPill: some View {
         HStack(alignment: .center, spacing: 10) {
             compactTextColorWell
+            addTextButton
 
             if let focus = inlineFocus {
                 activeFieldEditor(focus: focus)

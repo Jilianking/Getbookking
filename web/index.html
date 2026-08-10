@@ -5635,7 +5635,67 @@
       margin: 0 0 8px;
       text-transform: uppercase;
     }
-    .stonecut-page .stonecut-title em { font-family: 'DM Serif Display', serif; font-style: italic; font-size: .45em; color: var(--bk-fg-muted, #a09888); display: block; text-transform: none; }
+    .stonecut-page .stonecut-title em,
+    .stonecut-page .stonecut-title em.stonecut-industry-line {
+      font-family: 'DM Serif Display', serif;
+      font-style: italic;
+      font-size: .45em;
+      color: var(--bk-fg-muted, #a09888);
+      display: block;
+      text-transform: none;
+    }
+    /* Cleared industry line collapses so the site name sits at the top of the hero stack. */
+    .stonecut-page .stonecut-industry-line--empty { display: none; }
+    /* Cleared quick-edit copy: hide on the public site; keep a hit target in Manage. */
+    .bk-copy-empty { }
+    p:has(> .bk-copy-empty:only-child),
+    .stonecut-tag:has(.bk-copy-empty),
+    .stonecut-nav-location:has(.bk-copy-empty),
+    .classic-hero-tag:has(.bk-copy-empty),
+    .classic-section-eyebrow:has(.bk-copy-empty),
+    .luxe-section-label:has(.bk-copy-empty),
+    .blade-section-label:has(.bk-copy-empty),
+    .blade-hero-desc:has(.bk-copy-empty),
+    .blade-hero-vertical:has(.bk-copy-empty),
+    .s12-hero-tag:has(.bk-copy-empty),
+    .luxe-hero-text > p:has(.bk-copy-empty),
+    em:has(> .bk-copy-empty:only-child) {
+      display: none;
+    }
+    body:has(#bk-quick-edit-style) p:has(> .bk-copy-empty:only-child),
+    body:has(#bk-quick-edit-style) .stonecut-tag:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .stonecut-nav-location:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .classic-hero-tag:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .classic-section-eyebrow:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .luxe-section-label:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .blade-section-label:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .blade-hero-desc:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .blade-hero-vertical:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .s12-hero-tag:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) .luxe-hero-text > p:has(.bk-copy-empty),
+    body:has(#bk-quick-edit-style) em:has(> .bk-copy-empty:only-child) {
+      display: revert;
+    }
+    body:has(#bk-quick-edit-style) .bk-copy-empty {
+      display: inline-block !important;
+      min-width: 6rem;
+      min-height: 1.1em;
+      opacity: 0.75;
+    }
+    body:has(#bk-quick-edit-style) .stonecut-page .stonecut-industry-line--empty {
+      display: block;
+      min-height: 1.15em;
+      opacity: 0.75;
+    }
+    /* Hit target only — no ::before text (innerText would persist placeholder copy). */
+    body:has(#bk-quick-edit-style) .stonecut-page .stonecut-industry-line--empty [data-edit-key="wc.stonecut.heroIndustry"] {
+      display: inline-block;
+      min-width: 7rem;
+      min-height: 1.1em;
+    }
+    body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-industry-line--empty {
+      display: block;
+    }
     .stonecut-page .stonecut-hero-cta {
       display: flex;
       flex-wrap: wrap;
@@ -8712,23 +8772,83 @@
           })(inputs[i]);
         }
       }
-      /** Tenant `webCopyOverrides` map (keys `wc.*`); empty / missing falls back to template default. */
+      /**
+       * Tenant `webCopyOverrides` (`wc.*`).
+       * Missing key → fallback. Explicit value (including "") → that value (empty stays blank).
+       */
       function webCopyOverrideText(tenant, fullKey, fallback) {
         var m = tenant && tenant.webCopyOverrides;
         if (!m || typeof m !== 'object') return fallback;
+        if (!Object.prototype.hasOwnProperty.call(m, fullKey)) return fallback;
         var v = m[fullKey];
-        if (v != null && String(v).trim() !== '') return String(v).trim();
-        return fallback;
+        return v != null ? String(v).trim() : '';
+      }
+      function webCopyHasExplicit(tenant, fullKey) {
+        var m = tenant && tenant.webCopyOverrides;
+        return !!(m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, fullKey));
       }
       /** Escaped inner HTML with `data-edit-key` for app quick-edit (`wc.*` → Firestore `webCopyOverrides`). */
       function wcSpan(tenant, fullKey, fallback) {
         var text = webCopyOverrideText(tenant, fullKey, fallback);
-        return '<span data-edit-key="' + esc(fullKey) + '">' + esc(text) + '</span>';
+        var emptyAttr = text ? '' : ' class="bk-copy-empty"';
+        return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
       }
       /** Like `wcSpan` but preserves line breaks (hours, address). */
       function wcSpanMultiline(tenant, fullKey, fallback) {
         var text = webCopyOverrideText(tenant, fullKey, fallback);
-        return '<span data-edit-key="' + esc(fullKey) + '">' + esc(text).replace(/\n/g, '<br>') + '</span>';
+        var emptyAttr = text ? '' : ' class="bk-copy-empty"';
+        return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + esc(text).replace(/\n/g, '<br>') + '</span>';
+      }
+      /**
+       * Intentional blank for optional dedicated site-copy fields.
+       * ZWSP is invisible if an older page ever prints the raw value; `__blank__` is the legacy form.
+       */
+      var SITE_TEXT_BLANK = '\u200B';
+      var SITE_TEXT_BLANK_LEGACY = '__blank__';
+      function isSiteTextBlankValue(v) {
+        if (v == null) return false;
+        var s = String(v);
+        return s === SITE_TEXT_BLANK || s === SITE_TEXT_BLANK_LEGACY;
+      }
+      /** Map Firestore optional copy onto the tenant row; rewrite legacy `__blank__` to invisible ZWSP. */
+      function normalizeIncomingSiteText(v) {
+        if (v == null || v === '') return '';
+        if (isSiteTextBlankValue(v)) return SITE_TEXT_BLANK;
+        return String(v);
+      }
+      function tenantSiteTextIsBlank(tenant, key) {
+        return !!(tenant && Object.prototype.hasOwnProperty.call(tenant, key) && isSiteTextBlankValue(tenant[key]));
+      }
+      /**
+       * Optional dedicated site-copy field.
+       * Blank sentinel → ""; missing / legacy "" → fallback; otherwise trimmed value.
+       */
+      function tenantSiteText(tenant, key, fallback) {
+        if (tenantSiteTextIsBlank(tenant, key)) return '';
+        if (!tenant || !Object.prototype.hasOwnProperty.call(tenant, key) || tenant[key] == null) {
+          return fallback;
+        }
+        var raw = String(tenant[key]);
+        if (isSiteTextBlankValue(raw)) return '';
+        var v = raw.trim();
+        if (!v) return fallback;
+        return v;
+      }
+      /** Like tenantSiteText but runs `computeDefault` only when the field is unset (not intentionally blank). */
+      function tenantSiteTextOrCompute(tenant, key, computeDefault) {
+        if (tenantSiteTextIsBlank(tenant, key)) return '';
+        if (tenant && Object.prototype.hasOwnProperty.call(tenant, key) && tenant[key] != null) {
+          var raw = String(tenant[key]);
+          if (isSiteTextBlankValue(raw)) return '';
+          var v = raw.trim();
+          if (v) return v;
+        }
+        return typeof computeDefault === 'function' ? computeDefault() : String(computeDefault || '');
+      }
+      function siteTextSpan(editKey, text) {
+        if (isSiteTextBlankValue(text)) text = '';
+        var emptyAttr = text ? '' : ' class="bk-copy-empty"';
+        return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
       }
       /** Website-only service label/description; real catalog edits happen in Design → Services. */
       function svcSpan(tenant, serviceId, field, displayText) {
@@ -8802,8 +8922,7 @@
         return tenantPixelAspectCssVars(tenant.heroImagePixelWidth, tenant.heroImagePixelHeight);
       }
       function classicStatPick(tenant, key, fallback) {
-        var v = tenant && tenant[key] != null ? String(tenant[key]).trim() : '';
-        return v ? v : fallback;
+        return tenantSiteText(tenant, key, fallback);
       }
       /** True on iPhone / iPod / iPad, iPadOS (MacIntel + touch), or when URL has ?maps=apple (e.g. in-app WebView). */
       function clientPrefersAppleMaps() {
@@ -8919,6 +9038,15 @@
       }
       function tenantShowGalleryPage(tenant) {
         return tenant.showGalleryPage !== false;
+      }
+      /** In-app Design preview preserves template structure without changing the public site's page visibility. */
+      function isTemplatePreview() {
+        try {
+          if (new URLSearchParams(location.search || '').get('bk_template_preview') === '1') return true;
+          return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bkPreviewEdit);
+        } catch (e) {
+          return false;
+        }
       }
       function tenantShowBookPage(tenant) {
         return tenant.showBookPage !== false;
@@ -9247,6 +9375,29 @@
         };
         return map[k] || map.custom;
       }
+      /**
+       * Editable Stonecut industry line (`wc.stonecut.heroIndustry`).
+       * Missing override → industry default; explicit "" → hide; any other text → custom.
+       */
+      function stonecutIndustryLineText(tenant) {
+        var key = 'wc.stonecut.heroIndustry';
+        var m = tenant && tenant.webCopyOverrides;
+        if (m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, key)) {
+          var v = m[key];
+          return v != null ? String(v).trim() : '';
+        }
+        return stonecutIndustryDisplayName(tenant);
+      }
+      /** `<em>` + quick-edit span for hero/nav. Empty line is omitted visually (placeholder in Manage). */
+      function stonecutIndustryEmHtml(tenant, emClass) {
+        var key = 'wc.stonecut.heroIndustry';
+        var text = stonecutIndustryLineText(tenant);
+        var classes = ['stonecut-industry-line'];
+        if (emClass) classes.push(String(emClass));
+        if (!text) classes.push('stonecut-industry-line--empty');
+        return '<em class="' + esc(classes.join(' ')) + '">' +
+          '<span data-edit-key="' + esc(key) + '">' + esc(text) + '</span></em>';
+      }
 
       function bladeHomePage(tenant, services) {
         var base = tenantBaseUrl(tenant);
@@ -9262,21 +9413,16 @@
           sidebarLinksHtml(tenant, base, bookUrl) +
           '</div></div>';
         var tag = tenant.tagline || '';
-        var emLine = '';
-        if (tenant.bladeHeroTagline && String(tenant.bladeHeroTagline).trim()) {
-          emLine = String(tenant.bladeHeroTagline).trim();
-        } else {
+        var emLine = tenantSiteTextOrCompute(tenant, 'bladeHeroTagline', function() {
           var legacyEm = tag.split('.')[0].trim();
-          emLine = legacyEm || defaultBladeHeroTaglineForIndustry(tenant.industry);
-        }
-        var heroDesc = '';
-        if (tenant.bladeHeroDescription && String(tenant.bladeHeroDescription).trim()) {
-          heroDesc = String(tenant.bladeHeroDescription).trim();
-        } else if (tenant.aboutText && String(tenant.aboutText).trim()) {
-          heroDesc = String(tenant.aboutText).trim();
-        } else {
-          heroDesc = tag || defaultBladeHeroDescriptionForIndustry(tenant.industry);
-        }
+          return legacyEm || defaultBladeHeroTaglineForIndustry(tenant.industry);
+        });
+        var heroDesc = tenantSiteTextOrCompute(tenant, 'bladeHeroDescription', function() {
+          if (tenant.aboutText && String(tenant.aboutText).trim()) {
+            return String(tenant.aboutText).trim();
+          }
+          return tag || defaultBladeHeroDescriptionForIndustry(tenant.industry);
+        });
         if (heroDesc.length > 240) heroDesc = heroDesc.slice(0, 237) + '…';
         var sa = (tenant.serviceArea && String(tenant.serviceArea).trim()) ? String(tenant.serviceArea).trim() : '';
         var hoursTrimBlade = tenantBusinessHoursTrimmed(tenant);
@@ -9447,14 +9593,14 @@
           bkColorBandHitButtonHtml() +
           '<div class="blade-hero-left" data-bk-hero-band-tappable>' +
           '<div class="blade-hero-eyebrow">' + heroEyebrowSpan + '</div>' +
-          '<h1 class="blade-hero-title"><em><span data-edit-key="bladeHeroTagline">' + esc(emLine) + '</span></em>' + siteNameSpan(tenant, 'Studio') + '</h1>' +
-          '<p class="blade-hero-desc"><span data-edit-key="bladeHeroDescription">' + esc(heroDesc) + '</span></p>' +
+          '<h1 class="blade-hero-title"><em>' + siteTextSpan('bladeHeroTagline', emLine) + '</em>' + siteNameSpan(tenant, 'Studio') + '</h1>' +
+          '<p class="blade-hero-desc">' + siteTextSpan('bladeHeroDescription', heroDesc) + '</p>' +
           '<div class="blade-hero-cta">' +
           heroPrimary +
           '<a href="' + anchorHome + '#services" class="blade-btn-ghost">' + wcSpan(tenant, 'wc.blade.heroViewServices', 'View services') + '</a>' +
           '</div></div>' +
           '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
-          '<div class="blade-hero-vertical"><span data-edit-key="bladeHeroTagline">' + esc(vertical) + '</span></div></section>';
+          '<div class="blade-hero-vertical">' + siteTextSpan('bladeHeroTagline', vertical) + '</div></section>';
         return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
       /** Stonecut top bar (fixed); same markup on home, shop, /book, and post-submit. */
@@ -9462,8 +9608,6 @@
         var base = tenantBaseUrl(tenant);
         var bookUrl = base + '/book';
         var galleryUrl = base + '/gallery';
-        var displayName = tenantSiteDisplayName(tenant, 'Studio');
-        var industryLine = stonecutIndustryDisplayName(tenant);
         var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
         var locationHtml = sa
           ? ('<span class="stonecut-nav-location">' + wcSpan(tenant, 'wc.contact.serviceArea', sa) + '</span>')
@@ -9472,7 +9616,7 @@
           '<a href="' + base + '/home" class="stonecut-logo">' +
           '<span class="stonecut-logo-wordmark">' + siteNameSpan(tenant, 'Studio') + '</span>' +
           '<span class="stonecut-logo-stack">' +
-          '<em class="stonecut-nav-industry">' + esc(industryLine) + '</em>' +
+          stonecutIndustryEmHtml(tenant, 'stonecut-nav-industry') +
           '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio') + '</span>' +
           locationHtml +
           '</span></a>' +
@@ -9523,7 +9667,6 @@
         var addrBodyPlainSc = addrRaw || sa || 'Add your address in the app.';
         var addrBodyWrappedSc = wcSpanMultiline(tenant, 'wc.contact.location', addrBodyPlainSc);
         var phoneHref = telHrefFromPhone(tenant.contactPhone);
-        var industryLine = stonecutIndustryDisplayName(tenant);
         var tagTrim = tenant.tagline && String(tenant.tagline).trim() ? String(tenant.tagline).trim() : '';
         var taglineHtml = tagTrim
           ? ('<div class="stonecut-tag">' + wcSpan(tenant, 'wc.stonecut.heroTagline', tagTrim) + '</div>')
@@ -9564,7 +9707,7 @@
           '<section class="stonecut-hero" data-bk-color-surface="hero">' +
           bkHeroBandHitButtonHtml() +
           '<div class="stonecut-hero-left" data-bk-hero-band-tappable>' +
-          '<h1 class="stonecut-title"><em>' + esc(industryLine) + '</em>' + siteNameSpan(tenant, 'Studio') + '</h1>' +
+          '<h1 class="stonecut-title">' + stonecutIndustryEmHtml(tenant, '') + siteNameSpan(tenant, 'Studio') + '</h1>' +
           taglineHtml +
           cityTagHtml +
           heroCta +
@@ -9668,17 +9811,10 @@
         var u = urls[index];
         return (u != null && String(u).trim() !== '') ? String(u).trim() : '';
       }
-      /** Stonecut about column: featured → gallery → hero; matches quick-edit keys. */
+      /** Stonecut about column: featuredWork slot 0 only (not gallery / hero). */
       function stonecutAboutPhotoMeta(tenant) {
         var featured = featuredStripSlotUrl(featuredUrlsForHomeStrip(tenant, 1), 0);
         if (featured) return { url: featured, editKey: 'featuredWork:0' };
-        var gallery = (tenant.galleryImages || [])[0];
-        if (gallery != null && String(gallery).trim() !== '') {
-          return { url: String(gallery).trim(), editKey: 'galleryImage:0' };
-        }
-        if (tenant.heroImageUrl && String(tenant.heroImageUrl).trim()) {
-          return { url: String(tenant.heroImageUrl).trim(), editKey: 'heroImage' };
-        }
         return { url: '', editKey: 'featuredWork:0' };
       }
       function stonecutAboutPhotoHtml(tenant) {
@@ -11891,31 +12027,31 @@
               workflow: data.workflow || null,
               guidedStepTitles: data.guidedStepTitles || {},
               guidedStepOrder: data.guidedStepOrder || [],
-              luxeHeroTagline: data.luxeHeroTagline || '',
-              luxePromoHeadline: data.luxePromoHeadline || '',
-              bladeHeroTagline: data.bladeHeroTagline || '',
-              bladeHeroDescription: data.bladeHeroDescription || '',
-              heroTagline: data.heroTagline || '',
-              heroSubtitle: data.heroSubtitle || '',
+              luxeHeroTagline: normalizeIncomingSiteText(data.luxeHeroTagline),
+              luxePromoHeadline: normalizeIncomingSiteText(data.luxePromoHeadline),
+              bladeHeroTagline: normalizeIncomingSiteText(data.bladeHeroTagline),
+              bladeHeroDescription: normalizeIncomingSiteText(data.bladeHeroDescription),
+              heroTagline: normalizeIncomingSiteText(data.heroTagline),
+              heroSubtitle: normalizeIncomingSiteText(data.heroSubtitle),
               studio12PhilosophyImageUrl: data.studio12PhilosophyImageUrl || '',
               studio12PhilosophyImagePixelWidth: tenantHeroPixelDim(data.studio12PhilosophyImagePixelWidth, 16),
               studio12PhilosophyImagePixelHeight: tenantHeroPixelDim(data.studio12PhilosophyImagePixelHeight, 9),
               studio12PhilosophyHeadline: data.studio12PhilosophyHeadline || '',
-              studio12PhilosophyHeadLine1: data.studio12PhilosophyHeadLine1 || '',
-              studio12PhilosophyHeadLine2: data.studio12PhilosophyHeadLine2 || '',
-              studio12PhilosophyHeadItalic: data.studio12PhilosophyHeadItalic || '',
+              studio12PhilosophyHeadLine1: normalizeIncomingSiteText(data.studio12PhilosophyHeadLine1),
+              studio12PhilosophyHeadLine2: normalizeIncomingSiteText(data.studio12PhilosophyHeadLine2),
+              studio12PhilosophyHeadItalic: normalizeIncomingSiteText(data.studio12PhilosophyHeadItalic),
               studio12BookCtaHeadline: data.studio12BookCtaHeadline || '',
-              studio12BookCtaLine1: data.studio12BookCtaLine1 || '',
-              studio12BookCtaItalic: data.studio12BookCtaItalic || '',
-              studio12BookCtaBody: data.studio12BookCtaBody || '',
+              studio12BookCtaLine1: normalizeIncomingSiteText(data.studio12BookCtaLine1),
+              studio12BookCtaItalic: normalizeIncomingSiteText(data.studio12BookCtaItalic),
+              studio12BookCtaBody: normalizeIncomingSiteText(data.studio12BookCtaBody),
               studio12BookCtaImageUrl: data.studio12BookCtaImageUrl || '',
               studio12BookCtaImagePixelWidth: tenantHeroPixelDim(data.studio12BookCtaImagePixelWidth, 16),
               studio12BookCtaImagePixelHeight: tenantHeroPixelDim(data.studio12BookCtaImagePixelHeight, 9),
               studio12ProcessSteps: data.studio12ProcessSteps || [],
-              studio12HeroEyebrow: data.studio12HeroEyebrow || '',
+              studio12HeroEyebrow: normalizeIncomingSiteText(data.studio12HeroEyebrow),
               studio12HeroHeadline: data.studio12HeroHeadline || '',
-              studio12HeroLine1: data.studio12HeroLine1 || '',
-              studio12HeroLine2: data.studio12HeroLine2 || '',
+              studio12HeroLine1: normalizeIncomingSiteText(data.studio12HeroLine1),
+              studio12HeroLine2: normalizeIncomingSiteText(data.studio12HeroLine2),
               studio12ShowServicesSection: data.studio12ShowServicesSection !== false,
               studio12ShowProcessSection: data.studio12ShowProcessSection !== false,
               showGalleryPage: data.showGalleryPage !== false,
@@ -11925,20 +12061,20 @@
               showMeetTheTeamOnHome: data.showMeetTheTeamOnHome !== false,
               shopEnabled: data.shopEnabled || false,
               subscriptionPlan: (data.subscriptionPlan || 'solo').toString(),
-              classicFeaturedWorkEyebrow: data.classicFeaturedWorkEyebrow || '',
-              classicFeaturedWorkHeading: data.classicFeaturedWorkHeading || '',
-              classicFeaturedWorkSub: data.classicFeaturedWorkSub || '',
-              classicFeaturedWorkEmpty: data.classicFeaturedWorkEmpty || '',
-              classicServicesEyebrow: data.classicServicesEyebrow || '',
-              classicServicesHeading: data.classicServicesHeading || '',
+              classicFeaturedWorkEyebrow: normalizeIncomingSiteText(data.classicFeaturedWorkEyebrow),
+              classicFeaturedWorkHeading: normalizeIncomingSiteText(data.classicFeaturedWorkHeading),
+              classicFeaturedWorkSub: normalizeIncomingSiteText(data.classicFeaturedWorkSub),
+              classicFeaturedWorkEmpty: normalizeIncomingSiteText(data.classicFeaturedWorkEmpty),
+              classicServicesEyebrow: normalizeIncomingSiteText(data.classicServicesEyebrow),
+              classicServicesHeading: normalizeIncomingSiteText(data.classicServicesHeading),
               classicServicesExpandableCard: data.classicServicesExpandableCard === true,
-              classicAboutEyebrow: data.classicAboutEyebrow || '',
-              classicAboutHeading: data.classicAboutHeading || '',
-              luxeFeaturedWorkEyebrow: data.luxeFeaturedWorkEyebrow || '',
-              luxeFeaturedWorkHeading: data.luxeFeaturedWorkHeading || '',
+              classicAboutEyebrow: normalizeIncomingSiteText(data.classicAboutEyebrow),
+              classicAboutHeading: normalizeIncomingSiteText(data.classicAboutHeading),
+              luxeFeaturedWorkEyebrow: normalizeIncomingSiteText(data.luxeFeaturedWorkEyebrow),
+              luxeFeaturedWorkHeading: normalizeIncomingSiteText(data.luxeFeaturedWorkHeading),
               luxeShowFeaturedWorkStrip: data.luxeShowFeaturedWorkStrip !== false,
-              luxeHomeServicesEyebrow: data.luxeHomeServicesEyebrow || '',
-              luxeHomeServicesHeading: data.luxeHomeServicesHeading || '',
+              luxeHomeServicesEyebrow: normalizeIncomingSiteText(data.luxeHomeServicesEyebrow),
+              luxeHomeServicesHeading: normalizeIncomingSiteText(data.luxeHomeServicesHeading),
               luxeShowHomeServicesSection: data.luxeShowHomeServicesSection === true,
               luxeHomeServicesExpandableCard: data.luxeHomeServicesExpandableCard === true,
               webCopyOverrides: (function() {
@@ -11949,7 +12085,8 @@
                   if (!Object.prototype.hasOwnProperty.call(o, wk)) continue;
                   if (wk.indexOf('wc.') !== 0) continue;
                   var wv = o[wk];
-                  if (wv != null && String(wv).trim() !== '') out[wk] = String(wv).trim();
+                  // Keep empty strings — some slots (e.g. wc.stonecut.heroIndustry) use "" to mean hide.
+                  if (wv != null) out[wk] = String(wv).trim();
                 }
                 return out;
               })() };
@@ -12361,12 +12498,12 @@
           '<div class="classic-hero-right"' + heroRightStyle + '>' + heroImgHtml + bkHeroImageHitButtonHtml() + '</div>' +
           '</section>';
 
-        var classicFeaturedEyebrow = classicTenantTrim('classicFeaturedWorkEyebrow') || 'Featured work';
-        var classicFeaturedHeading = classicTenantTrim('classicFeaturedWorkHeading') || opts.featuredHeading;
-        var classicFeaturedSub = classicTenantTrim('classicFeaturedWorkSub') || opts.featuredSub;
-        var classicFeaturedEmpty = classicTenantTrim('classicFeaturedWorkEmpty') || opts.featuredEmpty;
-        var classicSvcEyebrow = classicTenantTrim('classicServicesEyebrow') || 'Services';
-        var classicSvcHeading = classicTenantTrim('classicServicesHeading') || 'What I offer';
+        var classicFeaturedEyebrow = tenantSiteText(tenant, 'classicFeaturedWorkEyebrow', 'Featured work');
+        var classicFeaturedHeading = tenantSiteText(tenant, 'classicFeaturedWorkHeading', opts.featuredHeading);
+        var classicFeaturedSub = tenantSiteText(tenant, 'classicFeaturedWorkSub', opts.featuredSub);
+        var classicFeaturedEmpty = tenantSiteText(tenant, 'classicFeaturedWorkEmpty', opts.featuredEmpty);
+        var classicSvcEyebrow = tenantSiteText(tenant, 'classicServicesEyebrow', 'Services');
+        var classicSvcHeading = tenantSiteText(tenant, 'classicServicesHeading', 'What I offer');
         var classicSvcExpand = tenant.classicServicesExpandableCard === true;
 
         var featuredHtml = '';
@@ -12391,9 +12528,9 @@
           })();
           featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured" data-bk-band-tappable>' +
             bkColorBandInnerWrap('<div class="tattoo-featured-inner">' +
-            '<p class="classic-section-eyebrow"><span data-edit-key="classicFeaturedWorkEyebrow">' + esc(classicFeaturedEyebrow) + '</span></p>' +
-            '<h2><span data-edit-key="classicFeaturedWorkHeading">' + esc(classicFeaturedHeading) + '</span></h2>' +
-            '<p class="tattoo-featured-sub"><span data-edit-key="' + (gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty') + '">' + esc(gallery.length ? classicFeaturedSub : classicFeaturedEmpty) + '</span></p>' +
+            '<p class="classic-section-eyebrow">' + siteTextSpan('classicFeaturedWorkEyebrow', classicFeaturedEyebrow) + '</p>' +
+            '<h2>' + siteTextSpan('classicFeaturedWorkHeading', classicFeaturedHeading) + '</h2>' +
+            '<p class="tattoo-featured-sub">' + siteTextSpan((gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty'), (gallery.length ? classicFeaturedSub : classicFeaturedEmpty)) + '</p>' +
             '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
             '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">' + wcSpan(tenant, 'wc.classic.galleryLink', 'View full gallery \u2192') + '</a>' +
             '</div>') + '</section>';
@@ -12445,8 +12582,8 @@
               '<details class="classic-services-details">' +
               '<summary class="classic-services-summary">' +
               '<div class="classic-services-summary-text">' +
-              '<p class="classic-section-eyebrow"><span data-edit-key="classicServicesEyebrow">' + esc(classicSvcEyebrow) + '</span></p>' +
-              '<h2><span data-edit-key="classicServicesHeading">' + esc(classicSvcHeading) + '</span></h2>' +
+              '<p class="classic-section-eyebrow">' + siteTextSpan('classicServicesEyebrow', classicSvcEyebrow) + '</p>' +
+              '<h2>' + siteTextSpan('classicServicesHeading', classicSvcHeading) + '</h2>' +
               '</div>' +
               '<span class="classic-services-expand-hint">View menu</span>' +
               '</summary>' +
@@ -12455,8 +12592,8 @@
           } else {
             servicesHtml = '<section id="services" class="classic-services-section" data-bk-color-surface="card" data-bk-band-tappable>' +
               bkColorBandInnerWrap('<div class="classic-services">' +
-              '<p class="classic-section-eyebrow"><span data-edit-key="classicServicesEyebrow">' + esc(classicSvcEyebrow) + '</span></p>' +
-              '<h2><span data-edit-key="classicServicesHeading">' + esc(classicSvcHeading) + '</span></h2>' +
+              '<p class="classic-section-eyebrow">' + siteTextSpan('classicServicesEyebrow', classicSvcEyebrow) + '</p>' +
+              '<h2>' + siteTextSpan('classicServicesHeading', classicSvcHeading) + '</h2>' +
               listBlock +
               '</div>') + '</section>';
           }
@@ -12503,20 +12640,25 @@
           var rl = classicStatPick(tenant, 'classicStatRatedLabel', 'Rated');
           classicStatsHtml =
             '<div class="classic-stats">' +
-            '<div class="classic-stat"><div class="classic-stat-value"><span data-edit-key="classicStatYearsValue">' + esc(yv) + '</span></div><div class="classic-stat-label"><span data-edit-key="classicStatYearsLabel">' + esc(yl) + '</span></div></div>' +
-            '<div class="classic-stat"><div class="classic-stat-value"><span data-edit-key="classicStatClientsValue">' + esc(cv) + '</span></div><div class="classic-stat-label"><span data-edit-key="classicStatClientsLabel">' + esc(cl) + '</span></div></div>' +
-            '<div class="classic-stat"><div class="classic-stat-value"><span data-edit-key="classicStatRatedValue">' + esc(rv) + '</span></div><div class="classic-stat-label"><span data-edit-key="classicStatRatedLabel">' + esc(rl) + '</span></div></div>' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + siteTextSpan('classicStatYearsValue', yv) + '</div><div class="classic-stat-label">' + siteTextSpan('classicStatYearsLabel', yl) + '</div></div>' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + siteTextSpan('classicStatClientsValue', cv) + '</div><div class="classic-stat-label">' + siteTextSpan('classicStatClientsLabel', cl) + '</div></div>' +
+            '<div class="classic-stat"><div class="classic-stat-value">' + siteTextSpan('classicStatRatedValue', rv) + '</div><div class="classic-stat-label">' + siteTextSpan('classicStatRatedLabel', rl) + '</div></div>' +
             '</div>';
         }
-        var aboutEyebrow = classicTenantTrim('classicAboutEyebrow') || 'About';
-        var aboutHeadingCustom = classicTenantTrim('classicAboutHeading');
-        var aboutHeadingHtml = aboutHeadingCustom
-          ? ('<h2><span data-edit-key="classicAboutHeading">' + esc(aboutHeadingCustom) + '</span></h2>')
-          : ('<h2><span data-edit-key="classicAboutHeading">' + opts.aboutHeading + '</span></h2>');
+        var aboutEyebrow = tenantSiteText(tenant, 'classicAboutEyebrow', 'About');
+        var aboutHeadingHtml;
+        if (tenantSiteTextIsBlank(tenant, 'classicAboutHeading')) {
+          aboutHeadingHtml = '<h2>' + siteTextSpan('classicAboutHeading', '') + '</h2>';
+        } else {
+          var aboutHeadingCustom = tenantSiteText(tenant, 'classicAboutHeading', '');
+          aboutHeadingHtml = aboutHeadingCustom
+            ? ('<h2>' + siteTextSpan('classicAboutHeading', aboutHeadingCustom) + '</h2>')
+            : ('<h2>' + siteTextSpan('classicAboutHeading', opts.aboutHeading) + '</h2>');
+        }
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section" data-bk-color-surface="about" data-bk-band-tappable>' +
           bkColorBandInnerWrap('<div class="classic-about-inner-v2">' +
-          '<p class="classic-section-eyebrow"><span data-edit-key="classicAboutEyebrow">' + esc(aboutEyebrow) + '</span></p>' +
+          '<p class="classic-section-eyebrow">' + siteTextSpan('classicAboutEyebrow', aboutEyebrow) + '</p>' +
           aboutHeadingHtml +
           '<p class="classic-about-bio-v2">' + aboutBioDisplay + '</p>' +
           classicStatsHtml +
@@ -12820,7 +12962,12 @@
           ? '<img class="s12-hero-img" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
           : '<div class="s12-hero-img-fallback" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>';
         var s12HeroColStyle = '';
-        var heroItalic = tenant.heroTagline || tenant.heroSubtitle || s12.heroItalicDefault;
+        var heroItalic = tenantSiteTextOrCompute(tenant, 'heroTagline', function() {
+          if (tenant.heroSubtitle && String(tenant.heroSubtitle).trim() && !isSiteTextBlankValue(tenant.heroSubtitle)) {
+            return String(tenant.heroSubtitle).trim();
+          }
+          return s12.heroItalicDefault;
+        });
         var heroLead = tenant.tagline || (tenant.aboutText ? String(tenant.aboutText).slice(0, 200) : '') ||
           s12.heroLeadDefault;
         var aboutFull = (tenant.aboutText || '').trim();
@@ -12915,12 +13062,12 @@
           phL2 = pp[1];
           phEm = pp[2];
         } else {
-          phL1 = (tenant.studio12PhilosophyHeadLine1 || '').trim() || s12.phil1;
-          phL2 = (tenant.studio12PhilosophyHeadLine2 || '').trim() || s12.phil2;
-          phEm = (tenant.studio12PhilosophyHeadItalic || '').trim() || s12.philEm;
+          phL1 = tenantSiteTextOrCompute(tenant, 'studio12PhilosophyHeadLine1', s12.phil1);
+          phL2 = tenantSiteTextOrCompute(tenant, 'studio12PhilosophyHeadLine2', s12.phil2);
+          phEm = tenantSiteTextOrCompute(tenant, 'studio12PhilosophyHeadItalic', s12.philEm);
         }
-        var philTitleHtml = '<h2 class="s12-phil-title"><span data-edit-key="studio12PhilosophyHeadLine1">' + esc(phL1) + '</span><br>' +
-          '<span data-edit-key="studio12PhilosophyHeadLine2">' + esc(phL2) + '</span><br><em><span data-edit-key="studio12PhilosophyHeadItalic">' + esc(phEm) + '</span></em></h2>';
+        var philTitleHtml = '<h2 class="s12-phil-title">' + siteTextSpan('studio12PhilosophyHeadLine1', phL1) + '<br>' +
+          siteTextSpan('studio12PhilosophyHeadLine2', phL2) + '<br><em>' + siteTextSpan('studio12PhilosophyHeadItalic', phEm) + '</em></h2>';
         var philImgCol = tenant.studio12PhilosophyImageUrl
           ? ('<div class="s12-aux-img-wrap">' +
             '<img class="s12-hero-img" data-edit-key="studio12PhilosophyImage" src="' + esc(tenant.studio12PhilosophyImageUrl) + '" alt=""></div>')
@@ -12965,10 +13112,10 @@
           bcL1 = bp[0];
           bcEm = bp[1];
         } else {
-          bcL1 = (tenant.studio12BookCtaLine1 || '').trim() || s12.bookL1;
-          bcEm = (tenant.studio12BookCtaItalic || '').trim() || s12.bookEm;
+          bcL1 = tenantSiteTextOrCompute(tenant, 'studio12BookCtaLine1', s12.bookL1);
+          bcEm = tenantSiteTextOrCompute(tenant, 'studio12BookCtaItalic', s12.bookEm);
         }
-        var bcBody = (tenant.studio12BookCtaBody || '').trim() || s12.bookBody;
+        var bcBody = tenantSiteTextOrCompute(tenant, 'studio12BookCtaBody', s12.bookBody);
         var s12BookGridImg = tenant.studio12BookCtaImageUrl
           ? ('<div class="s12-aux-img-wrap s12-info-book-img-wrap">' +
             '<img class="s12-hero-img" data-edit-key="studio12BookCtaImage" src="' + esc(tenant.studio12BookCtaImageUrl) + '" alt=""></div>')
@@ -12976,13 +13123,13 @@
         var s12BookGridHalf = tenantShowBookPage(tenant)
           ? ('<div class="s12-info-half s12-info-book s12-fade" id="s12-booking">' +
             '<div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.bookSectionLabel', 'Reserve') + '</div>' +
-            '<h2 class="s12-info-book-title"><span data-edit-key="studio12BookCtaLine1">' + esc(bcL1) + '</span><br><em><span data-edit-key="studio12BookCtaItalic">' + esc(bcEm) + '</span></em></h2>' +
-            '<p class="s12-info-book-body"><span data-edit-key="studio12BookCtaBody">' + esc(bcBody) + '</span></p>' +
+            '<h2 class="s12-info-book-title">' + siteTextSpan('studio12BookCtaLine1', bcL1) + '<br><em>' + siteTextSpan('studio12BookCtaItalic', bcEm) + '</em></h2>' +
+            '<p class="s12-info-book-body">' + siteTextSpan('studio12BookCtaBody', bcBody) + '</p>' +
             '<a class="s12-btn-dark s12-info-book-btn" href="' + bookUrl + '">' + wcSpan(tenant, 'wc.s12.bookSectionCta', 'Request appointment') + '</a>' +
             s12BookGridImg + '</div>')
           : '';
         var s12InfoInnerHtml = '<div class="' + s12InfoInnerClass + '">' + s12HoursHalf + s12BookGridHalf + s12StudioHalf + s12MapHalf + '</div>';
-        var heroEyebrow = (tenant.studio12HeroEyebrow || '').trim() || s12.heroEyebrow;
+        var heroEyebrow = tenantSiteTextOrCompute(tenant, 'studio12HeroEyebrow', s12.heroEyebrow);
         var heroMerged = (tenant.studio12HeroHeadline || '').trim();
         var heroL1, heroL2;
         if (heroMerged) {
@@ -12990,8 +13137,8 @@
           heroL1 = hh.line1;
           heroL2 = hh.line2;
         } else {
-          heroL1 = (tenant.studio12HeroLine1 || '').trim() || s12.heroLine1;
-          heroL2 = (tenant.studio12HeroLine2 || '').trim() || s12.heroLine2;
+          heroL1 = tenantSiteTextOrCompute(tenant, 'studio12HeroLine1', s12.heroLine1);
+          heroL2 = tenantSiteTextOrCompute(tenant, 'studio12HeroLine2', s12.heroLine2);
         }
         var s12HeroActions = '<div class="s12-hero-actions s12-fade">';
         if (tenantShowBookPage(tenant)) {
@@ -13011,8 +13158,8 @@
           bkHeroBandHitButtonHtml() +
           '<div class="s12-hero-img-col"' + s12HeroColStyle + '>' + heroImg + '<div class="s12-hero-img-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
           '<div class="s12-hero-content" data-bk-hero-band-tappable>' +
-          '<div class="s12-hero-tag s12-fade"><span data-edit-key="studio12HeroEyebrow">' + esc(heroEyebrow) + '</span></div>' +
-          '<h1 class="s12-hero-title s12-fade">' + '<span data-edit-key="studio12HeroLine1">' + esc(heroL1) + '</span><br><span data-edit-key="studio12HeroLine2">' + esc(heroL2) + '</span><br><em><span data-edit-key="heroTagline">' + esc(heroItalic) + '</span></em></h1>' +
+          '<div class="s12-hero-tag s12-fade">' + siteTextSpan('studio12HeroEyebrow', heroEyebrow) + '</div>' +
+          '<h1 class="s12-hero-title s12-fade">' + siteTextSpan('studio12HeroLine1', heroL1) + '<br>' + siteTextSpan('studio12HeroLine2', heroL2) + '<br><em>' + siteTextSpan('heroTagline', heroItalic) + '</em></h1>' +
           '<p class="s12-hero-sub s12-fade">' + wcSpan(tenant, 'wc.s12.heroLead', heroLead) + '</p>' +
           s12HeroActions +
           '</div></section>' +
@@ -13208,11 +13355,11 @@
         var heroStyle = tenant.heroImageUrl
           ? 'background-image:url(' + esc(tenant.heroImageUrl) + ');'
           : '';
-        var luxeHeroLine = tenant.luxeHeroTagline
-          ? String(tenant.luxeHeroTagline)
-          : defaultLuxeHeroTaglineForIndustry(tenant.industry);
+        var luxeHeroLine = tenantSiteTextOrCompute(tenant, 'luxeHeroTagline', function() {
+          return defaultLuxeHeroTaglineForIndustry(tenant.industry);
+        });
 
-        var luxeHeroCta = tenantShowBookPage(tenant)
+        var luxeHeroCta = (tenantShowBookPage(tenant) || isTemplatePreview())
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
         /* Luxe hero is a full-bleed photo slot — no section color band (text/CTA still editable). */
@@ -13221,14 +13368,14 @@
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text">' +
               '<h1>' + siteNameSpan(tenant, 'Welcome') + '</h1>' +
-              '<p><span data-edit-key="luxeHeroTagline">' + esc(luxeHeroLine) + '</span></p>' +
+              '<p>' + siteTextSpan('luxeHeroTagline', luxeHeroLine) + '</p>' +
               luxeHeroCta +
             '</div>' +
           '</div>' +
         '</section>';
 
-        var stripEyebrow = luxeTenantTrim('luxeFeaturedWorkEyebrow') || 'Gallery';
-        var stripHeading = luxeTenantTrim('luxeFeaturedWorkHeading') || 'Featured work';
+        var stripEyebrow = tenantSiteText(tenant, 'luxeFeaturedWorkEyebrow', 'Gallery');
+        var stripHeading = tenantSiteText(tenant, 'luxeFeaturedWorkHeading', 'Featured work');
         var showFeaturedStrip = tenantShowGalleryPage(tenant) && tenant.luxeShowFeaturedWorkStrip !== false;
 
         var servicesSection = '';
@@ -13248,16 +13395,16 @@
             '</div>';
           }
           servicesSection = '<section id="gallery" class="luxe-services-section" data-bk-color-surface="featured" data-bk-band-tappable>' +
-            bkColorBandInnerWrap('<p class="luxe-section-label"><span data-edit-key="luxeFeaturedWorkEyebrow">' + esc(stripEyebrow) + '</span></p>' +
-            '<h2 class="luxe-section-heading"><span data-edit-key="luxeFeaturedWorkHeading">' + esc(stripHeading) + '</span></h2>' +
+            bkColorBandInnerWrap('<p class="luxe-section-label">' + siteTextSpan('luxeFeaturedWorkEyebrow', stripEyebrow) + '</p>' +
+            '<h2 class="luxe-section-heading">' + siteTextSpan('luxeFeaturedWorkHeading', stripHeading) + '</h2>' +
             '<div class="luxe-services-grid">' + serviceCards + '</div>') +
           '</section>';
         }
 
         var homeServicesSection = '';
         if (tenant.luxeShowHomeServicesSection === true && services && services.length > 0) {
-          var menuEyebrow = luxeTenantTrim('luxeHomeServicesEyebrow') || 'Services';
-          var menuHeading = luxeTenantTrim('luxeHomeServicesHeading') || 'What we offer';
+          var menuEyebrow = tenantSiteText(tenant, 'luxeHomeServicesEyebrow', 'Services');
+          var menuHeading = tenantSiteText(tenant, 'luxeHomeServicesHeading', 'What we offer');
           var showLuxeHomeMenuDur = tenant.classicShowServiceDuration !== false;
           var menuRows = '';
           for (var li = 0; li < services.length; li++) {
@@ -13294,8 +13441,8 @@
               '<details class="luxe-home-services-details">' +
               '<summary class="luxe-home-services-summary">' +
               '<div class="luxe-home-services-summary-text">' +
-              '<p class="luxe-section-label"><span data-edit-key="luxeHomeServicesEyebrow">' + esc(menuEyebrow) + '</span></p>' +
-              '<h2 class="luxe-section-heading"><span data-edit-key="luxeHomeServicesHeading">' + esc(menuHeading) + '</span></h2>' +
+              '<p class="luxe-section-label">' + siteTextSpan('luxeHomeServicesEyebrow', menuEyebrow) + '</p>' +
+              '<h2 class="luxe-section-heading">' + siteTextSpan('luxeHomeServicesHeading', menuHeading) + '</h2>' +
               '</div>' +
               '<span class="luxe-home-services-expand-hint">View menu</span>' +
               '</summary>' +
@@ -13303,8 +13450,8 @@
               '</details></section>';
           } else {
             homeServicesSection = '<section id="services" class="luxe-home-services-section">' +
-              '<p class="luxe-section-label"><span data-edit-key="luxeHomeServicesEyebrow">' + esc(menuEyebrow) + '</span></p>' +
-              '<h2 class="luxe-section-heading"><span data-edit-key="luxeHomeServicesHeading">' + esc(menuHeading) + '</span></h2>' +
+              '<p class="luxe-section-label">' + siteTextSpan('luxeHomeServicesEyebrow', menuEyebrow) + '</p>' +
+              '<h2 class="luxe-section-heading">' + siteTextSpan('luxeHomeServicesHeading', menuHeading) + '</h2>' +
               listInner +
               '</section>';
           }
@@ -13312,15 +13459,15 @@
         }
 
         var promoTag = tenant.tagline || 'Book with confidence.';
-        var promoHeadline = tenant.luxePromoHeadline
-          ? String(tenant.luxePromoHeadline)
-          : defaultLuxePromoHeadlineForIndustry(tenant.industry);
+        var promoHeadline = tenantSiteTextOrCompute(tenant, 'luxePromoHeadline', function() {
+          return defaultLuxePromoHeadlineForIndustry(tenant.industry);
+        });
         var promoCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-promo-cta">' + wcSpan(tenant, 'wc.luxe.promoCta', 'Book Now') + '</a>'
           : '';
         var promo = '<section class="luxe-promo" data-bk-color-surface="card" data-bk-band-tappable>' +
           bkColorBandInnerWrap('<div class="luxe-promo-inner">' +
-            '<h2><span data-edit-key="luxePromoHeadline">' + esc(promoHeadline) + '</span></h2>' +
+            '<h2>' + siteTextSpan('luxePromoHeadline', promoHeadline) + '</h2>' +
             '<p>' + wcSpan(tenant, 'wc.luxe.promoTag', promoTag) + '</p>' +
             promoCta +
           '</div>') +

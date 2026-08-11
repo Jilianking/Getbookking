@@ -556,18 +556,16 @@ struct BookingRequestListRow: View {
     @ViewBuilder
     private var metadataChipsRow: some View {
         HStack(spacing: 8) {
-            AppMetadataChip(icon: "scissors", text: serviceName)
+            AppMetadataChip(text: serviceName)
             if let start = request.requestedStartTime {
                 AppMetadataChip(
-                    icon: "calendar",
                     text: start.formatted(.dateTime.month(.abbreviated).day())
                 )
                 AppMetadataChip(
-                    icon: "clock",
                     text: start.formatted(date: .omitted, time: .shortened)
                 )
             } else if let preferred = request.preferredTime, !preferred.isEmpty {
-                AppMetadataChip(icon: "clock", text: preferred)
+                AppMetadataChip(text: preferred)
             }
         }
     }
@@ -695,12 +693,6 @@ struct BookingRequestDetailView: View {
         return !PhoneFormatting.digits(from: phone).isEmpty
     }
 
-    private var confirmedTimeSystemImage: String {
-        statusLower == "confirmed" && currentRequest.requestedStartTime != nil
-            ? "checkmark.circle.fill"
-            : "clock.badge.questionmark"
-    }
-
     var body: some View {
         detailNavigationStack
             .sheet(isPresented: $showAssignScheduleSheet) {
@@ -818,7 +810,7 @@ struct BookingRequestDetailView: View {
             if canManageAssignment, !isPendingConfirmation, showsStaffAssignmentUI {
                 assignFromScheduleSection
             } else if let staff = currentRequest.assignedMemberDisplayLabel {
-                BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
+                BookingRequestDetailRow(label: "Assigned to", value: staff)
             }
             if let mode = currentRequest.bookingModeUsed, !mode.isEmpty {
                 BookingRequestDetailRow(label: "Booking mode", value: mode)
@@ -835,22 +827,19 @@ struct BookingRequestDetailView: View {
             if let start = request.requestedStartTime {
                 BookingRequestDetailRow(
                     label: "Requested date",
-                    value: start.formatted(.dateTime.month(.abbreviated).day().year()),
-                    systemImage: "calendar"
+                    value: start.formatted(.dateTime.month(.abbreviated).day().year())
                 )
                 BookingRequestDetailRow(
                     label: "Requested time",
-                    value: start.formatted(date: .omitted, time: .shortened),
-                    systemImage: "clock"
+                    value: start.formatted(date: .omitted, time: .shortened)
                 )
             } else if let created = request.createdAt {
                 BookingRequestDetailRow(
                     label: "Submitted",
-                    value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
-                    systemImage: "calendar"
+                    value: created.formatted(.dateTime.month(.abbreviated).day().year().hour().minute())
                 )
                 if let pt = request.preferredTime, !pt.isEmpty {
-                    BookingRequestDetailRow(label: "Preferred time", value: pt, systemImage: "clock")
+                    BookingRequestDetailRow(label: "Preferred time", value: pt)
                 }
                 if let days = request.preferredDays, !days.isEmpty {
                     BookingRequestDetailRow(
@@ -873,7 +862,6 @@ struct BookingRequestDetailView: View {
                 BookingRequestDetailRow(
                     label: "Confirmed time",
                     value: confirmedTimeLabel,
-                    systemImage: confirmedTimeSystemImage,
                     showsChevron: true
                 )
             }
@@ -881,8 +869,7 @@ struct BookingRequestDetailView: View {
         } else {
             BookingRequestDetailRow(
                 label: "Confirmed time",
-                value: confirmedTimeLabel,
-                systemImage: confirmedTimeSystemImage
+                value: confirmedTimeLabel
             )
         }
     }
@@ -929,16 +916,13 @@ struct BookingRequestDetailView: View {
     @ViewBuilder
     private var contactPhoneSection: some View {
         if let phone = request.customerPhone, !phone.isEmpty,
-           let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })"),
            !phone.filter(\.isNumber).isEmpty {
-            Link(destination: telURL) {
-                contactRow(
-                    icon: "phone.fill",
-                    iconColor: .green,
-                    title: PhoneFormatting.displayUS(phone),
-                    trailing: "arrow.up.right"
-                )
-            }
+            contactRow(
+                icon: "phone.fill",
+                iconColor: .green,
+                title: PhoneFormatting.displayUS(phone),
+                trailing: nil
+            )
             Divider()
             Button(action: openMessagesForClient) {
                 contactRow(
@@ -1084,20 +1068,16 @@ struct BookingRequestDetailView: View {
                let start = currentRequest.requestedStartTime {
                 BookingRequestDetailRow(
                     label: "Assigned to",
-                    value: "\(staff) · \(start.formatted(date: .omitted, time: .shortened))",
-                    systemImage: "person.fill"
+                    value: "\(staff) · \(start.formatted(date: .omitted, time: .shortened))"
                 )
             } else if let staff = currentRequest.assignedMemberDisplayLabel {
-                BookingRequestDetailRow(label: "Assigned to", value: staff, systemImage: "person.fill")
+                BookingRequestDetailRow(label: "Assigned to", value: staff)
             }
             Button {
                 showAssignScheduleSheet = true
             } label: {
-                Label(
-                    assignScheduleButtonTitle,
-                    systemImage: "calendar.badge.clock"
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(assignScheduleButtonTitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.bordered)
             if showsStaffAssignmentUI {
@@ -1204,12 +1184,11 @@ struct BookingRequestDetailView: View {
 
     private func openMessagesForClient() {
         guard let phone = currentRequest.customerPhone, !phone.isEmpty else { return }
-        drawerState.messagesComposePhone = phone
-        drawerState.messagesComposeClientName = currentRequest.customerName ?? ""
-        drawerState.messagesComposeBookingRequestId = currentRequest.documentId
-        drawerState.messagesShouldOpenCompose = true
-        drawerState.selectedSection = .messages
-        drawerState.isOpen = false
+        drawerState.openExistingMessagesThread(
+            phone: phone,
+            clientName: currentRequest.customerName,
+            bookingRequestId: currentRequest.documentId
+        )
         dismiss()
     }
 }

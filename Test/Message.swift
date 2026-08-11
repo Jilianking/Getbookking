@@ -96,6 +96,8 @@ struct Message: Codable, Identifiable {
     var paymentKind: MessagePaymentKind? = nil
     var amountCents: Int? = nil
     var paymentUrl: String? = nil
+    /// Public HTTPS image URLs for MMS (Firebase Storage).
+    var mediaUrls: [String] = []
 
     enum MessageSender: String, Codable {
         case client = "client"
@@ -105,6 +107,10 @@ struct Message: Codable, Identifiable {
     /// Stable id for SwiftUI when backend id is nil
     var stableId: String {
         id ?? "\(clientId)-\(createdAt.timeIntervalSince1970)"
+    }
+
+    var hasMedia: Bool {
+        mediaUrls.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     var isPaymentRequest: Bool {
@@ -119,6 +125,8 @@ struct Message: Codable, Identifiable {
         guard let cents = amountCents, cents > 0 else { return nil }
         return String(format: "$%.2f", Double(cents) / 100.0)
     }
+
+    static var photoThreadPreview: String { "Photo" }
 
     /// SMS body the client receives (and fallback plain-text content).
     static func paymentRequestSMSBody(

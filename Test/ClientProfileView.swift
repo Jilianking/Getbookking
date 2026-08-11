@@ -28,6 +28,7 @@ struct ClientProfileView: View {
 
     @State private var showingEditSheet = false
     @State private var scheduleSheetMode: ClientScheduleSheetMode?
+    @State private var selectedBookingDetail: BookingRequest?
 
     init(client: Client, clientsViewModel: ClientsViewModel, drawerState: DrawerState) {
         _viewModel = StateObject(wrappedValue: ClientProfileViewModel(client: client))
@@ -45,6 +46,7 @@ struct ClientProfileView: View {
                         .padding(.bottom, 96)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
 
             bottomActionBar
         }
@@ -64,14 +66,37 @@ struct ClientProfileView: View {
         }
         .task {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)
+            requestsViewModel.sessionStore = sessionStore
+            await requestsViewModel.loadRequests(
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
         }
         .onDisappear {
             Task { await viewModel.flushNoteEntriesSave() }
         }
         .sheet(isPresented: $showingEditSheet) {
-            ClientProfileEditSheet(viewModel: viewModel) {
-                Task { await clientsViewModel.loadClients(isDemoMode: authViewModel.isDemoMode) }
-            }
+            ClientProfileEditSheet(
+                viewModel: viewModel,
+                onViewNotes: {
+                    showingEditSheet = false
+                    viewModel.selectedTab = .notes
+                },
+                onSaved: {
+                    Task { await clientsViewModel.loadClients(isDemoMode: authViewModel.isDemoMode) }
+                }
+            )
+        }
+        .sheet(item: $selectedBookingDetail, onDismiss: {
+            Task { await reloadAfterSchedule() }
+        }) { booking in
+            BookingRequestDetailView(
+                request: resolvedBooking(booking),
+                viewModel: requestsViewModel,
+                drawerState: drawerState,
+                teamAccess: teamAccess
+            )
+            .environmentObject(sessionStore)
         }
         .sheet(item: $scheduleSheetMode, onDismiss: {
             Task { await reloadAfterSchedule() }
@@ -268,9 +293,14 @@ struct ClientProfileView: View {
             }
 
             if let upcoming = viewModel.upcomingBooking, let date = upcoming.requestedStartTime {
-                ProfileDetailCard(sectionTitle: "Upcoming appointment") {
-                    upcomingAppointmentContent(booking: upcoming, date: date)
+                Button {
+                    openBookingDetail(upcoming)
+                } label: {
+                    ProfileDetailCard(sectionTitle: "Upcoming appointment") {
+                        upcomingAppointmentContent(booking: upcoming, date: date)
+                    }
                 }
+                .buttonStyle(.plain)
             }
 
             ProfileDetailCard(sectionTitle: "Contact information") {
@@ -288,44 +318,68 @@ struct ClientProfileView: View {
             }
 
             if let preview = viewModel.client.latestNotePreview {
-                ProfileDetailCard(sectionTitle: "Internal notes") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(preview)
-                            .font(.subheadline)
-                            .lineLimit(4)
-                        if viewModel.client.resolvedNoteEntries.count > 1 {
-                            Text("\(viewModel.client.resolvedNoteEntries.count) notes")
-                                .font(.caption)
-                                .foregroundStyle(AppDesign.textSecondary)
+                Button {
+                    viewModel.selectedTab = .notes
+                } label: {
+                    ProfileDetailCard(sectionTitle: "Internal notes") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(preview)
+                                .font(.subheadline)
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .lineLimit(4)
+                                .multilineTextAlignment(.leading)
+                            HStack {
+                                if viewModel.client.resolvedNoteEntries.count > 1 {
+                                    Text("\(viewModel.client.resolvedNoteEntries.count) notes")
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppDesign.textSecondary)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(Color.yellow.opacity(0.12))
+                        .cornerRadius(10)
+                        .padding(.top, 4)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(Color.yellow.opacity(0.12))
-                    .cornerRadius(10)
-                    .padding(.top, 4)
                 }
+                .buttonStyle(.plain)
             }
 
             if !viewModel.recentVisits.isEmpty {
                 ProfileDetailCard(sectionTitle: "Recent visits") {
                     VStack(spacing: 0) {
                         ForEach(Array(viewModel.recentVisits.enumerated()), id: \.element.id) { index, visit in
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(visit.serviceName)
-                                        .font(.subheadline.weight(.semibold))
-                                    Text(visit.date.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                            Button {
+                                openBookingDetail(id: visit.id)
+                            } label: {
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(visit.serviceName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(AppDesign.textPrimary)
+                                        Text(visit.date.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    if let price = visit.price {
+                                        Text(formatCurrency(price))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(AppDesign.textPrimary)
+                                    }
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppDesign.textSecondary)
                                 }
-                                Spacer()
-                                if let price = visit.price {
-                                    Text(formatCurrency(price))
-                                        .font(.subheadline.weight(.semibold))
-                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 12)
+                            .buttonStyle(.plain)
                             if index < viewModel.recentVisits.count - 1 {
                                 Divider()
                             }
@@ -379,15 +433,12 @@ struct ClientProfileView: View {
     @ViewBuilder
     private var contactInformationContent: some View {
         VStack(spacing: 0) {
-            if let phone = viewModel.client.phone, !phone.isEmpty,
-               let telURL = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                Link(destination: telURL) {
-                    contactLinkRow(
-                        systemImage: "phone.fill",
-                        iconColor: .green,
-                        text: PhoneFormatting.displayUS(phone)
-                    )
-                }
+            if let phone = viewModel.client.phone, !phone.isEmpty {
+                contactLinkRow(
+                    systemImage: "phone.fill",
+                    iconColor: .green,
+                    text: PhoneFormatting.displayUS(phone)
+                )
                 if !viewModel.client.email.isEmpty { Divider() }
             }
 
@@ -494,21 +545,36 @@ struct ClientProfileView: View {
                     .padding(.top, 40)
             } else {
                 ForEach(viewModel.matchingBookings) { booking in
-                    ProfileDetailCard(sectionTitle: booking.serviceName ?? "Booking") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            BookingRequestDetailRow(label: "Status", value: BookingRequestStatus.displayLabel(booking.status))
-                            if let date = booking.requestedStartTime ?? booking.createdAt {
-                                BookingRequestDetailRow(
-                                    label: "Date",
-                                    value: date.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
-                                    systemImage: "calendar"
-                                )
-                            }
-                            if let notes = booking.notes, !notes.isEmpty {
-                                BookingRequestDetailRow(label: "Notes", value: notes)
+                    Button {
+                        openBookingDetail(booking)
+                    } label: {
+                        ProfileDetailCard(sectionTitle: booking.serviceName ?? "Booking") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                BookingRequestDetailRow(label: "Status", value: BookingRequestStatus.displayLabel(booking.status))
+                                if let date = booking.requestedStartTime ?? booking.createdAt {
+                                    BookingRequestDetailRow(
+                                        label: "Date",
+                                        value: date.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),
+                                        systemImage: "calendar"
+                                    )
+                                }
+                                if let notes = booking.notes, !notes.isEmpty {
+                                    BookingRequestDetailRow(label: "Notes", value: notes)
+                                }
+                                HStack {
+                                    Spacer()
+                                    Text("View request")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppDesign.brandWarm)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppDesign.textSecondary)
+                                }
+                                .padding(.top, 4)
                             }
                         }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -588,6 +654,7 @@ struct ClientProfileView: View {
                             TextEditor(text: $entry.body)
                                 .frame(minHeight: 120)
                                 .scrollContentBackground(.hidden)
+                                .scrollDismissesKeyboard(.interactively)
                                 .onChange(of: entry.body) { _, _ in
                                     viewModel.noteEntryBodyChanged(id: entry.id)
                                 }
@@ -643,15 +710,6 @@ struct ClientProfileView: View {
 
     private var bottomActionBar: some View {
         HStack(spacing: 12) {
-            if let phoneURL = callURL {
-                Link(destination: phoneURL) {
-                    Label("Call", systemImage: "phone.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.bordered)
-            }
-
             Button {
                 openMessagesCompose()
             } label: {
@@ -660,6 +718,7 @@ struct ClientProfileView: View {
                     .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
+            .tint(AppDesign.brandDark)
             .disabled(viewModel.messageThreadId == nil)
         }
         .padding(.horizontal)
@@ -677,22 +736,28 @@ struct ClientProfileView: View {
         return hasPreferredTime || hasStyle || hasAllergies || hasStaff || hasDays
     }
 
-    private var callURL: URL? {
-        let digits = PhoneFormatting.digits(from: viewModel.client.phone ?? "")
-        guard digits.count >= 10 else { return nil }
-        return URL(string: "tel://+\(digits)")
+    private func openBookingDetail(_ booking: BookingRequest) {
+        selectedBookingDetail = booking
+    }
+
+    private func openBookingDetail(id: String) {
+        if let booking = viewModel.matchingBookings.first(where: { $0.id == id || $0.documentId == id }) {
+            selectedBookingDetail = booking
+        } else {
+            viewModel.selectedTab = .history
+        }
     }
 
     private func openMessagesCompose() {
         guard let phone = viewModel.client.phone else { return }
-        drawerState.messagesComposePhone = phone
-        drawerState.messagesComposeClientName = viewModel.client.name
-        drawerState.messagesComposeBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
-            forClientPhone: phone,
-            in: viewModel.bookings
+        drawerState.openExistingMessagesThread(
+            phone: phone,
+            clientName: viewModel.client.name,
+            bookingRequestId: BookingRequestPaymentLookup.bookingRequestId(
+                forClientPhone: phone,
+                in: viewModel.bookings
+            )
         )
-        drawerState.messagesShouldOpenCompose = true
-        drawerState.selectedSection = .messages
     }
 
     private func formatCurrency(_ value: Double) -> String {
@@ -782,20 +847,21 @@ private struct ProfileStatCard: View {
 
 private struct ClientProfileEditSheet: View {
     @ObservedObject var viewModel: ClientProfileViewModel
+    var onViewNotes: () -> Void
     var onSaved: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
     @State private var email = ""
     @State private var phone = ""
-    @State private var vip = false
     @State private var birthday = ""
-    @State private var referralSource = ""
     @State private var preferredTime = ""
-    @State private var tattooStyles: [String] = []
-    @State private var allergies: [String] = []
     @State private var profileExtras: [Client.ClientProfileExtra] = []
     @State private var isSaving = false
+
+    private var notesCount: Int {
+        viewModel.client.resolvedNoteEntries.count
+    }
 
     var body: some View {
         NavigationStack {
@@ -812,9 +878,7 @@ private struct ClientProfileEditSheet: View {
                     .keyboardType(.phonePad)
                 }
                 Section("Profile") {
-                    Toggle("VIP client", isOn: $vip)
                     TextField("Birthday", text: $birthday)
-                    TextField("Referral source", text: $referralSource)
                     ForEach($profileExtras) { $extra in
                         HStack(spacing: 8) {
                             TextField("Label", text: $extra.label)
@@ -834,39 +898,22 @@ private struct ClientProfileEditSheet: View {
                 }
                 Section("Preferences") {
                     TextField("Preferred time", text: $preferredTime)
-                    ForEach(tattooStyles.indices, id: \.self) { index in
-                        HStack(spacing: 8) {
-                            TextField("Tattoo style", text: $tattooStyles[index])
-                            if tattooStyles.count > 1 {
-                                Button(role: .destructive) {
-                                    tattooStyles.remove(at: index)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red.opacity(0.85))
-                                }
-                                .buttonStyle(.plain)
+                }
+                Section("Notes") {
+                    Button {
+                        onViewNotes()
+                    } label: {
+                        HStack {
+                            Label("View notes", systemImage: "note.text")
+                            Spacer()
+                            if notesCount > 0 {
+                                Text("\(notesCount)")
+                                    .foregroundStyle(AppDesign.textSecondary)
                             }
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppDesign.textSecondary)
                         }
-                    }
-                    addRowButton(title: "Add style") {
-                        tattooStyles.append("")
-                    }
-                    ForEach(allergies.indices, id: \.self) { index in
-                        HStack(spacing: 8) {
-                            TextField("Allergy", text: $allergies[index])
-                            if allergies.count > 1 {
-                                Button(role: .destructive) {
-                                    allergies.remove(at: index)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red.opacity(0.85))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    addRowButton(title: "Add allergy") {
-                        allergies.append("")
                     }
                 }
             }
@@ -884,12 +931,8 @@ private struct ClientProfileEditSheet: View {
                                 name: name,
                                 email: email,
                                 phone: phone,
-                                vip: vip,
                                 birthday: birthday,
-                                referralSource: referralSource,
                                 preferredTime: preferredTime,
-                                tattooStyles: tattooStyles,
-                                allergies: allergies,
                                 profileExtras: profileExtras
                             )
                             isSaving = false
@@ -904,13 +947,8 @@ private struct ClientProfileEditSheet: View {
                 name = viewModel.client.name
                 email = viewModel.client.email
                 phone = PhoneFormatting.displayUS(viewModel.client.phone ?? "")
-                vip = viewModel.client.vip
                 birthday = viewModel.client.birthday ?? ""
-                referralSource = viewModel.client.referralSource ?? ""
                 preferredTime = viewModel.client.preferences?.preferredTime ?? ""
-                let styles = viewModel.client.preferences?.resolvedTattooStyles ?? []
-                tattooStyles = styles
-                allergies = viewModel.client.preferences?.allergies ?? []
                 profileExtras = viewModel.client.profileExtras ?? []
             }
         }

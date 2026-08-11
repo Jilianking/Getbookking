@@ -6,10 +6,13 @@
 
 import SwiftUI
 import FirebaseAuth
+import PhotosUI
+import UIKit
 
 // MARK: - Icons (Assets.xcassets, sourced from ui_icons.svg)
 
 enum MessageComposerIcon: CaseIterable, Identifiable {
+    case photo
     case deposit
     case paymentLink
     case bookingLink
@@ -20,6 +23,7 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .photo: return "Photo"
         case .deposit: return "Request deposit"
         case .paymentLink: return "Request payment"
         case .bookingLink: return "Booking link"
@@ -32,6 +36,7 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .photo: return "photo.fill"
         case .deposit: return "arrow.down.circle.fill"
         case .paymentLink: return "creditcard.fill"
         case .bookingLink: return "link"
@@ -42,6 +47,7 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
 
     var accentColor: Color {
         switch self {
+        case .photo: return Color(red: 0.35, green: 0.72, blue: 0.45)
         case .deposit: return Color(red: 0.20, green: 0.55, blue: 0.95)
         case .paymentLink: return Color(red: 0.23, green: 0.48, blue: 0.95)
         case .bookingLink: return Color(red: 0.55, green: 0.40, blue: 0.28)
@@ -52,12 +58,24 @@ enum MessageComposerIcon: CaseIterable, Identifiable {
 
     /// Top-to-bottom above the +; money actions first (thumb lands here).
     static var stackOrder: [MessageComposerIcon] {
-        [.paymentLink, .deposit, .bookAppointment, .bookingLink, .quickReplies]
+        [.photo, .paymentLink, .deposit, .bookAppointment, .bookingLink, .quickReplies]
     }
 
     static let iconSize: CGFloat = 36
     static let iconSpacing: CGFloat = 14
     static let plusButtonSize: CGFloat = 36
+}
+
+private struct PendingMessagePhoto: Identifiable {
+    let id: UUID
+    let data: Data
+    let image: UIImage
+
+    init(id: UUID = UUID(), data: Data, image: UIImage) {
+        self.id = id
+        self.data = data
+        self.image = image
+    }
 }
 
 // MARK: - Composer bar
@@ -74,6 +92,8 @@ struct MessageComposerBar: View {
     var onSend: () -> Void
     /// When set, deposit/payment sheets send a structured amount bubble instead of inserting text.
     var onSendPaymentRequest: ((MessagePaymentSheetKind, Int, String) -> Void)? = nil
+    /// Draft photos + optional caption — caller uploads and sends MMS.
+    var onSendPhoto: (([Data], String) -> Void)? = nil
     var clientName: String
     var clientPhone: String
     var bookingRequestId: String?
@@ -90,6 +110,11 @@ struct MessageComposerBar: View {
     @State private var showingStaffScheduleSheet = false
     @State private var showingLegacyBookingForm = false
     @State private var actionNotice: String?
+    @State private var showingPhotoPicker = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var pendingPhotos: [PendingMessagePhoto] = []
+
+    private static let maxPendingPhotos = 5
 
     private var usablePresets: [String] {
         quickPresets
@@ -103,6 +128,17 @@ struct MessageComposerBar: View {
             icons.removeAll { $0 == .quickReplies }
         }
         return icons
+    }
+
+    private var hasPendingPhoto: Bool { !pendingPhotos.isEmpty }
+
+    private var hasTypedText: Bool {
+        !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Parent `canSend` = recipient ready; composer also requires text and/or a draft photo.
+    private var sendEnabled: Bool {
+        !isSending && canSend && (hasTypedText || hasPendingPhoto)
     }
 
 
@@ -121,6 +157,10 @@ struct MessageComposerBar: View {
                         quickRepliesPanel
                             .transition(.opacity.combined(with: .move(edge: .trailing)))
                     }
+                    if !pendingPhotos.isEmpty {
+                        pendingPhotosStrip
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
                     composerField
                 }
             }
@@ -132,6 +172,7 @@ struct MessageComposerBar: View {
         .background(composerBackground)
         .animation(.easeOut(duration: 0.22), value: actionsExpanded)
         .animation(.easeOut(duration: 0.22), value: quickRepliesExpanded)
+        .animation(.easeOut(duration: 0.2), value: pendingPhotos.count)
         .task {
             await loadComposerContext()
         }
@@ -190,6 +231,25 @@ struct MessageComposerBar: View {
         } message: {
             Text(actionNotice ?? "")
         }
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: max(1, Self.maxPendingPhotos - pendingPhotos.count),
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: photoPickerItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            Task {
+                await loadPendingPhotos(from: newItems)
+            }
+        }
+        .onChange(of: actionsExpanded) { _, expanded in
+            // Tray open ⇒ keyboard must stay down and field unfocusable.
+            if expanded {
+                dismissKeyboard()
+            }
+        }
     }
 
     private var composerBackground: Color {
@@ -211,6 +271,7 @@ struct MessageComposerBar: View {
 
     private var plusToggleButton: some View {
         Button {
+            dismissKeyboard()
             withAnimation(.easeOut(duration: 0.22)) {
                 if actionsExpanded {
                     collapseMenus()
@@ -267,6 +328,52 @@ struct MessageComposerBar: View {
 
     // MARK: Composer field
 
+    private var pendingPhotosStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(pendingPhotos) { draft in
+                    pendingPhotoThumb(draft)
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 2)
+            .padding(.bottom, 2)
+        }
+    }
+
+    private func pendingPhotoThumb(_ draft: PendingMessagePhoto) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: draft.image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(
+                            darkStyle ? Color.white.opacity(0.18) : Color(.separator).opacity(0.35),
+                            lineWidth: 1
+                        )
+                )
+
+            Button {
+                removePendingPhoto(id: draft.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(
+                        Color.white,
+                        Color.black.opacity(0.55)
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(4)
+            .accessibilityLabel("Remove photo")
+        }
+        .frame(width: 72, height: 72)
+    }
+
     @ViewBuilder
     private var composerField: some View {
         if darkStyle {
@@ -275,6 +382,7 @@ struct MessageComposerBar: View {
                     .focused($fieldFocused)
                     .foregroundColor(.white)
                     .lineLimit(1...4)
+                    .disabled(actionsExpanded)
                 sendButton(
                     activeColor: .blue,
                     idleColor: .white.opacity(0.55)
@@ -286,13 +394,15 @@ struct MessageComposerBar: View {
                 RoundedRectangle(cornerRadius: 21)
                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
             )
+            .allowsHitTesting(!actionsExpanded)
         } else {
             HStack(spacing: 8) {
                 TextField(placeholder, text: $message, axis: .vertical)
                     .focused($fieldFocused)
                     .lineLimit(1...4)
+                    .disabled(actionsExpanded)
                 sendButton(
-                    activeColor: AppDesign.accentBlue,
+                    activeColor: AppDesign.brandDark,
                     idleColor: .secondary
                 )
             }
@@ -304,26 +414,38 @@ struct MessageComposerBar: View {
                 RoundedRectangle(cornerRadius: 21, style: .continuous)
                     .stroke(Color(.separator).opacity(0.35), lineWidth: 1)
             )
+            .allowsHitTesting(!actionsExpanded)
         }
     }
 
     private func sendButton(activeColor: Color, idleColor: Color) -> some View {
-        Button(action: {
-            if canSend && !isSending { onSend() }
-        }) {
+        Button(action: performSend) {
             if isSending {
                 ProgressView()
                     .tint(activeColor)
             } else if darkStyle {
-                Image(systemName: canSend ? "arrow.up.circle.fill" : "arrow.up.circle")
+                Image(systemName: sendEnabled ? "arrow.up.circle.fill" : "arrow.up.circle")
                     .font(.system(size: 21, weight: .regular))
-                    .foregroundColor(canSend ? activeColor : idleColor)
+                    .foregroundColor(sendEnabled ? activeColor : idleColor)
             } else {
                 Image(systemName: "paperplane.fill")
-                    .foregroundColor(canSend ? activeColor : idleColor)
+                    .foregroundColor(sendEnabled ? activeColor : idleColor)
             }
         }
-        .disabled(!canSend || isSending)
+        .disabled(!sendEnabled)
+    }
+
+    private func performSend() {
+        guard sendEnabled else { return }
+        if !pendingPhotos.isEmpty {
+            let caption = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            let payloads = pendingPhotos.map(\.data)
+            clearPendingPhotos()
+            message = ""
+            onSendPhoto?(payloads, caption)
+            return
+        }
+        onSend()
     }
 
     // MARK: Quick replies panel
@@ -375,6 +497,21 @@ struct MessageComposerBar: View {
 
     private func handleAction(_ icon: MessageComposerIcon) {
         switch icon {
+        case .photo:
+            if isDemoMode {
+                actionNotice = "Photos aren't available in demo mode."
+                return
+            }
+            guard onSendPhoto != nil else {
+                actionNotice = "Photos aren't available right now."
+                return
+            }
+            if pendingPhotos.count >= Self.maxPendingPhotos {
+                actionNotice = "You can attach up to \(Self.maxPendingPhotos) photos."
+                return
+            }
+            collapseMenus()
+            showingPhotoPicker = true
         case .deposit:
             if isDemoMode {
                 actionNotice = "Deposits aren't available in demo mode."
@@ -408,8 +545,8 @@ struct MessageComposerBar: View {
                 actionNotice = "Your booking site is not set up yet."
                 return
             }
-            insertIntoMessage("Book online here: \(bookingUrl)")
             collapseMenus()
+            insertIntoMessage("Book online here: \(bookingUrl)", refocusComposer: true)
         case .bookAppointment:
             openStaffScheduleSheet()
             collapseMenus()
@@ -426,6 +563,8 @@ struct MessageComposerBar: View {
 
     private func isActionAvailable(_ icon: MessageComposerIcon) -> Bool {
         switch icon {
+        case .photo:
+            return !isDemoMode && onSendPhoto != nil
         case .deposit, .paymentLink:
             return !isDemoMode && paymentsViewModel.subscriptionPaid && paymentsViewModel.stripeConnected
         case .bookingLink:
@@ -435,19 +574,88 @@ struct MessageComposerBar: View {
         }
     }
 
-    private func insertIntoMessage(_ text: String) {
+    private func loadPendingPhotos(from items: [PhotosPickerItem]) async {
+        defer {
+            Task { @MainActor in
+                photoPickerItems = []
+            }
+        }
+        var loaded: [PendingMessagePhoto] = []
+        var failed = 0
+        for item in items.prefix(Self.maxPendingPhotos) {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      !data.isEmpty,
+                      let image = UIImage(data: data) else {
+                    failed += 1
+                    continue
+                }
+                loaded.append(PendingMessagePhoto(data: data, image: image))
+            } catch {
+                failed += 1
+            }
+        }
+        await MainActor.run {
+            if loaded.isEmpty {
+                actionNotice = "Couldn't load that photo."
+                return
+            }
+            let room = max(0, Self.maxPendingPhotos - pendingPhotos.count)
+            let toAdd = Array(loaded.prefix(room))
+            if toAdd.isEmpty {
+                actionNotice = "You can attach up to \(Self.maxPendingPhotos) photos."
+                return
+            }
+            pendingPhotos.append(contentsOf: toAdd)
+            fieldFocused = true
+            if failed > 0 || loaded.count > room {
+                // Soft notice only when something was skipped.
+                if pendingPhotos.count >= Self.maxPendingPhotos {
+                    actionNotice = "You can attach up to \(Self.maxPendingPhotos) photos."
+                } else if failed > 0 {
+                    actionNotice = "Couldn't load some photos."
+                }
+            }
+        }
+    }
+
+    private func removePendingPhoto(id: UUID) {
+        pendingPhotos.removeAll { $0.id == id }
+    }
+
+    private func clearPendingPhotos() {
+        pendingPhotos = []
+    }
+
+    private func insertIntoMessage(_ text: String, refocusComposer: Bool = true) {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             message = text
         } else {
             message = trimmed + "\n\n" + text
         }
-        fieldFocused = true
+        guard refocusComposer else { return }
+        // Wait for the tray collapse to settle, then bring the keyboard back
+        // under the field so it doesn't jump with the layout change.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(240))
+            fieldFocused = true
+        }
     }
 
     private func collapseMenus() {
         actionsExpanded = false
         quickRepliesExpanded = false
+    }
+
+    private func dismissKeyboard() {
+        fieldFocused = false
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private var prefillName: String? {

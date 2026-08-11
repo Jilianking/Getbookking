@@ -139,7 +139,7 @@ struct ConfirmBookingAppointmentSheet: View {
         if isReschedule { return "Update Time" }
         if confirmationType == .consultationFirst { return "Schedule consult" }
         if willSendDeposit { return "Send deposit & hold time" }
-        return "Lock In & Confirm ✓"
+        return "Confirm"
     }
 
     private var isSaving: Bool {

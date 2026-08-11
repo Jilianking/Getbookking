@@ -101,10 +101,50 @@ final class DrawerState {
     var messagesComposeBookingRequestId: String?
     var messagesComposeBody: String?
     var messagesShouldOpenCompose = false
+    /// Open a specific SMS thread from a push notification.
+    var messagesOpenThreadId: String?
+    /// When true, root left-edge swipe won't open the drawer (message thread owns that edge for back).
+    var suppressDrawerEdgeOpen = false
     /// Dashboard Schedule quick action → Calendar + New Booking sheet.
     var calendarShouldOpenNewBooking = false
     /// Incremented when the app tour advances — child views dismiss sheets / inline panels.
     var appTourDismissModalsToken: Int = 0
+
+    /// Prefer opening an existing SMS thread. Falls back to compose when there is no phone but a body to send.
+    func openExistingMessagesThread(
+        phone: String?,
+        clientName: String? = nil,
+        bookingRequestId: String? = nil,
+        body: String? = nil
+    ) {
+        let trimmedPhone = (phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = (body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let threadId = trimmedPhone.isEmpty ? "" : PhoneFormatting.smsThreadId(trimmedPhone)
+
+        messagesComposePhone = nil
+        messagesComposeClientName = nil
+        messagesComposeBookingRequestId = nil
+        messagesComposeBody = nil
+        messagesShouldOpenCompose = false
+        messagesOpenThreadId = nil
+
+        if !threadId.isEmpty {
+            messagesOpenThreadId = threadId
+            if !trimmedBody.isEmpty {
+                messagesComposeBody = trimmedBody
+            }
+            _ = clientName
+            _ = bookingRequestId
+        } else if !trimmedBody.isEmpty {
+            messagesComposeBody = trimmedBody
+            messagesComposeClientName = clientName
+            messagesComposeBookingRequestId = bookingRequestId
+            messagesShouldOpenCompose = true
+        }
+
+        selectedSection = .messages
+        isOpen = false
+    }
 }
 
 struct AdminRootView: View {
@@ -184,6 +224,9 @@ struct AdminRootView: View {
             }
 
         }
+        .overlay(alignment: .leading) {
+            drawerEdgeOpenHitArea
+        }
         .environmentObject(appTour)
         .onPreferenceChange(AppTourFramePreferenceKey.self) { frames in
             appTour.updateFrames(frames)
@@ -191,6 +234,10 @@ struct AdminRootView: View {
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
         .onChange(of: drawerState.selectedSection) { _, section in
             visitedSections.insert(section)
+            // Leaving Messages clears thread edge ownership even if the view stays mounted.
+            if section != .messages {
+                drawerState.suppressDrawerEdgeOpen = false
+            }
         }
         .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
             if !drawerSections.contains(drawerState.selectedSection) {
@@ -231,6 +278,16 @@ struct AdminRootView: View {
                 authViewModel.applyTenantLogoCache(url)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .pushOpenMessagesThread)) { note in
+            let threadId = (note.userInfo?["threadId"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !threadId.isEmpty else { return }
+            drawerState.isOpen = false
+            drawerState.messagesShouldOpenCompose = false
+            drawerState.messagesOpenThreadId = threadId
+            drawerState.selectedSection = .messages
+            visitedSections.insert(.messages)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .tenantBusinessNameDidChange)) { _ in
             Task {
                 await sessionStore.refreshProfileAndTenant()
@@ -239,6 +296,27 @@ struct AdminRootView: View {
                     isDemoMode: authViewModel.isDemoMode
                 )
             }
+        }
+    }
+
+    /// Thin left-edge strip: swipe right opens the drawer without stealing scroll/keyboard elsewhere.
+    @ViewBuilder
+    private var drawerEdgeOpenHitArea: some View {
+        if !drawerState.isOpen, !drawerState.suppressDrawerEdgeOpen {
+            Color.clear
+                .frame(width: 24)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 16, coordinateSpace: .local)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = abs(value.translation.height)
+                            guard dx > 56, dx > dy * 1.15 else { return }
+                            drawerState.isOpen = true
+                        }
+                )
+                .accessibilityHidden(true)
         }
     }
 

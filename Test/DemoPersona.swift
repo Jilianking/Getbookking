@@ -185,7 +185,17 @@ enum DemoSnapshotParser {
 
     static func smsMessage(from dict: [String: Any]) -> Message? {
         let body = (dict["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return nil }
+        let mediaUrls: [String] = {
+            if let arr = dict["mediaUrls"] as? [String] {
+                return arr.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            }
+            if let arr = dict["mediaUrls"] as? [Any] {
+                return arr.compactMap { ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+            return []
+        }()
+        guard !body.isEmpty || !mediaUrls.isEmpty else { return nil }
         let direction = (dict["direction"] as? String ?? "").lowercased()
         let from = dict["from"] as? String ?? ""
         let to = dict["to"] as? String ?? ""
@@ -220,7 +230,8 @@ enum DemoSnapshotParser {
             threadId: threadId,
             paymentKind: paymentKind,
             amountCents: (amountCents ?? 0) > 0 ? amountCents : nil,
-            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil
+            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil,
+            mediaUrls: mediaUrls
         )
     }
 

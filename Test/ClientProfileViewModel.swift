@@ -400,19 +400,14 @@ final class ClientProfileViewModel: ObservableObject {
         name: String,
         email: String,
         phone: String?,
-        vip: Bool,
         birthday: String?,
-        referralSource: String?,
         preferredTime: String?,
-        tattooStyles: [String],
-        allergies: [String],
         profileExtras: [Client.ClientProfileExtra]
     ) async {
         guard let tid = tenantId, let customerId = client.id else { return }
         var updates: [String: Any] = [
             "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
             "email": email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-            "vip": vip,
         ]
         if let phone = PhoneFormatting.normalizedForStorage(phone) {
             updates["phone"] = phone
@@ -422,35 +417,22 @@ final class ClientProfileViewModel: ObservableObject {
         } else {
             updates["birthday"] = FieldValue.delete()
         }
-        if let referralSource, !referralSource.isEmpty {
-            updates["referralSource"] = referralSource
-        } else {
-            updates["referralSource"] = FieldValue.delete()
-        }
 
-        let cleanedStyles = tattooStyles
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let cleanedAllergies = allergies
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        // Preserve VIP / referral / style / allergy data; edit sheet no longer changes them.
+        let existingStyles = client.preferences?.resolvedTattooStyles ?? []
+        let existingAllergies = client.preferences?.allergies ?? []
         var prefs: [String: Any] = [:]
         if let preferredTime, !preferredTime.isEmpty {
             prefs["preferredTime"] = preferredTime
         } else {
             prefs["preferredTime"] = FieldValue.delete()
         }
-        if !cleanedStyles.isEmpty {
-            prefs["tattooStyles"] = cleanedStyles
-            prefs["tattooStyle"] = cleanedStyles[0]
-        } else {
-            prefs["tattooStyles"] = FieldValue.delete()
-            prefs["tattooStyle"] = FieldValue.delete()
+        if !existingStyles.isEmpty {
+            prefs["tattooStyles"] = existingStyles
+            prefs["tattooStyle"] = existingStyles[0]
         }
-        if !cleanedAllergies.isEmpty {
-            prefs["allergies"] = cleanedAllergies
-        } else {
-            prefs["allergies"] = FieldValue.delete()
+        if !existingAllergies.isEmpty {
+            prefs["allergies"] = existingAllergies
         }
         updates["preferences"] = prefs
 
@@ -474,15 +456,13 @@ final class ClientProfileViewModel: ObservableObject {
             client.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             client.email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             client.phone = PhoneFormatting.normalizedForStorage(phone)
-            client.vip = vip
             client.birthday = trimmedOrNil(birthday)
-            client.referralSource = trimmedOrNil(referralSource)
             client.profileExtras = cleanedExtras.isEmpty ? nil : cleanedExtras
             client.preferences = Client.ClientPreferences(
                 preferredTime: trimmedOrNil(preferredTime),
-                tattooStyle: cleanedStyles.first,
-                tattooStyles: cleanedStyles.isEmpty ? nil : cleanedStyles,
-                allergies: cleanedAllergies.isEmpty ? nil : cleanedAllergies
+                tattooStyle: existingStyles.first,
+                tattooStyles: existingStyles.isEmpty ? nil : existingStyles,
+                allergies: existingAllergies.isEmpty ? nil : existingAllergies
             )
             saveError = nil
             do {

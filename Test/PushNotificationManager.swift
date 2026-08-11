@@ -103,6 +103,37 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound, .badge]
     }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let userInfo = response.notification.request.content.userInfo
+        let type = Self.stringValue(userInfo["type"])?.lowercased() ?? ""
+        guard type == "sms_message" || type == "booking_request" else { return }
+        if type == "sms_message",
+           let threadId = Self.stringValue(userInfo["threadId"]),
+           !threadId.isEmpty {
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .pushOpenMessagesThread,
+                    object: nil,
+                    userInfo: ["threadId": threadId]
+                )
+            }
+        }
+    }
+
+    private nonisolated static func stringValue(_ raw: Any?) -> String? {
+        if let s = raw as? String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        if let n = raw as? NSNumber {
+            return n.stringValue
+        }
+        return nil
+    }
 }
 
 extension PushNotificationManager: MessagingDelegate {
@@ -112,4 +143,8 @@ extension PushNotificationManager: MessagingDelegate {
             await persistFCMToken(fcmToken)
         }
     }
+}
+
+extension Notification.Name {
+    static let pushOpenMessagesThread = Notification.Name("pushOpenMessagesThread")
 }

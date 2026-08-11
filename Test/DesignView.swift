@@ -81,15 +81,16 @@ struct DesignView: View {
                         if !isShowingManage {
                             HStack(spacing: 12) {
                                 if viewModel.hasTenant, !authViewModel.isDemoMode {
-                                    Text("Preview")
+                                    Text("Edit")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(
                                             isQuickEditEnabled ? AppDesign.textSecondary : AppDesign.textPrimary
                                         )
+                                        .padding(.leading, 4)
                                     Toggle("", isOn: $isQuickEditEnabled)
                                         .labelsHidden()
                                         .toggleStyle(AppTwoToneSwitchToggleStyle())
-                                        .accessibilityLabel("Quick edit")
+                                        .accessibilityLabel("Edit")
                                 }
                                 Button("Manage") {
                                     isQuickEditEnabled = false

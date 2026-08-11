@@ -1,10 +1,9 @@
 //
 //  BookingRequestMediaPreviewViews.swift
 //
-//  Full-screen reference photo viewer with pinch zoom and save to Photos.
+//  Full-screen reference photo viewer with pinch zoom and system share sheet.
 //
 
-import Photos
 import SwiftUI
 import UIKit
 
@@ -15,9 +14,11 @@ struct BookingRequestMediaFullScreenPreview: View {
     @Environment(\.dismiss) private var dismiss
     @State private var pageIndex: Int
     @State private var isZoomed = false
-    @State private var isSaving = false
-    @State private var didSaveSuccessfully = false
-    @State private var saveErrorMessage: String?
+    @State private var isPreparingShare = false
+    @State private var shareErrorMessage: String?
+    @State private var dragOffset: CGFloat = 0
+
+    private let dismissDragThreshold: CGFloat = 120
 
     init(urls: [URL], initialIndex: Int) {
         self.urls = urls
@@ -27,7 +28,9 @@ struct BookingRequestMediaFullScreenPreview: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .opacity(max(0.35, 1 - Double(dragOffset) / 400))
+                .ignoresSafeArea()
 
             TabView(selection: $pageIndex) {
                 ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
@@ -36,55 +39,15 @@ struct BookingRequestMediaFullScreenPreview: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: urls.count > 1 ? .automatic : .never))
-            .scrollDisabled(isZoomed)
+            .scrollDisabled(isZoomed || dragOffset > 0)
             .onChange(of: pageIndex) { _, _ in
                 isZoomed = false
             }
 
-            VStack {
-                HStack(spacing: 16) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.white.opacity(0.35))
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Close")
-
+            if let shareErrorMessage {
+                VStack {
                     Spacer()
-
-                    Button {
-                        Task { await saveCurrentPhoto() }
-                    } label: {
-                        Group {
-                            if isSaving {
-                                ProgressView()
-                                    .tint(.white)
-                            } else if didSaveSuccessfully {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 22, weight: .medium))
-                            } else {
-                                Label("Save", systemImage: "square.and.arrow.down")
-                                    .labelStyle(.iconOnly)
-                                    .font(.system(size: 22, weight: .medium))
-                            }
-                        }
-                        .frame(width: 44, height: 44)
-                    }
-                    .disabled(isSaving || didSaveSuccessfully)
-                    .accessibilityLabel("Save to Photos")
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-
-                Spacer()
-
-                if let saveErrorMessage {
-                    Text(saveErrorMessage)
+                    Text(shareErrorMessage)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
@@ -96,46 +59,172 @@ struct BookingRequestMediaFullScreenPreview: View {
                         .padding(.bottom, 32)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                .zIndex(5)
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.2), value: shareErrorMessage)
             }
-            .animation(.easeInOut(duration: 0.2), value: saveErrorMessage)
+        }
+        .offset(y: dragOffset)
+        .simultaneousGesture(swipeDownDismissGesture)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            photoViewerHeader
         }
     }
 
-    private func saveCurrentPhoto() async {
-        guard urls.indices.contains(pageIndex) else { return }
-        await MainActor.run {
-            isSaving = true
-            saveErrorMessage = nil
+    private var photoViewerHeader: some View {
+        HStack(spacing: 12) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.black)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Color.black.opacity(0.08)))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+
+            Spacer(minLength: 0)
+
+            Text(headerTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.black)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                Task { await shareCurrentPhoto() }
+            } label: {
+                Group {
+                    if isPreparingShare {
+                        ProgressView()
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.black)
+                    }
+                }
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.black.opacity(0.08)))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isPreparingShare)
+            .accessibilityLabel("Share")
         }
-        defer { Task { @MainActor in isSaving = false } }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(AppDesign.cardBackground)
+        .overlay(alignment: .bottom) {
+            Divider().overlay(AppDesign.chipBorder.opacity(0.6))
+        }
+    }
+
+    private var headerTitle: String {
+        guard urls.count > 1 else { return "Photo" }
+        return "\(pageIndex + 1) of \(urls.count)"
+    }
+
+    private var swipeDownDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onChanged { value in
+                guard !isZoomed else { return }
+                let vertical = value.translation.height
+                let horizontal = abs(value.translation.width)
+                // Prefer vertical dismiss; ignore mostly-horizontal paging swipes.
+                guard vertical > 0, vertical > horizontal else { return }
+                dragOffset = vertical
+            }
+            .onEnded { value in
+                guard !isZoomed else {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        dragOffset = 0
+                    }
+                    return
+                }
+                let shouldDismiss =
+                    value.translation.height > dismissDragThreshold
+                    || value.predictedEndTranslation.height > dismissDragThreshold * 1.4
+                if shouldDismiss {
+                    dismiss()
+                } else {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        dragOffset = 0
+                    }
+                }
+            }
+    }
+
+    @MainActor
+    private func shareCurrentPhoto() async {
+        guard urls.indices.contains(pageIndex) else { return }
+        isPreparingShare = true
+        shareErrorMessage = nil
+        defer { isPreparingShare = false }
 
         do {
-            try await BookingRequestPhotoLibrarySaver.saveImage(from: urls[pageIndex])
-            await MainActor.run {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                didSaveSuccessfully = true
+            let (data, _) = try await URLSession.shared.data(from: urls[pageIndex])
+            guard !data.isEmpty, let image = UIImage(data: data) else {
+                throw URLError(.cannotDecodeContentData)
             }
-            try? await Task.sleep(for: .seconds(1.5))
-            await MainActor.run { didSaveSuccessfully = false }
-        } catch BookingRequestPhotoLibrarySaver.Error.denied {
-            await MainActor.run {
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                saveErrorMessage = "Allow Photos access in Settings to save images."
-                dismissSaveErrorAfterDelay()
-            }
+
+            // Present from the topmost VC so we don't nest a blank SwiftUI sheet
+            // on top of the photo fullScreenCover (that was showing an empty sheet).
+            // UIImage yields Save Image / Messages / Mail like a normal photo share.
+            Self.presentActivityViewController(items: [image])
         } catch {
-            await MainActor.run {
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                saveErrorMessage = "Couldn’t save photo."
-                dismissSaveErrorAfterDelay()
-            }
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            shareErrorMessage = "Couldn’t prepare photo to share."
+            dismissShareErrorAfterDelay()
         }
     }
 
-    private func dismissSaveErrorAfterDelay() {
+    @MainActor
+    private static func presentActivityViewController(items: [Any]) {
+        guard let presenter = topViewController() else { return }
+        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let popover = activity.popoverPresentationController {
+            popover.sourceView = presenter.view
+            popover.sourceRect = CGRect(
+                x: presenter.view.bounds.midX,
+                y: presenter.view.safeAreaInsets.top + 28,
+                width: 1,
+                height: 1
+            )
+            popover.permittedArrowDirections = []
+        }
+        presenter.present(activity, animated: true)
+    }
+
+    @MainActor
+    private static func topViewController(
+        base: UIViewController? = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .rootViewController
+    ) -> UIViewController? {
+        if let nav = base as? UINavigationController {
+            return topViewController(base: nav.visibleViewController)
+        }
+        if let tab = base as? UITabBarController {
+            return topViewController(base: tab.selectedViewController)
+        }
+        if let presented = base?.presentedViewController {
+            return topViewController(base: presented)
+        }
+        return base
+    }
+
+    private func dismissShareErrorAfterDelay() {
         Task {
             try? await Task.sleep(for: .seconds(3))
-            await MainActor.run { saveErrorMessage = nil }
+            await MainActor.run { shareErrorMessage = nil }
         }
     }
 }
@@ -310,49 +399,6 @@ struct ZoomableRemoteImageView: UIViewRepresentable {
             }
 
             imageView.frame = frameToCenter
-        }
-    }
-}
-
-enum BookingRequestPhotoLibrarySaver {
-    enum Error: LocalizedError {
-        case invalidImage
-        case denied
-        case failed
-
-        var errorDescription: String? {
-            switch self {
-            case .invalidImage: return "This file couldn’t be saved as a photo."
-            case .denied: return "Photos access was denied."
-            case .failed: return "Saving to Photos failed."
-            }
-        }
-    }
-
-    static func saveImage(from url: URL) async throws {
-        let (data, _) = try await URLSession.shared.data(from: url)
-        guard let image = UIImage(data: data) else { throw Error.invalidImage }
-
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        switch status {
-        case .authorized, .limited:
-            break
-        default:
-            throw Error.denied
-        }
-
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Swift.Error>) in
-            PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: image)
-            }, completionHandler: { success, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if success {
-                    continuation.resume()
-                } else {
-                    continuation.resume(throwing: Error.failed)
-                }
-            })
         }
     }
 }

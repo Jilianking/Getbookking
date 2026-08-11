@@ -11,6 +11,7 @@ struct MessagesView: View {
     @State private var composePrefillName = ""
     @State private var composePrefillBookingRequestId: String?
     @State private var composePrefillMessage = ""
+    @State private var pendingThreadComposerDraft = ""
     @State private var searchText = ""
     @State private var showErrorAlert = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
@@ -48,15 +49,8 @@ struct MessagesView: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                if let threadId = selectedThreadId {
-                    MessageThreadView(
-                        threadId: threadId,
-                        viewModel: viewModel,
-                        drawerState: drawerState,
-                        onBack: { selectedThreadId = nil }
-                    )
-                } else {
+            ZStack {
+                VStack(spacing: 0) {
                     AppSearchField(placeholder: "Search conversations...", text: $searchText)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -104,6 +98,7 @@ struct MessagesView: View {
                             .scrollContentBackground(.hidden)
                             .background(AppDesign.cardBackground)
                             .environment(\.defaultMinListRowHeight, 1)
+                            .scrollDismissesKeyboard(.interactively)
                         }
                     }
                     .refreshable {
@@ -117,11 +112,29 @@ struct MessagesView: View {
                         )
                     }
                 }
+                .allowsHitTesting(selectedThreadId == nil)
+                .accessibilityHidden(selectedThreadId != nil)
+
+                if let threadId = selectedThreadId {
+                    MessageThreadView(
+                        threadId: threadId,
+                        viewModel: viewModel,
+                        drawerState: drawerState,
+                        initialComposerDraft: pendingThreadComposerDraft,
+                        onConsumedComposerDraft: { pendingThreadComposerDraft = "" },
+                        onBack: {
+                            selectedThreadId = nil
+                            pendingThreadComposerDraft = ""
+                        }
+                    )
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+                }
             }
             .appScreenBackground()
             .appNavigationChrome()
             .navigationTitle(sectionTitle)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(selectedThreadId == nil ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { drawerState.isOpen = true }) {
@@ -179,6 +192,8 @@ struct MessagesView: View {
                 Text(viewModel.lastError ?? "")
             }
             .onChange(of: selectedThreadId) { _, threadId in
+                // Thread owns left-edge swipe for back; inbox allows root drawer edge-open.
+                drawerState.suppressDrawerEdgeOpen = threadId != nil
                 guard threadId == nil else { return }
                 Task {
                     await viewModel.loadComposeClients(
@@ -186,6 +201,14 @@ struct MessagesView: View {
                         sessionStore: sessionStore
                     )
                 }
+            }
+            .onChange(of: drawerState.selectedSection) { _, section in
+                if section == .messages {
+                    drawerState.suppressDrawerEdgeOpen = selectedThreadId != nil
+                }
+            }
+            .onChange(of: drawerState.messagesOpenThreadId) { _, threadId in
+                applyOpenThreadFromPush(threadId)
             }
             .onChange(of: drawerState.messagesShouldOpenCompose) { _, shouldOpen in
                 guard shouldOpen else { return }
@@ -223,6 +246,7 @@ struct MessagesView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
+                applyOpenThreadFromPush(drawerState.messagesOpenThreadId)
                 if drawerState.messagesShouldOpenCompose {
                     applyMessagesComposePrefill(from: drawerState)
                     showingCompose = true
@@ -230,9 +254,21 @@ struct MessagesView: View {
             }
             .onDisappear {
                 viewModel.stopThreadsListening()
+                drawerState.suppressDrawerEdgeOpen = false
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    private func applyOpenThreadFromPush(_ threadId: String?) {
+        let trimmed = (threadId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        showingCompose = false
+        let draft = (drawerState.messagesComposeBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingThreadComposerDraft = draft
+        drawerState.messagesComposeBody = nil
+        selectedThreadId = PhoneFormatting.smsThreadId(trimmed)
+        drawerState.messagesOpenThreadId = nil
     }
 
     private func applyMessagesComposePrefill(from drawerState: DrawerState) {
@@ -310,6 +346,8 @@ struct MessageThreadView: View {
     let threadId: String
     @ObservedObject var viewModel: MessagesViewModel
     var drawerState: DrawerState
+    var initialComposerDraft: String = ""
+    var onConsumedComposerDraft: () -> Void = {}
     let onBack: () -> Void
     @State private var messages: [Message] = []
     @State private var newMessage = ""
@@ -321,33 +359,33 @@ struct MessageThreadView: View {
     @State private var showClientProfile = false
     @StateObject private var clientsViewModel = ClientsViewModel()
     @FocusState private var isComposerFocused: Bool
+    @State private var mediaPreviewSelection: MessageMediaPreviewSelection?
+    @State private var interactiveBackOffset: CGFloat = 0
+
+    private let interactiveBackEdgeWidth: CGFloat = 28
+    private let interactiveBackDismissThreshold: CGFloat = 110
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header: back, avatar, name, phone, profile
-            HStack(spacing: 12) {
+            // Header: back, name, phone, profile
+            HStack(spacing: 16) {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 32, height: 36)
+                        .contentShape(Rectangle())
                 }
                 Button {
                     openClientProfile()
                 } label: {
-                    HStack(spacing: 12) {
-                        AppAvatarView(
-                            tenantLogoURL: nil,
-                            accountPhotoURL: nil,
-                            displayNameFallback: clientName,
-                            size: 40
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(clientName)
-                                .font(.headline)
-                                .foregroundStyle(AppDesign.textPrimary)
-                            if !clientPhone.isEmpty {
-                                Text(clientPhone)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(clientName)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                        if !clientPhone.isEmpty {
+                            Text(clientPhone)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -376,8 +414,14 @@ struct MessageThreadView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(messages, id: \.stableId) { message in
-                                MessageBubble(message: message)
-                                    .id(message.stableId)
+                                MessageBubble(message: message) { urls, index in
+                                    isComposerFocused = false
+                                    mediaPreviewSelection = MessageMediaPreviewSelection(
+                                        urls: urls,
+                                        initialIndex: index
+                                    )
+                                }
+                                .id(message.stableId)
                             }
                         }
                         .padding()
@@ -390,18 +434,28 @@ struct MessageThreadView: View {
                         withAnimation { proxy.scrollTo(last.stableId, anchor: .bottom) }
                     }
                 }
+                .onChange(of: isComposerFocused) { _, focused in
+                    guard focused, let last = messages.last else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(280))
+                        withAnimation {
+                            proxy.scrollTo(last.stableId, anchor: .bottom)
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             MessageComposerBar(
                 message: $newMessage,
-                darkStyle: true,
+                darkStyle: false,
                 placeholder: "Type a message...",
                 quickPresets: viewModel.smsQuickPresets,
                 isSending: isLoading,
-                canSend: !newMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                canSend: true,
                 onSend: sendMessage,
                 onSendPaymentRequest: sendPaymentRequest,
+                onSendPhoto: sendPhoto,
                 clientName: clientName,
                 clientPhone: clientPhone,
                 bookingRequestId: linkedBookingRequestId,
@@ -410,6 +464,23 @@ struct MessageThreadView: View {
                 fieldFocused: $isComposerFocused
             )
             .appTourAnchor(.messagesReply, isActive: appTour.isStepActive(.messagesReply))
+        }
+        .background(AppDesign.cardBackground)
+        .offset(x: max(0, interactiveBackOffset))
+        .shadow(color: interactiveBackOffset > 0 ? Color.black.opacity(0.12) : .clear, radius: 8, x: -4, y: 0)
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: interactiveBackEdgeWidth)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .highPriorityGesture(interactiveBackGesture)
+                .accessibilityHidden(true)
+        }
+        .fullScreenCover(item: $mediaPreviewSelection) { selection in
+            BookingRequestMediaFullScreenPreview(
+                urls: selection.urls,
+                initialIndex: selection.initialIndex
+            )
         }
         .task {
             if let summary = viewModel.summary(for: threadId) {
@@ -447,6 +518,10 @@ struct MessageThreadView: View {
         }
         .onAppear {
             startListening()
+            applyPendingComposerDraftIfNeeded()
+        }
+        .onChange(of: initialComposerDraft) { _, _ in
+            applyPendingComposerDraftIfNeeded()
         }
         .onDisappear {
             viewModel.stopListeningToMessages(threadId: threadId)
@@ -482,6 +557,39 @@ struct MessageThreadView: View {
             .environmentObject(authViewModel)
             .environmentObject(sessionStore)
         }
+    }
+
+    private var interactiveBackGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                let dx = value.translation.width
+                let dy = abs(value.translation.height)
+                guard dx > 0, dx > dy * 0.6 else { return }
+                if isComposerFocused {
+                    isComposerFocused = false
+                }
+                interactiveBackOffset = dx
+            }
+            .onEnded { value in
+                let shouldGoBack =
+                    value.translation.width > interactiveBackDismissThreshold
+                    || value.predictedEndTranslation.width > interactiveBackDismissThreshold * 1.6
+                if shouldGoBack {
+                    onBack()
+                } else {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        interactiveBackOffset = 0
+                    }
+                }
+            }
+    }
+
+    private func applyPendingComposerDraftIfNeeded() {
+        let draft = initialComposerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !draft.isEmpty else { return }
+        newMessage = draft
+        isComposerFocused = true
+        onConsumedComposerDraft()
     }
 
     private func openClientProfile() {
@@ -574,10 +682,33 @@ struct MessageThreadView: View {
             }
         }
     }
+
+    private func sendPhoto(_ imageDataList: [Data], caption: String) {
+        isLoading = true
+        Task {
+            let summary = viewModel.summary(for: threadId)
+            let ok = await viewModel.sendPhotoMessage(
+                threadId: threadId,
+                imageDataList: imageDataList,
+                caption: caption,
+                clientName: clientName,
+                clientId: summary?.clientPhoneForSend,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore
+            )
+            await MainActor.run {
+                if ok {
+                    isComposerFocused = false
+                }
+                isLoading = false
+            }
+        }
+    }
 }
 
 struct MessageBubble: View {
     let message: Message
+    var onOpenMedia: (([URL], Int) -> Void)? = nil
 
     private var isAdmin: Bool { message.sender == .admin }
 
@@ -590,10 +721,22 @@ struct MessageBubble: View {
                 if message.isPaymentRequest {
                     MessagePaymentBubble(message: message, isAdmin: isAdmin)
                 } else {
-                    MessageBubbleText(content: message.content, isAdmin: isAdmin)
-                        .padding()
-                        .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    VStack(alignment: isAdmin ? .trailing : .leading, spacing: 8) {
+                        if message.hasMedia {
+                            MessageMediaBubble(
+                                urls: message.mediaUrls,
+                                isAdmin: isAdmin,
+                                onOpen: onOpenMedia
+                            )
+                        }
+                        let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !text.isEmpty {
+                            MessageBubbleText(content: message.content, isAdmin: isAdmin)
+                                .padding()
+                                .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                    }
                 }
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
@@ -603,6 +746,77 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+    }
+}
+
+private struct MessageMediaBubble: View {
+    let urls: [String]
+    let isAdmin: Bool
+    var onOpen: (([URL], Int) -> Void)? = nil
+
+    private var resolvedURLs: [URL] {
+        urls.compactMap { raw in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return URL(string: trimmed)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: isAdmin ? .trailing : .leading, spacing: 6) {
+            ForEach(Array(resolvedURLs.enumerated()), id: \.offset) { index, url in
+                Button {
+                    onOpen?(resolvedURLs, index)
+                } label: {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 220, height: 280)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        case .failure:
+                            mediaPlaceholder(systemName: "photo")
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 220, height: 160)
+                                .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        @unknown default:
+                            mediaPlaceholder(systemName: "photo")
+                        }
+                    }
+                    .frame(width: 220, height: 280)
+                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View photo")
+            }
+        }
+    }
+
+    private func mediaPlaceholder(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.title2)
+            .foregroundStyle(isAdmin ? Color.white.opacity(0.8) : AppDesign.textSecondary)
+            .frame(width: 220, height: 160)
+            .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct MessageMediaPreviewSelection: Identifiable {
+    let id: String
+    let urls: [URL]
+    let initialIndex: Int
+
+    init(urls: [URL], initialIndex: Int) {
+        self.urls = urls
+        self.initialIndex = max(0, min(initialIndex, max(urls.count - 1, 0)))
+        let joined = urls.map(\.absoluteString).joined(separator: "|")
+        self.id = "\(joined)#\(self.initialIndex)"
     }
 }
 
@@ -817,9 +1031,10 @@ struct ComposeMessageView: View {
                     placeholder: "iMessage",
                     quickPresets: viewModel.smsQuickPresets,
                     isSending: viewModel.isSending,
-                    canSend: canSend,
+                    canSend: recipientPhoneForSend != nil,
                     onSend: sendMessage,
                     onSendPaymentRequest: sendPaymentRequest,
+                    onSendPhoto: sendPhoto,
                     clientName: selectedClientName,
                     clientPhone: clientPhone,
                     bookingRequestId: linkedBookingRequestId,
@@ -915,11 +1130,6 @@ struct ComposeMessageView: View {
         PhoneFormatting.e164US(clientPhone)
     }
 
-    private var canSend: Bool {
-        recipientPhoneForSend != nil &&
-        !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     private func sendMessage() {
         guard let e164Phone = recipientPhoneForSend else { return }
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -990,6 +1200,50 @@ struct ComposeMessageView: View {
                 paymentKind: kind.paymentKind,
                 amountCents: amountCents,
                 paymentUrl: url,
+                isDemoMode: authViewModel.isDemoMode,
+                sessionStore: sessionStore,
+                memberLinePhone: memberLine
+            )
+            if ok {
+                let openId: String = {
+                    if let memberLine,
+                       let scoped = PhoneFormatting.lineScopedThreadId(linePhone: memberLine, clientPhone: e164Phone) {
+                        return scoped
+                    }
+                    return e164Phone
+                }()
+                onSent?(openId)
+                dismiss()
+            }
+        }
+    }
+
+    private func sendPhoto(_ imageDataList: [Data], caption: String) {
+        guard let e164Phone = recipientPhoneForSend else {
+            viewModel.lastError = "Enter a valid phone number."
+            return
+        }
+        var name = selectedClientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
+            if let match = viewModel.composeClients.first(where: {
+                PhoneFormatting.digits(from: $0.phone ?? "") == PhoneFormatting.digits(from: e164Phone)
+            }) {
+                name = match.name
+            }
+        }
+        Task {
+            let memberLine: String? = {
+                let access = authViewModel.teamAccess
+                guard access.usesOwnSms else { return nil }
+                let phone = access.memberSmsPhoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                return phone.isEmpty ? nil : phone
+            }()
+            let ok = await viewModel.sendPhotoMessage(
+                threadId: e164Phone,
+                imageDataList: imageDataList,
+                caption: caption,
+                clientName: name.isEmpty ? nil : name,
+                clientId: e164Phone,
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore,
                 memberLinePhone: memberLine

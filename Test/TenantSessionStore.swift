@@ -268,6 +268,10 @@ final class TenantSessionStore: ObservableObject {
                        let cents = message.amountCents, cents > 0 {
                         return Message.paymentRequestPreview(kind: kind, amountCents: cents)
                     }
+                    if message.hasMedia,
+                       message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return Message.photoThreadPreview
+                    }
                     return message.content
                 }(),
                 lastMessageAt: message.createdAt,

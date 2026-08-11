@@ -366,15 +366,7 @@ private struct TeamMemberContactSheet: View {
                 Section {
                     LabeledContent("Name", value: member.displayName)
                     if !phoneTrimmed.isEmpty {
-                        if let e164 = PhoneFormatting.e164US(phoneTrimmed),
-                           let url = URL(string: "tel:\(e164)") {
-                            Link(destination: url) {
-                                LabeledContent("Phone", value: phoneDisplay)
-                            }
-                            .foregroundStyle(AppDesign.linkAccent)
-                        } else {
-                            LabeledContent("Phone", value: phoneDisplay)
-                        }
+                        LabeledContent("Phone", value: phoneDisplay)
                     } else {
                         LabeledContent("Phone", value: "Not shared")
                             .foregroundStyle(AppDesign.textSecondary)

@@ -10853,6 +10853,7 @@ exports.sendClientSms = functions
     const to = sms.toE164US(data && data.to);
     const body = ((data && data.body) || "").toString().trim();
     const clientName = ((data && data.clientName) || "").toString().trim().slice(0, 120);
+    const mediaUrls = sms.normalizeOutboundMediaUrls(data && data.mediaUrls);
     const paymentKindRaw = ((data && data.paymentKind) || "").toString().trim().toLowerCase();
     const paymentKind =
       paymentKindRaw === "deposit" || paymentKindRaw === "payment" ? paymentKindRaw : "";
@@ -10866,8 +10867,11 @@ exports.sendClientSms = functions
     if (!to) {
       throw new functions.https.HttpsError("invalid-argument", "A valid client phone is required.");
     }
-    if (!body) {
-      throw new functions.https.HttpsError("invalid-argument", "Message body is required.");
+    if (!body && !mediaUrls.length) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Message body or photo is required."
+      );
     }
     if (body.length > 1600) {
       throw new functions.https.HttpsError("invalid-argument", "Message body is too long.");
@@ -10947,6 +10951,7 @@ exports.sendClientSms = functions
           amountCents: amountCents || undefined,
           paymentUrl: paymentUrl || undefined,
           threadPreview: threadPreview || undefined,
+          mediaUrls: mediaUrls.length ? mediaUrls : undefined,
         },
         ownerUserData: ownerData,
         senderUid: context.auth.uid,
@@ -11437,10 +11442,12 @@ exports.twilioInboundSms = functions
 
     if (sms.isInboundConsentAffirmation(body)) {
       await sms.grantInboundSmsConsent(tenantId, from);
+      const consentMedia = await sms.persistInboundTwilioMedia(tenantId, params);
       await sms.recordInboundTenantSms(tenantId, {
         from,
         to,
         body: rawBody,
+        mediaUrls: consentMedia,
         threadId: inboundThreadId,
         assignedMemberUid,
         smsLineScope,
@@ -11462,10 +11469,12 @@ exports.twilioInboundSms = functions
       return;
     }
 
+    const inboundMedia = await sms.persistInboundTwilioMedia(tenantId, params);
     await sms.recordInboundTenantSms(tenantId, {
       from,
       to,
       body: rawBody,
+      mediaUrls: inboundMedia,
       threadId: inboundThreadId,
       assignedMemberUid,
       smsLineScope,

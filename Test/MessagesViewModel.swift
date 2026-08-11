@@ -158,7 +158,6 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
-    @discardableResult
     func sendMessage(
         threadId: String,
         content: String,
@@ -167,6 +166,7 @@ class MessagesViewModel: ObservableObject {
         paymentKind: MessagePaymentKind? = nil,
         amountCents: Int? = nil,
         paymentUrl: String? = nil,
+        mediaUrls: [String] = [],
         isDemoMode: Bool = false,
         sessionStore: TenantSessionStore? = nil,
         memberLinePhone: String? = nil
@@ -229,6 +229,9 @@ class MessagesViewModel: ObservableObject {
                   let trimmedUrl, !trimmedUrl.isEmpty else { return nil }
             return paymentKind
         }()
+        let cleanedMedia = mediaUrls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         let resolvedContent: String = {
             if let kind = resolvedPaymentKind,
                let cents = amountCents,
@@ -237,6 +240,14 @@ class MessagesViewModel: ObservableObject {
             }
             return content
         }()
+
+        if resolvedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           cleanedMedia.isEmpty {
+            await MainActor.run {
+                lastError = "Enter a message or choose a photo."
+            }
+            return false
+        }
 
         let message = Message(
             id: nil,
@@ -249,7 +260,8 @@ class MessagesViewModel: ObservableObject {
             threadId: outboundThreadId,
             paymentKind: resolvedPaymentKind,
             amountCents: resolvedPaymentKind != nil ? amountCents : nil,
-            paymentUrl: resolvedPaymentKind != nil ? trimmedUrl : nil
+            paymentUrl: resolvedPaymentKind != nil ? trimmedUrl : nil,
+            mediaUrls: cleanedMedia
         )
 
         await MainActor.run {
@@ -275,6 +287,59 @@ class MessagesViewModel: ObservableObject {
             return true
         } catch {
             print("Error sending message: \(error)")
+            await MainActor.run {
+                isSending = false
+                lastError = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    func sendPhotoMessage(
+        threadId: String,
+        imageDataList: [Data],
+        caption: String = "",
+        clientName: String? = nil,
+        clientId: String? = nil,
+        isDemoMode: Bool = false,
+        sessionStore: TenantSessionStore? = nil,
+        memberLinePhone: String? = nil
+    ) async -> Bool {
+        if isDemoMode {
+            await MainActor.run {
+                lastError = "Photos aren't available in demo mode."
+            }
+            return false
+        }
+        let payloads = imageDataList.filter { !$0.isEmpty }
+        guard !payloads.isEmpty else {
+            await MainActor.run {
+                lastError = "Choose at least one photo."
+            }
+            return false
+        }
+        await MainActor.run {
+            isSending = true
+            lastError = nil
+        }
+        do {
+            var urls: [String] = []
+            for data in payloads.prefix(5) {
+                let url = try await firebaseService.uploadSmsMediaImage(imageData: data)
+                urls.append(url)
+            }
+            return await sendMessage(
+                threadId: threadId,
+                content: caption,
+                clientName: clientName,
+                clientId: clientId,
+                mediaUrls: urls,
+                isDemoMode: false,
+                sessionStore: sessionStore,
+                memberLinePhone: memberLinePhone
+            )
+        } catch {
             await MainActor.run {
                 isSending = false
                 lastError = error.localizedDescription

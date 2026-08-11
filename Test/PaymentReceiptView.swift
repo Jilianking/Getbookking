@@ -344,14 +344,12 @@ struct PaymentReceiptSheet: View {
     private func sendInMessages() {
         let shareText = detail.messagesShareLinkOrBody()
         UIPasteboard.general.string = shareText
-        // Leave To: empty so user can type a name/client; put link in the composer.
-        drawerState.messagesComposePhone = nil
-        drawerState.messagesComposeClientName = nil
-        drawerState.messagesComposeBookingRequestId = nil
-        drawerState.messagesComposeBody = shareText
-        drawerState.messagesShouldOpenCompose = true
-        drawerState.selectedSection = .messages
-        drawerState.isOpen = false
+        let phoneGuess = PhoneFormatting.e164US(detail.customerName)
+        drawerState.openExistingMessagesThread(
+            phone: phoneGuess,
+            clientName: detail.customerName,
+            body: shareText
+        )
         if let onDismissAll {
             onDismissAll()
         } else {

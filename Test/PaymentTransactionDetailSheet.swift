@@ -412,13 +412,13 @@ struct PaymentTransactionDetailSheet: View {
         guard let detail = await loadReceiptDetail() else { return }
         let shareText = detail.messagesShareLinkOrBody()
         UIPasteboard.general.string = shareText
-        drawerState.messagesComposePhone = nil
-        drawerState.messagesComposeClientName = nil
-        drawerState.messagesComposeBookingRequestId = nil
-        drawerState.messagesComposeBody = shareText
-        drawerState.messagesShouldOpenCompose = true
-        drawerState.selectedSection = .messages
-        drawerState.isOpen = false
+        let phoneGuess = PhoneFormatting.e164US(detail.customerName)
+            ?? PhoneFormatting.e164US(transaction.customerName)
+        drawerState.openExistingMessagesThread(
+            phone: phoneGuess,
+            clientName: detail.customerName ?? transaction.customerName,
+            body: shareText
+        )
         dismiss()
     }
 }

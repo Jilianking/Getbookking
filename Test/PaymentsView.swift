@@ -1061,10 +1061,10 @@ struct DepositLinkSheet: View {
 
     private func sendInMessages(urlString: String) {
         let amountLabel = CardCheckoutPricing.formatUSD(cents: serviceAmountCents)
-        drawerState.messagesComposeBody = "Pay your \(amountLabel) deposit: \(urlString)"
-        drawerState.messagesShouldOpenCompose = true
-        drawerState.selectedSection = .messages
-        drawerState.isOpen = false
+        drawerState.openExistingMessagesThread(
+            phone: nil,
+            body: "Pay your \(amountLabel) deposit: \(urlString)"
+        )
         onDismiss()
     }
 }

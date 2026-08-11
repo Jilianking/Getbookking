@@ -8964,6 +8964,20 @@
         var emptyAttr = text ? '' : ' class="bk-copy-empty"';
         return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
       }
+      /**
+       * Like siteTextSpan, but if `text` includes a single <em>…</em> pair (Classic about defaults),
+       * render real italics instead of escaped tags. Inner text stays escaped.
+       */
+      function siteTextSpanWithInlineEm(editKey, text) {
+        if (isSiteTextBlankValue(text)) text = '';
+        var raw = String(text || '');
+        var m = raw.match(/^(.*?)<em>([\s\S]*?)<\/em>(.*)$/i);
+        if (!m) return siteTextSpan(editKey, raw);
+        var emptyAttr = (m[1] + m[2] + m[3]).trim() ? '' : ' class="bk-copy-empty"';
+        return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' +
+          esc(m[1]) + '<em>' + esc(m[2]) + '</em>' + esc(m[3]) +
+          '</span>';
+      }
       /** Website-only service label/description; real catalog edits happen in Design → Services. */
       function svcSpan(tenant, serviceId, field, displayText) {
         var sid = serviceId ? String(serviceId) : '';
@@ -12770,8 +12784,8 @@
         } else {
           var aboutHeadingCustom = tenantSiteText(tenant, 'classicAboutHeading', '');
           aboutHeadingHtml = aboutHeadingCustom
-            ? ('<h2>' + siteTextSpan('classicAboutHeading', aboutHeadingCustom) + '</h2>')
-            : ('<h2>' + siteTextSpan('classicAboutHeading', opts.aboutHeading) + '</h2>');
+            ? ('<h2>' + siteTextSpanWithInlineEm('classicAboutHeading', aboutHeadingCustom) + '</h2>')
+            : ('<h2>' + siteTextSpanWithInlineEm('classicAboutHeading', opts.aboutHeading) + '</h2>');
         }
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section" data-bk-color-surface="about" data-bk-band-tappable>' +

@@ -531,13 +531,15 @@ struct AppFilterChipBar<Filter: Hashable>: View {
 }
 
 struct AppMetadataChip: View {
-    let icon: String
+    var icon: String? = nil
     let text: String
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.caption2)
+            if let icon {
+                Image(systemName: icon)
+                    .font(.caption2)
+            }
             Text(text)
                 .font(.caption)
                 .lineLimit(1)

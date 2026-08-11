@@ -249,7 +249,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text("Lock In & Confirm ✓")
+                                Text("Confirm")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -292,7 +292,6 @@ struct StaffScheduleClientAppointmentSheet: View {
                     set: { customerPhone = PhoneFormatting.formatAsYouType($0) }
                 ))
                 .keyboardType(.phonePad)
-                AppStatusPill(text: "Staff schedule & confirm", soft: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)

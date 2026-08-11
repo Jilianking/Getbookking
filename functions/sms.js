@@ -1118,12 +1118,24 @@ async function sendOutboundClientSms({
     memberUid: route.lineType === "member" ? route.memberUid : null,
   });
   const messagingServiceSid = getMasterMessagingServiceSid();
-  const msg = await master.messages.create({
+  const mediaUrls = normalizeOutboundMediaUrls(meta && meta.mediaUrls);
+  const createOpts = {
     to: toE164,
-    body: body.slice(0, 1600),
     messagingServiceSid,
     from: route.from,
-  });
+  };
+  const trimmedBody = (body || "").toString();
+  if (trimmedBody) {
+    createOpts.body = trimmedBody.slice(0, 1600);
+  } else if (mediaUrls.length) {
+    createOpts.body = "";
+  } else {
+    createOpts.body = "";
+  }
+  if (mediaUrls.length) {
+    createOpts.mediaUrl = mediaUrls;
+  }
+  const msg = await master.messages.create(createOpts);
 
   const threadId =
     (meta && meta.threadId) ||
@@ -1140,27 +1152,35 @@ async function sendOutboundClientSms({
     .doc(msg.sid);
   const paymentMeta = paymentFieldsFromMeta(meta);
   const threadPreview = ((meta && meta.threadPreview) || "").toString().trim();
-  await logRef.set({
+  const previewBody =
+    threadPreview ||
+    trimmedBody ||
+    (mediaUrls.length ? "Photo" : "");
+  const logPayload = {
     direction: "outbound",
     to: toE164,
     from: route.from,
     threadId,
     clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
-    body: body.slice(0, 500),
+    body: trimmedBody.slice(0, 500),
     status: msg.status,
     bookingRequestId: (meta && meta.bookingRequestId) || null,
     assignedMemberUid: route.memberUid || null,
     smsLineScope: route.lineType === "member" ? "member" : "tenant",
     ...paymentMeta,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  };
+  if (mediaUrls.length) {
+    logPayload.mediaUrls = mediaUrls;
+  }
+  await logRef.set(logPayload);
 
   await upsertSmsThread(tenantId, threadId, {
     counterpartPhone: toE164,
     linePhone: route.from,
     clientName: ((meta && meta.clientName) || "").toString().slice(0, 120),
     lastDirection: "outbound",
-    lastMessageBody: (threadPreview || body).slice(0, 500),
+    lastMessageBody: previewBody.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     lastMessageStatus: (msg.status || "").toString(),
     assignedMemberUid: route.memberUid || null,
@@ -1184,6 +1204,95 @@ function paymentFieldsFromMeta(meta) {
   const url = ((meta && meta.paymentUrl) || "").toString().trim();
   if (url) {
     out.paymentUrl = url.slice(0, 500);
+  }
+  return out;
+}
+
+/** Only allow Firebase Storage HTTPS URLs for outbound MMS. */
+function normalizeOutboundMediaUrls(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item of list.slice(0, 5)) {
+    const s = (item || "").toString().trim();
+    if (!s || s.length > 2000) continue;
+    if (!/^https:\/\//i.test(s)) continue;
+    if (
+      !/firebasestorage\.googleapis\.com/i.test(s) &&
+      !/storage\.googleapis\.com/i.test(s)
+    ) {
+      continue;
+    }
+    out.push(s);
+  }
+  return out;
+}
+
+function extensionForContentType(contentType) {
+  const ct = (contentType || "").toString().toLowerCase();
+  if (ct.includes("png")) return "png";
+  if (ct.includes("gif")) return "gif";
+  if (ct.includes("webp")) return "webp";
+  if (ct.includes("jpeg") || ct.includes("jpg")) return "jpg";
+  return "jpg";
+}
+
+/**
+ * Download Twilio inbound media and store under tenants/{id}/smsMedia for lasting URLs.
+ */
+async function persistInboundTwilioMedia(tenantId, params) {
+  const numMedia = Number((params && params.NumMedia) || 0);
+  if (!tenantId || !Number.isFinite(numMedia) || numMedia <= 0) return [];
+  const accountSid = (twilioAccountSid.value() || "").toString().trim();
+  const authToken = (twilioAuthToken.value() || "").toString().trim();
+  if (!accountSid || !authToken) return [];
+
+  const bucket = admin.storage().bucket();
+  const authHeader =
+    "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+  const out = [];
+  const limit = Math.min(Math.floor(numMedia), 5);
+  for (let i = 0; i < limit; i += 1) {
+    const mediaUrl = ((params && params[`MediaUrl${i}`]) || "").toString().trim();
+    const contentType = ((params && params[`MediaContentType${i}`]) || "image/jpeg")
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (!mediaUrl) continue;
+    if (!contentType.startsWith("image/")) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await fetch(mediaUrl, {
+        headers: { Authorization: authHeader },
+        redirect: "follow",
+      });
+      if (!res.ok) {
+        console.warn("persistInboundTwilioMedia fetch", res.status, mediaUrl);
+        continue;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (!buf.length || buf.length > 5 * 1024 * 1024) continue;
+      const ext = extensionForContentType(contentType);
+      const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      const path = `tenants/${tenantId}/smsMedia/${Date.now()}_${i}.${ext}`;
+      const file = bucket.file(path);
+      // eslint-disable-next-line no-await-in-loop
+      await file.save(buf, {
+        resumable: false,
+        metadata: {
+          contentType: contentType.startsWith("image/") ? contentType : "image/jpeg",
+          metadata: {
+            firebaseStorageDownloadTokens: token,
+          },
+        },
+      });
+      const encoded = encodeURIComponent(path);
+      out.push(
+        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encoded}?alt=media&token=${token}`
+      );
+    } catch (e) {
+      console.warn("persistInboundTwilioMedia", e && e.message ? e.message : e);
+    }
   }
   return out;
 }
@@ -1292,6 +1401,12 @@ async function recordInboundTenantSms(tenantId, inbound) {
   const body = ((inbound && inbound.body) || "").toString();
   const assignedMemberUid = (inbound && inbound.assignedMemberUid) || null;
   const smsLineScope = (inbound && inbound.smsLineScope) || "tenant";
+  const mediaUrls = Array.isArray(inbound && inbound.mediaUrls)
+    ? inbound.mediaUrls
+        .map((u) => (u || "").toString().trim())
+        .filter(Boolean)
+        .slice(0, 5)
+    : [];
   const threadId =
     (inbound && inbound.threadId) ||
     lineScopedThreadId({
@@ -1301,6 +1416,7 @@ async function recordInboundTenantSms(tenantId, inbound) {
       memberUid: assignedMemberUid,
     });
   if (!tenantId || !from || !to) return false;
+  if (!body && !mediaUrls.length) return false;
 
   try {
     await consumeSmsMonthlySlot(tenantId, {
@@ -1314,31 +1430,202 @@ async function recordInboundTenantSms(tenantId, inbound) {
     throw e;
   }
 
+  const previewBody = body || (mediaUrls.length ? "Photo" : "");
+  const logPayload = {
+    direction: "inbound",
+    from,
+    to,
+    threadId,
+    body: body.slice(0, 500),
+    assignedMemberUid,
+    smsLineScope,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (mediaUrls.length) {
+    logPayload.mediaUrls = mediaUrls;
+  }
   await getDb()
     .collection("tenants")
     .doc(tenantId)
     .collection("smsLog")
-    .add({
-      direction: "inbound",
-      from,
-      to,
-      threadId,
-      body: body.slice(0, 500),
-      assignedMemberUid,
-      smsLineScope,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    .add(logPayload);
   await upsertSmsThread(tenantId, threadId, {
     counterpartPhone: from,
     linePhone: to,
     clientName: ((inbound && inbound.clientName) || "").toString().slice(0, 120),
     lastDirection: "inbound",
-    lastMessageBody: body.slice(0, 500),
+    lastMessageBody: previewBody.slice(0, 500),
     lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     assignedMemberUid,
     smsLineScope,
   });
+
+  // Fire-and-forget APNs/FCM so Twilio webhook stays fast.
+  notifyInboundClientSms(tenantId, {
+    threadId,
+    counterpartPhone: from,
+    bodyPreview: previewBody,
+    clientName: ((inbound && inbound.clientName) || "").toString(),
+    assignedMemberUid,
+    smsLineScope,
+  }).catch((e) => {
+    console.warn(
+      "notifyInboundClientSms",
+      tenantId,
+      e && e.message ? e.message : e
+    );
+  });
+
   return true;
+}
+
+/**
+ * Push inbound client texts to the right team devices (studio inbox vs personal line).
+ * Banner layout matches Messages: name on the first line, message text below.
+ */
+async function notifyInboundClientSms(tenantId, opts) {
+  const threadId = ((opts && opts.threadId) || "").toString().trim();
+  const counterpartPhone = ((opts && opts.counterpartPhone) || "").toString().trim();
+  const bodyPreview = ((opts && opts.bodyPreview) || "").toString().trim();
+  const assignedMemberUid = ((opts && opts.assignedMemberUid) || "").toString().trim();
+  const smsLineScope = ((opts && opts.smsLineScope) || "tenant").toString().trim();
+  if (!tenantId || !threadId) return;
+
+  let displayName = ((opts && opts.clientName) || "").toString().trim();
+
+  // Prefer the thread's stored name (kept in sync when a client is saved).
+  if (!displayName) {
+    try {
+      const threadSnap = await getDb()
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsThreads")
+        .doc(threadId)
+        .get();
+      if (threadSnap.exists) {
+        displayName = ((threadSnap.data() || {}).clientName || "").toString().trim();
+      }
+    } catch (_) {
+      /* optional */
+    }
+  }
+
+  if (!displayName || looksLikePhoneLabel(displayName)) {
+    const last10 = phoneLast10(counterpartPhone);
+    if (last10) {
+      try {
+        const custSnap = await getDb()
+          .collection("tenants")
+          .doc(tenantId)
+          .collection("customers")
+          .doc(last10)
+          .get();
+        if (custSnap.exists) {
+          const customerName = ((custSnap.data() || {}).name || "").toString().trim();
+          if (customerName) displayName = customerName;
+        }
+      } catch (_) {
+        /* optional */
+      }
+    }
+  }
+
+  if (!displayName || looksLikePhoneLabel(displayName)) {
+    displayName = formatPhoneForPush(counterpartPhone) || "New message";
+  }
+
+  // iMessage-style: title = name, body = message (renders as name↵text).
+  const alertTitle = displayName.slice(0, 100);
+  const alertBody = (bodyPreview || "Photo").slice(0, 200);
+
+  let recipientUids = [];
+  if (smsLineScope === "member" && assignedMemberUid) {
+    recipientUids = [assignedMemberUid];
+  } else {
+    const tenantSnap = await getDb().collection("tenants").doc(tenantId).get();
+    const ownerUid = ((tenantSnap.data() || {}).ownerUid || "").toString().trim();
+    const usersSnap = await getDb()
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .get();
+    for (const userDoc of usersSnap.docs) {
+      const d = userDoc.data() || {};
+      const role = ((d.accessRole || d.role || "") + "").toString().toLowerCase();
+      if (userDoc.id === ownerUid || role === "owner" || role === "manager") {
+        recipientUids.push(userDoc.id);
+      }
+    }
+    if (ownerUid && !recipientUids.includes(ownerUid)) {
+      recipientUids.push(ownerUid);
+    }
+  }
+  recipientUids = [...new Set(recipientUids.filter(Boolean))];
+  if (!recipientUids.length) return;
+
+  const tokens = [];
+  for (const uid of recipientUids) {
+    // eslint-disable-next-line no-await-in-loop
+    const tokSnap = await getDb()
+      .collection("users")
+      .doc(uid)
+      .collection("deviceTokens")
+      .get();
+    tokSnap.forEach((t) => {
+      const token = (t.data() || {}).token;
+      if (token && typeof token === "string") tokens.push(token);
+    });
+  }
+  const unique = [...new Set(tokens)];
+  if (!unique.length) return;
+
+  const chunkSize = 500;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await admin.messaging().sendEachForMulticast({
+        tokens: chunk,
+        notification: {
+          title: alertTitle,
+          body: alertBody,
+        },
+        data: {
+          type: "sms_message",
+          tenantId: String(tenantId),
+          threadId: String(threadId),
+        },
+        apns: {
+          headers: {
+            "apns-priority": "10",
+          },
+          payload: {
+            aps: {
+              alert: {
+                title: alertTitle,
+                body: alertBody,
+              },
+              sound: "default",
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.error("notifyInboundClientSms FCM error", e);
+    }
+  }
+}
+
+function looksLikePhoneLabel(raw) {
+  const digits = (raw || "").toString().replace(/\D/g, "");
+  return digits.length >= 10;
+}
+
+function formatPhoneForPush(phone) {
+  const last10 = phoneLast10(phone);
+  if (last10.length === 10) {
+    return `(${last10.slice(0, 3)}) ${last10.slice(3, 6)}-${last10.slice(6)}`;
+  }
+  return (phone || "").toString().trim();
 }
 
 async function suspendTenantSms(tenantId, reason) {
@@ -1779,6 +2066,9 @@ module.exports = {
   sendTenantSms,
   sendOutboundClientSms,
   recordInboundTenantSms,
+  persistInboundTwilioMedia,
+  normalizeOutboundMediaUrls,
+  notifyInboundClientSms,
   grantInboundSmsConsent,
   maybeSendInboundConsentPrompt,
   isInboundConsentAffirmation,

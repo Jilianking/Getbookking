@@ -265,6 +265,7 @@ class FirebaseService: ObservableObject {
         }()
         let paymentUrl = (data["paymentUrl"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let mediaUrls = Self.parseMediaUrls(data["mediaUrls"])
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
@@ -276,8 +277,26 @@ class FirebaseService: ObservableObject {
             threadId: threadId,
             paymentKind: paymentKind,
             amountCents: (amountCents ?? 0) > 0 ? amountCents : nil,
-            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil
+            paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil,
+            mediaUrls: mediaUrls
         )
+    }
+
+    private static func parseMediaUrls(_ raw: Any?) -> [String] {
+        let list: [Any]
+        if let arr = raw as? [Any] {
+            list = arr
+        } else if let arr = raw as? [String] {
+            return arr
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        } else {
+            return []
+        }
+        return list.compactMap { item in
+            let s = (item as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return s.isEmpty ? nil : s
+        }
     }
 
     func startThreadsListener(
@@ -392,6 +411,14 @@ class FirebaseService: ObservableObject {
             message.amountCents.map { Message.paymentRequestPreview(kind: kind, amountCents: $0) }
         }) {
             payload["threadPreview"] = preview
+        } else if message.hasMedia, message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["threadPreview"] = Message.photoThreadPreview
+        }
+        let media = message.mediaUrls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !media.isEmpty {
+            payload["mediaUrls"] = media
         }
         do {
             let result = try await functions.httpsCallable("sendClientSms").call(payload)
@@ -1152,6 +1179,20 @@ class FirebaseService: ObservableObject {
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
         let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
+    /// MMS attachment for Messages (public read under tenants/… per Storage rules).
+    func uploadSmsMediaImage(imageData: Data) async throws -> String {
+        let tenantId = try await currentTenantId()
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/smsMedia/\(name)")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1600, compressionQuality: 0.8)
         _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString

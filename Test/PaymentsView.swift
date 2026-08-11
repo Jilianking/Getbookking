@@ -848,12 +848,13 @@ struct ManualPaymentSheet: View {
 
     /// Clean white + crown behind Stripe PaymentSheet (manual only).
     private var checkoutBrandingBackdrop: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Color.white.ignoresSafeArea()
             Image("BookkingCrownMark")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 200, height: 200)
+                .padding(.top, 40)
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

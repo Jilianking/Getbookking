@@ -110,7 +110,7 @@ struct ClientProfileView: View {
     }
 
     private var canManageAssignment: Bool {
-        teamAccess.isOwner || teamAccess.canViewAllBookings
+        teamAccess.canViewAllBookings
     }
 
     private var canPickArtistOnConfirm: Bool {

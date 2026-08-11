@@ -40,8 +40,8 @@ struct TeamBookingSettingsView: View {
                 soloBookingSection
             } else {
                 studioBookingPolicySection
-                managerAccessSection
-                managerAlertsSection
+                ownerAccessSection
+                ownerAlertsSection
             }
 
             if isCalendarType {
@@ -177,10 +177,10 @@ struct TeamBookingSettingsView: View {
         }
     }
 
-    private var managerAccessSection: some View {
+    private var ownerAccessSection: some View {
         Section(
-            header: Text("Manager access"),
-            footer: Text("Applies to everyone with the Manager role.")
+            header: Text("Owner access"),
+            footer: Text("When on, your Requests list includes every shop booking and you can approve or decline. When off, you only see and act on bookings assigned to you. Assigned artists can always accept or decline their own.")
                 .font(.caption2)
         ) {
             TeamPermissionToggle(
@@ -190,33 +190,26 @@ struct TeamBookingSettingsView: View {
             )
             TeamApproveRejectRow(
                 viewModel: teamPolicyViewModel,
-                managersApproveAppointments: settingsViewModel.managersApproveAppointments,
-                bookingRequiresApproval: settingsViewModel.managersApproveAppointments
-                    ? settingsViewModel.confirmationType.requiresApproval
-                    : false
-            )
-            TeamPermissionToggle(
-                viewModel: teamPolicyViewModel,
-                title: "Manage artist schedules",
-                keyPath: \.manageArtistSchedules
+                managersApproveAppointments: true,
+                bookingRequiresApproval: true
             )
         }
     }
 
-    private var managerAlertsSection: some View {
+    private var ownerAlertsSection: some View {
         Section(
-            header: Text("Manager booking alerts"),
-            footer: Text("Push and email delivery depends on your notification setup.")
+            header: Text("Owner booking alerts"),
+            footer: Text("When on, you get push alerts for new bookings and cancellations. Assigned artists are still notified about their own jobs.")
                 .font(.caption2)
         ) {
             TeamNotificationToggle(
                 viewModel: teamPolicyViewModel,
-                title: "Notify manager on new booking",
+                title: "Notify on new booking",
                 keyPath: \.onNewBooking
             )
             TeamNotificationToggle(
                 viewModel: teamPolicyViewModel,
-                title: "Notify manager on cancellation",
+                title: "Notify on cancellation",
                 keyPath: \.onCancellation
             )
         }

@@ -2207,7 +2207,7 @@ struct ManageShopTabContent: View {
                 } label: {
                     ManageNavigationRow(
                         title: "Shipping & pickup",
-                        subtitle: "Shippo live rates and local pickup",
+                        subtitle: "Quotes from business address · optional drop-off",
                         value: viewModel.shopShippingEnabled ? "On" : "Set up"
                     )
                 }

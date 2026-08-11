@@ -7,6 +7,8 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import MapKit
+import CoreLocation
 
 // MARK: - Hub
 
@@ -967,8 +969,41 @@ private struct ShopInlineComingSoon: View {
 
 // MARK: - Shipping settings
 
+/// Nearby carrier drop-off (saved for studio convenience; not used for rate quotes).
+struct ShopDropOffSpot: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let street: String
+    let city: String
+    let state: String
+    let zip: String
+    let distanceMeters: CLLocationDistance?
+
+    var subtitle: String {
+        let cityLine = [city, [state, zip].filter { !$0.isEmpty }.joined(separator: " ")]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        var parts: [String] = []
+        if !street.isEmpty { parts.append(street) }
+        if !cityLine.isEmpty { parts.append(cityLine) }
+        if let meters = distanceMeters, meters.isFinite {
+            let miles = meters / 1609.344
+            if miles < 10 {
+                parts.append(String(format: "%.1f mi", miles))
+            } else {
+                parts.append(String(format: "%.0f mi", miles))
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
 struct ShopShippingSettingsView: View {
     @ObservedObject var viewModel: DesignViewModel
+
+    @State private var dropOffResults: [ShopDropOffSpot] = []
+    @State private var isSearchingDropOff = false
+    @State private var dropOffSearchError: String?
 
     private var controlsDisabled: Bool {
         !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
@@ -979,39 +1014,125 @@ struct ShopShippingSettingsView: View {
             Section {
                 Toggle("Local pickup", isOn: $viewModel.shopPickupEnabled)
                     .disabled(controlsDisabled)
-                Toggle("Shipping (Shippo live rates)", isOn: $viewModel.shopShippingEnabled)
+                Toggle("Shipping (live carrier quotes)", isOn: $viewModel.shopShippingEnabled)
                     .disabled(controlsDisabled)
+            } header: {
+                Text("How shipping works")
             } footer: {
-                Text("Customers pay carrier rates at checkout. Add a Shippo API token to Cloud Functions (SHIPPO_API_TOKEN) before enabling shipping.")
+                Text(
+                    """
+                    Checkout shows live carrier quotes from your business address/ZIP. The customer pays that shipping amount to you.
+
+                    Bookking does not buy postage. After an order, pack the item, buy a label yourself (post office, UPS, Pirate Ship, etc.), and use the shipping money you collected.
+
+                    Tip: set Weight (oz) and L×W×H on each product for the most accurate quotes. The default package below is only a fallback.
+                    """
+                )
             }
 
             Section {
-                TextField("Business name", text: $viewModel.shopShipFromName)
-                TextField("Street", text: $viewModel.shopShipFromStreet)
-                TextField("City", text: $viewModel.shopShipFromCity)
-                TextField("State", text: $viewModel.shopShipFromState)
-                    .textInputAutocapitalization(.characters)
-                TextField("ZIP", text: $viewModel.shopShipFromZip)
-                    .keyboardType(.numbersAndPunctuation)
+                Text(viewModel.shopShippingQuoteOriginSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(viewModel.shopShippingSearchAddressLine.isEmpty ? .secondary : .primary)
             } header: {
-                Text("Ship from")
+                Text("Quote from (business address)")
             } footer: {
-                Text("If blank, we use your business contact address and service area.")
+                Text("Rates always use this address. Edit it under Design → Contact / location — not here.")
             }
 
             Section {
-                TextField("Weight (oz)", text: $viewModel.shopDefaultWeightOz)
-                    .keyboardType(.decimalPad)
-                TextField("Length (in)", text: $viewModel.shopDefaultLengthIn)
-                    .keyboardType(.decimalPad)
-                TextField("Width (in)", text: $viewModel.shopDefaultWidthIn)
-                    .keyboardType(.decimalPad)
-                TextField("Height (in)", text: $viewModel.shopDefaultHeightIn)
-                    .keyboardType(.decimalPad)
+                shippingMeasureRow(
+                    title: "Weight",
+                    unit: "oz",
+                    text: $viewModel.shopDefaultWeightOz
+                )
+                shippingMeasureRow(
+                    title: "Length",
+                    unit: "in",
+                    text: $viewModel.shopDefaultLengthIn
+                )
+                shippingMeasureRow(
+                    title: "Width",
+                    unit: "in",
+                    text: $viewModel.shopDefaultWidthIn
+                )
+                shippingMeasureRow(
+                    title: "Height",
+                    unit: "in",
+                    text: $viewModel.shopDefaultHeightIn
+                )
             } header: {
-                Text("Default package")
+                Text("Default package (oz · L×W×H)")
             } footer: {
-                Text("Used when a product has no weight or dimensions. Set weight on each product for accurate rates.")
+                Text(
+                    """
+                    Weight is in ounces (oz). Dimensions are length × width × height in inches.
+
+                    Weigh a typical packed box (product + packing). Measure the outside of the box. These values are used only when a product has no shipping size set.
+                    """
+                )
+            }
+
+            Section {
+                if viewModel.hasShopDropOffSelected {
+                    Text(viewModel.shopDropOffSummary)
+                        .font(.subheadline)
+                    Button("Clear saved drop-off", role: .destructive) {
+                        viewModel.clearShopDropOff()
+                        dropOffResults = []
+                    }
+                    .disabled(controlsDisabled)
+                }
+
+                Button {
+                    Task { await searchNearbyDropOffs() }
+                } label: {
+                    if isSearchingDropOff {
+                        HStack {
+                            ProgressView()
+                            Text("Finding nearby spots…")
+                        }
+                    } else {
+                        Label(
+                            viewModel.hasShopDropOffSelected ? "Find a different drop-off" : "Find nearby drop-off",
+                            systemImage: "mappin.and.ellipse"
+                        )
+                    }
+                }
+                .disabled(controlsDisabled || isSearchingDropOff || viewModel.shopShippingSearchAddressLine.isEmpty)
+
+                if let dropOffSearchError, !dropOffSearchError.isEmpty {
+                    Text(dropOffSearchError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                ForEach(dropOffResults) { spot in
+                    Button {
+                        viewModel.applyShopDropOff(spot)
+                        dropOffResults = []
+                        dropOffSearchError = nil
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(spot.name)
+                                .foregroundStyle(.primary)
+                            Text(spot.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(controlsDisabled)
+                }
+            } header: {
+                Text("Where to drop off (optional)")
+            } footer: {
+                Text(
+                    """
+                    Look up the closest post office, UPS, or similar spot near your business. This is only a reminder for you — it does not change customer shipping quotes.
+
+                    Add a business street address under Design → Contact first so we know where to search.
+                    """
+                )
             }
         }
         .navigationTitle("Shipping & pickup")
@@ -1027,6 +1148,122 @@ struct ShopShippingSettingsView: View {
         .onDisappear {
             Task { await viewModel.saveShopShippingSettings() }
         }
+    }
+
+    private func shippingMeasureRow(title: String, unit: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(title)
+            Spacer(minLength: 12)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 96)
+                .disabled(controlsDisabled)
+            Text(unit)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, alignment: .leading)
+        }
+    }
+
+    @MainActor
+    private func searchNearbyDropOffs() async {
+        dropOffSearchError = nil
+        dropOffResults = []
+        let query = viewModel.shopShippingSearchAddressLine
+        guard !query.isEmpty else {
+            dropOffSearchError = "Add your business address under Design → Contact first."
+            return
+        }
+
+        isSearchingDropOff = true
+        defer { isSearchingDropOff = false }
+
+        do {
+            let placemarks = try await CLGeocoder().geocodeAddressString(query)
+            guard let center = placemarks.first?.location else {
+                dropOffSearchError = "Couldn’t locate your business address. Check Design → Contact."
+                return
+            }
+
+            let region = MKCoordinateRegion(
+                center: center.coordinate,
+                latitudinalMeters: 20_000,
+                longitudinalMeters: 20_000
+            )
+            let queries = ["USPS", "post office", "UPS Store", "FedEx Office"]
+            var byId: [String: ShopDropOffSpot] = [:]
+
+            for q in queries {
+                let request = MKLocalSearch.Request()
+                request.naturalLanguageQuery = q
+                request.region = region
+                request.resultTypes = .pointOfInterest
+                let response = try await MKLocalSearch(request: request).start()
+                for item in response.mapItems {
+                    guard let spot = ShopDropOffSpot(mapItem: item, from: center) else { continue }
+                    if let existing = byId[spot.id] {
+                        let old = existing.distanceMeters ?? .greatestFiniteMagnitude
+                        let neu = spot.distanceMeters ?? .greatestFiniteMagnitude
+                        if neu < old { byId[spot.id] = spot }
+                    } else {
+                        byId[spot.id] = spot
+                    }
+                }
+            }
+
+            let sorted = byId.values.sorted {
+                ($0.distanceMeters ?? .greatestFiniteMagnitude) < ($1.distanceMeters ?? .greatestFiniteMagnitude)
+            }
+            dropOffResults = Array(sorted.prefix(8))
+            if dropOffResults.isEmpty {
+                dropOffSearchError = "No drop-off spots found nearby. Try refining your business address."
+            }
+        } catch {
+            dropOffSearchError = error.localizedDescription
+        }
+    }
+}
+
+private extension ShopDropOffSpot {
+    init?(mapItem: MKMapItem, from origin: CLLocation) {
+        let placemark = mapItem.placemark
+        let rawName = mapItem.name ?? placemark.name ?? "Drop-off"
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let streetNumber = placemark.subThoroughfare ?? ""
+        let streetName = placemark.thoroughfare ?? ""
+        let street = [streetNumber, streetName]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let city = (placemark.locality ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let state = (placemark.administrativeArea ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let zip = (placemark.postalCode ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, (!street.isEmpty || !zip.isEmpty) else { return nil }
+
+        let coord = placemark.coordinate
+        let id = [
+            name.lowercased(),
+            street.lowercased(),
+            city.lowercased(),
+            String(format: "%.4f,%.4f", coord.latitude, coord.longitude),
+        ].joined(separator: "|")
+
+        var distance: CLLocationDistance?
+        if let loc = placemark.location {
+            distance = origin.distance(from: loc)
+        } else if CLLocationCoordinate2DIsValid(coord) {
+            distance = origin.distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+        }
+
+        self.init(
+            id: id,
+            name: name,
+            street: street,
+            city: city,
+            state: state,
+            zip: zip,
+            distanceMeters: distance
+        )
     }
 }
 
@@ -1510,7 +1747,7 @@ private struct ShopProductFormSheet: View {
                         }
                     }
                     .appCard()
-                    Text("Needed for accurate USPS/UPS rates at checkout.")
+                    Text("Needed for accurate USPS/UPS rates at checkout. You’re responsible for shipping and the shipping cost — weigh and measure the packed item carefully so the quote matches what you’ll pay when you buy the label.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

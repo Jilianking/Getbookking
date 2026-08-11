@@ -1,6 +1,11 @@
 # Shippo shop shipping setup
 
-Bookking uses **Shippo** for live USPS/UPS (etc.) rates at `/shop/checkout`. Customers pay the selected rate; after payment, Functions buy the label (best-effort).
+Bookking uses **Shippo for live rates only** at `/shop/checkout`. Customers pay the selected rate to the studio. **Bookking never buys shipping labels** — the studio buys postage themselves (post office, Pirate Ship, etc.) using the shipping money collected.
+
+## Rate origin vs drop-off
+
+- **Quotes** always use the studio **business contact address / ZIP** (Design → Contact).
+- **Where to drop off** in the app is optional (nearby USPS/UPS lookup). It is saved for the studio only and **does not** change quotes.
 
 ## 1. Create a Shippo account
 
@@ -26,22 +31,23 @@ Or full functions deploy after the secret exists.
 
 ## 3. Enable in the app
 
-**Shop → Shipping & pickup** (or Website Builder → Shop settings):
+**Shop → Shipping & pickup**:
 
-- Turn on **Shipping (Shippo live rates)**
-- Optionally fill **Ship from** (else business contact address is used)
-- Set **Default package** weight/size
-- On each product, set **Weight (oz)** and dimensions for accurate quotes
+- Turn on **Shipping (live carrier quotes)** and/or **Local pickup**
+- Confirm business address under Design → Contact (used for quotes)
+- Set **Default package** weight (**oz**) and **L×W×H** (**in**) as a fallback
+- Set weight/dims on each product when possible
+- Optionally save a nearby drop-off spot (reminder only)
 
 ## 4. Checkout flow
 
-- **Pickup** (default when enabled) — free, no Shippo call  
-- **Ship** — customer enters address → **Get shipping rates** → picks a rate → pays product + shipping + fees  
+- **Pickup** — free, no Shippo call  
+- **Ship** — customer address → live rates → pays product + shipping  
+- After payment: `shippingLabelMode: studio_manual` — no platform label purchase
 
 Your platform **1%** still applies on the full charged amount (including shipping).
 
 ## Notes
 
-- No Shippo subscription required for API Starter / pay-as-you-go  
-- Postage is paid by the customer; label purchase uses the Shippo account wallet / carriers  
-- Until `SHIPPO_API_TOKEN` is set, enabling shipping will error when requesting rates — pickup still works once Functions are deployed with a valid secret for shop callables that declare the secret
+- Platform `SHIPPO_API_TOKEN` is used **only** to fetch/validate rates — not to buy postage  
+- Until the secret is set, enabling shipping will error when requesting rates; pickup still works once shop callables are deployed with the secret declared

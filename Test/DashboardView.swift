@@ -35,11 +35,11 @@ struct DashboardView: View {
     ]
 
     private var displayPendingRequestsCount: Int {
-        viewModel.useTenantData ? sessionStore.pendingRequestsCount : viewModel.pendingRequestsCount
+        viewModel.pendingRequestsCount
     }
 
     private var displayUnreadRequestsCount: Int {
-        viewModel.useTenantData ? sessionStore.unreadRequestsCount : viewModel.unreadRequestsCount
+        viewModel.unreadRequestsCount
     }
 
     var body: some View {
@@ -120,7 +120,12 @@ struct DashboardView: View {
                 }
             }
             .refreshable {
-                await viewModel.refresh(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
+                await viewModel.refresh(
+                    sessionStore: sessionStore,
+                    isDemoMode: authViewModel.isDemoMode,
+                    teamAccess: authViewModel.teamAccess,
+                    currentUserUid: authViewModel.currentUserUid
+                )
                 await paymentsViewModel.loadData(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
@@ -155,7 +160,12 @@ struct DashboardView: View {
         }
         .task {
             requestsViewModel.sessionStore = sessionStore
-            await viewModel.loadData(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
+            await viewModel.loadData(
+                sessionStore: sessionStore,
+                isDemoMode: authViewModel.isDemoMode,
+                teamAccess: authViewModel.teamAccess,
+                currentUserUid: authViewModel.currentUserUid
+            )
             await paymentsViewModel.loadData(
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
@@ -265,7 +275,12 @@ struct DashboardView: View {
     private func reloadAfterRequestDetail() async {
         sessionStore.invalidateBookings()
         await sessionStore.loadNewBookingsIfNeeded(force: true, isDemoMode: authViewModel.isDemoMode)
-        await viewModel.refresh(sessionStore: sessionStore, isDemoMode: authViewModel.isDemoMode)
+        await viewModel.refresh(
+            sessionStore: sessionStore,
+            isDemoMode: authViewModel.isDemoMode,
+            teamAccess: authViewModel.teamAccess,
+            currentUserUid: authViewModel.currentUserUid
+        )
         await requestsViewModel.refreshRequests(
             isDemoMode: authViewModel.isDemoMode,
             sessionStore: sessionStore

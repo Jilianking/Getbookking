@@ -252,9 +252,14 @@ struct ManagerPermissions: Equatable {
     }
 
     init(dictionary: [String: Any]?) {
-        guard let d = dictionary else { return }
-        viewAllBookings = d["viewAllBookings"] as? Bool ?? false
-        approveRejectRequests = d["approveRejectRequests"] as? Bool ?? false
+        guard let d = dictionary else {
+            // No policy doc yet — owners expect shop-wide access until they turn toggles off.
+            viewAllBookings = true
+            approveRejectRequests = true
+            return
+        }
+        viewAllBookings = d["viewAllBookings"] as? Bool ?? true
+        approveRejectRequests = d["approveRejectRequests"] as? Bool ?? true
         editServicesPricing = d["editServicesPricing"] as? Bool ?? false
         manageBookingFormStyle = d["manageBookingFormStyle"] as? Bool ?? false
         manageArtistSchedules = d["manageArtistSchedules"] as? Bool ?? false

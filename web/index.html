@@ -3740,6 +3740,9 @@
     .bk-band-content .field-input,
     .bk-band-content .pref-days-dropdown,
     .bk-band-content .upload-drop,
+    .bk-band-content .bk-book-artist-wrap,
+    .bk-band-content .bk-book-artist-field,
+    .bk-band-content #bk-book-artist,
     .blade-band-content [data-edit-key],
     .blade-band-content a,
     .blade-band-content button,
@@ -3753,7 +3756,10 @@
     .blade-band-content .booking-form label,
     .blade-band-content .field-input,
     .blade-band-content .pref-days-dropdown,
-    .blade-band-content .upload-drop {
+    .blade-band-content .upload-drop,
+    .blade-band-content .bk-book-artist-wrap,
+    .blade-band-content .bk-book-artist-field,
+    .blade-band-content #bk-book-artist {
       pointer-events: auto;
     }
     /* Quick-edit hit targets sit behind band content; disable on live site so empty taps reach the page. */
@@ -4385,14 +4391,17 @@
     .bk-shop-checkout-ship-fields { margin-top: 12px; }
     .bk-shop-checkout-rates { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
     .bk-shop-checkout-rate {
-      display: flex; justify-content: space-between; gap: 12px; align-items: center; width: 100%;
+      display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; width: 100%;
       text-align: left; padding: 12px 14px; border: 1px solid var(--bk-checkout-border);
       border-radius: 12px; background: var(--bk-checkout-card, #fff); color: inherit; cursor: pointer; font: inherit;
     }
     .bk-shop-checkout-rate[aria-pressed="true"] {
       border-color: var(--bk-checkout-accent); box-shadow: inset 0 0 0 1px var(--bk-checkout-accent);
     }
-    .bk-shop-checkout-rate-meta { font-size: 0.8rem; color: var(--bk-checkout-muted); margin-top: 2px; }
+    .bk-shop-checkout-rate-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+    .bk-shop-checkout-rate-copy > strong { display: block; line-height: 1.3; }
+    .bk-shop-checkout-rate-meta { display: block; font-size: 0.8rem; line-height: 1.35; color: var(--bk-checkout-muted); }
+    .bk-shop-checkout-rate > strong:last-child { flex-shrink: 0; line-height: 1.3; }
     .bk-shop-checkout-rates-status { font-size: 0.85rem; color: var(--bk-checkout-muted); margin: 8px 0 0; }
     .bk-shop-checkout-note-toggle {
       background: none; border: none; padding: 0; margin: 4px 0 16px;
@@ -7653,12 +7662,11 @@
         display: none;
       }
       .studio12-page .s12-nav-logo-main {
-        font-size: clamp(20px, 6vw, 28px);
+        font-size: clamp(26px, 7.5vw, 34px);
+        letter-spacing: 0.18em;
       }
       .studio12-page .s12-nav-logo-sub {
-        font-size: 10px;
-        margin-top: 4px;
-        letter-spacing: 0.28em;
+        display: none;
       }
     }
 
@@ -8999,13 +9007,15 @@
       function studio12NavLogoSubHtml(tenant) {
         var tagline = (tenant.tagline || '').trim();
         var area = (tenant.serviceArea || '').trim();
+        var inner = '';
         if (tagline) {
-          return wcSpan(tenant, 'wc.s12.navSub', tagline);
+          inner = wcSpan(tenant, 'wc.s12.navSub', tagline);
+        } else if (area) {
+          inner = wcSpan(tenant, 'wc.contact.serviceArea', area);
+        } else {
+          inner = wcSpan(tenant, 'wc.s12.navSub', 'Hair studio');
         }
-        if (area) {
-          return wcSpan(tenant, 'wc.contact.serviceArea', area);
-        }
-        return wcSpan(tenant, 'wc.s12.navSub', 'Hair studio');
+        return '<span class="s12-nav-logo-sub">' + inner + '</span>';
       }
       /** Whole service row/card tap → native Edit service sheet (`svc:<id>:edit`). */
       function svcEditAttr(serviceId) {
@@ -11958,10 +11968,10 @@
           var guidedFormSchemaAttr = ' data-guided-form-schema-encoded="' + formSchemaEnc + '"';
           var guidedInner =
             bookingPageHeaderHtml +
-            (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
             '<div class="booking-guided booking-guided--wizard booking-guided--steps-first">' +
               guidedWizardPhaseChromeHtml(tenant) +
               '<form id="book-form" class="booking-form booking-form--guided" data-guided-wizard-form data-guided-confirm-step="' + guidedWizard.confirmStep + '"' + mobileFormAttrs + guidedFormSchemaAttr + '>' +
+                (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
                 guidedPanelsHtml +
                 (mobileProj.useMobileSplit ? guidedFieldSheetHtml() : '') +
                 '<div class="booking-guided-bottom booking-guided-wizard-footer">' +
@@ -11988,8 +11998,10 @@
               sidebar +
             '</div>';
         }
-        var bookCardInner = contact + artistHtml +
-                '<form id="book-form" class="booking-form">' + html +
+        var bookCardInner = contact +
+                '<form id="book-form" class="booking-form">' +
+                  (artistHtml ? '<div class="bk-book-artist-wrap">' + artistHtml + '</div>' : '') +
+                  html +
                   '<p id="form-error" class="error" style="display:none"></p>' +
                   '<button type="submit" class="booking-submit" data-accent>Request booking</button>' +
                 '</form>';
@@ -14754,9 +14766,16 @@
           if (!ratesEl) return;
           ratesEl.innerHTML = rates.map(function(r) {
             var label = esc((r.provider || '') + (r.service ? (' · ' + r.service) : ''));
-            var days = r.estimatedDays != null ? (' · ~' + r.estimatedDays + ' day' + (r.estimatedDays === 1 ? '' : 's')) : '';
+            var metaParts = [];
+            if (r.durationTerms) metaParts.push(String(r.durationTerms).trim());
+            if (r.estimatedDays != null) {
+              metaParts.push('~' + r.estimatedDays + ' day' + (r.estimatedDays === 1 ? '' : 's'));
+            }
+            var meta = metaParts.length
+              ? '<span class="bk-shop-checkout-rate-meta">' + esc(metaParts.join(' · ')) + '</span>'
+              : '';
             return '<button type="button" class="bk-shop-checkout-rate" data-rate-id="' + esc(r.objectId) + '" aria-pressed="false">' +
-              '<span><strong>' + label + '</strong><span class="bk-shop-checkout-rate-meta">' + esc(r.durationTerms || '') + days + '</span></span>' +
+              '<span class="bk-shop-checkout-rate-copy"><strong>' + label + '</strong>' + meta + '</span>' +
               '<strong>' + formatMoney(r.amountCents / 100) + '</strong></button>';
           }).join('');
         }

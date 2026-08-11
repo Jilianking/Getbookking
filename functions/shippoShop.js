@@ -117,23 +117,11 @@ function normalizeShipAddress(raw, fallbackName) {
   return out;
 }
 
+/**
+ * Rate origin is always the studio business address (contact + service area).
+ * Optional shopDropOffLocation is for studio convenience only and must not drive quotes.
+ */
 function shipFromAddressFromTenant(tenantData, terminalAddressFromTenant) {
-  const custom = tenantData?.shopShipFrom && typeof tenantData.shopShipFrom === "object"
-    ? tenantData.shopShipFrom
-    : null;
-  if (custom && (custom.street1 || custom.line1) && custom.city && custom.state && (custom.zip || custom.postal_code)) {
-    return normalizeShipAddress(
-      {
-        ...custom,
-        name:
-          custom.name ||
-          tenantData.displayName ||
-          tenantData.businessName ||
-          "Studio",
-      },
-      tenantData.displayName || tenantData.businessName || "Studio"
-    );
-  }
   const addr = terminalAddressFromTenant(tenantData || {});
   return {
     name: (tenantData.displayName || tenantData.businessName || "Studio").toString().trim().slice(0, 100),
@@ -186,6 +174,11 @@ async function retrieveRate(token, rateObjectId) {
   return mapShippoRate(rate);
 }
 
+/**
+ * Not used by Bookking checkout. Platform is rates-only: studios buy labels
+ * themselves with the shipping money collected at checkout.
+ * Kept for optional future per-studio Shippo integrations.
+ */
 async function purchaseLabel(token, rateObjectId) {
   const tx = await shippoFetch(token, "/transactions/", {
     method: "POST",

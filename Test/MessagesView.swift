@@ -361,6 +361,8 @@ struct MessageThreadView: View {
     @FocusState private var isComposerFocused: Bool
     @State private var mediaPreviewSelection: MessageMediaPreviewSelection?
     @State private var interactiveBackOffset: CGFloat = 0
+    /// Bumped when composer tray / draft chrome collapses so the thread re-pins to the latest bubble.
+    @State private var scrollToLatestRequest = 0
 
     private let interactiveBackEdgeWidth: CGFloat = 28
     private let interactiveBackDismissThreshold: CGFloat = 110
@@ -428,20 +430,21 @@ struct MessageThreadView: View {
                         .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: geo.size.height) { oldHeight, newHeight in
+                        // Tray / keyboard changed available height — re-pin to latest once layout settles.
+                        guard abs(newHeight - oldHeight) > 1 else { return }
+                        scrollThreadToLatest(proxy: proxy, delayMilliseconds: 280)
+                    }
                 }
                 .onChange(of: messages.count) { _, _ in
-                    if let last = messages.last {
-                        withAnimation { proxy.scrollTo(last.stableId, anchor: .bottom) }
-                    }
+                    scrollThreadToLatest(proxy: proxy, animated: true)
                 }
                 .onChange(of: isComposerFocused) { _, focused in
-                    guard focused, let last = messages.last else { return }
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(280))
-                        withAnimation {
-                            proxy.scrollTo(last.stableId, anchor: .bottom)
-                        }
-                    }
+                    guard focused else { return }
+                    scrollThreadToLatest(proxy: proxy, delayMilliseconds: 280)
+                }
+                .onChange(of: scrollToLatestRequest) { _, _ in
+                    scrollThreadToLatest(proxy: proxy, delayMilliseconds: 280)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -461,7 +464,10 @@ struct MessageThreadView: View {
                 bookingRequestId: linkedBookingRequestId,
                 drawerState: drawerState,
                 isDemoMode: authViewModel.isDemoMode,
-                fieldFocused: $isComposerFocused
+                fieldFocused: $isComposerFocused,
+                onComposerChromeChanged: {
+                    scrollToLatestRequest += 1
+                }
             )
             .appTourAnchor(.messagesReply, isActive: appTour.isStepActive(.messagesReply))
         }
@@ -590,6 +596,26 @@ struct MessageThreadView: View {
         newMessage = draft
         isComposerFocused = true
         onConsumedComposerDraft()
+    }
+
+    private func scrollThreadToLatest(
+        proxy: ScrollViewProxy,
+        animated: Bool = true,
+        delayMilliseconds: Int = 0
+    ) {
+        guard let lastId = messages.last?.stableId else { return }
+        Task { @MainActor in
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            if animated {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    proxy.scrollTo(lastId, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(lastId, anchor: .bottom)
+            }
+        }
     }
 
     private func openClientProfile() {

@@ -265,7 +265,9 @@ struct AdminRootView: View {
                 )
                 async let metrics: () = dashboardMetrics.loadData(
                     sessionStore: sessionStore,
-                    isDemoMode: authViewModel.isDemoMode
+                    isDemoMode: authViewModel.isDemoMode,
+                    teamAccess: authViewModel.teamAccess,
+                    currentUserUid: authViewModel.currentUserUid
                 )
                 _ = await (bootstrap, metrics)
             } else if !authViewModel.isAuthenticated {
@@ -293,7 +295,9 @@ struct AdminRootView: View {
                 await sessionStore.refreshProfileAndTenant()
                 await dashboardMetrics.loadData(
                     sessionStore: sessionStore,
-                    isDemoMode: authViewModel.isDemoMode
+                    isDemoMode: authViewModel.isDemoMode,
+                    teamAccess: authViewModel.teamAccess,
+                    currentUserUid: authViewModel.currentUserUid
                 )
             }
         }
@@ -443,7 +447,13 @@ struct AdminRootView: View {
 
     private func badgeCount(for section: AdminSection) -> Int {
         switch section {
-        case .requests: return sessionStore.unreadRequestsCount
+        case .requests:
+            let scoped = sessionStore.newBookingRequests.scopedForTeamAccess(
+                authViewModel.teamAccess,
+                currentUserUid: authViewModel.currentUserUid,
+                roster: sessionStore.teamMembers
+            )
+            return scoped.filter { $0.readAt == nil }.count
         default: return 0
         }
     }

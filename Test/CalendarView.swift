@@ -22,7 +22,7 @@ struct CalendarView: View {
     let sectionTitle: String
 
     private var canManageAssignment: Bool {
-        authViewModel.teamAccess.isOwner || authViewModel.teamAccess.canViewAllBookings
+        authViewModel.teamAccess.canViewAllBookings
     }
 
     private var canPickArtistOnConfirm: Bool {

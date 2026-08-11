@@ -67,8 +67,9 @@ struct EffectiveTeamAccess: Equatable {
     var canManageBookingPolicy: Bool { isOwner }
 
     var canApproveRejectRequests: Bool {
+        // Owner access toggle — independent of studio “sets team booking type”.
+        if isOwner { return permissions.approveRejectRequests }
         guard bookingRequiresApproval else { return false }
-        if isOwner { return true }
         guard managersApproveAppointments else { return false }
         if accessRole == .manager { return permissions.approveRejectRequests }
         return false
@@ -87,7 +88,8 @@ struct EffectiveTeamAccess: Equatable {
     }
 
     var canViewAllBookings: Bool {
-        if isOwner { return true }
+        // Owner access toggle (tenant.managerPermissions.viewAllBookings).
+        if isOwner { return permissions.viewAllBookings }
         if accessRole == .manager { return permissions.viewAllBookings }
         return false
     }
@@ -95,12 +97,6 @@ struct EffectiveTeamAccess: Equatable {
     var canAccessClientList: Bool {
         if isOwner { return true }
         if accessRole == .manager { return permissions.accessClientList }
-        return false
-    }
-
-    var canManageArtistSchedules: Bool {
-        if isOwner { return true }
-        if accessRole == .manager { return permissions.manageArtistSchedules }
         return false
     }
 
@@ -148,16 +144,8 @@ enum TenantTeamAccessService {
             return EffectiveTeamAccess(
                 isOwner: true,
                 accessRole: .owner,
-                permissions: ManagerPermissions(
-                    viewAllBookings: true,
-                    approveRejectRequests: true,
-                    editServicesPricing: true,
-                    manageBookingFormStyle: true,
-                    manageArtistSchedules: true,
-                    accessClientList: true,
-                    viewEarningsReports: true,
-                    sendClientNotifications: true
-                ),
+                // Prefer live team access permissions (from Owner access toggles); don't force-on.
+                permissions: current.permissions,
                 confirmationType: current.confirmationType,
                 depositAmount: current.depositAmount,
                 bookingRequiresApproval: current.bookingRequiresApproval,

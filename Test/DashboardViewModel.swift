@@ -49,13 +49,24 @@ class DashboardViewModel: ObservableObject {
         isLoading = true
     }
 
-    func loadData(sessionStore: TenantSessionStore, isDemoMode: Bool = false) async {
+    func loadData(
+        sessionStore: TenantSessionStore,
+        isDemoMode: Bool = false,
+        teamAccess: EffectiveTeamAccess = .ownerFullAccess,
+        currentUserUid: String? = nil
+    ) async {
         await MainActor.run { isLoading = true }
         
         if isDemoMode {
             await MainActor.run { isLoading = true }
             if sessionStore.isDemoSession {
-                let bookingReqs = sessionStore.bookingRequests
+                let roster = sessionStore.teamMembers
+                let bookingReqs = sessionStore.bookingRequests.scopedForTeamAccess(
+                    teamAccess,
+                    currentUserUid: currentUserUid,
+                    roster: roster
+                )
+                let newReqs = TenantSessionStore.filterNewWorkflowRequests(bookingReqs)
                 let upcoming = bookingReqs.filter { $0.status.lowercased() == "confirmed" }
                 let monthStart = Calendar.current.date(
                     from: Calendar.current.dateComponents([.year, .month], from: Date())
@@ -68,8 +79,8 @@ class DashboardViewModel: ObservableObject {
                 let revenueSnapshot = Self.makeRevenueSnapshotFromDemoPayments(sessionStore.demoPayments)
                 await MainActor.run {
                     useTenantData = true
-                    pendingRequestsCount = sessionStore.pendingRequestsCount
-                    unreadRequestsCount = sessionStore.unreadRequestsCount
+                    pendingRequestsCount = newReqs.count
+                    unreadRequestsCount = newReqs.filter { $0.readAt == nil }.count
                     upcomingBookingsCount = upcoming.count
                     confirmedThisMonthCount = confirmedMonth.count
                     totalClientsCount = sessionStore.customers.count
@@ -113,12 +124,19 @@ class DashboardViewModel: ObservableObject {
             await sessionStore.ensureSessionLoaded(isDemoMode: false)
             async let dashboardBookings: () = sessionStore.loadDashboardBookingsIfNeeded(isDemoMode: false)
             async let newBookings: () = sessionStore.loadNewBookingsIfNeeded(isDemoMode: false)
+            async let teamLoad: () = sessionStore.loadTeamMembersIfNeeded(isDemoMode: false)
             async let customerTotal = sessionStore.customerCount(isDemoMode: false)
-            _ = await (dashboardBookings, newBookings)
+            _ = await (dashboardBookings, newBookings, teamLoad)
             let clientsCount = await customerTotal
             
             if sessionStore.tenantId != nil {
-                let bookingReqs = sessionStore.bookingRequests
+                let roster = sessionStore.teamMembers
+                let bookingReqs = sessionStore.bookingRequests.scopedForTeamAccess(
+                    teamAccess,
+                    currentUserUid: currentUserUid ?? Auth.auth().currentUser?.uid,
+                    roster: roster
+                )
+                let newReqs = TenantSessionStore.filterNewWorkflowRequests(bookingReqs)
                 let upcoming = bookingReqs.filter { $0.status.lowercased() == "confirmed" }
                 let monthStart = Calendar.current.date(
                     from: Calendar.current.dateComponents([.year, .month], from: Date())
@@ -132,8 +150,8 @@ class DashboardViewModel: ObservableObject {
 
                 await MainActor.run {
                     useTenantData = true
-                    pendingRequestsCount = sessionStore.pendingRequestsCount
-                    unreadRequestsCount = sessionStore.unreadRequestsCount
+                    pendingRequestsCount = newReqs.count
+                    unreadRequestsCount = newReqs.filter { $0.readAt == nil }.count
                     upcomingBookingsCount = upcoming.count
                     confirmedThisMonthCount = confirmedMonth.count
                     totalClientsCount = clientsCount
@@ -203,9 +221,19 @@ class DashboardViewModel: ObservableObject {
         }
     }
     
-    func refresh(sessionStore: TenantSessionStore, isDemoMode: Bool = false) async {
+    func refresh(
+        sessionStore: TenantSessionStore,
+        isDemoMode: Bool = false,
+        teamAccess: EffectiveTeamAccess = .ownerFullAccess,
+        currentUserUid: String? = nil
+    ) async {
         sessionStore.invalidateBookings()
-        await loadData(sessionStore: sessionStore, isDemoMode: isDemoMode)
+        await loadData(
+            sessionStore: sessionStore,
+            isDemoMode: isDemoMode,
+            teamAccess: teamAccess,
+            currentUserUid: currentUserUid
+        )
     }
 
     // MARK: - Revenue chart

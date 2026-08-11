@@ -100,6 +100,8 @@ struct MessageComposerBar: View {
     var drawerState: DrawerState
     var isDemoMode: Bool
     @FocusState.Binding var fieldFocused: Bool
+    /// Fired when tray / draft-photo chrome collapses so the thread can pin to the latest message.
+    var onComposerChromeChanged: (() -> Void)? = nil
 
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @StateObject private var requestsViewModel = RequestsViewModel()
@@ -248,8 +250,24 @@ struct MessageComposerBar: View {
             // Tray open ⇒ keyboard must stay down and field unfocusable.
             if expanded {
                 dismissKeyboard()
+            } else {
+                notifyComposerChromeChanged()
             }
         }
+        .onChange(of: quickRepliesExpanded) { _, expanded in
+            if !expanded {
+                notifyComposerChromeChanged()
+            }
+        }
+        .onChange(of: pendingPhotos.count) { oldCount, newCount in
+            if newCount < oldCount {
+                notifyComposerChromeChanged()
+            }
+        }
+    }
+
+    private func notifyComposerChromeChanged() {
+        onComposerChromeChanged?()
     }
 
     private var composerBackground: Color {
@@ -670,7 +688,7 @@ struct MessageComposerBar: View {
 
     private var canPickArtistOnConfirm: Bool {
         let access = authViewModel.teamAccess
-        let canManage = access.isOwner || access.canViewAllBookings
+        let canManage = access.canViewAllBookings
         return canManage && access.showsStaffAssignmentUI(
             rosterCount: requestsViewModel.teamFilterRoster.count
         )

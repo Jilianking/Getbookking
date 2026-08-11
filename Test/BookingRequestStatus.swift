@@ -71,9 +71,16 @@ enum BookingRequestStatus {
         return confirmed
     }
 
-    static func canManageBookingActions(_ teamAccess: EffectiveTeamAccess) -> Bool {
-        // Visibility is scoped in Requests (own vs shop-wide). Anyone who can
-        // see a request can act on it.
-        true
+    /// Owner / managers with approve permission, or the assigned member on their own request.
+    static func canManageBookingActions(
+        _ teamAccess: EffectiveTeamAccess,
+        assignedMemberUid: String? = nil,
+        currentUserUid: String? = nil
+    ) -> Bool {
+        if teamAccess.canApproveRejectRequests { return true }
+        let assigned = (assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let me = (currentUserUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !assigned.isEmpty, !me.isEmpty else { return false }
+        return assigned == me
     }
 }

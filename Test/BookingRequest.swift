@@ -53,23 +53,42 @@ struct BookingRequest: Identifiable {
     func matchesAssigneeFilter(key: String, roster: [TenantTeamMember]) -> Bool {
         if key == BookingAssigneeFilter.allKey { return true }
         if key == BookingAssigneeFilter.unassignedKey { return !hasAssignedMember }
-        guard let member = roster.first(where: { $0.uid == key }) else { return true }
-        let memberUid = member.uid.trimmingCharacters(in: .whitespacesAndNewlines)
-        let memberEmail = member.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let memberName = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let reqUid = (assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !reqUid.isEmpty, reqUid == memberUid { return true }
-        let reqEmail = (assignedMemberEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !reqEmail.isEmpty, !memberEmail.isEmpty, reqEmail == memberEmail { return true }
-        let reqName = (assignedMemberName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !reqName.isEmpty, !memberName.isEmpty, reqName == memberName { return true }
-        return false
+        if let member = roster.first(where: { $0.uid == key }) {
+            let memberUid = member.uid.trimmingCharacters(in: .whitespacesAndNewlines)
+            let memberEmail = member.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let memberName = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !reqUid.isEmpty, reqUid == memberUid { return true }
+            let reqEmail = (assignedMemberEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !reqEmail.isEmpty, !memberEmail.isEmpty, reqEmail == memberEmail { return true }
+            let reqName = (assignedMemberName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !reqName.isEmpty, !memberName.isEmpty, reqName == memberName { return true }
+            return false
+        }
+        // Uid not on roster (e.g. owner missing from teamFilterRoster) — match by uid only.
+        let keyUid = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyUid.isEmpty, !reqUid.isEmpty else { return false }
+        return reqUid == keyUid
     }
 }
 
 enum BookingAssigneeFilter {
     static let allKey = "__all__"
     static let unassignedKey = "__unassigned__"
+}
+
+extension Array where Element == BookingRequest {
+    /// Shop-wide when `canViewAllBookings`; otherwise only requests assigned to `currentUserUid`.
+    func scopedForTeamAccess(
+        _ access: EffectiveTeamAccess,
+        currentUserUid: String?,
+        roster: [TenantTeamMember]
+    ) -> [BookingRequest] {
+        if access.canViewAllBookings { return self }
+        let uid = (currentUserUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !uid.isEmpty else { return [] }
+        return filter { $0.matchesAssigneeFilter(key: uid, roster: roster) }
+    }
 }
 
 enum BookingRequestPaymentLookup {

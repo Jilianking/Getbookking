@@ -55,7 +55,7 @@ struct TeamSettingsHubView: View {
                         title: "Booking settings",
                         subtitle: isSoloBusinessSettings
                             ? "Booking type, deposits, and client flow"
-                            : "Client flow, manager access, booking alerts"
+                            : "Client flow, owner access, booking alerts"
                     )
                 }
 

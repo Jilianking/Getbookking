@@ -204,11 +204,12 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var shopPickupEnabled: Bool = true
     /// Offer Shippo live rates at checkout (requires SHIPPO_API_TOKEN on Functions).
     @Published var shopShippingEnabled: Bool = false
-    @Published var shopShipFromName: String = ""
-    @Published var shopShipFromStreet: String = ""
-    @Published var shopShipFromCity: String = ""
-    @Published var shopShipFromState: String = ""
-    @Published var shopShipFromZip: String = ""
+    /// Optional preferred drop-off (USPS/UPS/etc.) near the business — not used for Shippo rates.
+    @Published var shopDropOffName: String = ""
+    @Published var shopDropOffStreet: String = ""
+    @Published var shopDropOffCity: String = ""
+    @Published var shopDropOffState: String = ""
+    @Published var shopDropOffZip: String = ""
     /// Default parcel when a product has no weight (ounces).
     @Published var shopDefaultWeightOz: String = "16"
     @Published var shopDefaultLengthIn: String = "8"
@@ -1210,18 +1211,21 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
                 shopPickupEnabled = tenant?["shopPickupEnabled"] as? Bool ?? true
                 shopShippingEnabled = tenant?["shopShippingEnabled"] as? Bool ?? false
-                if let shipFrom = tenant?["shopShipFrom"] as? [String: Any] {
-                    shopShipFromName = shipFrom["name"] as? String ?? ""
-                    shopShipFromStreet = shipFrom["street1"] as? String ?? shipFrom["line1"] as? String ?? ""
-                    shopShipFromCity = shipFrom["city"] as? String ?? ""
-                    shopShipFromState = shipFrom["state"] as? String ?? ""
-                    shopShipFromZip = shipFrom["zip"] as? String ?? shipFrom["postal_code"] as? String ?? ""
+                let dropOff =
+                    (tenant?["shopDropOffLocation"] as? [String: Any])
+                    ?? (tenant?["shopShipFrom"] as? [String: Any])
+                if let dropOff {
+                    shopDropOffName = dropOff["name"] as? String ?? ""
+                    shopDropOffStreet = dropOff["street1"] as? String ?? dropOff["line1"] as? String ?? ""
+                    shopDropOffCity = dropOff["city"] as? String ?? ""
+                    shopDropOffState = dropOff["state"] as? String ?? ""
+                    shopDropOffZip = dropOff["zip"] as? String ?? dropOff["postal_code"] as? String ?? ""
                 } else {
-                    shopShipFromName = ""
-                    shopShipFromStreet = ""
-                    shopShipFromCity = ""
-                    shopShipFromState = ""
-                    shopShipFromZip = ""
+                    shopDropOffName = ""
+                    shopDropOffStreet = ""
+                    shopDropOffCity = ""
+                    shopDropOffState = ""
+                    shopDropOffZip = ""
                 }
                 if let parcel = tenant?["shopDefaultParcel"] as? [String: Any] {
                     if let w = parcel["weightOz"] as? Double { shopDefaultWeightOz = String(format: "%g", w) }
@@ -2388,21 +2392,21 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         await savePublicPageVisibility()
     }
 
-    /// Pickup / Shippo shipping toggles, ship-from address, and default parcel.
+    /// Pickup / shipping toggles, optional drop-off spot, and default parcel.
     func saveShopShippingSettings() async {
         guard let tid = tenantId else { return }
         if blockIfDemoReadOnly() { return }
-        var shipFrom: [String: Any] = [:]
-        let name = shopShipFromName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let street = shopShipFromStreet.trimmingCharacters(in: .whitespacesAndNewlines)
-        let city = shopShipFromCity.trimmingCharacters(in: .whitespacesAndNewlines)
-        let state = shopShipFromState.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let zip = shopShipFromZip.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !name.isEmpty { shipFrom["name"] = name }
-        if !street.isEmpty { shipFrom["street1"] = street }
-        if !city.isEmpty { shipFrom["city"] = city }
-        if !state.isEmpty { shipFrom["state"] = state }
-        if !zip.isEmpty { shipFrom["zip"] = zip }
+        var dropOff: [String: Any] = [:]
+        let name = shopDropOffName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let street = shopDropOffStreet.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = shopDropOffCity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let state = shopDropOffState.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let zip = shopDropOffZip.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { dropOff["name"] = name }
+        if !street.isEmpty { dropOff["street1"] = street }
+        if !city.isEmpty { dropOff["city"] = city }
+        if !state.isEmpty { dropOff["state"] = state }
+        if !zip.isEmpty { dropOff["zip"] = zip }
 
         var parcel: [String: Any] = [:]
         if let w = Double(shopDefaultWeightOz.trimmingCharacters(in: .whitespaces)), w > 0 {
@@ -2421,11 +2425,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         var updates: [String: Any] = [
             "shopPickupEnabled": shopPickupEnabled,
             "shopShippingEnabled": shopShippingEnabled,
+            // Quotes always use business contact address — clear legacy custom origin.
+            "shopShipFrom": FieldValue.delete(),
         ]
-        if shipFrom.isEmpty {
-            updates["shopShipFrom"] = FieldValue.delete()
+        if dropOff.isEmpty {
+            updates["shopDropOffLocation"] = FieldValue.delete()
         } else {
-            updates["shopShipFrom"] = shipFrom
+            updates["shopDropOffLocation"] = dropOff
         }
         if parcel.isEmpty {
             updates["shopDefaultParcel"] = FieldValue.delete()
@@ -2433,6 +2439,64 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["shopDefaultParcel"] = parcel
         }
         await saveTenantUpdates(tid, updates)
+    }
+
+    /// Address string used to search nearby carrier drop-off spots.
+    var shopShippingSearchAddressLine: String {
+        let street = contactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suite = contactAddressSuite.trimmingCharacters(in: .whitespacesAndNewlines)
+        let area = serviceArea.trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts: [String] = []
+        if !street.isEmpty {
+            parts.append(suite.isEmpty ? street : "\(street), \(suite)")
+        }
+        if !area.isEmpty { parts.append(area) }
+        return parts.joined(separator: ", ")
+    }
+
+    var shopShippingQuoteOriginSummary: String {
+        let line = shopShippingSearchAddressLine
+        if line.isEmpty {
+            return "Add your business address under Design → Contact so we can quote shipping from your studio ZIP."
+        }
+        return line
+    }
+
+    func applyShopDropOff(_ spot: ShopDropOffSpot) {
+        shopDropOffName = spot.name
+        shopDropOffStreet = spot.street
+        shopDropOffCity = spot.city
+        shopDropOffState = spot.state
+        shopDropOffZip = spot.zip
+    }
+
+    func clearShopDropOff() {
+        shopDropOffName = ""
+        shopDropOffStreet = ""
+        shopDropOffCity = ""
+        shopDropOffState = ""
+        shopDropOffZip = ""
+    }
+
+    var hasShopDropOffSelected: Bool {
+        !shopDropOffName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !shopDropOffStreet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var shopDropOffSummary: String {
+        var lines: [String] = []
+        let name = shopDropOffName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { lines.append(name) }
+        let street = shopDropOffStreet.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !street.isEmpty { lines.append(street) }
+        let city = shopDropOffCity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let state = shopDropOffState.trimmingCharacters(in: .whitespacesAndNewlines)
+        let zip = shopDropOffZip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cityLine = [city, [state, zip].filter { !$0.isEmpty }.joined(separator: " ")]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        if !cityLine.isEmpty { lines.append(cityLine) }
+        return lines.joined(separator: "\n")
     }
 
     /// Persists team page visibility toggles and per-member roster fields.

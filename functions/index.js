@@ -65,7 +65,7 @@ const {
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
-/** Shippo API token (shippo_test_… or live). Required for shop shipping rates/labels. */
+/** Shippo API token (shippo_test_… or live). Rates-only at checkout — Bookking never buys labels. */
 const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
 /** JSON map: solo, studio, shop → Stripe Price id; optional smsExtra ($10/mo per extra SMS line). */
 const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
@@ -4871,39 +4871,18 @@ async function markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, pay
 
   const paidAtIso = new Date().toISOString();
 
-  // Buy Shippo label after payment (best-effort; order stays paid if label fails).
-  const rateId = (order.shippoRateId || meta.shippoRateId || "").toString().trim();
+  // Rates-only: customer paid the quoted shipping; studio buys postage/label themselves.
+  // Do not call Shippo purchaseLabel on the platform token (avoids Bookking postage liability).
   const fulfillment = (order.fulfillmentMethod || meta.fulfillmentMethod || "pickup").toString();
-  if (fulfillment === "shipping" && rateId && !order.shippoTransactionId) {
-    try {
-      const token = (shippoApiToken.value() || "").toString().trim();
-      if (token) {
-        const label = await shippoShop.purchaseLabel(token, rateId);
-        await orderRef.set(
-          {
-            shippoTransactionId: label.transactionId || null,
-            shippoLabelStatus: label.status || null,
-            trackingNumber: label.trackingNumber || null,
-            trackingUrl: label.trackingUrl || null,
-            labelUrl: label.labelUrl || null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        order.trackingNumber = label.trackingNumber || order.trackingNumber;
-        order.trackingUrl = label.trackingUrl || order.trackingUrl;
-        order.labelUrl = label.labelUrl || order.labelUrl;
-      }
-    } catch (labelErr) {
-      console.warn("markShopOrderPaid Shippo label", labelErr.message || labelErr);
-      await orderRef.set(
-        {
-          shippoLabelError: (labelErr.message || "label_failed").toString().slice(0, 500),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    }
+  if (fulfillment === "shipping" && order.shippingLabelMode !== "studio_manual") {
+    await orderRef.set(
+      {
+        shippingLabelMode: "studio_manual",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    order.shippingLabelMode = "studio_manual";
   }
 
   return shopOrderReceiptResponse(tenantData, orderId, {
@@ -5847,6 +5826,125 @@ exports.updateTapToPayDisplayName = functions
   });
 
 /**
+ * Collect FCM device tokens for the given user uids.
+ */
+async function collectDeviceTokensForUids(uids) {
+  const tokens = [];
+  const uniqueUids = [...new Set((uids || []).filter(Boolean))];
+  for (const uid of uniqueUids) {
+    const tokSnap = await db
+      .collection("users")
+      .doc(uid)
+      .collection("deviceTokens")
+      .get();
+    tokSnap.forEach((t) => {
+      const token = t.data().token;
+      if (token && typeof token === "string") tokens.push(token);
+    });
+  }
+  return [...new Set(tokens)];
+}
+
+/**
+ * Recipients for booking alerts: owner when Owner booking alerts toggle is on;
+ * assigned member always; managers when the same flag is on.
+ */
+async function resolveBookingAlertRecipientUids(tenantId, bookingData, managerFlagKey) {
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  if (!tenantSnap.exists) return [];
+  const tenant = tenantSnap.data() || {};
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  const notifs = {
+    ...DEFAULT_MANAGER_NOTIFICATIONS,
+    ...(tenant.managerNotifications || {}),
+  };
+  const alertsEnabled = notifs[managerFlagKey] === true;
+
+  const recipientSet = new Set();
+
+  // Owner booking alerts toggle gates owner pushes.
+  if (alertsEnabled && ownerUid) recipientSet.add(ownerUid);
+
+  const assigned = ((bookingData && bookingData.assignedMemberUid) || "")
+    .toString()
+    .trim();
+  if (assigned) recipientSet.add(assigned);
+
+  if (alertsEnabled) {
+    const usersSnap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .get();
+    for (const userDoc of usersSnap.docs) {
+      if (ownerUid && userDoc.id === ownerUid) continue;
+      const role = parseAccessRole(
+        userDoc.data().role || userDoc.data().accessRole
+      );
+      if (role === "manager") recipientSet.add(userDoc.id);
+    }
+  }
+
+  return [...recipientSet];
+}
+
+async function sendBookingAlertPush({ tokens, title, body, data }) {
+  if (!tokens || !tokens.length) return;
+  const chunkSize = 500;
+  for (let i = 0; i < tokens.length; i += chunkSize) {
+    const chunk = tokens.slice(i, i + chunkSize);
+    try {
+      await admin.messaging().sendEachForMulticast({
+        tokens: chunk,
+        notification: { title, body },
+        data: data || {},
+        apns: {
+          headers: {
+            "apns-priority": "10",
+          },
+          payload: {
+            aps: {
+              alert: { title, body },
+              sound: "default",
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.error("sendBookingAlertPush FCM error", e);
+    }
+  }
+}
+
+/** Push copy: "Booking request" + service, or "Booking request for {artist}" + service. */
+function bookingRequestAlertCopy(bookingData) {
+  const serviceName =
+    ((bookingData && bookingData.serviceName) || "").toString().trim() ||
+    ((bookingData && bookingData.serviceSlug) || "").toString().trim() ||
+    "Appointment";
+  const assignee = ((bookingData && bookingData.assignedMemberName) || "")
+    .toString()
+    .trim();
+  const title = assignee
+    ? `Booking request for ${assignee}`.slice(0, 100)
+    : "Booking request";
+  return { title, body: serviceName.slice(0, 200) };
+}
+
+function bookingCancelledAlertCopy(bookingData) {
+  const serviceName =
+    ((bookingData && bookingData.serviceName) || "").toString().trim() ||
+    ((bookingData && bookingData.serviceSlug) || "").toString().trim() ||
+    "Appointment";
+  const assignee = ((bookingData && bookingData.assignedMemberName) || "")
+    .toString()
+    .trim();
+  const title = assignee
+    ? `Booking cancelled for ${assignee}`.slice(0, 100)
+    : "Booking cancelled";
+  return { title, body: serviceName.slice(0, 200) };
+}
+
+/**
  * FCM push to provider devices when a booking request is created (web or app).
  * iOS stores tokens under users/{uid}/deviceTokens/{hash} (see PushNotificationManager.swift).
  */
@@ -5859,61 +5957,63 @@ exports.onTenantBookingRequestCreated = functions.firestore
     const source = (data.source || "").toString().trim().toLowerCase();
     if (source === "seed") return null;
 
-    const customerName = data.customerName || "Someone";
-    const serviceName = (data.serviceName || "").toString().trim();
-    const body = serviceName
-      ? `${customerName} — ${serviceName}`.slice(0, 200)
-      : `New request from ${customerName}`.slice(0, 200);
+    const { title, body } = bookingRequestAlertCopy(data);
 
-    const usersSnap = await db
-      .collection("users")
-      .where("tenantId", "==", tenantId)
-      .get();
+    const recipientUids = await resolveBookingAlertRecipientUids(
+      tenantId,
+      data,
+      "onNewBooking"
+    );
+    const tokens = await collectDeviceTokensForUids(recipientUids);
+    await sendBookingAlertPush({
+      tokens,
+      title,
+      body,
+      data: {
+        type: "booking_request",
+        tenantId: String(tenantId),
+        requestId: String(requestId),
+      },
+    });
+    return null;
+  });
 
-    const tokens = [];
-    for (const userDoc of usersSnap.docs) {
-      const tokSnap = await db
-        .collection("users")
-        .doc(userDoc.id)
-        .collection("deviceTokens")
-        .get();
-      tokSnap.forEach((t) => {
-        const token = t.data().token;
-        if (token && typeof token === "string") tokens.push(token);
-      });
-    }
+/**
+ * FCM when a booking is cancelled (respects managerNotifications.onCancellation).
+ */
+exports.onTenantBookingRequestUpdated = functions.firestore
+  .document("tenants/{tenantId}/bookingRequests/{requestId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    const prev = (before.status || "").toString().trim().toLowerCase();
+    const next = (after.status || "").toString().trim().toLowerCase();
+    if (prev === next) return null;
+    if (next !== "cancelled" && next !== "canceled") return null;
 
-    if (tokens.length === 0) return null;
+    const tenantId = context.params.tenantId;
+    const requestId = context.params.requestId;
+    const source = (after.source || "").toString().trim().toLowerCase();
+    if (source === "seed") return null;
 
-    const unique = [...new Set(tokens)];
-    const chunkSize = 500;
+    const { title, body } = bookingCancelledAlertCopy(after);
 
-    for (let i = 0; i < unique.length; i += chunkSize) {
-      const chunk = unique.slice(i, i + chunkSize);
-      try {
-        await admin.messaging().sendEachForMulticast({
-          tokens: chunk,
-          notification: {
-            title: "New booking request",
-            body,
-          },
-          data: {
-            type: "booking_request",
-            tenantId: String(tenantId),
-            requestId: String(requestId),
-          },
-          apns: {
-            payload: {
-              aps: {
-                sound: "default",
-              },
-            },
-          },
-        });
-      } catch (e) {
-        console.error("onTenantBookingRequestCreated FCM error", e);
-      }
-    }
+    const recipientUids = await resolveBookingAlertRecipientUids(
+      tenantId,
+      after,
+      "onCancellation"
+    );
+    const tokens = await collectDeviceTokensForUids(recipientUids);
+    await sendBookingAlertPush({
+      tokens,
+      title,
+      body,
+      data: {
+        type: "booking_cancelled",
+        tenantId: String(tenantId),
+        requestId: String(requestId),
+      },
+    });
     return null;
   });
 
@@ -6266,8 +6366,8 @@ exports.stripeSubscriptionWebhook = functions
 const TENANT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_MANAGER_PERMISSIONS = {
-  viewAllBookings: false,
-  approveRejectRequests: false,
+  viewAllBookings: true,
+  approveRejectRequests: true,
   editServicesPricing: false,
   manageBookingFormStyle: false,
   manageArtistSchedules: false,
@@ -6317,22 +6417,22 @@ async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId) {
 }
 
 function canManageAppointmentTime(ctx) {
-  if (ctx.isOwner) return true;
+  const perms = ctx.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
+  if (ctx.isOwner) return perms.viewAllBookings === true;
   return (
     ctx.accessRole === "manager" &&
-    ctx.managerPermissions &&
-    ctx.managerPermissions.viewAllBookings === true
+    perms.viewAllBookings === true
   );
 }
 
 function canApproveRejectBookingRequests(ctx) {
+  const perms = ctx.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
+  if (ctx.isOwner) return perms.approveRejectRequests === true;
   if (!ctx.bookingRequiresApproval) return false;
-  if (ctx.isOwner) return true;
   if (!ctx.managersApproveAppointments) return false;
   return (
     ctx.accessRole === "manager" &&
-    ctx.managerPermissions &&
-    ctx.managerPermissions.approveRejectRequests === true
+    perms.approveRejectRequests === true
   );
 }
 
@@ -6437,7 +6537,10 @@ async function getMemberAccessContext(uid) {
     uid
   );
   const accessRole = isOwner ? "owner" : parseAccessRole(userData.role || userData.accessRole);
-  const managerPermissions = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
+  const managerPermissions = {
+    ...DEFAULT_MANAGER_PERMISSIONS,
+    ...(tenant.managerPermissions || {}),
+  };
   return {
     uid,
     tenantId,
@@ -7725,8 +7828,8 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
   const reqData = reqSnap.data() || {};
   const assignedUid = (reqData.assignedMemberUid || "").toString().trim();
   const assignedToSelf = Boolean(assignedUid && assignedUid === ctx.uid);
-  const canShopWide =
-    ctx.isOwner || canManageAppointmentTime(ctx) || canApproveRejectBookingRequests(ctx);
+  // View-all is visibility only — approve/reject uses explicit permission (or assignee).
+  const canShopWide = ctx.isOwner || canApproveRejectBookingRequests(ctx);
   if (!canShopWide && !assignedToSelf) {
     throw new functions.https.HttpsError(
       "permission-denied",
@@ -7812,8 +7915,14 @@ exports.listTenantMembers = functions
     if (ra !== rb) return ra - rb;
     return (a.displayName || "").localeCompare(b.displayName || "");
   });
-  const perms = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
-  const notifs = tenant.managerNotifications || DEFAULT_MANAGER_NOTIFICATIONS;
+  const perms = {
+    ...DEFAULT_MANAGER_PERMISSIONS,
+    ...(tenant.managerPermissions || {}),
+  };
+  const notifs = {
+    ...DEFAULT_MANAGER_NOTIFICATIONS,
+    ...(tenant.managerNotifications || {}),
+  };
   const workflow = resolveTenantWorkflow(tenant, ownerData);
   const confirmationType = workflow.confirmationType;
   const messaging = await messagingFieldsWithLineCount(

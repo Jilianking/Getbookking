@@ -456,13 +456,11 @@ struct RequestsView: View {
 
     /// Owner / view-all managers see shop requests; everyone else only their own.
     private var scopedBookingRequests: [BookingRequest] {
-        let all = viewModel.bookingRequests
-        if authViewModel.teamAccess.canViewAllBookings { return all }
-        guard let uid = authViewModel.currentUserUid?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !uid.isEmpty else { return [] }
-        return all.filter {
-            $0.matchesAssigneeFilter(key: uid, roster: viewModel.teamFilterRoster)
-        }
+        viewModel.bookingRequests.scopedForTeamAccess(
+            authViewModel.teamAccess,
+            currentUserUid: authViewModel.currentUserUid,
+            roster: viewModel.teamFilterRoster
+        )
     }
 }
 
@@ -487,7 +485,11 @@ struct BookingRequestListRow: View {
     }
 
     private var canManageActions: Bool {
-        BookingRequestStatus.canManageBookingActions(teamAccess)
+        BookingRequestStatus.canManageBookingActions(
+            teamAccess,
+            assignedMemberUid: request.assignedMemberUid,
+            currentUserUid: Auth.auth().currentUser?.uid
+        )
     }
 
     private var canShowDeclineAction: Bool {
@@ -639,7 +641,7 @@ struct BookingRequestDetailView: View {
     }
 
     private var canManageAssignment: Bool {
-        teamAccess.isOwner || teamAccess.canViewAllBookings
+        teamAccess.canViewAllBookings
     }
 
     private var showsStaffAssignmentUI: Bool {
@@ -651,7 +653,11 @@ struct BookingRequestDetailView: View {
     }
 
     private var canManageActions: Bool {
-        BookingRequestStatus.canManageBookingActions(teamAccess)
+        BookingRequestStatus.canManageBookingActions(
+            teamAccess,
+            assignedMemberUid: currentRequest.assignedMemberUid,
+            currentUserUid: Auth.auth().currentUser?.uid
+        )
     }
 
     private var canShowApprovalActions: Bool {
@@ -659,7 +665,7 @@ struct BookingRequestDetailView: View {
     }
 
     private var canConfirmPendingAppointment: Bool {
-        canManageAssignment && BookingRequestStatus.isNew(currentRequest.status)
+        canManageActions && BookingRequestStatus.isNew(currentRequest.status)
     }
 
     private var canShowDeclineAction: Bool {

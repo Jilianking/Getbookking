@@ -16,13 +16,13 @@ struct EffectiveTeamAccess: Equatable {
     var confirmationType: BookingConfirmationType = .requestApprove
     var depositAmount: Double?
     var bookingRequiresApproval: Bool = true
-    var managersApproveAppointments: Bool = true
+    var managersApproveAppointments: Bool = false
     var usesStudioBookingPolicy: Bool = false
     var subscriptionPlan: SubscriptionPlan = .solo
-    /// Independent members connect own Stripe; studio_payroll uses studio account.
+    /// Members connect own Stripe; shop_split sends configured owner share after charges.
     var payoutMode: MemberPayoutMode = .independent
     var usesOwnPayments: Bool = false
-    var canTakePayments: Bool = true
+    var canTakePayments: Bool = false
     /// Studio has an active shared texting line (prerequisite for personal lines).
     var studioSmsActive: Bool = false
     /// Independent member with an active personal texting line.
@@ -54,7 +54,7 @@ struct EffectiveTeamAccess: Equatable {
         ),
         confirmationType: .requestApprove,
         bookingRequiresApproval: true,
-        managersApproveAppointments: true,
+        managersApproveAppointments: false,
         usesStudioBookingPolicy: false,
         subscriptionPlan: .studio,
         payoutMode: .independent,
@@ -182,10 +182,10 @@ enum TenantTeamAccessService {
         let rawType = (data["confirmationType"] as? String) ?? BookingConfirmationType.requestApprove.rawValue
         let confirmation = BookingConfirmationType(rawValue: rawType) ?? .requestApprove
         let requiresApproval = data["bookingRequiresApproval"] as? Bool ?? confirmation.requiresApproval
-        let managersApprove = data["managersApproveAppointments"] as? Bool ?? true
+        let managersApprove = data["managersApproveAppointments"] as? Bool ?? false
         let usesStudio = data["usesStudioBookingPolicy"] as? Bool ?? false
         let payoutRaw = (data["payoutMode"] as? String) ?? MemberPayoutMode.independent.rawValue
-        let payoutMode = MemberPayoutMode(rawValue: payoutRaw) ?? .independent
+        let payoutMode = MemberPayoutMode.fromFirestore(payoutRaw)
         let usesOwnPayments = data["usesOwnPayments"] as? Bool ?? false
         let canTakePayments = data["canTakePayments"] as? Bool ?? true
         let studioSmsActive = data["studioSmsActive"] as? Bool ?? false

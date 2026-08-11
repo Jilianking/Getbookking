@@ -120,18 +120,30 @@ enum PaymentSplitAppliesTo: String, CaseIterable, Identifiable {
 }
 
 /// How a team member receives customer payments.
+/// All modes use the member's own Stripe Connect account; shop split sends the
+/// configured owner % after each successful charge.
 enum MemberPayoutMode: String, CaseIterable, Codable, Identifiable {
-    /// Charges land on the studio Connect account (payroll / front desk).
-    case studioPayroll = "studio_payroll"
-    /// Member connects own Stripe and takes Tap to Pay on their account.
+    /// Member Connect + payment split to the studio/owner (legacy: studio_payroll).
+    case shopSplit = "shop_split"
+    /// Member connects own Stripe; optional payment split via split settings.
     case independent = "independent"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .studioPayroll: return "Studio payroll"
-        case .independent: return "Takes own payments"
+        case .shopSplit: return "Own Stripe + studio split"
+        case .independent: return "Own Stripe (optional split)"
+        }
+    }
+
+    /// Parses Firestore / API values; maps legacy `studio_payroll` → shop split.
+    static func fromFirestore(_ raw: String?) -> MemberPayoutMode {
+        let r = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch r {
+        case "shop_split", "studio_payroll": return .shopSplit
+        case "independent": return .independent
+        default: return .independent
         }
     }
 }
@@ -144,12 +156,14 @@ struct TeamMemberSettings: Equatable {
     var paymentSplitEnabled: Bool = false
     var paymentSplitPercent: Int = 0
     var paymentSplitAppliesTo: PaymentSplitAppliesTo = .service
-    /// Independent members connect their own Stripe; studio_payroll uses the studio account.
+    /// All members connect their own Stripe; shop_split uses payment split to the owner.
     var payoutMode: MemberPayoutMode = .independent
     /// Owner enables self-service portfolio upload in the app (Design → Team).
     var canEditPortfolio: Bool = false
     /// Owner enables self-service bio editing in the app (Design → Team).
     var canEditPublicBio: Bool = false
+    /// When false, member cannot take payments / connect Stripe. Default true.
+    var canTakePayments: Bool = true
 
     init() {}
 
@@ -175,12 +189,12 @@ struct TeamMemberSettings: Equatable {
         } else {
             paymentSplitEnabled = paymentSplitPercent > 0
         }
-        if let raw = d["payoutMode"] as? String,
-           let parsed = MemberPayoutMode(rawValue: raw) {
-            payoutMode = parsed
+        if let raw = d["payoutMode"] as? String {
+            payoutMode = MemberPayoutMode.fromFirestore(raw)
         }
         canEditPortfolio = d["canEditPortfolio"] as? Bool ?? false
         canEditPublicBio = d["canEditPublicBio"] as? Bool ?? false
+        canTakePayments = d["canTakePayments"] as? Bool ?? true
     }
 
     var firestoreDictionary: [String: Any] {
@@ -192,6 +206,7 @@ struct TeamMemberSettings: Equatable {
             "payoutMode": payoutMode.rawValue,
             "canEditPortfolio": canEditPortfolio,
             "canEditPublicBio": canEditPublicBio,
+            "canTakePayments": canTakePayments,
         ]
         if let override = bookingConfirmationOverride, !useStudioBookingPolicy {
             d["bookingConfirmationOverride"] = override
@@ -203,28 +218,28 @@ struct TeamMemberSettings: Equatable {
 // MARK: - Manager policy
 
 struct ManagerPermissions: Equatable {
-    var viewAllBookings: Bool = true
-    var approveRejectRequests: Bool = true
+    var viewAllBookings: Bool = false
+    var approveRejectRequests: Bool = false
     var editServicesPricing: Bool = false
     var manageBookingFormStyle: Bool = false
-    var manageArtistSchedules: Bool = true
-    var accessClientList: Bool = true
+    var manageArtistSchedules: Bool = false
+    var accessClientList: Bool = false
     var viewEarningsReports: Bool = false
-    var sendClientNotifications: Bool = true
+    var sendClientNotifications: Bool = false
 
     static let defaults = ManagerPermissions()
 
     init() {}
 
     init(
-        viewAllBookings: Bool = true,
-        approveRejectRequests: Bool = true,
+        viewAllBookings: Bool = false,
+        approveRejectRequests: Bool = false,
         editServicesPricing: Bool = false,
         manageBookingFormStyle: Bool = false,
-        manageArtistSchedules: Bool = true,
-        accessClientList: Bool = true,
+        manageArtistSchedules: Bool = false,
+        accessClientList: Bool = false,
         viewEarningsReports: Bool = false,
-        sendClientNotifications: Bool = true
+        sendClientNotifications: Bool = false
     ) {
         self.viewAllBookings = viewAllBookings
         self.approveRejectRequests = approveRejectRequests
@@ -238,14 +253,14 @@ struct ManagerPermissions: Equatable {
 
     init(dictionary: [String: Any]?) {
         guard let d = dictionary else { return }
-        viewAllBookings = d["viewAllBookings"] as? Bool ?? true
-        approveRejectRequests = d["approveRejectRequests"] as? Bool ?? true
+        viewAllBookings = d["viewAllBookings"] as? Bool ?? false
+        approveRejectRequests = d["approveRejectRequests"] as? Bool ?? false
         editServicesPricing = d["editServicesPricing"] as? Bool ?? false
         manageBookingFormStyle = d["manageBookingFormStyle"] as? Bool ?? false
-        manageArtistSchedules = d["manageArtistSchedules"] as? Bool ?? true
-        accessClientList = d["accessClientList"] as? Bool ?? true
+        manageArtistSchedules = d["manageArtistSchedules"] as? Bool ?? false
+        accessClientList = d["accessClientList"] as? Bool ?? false
         viewEarningsReports = d["viewEarningsReports"] as? Bool ?? false
-        sendClientNotifications = d["sendClientNotifications"] as? Bool ?? true
+        sendClientNotifications = d["sendClientNotifications"] as? Bool ?? false
     }
 
     var firestoreDictionary: [String: Bool] {
@@ -361,7 +376,9 @@ struct TenantTeamMember: Identifiable, Equatable {
 
     var paymentSplitSummary: String? {
         guard memberSettings.paymentSplitEnabled, memberSettings.paymentSplitPercent > 0 else { return nil }
-        return "\(memberSettings.paymentSplitPercent)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
+        let artist = memberSettings.paymentSplitPercent
+        let studio = max(0, 100 - artist)
+        return "Artist keeps \(artist)% · Studio \(studio)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
     }
 
     var payoutModeSummary: String? {

@@ -72,8 +72,8 @@ enum BookingRequestStatus {
     }
 
     static func canManageBookingActions(_ teamAccess: EffectiveTeamAccess) -> Bool {
-        teamAccess.isOwner
-            || teamAccess.canViewAllBookings
-            || teamAccess.canApproveRejectRequests
+        // Visibility is scoped in Requests (own vs shop-wide). Anyone who can
+        // see a request can act on it.
+        true
     }
 }

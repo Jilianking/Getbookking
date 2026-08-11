@@ -16,7 +16,7 @@ enum TapToPayEligibility {
             return "Tap to Pay on iPhone is only available on iPhone."
         }
         if ProcessInfo.processInfo.isiOSAppOnMac {
-            return "Tap to Pay is not available on Mac."
+            return "Tap to Pay on iPhone is not available on Mac."
         }
         if let osMessage = iosVersionMessage() {
             return osMessage
@@ -70,17 +70,17 @@ enum TapToPayErrorMapper {
     static func userMessage(for error: Error) -> String {
         let ns = error as NSError
         if isAlreadyConnectedToReader(error) {
-            return "Tap to Pay is still connecting. Wait a moment and try again."
+            return "Tap to Pay on iPhone is still connecting. Wait a moment and try again."
         }
         let combined = "\(ns.domain) \(ns.code) \(ns.localizedDescription)".lowercased()
         if combined.contains("blocked") || combined.contains("cannot be used with the built-in") {
-            return "Tap to Pay isn’t available for this Apple Account right now. Apple terms can’t be shown until Tap to Pay is re-enabled. Contact Apple or Stripe support, or try another Apple ID."
+            return "Tap to Pay on iPhone isn’t available for this Apple Account right now. Apple terms can’t be shown until Tap to Pay on iPhone is re-enabled. Contact Apple or Stripe support, or try another Apple ID."
         }
         if combined.contains("osversionnotsupported") || combined.contains("os_version_not_supported") {
-            return "Update iOS to the latest version to use Tap to Pay."
+            return "Update iOS to the latest version to use Tap to Pay on iPhone."
         }
         if combined.contains("simulator") {
-            return "Tap to Pay requires a physical iPhone XS or later."
+            return "Tap to Pay on iPhone requires a physical iPhone XS or later."
         }
         // Apple req 5.9: "timed out" must be a named outcome distinct from declined/failed.
         if combined.contains("collectiontimeout")

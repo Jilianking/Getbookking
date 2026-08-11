@@ -14,7 +14,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     /// Form request vs calendar / slots on public /book.
     @Published var bookingMode: BookingMode = .form
     @Published var confirmationType: BookingConfirmationType = .requestApprove
-    @Published var managersApproveAppointments: Bool = true
+    @Published var managersApproveAppointments: Bool = false
     @Published var depositAmount: Double?
     /// This user's personal booking flow (Settings → My booking type).
     @Published var personalConfirmationType: BookingConfirmationType = .requestApprove
@@ -246,13 +246,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 confirmationType = .requestApprove
                 personalConfirmationType = .requestApprove
                 usesStudioBookingPolicy = false
-                managersApproveAppointments = true
-                depositAmount = nil
-                businessHoursWeekly = .defaultOfficeHours
-                businessHoursExceptions = []
-                businessHours = DesignViewModel.businessHoursDisplayString(weekly: .defaultOfficeHours, exceptions: [])
-                showBusinessHoursOnPage = true
-                daysOpen = [1, 2, 3, 4, 5]
+                managersApproveAppointments = false
                 timeZoneId = TimeZone.current.identifier
                 blockedDates = []
                 availableDates = []

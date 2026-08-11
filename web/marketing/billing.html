@@ -75,20 +75,20 @@
             <span class="bill-kv-label">Numbers in use</span>
             <span class="bill-kv-value" id="smsLinesUsed">—</span>
           </div>
-          <div class="bill-kv">
-            <span class="bill-kv-label">Included free</span>
+          <div class="bill-kv" id="smsLinesFreeRow">
+            <span class="bill-kv-label">Included</span>
             <span class="bill-kv-value" id="smsLinesFree">—</span>
           </div>
           <div class="bill-kv" id="smsLinesPaidRow">
             <span class="bill-kv-label">Additional numbers</span>
-            <span class="bill-kv-value" id="smsLinesPaid">$10/mo each</span>
+            <span class="bill-kv-value" id="smsLinesPaid">$12/mo each</span>
           </div>
           <div id="smsLineAssignmentsWrap" class="bill-sms-assignments hidden">
             <div class="bill-sms-assignments-label">Who has a number</div>
             <ul class="bill-sms-line-list" id="smsLineList"></ul>
           </div>
           <p class="bill-note" id="smsLinesNote" style="margin-top:12px;">
-            Studio and Shop include 2 texting numbers. Any additional phone number is <span id="smsExtraPriceNote">$10/mo</span> (up to your plan seat limit). Tap a person to manage their line. Add or assign numbers below.
+            Additional numbers beyond your plan allotment are <span id="smsExtraPriceNote">$12/mo</span>. Tap a person to manage their line. Add or assign numbers below.
           </p>
           <button type="button" class="btn-upgrade hidden" id="addSmsLineBtn" style="margin-top:14px;width:100%;">
             Add a texting number
@@ -159,7 +159,7 @@
         Choose a teammate to enable their personal texting number.
       </p>
       <p id="addSmsLinePayNote" class="hidden" style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin:12px 0 0;">
-        This will charge your card <strong>now</strong> (prorated <span id="addSmsLineModalPrice">$10/mo</span>) for one additional number, then set up their line.
+        This will charge your card <strong>now</strong> (prorated <span id="addSmsLineModalPrice">$12/mo</span>) for one additional number, then set up their line.
       </p>
       <label class="bill-sms-consent" style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--text-secondary);line-height:1.45;">
         <input type="checkbox" id="addSmsLineConsent" style="margin-top:3px;" />
@@ -793,7 +793,7 @@
 
     function smsExtraPriceLabel(m) {
       var label = (m && m.smsExtraMonthlyPriceLabel) ? String(m.smsExtraMonthlyPriceLabel).trim() : '';
-      return label || '$10/mo';
+      return label || '$12/mo';
     }
 
     function applySmsExtraPriceCopy(m) {
@@ -828,22 +828,27 @@
 
       var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
       var paidRow = document.getElementById('smsLinesPaidRow');
+      var freeRow = document.getElementById('smsLinesFreeRow');
       var linesNote = document.getElementById('smsLinesNote');
       if (plan === 'solo') {
         if (paidRow) paidRow.classList.add('hidden');
+        if (freeRow) freeRow.classList.remove('hidden');
         if (linesNote) {
-          linesNote.textContent = 'Solo includes 1 studio texting number. Enable it in the Get Bookking app under Messaging.';
+          linesNote.textContent =
+            'Solo includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
         }
-        note.textContent = 'Solo includes 1 studio texting number. Enable it in the Get Bookking app under Messaging.';
+        note.textContent =
+          'Solo includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
         note.classList.remove('hidden');
         return;
       }
       if (paidRow) paidRow.classList.remove('hidden');
+      if (freeRow) freeRow.classList.add('hidden');
       if (linesNote) {
         linesNote.innerHTML =
-          'Studio and Shop include 2 texting numbers. Any additional phone number is <span id="smsExtraPriceNote">' +
+          'Additional numbers beyond your plan allotment are <span id="smsExtraPriceNote">' +
           priceLabel +
-          '</span> (up to your plan seat limit). Tap a person to manage their line. Add or assign numbers below.';
+          '</span>. Tap a person to manage their line. Add or assign numbers below.';
       }
 
       if (m.smsAtMaxLines) {
@@ -861,15 +866,15 @@
         btn.classList.remove('hidden');
         if (needsPayNext) {
           note.textContent =
-            'All included and paid slots are in use. Add another number for ' + priceLabel +
-            ' each — choose a teammate to assign it.';
+            'Additional numbers beyond your plan allotment are ' + priceLabel +
+            '. Choose a teammate to assign the next number.';
         } else if (!eligible.length) {
           note.textContent =
             'You have capacity available, but no independent teammates without a number. Invite a member or set payout to Independent in the app.';
         } else {
           note.textContent = m.smsNextLineIsFree
             ? 'You have an included slot available. Choose a teammate to enable their personal line.'
-            : 'Confirm purchase for the next number ($10/mo), then choose a teammate.';
+            : 'Confirm purchase for the next number ($12/mo), then choose a teammate.';
         }
         note.classList.remove('hidden');
       }
@@ -1121,7 +1126,6 @@
           var m = messagingFromBilling();
           var payNote = document.getElementById('addSmsLinePayNote');
           if (smsNeedsPayForNext(m)) payNote.classList.remove('hidden');
-          else payNote.classList.add('hidden');
           else payNote.classList.add('hidden');
           modalErr.textContent = formatFirebaseHttpsError(e);
           modalErr.classList.remove('hidden');

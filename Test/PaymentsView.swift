@@ -30,9 +30,7 @@ struct PaymentsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if viewModel.isStudioPayroll {
-                        studioPayrollBanner
-                    } else if viewModel.hasLoadedStripeStatus && viewModel.needsStripeConnect {
+                    if viewModel.hasLoadedStripeStatus && viewModel.needsStripeConnect {
                         StripeConnectBanner(
                             viewModel: viewModel,
                             isDemoMode: authViewModel.isDemoMode
@@ -100,12 +98,12 @@ struct PaymentsView: View {
                 Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
             }
             .sheet(isPresented: $showDepositLinkSheet, onDismiss: { viewModel.depositLinkUrl = nil }) {
-                DepositLinkSheet(viewModel: viewModel) {
+                DepositLinkSheet(viewModel: viewModel, drawerState: drawerState) {
                     showDepositLinkSheet = false
                 }
             }
             .sheet(isPresented: $showManualPaymentSheet) {
-                ManualPaymentSheet(viewModel: viewModel) {
+                ManualPaymentSheet(viewModel: viewModel, drawerState: drawerState) {
                     showManualPaymentSheet = false
                 }
             }
@@ -121,7 +119,7 @@ struct PaymentsView: View {
                     showTapToPayEducation = false
                 }
             }
-            .alert("Tap to Pay", isPresented: Binding(
+            .alert("Tap to Pay on iPhone", isPresented: Binding(
                 get: { tapToPayAlertMessage != nil },
                 set: { if !$0 { tapToPayAlertMessage = nil } }
             )) {
@@ -227,7 +225,12 @@ struct PaymentsView: View {
                     Text(PaymentsViewModel.formatUSD(viewModel.totalBalance))
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-                    Text("Ready to withdraw \(PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay)) · Settling \(PaymentsViewModel.formatUSD(viewModel.settlingDisplay))")
+                    if authViewModel.isDemoMode {
+                        Text("Demo — not real money")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.orange.opacity(0.9))
+                    }
+                    Text("Available to pay out \(PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay)) · Available soon \(PaymentsViewModel.formatUSD(viewModel.settlingDisplay))")
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
@@ -253,24 +256,24 @@ struct PaymentsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 0) {
                         balanceStatItem(
-                            title: "Ready",
+                            title: "Available to pay out",
                             value: PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay),
                             valueColor: .white
                         )
                         balanceStatItem(
-                            title: "Settling",
+                            title: "Available soon",
                             value: PaymentsViewModel.formatUSD(viewModel.settlingDisplay),
+                            valueColor: .white
+                        )
+                        balanceStatItem(
+                            title: "Total balance",
+                            value: PaymentsViewModel.formatUSD(viewModel.totalBalance),
                             valueColor: .white
                         )
                         balanceStatItem(
                             title: "This month",
                             value: "+\(PaymentsViewModel.formatUSD(viewModel.monthEarnings))",
                             valueColor: .green
-                        )
-                        balanceStatItem(
-                            title: "Avg/week",
-                            value: PaymentsViewModel.formatUSD(viewModel.averageWeeklyEarnings),
-                            valueColor: .white
                         )
                     }
 
@@ -314,6 +317,9 @@ struct PaymentsView: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(Color.white.opacity(0.55))
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(valueColor)
@@ -347,11 +353,13 @@ struct PaymentsView: View {
                     icon: "creditcard.fill",
                     iconColor: .purple,
                     title: "Manual payment",
-                    subtitle: "",
+                    subtitle: viewModel.stripeConnected
+                        ? ""
+                        : "Set up Stripe to accept card payments",
                     action: {
-                        showManualPaymentSheet = true
+                        handleManualOrDepositTapped(open: { showManualPaymentSheet = true })
                     },
-                    disabled: !viewModel.stripeConnected,
+                    disabled: false,
                     showsDivider: true
                 )
 
@@ -359,16 +367,54 @@ struct PaymentsView: View {
                     icon: "link",
                     iconColor: .green,
                     title: "Deposit link",
-                    subtitle: "Request a deposit via text",
+                    subtitle: viewModel.stripeConnected
+                        ? "Request a deposit via text"
+                        : "Set up Stripe to send deposit links",
                     action: {
-                        showDepositLinkSheet = true
+                        handleManualOrDepositTapped(open: { showDepositLinkSheet = true })
                     },
-                    disabled: !viewModel.stripeConnected,
+                    disabled: false,
                     showsDivider: false
                 )
             }
             .appCard()
             .padding(.horizontal)
+        }
+    }
+
+    /// Opens Manual/Deposit when Connect is ready; otherwise starts Stripe setup (same path as Tap to Pay).
+    private func handleManualOrDepositTapped(open: @escaping () -> Void) {
+        if viewModel.stripeConnected {
+            open()
+            return
+        }
+        Task {
+            await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode)
+            if viewModel.stripeConnected {
+                open()
+                return
+            }
+            if viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected {
+                #if TAP_TO_PAY_ENABLED
+                tapToPayAlertMessage = viewModel.stripePaymentsBlockedMessage
+                #else
+                viewModel.errorMessage = viewModel.stripePaymentsBlockedMessage
+                #endif
+                return
+            }
+            let outcome = await viewModel.createConnectAccountLink(isDemoMode: authViewModel.isDemoMode)
+            switch outcome {
+            case .alreadyConnected:
+                open()
+            case .pendingReview:
+                #if TAP_TO_PAY_ENABLED
+                tapToPayAlertMessage = viewModel.stripePaymentsBlockedMessage
+                #else
+                viewModel.errorMessage = viewModel.stripePaymentsBlockedMessage
+                #endif
+            case .openedInSafari, .noAction:
+                break
+            }
         }
     }
 
@@ -423,26 +469,6 @@ struct PaymentsView: View {
             }
         }
         .appTourAnchor(.paymentsHistory, isActive: appTour.isStepActive(.paymentsHistory))
-    }
-
-    private var studioPayrollBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "building.2.fill")
-                .font(.title2)
-                .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Studio payroll")
-                    .font(.subheadline.weight(.semibold))
-                Text("Payments go through your studio account. Contact your admin to take your own payments.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-        }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
     }
 }
 
@@ -684,18 +710,20 @@ struct PaymentsAllTransactionsSheet: View {
 
 // MARK: - Manual Payment Sheet
 struct ManualPaymentSheet: View {
+    private enum Phase: Equatable {
+        case amount
+        case checkoutBranding
+        case receipt
+    }
+
     @ObservedObject var viewModel: PaymentsViewModel
+    var drawerState: DrawerState
     var onDismiss: () -> Void
     @State private var amountText = ""
     @State private var localError: String?
+    @State private var phase: Phase = .amount
+    @State private var receiptDetail: PaymentReceiptDetail?
     @FocusState private var isAmountFocused: Bool
-
-    private static let suggestionAmounts: [(label: String, cents: Int)] = [
-        ("$25", 2500),
-        ("$50", 5000),
-        ("$100", 10_000),
-        ("$200", 20_000),
-    ]
 
     private var serviceAmountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
@@ -709,6 +737,47 @@ struct ManualPaymentSheet: View {
     private var canOpen: Bool { serviceAmountCents >= 50 }
 
     var body: some View {
+        ZStack {
+            if phase == .amount || phase == .checkoutBranding {
+                amountEntryContent
+            }
+
+            if phase == .checkoutBranding {
+                checkoutBrandingBackdrop
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
+            }
+
+            if phase == .receipt, let receiptDetail {
+                PaymentReceiptSheet(
+                    detail: receiptDetail,
+                    drawerState: drawerState,
+                    onDismissAll: onDismiss,
+                    onDone: {
+                        if receiptDetail.isUnpaidAttempt {
+                            self.receiptDetail = nil
+                            withAnimation(.easeInOut(duration: 0.28)) {
+                                phase = .amount
+                            }
+                        } else {
+                            onDismiss()
+                        }
+                    },
+                    onTryAgain: {
+                        self.receiptDetail = nil
+                        withAnimation(.easeInOut(duration: 0.28)) {
+                            phase = .amount
+                        }
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(2)
+            }
+        }
+        .animation(.easeOut(duration: 0.38), value: phase)
+    }
+
+    private var amountEntryContent: some View {
         NavigationStack {
             VStack(spacing: 24) {
                 Text("Enter amount")
@@ -746,20 +815,14 @@ struct ManualPaymentSheet: View {
                 Button {
                     Task { await openCheckout() }
                 } label: {
-                    HStack {
-                        if viewModel.isCreatingManualCheckoutLink {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Open checkout · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(canOpen ? AppDesign.brandDark : Color.gray)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    Text("Open checkout · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canOpen ? AppDesign.brandDark : Color.gray)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .disabled(!canOpen || viewModel.isCreatingManualCheckoutLink)
+                .disabled(!canOpen || viewModel.isCreatingManualCheckoutLink || phase == .checkoutBranding)
                 .padding(.horizontal, 24)
 
                 Spacer(minLength: 0)
@@ -770,17 +833,6 @@ struct ManualPaymentSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { onDismiss() }
-                }
-                ToolbarItem(placement: .keyboard) {
-                    HStack(spacing: 12) {
-                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
-                            Button(item.label) {
-                                amountText = String(format: "%.2f", Double(item.cents) / 100)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                    .padding(.vertical, 8)
                 }
             }
             .onAppear {
@@ -794,16 +846,79 @@ struct ManualPaymentSheet: View {
         }
     }
 
+    /// Clean white + crown behind Stripe PaymentSheet (manual only).
+    private var checkoutBrandingBackdrop: some View {
+        ZStack {
+            Color.white.ignoresSafeArea()
+            Image("BookkingCrownMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 200, height: 200)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .interactiveDismissDisabled(true)
+    }
+
     private func openCheckout() async {
         localError = nil
+        isAmountFocused = false
+        withAnimation(.easeOut(duration: 0.38)) {
+            phase = .checkoutBranding
+        }
+        // Kick off Stripe as the white crown screen slides in from the top.
+        await Task.yield()
+
         let result = await viewModel.chargeManualCheckoutInApp(serviceAmountCents: serviceAmountCents)
         switch result {
-        case .success:
-            onDismiss()
+        case .success(let intent):
+            presentReceipt(intent: intent)
         case .canceled:
-            break
+            withAnimation(.easeInOut(duration: 0.28)) {
+                phase = .amount
+            }
         case .failed(let message):
-            localError = message
+            presentUnsuccessfulReceipt(message: message)
+        }
+    }
+
+    private func presentReceipt(intent: ManualCheckoutPaymentIntent) {
+        receiptDetail = PaymentReceiptDetail.fromTapToPay(
+            checkout: intent.checkout,
+            businessName: viewModel.effectiveTapToPayDisplayName,
+            customerName: nil,
+            note: nil,
+            paymentIntentId: intent.paymentIntentId,
+            includesSignature: false,
+            paymentMethodLabel: "Manual payment"
+        )
+        withAnimation(.easeOut(duration: 0.25)) {
+            phase = .receipt
+        }
+    }
+
+    private func presentUnsuccessfulReceipt(message: String) {
+        let reason: PaymentReceiptDocumentKind.UnpaidAttemptReason = {
+            if message.localizedCaseInsensitiveContains("declin") {
+                return .declined
+            }
+            if message.localizedCaseInsensitiveContains("timed out")
+                || message.localizedCaseInsensitiveContains("time out") {
+                return .timedOut
+            }
+            return .notCompleted
+        }()
+        receiptDetail = PaymentReceiptDetail.fromTapToPayUnsuccessful(
+            checkout: checkout,
+            businessName: viewModel.effectiveTapToPayDisplayName,
+            customerName: nil,
+            note: nil,
+            reason: reason,
+            detailMessage: message,
+            paymentMethodLabel: "Manual payment"
+        )
+        withAnimation(.easeOut(duration: 0.25)) {
+            phase = .receipt
         }
     }
 }
@@ -811,17 +926,10 @@ struct ManualPaymentSheet: View {
 // MARK: - Deposit Link Sheet
 struct DepositLinkSheet: View {
     @ObservedObject var viewModel: PaymentsViewModel
+    var drawerState: DrawerState
     var onDismiss: () -> Void
     @State private var amountText = ""
-    @State private var didCopyLink = false
     @FocusState private var isAmountFocused: Bool
-
-    private static let suggestionAmounts: [(label: String, cents: Int)] = [
-        ("$25", 2500),
-        ("$50", 5000),
-        ("$100", 10_000),
-        ("$200", 20_000),
-    ]
 
     private var serviceAmountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
@@ -881,20 +989,26 @@ struct DepositLinkSheet: View {
                                 .padding(.horizontal)
                             HStack(spacing: 12) {
                                 Button {
-                                    UIPasteboard.general.string = urlString
-                                    didCopyLink = true
+                                    sendInMessages(urlString: urlString)
                                 } label: {
-                                    Label(didCopyLink ? "Copied" : "Copy", systemImage: didCopyLink ? "checkmark" : "doc.on.doc")
-                                        .font(.body.weight(.medium))
-                                        .frame(maxWidth: .infinity)
+                                    Label("Send in Messages", systemImage: "message")
+                                        .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.75)
+                                        .frame(maxWidth: .infinity, minHeight: 22)
                                 }
                                 .buttonStyle(.bordered)
+                                .tint(AppDesign.brandWarm)
+                                .frame(maxWidth: .infinity)
                                 ShareLink(item: url, subject: Text("Deposit link"), message: Text("Pay your deposit")) {
                                     Label("Share", systemImage: "square.and.arrow.up")
-                                        .font(.body.weight(.medium))
-                                        .frame(maxWidth: .infinity)
+                                        .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, minHeight: 22)
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .tint(AppDesign.brandDark)
+                                .frame(maxWidth: .infinity)
                             }
                             .padding(.horizontal, 24)
                         }
@@ -916,7 +1030,7 @@ struct DepositLinkSheet: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(canCreate ? Color.green : Color.gray)
+                            .background(canCreate ? AppDesign.messageSentBackground : Color.gray)
                             .foregroundColor(.white)
                             .cornerRadius(12)
                         }
@@ -930,30 +1044,27 @@ struct DepositLinkSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Deposit Link")
             .navigationBarTitleDisplayMode(.inline)
+            .tint(AppDesign.brandWarm)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { onDismiss() }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    ForEach(Self.suggestionAmounts, id: \.cents) { item in
-                        Button(item.label) {
-                            amountText = String(format: "%.2f", Double(item.cents) / 100)
-                        }
-                    }
-                    Spacer()
-                    Button("Done") { isAmountFocused = false }
                 }
             }
             .onChange(of: viewModel.depositLinkUrl) { _, newValue in
                 if newValue != nil {
                     isAmountFocused = false
-                    didCopyLink = false
                 }
             }
-            .onChange(of: amountText) { _, _ in
-                didCopyLink = false
-            }
         }
+    }
+
+    private func sendInMessages(urlString: String) {
+        let amountLabel = CardCheckoutPricing.formatUSD(cents: serviceAmountCents)
+        drawerState.messagesComposeBody = "Pay your \(amountLabel) deposit: \(urlString)"
+        drawerState.messagesShouldOpenCompose = true
+        drawerState.selectedSection = .messages
+        drawerState.isOpen = false
+        onDismiss()
     }
 }
 
@@ -985,22 +1096,56 @@ struct WithdrawSheet: View {
     private var canWithdraw: Bool { amountCents >= 50 && amountCents <= maxCents }
 
     private var estimatedInstantFeeCents: Int {
-        max(0, Int((Double(amountCents) * 0.01).rounded()))
+        // ~1.5% Stripe + 0.3% platform ≈ 1.8%
+        max(0, Int((Double(amountCents) * 0.018).rounded()))
+    }
+
+    private var activePaysToLabel: String? {
+        if payoutMethod == .instant {
+            return viewModel.instantPayoutDestinationLabel
+                ?? viewModel.standardPayoutDestinationLabel
+        }
+        return viewModel.standardPayoutDestinationLabel
+            ?? viewModel.instantPayoutDestinationLabel
     }
 
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text("Ready to withdraw: \(formatCurrency(viewModel.readyToWithdrawDisplay))")
+                    Text("Available to pay out: \(formatCurrency(viewModel.readyToWithdrawDisplay))")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     if viewModel.settlingDisplay > 0 {
-                        Text("Settling \(formatCurrency(viewModel.settlingDisplay)) — available after Stripe clears the payment.")
+                        Text("Available soon \(formatCurrency(viewModel.settlingDisplay)) — not ready for payout yet.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 8)
+                    }
+
+                    if let paysTo = activePaysToLabel {
+                        VStack(spacing: 4) {
+                            Text("Pays to")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppDesign.textSecondary)
+                            Text(paysTo)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(AppDesign.brandCream)
+                        )
+                    } else {
+                        Text("Destination is your Stripe payout account. Manage bank details in Stripe.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
 
                     TextField("0", text: $amountText)
@@ -1016,6 +1161,7 @@ struct WithdrawSheet: View {
                     }) {
                         Text("Withdraw full balance")
                             .font(.subheadline)
+                            .foregroundStyle(AppDesign.brandWarm)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -1026,7 +1172,7 @@ struct WithdrawSheet: View {
                         payoutMethodRow(
                             method: .standard,
                             title: "Standard",
-                            subtitle: "Free · usually 1–2 business days",
+                            subtitle: standardSubtitle,
                             enabled: maxStandardCents >= 50
                         )
 
@@ -1040,7 +1186,7 @@ struct WithdrawSheet: View {
                     .padding(.horizontal, 4)
 
                     if payoutMethod == .instant, amountCents >= 50 {
-                        Text("Est. Stripe Instant fee ~\(formatCurrency(Double(estimatedInstantFeeCents) / 100)) (about 1%). Funds typically arrive within ~30 minutes.")
+                        Text("Est. fees ~\(formatCurrency(Double(estimatedInstantFeeCents) / 100)) (~1.5% Stripe + 0.3% platform). Funds typically arrive within ~30 minutes.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -1074,7 +1220,7 @@ struct WithdrawSheet: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(canWithdraw ? Color.green : Color.gray)
+                        .background(canWithdraw ? AppDesign.messageSentBackground : Color.gray)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                     }
@@ -1084,16 +1230,20 @@ struct WithdrawSheet: View {
                 .padding(.top, 24)
                 .padding(.bottom, 32)
             }
-            .navigationTitle("Withdraw to bank")
+            .navigationTitle("Withdraw")
             .navigationBarTitleDisplayMode(.inline)
+            .tint(AppDesign.brandWarm)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { onDismiss() }
                 }
             }
             .onAppear {
-                if !viewModel.canOfferInstantPayout {
-                    payoutMethod = .standard
+                Task {
+                    await viewModel.refreshAvailableBalance()
+                    if !viewModel.canOfferInstantPayout {
+                        payoutMethod = .standard
+                    }
                 }
             }
             .onChange(of: payoutMethod) { _, _ in
@@ -1104,14 +1254,26 @@ struct WithdrawSheet: View {
         }
     }
 
+    private var standardSubtitle: String {
+        if let label = viewModel.standardPayoutDestinationLabel {
+            return "Free · 1–2 business days · \(label)"
+        }
+        return "Free · usually 1–2 business days"
+    }
+
     private var instantSubtitle: String {
         if viewModel.canOfferInstantPayout {
-            return "Fee applies · usually ~30 minutes · up to \(formatCurrency(viewModel.instantAvailableBalance)) eligible"
+            let dest = viewModel.instantPayoutDestinationLabel
+                ?? viewModel.standardPayoutDestinationLabel
+            if let dest {
+                return "Fees: ~1.5% Stripe + 0.3% · ~30 min · \(dest) · up to \(formatCurrency(viewModel.instantAvailableBalance))"
+            }
+            return "Fees: ~1.5% Stripe + 0.3% platform · usually ~30 minutes · up to \(formatCurrency(viewModel.instantAvailableBalance)) after fees"
         }
         if viewModel.instantAvailableBalance < 0.50 {
             return "Not available yet — funds must be Instant-eligible"
         }
-        return "Not available — bank may not support Instant Payouts"
+        return "Not available — add an Instant-eligible debit or bank in Stripe"
     }
 
     private func payoutMethodRow(
@@ -1126,7 +1288,7 @@ struct WithdrawSheet: View {
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: payoutMethod == method ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(enabled ? (payoutMethod == method ? Color.green : AppDesign.textSecondary) : Color.gray.opacity(0.4))
+                    .foregroundStyle(enabled ? (payoutMethod == method ? AppDesign.brandWarm : AppDesign.textSecondary) : Color.gray.opacity(0.4))
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -1147,7 +1309,7 @@ struct WithdrawSheet: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
-                        payoutMethod == method && enabled ? Color.green.opacity(0.5) : Color.clear,
+                        payoutMethod == method && enabled ? AppDesign.brandWarm.opacity(0.55) : Color.clear,
                         lineWidth: 1.5
                     )
             )

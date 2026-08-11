@@ -60,6 +60,8 @@ function demoConnectBalanceResponse(payments) {
     pendingCents: Math.max(0, Math.round(Number(payments.pendingBalanceCents) || 0)),
     instantAvailableCents: availableCents,
     instantPayoutEligible: availableCents >= 50,
+    standardPayoutDestinationLabel: "Demo Bank ····4242",
+    instantPayoutDestinationLabel: null,
     demoShowcase: true,
   };
 }

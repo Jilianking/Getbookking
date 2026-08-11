@@ -6,7 +6,7 @@
  *   firebase functions:secrets:set SHIPPO_API_TOKEN
  *     (Shippo API token — use shippo_test_… while developing shop shipping)
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
- *     (JSON map solo/studio/shop → price_… and optional smsExtra $10/mo add-on;
+ *     (JSON map solo/studio/shop → price_… and optional smsExtra $12/mo add-on;
  *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
@@ -18,9 +18,12 @@
  * Portal return_url → …/account.html. Enable the portal in Stripe Dashboard → Billing → Customer portal.
  * Callable getBillingSummary: read-only Stripe subscription + invoices for account.html.
  *
- * Customer payments (Connect): 1% platform application fee on createDepositLink and
- * createPaymentIntentForTapToPay — grossed up to the customer at checkout (with estimated
- * Stripe card fees). Not on subscription checkout.
+ * Customer payments (Connect): 1% platform application fee on createDepositLink,
+ * createPaymentIntentForManualCheckout, and createPaymentIntentForTapToPay — grossed up
+ * to the customer at checkout (with estimated Stripe card fees). Not on subscription checkout.
+ * Studio/Shop independent members: optional team payment split — studio share is collected
+ * with the application fee, then transferred to the tenant Connect account after success
+ * (see teamPaymentSplit.js). End-customer checkout UI/totals unchanged.
  *
  * Client texting (Twilio): set secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN.
  * Paid subscription (active) required; free trial (trialing) cannot enable SMS —
@@ -47,6 +50,7 @@ const {
   normalizeIndustry,
 } = require("./signupPayloads");
 const sms = require("./sms");
+const teamPaymentSplit = require("./teamPaymentSplit");
 const {
   isDemoShowcaseStripeAccountId,
   loadDemoShowcaseForPayCtx,
@@ -180,7 +184,7 @@ function stripePriceIdForPlan(planNorm) {
   return id.trim();
 }
 
-/** Optional $10/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
+/** Optional $12/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
 function stripeSmsExtraPriceId() {
   const map = parseStripeSubscriptionPriceIds();
   const id =
@@ -193,14 +197,14 @@ function stripeSmsExtraPriceId() {
     throw new functions.https.HttpsError(
       "failed-precondition",
       'Set "smsExtra":"price_..." in secret STRIPE_SUBSCRIPTION_PRICE_IDS ' +
-        "for the $10/mo extra texting number (Stripe product)."
+        "for the $12/mo extra texting number (Stripe product)."
     );
   }
   const trimmed = String(id).trim();
   if (trimmed.includes("REPLACE") || !trimmed.startsWith("price_")) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      'Create a $10/mo Stripe Price for extra SMS lines and set "smsExtra" in STRIPE_SUBSCRIPTION_PRICE_IDS.'
+      'Create a $12/mo Stripe Price for extra SMS lines and set "smsExtra" in STRIPE_SUBSCRIPTION_PRICE_IDS.'
     );
   }
   return trimmed;
@@ -219,8 +223,11 @@ function stripeSmsExtraPriceIds() {
     : typeof legacyRaw === "string" && legacyRaw.trim()
       ? [legacyRaw]
       : [];
-  // Previous Test $5/mo extra line price (kept so existing subscription items still count).
-  const knownLegacy = ["price_1U0j3VCeE17fSOZIkt3kn1BZ"];
+  // Previous Test extra-line prices (kept so existing subscription items still count).
+  const knownLegacy = [
+    "price_1U0j3VCeE17fSOZIkt3kn1BZ", // $5/mo
+    "price_1U0oH0CeE17fSOZIAaPNsxJB", // $10/mo
+  ];
   const out = [];
   const seen = new Set();
   for (const id of [primary, ...legacyList, ...knownLegacy]) {
@@ -288,10 +295,99 @@ async function syncSmsExtraLineQuantityToTenant(tenantId, quantity) {
 }
 
 /**
- * Set Stripe smsExtra subscription quantity (0 deletes items) and mirror on the tenant.
+ * Move any legacy smsExtra subscription items onto the current primary price
+ * without invoicing, so price rotations ($10 → $12) never double-charge.
+ * Returns { primaryItem, quantity, subscription }.
  */
-async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty) {
+async function migrateSmsExtraLegacyToPrimary(stripe, subscription) {
+  let sub = subscription;
+  const subId = sub && sub.id;
+  if (!stripe || !subId) {
+    return { primaryItem: null, quantity: 0, subscription: sub };
+  }
+  let extraPriceId;
+  let extraPriceIds;
+  try {
+    extraPriceId = stripeSmsExtraPriceId();
+    extraPriceIds = stripeSmsExtraPriceIds();
+  } catch (_) {
+    return { primaryItem: null, quantity: 0, subscription: sub };
+  }
+
+  const refresh = async () => {
+    sub = await stripe.subscriptions.retrieve(subId, {
+      expand: ["items.data.price"],
+    });
+    return sub;
+  };
+
+  let extraItems = smsExtraSubscriptionItems(sub, extraPriceIds);
+  let primaryItem = extraItems.find(
+    (it) => subscriptionItemPriceId(it) === extraPriceId
+  );
+  let legacyItems = extraItems.filter(
+    (it) => subscriptionItemPriceId(it) !== extraPriceId
+  );
+  const totalQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
+
+  if (legacyItems.length) {
+    for (const legacy of legacyItems) {
+      await stripe.subscriptionItems.del(legacy.id, {
+        proration_behavior: "none",
+      });
+    }
+    await refresh();
+    extraItems = smsExtraSubscriptionItems(sub, extraPriceIds);
+    primaryItem = extraItems.find(
+      (it) => subscriptionItemPriceId(it) === extraPriceId
+    );
+  }
+
+  if (totalQty > 0) {
+    if (primaryItem) {
+      const pq = Math.max(0, Math.floor(Number(primaryItem.quantity) || 0));
+      if (pq !== totalQty) {
+        await stripe.subscriptionItems.update(primaryItem.id, {
+          quantity: totalQty,
+          proration_behavior: "none",
+        });
+        await refresh();
+        primaryItem = smsExtraSubscriptionItems(sub, extraPriceIds).find(
+          (it) => subscriptionItemPriceId(it) === extraPriceId
+        );
+      }
+    } else {
+      await stripe.subscriptionItems.create({
+        subscription: subId,
+        price: extraPriceId,
+        quantity: totalQty,
+        proration_behavior: "none",
+      });
+      await refresh();
+      primaryItem = smsExtraSubscriptionItems(sub, extraPriceIds).find(
+        (it) => subscriptionItemPriceId(it) === extraPriceId
+      );
+    }
+  }
+
+  const quantity = smsExtraQuantityFromSubscription(sub, extraPriceIds);
+  return { primaryItem: primaryItem || null, quantity, subscription: sub };
+}
+
+/** Flat monthly price for an extra texting number (cents). Never prorate purchases. */
+const SMS_EXTRA_MONTHLY_CENTS = 1200;
+
+/**
+ * Set Stripe smsExtra subscription quantity (0 deletes items) and mirror on the tenant.
+ * Legacy items are consolidated first with no invoice. Qty changes default to
+ * proration_behavior "none" — purchases bill via a separate flat $12 invoice.
+ */
+async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts) {
   const q = Math.max(0, Math.floor(Number(nextQty) || 0));
+  const prorationBehavior =
+    opts && opts.prorationBehavior === "always_invoice"
+      ? "always_invoice"
+      : "none";
   const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
   if (!subId || !stripe) {
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
@@ -307,57 +403,248 @@ async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty) {
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
   }
-  const sub = await stripe.subscriptions.retrieve(subId, {
+  let sub = await stripe.subscriptions.retrieve(subId, {
     expand: ["items.data.price"],
   });
-  const extraItems = smsExtraSubscriptionItems(sub, extraPriceIds);
-  const primaryItem = extraItems.find(
-    (it) => subscriptionItemPriceId(it) === extraPriceId
-  );
-  const legacyItems = extraItems.filter(
-    (it) => subscriptionItemPriceId(it) !== extraPriceId
-  );
-  const currentQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
-  if (currentQty === q && legacyItems.length === 0) {
+  const migrated = await migrateSmsExtraLegacyToPrimary(stripe, sub);
+  sub = migrated.subscription || sub;
+  let primaryItem = migrated.primaryItem;
+  const currentQty = migrated.quantity;
+
+  if (currentQty === q) {
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
   }
+
   if (q <= 0) {
-    for (const item of extraItems) {
+    const extras = smsExtraSubscriptionItems(sub, extraPriceIds);
+    for (const item of extras) {
       await stripe.subscriptionItems.del(item.id, {
-        proration_behavior: "always_invoice",
+        proration_behavior: prorationBehavior,
       });
     }
   } else if (primaryItem) {
     await stripe.subscriptionItems.update(primaryItem.id, {
       quantity: q,
-      proration_behavior: "always_invoice",
+      proration_behavior: prorationBehavior,
     });
-    for (const legacy of legacyItems) {
-      await stripe.subscriptionItems.del(legacy.id, {
-        proration_behavior: "always_invoice",
-      });
-    }
   } else {
     await stripe.subscriptionItems.create({
       subscription: subId,
       price: extraPriceId,
       quantity: q,
-      proration_behavior: "always_invoice",
+      proration_behavior: prorationBehavior,
     });
-    for (const legacy of legacyItems) {
-      await stripe.subscriptionItems.del(legacy.id, {
-        proration_behavior: "always_invoice",
-      });
-    }
   }
   await syncSmsExtraLineQuantityToTenant(tenantId, q);
   return q;
 }
 
 /**
+ * Payment method id Stripe already uses for this subscriber (sub → customer →
+ * attached PMs → last paid invoice). Empty string means invoice.pay should use
+ * Stripe's normal collection defaults — never treat that as "no card" when they
+ * have an active subscription.
+ */
+async function resolveChargeablePaymentMethodId(
+  stripe,
+  customerId,
+  subscriptionIdOpt
+) {
+  const pickPm = (raw) => {
+    if (typeof raw === "string" && raw.startsWith("pm_")) return raw.trim();
+    if (raw && typeof raw === "object" && typeof raw.id === "string" && raw.id.startsWith("pm_")) {
+      return raw.id.trim();
+    }
+    return "";
+  };
+
+  const subId = (subscriptionIdOpt || "").toString().trim();
+  if (subId) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(subId, {
+        expand: ["default_payment_method"],
+      });
+      const fromSub = pickPm(sub.default_payment_method);
+      if (fromSub) return fromSub;
+    } catch (e) {
+      console.warn("resolveChargeablePaymentMethodId sub", subId, e.message || e);
+    }
+  }
+
+  try {
+    const customer = await stripe.customers.retrieve(customerId, {
+      expand: ["invoice_settings.default_payment_method"],
+    });
+    if (customer && !customer.deleted) {
+      const fromCust = pickPm(
+        customer.invoice_settings && customer.invoice_settings.default_payment_method
+      );
+      if (fromCust) return fromCust;
+    }
+  } catch (e) {
+    console.warn("resolveChargeablePaymentMethodId customer", e.message || e);
+  }
+
+  try {
+    const listed = await stripe.paymentMethods.list({
+      customer: customerId,
+      limit: 10,
+    });
+    for (const item of listed.data || []) {
+      const id = pickPm(item);
+      if (id) return id;
+    }
+  } catch (e) {
+    console.warn("resolveChargeablePaymentMethodId list", e.message || e);
+  }
+
+  try {
+    const invs = await stripe.invoices.list({
+      customer: customerId,
+      status: "paid",
+      limit: 5,
+    });
+    for (const inv of invs.data || []) {
+      if (!inv.id || !(inv.amount_paid > 0)) continue;
+      const full = await stripe.invoices.retrieve(inv.id, {
+        expand: ["payment_intent.payment_method"],
+      });
+      let pi = full.payment_intent;
+      if (typeof pi === "string") {
+        try {
+          pi = await stripe.paymentIntents.retrieve(pi, {
+            expand: ["payment_method"],
+          });
+        } catch (_) {
+          pi = null;
+        }
+      }
+      const fromInv = pickPm(pi && pi.payment_method);
+      if (fromInv) return fromInv;
+    }
+  } catch (e) {
+    console.warn("resolveChargeablePaymentMethodId invoices", e.message || e);
+  }
+
+  return "";
+}
+
+/**
+ * Flat $12 same-day charge via the same invoice collection path as their plan.
+ * Creates a draft invoice, attaches the $12 line to that invoice (avoids empty
+ * paid/$0 invoices when pending items are excluded), then pays it.
+ */
+async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
+  const customerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
+  if (!customerId) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Billing is not set up. Complete subscription checkout first."
+    );
+  }
+  const desc = (description || "Get Bookking extra texting number ($12)").toString();
+  const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
+
+  let paymentMethodId = "";
+  try {
+    paymentMethodId = await resolveChargeablePaymentMethodId(
+      stripe,
+      customerId,
+      subId
+    );
+  } catch (e) {
+    console.warn("resolveChargeablePaymentMethodId", e.message || e);
+  }
+
+  try {
+    // Draft first, then attach the $12 line to THIS invoice — never rely on
+    // pending_invoice_items_behavior (defaults can exclude items → paid/total=0).
+    let invoice = await stripe.invoices.create({
+      customer: customerId,
+      collection_method: "charge_automatically",
+      auto_advance: false,
+      pending_invoice_items_behavior: "exclude",
+    });
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      invoice: invoice.id,
+      amount: SMS_EXTRA_MONTHLY_CENTS,
+      currency: "usd",
+      description: desc,
+    });
+    invoice = await stripe.invoices.retrieve(invoice.id);
+    const draftTotal = Math.max(0, Math.floor(Number(invoice.total) || 0));
+    if (draftTotal < SMS_EXTRA_MONTHLY_CENTS) {
+      try {
+        await stripe.invoices.del(invoice.id);
+      } catch (_) {
+        /* best effort */
+      }
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Could not build the $12 texting-number invoice. Try again."
+      );
+    }
+    invoice = await stripe.invoices.finalizeInvoice(invoice.id);
+    if (invoice.status === "open") {
+      const payOpts = paymentMethodId
+        ? { payment_method: paymentMethodId }
+        : undefined;
+      try {
+        invoice = await stripe.invoices.pay(invoice.id, payOpts);
+      } catch (payErr) {
+        if (paymentMethodId) {
+          try {
+            invoice = await stripe.invoices.pay(invoice.id);
+          } catch (payErr2) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              `Could not charge your card for the texting number: ${stripeErrorMessage(payErr2)}`
+            );
+          }
+        } else {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            `Could not charge your card for the texting number: ${stripeErrorMessage(payErr)}`
+          );
+        }
+      }
+    }
+    const total = Math.max(0, Math.floor(Number(invoice && invoice.total) || 0));
+    if (invoice && invoice.status === "paid" && total >= SMS_EXTRA_MONTHLY_CENTS) {
+      return {
+        id: invoice.id,
+        status: "paid",
+        amount_paid: Math.max(
+          total,
+          Math.floor(Number(invoice.amount_paid) || 0)
+        ),
+      };
+    }
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `Stripe did not confirm the $12 texting-number payment` +
+        (invoice ? ` (status=${invoice.status}, total=${total}).` : ".") +
+        " No number was set up. Try again or update billing if the charge failed."
+    );
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `Could not charge your card for the texting number: ${stripeErrorMessage(e)}`
+    );
+  }
+}
+
+/**
  * Drop Stripe/Firestore paid extras down to what's needed for current usage
  * (no prepaid empty slots). usedOpt skips a users scan when already known.
+ */
+/**
+ * Drop Stripe/Firestore paid extras to match currently active paid-tagged lines.
+ * No prepaid spare seats. Legacy untagged lines: fall back to max(0, used - free)
+ * only when no paid tags exist yet.
  */
 async function reconcileSmsExtraPaidToUsage(
   stripe,
@@ -372,20 +659,45 @@ async function reconcileSmsExtraPaidToUsage(
   if (plan === "solo") {
     return { tenant, paid: 0, changed: false };
   }
+  const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
   const used =
     typeof usedOpt === "number"
       ? Math.max(0, usedOpt)
-      : await sms.countOccupiedSmsLines(tenantId, tenant);
-  const needed = sms.smsExtraNeededForUsage(plan, used);
+      : sms.countOccupiedSmsLinesFromDocs(tenant, snap.docs);
+  const free = sms.freeIncludedSmsLinesForPlan(plan);
+  let paidActive = sms.countPaidSmsLinesFromDocs(tenant, snap.docs);
   const paidFs = sms.smsExtraPaidQuantity(tenant);
+
+  // Legacy backfill only while over the free concurrent allotment.
+  if (paidActive === 0 && paidFs > 0 && used > free) {
+    await backfillPaidSmsLineTags(
+      tenantId,
+      tenant,
+      snap.docs,
+      Math.min(paidFs, used - free)
+    );
+    const freshTenant =
+      (await db.collection("tenants").doc(tenantId).get()).data() || tenant;
+    const freshSnap = await db
+      .collection("users")
+      .where("tenantId", "==", tenantId)
+      .get();
+    paidActive = sms.countPaidSmsLinesFromDocs(freshTenant, freshSnap.docs);
+    tenant = freshTenant;
+  }
+
+  // Prefer paid tags. If none, fall back to concurrent overage (clears leftover
+  // Stripe qty when only free seats remain).
+  const target = paidActive > 0 ? paidActive : Math.max(0, used - free);
+
   if (!stripe) {
-    if (paidFs <= needed) {
+    if (paidFs === target) {
       return { tenant, paid: paidFs, changed: false };
     }
-    await syncSmsExtraLineQuantityToTenant(tenantId, needed);
+    await syncSmsExtraLineQuantityToTenant(tenantId, target);
     return {
-      tenant: { ...tenant, smsExtraLineQuantity: needed },
-      paid: needed,
+      tenant: { ...tenant, smsExtraLineQuantity: target },
+      paid: target,
       changed: true,
     };
   }
@@ -403,32 +715,24 @@ async function reconcileSmsExtraPaidToUsage(
       }
     }
     const current = Math.max(paidFs, stripeQty);
-    // Preserve one just-purchased, not-yet-provisioned line. The per-member
-    // authorization remains the enforcement mechanism, so it cannot bypass billing.
-    if (current <= needed + 1 && paidFs === current) {
+    if (current === target && paidFs === target) {
       return { tenant, paid: current, changed: false };
     }
-    if (current <= needed + 1 && paidFs !== current) {
-      await syncSmsExtraLineQuantityToTenant(tenantId, current);
-      return {
-        tenant: { ...tenant, smsExtraLineQuantity: current },
-        paid: current,
-        changed: true,
-      };
-    }
-    await applySmsExtraLineQuantity(stripe, tenantId, tenant, needed);
+    await applySmsExtraLineQuantity(stripe, tenantId, tenant, target, {
+      prorationBehavior: "none",
+    });
     return {
-      tenant: { ...tenant, smsExtraLineQuantity: needed },
-      paid: needed,
+      tenant: { ...tenant, smsExtraLineQuantity: target },
+      paid: target,
       changed: true,
     };
   } catch (e) {
     console.error("reconcileSmsExtraPaidToUsage", tenantId, e.message || e);
-    if (paidFs > needed) {
-      await syncSmsExtraLineQuantityToTenant(tenantId, needed);
+    if (paidFs !== target) {
+      await syncSmsExtraLineQuantityToTenant(tenantId, target);
       return {
-        tenant: { ...tenant, smsExtraLineQuantity: needed },
-        paid: needed,
+        tenant: { ...tenant, smsExtraLineQuantity: target },
+        paid: target,
         changed: true,
       };
     }
@@ -437,8 +741,44 @@ async function reconcileSmsExtraPaidToUsage(
 }
 
 /**
- * After releasing an occupied line, sync paid extras to max(0, used - free)
- * so the next add at/above free included charges $10 again.
+ * Tag occupied personal lines as paid extras until tagged count matches stripeQty.
+ * Prefers member lines over studio (studio is usually a free included seat).
+ */
+async function backfillPaidSmsLineTags(tenantId, tenant, userDocs, stripeQty) {
+  const need = Math.max(0, Math.floor(Number(stripeQty) || 0));
+  if (need <= 0) return;
+  const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
+  const candidates = [];
+  for (const doc of userDocs || []) {
+    if (ownerUid && doc.id === ownerUid) continue;
+    const d = typeof doc.data === "function" ? doc.data() || {} : {};
+    if (!sms.occupiesSmsLineSlot(d)) continue;
+    if (sms.isPaidSmsLineExtra(d)) continue;
+    candidates.push({ ref: doc.ref, kind: "member" });
+  }
+  // Studio last — only if we still need tags.
+  if (sms.occupiesSmsLineSlot(tenant) && !sms.isPaidSmsLineExtra(tenant)) {
+    candidates.push({
+      ref: db.collection("tenants").doc(tenantId),
+      kind: "studio",
+    });
+  }
+  let tagged = 0;
+  for (const c of candidates) {
+    if (tagged >= need) break;
+    await c.ref.set(
+      {
+        smsLineIsPaidExtra: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    tagged += 1;
+  }
+}
+
+/**
+ * After releasing an occupied line, sync Extra SMS qty to active paid-tagged lines.
  */
 async function maybeReduceSmsExtraAfterReleasingOccupiedLine(
   stripe,
@@ -460,7 +800,7 @@ async function maybeReduceSmsExtraAfterReleasingOccupiedLine(
     plan,
     usedAfter
   );
-  return result.changed ? result.paid : result.paid;
+  return result.paid;
 }
 
 function stripeClientFromSecret() {
@@ -975,13 +1315,8 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
     const extraPriceIds = stripeSmsExtraPriceIds();
     if (sub && extraPriceIds.length) {
       const stripeQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
-      const planForSms =
-        planNorm ||
-        normalizeSubscriptionPlan((snap.docs[0].data() || {}).subscriptionPlan);
-      const used = await sms.countOccupiedSmsLines(tenantId, snap.docs[0].data() || {});
-      const needed = sms.smsExtraNeededForUsage(planForSms, used);
-      // Keep at most one unassigned paid extra; drop orphan prepaid capacity.
-      patch.smsExtraLineQuantity = Math.min(stripeQty, needed + 1);
+      // Stripe Extra SMS quantity is source of truth for the mirror field.
+      patch.smsExtraLineQuantity = Math.max(0, stripeQty);
     }
   } catch (_) {
     /* optional */
@@ -1359,7 +1694,7 @@ exports.createConnectAccountLink = functions
       if (!payCtx?.canConnect) {
         throw new functions.https.HttpsError(
           "permission-denied",
-          "Your studio collects payments for you. Ask your admin to enable independent payouts."
+          "Connect your Stripe account in Payments to take payments."
         );
       }
 
@@ -1539,8 +1874,8 @@ exports.getConnectAccountStatus = functions
         hasAccount: false,
         canTakePayments: false,
         usesOwnPayments: false,
-        payoutMode: payCtx?.payoutMode || "studio_payroll",
-        studioPayroll: true,
+        payoutMode: payCtx?.payoutMode || "independent",
+        studioPayroll: false,
       };
     }
 
@@ -1907,32 +2242,21 @@ async function resolvePaymentStripeContext(uid) {
     };
   }
 
-  const payoutMode = normalizeMemberSettings(userData.memberSettings).payoutMode;
-  const usesOwnPayments = payoutMode === "independent";
-
-  if (usesOwnPayments) {
-    const stripeAccountId = (userData.stripeAccountId || "").toString().trim() || null;
-    const terminalLocationId =
-      (userData.stripeTerminalLocationId || "").toString().trim() || null;
-    return {
-      scope: "user",
-      tenantId,
-      stripeAccountId,
-      terminalLocationId,
-      canConnect: true,
-      canTakePayments: true,
-      payoutMode,
-      isOwner: false,
-    };
-  }
-
+  const memberSettings = normalizeMemberSettings(userData.memberSettings);
+  const payoutMode = memberSettings.payoutMode;
+  // Every team member connects their own Stripe (shop split + takes own payments).
+  const stripeAccountId = (userData.stripeAccountId || "").toString().trim() || null;
+  const terminalLocationId =
+    (userData.stripeTerminalLocationId || "").toString().trim() || null;
+  // Owner can disable payments via memberSettings.canTakePayments === false.
+  const paymentsAllowed = memberSettings.canTakePayments !== false;
   return {
-    scope: "tenant",
+    scope: "user",
     tenantId,
-    stripeAccountId: null,
-    terminalLocationId: null,
-    canConnect: false,
-    canTakePayments: false,
+    stripeAccountId,
+    terminalLocationId,
+    canConnect: paymentsAllowed,
+    canTakePayments: paymentsAllowed,
     payoutMode,
     isOwner: false,
   };
@@ -1949,7 +2273,7 @@ async function assertCanTakePayments(uid) {
   if (!ctx?.canTakePayments) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+      "Connect your Stripe account in Payments to take payments."
     );
   }
   return ctx;
@@ -1977,7 +2301,7 @@ async function ensureStripeAccountForTapToPayContext(uid, stripe) {
   if (!payCtx?.canTakePayments) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+      "Connect your Stripe account in Payments to take payments."
     );
   }
   const tenantRef = db.collection("tenants").doc(tenantId);
@@ -2066,39 +2390,21 @@ async function resolveEffectivePaymentContext(uid, options = {}) {
   const memberSettings = normalizeMemberSettings(memberData.memberSettings);
   const memberName = memberDisplayNameFromUserData(memberData, "This team member");
 
-  if (memberSettings.payoutMode === "independent") {
-    const stripeAccountId = (memberData.stripeAccountId || "").toString().trim() || null;
-    const terminalLocationId =
-      (memberData.stripeTerminalLocationId || "").toString().trim() || null;
-    return {
-      scope: "user",
-      tenantId,
-      stripeAccountId,
-      terminalLocationId,
-      canConnect: uid === attributedMemberUid,
-      canTakePayments: true,
-      payoutMode: "independent",
-      isOwner: false,
-      attributedMemberUid,
-      chargeOnBehalfOfMemberUid: attributedMemberUid,
-      attributedMemberName: memberName,
-    };
-  }
-
-  const stripeAccountId = (tenant.stripeAccountId || "").toString().trim() || null;
+  const stripeAccountId = (memberData.stripeAccountId || "").toString().trim() || null;
   const terminalLocationId =
-    (tenant.stripeTerminalLocationId || "").toString().trim() || null;
+    (memberData.stripeTerminalLocationId || "").toString().trim() || null;
   return {
-    scope: "tenant",
+    scope: "user",
     tenantId,
     stripeAccountId,
     terminalLocationId,
-    canConnect: callerCtx.isOwner,
-    canTakePayments: callerCtx.isOwner,
-    payoutMode: "studio_payroll",
-    isOwner: callerCtx.isOwner,
+    canConnect: uid === attributedMemberUid,
+    canTakePayments: true,
+    payoutMode: memberSettings.payoutMode,
+    isOwner: false,
     attributedMemberUid,
-    chargeOnBehalfOfMemberUid: null,
+    chargeOnBehalfOfMemberUid: attributedMemberUid,
+    attributedMemberName: memberName,
   };
 }
 
@@ -2123,7 +2429,7 @@ async function assertCanInitiateBookingPayment(uid, payCtx) {
   } else if (!payCtx.canTakePayments) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+      "Connect your Stripe account in Payments to take payments."
     );
   }
   if (!payCtx.stripeAccountId) {
@@ -2161,7 +2467,7 @@ async function assertCanTapToPayForBooking(uid, payCtx) {
   if (!payCtx.canTakePayments) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Your studio collects payments for you. Ask your admin to enable independent payouts."
+      "Connect your Stripe account in Payments to take payments."
     );
   }
   if (!payCtx.stripeAccountId) {
@@ -2564,8 +2870,95 @@ exports.generateTenantLogoWithOpenAI = functions
   });
 
 /**
+ * Instant-eligible cents net of platform Instant pricing (0.3% markup).
+ * Prefers expanded instant_available.net_available; falls back to gross amount.
+ */
+function instantAvailableCentsFromBalance(balance) {
+  const instant = (balance.instant_available || []).find((b) => b.currency === "usd");
+  const gross = Math.max(0, instant?.amount ?? 0);
+  const netRows = Array.isArray(instant?.net_available) ? instant.net_available : [];
+  if (!netRows.length) return gross;
+  const netMax = Math.max(
+    0,
+    ...netRows.map((row) => Math.max(0, Number(row?.amount) || 0))
+  );
+  // Never advertise more Instant than Stripe's gross Instant bucket.
+  return Math.min(gross, netMax);
+}
+
+/** PCI-safe payout destination label: bank/card name + last4 only. */
+function formatExternalAccountLabel(account) {
+  if (!account || typeof account !== "object") return null;
+  const last4 = (account.last4 || "").toString().trim();
+  if (!last4) return null;
+  if (account.object === "bank_account") {
+    const bank = (account.bank_name || "Bank").toString().trim() || "Bank";
+    return `${bank} ····${last4}`;
+  }
+  if (account.object === "card") {
+    const brand = (account.brand || "Debit").toString().trim() || "Debit";
+    return `${brand} ····${last4}`;
+  }
+  return null;
+}
+
+function supportsInstantPayout(account) {
+  return (
+    Array.isArray(account?.available_payout_methods) &&
+    account.available_payout_methods.includes("instant")
+  );
+}
+
+/**
+ * Default Standard destination + Instant-capable destination labels for Withdraw UI.
+ */
+async function loadPayoutDestinationLabels(stripe, stripeAccountId) {
+  let banks = [];
+  let cards = [];
+  try {
+    const bankRes = await stripe.accounts.listExternalAccounts(stripeAccountId, {
+      object: "bank_account",
+      limit: 10,
+    });
+    banks = bankRes.data || [];
+  } catch (e) {
+    console.warn("listExternalAccounts banks failed", e?.message || e);
+  }
+  try {
+    const cardRes = await stripe.accounts.listExternalAccounts(stripeAccountId, {
+      object: "card",
+      limit: 10,
+    });
+    cards = cardRes.data || [];
+  } catch (e) {
+    console.warn("listExternalAccounts cards failed", e?.message || e);
+  }
+
+  const all = banks.concat(cards);
+  const defaultBank =
+    banks.find((b) => b.default_for_currency) || banks[0] || null;
+  const defaultAny =
+    defaultBank ||
+    all.find((a) => a.default_for_currency) ||
+    all[0] ||
+    null;
+  const instantDest =
+    all.find((a) => supportsInstantPayout(a) && a.default_for_currency) ||
+    all.find((a) => supportsInstantPayout(a)) ||
+    null;
+
+  return {
+    standardPayoutDestinationLabel: formatExternalAccountLabel(defaultAny),
+    instantPayoutDestinationLabel: formatExternalAccountLabel(instantDest),
+    instantPayoutEligible: Boolean(instantDest),
+  };
+}
+
+/**
  * Returns the Connect account balance.
- * { availableCents, pendingCents, instantAvailableCents, instantPayoutEligible }.
+ * { availableCents, pendingCents, instantAvailableCents, instantPayoutEligible,
+ *   standardPayoutDestinationLabel, instantPayoutDestinationLabel }.
+ * instantAvailableCents uses net_available (after platform Instant fees) when present.
  */
 exports.getConnectBalance = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -2578,6 +2971,10 @@ exports.getConnectBalance = functions
     if (demoShowcase) {
       return demoConnectBalanceResponse(demoShowcase.payments);
     }
+    const emptyDest = {
+      standardPayoutDestinationLabel: null,
+      instantPayoutDestinationLabel: null,
+    };
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       return {
@@ -2585,6 +2982,7 @@ exports.getConnectBalance = functions
         pendingCents: 0,
         instantAvailableCents: 0,
         instantPayoutEligible: false,
+        ...emptyDest,
       };
     }
     if (isDemoShowcaseStripeAccountId(stripeAccountId)) {
@@ -2593,6 +2991,7 @@ exports.getConnectBalance = functions
         pendingCents: 0,
         instantAvailableCents: 0,
         instantPayoutEligible: false,
+        ...emptyDest,
       };
     }
     const secretKey = stripeSecretKey.value();
@@ -2602,40 +3001,37 @@ exports.getConnectBalance = functions
         pendingCents: 0,
         instantAvailableCents: 0,
         instantPayoutEligible: false,
+        ...emptyDest,
       };
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const balance = await stripe.balance.retrieve(
-      {},
+      { expand: ["instant_available.net_available"] },
       { stripeAccount: stripeAccountId }
     );
     const available = balance.available?.find((b) => b.currency === "usd");
     const pending = balance.pending?.find((b) => b.currency === "usd");
-    const instant = balance.instant_available?.find((b) => b.currency === "usd");
-    const instantAvailableCents = Math.max(0, instant?.amount ?? 0);
+    const instantAvailableCents = instantAvailableCentsFromBalance(balance);
+
+    let standardPayoutDestinationLabel = null;
+    let instantPayoutDestinationLabel = null;
+    let hasInstantDestination = false;
+    let destinationsLoaded = false;
+    try {
+      const dest = await loadPayoutDestinationLabels(stripe, stripeAccountId);
+      standardPayoutDestinationLabel = dest.standardPayoutDestinationLabel;
+      instantPayoutDestinationLabel = dest.instantPayoutDestinationLabel;
+      hasInstantDestination = dest.instantPayoutEligible;
+      destinationsLoaded = true;
+    } catch (e) {
+      console.warn("payout destination labels failed", e?.message || e);
+    }
 
     let instantPayoutEligible = false;
     if (instantAvailableCents >= 50) {
-      try {
-        const ext = await stripe.accounts.listExternalAccounts(stripeAccountId, {
-          object: "bank_account",
-          limit: 10,
-        });
-        const banks = ext.data || [];
-        const cards = await stripe.accounts.listExternalAccounts(stripeAccountId, {
-          object: "card",
-          limit: 10,
-        });
-        const all = banks.concat(cards.data || []);
-        instantPayoutEligible = all.some((a) =>
-          Array.isArray(a.available_payout_methods) &&
-          a.available_payout_methods.includes("instant")
-        );
-      } catch (e) {
-        console.warn("instant payout eligibility check failed", e?.message || e);
-        // Still expose instant_available; payout may fail if destination ineligible.
-        instantPayoutEligible = instantAvailableCents >= 50;
-      }
+      instantPayoutEligible = destinationsLoaded
+        ? hasInstantDestination
+        : true;
     }
 
     return {
@@ -2643,6 +3039,8 @@ exports.getConnectBalance = functions
       pendingCents: pending?.amount ?? 0,
       instantAvailableCents,
       instantPayoutEligible,
+      standardPayoutDestinationLabel,
+      instantPayoutDestinationLabel,
     };
   });
 
@@ -2757,7 +3155,19 @@ exports.createDepositLink = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-    const feeCents = platformFeeCents(checkout.totalCents);
+    const tenantDoc = tenantId
+      ? await db.collection("tenants").doc(tenantId).get()
+      : null;
+    const tenantData = tenantDoc?.exists ? tenantDoc.data() || {} : {};
+    const splitFee = await buildTeamSplitFeeAndMetaForCharge({
+      tenant: tenantData,
+      tenantId,
+      payCtx,
+      paymentKind,
+      serviceCents: checkout.serviceCents,
+      grossCents: checkout.totalCents,
+    });
+    const feeCents = splitFee.applicationFeeCents;
     const lineItems = [
       {
         price_data: {
@@ -2782,27 +3192,35 @@ exports.createDepositLink = functions
       });
     }
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
+    const paymentMeta = {
+      tenantId: tenantId || "",
+      paymentKind,
+      serviceAmountCents: String(checkout.serviceCents),
+      surchargeCents: String(checkout.surchargeCents),
+      bookingRequestId,
+      initiatedByUid: uid,
+      attributedMemberUid,
+      chargeStripeAccountId: stripeAccountId,
+      chargeStripeScope: payCtx.scope || "tenant",
+      ...splitFee.splitMeta,
+    };
     const link = await stripe.paymentLinks.create(
       {
         line_items: lineItems,
         application_fee_amount: feeCents,
-        metadata: {
-          tenantId: tenantId || "",
-          paymentKind,
-          serviceAmountCents: String(checkout.serviceCents),
-          surchargeCents: String(checkout.surchargeCents),
-          bookingRequestId,
-          initiatedByUid: uid,
-          attributedMemberUid,
-          chargeStripeAccountId: stripeAccountId,
-          chargeStripeScope: payCtx.scope || "tenant",
+        metadata: paymentMeta,
+        // Payment Link top-level metadata does NOT copy to the PaymentIntent.
+        // Webhook settlement reads PI metadata — must set payment_intent_data.
+        payment_intent_data: {
+          metadata: paymentMeta,
         },
       },
       { stripeAccount: stripeAccountId }
     );
     return {
       url: link.url,
-      platformFeeCents: feeCents,
+      platformFeeCents: splitFee.platformFeeCents,
+      studioShareCents: splitFee.studioShareCents,
       serviceCents: checkout.serviceCents,
       surchargeCents: checkout.surchargeCents,
       totalCents: checkout.totalCents,
@@ -2864,7 +3282,15 @@ exports.createPaymentIntentForManualCheckout = functions
     );
     const taxCents = tax.taxCents || 0;
     const totalCents = checkout.totalCents + taxCents;
-    const feeCents = platformFeeCents(totalCents);
+    const splitFee = await buildTeamSplitFeeAndMetaForCharge({
+      tenant: tenantData,
+      tenantId,
+      payCtx,
+      paymentKind,
+      serviceCents: checkout.serviceCents,
+      grossCents: totalCents,
+    });
+    const feeCents = splitFee.applicationFeeCents;
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const pi = await stripe.paymentIntents.create(
       {
@@ -2886,6 +3312,7 @@ exports.createPaymentIntentForManualCheckout = functions
           chargeStripeAccountId: stripeAccountId,
           chargeStripeScope: payCtx.scope || "tenant",
           checkoutChannel: "manual_in_app",
+          ...splitFee.splitMeta,
         },
       },
       { stripeAccount: stripeAccountId }
@@ -2894,7 +3321,8 @@ exports.createPaymentIntentForManualCheckout = functions
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       stripeAccountId,
-      platformFeeCents: feeCents,
+      platformFeeCents: splitFee.platformFeeCents,
+      studioShareCents: splitFee.studioShareCents,
       serviceCents: checkout.serviceCents,
       taxCents,
       surchargeCents: checkout.surchargeCents,
@@ -2997,7 +3425,49 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
       stripeAccountId
     );
   }
-  return {
+  let attributedMemberUid = null;
+  let transferMetaPurpose = null;
+  let description = t.description || null;
+  const src = t.source;
+  if (src && typeof src === "object") {
+    const meta = src.metadata || {};
+    if (meta.attributedMemberUid) {
+      attributedMemberUid = String(meta.attributedMemberUid).trim() || null;
+    }
+    if (meta.purpose) transferMetaPurpose = String(meta.purpose).trim();
+    if (!description && src.description) {
+      description = String(src.description);
+    }
+  }
+  // Always resolve platform Transfer metadata for incoming tr_ sources (owner credits).
+  if (sourceId && String(sourceId).startsWith("tr_")) {
+    try {
+      const transfer = await stripe.transfers.retrieve(sourceId);
+      const meta = (transfer && transfer.metadata) || {};
+      if (!attributedMemberUid && meta.attributedMemberUid) {
+        attributedMemberUid = String(meta.attributedMemberUid).trim() || null;
+      }
+      if (!transferMetaPurpose && meta.purpose) {
+        transferMetaPurpose = String(meta.purpose).trim();
+      }
+      if (
+        !transferMetaPurpose &&
+        (transfer.description || "").toLowerCase().includes("studio share")
+      ) {
+        transferMetaPurpose = "studio_payment_split";
+      }
+      if (!description && transfer.description) {
+        description = String(transfer.description);
+      }
+      if (transferMetaPurpose === "studio_payment_split" || meta.purpose === "studio_payment_split") {
+        description = "Studio share";
+        transferMetaPurpose = "studio_payment_split";
+      }
+    } catch (err) {
+      console.warn("enrichConnectBalanceTransaction transfer lookup", err.message);
+    }
+  }
+  return teamPaymentSplit.labelStudioShareBalanceTransaction({
     id: t.id,
     type: t.type || "unknown",
     amount: t.amount ?? 0,
@@ -3005,11 +3475,13 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
     net,
     isCredit: net > 0,
     created: t.created ?? 0,
-    description: t.description || null,
+    description,
     reportingCategory: t.reporting_category || null,
     sourceId,
     chargeId,
-  };
+    attributedMemberUid,
+    purpose: transferMetaPurpose || undefined,
+  });
 }
 
 /**
@@ -3069,7 +3541,54 @@ exports.getConnectBalanceTransactions = functions
         enrichConnectBalanceTransaction(stripe, t, stripeAccountId)
       )
     );
-    return { transactions };
+    payCtx.uid = context.auth.uid;
+    const ledgerRows = await teamPaymentSplit.ledgerStudioShareRowsForPayCtx(
+      db,
+      payCtx,
+      { startTs, endTs, limit }
+    );
+    const ledgerTransferIds = new Set(
+      ledgerRows
+        .map((r) => (r.sourceId || "").toString().trim())
+        .filter((id) => id.startsWith("tr_"))
+    );
+    const ledgerCreditAmounts = new Map();
+    for (const r of ledgerRows) {
+      if (r.isCredit === false) continue;
+      const amt = Math.abs(Math.round(Number(r.net) || Number(r.amount) || 0));
+      if (amt <= 0) continue;
+      ledgerCreditAmounts.set(amt, (ledgerCreditAmounts.get(amt) || 0) + 1);
+    }
+    const isOwnerFeed = payCtx.isOwner === true || payCtx.scope === "tenant";
+    const stripeRows = transactions.filter((t) => {
+      const sid = (t.sourceId || "").toString().trim();
+      if (sid && ledgerTransferIds.has(sid)) return false;
+      if (!isOwnerFeed || !ledgerRows.length) return true;
+      // Drop unlabeled Connect transfer credits that duplicate a unique ledger share.
+      const amt = Math.abs(Math.round(Number(t.net) || Number(t.amount) || 0));
+      const ch = (t.chargeId || "").toString();
+      const looksLikeCharge = ch.startsWith("ch_") || sid.startsWith("pi_") || sid.startsWith("ch_");
+      if (
+        t.isCredit !== false &&
+        amt > 0 &&
+        ledgerCreditAmounts.get(amt) === 1 &&
+        !looksLikeCharge &&
+        ((t.type || "") === "payment" || (t.reportingCategory || "") === "transfer")
+      ) {
+        return false;
+      }
+      return true;
+    });
+    for (const row of ledgerRows) {
+      stripeRows.push(row);
+    }
+    const attributed = await teamPaymentSplit.attachStudioShareAttribution(
+      db,
+      payCtx,
+      stripeRows
+    );
+    attributed.sort((a, b) => (b.created || 0) - (a.created || 0));
+    return { transactions: attributed.slice(0, limit) };
   });
 
 /**
@@ -3308,9 +3827,68 @@ exports.getPaymentReceiptDetail = functions
   });
 
 /**
+ * Remaining refundable amount for a Connect charge (includes Dashboard/API refunds).
+ * Params: { chargeId: string }.
+ * Returns { amountCents, amountCapturedCents, amountRefundedCents, remainingRefundableCents }.
+ */
+exports.getChargeRefundStatus = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const chargeId = (data?.chargeId || "").toString().trim();
+    if (!chargeId || !chargeId.startsWith("ch_")) {
+      throw new functions.https.HttpsError("invalid-argument", "Valid chargeId required");
+    }
+    const payCtx = await assertCanTakePayments(context.auth.uid);
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    let charge;
+    try {
+      charge = await stripe.charges.retrieve(chargeId, {
+        stripeAccount: stripeAccountId,
+      });
+    } catch (err) {
+      const msg =
+        (err && err.message) || "Could not load this payment. Try again.";
+      console.error("getChargeRefundStatus", err);
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+    const amountCents = charge.amount || 0;
+    const amountCapturedCents =
+      typeof charge.amount_captured === "number" && charge.amount_captured > 0
+        ? charge.amount_captured
+        : amountCents;
+    const amountRefundedCents = charge.amount_refunded || 0;
+    const remainingRefundableCents = Math.max(
+      0,
+      amountCapturedCents - amountRefundedCents
+    );
+    return {
+      amountCents,
+      amountCapturedCents,
+      amountRefundedCents,
+      remainingRefundableCents,
+    };
+  });
+
+/**
  * Creates a refund for a charge on the Connect account.
- * Params: { chargeId: string, amountCents?: number, reason?: string }.
- * Omit amountCents for full refund.
+ * Params: {
+ *   chargeId: string,
+ *   amountCents?: number,
+ *   reason?: string,
+ *   idempotencyKey?: string  // client UUID per refund attempt; prevents duplicate refunds on retry
+ * }.
+ * Omit amountCents for full refund of remaining (amount_captured - amount_refunded).
  */
 exports.createRefund = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -3331,23 +3909,57 @@ exports.createRefund = functions
     if (!secretKey) {
       throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
     }
-    const amountCents = data?.amountCents;
-    const reason = (data?.reason || "requested_by_customer").toString().trim();
+    const amountCentsRaw = data?.amountCents;
+    if (
+      amountCentsRaw !== undefined &&
+      amountCentsRaw !== null &&
+      typeof amountCentsRaw !== "number"
+    ) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "amountCents must be a number (integer cents)."
+      );
+    }
+    const amountCents =
+      typeof amountCentsRaw === "number" && Number.isFinite(amountCentsRaw)
+        ? Math.round(amountCentsRaw)
+        : null;
+    const allowedReasons = new Set([
+      "duplicate",
+      "fraudulent",
+      "requested_by_customer",
+    ]);
+    const reasonRaw = (data?.reason || "requested_by_customer").toString().trim();
+    const reason = allowedReasons.has(reasonRaw)
+      ? reasonRaw
+      : "requested_by_customer";
+    const clientIdempotencyKey = (data?.idempotencyKey || "").toString().trim();
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
 
     // Guard: refunds must be covered by the available balance so Stripe never
     // debits the linked bank account (funds still settling don't count).
-    const charge = await stripe.charges.retrieve(chargeId, {
-      stripeAccount: stripeAccountId,
-    });
+    // remaining uses amount_captured so Dashboard/API partial refunds are respected.
+    let charge;
+    try {
+      charge = await stripe.charges.retrieve(chargeId, {
+        stripeAccount: stripeAccountId,
+      });
+    } catch (err) {
+      const msg =
+        (err && err.message) || "Could not load this payment. Try again.";
+      console.error("createRefund retrieve charge", err);
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+    const capturedCents =
+      typeof charge.amount_captured === "number" && charge.amount_captured > 0
+        ? charge.amount_captured
+        : charge.amount || 0;
     const remainingCents = Math.max(
       0,
-      (charge.amount || 0) - (charge.amount_refunded || 0)
+      capturedCents - (charge.amount_refunded || 0)
     );
     const refundCents =
-      typeof amountCents === "number" && amountCents > 0
-        ? Math.round(amountCents)
-        : remainingCents;
+      amountCents !== null && amountCents > 0 ? amountCents : remainingCents;
     if (refundCents <= 0) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -3380,6 +3992,13 @@ exports.createRefund = functions
       );
     }
 
+    // Prefer client key (same tap/retry); fall back so retries without a client key
+    // still collapse for the same uid+charge+amount within Stripe's 24h window.
+    const idempotencyKey = (
+      clientIdempotencyKey ||
+      `refund_${stripeAccountId}_${chargeId}_${refundCents}_${context.auth.uid}`
+    ).slice(0, 255);
+
     // Return the platform 1% application fee with the refund (pro-rata on partials).
     const params = {
       charge: chargeId,
@@ -3387,8 +4006,73 @@ exports.createRefund = functions
       refund_application_fee: true,
       amount: refundCents,
     };
-    await stripe.refunds.create(params, { stripeAccount: stripeAccountId });
-    return { success: true };
+    let refund;
+    try {
+      refund = await stripe.refunds.create(params, {
+        stripeAccount: stripeAccountId,
+        idempotencyKey,
+      });
+    } catch (err) {
+      const msg =
+        (err && err.message) ||
+        "Refund failed. Check available balance and try again.";
+      console.error("createRefund", err);
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+
+    // Claw back studio share that was already transferred to the owner.
+    try {
+      const tenantId = payCtx.tenantId;
+      const piId =
+        typeof charge.payment_intent === "string"
+          ? charge.payment_intent
+          : charge.payment_intent && charge.payment_intent.id;
+      if (tenantId) {
+        await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+          db,
+          tenantId,
+          chargeId,
+          paymentIntentId: piId || null,
+          refundCents,
+          chargeCapturedCents: capturedCents,
+          refundId: refund && refund.id,
+        });
+      }
+    } catch (revErr) {
+      console.error("createRefund studio share reverse", revErr.message || revErr);
+    }
+
+    return {
+      success: true,
+      refundCents,
+      remainingRefundableCents: Math.max(0, remainingCents - refundCents),
+    };
+  });
+
+/**
+ * Retries failed studio-share transfers (platform → studio Connect).
+ * Runs every hour; also callable by ops if needed later.
+ */
+exports.retryFailedStudioShareSettlements = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .pubsub.schedule("every 60 minutes")
+  .onRun(async () => {
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      console.warn("retryFailedStudioShareSettlements: no Stripe secret");
+      return null;
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const out = await teamPaymentSplit.retryFailedStudioShareSettlements(stripe, {
+      db,
+      normalizeSubscriptionPlan,
+      limit: 25,
+    });
+    console.log(
+      "retryFailedStudioShareSettlements",
+      JSON.stringify({ attempted: out.attempted })
+    );
+    return null;
   });
 
 /**
@@ -4765,7 +5449,15 @@ exports.createPaymentIntentForTapToPay = functions
     );
     const taxCents = tax.taxCents || 0;
     const totalCents = checkout.totalCents + taxCents;
-    const feeCents = platformFeeCents(totalCents);
+    const splitFee = await buildTeamSplitFeeAndMetaForCharge({
+      tenant: tenantData,
+      tenantId,
+      payCtx,
+      paymentKind: "service",
+      serviceCents: checkout.serviceCents,
+      grossCents: totalCents,
+    });
+    const feeCents = splitFee.applicationFeeCents;
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const pi = await stripe.paymentIntents.create(
       {
@@ -4786,6 +5478,7 @@ exports.createPaymentIntentForTapToPay = functions
           attributedMemberUid,
           chargeStripeAccountId: stripeAccountId,
           chargeStripeScope: payCtx.scope || "tenant",
+          ...splitFee.splitMeta,
         },
       },
       { stripeAccount: stripeAccountId }
@@ -4793,7 +5486,8 @@ exports.createPaymentIntentForTapToPay = functions
     return {
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
-      platformFeeCents: feeCents,
+      platformFeeCents: splitFee.platformFeeCents,
+      studioShareCents: splitFee.studioShareCents,
       serviceCents: checkout.serviceCents,
       taxCents,
       surchargeCents: checkout.surchargeCents,
@@ -5442,17 +6136,54 @@ exports.stripeSubscriptionWebhook = functions
           console.error("stripeSubscriptionWebhook domain finalize", e.message || e);
         }
       } else if (
-        (meta.paymentKind || "").toString() === "deposit" &&
-        meta.bookingRequestId &&
-        meta.tenantId
+        meta.tenantId &&
+        ["deposit", "service"].includes((meta.paymentKind || "").toString())
       ) {
         try {
-          await confirmBookingAfterDepositPaid(
-            meta.tenantId.toString(),
-            meta.bookingRequestId.toString()
-          );
+          const tenantId = meta.tenantId.toString();
+          const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+          if (tenantSnap.exists) {
+            const chargeAccountId = (
+              meta.chargeStripeAccountId ||
+              event.account ||
+              ""
+            )
+              .toString()
+              .trim();
+            if (chargeAccountId) {
+              await teamPaymentSplit.recordAndSettleTenantPayment(stripe, {
+                db,
+                tenantId,
+                tenant: tenantSnap.data(),
+                pi,
+                stripeAccountId: chargeAccountId,
+                chargeStripeScopeHint:
+                  (meta.chargeStripeScope || "").toString() || null,
+                initiatedByUidFallback:
+                  (meta.initiatedByUid || "").toString() || null,
+                platformFeeCents,
+                normalizeSubscriptionPlan,
+                normalizeMemberSettings,
+                computeTeamPaymentSplit,
+                resolveAttributedMemberUid,
+                loadBookingRequestForPayment,
+                confirmBookingAfterDepositPaid,
+              });
+            } else if (
+              (meta.paymentKind || "").toString() === "deposit" &&
+              meta.bookingRequestId
+            ) {
+              await confirmBookingAfterDepositPaid(
+                tenantId,
+                meta.bookingRequestId.toString()
+              );
+            }
+          }
         } catch (e) {
-          console.error("stripeSubscriptionWebhook deposit confirm", e.message);
+          console.error(
+            "stripeSubscriptionWebhook recordAndSettleTenantPayment",
+            e.message || e
+          );
         }
       }
 
@@ -5535,20 +6266,21 @@ exports.stripeSubscriptionWebhook = functions
 const TENANT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_MANAGER_PERMISSIONS = {
-  viewAllBookings: true,
-  approveRejectRequests: true,
+  viewAllBookings: false,
+  approveRejectRequests: false,
   editServicesPricing: false,
   manageBookingFormStyle: false,
-  manageArtistSchedules: true,
-  accessClientList: true,
+  manageArtistSchedules: false,
+  accessClientList: false,
   viewEarningsReports: false,
-  sendClientNotifications: true,
+  sendClientNotifications: false,
 };
 
 const DEFAULT_TENANT_WORKFLOW = {
   confirmationType: "request_approve",
   responseTimeHours: 24,
   bookingMode: "form",
+  managersApproveAppointments: false,
 };
 
 function bookingRequiresApproval(confirmationType) {
@@ -5605,8 +6337,9 @@ function canApproveRejectBookingRequests(ctx) {
 }
 
 function managersApproveAppointments(workflow) {
-  if (!workflow || typeof workflow !== "object") return true;
-  return workflow.managersApproveAppointments !== false;
+  if (!workflow || typeof workflow !== "object") return false;
+  // Opt-in: owner must explicitly turn on “Owner sets team booking type”.
+  return workflow.managersApproveAppointments === true;
 }
 
 function resolveTenantWorkflow(tenant, ownerUserData) {
@@ -5629,7 +6362,7 @@ function resolveTenantWorkflow(tenant, ownerUserData) {
       managersApproveAppointments: managersApproveAppointments(ownerUserData.workflow),
     };
   }
-  return { ...DEFAULT_TENANT_WORKFLOW, managersApproveAppointments: true };
+  return { ...DEFAULT_TENANT_WORKFLOW, managersApproveAppointments: false };
 }
 
 function resolveEffectiveBookingWorkflow(tenant, userData, ownerUserData, memberUid) {
@@ -5706,6 +6439,7 @@ async function getMemberAccessContext(uid) {
   const accessRole = isOwner ? "owner" : parseAccessRole(userData.role || userData.accessRole);
   const managerPermissions = tenant.managerPermissions || DEFAULT_MANAGER_PERMISSIONS;
   return {
+    uid,
     tenantId,
     tenant,
     userData,
@@ -5746,7 +6480,25 @@ function normalizeJobTitle(title) {
 }
 
 const PAYMENT_SPLIT_APPLIES = new Set(["service", "deposit", "both"]);
-const PAYOUT_MODES = new Set(["studio_payroll", "independent"]);
+const PAYOUT_MODES = new Set(["shop_split", "independent", "studio_payroll"]);
+
+/** All team members take payments on their own Connect (legacy studio_payroll → shop_split). */
+function memberUsesOwnConnect(payoutMode) {
+  const m = (payoutMode || "").toString().trim().toLowerCase();
+  return (
+    m === "independent" ||
+    m === "shop_split" ||
+    m === "studio_payroll" ||
+    !m
+  );
+}
+
+function normalizePayoutMode(raw) {
+  const m = (raw || "independent").toString().trim().toLowerCase();
+  if (m === "studio_payroll" || m === "shop_split") return "shop_split";
+  if (m === "independent") return "independent";
+  return "independent";
+}
 
 function normalizeMemberSettings(raw) {
   const d = raw && typeof raw === "object" ? raw : {};
@@ -5769,10 +6521,11 @@ function normalizeMemberSettings(raw) {
   if (d.paymentSplitEnabled === undefined && paymentSplitPercent > 0) {
     paymentSplitEnabled = true;
   }
-  let payoutMode = (d.payoutMode || "independent").toString().trim().toLowerCase();
-  if (!PAYOUT_MODES.has(payoutMode)) payoutMode = "independent";
+  let payoutMode = normalizePayoutMode(d.payoutMode);
   const canEditPortfolio = d.canEditPortfolio === true;
   const canEditPublicBio = d.canEditPublicBio === true;
+  // Default true so existing members keep payments; owner may set false.
+  const canTakePayments = d.canTakePayments !== false;
   const out = {
     useStudioBookingPolicy: useStudio,
     paymentSplitEnabled,
@@ -5781,6 +6534,7 @@ function normalizeMemberSettings(raw) {
     payoutMode,
     canEditPortfolio,
     canEditPublicBio,
+    canTakePayments,
   };
   if (!useStudio && bookingConfirmationOverride) {
     out.bookingConfirmationOverride = bookingConfirmationOverride;
@@ -5826,6 +6580,19 @@ function computeTeamPaymentSplit({
   };
 }
 
+
+/** Wire teamPaymentSplit helpers with local deps. */
+async function buildTeamSplitFeeAndMetaForCharge(args) {
+  return teamPaymentSplit.buildTeamSplitFeeAndMeta({
+    db,
+    platformFeeCents,
+    normalizeSubscriptionPlan,
+    normalizeMemberSettings,
+    computeTeamPaymentSplit,
+    ...args,
+  });
+}
+
 function resolveAttributedMemberUid(tenant, bookingRequest, initiatedByUid) {
   const ownerUid = ((tenant && tenant.ownerUid) || "").toString().trim();
   const assigned = ((bookingRequest && bookingRequest.assignedMemberUid) || "")
@@ -5850,7 +6617,7 @@ async function loadBookingRequestForPayment(tenantId, requestId) {
 }
 
 /**
- * Records payment + team split for reporting after a successful card charge.
+ * Records payment + team split after a successful card charge; transfers studio share when due.
  * Params: { paymentIntentId: string }
  */
 exports.recordTenantPayment = functions
@@ -5926,124 +6693,23 @@ exports.recordTenantPayment = functions
         "Payment account does not match this booking."
       );
     }
-    if (pi.status !== "succeeded") {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Payment is not complete yet."
-      );
-    }
-    if ((meta.tenantId || "").toString() !== tenantId) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "Payment does not belong to this business."
-      );
-    }
-    const serviceCents = parseInt(meta.serviceAmountCents, 10);
-    const surchargeCents = parseInt(meta.surchargeCents, 10);
-    const taxCentsMeta = parseInt(meta.taxCents, 10);
-    const resolvedTax = Number.isNaN(taxCentsMeta) ? 0 : Math.max(0, taxCentsMeta);
-    const paymentKind = (meta.paymentKind || "service").toString();
-    const bookingRequestId = (meta.bookingRequestId || "").toString().trim();
-    const resolvedService =
-      Number.isNaN(serviceCents) || serviceCents <= 0
-        ? Math.max(
-            0,
-            (pi.amount || 0) -
-              (Number.isNaN(surchargeCents) ? 0 : surchargeCents) -
-              resolvedTax
-          )
-        : serviceCents;
-    const resolvedSurcharge = Number.isNaN(surchargeCents) ? 0 : Math.max(0, surchargeCents);
-    const grossCents = pi.amount || resolvedService + resolvedTax + resolvedSurcharge;
 
-    let stripeFeeCents = 0;
-    const chargeId =
-      typeof pi.latest_charge === "string"
-        ? pi.latest_charge
-        : pi.latest_charge && pi.latest_charge.id;
-    if (chargeId) {
-      try {
-        const charge = await stripe.charges.retrieve(chargeId, {
-          stripeAccount: stripeAccountId,
-        });
-        if (charge.balance_transaction) {
-          const btId =
-            typeof charge.balance_transaction === "string"
-              ? charge.balance_transaction
-              : charge.balance_transaction.id;
-          const bt = await stripe.balanceTransactions.retrieve(btId, {
-            stripeAccount: stripeAccountId,
-          });
-          stripeFeeCents = bt.fee || 0;
-        }
-      } catch (feeErr) {
-        console.warn("recordTenantPayment fee lookup", feeErr.message);
-      }
-    }
-    const platformFee = platformFeeCents(grossCents);
-
-    const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
-    const initiatedByUid = (meta.initiatedByUid || uid).toString();
-    const attributedMemberUid = resolveAttributedMemberUid(tenant, booking, initiatedByUid);
-    const ownerUid = (tenant.ownerUid || "").toString();
-    let memberSettings = {};
-    if (attributedMemberUid && attributedMemberUid !== ownerUid) {
-      const memberSnap = await db.collection("users").doc(attributedMemberUid).get();
-      if (memberSnap.exists && memberSnap.data().tenantId === tenantId) {
-        memberSettings = memberSnap.data().memberSettings || {};
-      }
-    }
-
-    const split = computeTeamPaymentSplit({
-      memberSettings,
-      paymentKind,
-      serviceCents: resolvedService,
+    return teamPaymentSplit.recordAndSettleTenantPayment(stripe, {
+      db,
+      tenantId,
+      tenant,
+      pi,
+      stripeAccountId,
+      chargeStripeScopeHint: chargeCtx?.scope || meta.chargeStripeScope || null,
+      initiatedByUidFallback: uid,
+      platformFeeCents,
+      normalizeSubscriptionPlan,
+      normalizeMemberSettings,
+      computeTeamPaymentSplit,
+      resolveAttributedMemberUid,
+      loadBookingRequestForPayment,
+      confirmBookingAfterDepositPaid,
     });
-
-    const ledgerRef = db
-      .collection("tenants")
-      .doc(tenantId)
-      .collection("paymentLedger")
-      .doc(paymentIntentId);
-    const existing = await ledgerRef.get();
-    if (existing.exists) {
-      return { ok: true, alreadyRecorded: true, ledgerId: paymentIntentId };
-    }
-
-    await ledgerRef.set({
-      paymentIntentId,
-      chargeId: chargeId || null,
-      bookingRequestId: bookingRequestId || null,
-      attributedMemberUid: attributedMemberUid || ownerUid,
-      paymentKind,
-      serviceCents: resolvedService,
-      taxCents: resolvedTax,
-      surchargeCents: resolvedSurcharge,
-      grossCents,
-      stripeFeeCents,
-      platformFeeCents: platformFee,
-      splitApplied: split.splitApplied,
-      splitPercentApplied: split.splitPercentApplied,
-      artistShareCents: split.artistShareCents,
-      studioServiceShareCents: split.studioServiceShareCents,
-      initiatedByUid,
-      chargeStripeScope: chargeCtx?.scope || "tenant",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    if (paymentKind === "deposit" && bookingRequestId) {
-      await confirmBookingAfterDepositPaid(tenantId, bookingRequestId);
-    }
-
-    return {
-      ok: true,
-      ledgerId: paymentIntentId,
-      serviceCents: resolvedService,
-      surchargeCents: resolvedSurcharge,
-      grossCents,
-      artistShareCents: split.artistShareCents,
-      studioServiceShareCents: split.studioServiceShareCents,
-    };
   });
 
 function defaultJobTitleForIndustry(industry) {
@@ -6250,8 +6916,11 @@ function defaultMemberSettingsForInvite(accessRole) {
   const role = parseAccessRole(accessRole);
   if (role === "manager") {
     return normalizeMemberSettings({
-      payoutMode: "studio_payroll",
+      payoutMode: "shop_split",
       useStudioBookingPolicy: true,
+      paymentSplitEnabled: true,
+      paymentSplitPercent: 70,
+      paymentSplitAppliesTo: "service",
     });
   }
   return normalizeMemberSettings({
@@ -6879,7 +7548,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
   const ctx = await getMemberAccessContext(context.auth.uid);
   const isOwner = ctx.isOwner || ctx.tenant.ownerUid === context.auth.uid;
   const memberSettings = normalizeMemberSettings(ctx.userData.memberSettings);
-  const usesOwnPayments = !isOwner && memberSettings.payoutMode === "independent";
+  const usesOwnPayments = !isOwner && memberUsesOwnConnect(memberSettings.payoutMode);
   const studioSmsActive = sms.tenantStudioSmsActive(ctx.tenant);
   const memberSmsStatus = (ctx.userData.smsStatus || "off").toString();
   const memberSmsPhone = (ctx.userData.smsPhoneNumber || "").toString().trim();
@@ -6909,7 +7578,7 @@ exports.getMyTeamAccess = functions.https.onCall(async (data, context) => {
     tenantConfirmationType: ctx.tenantWorkflow.confirmationType,
     payoutMode: isOwner ? null : memberSettings.payoutMode,
     usesOwnPayments,
-    canTakePayments: isOwner || usesOwnPayments,
+    canTakePayments: isOwner || (usesOwnPayments && memberSettings.canTakePayments !== false),
     studioSmsActive,
     usesOwnSms,
     canSendClientSms,
@@ -7044,39 +7713,6 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
   if (normalized === "approved") normalized = "confirmed";
   if (normalized === "rejected") normalized = "declined";
 
-  const isConfirm = normalized === "confirmed";
-  const isDecline = normalized === "declined";
-
-  if (isConfirm) {
-    if (!canManageAppointmentTime(ctx)) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "You do not have permission to confirm booking requests."
-      );
-    }
-  } else if (isDecline) {
-    if (!canApproveRejectBookingRequests(ctx) && !canManageAppointmentTime(ctx)) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "You do not have permission to approve or reject booking requests."
-      );
-    }
-  } else if (!ctx.isOwner && ctx.accessRole !== "manager") {
-    throw new functions.https.HttpsError(
-      "permission-denied",
-      "You do not have permission to update booking requests."
-    );
-  } else if (
-    !ctx.isOwner &&
-    ctx.accessRole === "manager" &&
-    !ctx.managerPermissions.viewAllBookings
-  ) {
-    throw new functions.https.HttpsError(
-      "permission-denied",
-      "You do not have permission to update booking requests."
-    );
-  }
-
   const reqRef = db
     .collection("tenants")
     .doc(ctx.tenantId)
@@ -7085,6 +7721,17 @@ exports.updateBookingRequestStatus = functions.https.onCall(async (data, context
   const reqSnap = await reqRef.get();
   if (!reqSnap.exists) {
     throw new functions.https.HttpsError("not-found", "Booking request not found.");
+  }
+  const reqData = reqSnap.data() || {};
+  const assignedUid = (reqData.assignedMemberUid || "").toString().trim();
+  const assignedToSelf = Boolean(assignedUid && assignedUid === ctx.uid);
+  const canShopWide =
+    ctx.isOwner || canManageAppointmentTime(ctx) || canApproveRejectBookingRequests(ctx);
+  if (!canShopWide && !assignedToSelf) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to update this booking request."
+    );
   }
 
   const patch = {
@@ -7138,7 +7785,9 @@ exports.seedTenantBookingRequests = functions.https.onCall(async (data, context)
 });
 
 /** Tenant members: roster (+ owner-only policy fields for Team screen). */
-exports.listTenantMembers = functions.https.onCall(async (data, context) => {
+exports.listTenantMembers = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -7645,7 +8294,7 @@ function memberIndependentStripeAccountId(userData) {
   const accountId = (userData.stripeAccountId || "").toString().trim();
   if (!accountId) return null;
   const payoutMode = normalizeMemberSettings(userData.memberSettings).payoutMode;
-  return payoutMode === "independent" ? accountId : null;
+  return memberUsesOwnConnect(payoutMode) ? accountId : null;
 }
 
 async function getConnectUsdBalanceCents(stripeAccountId) {
@@ -8256,7 +8905,14 @@ exports.createBillingPortalSession = functions
  * Marketing account page: read-only subscription status, plan label, renewal, card mask, recent invoices.
  */
 exports.getBillingSummary = functions
-  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .runWith({
+    secrets: [
+      stripeSecretKey,
+      stripeSubscriptionPriceIds,
+      sms.twilioAccountSid,
+      sms.twilioAuthToken,
+    ],
+  })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -8574,11 +9230,7 @@ async function linkAndSyncTenantStripeBilling(stripe, tenantId, tenant, ownerEma
     if (sub) {
       const extraPriceIds = stripeSmsExtraPriceIds();
       const stripeQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
-      const planForSms =
-        planNorm || normalizeSubscriptionPlan(tenant.subscriptionPlan);
-      const used = await sms.countOccupiedSmsLines(tenantId, tenant);
-      const needed = sms.smsExtraNeededForUsage(planForSms, used);
-      syncPatch.smsExtraLineQuantity = Math.min(stripeQty, needed + 1);
+      syncPatch.smsExtraLineQuantity = Math.max(0, stripeQty);
     }
   } catch (_) {
     /* smsExtra price optional during sync */
@@ -8635,9 +9287,13 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
     smsAtMaxLines: lines.atMax,
     smsCanAddWithoutPurchase: lines.canAddWithoutPurchase,
     smsCanPurchaseExtra: lines.canPurchaseExtra,
+    smsCanPurchaseSoloReplacement: !!lines.canPurchaseSoloReplacement,
     smsExtraMonthlyPriceCents: lines.extraMonthlyPriceCents,
     smsExtraMonthlyPriceLabel: lines.extraMonthlyPriceLabel,
+    smsExtraOneTimeReplacementCents: lines.extraOneTimeReplacementCents || 1200,
+    smsExtraOneTimeReplacementLabel: lines.extraOneTimeReplacementLabel || "$12",
     smsNextLineIsFree: lines.nextIsFree,
+    smsLifetimeNumbersBought: lines.lifetimeNumbersBought || 0,
     // Refresh that buys a new Twilio number: free only within lifetime allotment
     // (Solo 1 · Studio/Shop 2). No visible counter — boolean for confirm copy.
     smsRefreshNeedsPurchase: sms.smsRefreshNeedsPurchase(
@@ -8653,19 +9309,36 @@ async function messagingFieldsWithLineCount(tenantId, tenant, ownerUserData, use
     (tenant && tenant.subscriptionPlan) ||
       (ownerUserData && ownerUserData.subscriptionPlan)
   );
-  const snapDocs =
+  let snapDocs =
     userDocsOpt ||
     (await db.collection("users").where("tenantId", "==", tenantId).get()).docs;
+
+  // Drop Firestore lines whose Twilio SIDs are gone (prevents ghost Active numbers).
+  try {
+    const reconciled = await sms.reconcileStaleSmsLinesInFirestore(
+      tenantId,
+      tenant,
+      snapDocs
+    );
+    if (reconciled.cleared > 0) {
+      tenant = reconciled.tenant;
+      snapDocs = (
+        await db.collection("users").where("tenantId", "==", tenantId).get()
+      ).docs;
+    }
+  } catch (e) {
+    console.warn("messagingFieldsWithLineCount reconcile", e.message || e);
+  }
+
   const used = sms.countOccupiedSmsLinesFromDocs(tenant, snapDocs);
-  // Firestore-only: clear orphan prepaid qty so iOS/web show needsPurchase correctly.
-  // Allow paid === overage + 1 (just purchased, not yet provisioned).
-  // Stripe is reconciled on billing summary / purchase / release.
+  // Mirror Extra SMS qty to active paid-tagged lines (never wipe a paid seat
+  // just because concurrent count is back at the free allotment).
   let tenantForSummary = tenant;
-  const needed = sms.smsExtraNeededForUsage(plan, used);
   const paidFs = sms.smsExtraPaidQuantity(tenant);
-  if (plan !== "solo" && paidFs > needed + 1) {
-    await syncSmsExtraLineQuantityToTenant(tenantId, needed);
-    tenantForSummary = { ...tenant, smsExtraLineQuantity: needed };
+  const paidActive = sms.countPaidSmsLinesFromDocs(tenant, snapDocs);
+  if (plan !== "solo" && paidActive > 0 && paidFs > paidActive) {
+    await syncSmsExtraLineQuantityToTenant(tenantId, paidActive);
+    tenantForSummary = { ...tenant, smsExtraLineQuantity: paidActive };
   }
   const lineSummary = sms.buildSmsLineSummary(tenantForSummary, plan, used);
   const fields = serializeMessagingFields(tenantForSummary, ownerUserData, lineSummary);
@@ -8762,9 +9435,14 @@ function listSmsLineAssignmentsForBillingFromDocs(tenant, lineSummary, userDocs)
   }
 
   const used = lineSummary && typeof lineSummary.used === "number" ? lineSummary.used : out.length;
-  const capacity =
-    lineSummary && typeof lineSummary.capacity === "number" ? lineSummary.capacity : used;
-  const open = Math.max(0, capacity - used);
+  // Unassigned rows = unused FREE included only (Shop/Studio: show while
+  // lifetime buys are still under the free allotment). Never invent open
+  // slots from prepaid paid extras — those go through "+ Add … $12/mo".
+  const freeIncluded =
+    lineSummary && typeof lineSummary.freeIncluded === "number"
+      ? lineSummary.freeIncluded
+      : 0;
+  const open = Math.max(0, freeIncluded - used);
   for (let i = 0; i < open; i++) {
     out.push({
       kind: "open",
@@ -9096,9 +9774,10 @@ exports.startSubscriptionToday = functions
   });
 
 /**
- * Owner: add one paid SMS line capacity ($10/mo) on the existing subscription.
- * Free included slots must be used first (or left free for app provisioning).
- * Does not provision a number — capacity unlocks the next in-app / member line.
+ * Owner: add one paid SMS line capacity ($12 flat now + $12/mo recurring).
+ * Charges a one-time $12 invoice (no proration), then adds the smsExtra seat
+ * with proration_behavior none. Free included slots must be used first.
+ * Does not provision a number — returns a short-lived auth for requestSmsPhoneNumber.
  */
 exports.purchaseSmsExtraLine = functions
   .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
@@ -9169,7 +9848,10 @@ exports.purchaseSmsExtraLine = functions
         `Your ${plan} plan allows up to ${max} texting numbers.`
       );
     }
-    if (usedBefore < free) {
+    const lifetime = sms.resolveLifetimeNumbersBought(tenant, usedBefore);
+    // Only block purchase when a free get is still available (concurrent + lifetime).
+    // After lifetime free are used, allow $12 buy even if under concurrent free seats.
+    if (usedBefore < free && lifetime < free) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "You still have an included texting number. Enable it under Messaging without purchasing."
@@ -9221,10 +9903,12 @@ exports.purchaseSmsExtraLine = functions
     const extraPriceIds = stripeSmsExtraPriceIds();
     let currentQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
 
-    // Drop orphans to floor first (may credit). Then +1 always invoices a real add.
+    // Align Stripe qty to current usage with no proration (no credits / partials).
     if (currentQty !== floorQty) {
       try {
-        await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenant, floorQty);
+        await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenant, floorQty, {
+          prorationBehavior: "none",
+        });
         currentQty = floorQty;
       } catch (e) {
         console.error("purchaseSmsExtraLine reset to floor", e);
@@ -9239,52 +9923,32 @@ exports.purchaseSmsExtraLine = functions
 
     const tenantAtFloor = { ...tenant, smsExtraLineQuantity: floorQty };
 
+    // Flat $12 today — never mid-cycle proration. Recurring seat added separately.
+    let invoice;
     try {
-      await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenantAtFloor, nextQty);
+      invoice = await chargeOneTimeSmsExtraFee(
+        stripe,
+        tenantAtFloor,
+        "Get Bookking extra texting number ($12)"
+      );
     } catch (e) {
-      console.error("purchaseSmsExtraLine stripe +1", e);
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("purchaseSmsExtraLine flat charge", e);
       throw new functions.https.HttpsError(
         "failed-precondition",
-        `Could not add texting number to subscription: ${stripeErrorMessage(e)}`
+        `Could not charge your card for the texting number: ${stripeErrorMessage(e)}`
       );
     }
 
-    // Confirm the invoice created by this +1 (not any recent paid invoice).
-    let invoice = null;
     try {
-      const subAfter = await stripe.subscriptions.retrieve(subId, {
-        expand: ["latest_invoice", "latest_invoice.payment_intent"],
+      await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenantAtFloor, nextQty, {
+        prorationBehavior: "none",
       });
-      invoice =
-        subAfter.latest_invoice && typeof subAfter.latest_invoice === "object"
-          ? subAfter.latest_invoice
-          : null;
-      if (!invoice && subAfter.latest_invoice) {
-        invoice = await stripe.invoices.retrieve(subAfter.latest_invoice);
-      }
-      if (invoice && invoice.status === "open") {
-        try {
-          invoice = await stripe.invoices.pay(invoice.id);
-        } catch (payErr) {
-          console.error("purchaseSmsExtraLine invoice.pay", payErr);
-          throw new functions.https.HttpsError(
-            "failed-precondition",
-            `Could not charge your card for the texting number: ${stripeErrorMessage(payErr)}`
-          );
-        }
-      }
     } catch (e) {
-      if (e instanceof functions.https.HttpsError) throw e;
-      console.error("purchaseSmsExtraLine confirm invoice", e);
+      console.error("purchaseSmsExtraLine stripe +1 after paid", e);
       throw new functions.https.HttpsError(
         "failed-precondition",
-        `Could not confirm texting-number payment: ${stripeErrorMessage(e)}`
-      );
-    }
-    if (!invoice || invoice.status !== "paid") {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Stripe did not confirm the $10 texting-number payment. No number was set up. Update your payment method and try again."
+        `Payment succeeded but texting capacity could not be updated: ${stripeErrorMessage(e)}`
       );
     }
 
@@ -9324,7 +9988,9 @@ exports.purchaseSmsExtraLine = functions
 
 /** Owner: opt in to client texting (provisions Twilio after paid subscription). */
 exports.requestTenantSmsProvisioning = functions
-  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .runWith({
+    secrets: [sms.twilioAccountSid, sms.twilioAuthToken, stripeSecretKey],
+  })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -9357,17 +10023,8 @@ exports.requestTenantSmsProvisioning = functions
       if (sms.smsRefreshNeedsPurchase(tenant, plan, occupied)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          "Getting a new texting number after your included free numbers requires a $10 payment. Use Refresh number in Messaging."
+          "Getting a new texting number after your included free numbers requires a $12 payment."
         );
-      }
-    }
-    const alreadyOccupiesSlot = sms.countsAsOccupiedSmsLine(tenant.smsStatus);
-    if (!alreadyOccupiesSlot && !(forceReprovision && tenant.smsPhoneNumberSid)) {
-      const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-      const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
-      const block = sms.newSmsLineBlockReason(tenant, plan, lineCount);
-      if (block) {
-        throw new functions.https.HttpsError("failed-precondition", block);
       }
     }
     const consent = data && data.smsConsentAccepted === true;
@@ -9377,6 +10034,132 @@ exports.requestTenantSmsProvisioning = functions
         "invalid-argument",
         "Accept the client texting terms to continue."
       );
+    }
+
+    let soloReplacementInvoiceId = null;
+    let soloReplacementAuthorizationId = null;
+    const alreadyOccupiesSlot = sms.countsAsOccupiedSmsLine(tenant.smsStatus);
+    if (!alreadyOccupiesSlot && !(forceReprovision && tenant.smsPhoneNumberSid)) {
+      const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
+      const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
+      const summary = sms.buildSmsLineSummary(tenant, plan, lineCount);
+      // Solo: after the included lifetime number is used, authorize exactly one
+      // $12 replacement before setting pending. The Firestore trigger verifies
+      // this authorization before it may buy from Twilio.
+      if (summary.canPurchaseSoloReplacement) {
+        const tenantRef = db.collection("tenants").doc(ctx.tenantId);
+        const authorization = await db.runTransaction(async (tx) => {
+          const freshSnap = await tx.get(tenantRef);
+          const fresh = freshSnap.data() || {};
+          if (sms.countsAsOccupiedSmsLine(fresh.smsStatus)) {
+            return {
+              alreadyProvisioning: true,
+              authorizationId: null,
+              invoiceId: null,
+            };
+          }
+          const reusableId = (fresh.smsSoloReplacementAuthorizationId || "").toString();
+          const reusableInvoiceId = (
+            fresh.smsSoloReplacementAuthorizationInvoiceId || ""
+          ).toString();
+          const expiresAt = fresh.smsSoloReplacementAuthorizationExpiresAt;
+          const expiresMs =
+            expiresAt && typeof expiresAt.toMillis === "function"
+              ? expiresAt.toMillis()
+              : 0;
+          if (
+            fresh.smsSoloReplacementAuthorizationState === "authorized" &&
+            reusableId &&
+            reusableInvoiceId &&
+            expiresMs > Date.now()
+          ) {
+            return {
+              alreadyProvisioning: false,
+              authorizationId: reusableId,
+              invoiceId: reusableInvoiceId,
+            };
+          }
+          const inFlightAt = fresh.smsSoloReplacementInFlightAt;
+          const inFlightMs =
+            inFlightAt && typeof inFlightAt.toMillis === "function"
+              ? inFlightAt.toMillis()
+              : 0;
+          if (inFlightMs > Date.now() - 5 * 60 * 1000) {
+            throw new functions.https.HttpsError(
+              "aborted",
+              "Your texting-number purchase is already being processed. Please wait."
+            );
+          }
+          const authorizationId = crypto.randomUUID();
+          tx.set(
+            tenantRef,
+            {
+              smsSoloReplacementAuthorizationId: authorizationId,
+              smsSoloReplacementAuthorizationState: "charging",
+              smsSoloReplacementInFlightAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          return {
+            alreadyProvisioning: false,
+            authorizationId,
+            invoiceId: null,
+          };
+        });
+
+        if (authorization.alreadyProvisioning) {
+          return { ok: true, smsStatus: "pending", alreadyProvisioning: true };
+        }
+        soloReplacementAuthorizationId = authorization.authorizationId;
+        soloReplacementInvoiceId = authorization.invoiceId;
+        if (!soloReplacementInvoiceId) {
+          try {
+            const secretKey = stripeSecretKey.value();
+            if (!secretKey) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Stripe is not configured."
+              );
+            }
+            const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+            const invoice = await chargeOneTimeSmsExtraFee(
+              stripe,
+              tenant,
+              "Get Bookking Solo texting number replacement ($12)"
+            );
+            soloReplacementInvoiceId = invoice.id;
+            await tenantRef.set(
+              {
+                smsLastSoloReplacementInvoiceId: invoice.id,
+                smsLastSoloReplacementAt: admin.firestore.FieldValue.serverTimestamp(),
+                smsSoloReplacementAuthorizationInvoiceId: invoice.id,
+                smsSoloReplacementAuthorizationState: "authorized",
+                smsSoloReplacementAuthorizationExpiresAt:
+                  admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60 * 1000),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          } catch (e) {
+            await tenantRef.set(
+              {
+                smsSoloReplacementAuthorizationState: admin.firestore.FieldValue.delete(),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            throw e;
+          }
+        }
+      } else {
+        const block = sms.newSmsLineBlockReason(tenant, plan, lineCount);
+        if (block) {
+          throw new functions.https.HttpsError("failed-precondition", block);
+        }
+      }
     }
     const tenantId = ctx.tenantId;
     const wasPending = (tenant.smsStatus || "").toString() === "pending";
@@ -9416,7 +10199,12 @@ exports.requestTenantSmsProvisioning = functions
         );
       }
     }
-    return { ok: true, smsStatus: "pending" };
+    return {
+      ok: true,
+      smsStatus: "pending",
+      charged: !!soloReplacementInvoiceId,
+      stripeInvoiceId: soloReplacementInvoiceId,
+    };
   });
 
 /** Independent member (or owner on their behalf): opt in to a personal texting line. */
@@ -9486,7 +10274,7 @@ exports.requestMemberSmsProvisioning = functions
       if (sms.smsRefreshNeedsPurchase(tenant, plan, occupied)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          "Getting a new texting number after your included free numbers requires a $10 payment. Use Refresh number in Messaging."
+          "Getting a new texting number after your included free numbers requires a $12/mo payment. Use Refresh number in Messaging."
         );
       }
     }
@@ -9648,7 +10436,9 @@ exports.requestSmsPhoneNumber = functions
       authorizationExpiresAt && typeof authorizationExpiresAt.toMillis === "function"
         ? authorizationExpiresAt.toMillis()
         : 0;
-    const requiresPaidPurchase = lineCount >= summary.freeIncluded;
+    const requiresPaidPurchase =
+      lineCount >= summary.freeIncluded ||
+      (summary.lifetimeNumbersBought || 0) >= summary.freeIncluded;
     const hasPaidPurchaseAuthorization =
       requiresPaidPurchase &&
       !!purchaseAuthorizationId &&
@@ -9682,8 +10472,8 @@ exports.requestSmsPhoneNumber = functions
         smsLineRequestPending: true,
         message:
           targetUid === context.auth.uid
-            ? "Request sent. Your studio owner can add a number for $10/mo under Billing or Messaging."
-            : "This member needs a paid texting number. Confirm the $10/mo purchase, then enable their line.",
+            ? "Request sent. Your studio owner can add a number for $12/mo under Billing or Messaging."
+            : "This member needs a paid texting number. Confirm the $12/mo purchase, then enable their line.",
       };
     }
 
@@ -9754,54 +10544,20 @@ exports.clearSmsLineRequest = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * One-time $10 charge for a texting-number replacement after the lifetime
+ * One-time $12 charge for a texting-number replacement after the lifetime
  * free allotment is used (Solo 1 · Studio/Shop 2). Does not change seat qty.
  */
 async function chargeOneTimeSmsNumberReplacementFee(stripe, tenant) {
-  const customerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!customerId) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "Billing is not set up. Complete subscription checkout first."
-    );
-  }
-  const priceId = stripeSmsExtraPriceId();
-  await stripe.invoiceItems.create({
-    customer: customerId,
-    price: priceId,
-    description: "Get Bookking texting number replacement ($10)",
-  });
-  const invoice = await stripe.invoices.create({
-    customer: customerId,
-    collection_method: "charge_automatically",
-    auto_advance: true,
-  });
-  let paid = invoice;
-  if (invoice.status === "draft") {
-    paid = await stripe.invoices.finalizeInvoice(invoice.id);
-  }
-  if (paid.status === "open") {
-    try {
-      paid = await stripe.invoices.pay(paid.id);
-    } catch (payErr) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Could not charge your card for the texting number: ${stripeErrorMessage(payErr)}`
-      );
-    }
-  }
-  if (!paid || paid.status !== "paid") {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "Stripe did not confirm the $10 texting-number payment. No number was changed."
-    );
-  }
-  return paid;
+  return chargeOneTimeSmsExtraFee(
+    stripe,
+    tenant,
+    "Get Bookking texting number replacement ($12)"
+  );
 }
 
 /**
  * Owner: refresh a studio or personal texting number (release old Twilio SID, buy new).
- * Lifetime free buys: Solo 1 · Studio/Shop 2. Further refreshes charge $10 once, then buy.
+ * Lifetime free buys: Solo 1 · Studio/Shop 2. Further refreshes charge $12 once, then buy.
  */
 exports.refreshSmsPhoneNumber = functions
   .runWith({
@@ -9944,7 +10700,7 @@ exports.refreshSmsPhoneNumber = functions
  * Owner: permanently release a texting number (Twilio + Firestore).
  * Studio: no memberUid (or scope "studio"). Personal: memberUid set.
  * If the released line was past free included capacity, drops one Stripe paid-extra
- * so buying a number again charges $10.
+ * so buying a number again charges $12.
  */
 exports.releaseSmsPhoneNumber = functions
   .runWith({
@@ -10217,7 +10973,9 @@ exports.sendClientSms = functions
 
 /** Firestore: provision Twilio when smsStatus becomes pending. */
 exports.onTenantSmsProvisionRequested = functions
-  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .runWith({
+    secrets: [sms.twilioAccountSid, sms.twilioAuthToken, stripeSecretKey],
+  })
   .firestore.document("tenants/{tenantId}")
   .onUpdate(async (change, context) => {
     const before = change.before.data() || {};
@@ -10246,6 +11004,66 @@ exports.onTenantSmsProvisionRequested = functions
     }
     try {
       const plan = normalizeSubscriptionPlan(after.subscriptionPlan);
+      // A Solo replacement needs the existing $12 invoice authorization.
+      // Calculate from the pre-pending record: after is already pending and
+      // therefore occupies the only Solo slot.
+      const beforeLineCount = await sms.countOccupiedSmsLines(tenantId, before);
+      const beforeSummary = sms.buildSmsLineSummary(before, plan, beforeLineCount);
+      if (beforeSummary.canPurchaseSoloReplacement) {
+        const authorizationId = (after.smsSoloReplacementAuthorizationId || "")
+          .toString()
+          .trim();
+        const invoiceId = (after.smsSoloReplacementAuthorizationInvoiceId || "")
+          .toString()
+          .trim();
+        const expiresAt = after.smsSoloReplacementAuthorizationExpiresAt;
+        const expiresMs =
+          expiresAt && typeof expiresAt.toMillis === "function"
+            ? expiresAt.toMillis()
+            : 0;
+        if (
+          after.smsSoloReplacementAuthorizationState !== "authorized" ||
+          !authorizationId ||
+          !invoiceId ||
+          expiresMs <= Date.now()
+        ) {
+          await db.collection("tenants").doc(tenantId).set(
+            {
+              smsStatus: "failed",
+              smsProvisionError:
+                "A completed $12 texting-number payment is required before setup.",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          return null;
+        }
+        const secretKey = stripeSecretKey.value();
+        if (!secretKey) {
+          throw new Error("Stripe is not configured.");
+        }
+        const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+        const invoice = await stripe.invoices.retrieve(invoiceId);
+        const customerMatches =
+          (invoice.customer || "").toString() ===
+          (after.stripeCustomerId || "").toString();
+        const paidAmount = Math.max(
+          Number(invoice.amount_paid) || 0,
+          Number(invoice.total) || 0
+        );
+        if (invoice.status !== "paid" || !customerMatches || paidAmount < 1200) {
+          await db.collection("tenants").doc(tenantId).set(
+            {
+              smsStatus: "failed",
+              smsProvisionError:
+                "Your $12 texting-number payment could not be verified. Please try again.",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          return null;
+        }
+      }
       const lineCount = await sms.countOccupiedSmsLines(tenantId, after);
       // Line is already pending (included in count). Capacity must cover used lines.
       const summary = sms.buildSmsLineSummary(after, plan, lineCount);
@@ -10261,7 +11079,17 @@ exports.onTenantSmsProvisionRequested = functions
         );
         return null;
       }
-      await provisionTenantSms(tenantId, after);
+      await provisionTenantSms(tenantId, after, { isPaidExtra: false });
+      if (beforeSummary.canPurchaseSoloReplacement) {
+        await db.collection("tenants").doc(tenantId).set(
+          {
+            smsSoloReplacementAuthorizationState: "consumed",
+            smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
     } catch (e) {
       console.error("onTenantSmsProvisionRequested", tenantId, e);
       await db.collection("tenants").doc(tenantId).set(
@@ -10276,12 +11104,12 @@ exports.onTenantSmsProvisionRequested = functions
     return null;
   });
 
-async function provisionTenantSms(tenantId, tenant) {
-  return sms.provisionTenantSms(tenantId, tenant);
+async function provisionTenantSms(tenantId, tenant, opts) {
+  return sms.provisionTenantSms(tenantId, tenant, opts);
 }
 
-async function provisionMemberSms(tenantId, tenant, memberUid, memberData) {
-  return sms.provisionMemberSms(tenantId, tenant, memberUid, memberData);
+async function provisionMemberSms(tenantId, tenant, memberUid, memberData, opts) {
+  return sms.provisionMemberSms(tenantId, tenant, memberUid, memberData, opts);
 }
 
 /** Firestore: provision personal line when member smsStatus becomes pending. */
@@ -10355,7 +11183,10 @@ exports.onUserMemberSmsProvisionRequested = functions
       // uses other occupied lines: if free allotment is already used, Twilio
       // requires a live Stripe-paid authorization for this member.
       const occupiedExcludingSelf = Math.max(0, lineCount - 1);
-      const requiresPaidPurchase = occupiedExcludingSelf >= summary.freeIncluded;
+      const lifetime = sms.resolveLifetimeNumbersBought(tenant, occupiedExcludingSelf);
+      const requiresPaidPurchase =
+        occupiedExcludingSelf >= summary.freeIncluded ||
+        lifetime >= summary.freeIncluded;
       const hasPaidPurchaseAuthorization =
         !!(after.smsPaidLinePurchaseAuthorizationId || "").toString().trim() &&
         !!(after.smsPaidLinePurchaseInvoiceId || "").toString().trim() &&
@@ -10385,7 +11216,9 @@ exports.onUserMemberSmsProvisionRequested = functions
         );
         return null;
       }
-      await provisionMemberSms(tenantId, tenant, memberUid, after);
+      await provisionMemberSms(tenantId, tenant, memberUid, after, {
+        isPaidExtra: requiresPaidPurchase && hasPaidPurchaseAuthorization,
+      });
       // Consume the authorization only after Twilio successfully provisions.
       if (requiresPaidPurchase) {
         await db.collection("users").doc(memberUid).set(

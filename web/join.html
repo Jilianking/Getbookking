@@ -3,48 +3,148 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2C2018" />
   <title>Join team — Get Bookking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand-dark: #2C2018;
+      --brand-warm: #8B6F47;
+      --brand-cream: #F5EDD8;
+      --brand-offwhite: #FDFAF6;
+      --brand-muted: #C9B8A0;
+      --text-primary: #1A1410;
+      --text-secondary: #6B5E4A;
+      --text-tertiary: #9A8A7A;
+      --border: #E8E0D4;
+      --border-strong: #C9B8A0;
+      --brand-wordmark-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --brand-wordmark-weight: 200;
+      --brand-wordmark-tracking: 0.22em;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #f2f2f7;
-      color: #1c1c1e;
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--text-primary);
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(245, 237, 216, 0.95) 0%, transparent 55%),
+        linear-gradient(180deg, var(--brand-offwhite) 0%, #ffffff 55%, var(--brand-cream) 100%);
       min-height: 100vh;
-      padding: 24px 16px 48px;
-      line-height: 1.45;
+      padding: 28px 16px 56px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
-    .card {
-      max-width: 420px;
+
+    .shell {
+      max-width: 440px;
       margin: 0 auto;
-      background: #fff;
-      border-radius: 14px;
-      padding: 24px 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-    h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 6px; }
-    .sub { font-size: 0.9rem; color: #636366; margin-bottom: 20px; }
-    label { display: block; font-size: 0.75rem; font-weight: 600; color: #636366; margin-bottom: 6px; }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 28px;
+      padding-top: 8px;
+    }
+
+    .brand-wordmark {
+      display: inline-block;
+      font-family: var(--brand-wordmark-font);
+      font-weight: var(--brand-wordmark-weight);
+      font-size: 0.95rem;
+      letter-spacing: var(--brand-wordmark-tracking);
+      text-transform: uppercase;
+      color: var(--brand-dark);
+      text-decoration: none;
+      line-height: 1.2;
+    }
+
+    .brand-tag {
+      margin-top: 10px;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 1.05rem;
+      font-style: italic;
+      color: var(--brand-warm);
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 22px 24px;
+      box-shadow:
+        0 1px 2px rgba(44, 32, 24, 0.04),
+        0 12px 40px rgba(44, 32, 24, 0.06);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 1.85rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      color: var(--brand-dark);
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .sub {
+      font-size: 0.92rem;
+      font-weight: 400;
+      color: var(--text-secondary);
+      margin-bottom: 22px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 6px;
+    }
+
     input {
       width: 100%;
       padding: 12px 14px;
-      border: 1px solid #d1d1d6;
+      border: 1px solid var(--border);
       border-radius: 10px;
       font-size: 1rem;
+      font-family: inherit;
+      color: var(--text-primary);
+      background: #fff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    input:focus { outline: none; border-color: #007aff; }
+
+    input::placeholder { color: var(--brand-muted); }
+
+    input:focus {
+      outline: none;
+      border-color: var(--brand-warm);
+      box-shadow: 0 0 0 3px rgba(139, 111, 71, 0.18);
+    }
+
     #lastName { text-transform: none; }
+
     .field-margin { margin-bottom: 14px; }
+
     .input-wrap {
       position: relative;
       display: flex;
       align-items: center;
     }
+
     .input-wrap input {
       flex: 1;
       min-width: 0;
       padding-right: 44px;
     }
+
     .toggle-visibility {
       position: absolute;
       right: 4px;
@@ -54,30 +154,89 @@
       background: transparent;
       padding: 8px;
       cursor: pointer;
-      color: #636366;
+      color: var(--text-tertiary);
       line-height: 0;
       border-radius: 8px;
     }
-    .toggle-visibility:active { background: #e5e5ea; }
+
+    .toggle-visibility:hover { color: var(--brand-warm); }
+    .toggle-visibility:active { background: var(--brand-cream); }
+
     .btn {
       width: 100%;
-      padding: 14px;
+      padding: 15px;
       border: none;
-      border-radius: 10px;
+      border-radius: 999px;
       font-size: 1rem;
       font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
-      margin-top: 8px;
+      margin-top: 10px;
+      transition: background 0.15s ease, transform 0.1s ease;
     }
-    .btn-primary { background: #007aff; color: #fff; }
-    .btn-primary:disabled { background: #aeaeb2; cursor: not-allowed; }
-    .err { color: #ff3b30; font-size: 0.85rem; margin-top: 8px; }
-    .ok { color: #34c759; font-size: 0.95rem; margin-top: 12px; font-weight: 500; }
-    .muted { font-size: 0.8rem; color: #8e8e93; margin-top: 16px; }
+
+    .btn-primary {
+      background: var(--brand-dark);
+      color: var(--brand-cream);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #3d2e22;
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: scale(0.985);
+    }
+
+    .btn-primary:disabled {
+      background: var(--brand-muted);
+      color: #fff;
+      cursor: not-allowed;
+    }
+
+    .err {
+      color: #b42318;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+
+    .ok {
+      color: var(--brand-warm);
+      margin-top: 4px;
+      font-weight: 500;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 1.25rem;
+    }
+
+    .muted {
+      font-size: 0.82rem;
+      color: var(--text-tertiary);
+      margin-top: 14px;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 22px;
+      font-size: 0.78rem;
+      color: var(--text-tertiary);
+    }
+
+    .footer-note a {
+      color: var(--brand-warm);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer-note a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <div class="card" id="app">
+  <div class="shell">
+    <header class="brand">
+      <a class="brand-wordmark" href="https://getbookking.com" rel="noopener noreferrer">Get Bookking</a>
+      <p class="brand-tag">Your business, fully booked.</p>
+    </header>
+    <div class="card" id="app">
     <h1 id="title">Join team</h1>
     <p class="sub" id="subtitle">Create your account to accept this invite.</p>
     <div id="formBlock">
@@ -114,6 +273,10 @@
       <p class="ok" id="successText">You’re on the team. Opening the app…</p>
       <p class="muted">If nothing happens, install Get Bookking from the App Store.</p>
     </div>
+  </div>
+    <p class="footer-note">
+      Powered by <a href="https://getbookking.com" rel="noopener noreferrer">Get Bookking</a>
+    </p>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

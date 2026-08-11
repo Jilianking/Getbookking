@@ -26,7 +26,9 @@ struct PaymentSettingsView: View {
                     if viewModel.canEditStatementDescriptor {
                         statementDescriptorSection
                     }
-                    salesTaxSection
+                    if viewModel.isTenantOwner {
+                        salesTaxSection
+                    }
                     taxReportingSection
                 }
                 #if TAP_TO_PAY_ENABLED

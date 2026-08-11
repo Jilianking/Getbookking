@@ -144,7 +144,7 @@ struct CardCheckoutBreakdownView: View {
                         } label: {
                             Image(systemName: "info.circle")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppDesign.brandWarm)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Processing fee details")
@@ -202,20 +202,21 @@ struct CardCheckoutBreakdownView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text("The business receives the full service amount.")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if breakdown.hasSalesTax {
                 Text("Sales tax is collected for remittance.")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
         .padding(12)
         .frame(minWidth: 248, idealWidth: 268, maxWidth: 300, alignment: .leading)
-        // Use the system sheet on iPhone so a compact popover can't float over controls.
-        .presentationCompactAdaptation(.sheet)
+        .background(.ultraThinMaterial)
+        .presentationBackground(.ultraThinMaterial)
+        .presentationCompactAdaptation(.popover)
     }
 
     private func feeDetailLine(title: String, amount: Int) -> some View {

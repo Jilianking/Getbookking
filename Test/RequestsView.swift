@@ -199,11 +199,10 @@ struct RequestsView: View {
         if viewModel.isLoading {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.useTenantData && !authViewModel.teamAccess.canViewAllBookings {
+        } else if viewModel.useTenantData ? filteredBookingRequests.isEmpty : filteredRequests.isEmpty {
             ContentUnavailableView(
-                "Bookings restricted",
-                systemImage: "lock.fill",
-                description: Text("You don’t have permission to view all booking requests. Ask the owner to enable “View all bookings” for managers.")
+                "No booking requests yet",
+                systemImage: "tray"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -281,7 +280,7 @@ struct RequestsView: View {
 
     private var requestsCountLabel: String {
         let shown = viewModel.useTenantData ? filteredBookingRequests.count : filteredRequests.count
-        let total = viewModel.useTenantData ? viewModel.bookingRequests.count : viewModel.requests.count
+        let total = viewModel.useTenantData ? scopedBookingRequests.count : viewModel.requests.count
         return "Showing \(shown) of \(total) request(s)"
     }
 
@@ -418,7 +417,7 @@ struct RequestsView: View {
     }
 
     private func teamFilterCount(for key: String) -> Int {
-        viewModel.bookingRequests.filter {
+        scopedBookingRequests.filter {
             $0.matchesAssigneeFilter(key: key, roster: viewModel.teamFilterRoster)
         }.count
     }
@@ -439,8 +438,11 @@ struct RequestsView: View {
     }
 
     private var filteredBookingRequests: [BookingRequest] {
-        var list = viewModel.bookingRequests.filter {
-            $0.matchesAssigneeFilter(key: teamFilterKey, roster: viewModel.teamFilterRoster)
+        var list = scopedBookingRequests
+        if showsTeamFilter {
+            list = list.filter {
+                $0.matchesAssigneeFilter(key: teamFilterKey, roster: viewModel.teamFilterRoster)
+            }
         }
         list = list.filter { requestFilter.matches($0) }
         if !searchText.isEmpty {
@@ -450,6 +452,17 @@ struct RequestsView: View {
             }
         }
         return list
+    }
+
+    /// Owner / view-all managers see shop requests; everyone else only their own.
+    private var scopedBookingRequests: [BookingRequest] {
+        let all = viewModel.bookingRequests
+        if authViewModel.teamAccess.canViewAllBookings { return all }
+        guard let uid = authViewModel.currentUserUid?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !uid.isEmpty else { return [] }
+        return all.filter {
+            $0.matchesAssigneeFilter(key: uid, roster: viewModel.teamFilterRoster)
+        }
     }
 }
 

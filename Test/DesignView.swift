@@ -33,6 +33,7 @@ struct DesignView: View {
     @State private var quickEditGallerySlot: QuickEditGallerySlotPayload?
     @State private var quickEditStudio12PhilosophySheet = false
     @State private var quickEditStudio12BookCtaSheet = false
+    @State private var quickEditClassicAboutImageSheet = false
     @State private var formFieldToEdit: FormField?
     @State private var manageGalleryBatchCrop: MultiImageCropSheetItem?
     @State private var showGalleryPickerLoadError = false
@@ -177,6 +178,28 @@ struct DesignView: View {
                     viewModel: viewModel,
                     onDone: { quickEditGallerySlot = nil }
                 )
+            }
+            .sheet(isPresented: $quickEditClassicAboutImageSheet) {
+                NavigationStack {
+                    Form {
+                        Studio12AuxImageUploadSection(
+                            label: "About photo",
+                            advice: "",
+                            allowedCropChoices: [.portrait4_5, .landscape16_9, .square],
+                            defaultCropChoice: .portrait4_5,
+                            imageUrl: $viewModel.classicAboutImageUrl,
+                            isUploading: viewModel.isUploadingClassicAboutImage,
+                            upload: { data in await viewModel.uploadClassicAboutImage(imageData: data) }
+                        )
+                    }
+                    .navigationTitle("About photo")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { quickEditClassicAboutImageSheet = false }
+                        }
+                    }
+                }
             }
             .sheet(isPresented: $quickEditStudio12PhilosophySheet) {
                 NavigationStack {
@@ -629,6 +652,10 @@ struct DesignView: View {
                             quickEditFeaturedSlot = QuickEditFeaturedSlotPayload(slotIndex: idx)
                             return
                         }
+                    }
+                    if key == "classicAboutImage" {
+                        quickEditClassicAboutImageSheet = true
+                        return
                     }
                     if key == "studio12PhilosophyImage" {
                         quickEditStudio12PhilosophySheet = true

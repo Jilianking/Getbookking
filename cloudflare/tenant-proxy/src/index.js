@@ -36,6 +36,7 @@ const RESERVED = new Set([
 
 function isStaticPath(pathname) {
   if (pathname.startsWith("/js/")) return true;
+  if (pathname.startsWith("/css/")) return true;
   if (pathname.startsWith("/fonts/")) return true;
   if (pathname === "/favicon.ico" || pathname === "/robots.txt") return true;
   if (pathname.startsWith("/.well-known/")) return true;

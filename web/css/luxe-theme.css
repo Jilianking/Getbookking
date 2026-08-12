@@ -1,0 +1,544 @@
+/* Luxe (luxe-v1) — loaded only for this theme via BKSitePerf.ensureThemeCss. */
+
+.luxe-page {
+  min-height: 100vh;
+  background: var(--bk-bg, #FFFDF9);
+  color: var(--bk-fg, #1a1a1a);
+  font-family: var(--font-display);
+}
+.luxe-nav {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+  padding: 18px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+}
+.luxe-nav-trailing {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.luxe-nav .tattoo-nav-menu {
+  margin-left: 0;
+  flex-shrink: 0;
+  color: #fff;
+}
+.luxe-nav-brand {
+  font-family: var(--font-hero);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+.luxe-nav-links {
+  display: flex;
+  gap: 28px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.luxe-nav-links a {
+  color: rgba(255,255,255,0.85);
+  text-decoration: none;
+  font-weight: 500;
+}
+.luxe-nav-links a:hover { color: #fff; }
+/* Cream subpages (shop / gallery / book): dark chrome on cream; home uses .luxe-nav--topbar strip above hero */
+.luxe-nav--light .luxe-nav-brand {
+  color: #1a1a1a;
+}
+.luxe-nav--light .luxe-nav-links a {
+  color: rgba(26, 26, 26, 0.72);
+}
+.luxe-nav--light .luxe-nav-links a:hover {
+  color: #1a1a1a;
+}
+.luxe-nav--light .tattoo-nav-menu {
+  color: #1a1a1a;
+}
+/* Luxe home top bar: palette bg + fg (readable on cream Original or dark palettes like Ocean Slate). */
+.luxe-nav.luxe-nav--topbar {
+  position: relative;
+  z-index: 20;
+  background: var(--bk-bg, #FFFDF9);
+  border-bottom: 1px solid var(--bk-fg-10, rgba(26, 26, 26, 0.1));
+  box-shadow: 0 1px 0 var(--bk-fg-07, rgba(26, 26, 26, 0.07)), 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+.luxe-nav.luxe-nav--topbar .luxe-nav-brand {
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-nav.luxe-nav--topbar .luxe-nav-links a {
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.72));
+}
+.luxe-nav.luxe-nav--topbar .luxe-nav-links a:hover {
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-nav.luxe-nav--topbar .tattoo-nav-menu {
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-hero {
+  position: relative;
+  width: 100%;
+  /* Fixed 16:9 hero frame; uploads are cropped to 16:9 in the app so `cover` never re-crops. */
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+}
+/* Empty hero: accent-tinted slot (same as Classic / Blade / Studio 12 placeholders). */
+.luxe-hero--empty {
+  background-image: none;
+  background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+  border-bottom: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(17, 17, 17, 0.35)));
+}
+.luxe-hero--empty::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bk-fg) 12%, transparent) 0%,
+    transparent 55%,
+    transparent 100%
+  );
+}
+.luxe-hero--empty .luxe-hero-text h1 {
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-hero--empty .luxe-hero-text p {
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.72));
+}
+.luxe-hero:not(.luxe-hero--empty)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.18) 100%);
+}
+.luxe-hero-inner {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: center;
+  /* Empty padding must fall through to `.luxe-hero-image-hit` (photo), not open section color. */
+  pointer-events: none;
+}
+.luxe-hero-inner [data-edit-key],
+.luxe-hero-inner a,
+.luxe-hero-inner button,
+.luxe-hero-inner [role="button"] {
+  pointer-events: auto;
+}
+/* Below text layer (z:3 + pointer-events:auto on keys); above color band (z:0). */
+.luxe-hero-image-hit { z-index: 1; }
+.luxe-hero-text {
+  position: relative;
+  z-index: 2;
+}
+.luxe-hero-text h1 {
+  font-family: var(--font-hero);
+  font-size: clamp(2.2rem, 4.5vw, 3.4rem);
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.15;
+  margin: 0 0 16px;
+}
+.luxe-hero-text p {
+  font-size: 1rem;
+  color: rgba(255,255,255,0.78);
+  line-height: 1.7;
+  margin: 0 0 28px;
+  max-width: 440px;
+}
+.luxe-hero-cta {
+  display: inline-block;
+  padding: 14px 32px;
+  background: var(--bk-accent, #C9A96E);
+  color: var(--bk-accent-fg, #fff);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.luxe-hero-cta:hover { background: var(--bk-accent-hover, #b8944f); }
+.luxe-section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--bk-accent, #C9A96E);
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.luxe-section-heading {
+  font-family: var(--font-hero);
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 40px;
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-services-section {
+  padding: 80px 40px;
+  max-width: 1380px;
+  margin: 0 auto;
+  background: var(--bk-featured-bg, var(--bk-bg, #FFFDF9));
+}
+.luxe-services-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+}
+.luxe-service-card {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: transform 0.2s;
+}
+.luxe-service-card:hover { transform: translateY(-4px); }
+.luxe-service-card-img-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 0;
+}
+.luxe-service-card-img-wrap img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  height: auto;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  margin-bottom: 0;
+}
+.luxe-service-card img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  height: auto;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  margin-bottom: 0;
+}
+.luxe-service-placeholder {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  height: auto;
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--bk-card, #f0ebe3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0;
+  font-size: 2rem;
+  color: var(--bk-accent, #C9A96E);
+}
+.luxe-service-placeholder--add {
+  border: var(--bk-slot-border, 2px dashed var(--bk-accent-55, rgba(201, 169, 110, 0.55)));
+  background: var(--bk-slot-bg, color-mix(in srgb, var(--bk-accent) 22%, var(--bk-card) 78%));
+}
+.luxe-service-placeholder--locked {
+  opacity: 0.38;
+  pointer-events: none;
+}
+/** Full-bleed stripe behind the “What we offer” card (distinct from page #FFFDF9 + featured strip). */
+.luxe-home-services-band {
+  background: linear-gradient(180deg, var(--bk-bg, #faf6f0) 0%, var(--bk-card, #f0e9e0) 55%, var(--bk-card, #ebe4d9) 100%);
+  padding: 28px 0 36px;
+  border-top: 1px solid var(--bk-fg-07, rgba(26, 26, 26, 0.07));
+  border-bottom: 1px solid var(--bk-fg-07, rgba(26, 26, 26, 0.05));
+}
+.luxe-home-services-section {
+  padding: 32px 40px 40px;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--bk-accent-35, rgba(201, 169, 110, 0.35));
+  box-shadow: 0 18px 48px rgba(26, 26, 26, 0.14);
+  position: relative;
+  z-index: 1;
+}
+.luxe-home-services-section .luxe-section-heading {
+  margin-bottom: 8px;
+}
+.luxe-home-service-list { border-top: 1px solid rgba(26,26,26,0.1); }
+.luxe-home-service-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(26,26,26,0.1);
+}
+.luxe-home-service-copy { flex: 1; min-width: 0; }
+.luxe-home-service-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: #1a1a1a;
+}
+.luxe-home-service-dur {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, 0.42);
+  margin: 0 0 6px;
+}
+.luxe-home-service-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666;
+  margin: 0;
+  white-space: pre-line;
+}
+.luxe-home-service-price {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bk-accent, #C9A96E);
+  padding-top: 2px;
+}
+.luxe-home-services-section--expandable .luxe-home-services-details {
+  border: 1px solid var(--bk-accent-35, rgba(201, 169, 110, 0.35));
+  border-radius: 16px;
+  background: #fafafa;
+  overflow: hidden;
+  box-shadow: 0 18px 48px rgba(26, 26, 26, 0.14);
+}
+.luxe-home-services-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 22px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.luxe-home-services-summary::-webkit-details-marker { display: none; }
+.luxe-home-services-summary::marker { content: ''; }
+.luxe-home-services-summary-text { flex: 1; min-width: 0; }
+.luxe-home-services-summary-text h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.luxe-home-services-summary-text .luxe-section-label { margin-bottom: 6px; }
+.luxe-home-services-expand-hint {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(26,26,26,0.42);
+  flex-shrink: 0;
+}
+.luxe-home-services-details[open] .luxe-home-services-expand-hint { opacity: 0.65; }
+.luxe-home-services-details .luxe-home-service-list {
+  margin: 0;
+  padding: 8px 22px 18px;
+  border-top: 1px solid rgba(26,26,26,0.1);
+}
+.luxe-promo {
+  background: var(--bk-card, #E8E0D0);
+  padding: 64px 40px;
+  text-align: center;
+}
+.luxe-promo-inner {
+  max-width: 680px;
+  margin: 0 auto;
+}
+.luxe-promo h2 {
+  font-family: var(--font-hero);
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-promo p {
+  font-size: 1rem;
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
+  margin: 0 0 24px;
+  line-height: 1.6;
+}
+.luxe-promo-cta {
+  display: inline-block;
+  padding: 12px 28px;
+  background: var(--bk-accent, #1a1a1a);
+  color: var(--bk-accent-fg, #fff);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: background 0.2s;
+}
+.luxe-promo-cta:hover { background: var(--bk-accent-hover, #333); }
+.luxe-shop-section { padding: 80px 40px; background: var(--bk-bg, #FFFDF9); }
+.luxe-page .bk-shop-nav-cart { color: var(--bk-fg, #1a1a1a); }
+.luxe-team-section {
+  padding: 80px 40px;
+  background: var(--bk-featured-bg, var(--bk-bg, #F5F0E8));
+}
+.luxe-team-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+}
+.luxe-team-bio {
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
+  max-width: 600px;
+  margin: -20px auto 40px;
+}
+.luxe-team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.luxe-team-card {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  transition: transform 0.2s;
+}
+.luxe-team-card:hover { transform: translateY(-4px); }
+.luxe-team-card img {
+  width: 100%;
+  height: 280px;
+  object-fit: cover;
+  display: block;
+}
+.luxe-contact {
+  padding: 56px 40px;
+  background: var(--bk-about-bg, #1a1a1a);
+  color: var(--bk-about-fg, #fff);
+}
+.luxe-contact-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  text-align: center;
+}
+.luxe-contact-item h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  color: var(--bk-accent, #C9A96E);
+}
+.luxe-contact-item p {
+  font-size: 14px;
+  color: color-mix(in srgb, var(--bk-about-fg, #fff) 72%, transparent);
+  margin: 0;
+  line-height: 1.6;
+}
+.luxe-contact-item a {
+  color: color-mix(in srgb, var(--bk-about-fg, #fff) 72%, transparent);
+  text-decoration: none;
+}
+.luxe-contact-item a:hover { color: var(--bk-about-fg, #fff); text-decoration: underline; }
+.luxe-footer-legal {
+  background: var(--bk-about-bg, #141414);
+  padding: 28px 40px 36px;
+  text-align: center;
+  border-top: 1px solid color-mix(in srgb, var(--bk-about-fg, #fff) 8%, transparent);
+}
+.luxe-footer-copy {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--bk-about-fg, #fff) 42%, transparent);
+}
+.luxe-page .booking-shell {
+  background: var(--bk-bg, #FFFDF9);
+  color: var(--bk-fg, #1a1a1a);
+}
+.luxe-page .booking-page-title {
+  color: #1a1a1a;
+  font-family: var(--font-hero);
+}
+.luxe-page .booking-page-subtitle {
+  color: #555;
+}
+.luxe-page .booking-page-eyebrow {
+  color: var(--bk-accent, #C9A96E);
+}
+.luxe-page .booking-page-header--branded .booking-page-title {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.15;
+  margin: 0;
+}
+.luxe-page .booking-page-subtitle--tagline {
+  font-family: var(--font-hero);
+  color: #555;
+}
+.luxe-page .booking-card {
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+}
+.luxe-page .booking-submit {
+  background: var(--bk-accent, #C9A96E) !important;
+  color: #fff !important;
+}
+.luxe-page .booking-submit:hover {
+  background: #b8944f !important;
+}
+.luxe-page .booking-form input:focus,
+.luxe-page .booking-form textarea:focus,
+.luxe-page .booking-form select:focus {
+  border-color: var(--bk-accent, #C9A96E);
+  box-shadow: 0 0 0 2px rgba(201,169,110,0.2);
+}
+.luxe-page .booking-success-flat .booking-success-lead {
+  color: #15803d;
+}
+.luxe-page .booking-success-flat .booking-success-detail {
+  color: #555;
+}
+@media (max-width: 768px) {
+  .luxe-nav { padding: 14px 20px; }
+  /* One name on Luxe hero mobile: nav wordmark stays; hide duplicate hero <h1> */
+  .luxe-hero-text h1 { display: none; }
+  .luxe-nav-links { display: none; }
+  .luxe-nav .tattoo-nav-menu { display: block !important; }
+  .luxe-hero-inner {
+    grid-template-columns: 1fr;
+    padding: 0 20px;
+  }
+  .luxe-services-grid { grid-template-columns: repeat(2, 1fr); }
+  .luxe-services-section,
+  .luxe-home-services-section,
+  .luxe-promo,
+  .luxe-team-section,
+  .luxe-contact,
+  .luxe-footer-legal,
+  .luxe-shop-page-shell { padding-left: 20px; padding-right: 20px; }
+  .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
+  .luxe-team-grid { grid-template-columns: 1fr; }
+  .luxe-contact-inner { grid-template-columns: 1fr; }
+}

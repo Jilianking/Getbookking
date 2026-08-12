@@ -175,6 +175,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var classicAboutEyebrow: String = ""
     /// Classic About headline (plain text). Empty uses the industry default HTML on the web.
     @Published var classicAboutHeading: String = ""
+    @Published var classicAboutImageUrl: String = ""
+    @Published var classicAboutImagePixelWidth: Int = 16
+    @Published var classicAboutImagePixelHeight: Int = 9
+    @Published var isUploadingClassicAboutImage = false
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -1164,6 +1168,16 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 classicStatRatedLabel = Self.decodeOptionalSiteText(tenant?["classicStatRatedLabel"], missingDefault: "Rated")
                 classicAboutEyebrow = Self.decodeOptionalSiteText(tenant?["classicAboutEyebrow"])
                 classicAboutHeading = Self.decodeOptionalSiteText(tenant?["classicAboutHeading"])
+                classicAboutImageUrl = tenant?["classicAboutImageUrl"] as? String ?? ""
+                if let w = Self.intFromFirestore(tenant?["classicAboutImagePixelWidth"]),
+                   let h = Self.intFromFirestore(tenant?["classicAboutImagePixelHeight"]),
+                   w > 0, h > 0 {
+                    classicAboutImagePixelWidth = w
+                    classicAboutImagePixelHeight = h
+                } else {
+                    classicAboutImagePixelWidth = 16
+                    classicAboutImagePixelHeight = 9
+                }
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
@@ -1359,6 +1373,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["classicServicesExpandableCard"] = classicServicesExpandableCard
             updates["classicAboutEyebrow"] = Self.bulkSaveOptionalSiteText(classicAboutEyebrow, existingFirestore: existingDoc?["classicAboutEyebrow"])
             updates["classicAboutHeading"] = Self.bulkSaveOptionalSiteText(classicAboutHeading, existingFirestore: existingDoc?["classicAboutHeading"])
+            updates["classicAboutImageUrl"] = classicAboutImageUrl
+            updates["classicAboutImagePixelWidth"] = classicAboutImagePixelWidth
+            updates["classicAboutImagePixelHeight"] = classicAboutImagePixelHeight
         }
         if fam == .luxe {
             updates["luxeFeaturedWorkEyebrow"] = Self.bulkSaveOptionalSiteText(luxeFeaturedWorkEyebrow, existingFirestore: existingDoc?["luxeFeaturedWorkEyebrow"])
@@ -1594,6 +1611,33 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         let h = Int(round(img.size.height * img.scale))
         guard w > 0, h > 0 else { return nil }
         return (w, h)
+    }
+
+    func uploadClassicAboutImage(imageData: Data) async {
+        guard let tid = tenantId else { return }
+        if blockIfDemoReadOnly() { return }
+        await MainActor.run { isUploadingClassicAboutImage = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantGalleryImage(tenantId: tid, imageData: imageData)
+            let dims = Self.pixelDimensionsOfJPEGData(imageData) ?? (w: 16, h: 9)
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "classicAboutImageUrl": url,
+                "classicAboutImagePixelWidth": dims.w,
+                "classicAboutImagePixelHeight": dims.h
+            ])
+            await MainActor.run {
+                classicAboutImageUrl = url
+                classicAboutImagePixelWidth = dims.w
+                classicAboutImagePixelHeight = dims.h
+                isUploadingClassicAboutImage = false
+                invalidateWebPreview()
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isUploadingClassicAboutImage = false
+            }
+        }
     }
 
     func uploadStudio12PhilosophyImage(imageData: Data) async {

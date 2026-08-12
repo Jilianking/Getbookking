@@ -384,9 +384,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '.luxe-hero:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
                 '.classic-hero-right:has(.bk-hero-image-hit),.classic-hero-right:has([data-edit-key="heroImage"]){outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;overflow:visible!important;}' +
                 '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;cursor:pointer!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
-                'img[data-edit-key="heroImage"],img[data-edit-key^="galleryImage"],img[data-edit-key^="featuredWork"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],' +
+                'img[data-edit-key="heroImage"],img[data-edit-key^="galleryImage"],img[data-edit-key^="featuredWork"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],img[data-edit-key="classicAboutImage"],' +
                 '[data-edit-key^="featuredWork"].luxe-service-placeholder,[data-edit-key^="featuredWork"].tattoo-featured-slot-add,[data-edit-key^="featuredWork"].tattoo-featured-cell,.tattoo-featured-placeholder[data-edit-key],' +
-                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback' +
+                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback,[data-edit-key="classicAboutImage"].classic-about-photo--empty' +
                 '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 '[data-bk-color-surface] [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;box-shadow:none!important;}' +
@@ -622,7 +622,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 postToNative({ action: 'openColorSurface', surface: sid });
               }
               function isSheetOnlyKey(key) {
-                return key === 'heroImage' || key === 'studio12PhilosophyImage' || key === 'studio12BookCtaImage' ||
+                return key === 'heroImage' || key === 'studio12PhilosophyImage' || key === 'studio12BookCtaImage' || key === 'classicAboutImage' ||
                   key.indexOf('svc:') === 0 || key.indexOf('s12Process:') === 0 || key.indexOf('featuredWork:') === 0 ||
                   key.indexOf('galleryImage:') === 0;
               }

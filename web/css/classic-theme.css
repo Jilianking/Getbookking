@@ -1,0 +1,611 @@
+/* Classic — loaded only for this theme via BKSitePerf.ensureThemeCss. */
+
+.book-legal-footer .classic-footer-copy { text-align: center; }
+
+.bk-team-roster-section--classic {
+  --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 5%, var(--bk-card));
+  padding: 64px 24px 56px;
+}
+.bk-team-roster-section--classic .bk-team-roster-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.bk-team-roster-section--classic .bk-team-roster-subtitle {
+  font-style: normal;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--bk-accent);
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.bk-team-roster-section--classic .bk-team-roster-bio {
+  font-style: normal;
+}
+
+.classic-home .tattoo-featured-slot-add { border-radius: 8px; }
+
+/* Book / shop / success: pin footer when content is short. */
+.tattoo-page.classic-home {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.tattoo-page.classic-home .luxe-shop-page-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ─── Classic redesign (warm cream, split hero, services, stats) ─── */
+.classic-home {
+  background: var(--bk-bg, #ffffff);
+  color: var(--bk-fg, #1a1a1a);
+  font-family: var(--font-display);
+  min-height: 100vh;
+}
+.tattoo-page.classic-home .booking-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: flex-start;
+}
+.tattoo-page.classic-home .booking-page-eyebrow {
+  color: var(--bk-accent, #8B6F47);
+}
+.tattoo-page.classic-home .booking-page-title {
+  color: var(--bk-fg, #1a1a1a);
+}
+.tattoo-page.classic-home .booking-page-subtitle--tagline {
+  color: color-mix(in srgb, var(--bk-fg, #1a1a1a) 55%, transparent);
+  font-family: var(--font-hero);
+}
+.classic-home .tattoo-nav {
+  position: relative;
+  background: var(--bk-bg, #ffffff);
+  border-bottom: 1px solid rgba(26, 26, 26, 0.08);
+}
+/* Match drawer wordmark: Unbounded, uppercase, wide tracking (see `.tattoo-sidebar-wordmark`) */
+.classic-home .tattoo-nav .tattoo-brand {
+  font-family: 'Unbounded', sans-serif;
+  font-size: 18px;
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--bk-fg, #1a1a1a);
+  text-decoration: none;
+}
+.classic-home .tattoo-nav-links a { color: color-mix(in srgb, var(--bk-fg, #1a1a1a) 60%, transparent); text-transform: none; letter-spacing: 0.02em; font-size: 14px; font-weight: 400; }
+.classic-home .tattoo-nav-links a:hover { color: var(--bk-fg, #1a1a1a); }
+.classic-home .tattoo-nav .tattoo-nav-menu { color: var(--bk-fg, #1a1a1a); }
+.classic-home .classic-hero-nav-menu { color: var(--bk-fg, #1a1a1a); }
+.classic-home .tattoo-nav-links .classic-nav-book {
+  background: var(--bk-accent, #1a1a1a);
+  color: var(--bk-accent-fg, #F7F5F0);
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.classic-home .tattoo-nav-links .classic-nav-book:hover { opacity: 0.85; color: #F7F5F0; }
+.classic-hero {
+  display: grid;
+  /* 5fr/7fr gives the photo ~58% of the row so it reads as the hero
+     while the text column still has room for the title + CTAs. */
+  grid-template-columns: 5fr 7fr;
+  position: relative;
+  /* Symmetric gutters (matches Stonecut) so the photo is not flush to the viewport. */
+  padding-top: 36px;
+  padding-left: clamp(20px, 4vw, 48px);
+  padding-right: clamp(20px, 4vw, 48px);
+}
+.classic-hero-left {
+  /* 32px horizontal: pairs with hero gutters so the left column is not over-inset vs Stonecut. */
+  padding: 44px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+.classic-hero-tag {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(26,26,26,0.45);
+  margin: 0 0 20px;
+}
+/* Classic home: business name + menu one row (mobile); industry line below. Desktop hides in-hero menu. */
+.classic-home-page .classic-hero-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  margin-bottom: 12px;
+  text-align: left;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-self: stretch;
+}
+.classic-home-page .classic-hero-title-row .classic-hero-name {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.classic-home-page .classic-hero-nav-menu {
+  flex-shrink: 0;
+}
+.classic-home-page .classic-hero-left {
+  text-align: left;
+}
+.classic-home-page .classic-hero-left > .classic-hero-tag {
+  margin: 0 0 20px;
+}
+@media (min-width: 769px) {
+  .classic-home-page .classic-hero-title-row {
+    display: block;
+    margin-bottom: 0;
+  }
+  .classic-home-page .classic-hero-title-row .classic-hero-name {
+    margin: 0 0 28px;
+    padding-right: 0;
+  }
+  .classic-home-page .classic-hero-nav-menu {
+    display: none !important;
+  }
+  .classic-home-page .classic-hero-nav-actions {
+    display: none !important;
+  }
+}
+.classic-hero-name {
+  font-family: 'Unbounded', sans-serif;
+  font-size: clamp(26px, 4.5vw, 40px);
+  font-weight: normal;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 28px;
+}
+.classic-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.classic-btn-primary {
+  display: inline-block;
+  padding: 14px 28px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--bk-accent, #1a1a1a);
+  color: var(--bk-accent-fg, #F7F5F0);
+  text-decoration: none;
+  border-radius: 4px;
+}
+.classic-btn-primary:hover { opacity: 0.88; }
+.classic-btn-ghost {
+  display: inline-block;
+  padding: 14px 28px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a1a1a;
+  text-decoration: none;
+  border: 1px solid rgba(26,26,26,0.25);
+  border-radius: 4px;
+}
+.classic-btn-ghost:hover { border-color: #1a1a1a; }
+.classic-hero-right {
+  position: relative;
+  min-height: 320px;
+  overflow: hidden;
+}
+.classic-hero-right .bk-hero-image-hit { z-index: 4; }
+.classic-hero-right img { width: 100%; height: 100%; object-fit: cover; }
+/* Classic hero image slot is a fixed 16:9 frame; centering avoids top-heavy desktop spacing
+   while preserving the in-app crop pixel-for-pixel. */
+.classic-hero-right:has(> img) {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  align-self: center;
+}
+.classic-hero-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  background: var(--bk-hero-slot-bg, color-mix(in srgb, var(--bk-accent) 48%, var(--bk-bg) 52%));
+  border: var(--bk-hero-slot-border, 2px dashed var(--bk-accent-55, rgba(26, 26, 26, 0.35)));
+  box-sizing: border-box;
+}
+.classic-section-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bk-fg-muted, rgba(26,26,26,0.4));
+  margin: 0 0 8px;
+}
+.classic-home .tattoo-featured-outer { background: var(--bk-featured-bg, #ffffff) !important; color: var(--bk-featured-fg, #1a1a1a) !important; }
+.classic-home .tattoo-featured-inner {
+  padding-top: 40px;
+  padding-left: clamp(20px, 4vw, 48px);
+  padding-right: clamp(20px, 4vw, 48px);
+}
+.classic-home .tattoo-featured-inner h2 { font-size: 1.6rem; }
+.classic-home .tattoo-featured-grid img { border-radius: 8px; }
+.classic-services-section {
+  background: var(--bk-featured-bg, #ffffff);
+}
+.classic-services {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 64px 32px;
+}
+.classic-services h2 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 0 0 24px;
+}
+.classic-services-section--expandable .classic-services-details {
+  border: 1px solid var(--bk-fg-10, rgba(26,26,26,0.12));
+  border-radius: 12px;
+  background: var(--bk-card, #fafafa);
+  overflow: hidden;
+}
+.classic-services-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 20px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.classic-services-summary::-webkit-details-marker { display: none; }
+.classic-services-summary::marker { content: ''; }
+.classic-services-summary-text { flex: 1; min-width: 0; }
+.classic-services-summary-text h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.classic-services-summary-text .classic-section-eyebrow {
+  margin-bottom: 6px;
+}
+.classic-services-expand-hint {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(26,26,26,0.42);
+  flex-shrink: 0;
+}
+.classic-services-details[open] .classic-services-expand-hint {
+  opacity: 0.65;
+}
+.classic-services-details .classic-service-list {
+  margin: 0;
+  padding: 8px 24px 20px;
+  border-top: 1px solid rgba(26,26,26,0.1);
+}
+.classic-service-list { border-top: 1px solid rgba(26,26,26,0.12); }
+/* “What I offer”: menu list (layout E — copy left, price right; no numbers, no accordion). */
+.classic-service-item {
+  border-bottom: 1px solid rgba(26,26,26,0.12);
+}
+.classic-service-item--e {
+  padding: 16px 0;
+}
+.classic-service-e-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.classic-service-e-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.classic-service-e-price-col {
+  flex-shrink: 0;
+  text-align: right;
+  padding-top: 1px;
+}
+.classic-service-e-title {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #1a1a1a;
+  margin: 0;
+}
+.classic-service-e-dur {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, 0.42);
+  margin: 0;
+}
+.classic-service-e-desc {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(26, 26, 26, 0.52);
+  margin: 0;
+  white-space: pre-line;
+  max-height: 7.5em;
+  overflow: hidden;
+}
+.classic-service-menu-price {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(26, 26, 26, 0.72);
+  margin: 0;
+}
+.classic-about-section {
+  background: var(--bk-about-bg, #1a1a1a);
+  color: var(--bk-about-fg, #F7F5F0);
+  padding: 80px 32px;
+}
+.classic-about-section .classic-section-eyebrow { color: rgba(247,245,240,0.35); }
+.classic-about-inner-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 0.85fr);
+  gap: 40px 56px;
+  align-items: center;
+  max-width: 1400px;
+  margin-left: 0;
+  margin-right: auto;
+}
+.classic-about-copy { min-width: 0; }
+.classic-about-media { min-width: 0; }
+.classic-about-photo {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  display: block;
+}
+.classic-about-photo--empty {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  display: block;
+  background: color-mix(in srgb, var(--bk-about-fg, #F7F5F0) 8%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--bk-about-fg, #F7F5F0) 35%, transparent);
+  box-sizing: border-box;
+}
+@media (max-width: 768px) {
+  .classic-about-inner-v2 {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+.classic-about-section h2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 16px;
+  line-height: 1.25;
+  color: var(--bk-about-fg, #F7F5F0);
+}
+.classic-about-section h2 em { font-style: italic; font-family: var(--font-hero); }
+.classic-about-bio-v2 {
+  font-size: 15px;
+  line-height: 1.8;
+  color: rgba(247,245,240,0.65);
+  margin: 0 0 40px;
+}
+.classic-stats { display: flex; gap: 48px; }
+.classic-stat-value {
+  font-family: var(--font-hero);
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.classic-stat-label { font-size: 12px; color: rgba(247,245,240,0.45); margin-top: 6px; }
+.classic-about-contact-lines {
+  margin-top: 28px;
+  font-size: 15px;
+  line-height: 1.85;
+  color: rgba(247,245,240,0.72);
+}
+.classic-about-contact-lines a {
+  color: rgba(247,245,240,0.92);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(247,245,240,0.25);
+}
+.classic-about-contact-lines a:hover {
+  color: #F7F5F0;
+  border-bottom-color: rgba(247,245,240,0.5);
+}
+.classic-footer {
+  background: #ffffff;
+  border-top: 1px solid rgba(26,26,26,0.1);
+  padding: 24px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+.classic-home .classic-footer-brand {
+  font-family: 'Unbounded', sans-serif;
+  font-size: 18px;
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.classic-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+}
+.classic-footer-links a { color: rgba(26,26,26,0.5); text-decoration: none; font-size: 13px; }
+.classic-footer-links a:hover { color: #1a1a1a; }
+.classic-footer-copy {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(26, 26, 26, 0.45);
+  max-width: 560px;
+}
+/* Classic /gallery: calmer header rhythm (Studio 12–like symmetry). */
+.gallery-page.classic-home .gallery-header {
+  padding: 48px clamp(20px, 5vw, 40px) 32px;
+  text-align: center;
+}
+/* Classic: match nav wordmark `.classic-home .tattoo-nav .tattoo-brand` (Unbounded). */
+.gallery-page.classic-home .gallery-title {
+  font-family: 'Unbounded', sans-serif;
+  font-size: clamp(22px, 5vw, 34px);
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+@media (max-width: 768px) {
+  /* Menu lives in `.classic-hero-title-row` with the headline; hide duplicate overlay nav. */
+  .classic-home-page .tattoo-nav {
+    display: none !important;
+  }
+  /* One horizontal gutter (20px) with the nav + drawer; drop hero band padding so text is not double-inset. */
+  .classic-home-page .classic-hero {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .classic-hero { grid-template-columns: 1fr; }
+  /* Industry line under title: single line, ellipsis if needed. */
+  .classic-home-page .classic-hero-left > .classic-hero-tag {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Safe-area + compact top: first row is title + menu; menu is anchored to hero column's top-right. */
+  .classic-home-page .classic-hero-left {
+    position: relative;
+    justify-content: flex-start;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding-bottom: 32px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .classic-home-page .classic-hero-title-row {
+    position: static !important;
+  }
+  .classic-home-page .classic-hero-title-row .classic-hero-name {
+    padding-right: 96px !important;
+  }
+  /* Cart + ☰ grouped top-right on mobile home. */
+  .classic-home-page .classic-hero-nav-actions {
+    position: absolute !important;
+    top: max(0px, calc(12px + env(safe-area-inset-top, 0px) - 20px)) !important;
+    right: max(20px, env(safe-area-inset-right)) !important;
+    left: auto !important;
+    margin: 0 !important;
+    z-index: 101 !important;
+  }
+  .classic-home-page .classic-hero-nav-menu {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    transform: none !important;
+  }
+  .classic-home-page .tattoo-featured-inner {
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .classic-home-page .classic-services {
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .classic-home-page .tattoo-sidebar-panel {
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
+    padding-bottom: 32px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  /* Mobile: let `.classic-hero-right:has(> img)` aspect-ratio drive the height
+     so the crop renders exactly. No forced max-height or top-anchored cover. */
+  .classic-hero-right { min-height: 0; }
+  .classic-services { padding: 48px 20px; }
+  .classic-about-section { padding: 56px 20px; }
+  .classic-stats { gap: 28px; }
+  .classic-footer { padding: 20px; flex-direction: column; gap: 12px; text-align: center; }
+}
+
+.gallery-page.classic-home .gallery-shell {
+  padding-top: clamp(8px, 2vw, 16px);
+  padding-left: clamp(20px, 5vw, 40px);
+  padding-right: clamp(20px, 5vw, 40px);
+}
+.gallery-page.classic-home footer.classic-footer,
+.tattoo-page.classic-home footer.classic-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+/* Classic /gallery grid: centered block + auto-fill (Studio 12–like), not rigid 3×N. */
+.gallery-page.classic-home .gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.gallery-page.classic-home .gallery-grid img {
+  height: clamp(200px, 32vw, 320px);
+}
+
+.gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
+  padding: 48px 40px 0;
+  text-align: center;
+}
+/* Classic nav is in-flow (not overlaying strip); large inset duplicated nav clearance and pushed “Gallery” too low. */
+@media (max-width: 900px) {
+  .gallery-page.classic-home.gallery-page--horizontal-strip .gallery-header {
+    padding-top: clamp(28px, 4vw, 48px);
+    padding-left: clamp(20px, 5vw, 40px);
+    padding-right: clamp(20px, 5vw, 40px);
+    padding-bottom: 0;
+    margin-bottom: 28px;
+    text-align: center;
+  }
+}
+.gallery-page.classic-home.gallery-page--horizontal-strip .gallery-shell {
+  padding-left: 0;
+  padding-right: 0;
+  max-width: none;
+}
+/* Classic horizontal_strip: same-size frames as default strip (`cover`); no radius; `center` matches lightbox crop bias. */
+.gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link,
+.gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link img {
+  border-radius: 0;
+}
+.gallery-page.classic-home.gallery-page--horizontal-strip .gallery-alt--strip .gallery-grid-link img {
+  object-position: center;
+}
+
+@media (max-width: 640px) {
+  .gallery-page.classic-home .gallery-header {
+    padding: 40px clamp(16px, 5vw, 32px) 24px;
+  }
+  .gallery-page.classic-home .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .gallery-page.classic-home .gallery-grid img {
+    height: clamp(160px, 42vw, 260px);
+  }
+}

@@ -2,6 +2,8 @@
 
 Proxies `*.getbookking.com` tenant traffic to Firebase Hosting (`test-app-96812.web.app`).
 
+Static paths (`/js/`, `/css/`, `/fonts/`, favicon, robots, `/.well-known/`) are forwarded without a tenant prefix. `/css/` is required for extracted theme stylesheets (Studio 12+).
+
 ## Custom domains (Namecheap → automatic connect)
 
 Product rule: merchants **buy or transfer** a domain into Bookking (Namecheap API). We connect it automatically. There is **no DIY DNS** connect for domains left at GoDaddy/Vercel/etc.

@@ -44,6 +44,7 @@ enum QuickEditFieldTitles {
         case "studio12PhilosophyHeadLine2": return "Philosophy headline (line 2)"
         case "studio12PhilosophyHeadItalic": return "Philosophy headline (accent)"
         case "heroImage": return "Hero image"
+        case "classicAboutImage": return "About photo"
         case "studio12PhilosophyImage": return "Philosophy image"
         case "studio12BookCtaImage": return "Booking section image"
         default:

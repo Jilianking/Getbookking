@@ -1919,7 +1919,7 @@ private struct ManageTeamMemberVisibilityCard: View {
                         .disabled(disabled)
                     }
                     if member.accessRole != .owner {
-                        Text("Artist self-service")
+                        Text("\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.industry)) self-service")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -1928,7 +1928,7 @@ private struct ManageTeamMemberVisibilityCard: View {
                             .padding(.bottom, 4)
                         ManageCardDivider(leadingInset: 46)
                         ManageToggleRow(
-                            title: "Artist can edit portfolio",
+                            title: "\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.industry)) can edit portfolio",
                             subtitle: "They upload in Website profile — you can always upload above",
                             systemImage: "photo.stack",
                             isOn: $member.canEditPortfolio,
@@ -1936,7 +1936,7 @@ private struct ManageTeamMemberVisibilityCard: View {
                         )
                         ManageCardDivider(leadingInset: 46)
                         ManageToggleRow(
-                            title: "Artist can edit bio",
+                            title: "\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.industry)) can edit bio",
                             subtitle: "They edit bio in Website profile — you can always edit above",
                             systemImage: "text.quote",
                             isOn: $member.canEditPublicBio,

@@ -3481,7 +3481,7 @@
           headerHtml +
           '<button type="button" class="bk-team-picker-first" data-member-pick-first>' +
             '<strong>First available</strong>' +
-            '<span>We\u2019ll match you with the artist who can take you soonest.</span>' +
+            '<span>We\u2019ll match you with the ' + esc(bookingProviderRoleLabel(tenant.industry).toLowerCase()) + ' who can take you soonest.</span>' +
           '</button>' +
           '<section class="bk-team-section bk-team-picker-section" data-bk-color-surface="featured">' +
             (isLuxeTheme(tenant) || isBladeTheme(tenant) || isClassicTheme(tenant) || isStonecutTheme(tenant)
@@ -3561,7 +3561,31 @@
           renderTenantSite();
         });
       }
-      function bookingArtistFieldHtml(providers, selectedProvider, assignmentPreference) {
+      function bookingProviderRoleLabel(industry) {
+        var k = String(industry || '').trim().toLowerCase();
+        var map = {
+          tattoos: 'Artist',
+          hair: 'Stylist',
+          barber: 'Barber',
+          nails: 'Technician',
+          charters: 'Captain',
+          custom: 'Team member'
+        };
+        return map[k] || map.custom;
+      }
+      function bookingProviderRolePlural(industry) {
+        var k = String(industry || '').trim().toLowerCase();
+        var map = {
+          tattoos: 'artists',
+          hair: 'stylists',
+          barber: 'barbers',
+          nails: 'technicians',
+          charters: 'captains',
+          custom: 'team members'
+        };
+        return map[k] || map.custom;
+      }
+      function bookingArtistFieldHtml(providers, selectedProvider, assignmentPreference, industry) {
         if (!providers || !providers.length) return '';
         var selectedSlug = selectedProvider && selectedProvider.memberSlug
           ? String(selectedProvider.memberSlug).toLowerCase() : '';
@@ -3575,8 +3599,9 @@
           var sel = (!isFirst && slug === selectedSlug) ? ' selected' : '';
           opts += '<option value="' + esc(slug) + '"' + sel + '>' + esc(prov.displayName || slug) + '</option>';
         }
+        var roleLabel = bookingProviderRoleLabel(industry);
         return '<div class="bk-book-artist-field">' +
-          '<label for="bk-book-artist">Artist</label>' +
+          '<label for="bk-book-artist">' + esc(roleLabel) + '</label>' +
           '<select id="bk-book-artist" name="bk_book_artist" data-bk-artist-select>' + opts + '</select>' +
         '</div>';
       }
@@ -3621,7 +3646,7 @@
         } else {
           workGrid = '<p class="bk-team-member-work-empty">Portfolio coming soon.</p>';
         }
-        var workFirst = String(provider.displayName || 'Artist').split(' ')[0].toUpperCase();
+        var workFirst = String(provider.displayName || bookingProviderRoleLabel(tenant.industry)).split(' ')[0].toUpperCase();
         var scrollHint = gUrls.length > 3
           ? '<div class="bk-team-member-scroll-hint">' +
             '<button type="button" class="bk-team-roster-scroll-btn" aria-label="Scroll down" ' +
@@ -4170,7 +4195,7 @@
             (isClassicTheme(t) && !isStudio12Theme(t))) {
           bodySurface = 'page';
         } else if (t.industry === 'hair' || t.industry === 'barber' || t.industry === 'nails' ||
-            t.industry === 'custom' || t.industry === 'tattoos') {
+            t.industry === 'custom' || t.industry === 'tattoos' || t.industry === 'charters') {
           bodySurface = 'featured';
         }
         applyBodyPageColors(t, bodySurface);
@@ -4846,6 +4871,7 @@
           hair: 'Designed around you',
           tattoos: 'Designed to last',
           nails: 'Polished to perfection',
+          charters: 'Built for the water',
           custom: 'Focused on results'
         };
         return map[k] || map.custom;
@@ -4859,6 +4885,7 @@
           hair: 'From color to cut, every service is tailored to your look. We focus on results that feel natural, polished, and long-lasting.',
           tattoos: 'Every piece starts with your vision. We focus on clean execution, strong design, and results you’ll carry with confidence.',
           nails: 'Every set is crafted with care, delivering clean finishes and consistent results you can rely on.',
+          charters: 'From half-day trips to full-day adventures, every charter is planned around your group, the conditions, and the experience you want on the water.',
           custom: 'Every service is delivered with attention to detail and a focus on consistent, high-quality results.'
         };
         return map[k] || map.custom;
@@ -4874,6 +4901,7 @@
           hair: 'Hair salon',
           tattoos: 'Tattoo studio',
           nails: 'Nail studio',
+          charters: 'Charter',
           custom: 'Studio'
         };
         return map[k] || map.custom;
@@ -7230,7 +7258,8 @@
           artistHtml = bookingArtistFieldHtml(
             tenant._bookProviders,
             provider,
-            tenant._assignmentPreference
+            tenant._assignmentPreference,
+            tenant.industry
           );
         }
         var schema = tenant.formSchema || [];
@@ -7486,6 +7515,7 @@
           'barber': ['barber-shop-v1'],
           'tattoos': ['tattoo-studio-v1'],
           'nails': ['nail-salon-v1'],
+          'charters': ['charter-v1'],
           'custom': ['custom-standard']
         };
         var list = map[ind] || ['custom-standard'];
@@ -8368,7 +8398,7 @@
 
       function studio12IndustryKey(tenant) {
         var ind = String(tenant.industry || 'custom').toLowerCase();
-        if (ind === 'hair' || ind === 'barber' || ind === 'tattoos' || ind === 'nails') return ind;
+        if (ind === 'hair' || ind === 'barber' || ind === 'tattoos' || ind === 'nails' || ind === 'charters') return ind;
         return 'custom';
       }
 
@@ -8472,6 +8502,20 @@
               { title: 'Consultation', body: 'We confirm shape, length, color, and any nail-art details.' },
               { title: 'The service', body: 'Careful prep and application for a clean, lasting finish.' },
               { title: 'Aftercare', body: 'Home care tips so your set stays fresh longer.' }
+            ]
+          },
+          charters: {
+            heroEyebrow: 'Boat · Fish · Explore', heroLine1: 'Days that', heroLine2: 'belong', heroItalicDefault: 'on the water.',
+            heroLeadDefault: 'Private charters and fishing trips planned around your group, the conditions, and the day you want on the water.',
+            phil1: 'A charter is more than', phil2: 'a boat ride.', philEm: "It's the day you remember.",
+            philBody2Default: 'From dock to open water — clear communication and a trip built for your crew.',
+            marquee: ['Half-day', 'Full-day', 'Sunset', 'Fishing', 'Private'],
+            bookL1: 'Ready for your', bookEm: 'next trip?', bookBody: bookBodyStd,
+            process: [
+              { title: 'Book online', body: "Choose your trip and send a request. We'll confirm availability and details." },
+              { title: 'Plan the trip', body: 'We align on party size, timing, and fishing or cruise goals.' },
+              { title: 'Cast off', body: 'Meet at the dock — gear guidance and a day built around your group.' },
+              { title: 'After the trip', body: 'Photos, tips, and easy rebooking for your next day on the water.' }
             ]
           },
           custom: {
@@ -8768,16 +8812,29 @@
 
       function classicPortfolioHomePage(tenant, services) {
         var isNails = tenant.industry === 'nails';
+        var isCharters = tenant.industry === 'charters';
         return classicHomePage(tenant, services || [], {
-          defaultName: isNails ? 'Nail studio' : 'Studio',
-          industryLabel: isNails ? 'Nails' : '',
-          bookLabel: 'Book now',
-          galleryPlaceholder: isNails ? 'Add nail sets, art, and salon photos in the app.' : 'Add your best work in the app.',
-          featuredHeading: isNails ? 'Recent sets' : 'Featured work',
-          featuredSub: isNails ? 'Recent sets, color, and nail art.' : 'A selection of recent work from the studio.',
-          featuredEmpty: isNails ? 'Your best sets will appear here.' : 'Your best work will appear here.',
-          defaultBio: isNails ? 'Polished details, beautiful finishes, and an elevated salon experience.' : 'Professional service, thoughtful care, and a smooth booking experience.',
-          aboutHeading: isNails ? 'Polished details, <em>every set.</em>' : 'Quality work, <em>every time.</em>'
+          defaultName: isNails ? 'Nail studio' : (isCharters ? 'Charters' : 'Studio'),
+          industryLabel: isNails ? 'Nails' : (isCharters ? 'Charter' : ''),
+          bookLabel: isCharters ? 'Book a trip' : 'Book now',
+          galleryPlaceholder: isNails
+            ? 'Add nail sets, art, and salon photos in the app.'
+            : (isCharters ? 'Add boat, catch, and trip photos in the app.' : 'Add your best work in the app.'),
+          featuredHeading: isNails ? 'Recent sets' : (isCharters ? 'On the water' : 'Featured work'),
+          featuredSub: isNails
+            ? 'Recent sets, color, and nail art.'
+            : (isCharters ? 'Recent trips, catches, and days offshore.' : 'A selection of recent work from the studio.'),
+          featuredEmpty: isNails
+            ? 'Your best sets will appear here.'
+            : (isCharters ? 'Your best trip photos will appear here.' : 'Your best work will appear here.'),
+          defaultBio: isNails
+            ? 'Polished details, beautiful finishes, and an elevated salon experience.'
+            : (isCharters
+              ? 'Private charters and fishing trips planned around your group and the day you want on the water.'
+              : 'Professional service, thoughtful care, and a smooth booking experience.'),
+          aboutHeading: isNails
+            ? 'Polished details, <em>every set.</em>'
+            : (isCharters ? 'Days that belong <em>on the water.</em>' : 'Quality work, <em>every time.</em>')
         });
       }
       function luxeTenantProductCardsHtml(tenant) {
@@ -8870,6 +8927,7 @@
           hair: 'Elevated hair, tailored to you.',
           tattoos: 'Turn your idea into something permanent.',
           nails: 'Clean, polished, and done right.',
+          charters: 'Time on the water, planned around you.',
           custom: 'Designed to deliver better results.'
         };
         return map[k] || map.custom;
@@ -8883,6 +8941,7 @@
           hair: 'Ready for Your Next Look?',
           tattoos: 'Ready for Your Next Piece?',
           nails: 'Ready for Your Next Set?',
+          charters: 'Ready for Your Next Trip?',
           custom: 'Ready to Book Your Next Appointment?'
         };
         return map[k] || map.custom;
@@ -9707,14 +9766,8 @@
         }
         return subtotal;
       }
-      function shopCheckoutSubtitleLine(cart) {
-        if (!cart.lines.length) return '';
-        if (cart.lines.length === 1) {
-          return (cart.lines[0].name || 'Item').trim();
-        }
-        var n = 0;
-        for (var i = 0; i < cart.lines.length; i++) n += cart.lines[i].qty || 0;
-        return n + ' item' + (n === 1 ? '' : 's');
+      function shopCheckoutSubtitleLine(tenant) {
+        return tenantSiteDisplayName(tenant, '');
       }
       function shopCheckoutFeeTooltipHtml(stripeState) {
         if (!stripeState || !stripeState.surchargeCents) {
@@ -9815,7 +9868,7 @@
           '<div class="bk-shop-checkout-card" style="' + cardStyle + '">' +
           '<div class="bk-shop-checkout-head">' +
           '<h1>Checkout</h1>' +
-          '<p class="bk-shop-checkout-subtitle" id="bk-shop-checkout-subtitle"></p>' +
+          '<p class="bk-shop-checkout-subtitle" id="bk-shop-checkout-subtitle">' + esc(shopCheckoutSubtitleLine(tenant)) + '</p>' +
           '</div>' +
           '<div class="bk-shop-checkout-empty" id="bk-shop-checkout-empty" style="display:none">' +
           '<p>Your cart is empty.</p>' +
@@ -10241,10 +10294,12 @@
         function updateCheckoutChrome() {
           var contact = gatherContact();
           var cart = contact.cart;
+          if (subtitleEl) {
+            subtitleEl.textContent = shopCheckoutSubtitleLine(tenant);
+          }
           if (!cart.lines.length) {
             if (emptyEl) emptyEl.style.display = 'block';
             form.style.display = 'none';
-            if (subtitleEl) subtitleEl.textContent = '';
             return;
           }
           if (emptyEl) emptyEl.style.display = 'none';
@@ -10252,9 +10307,6 @@
           var subtotal = shopCartSubtotal(cart);
           var stripeState = window.__bkShopCheckoutStripe;
           var contactOk = contactValid(contact);
-          if (subtitleEl) {
-            subtitleEl.textContent = shopCheckoutSubtitleLine(cart);
-          }
           updateShopCheckoutSummary(cart, stripeState, contactOk, preparing);
           if (submitBtn) {
             var payAmount = stripeState && stripeState.totalCents
@@ -10837,8 +10889,9 @@
             var isBarberHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'barber' && !p.isBookPath && !isGallery && !isTeam);
             var isTattooHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'tattoos' && !p.isBookPath && !isGallery && !isTeam);
             var isNailsHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'nails' && !p.isBookPath && !isGallery && !isTeam);
+            var isChartersHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'charters' && !p.isBookPath && !isGallery && !isTeam);
             var isCustomHome = (!isLuxeHome && !isBladeHome && !isStonecutHome && tenant.industry === 'custom' && !p.isBookPath && !isGallery && !isTeam);
-            var isThemedHome = isStudio12Home || isTattooHome || isHairHome || isBarberHome || isNailsHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
+            var isThemedHome = isStudio12Home || isTattooHome || isHairHome || isBarberHome || isNailsHome || isChartersHome || isCustomHome || isLuxeHome || isBladeHome || isStonecutHome;
             function bindTeamPageChrome(tenant) {
               bindTeamSubpageChrome(tenant);
             }
@@ -10857,7 +10910,7 @@
                       ? hairTattooStyleHomePage(tenant, services)
                       : isBarberHome
                         ? barberPortfolioHomePage(tenant, services)
-                        : (isNailsHome || isCustomHome)
+                        : (isNailsHome || isChartersHome || isCustomHome)
                           ? classicPortfolioHomePage(tenant, services)
                           : classicPortfolioHomePage(tenant, services);
             }

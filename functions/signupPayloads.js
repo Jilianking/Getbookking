@@ -262,6 +262,61 @@ function formSchemaForIndustry(industry) {
         },
         { key: "notes", label: "Notes", type: "textarea", required: false },
       ]);
+    case "charters":
+      return baseContactFormFields.concat([
+        {
+          key: "tripType",
+          label: "Trip type",
+          type: "select",
+          required: false,
+          options: [
+            "Sightseeing / cruise",
+            "Fishing",
+            "Sunset / evening",
+            "Private group",
+            "Other",
+          ],
+          placeholder: "Select trip type",
+        },
+        {
+          key: "partySize",
+          label: "Party size",
+          type: "select",
+          required: false,
+          options: ["1–2", "3–4", "5–6", "7–10", "11+"],
+          placeholder: "Select party size",
+        },
+        {
+          key: "preferredDate",
+          label: "Preferred date",
+          type: "text",
+          required: false,
+          placeholder: "e.g. Sat Aug 22 or flexible",
+        },
+        {
+          key: "departurePreference",
+          label: "Departure preference",
+          type: "select",
+          required: false,
+          options: ["Morning", "Afternoon", "Evening / sunset", "Flexible"],
+          placeholder: "Select preference",
+        },
+        {
+          key: "experienceLevel",
+          label: "Experience on the water",
+          type: "select",
+          required: false,
+          options: ["First time", "Some experience", "Experienced", "N/A"],
+          placeholder: "Select experience",
+        },
+        {
+          key: "referenceImages",
+          label: "Reference photos (optional)",
+          type: "file",
+          required: false,
+        },
+        { key: "notes", label: "Notes", type: "textarea", required: false },
+      ]);
     case "custom":
     default:
       return minimalFormSchema;
@@ -296,6 +351,13 @@ const defaultServicesByIndustry = {
     { name: "Acrylic full set", durationMinutes: 90 },
     { name: "Nail art", durationMinutes: 30 },
   ],
+  charters: [
+    { name: "Half-day charter", durationMinutes: 240 },
+    { name: "Full-day charter", durationMinutes: 480 },
+    { name: "Sunset / evening trip", durationMinutes: 180 },
+    { name: "Private group charter", durationMinutes: 360 },
+    { name: "Fishing charter", durationMinutes: 300 },
+  ],
   custom: [
     { name: "Consultation", durationMinutes: 30 },
     { name: "Standard service", durationMinutes: 45 },
@@ -312,6 +374,7 @@ function themesForIndustry(industry) {
     barber: "barber-shop-v1",
     tattoos: "tattoo-studio-v1",
     nails: "nail-salon-v1",
+    charters: "charter-v1",
     custom: "custom-standard",
   };
   if (!ind || !(ind in classicByIndustry)) {
@@ -323,7 +386,14 @@ function themesForIndustry(industry) {
 
 function defaultThemeForIndustry(industry) {
   const allowed = themesForIndustry(industry);
-  const first = ["hair-salon-v1", "barber-shop-v1", "tattoo-studio-v1", "nail-salon-v1", "custom-standard"];
+  const first = [
+    "hair-salon-v1",
+    "barber-shop-v1",
+    "tattoo-studio-v1",
+    "nail-salon-v1",
+    "charter-v1",
+    "custom-standard",
+  ];
   for (const id of first) {
     if (allowed.has(id)) return id;
   }
@@ -364,9 +434,13 @@ function normalizeIndustry(raw) {
     tattoo: "tattoos",
     tattoos: "tattoos",
     nails: "nails",
+    charter: "charters",
+    charters: "charters",
+    boating: "charters",
+    fishing: "charters",
     custom: "custom",
   };
-  return map[s] || (["hair", "barber", "tattoos", "nails", "custom"].includes(s) ? s : "custom");
+  return map[s] || (["hair", "barber", "tattoos", "nails", "charters", "custom"].includes(s) ? s : "custom");
 }
 
 module.exports = {

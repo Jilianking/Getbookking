@@ -4280,6 +4280,7 @@ const BETA_WAITLIST_BUSINESS_TYPES = new Set([
   "hair",
   "tattoos",
   "nails",
+  "charters",
   "fitness",
   "other",
 ]);
@@ -6821,6 +6822,7 @@ function defaultJobTitleForIndustry(industry) {
     hair: "Stylist",
     barber: "Barber",
     nails: "Nail technician",
+    charters: "Captain",
     custom: "Team member",
   };
   const key = (industry || "custom").toString().trim().toLowerCase();

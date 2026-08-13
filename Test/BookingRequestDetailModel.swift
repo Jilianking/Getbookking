@@ -91,6 +91,8 @@ enum BookingRequestDetailModel {
             primary = "Hair & style details"
         case .nails:
             primary = "Nail details"
+        case .charters:
+            primary = "Charter details"
         case .custom, .none:
             primary = "Request details"
         }

@@ -146,6 +146,7 @@ function defaultJobTitle(industry) {
     hair: "Stylist",
     barber: "Barber",
     nails: "Nail technician",
+    charters: "Captain",
     custom: "Team member",
   };
   const key = (industry || "custom").toString().trim().toLowerCase();

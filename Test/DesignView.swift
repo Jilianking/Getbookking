@@ -894,6 +894,7 @@ struct DesignView: View {
         case .barber: return "Sharp cuts. Clean results. Every time."
         case .tattoos: return "Turn your idea into something permanent."
         case .nails: return "Clean, polished, and done right."
+        case .charters: return "Time on the water, planned around you."
         case .custom: return "Designed to deliver better results."
         }
     }
@@ -907,6 +908,7 @@ struct DesignView: View {
         case .barber: return "Ready for Your Next Cut?"
         case .tattoos: return "Ready for Your Next Piece?"
         case .nails: return "Ready for Your Next Set?"
+        case .charters: return "Ready for Your Next Trip?"
         case .custom: return "Ready to Book Your Next Appointment?"
         }
     }
@@ -920,6 +922,7 @@ struct DesignView: View {
         case .barber: return "Defined by detail"
         case .tattoos: return "Designed to last"
         case .nails: return "Polished to perfection"
+        case .charters: return "Built for the water"
         case .custom: return "Focused on results"
         }
     }
@@ -937,6 +940,8 @@ struct DesignView: View {
             return "Every piece starts with your vision. We focus on clean execution, strong design, and results you’ll carry with confidence."
         case .nails:
             return "Every set is crafted with care, delivering clean finishes and consistent results you can rely on."
+        case .charters:
+            return "From half-day trips to full-day adventures, every charter is planned around your group, the conditions, and the experience you want on the water."
         case .custom:
             return "Every service is delivered with attention to detail and a focus on consistent, high-quality results."
         }

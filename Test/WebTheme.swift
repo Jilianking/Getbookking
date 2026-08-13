@@ -72,6 +72,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case tattooStudioV1 = "tattoo-studio-v1"
     /// Nails: classic portfolio template.
     case nailSalonV1 = "nail-salon-v1"
+    /// Charters: classic portfolio template for boating / fishing.
+    case charterV1 = "charter-v1"
     /// Custom: neutral classic portfolio template.
     case customStandard = "custom-standard"
     /// Luxe: elegant full-width hero, service cards, promo strip, team section. Works with any industry.
@@ -101,6 +103,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return .barber
         case .tattooStudioV1: return .tattoos
         case .nailSalonV1: return .nails
+        case .charterV1: return .charters
         case .customStandard: return .custom
         case .luxeV1: return .custom
         case .bladeV1: return .custom
@@ -115,6 +118,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Classic"
         case .tattooStudioV1: return "Classic"
         case .nailSalonV1: return "Classic"
+        case .charterV1: return "Classic"
         case .customStandard: return "Classic"
         case .luxeV1: return "Luxe"
         case .bladeV1: return "Blade"
@@ -128,6 +132,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Hero, featured work, about, sidebar"
         case .tattooStudioV1: return "Hero, featured work, about, sidebar"
         case .nailSalonV1: return "Hero, featured work, about, sidebar"
+        case .charterV1: return "Hero, featured work, about, sidebar"
         case .customStandard: return "Hero, featured work, about, sidebar"
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
@@ -142,6 +147,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "mustache.fill"
         case .tattooStudioV1: return "photo.on.rectangle.angled"
         case .nailSalonV1: return "square.grid.2x2"
+        case .charterV1: return "sailboat.fill"
         case .customStandard: return "list.bullet.rectangle"
         case .luxeV1: return "sparkles"
         case .bladeV1: return "moon.stars"
@@ -159,7 +165,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .studio12V1: return "Ivory editorial, marquee, horizontal gallery"
         case .hairSalonV1, .barberShopV1: return "Portfolio hero, featured work, book flow"
         case .tattooStudioV1: return "Bold hero, featured grid, sidebar"
-        case .nailSalonV1, .customStandard: return "Neutral portfolio layout with gallery and about"
+        case .nailSalonV1, .charterV1, .customStandard: return "Neutral portfolio layout with gallery and about"
         }
     }
 
@@ -172,7 +178,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return ["Hero", "Artists", "Portfolio", "Styles", "Process", "Booking"]
         case .luxeV1:
             return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
-        case .nailSalonV1, .customStandard:
+        case .nailSalonV1, .charterV1, .customStandard:
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
         case .hairSalonV1, .barberShopV1, .tattooStudioV1:
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
@@ -201,6 +207,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return .tattooStudioV1
         case .nails:
             return .nailSalonV1
+        case .charters:
+            return .charterV1
         case .custom, .none:
             return .customStandard
         }

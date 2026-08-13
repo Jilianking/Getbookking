@@ -250,12 +250,12 @@ struct TeamMemberDetailView: View {
             }
             if member.accessRole != .owner {
                 Section(
-                    header: Text("Artist self-service"),
+                    header: Text("\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry)) self-service"),
                     footer: Text("When on, they can update these in Website profile. You can always edit them here too.")
                         .font(.caption2)
                 ) {
-                    Toggle("Artist can edit portfolio", isOn: $memberSettings.canEditPortfolio)
-                    Toggle("Artist can edit bio", isOn: $memberSettings.canEditPublicBio)
+                    Toggle("\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry)) can edit portfolio", isOn: $memberSettings.canEditPortfolio)
+                    Toggle("\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry)) can edit bio", isOn: $memberSettings.canEditPublicBio)
                 }
             }
         }
@@ -318,7 +318,7 @@ struct TeamMemberDetailView: View {
                     step: 5
                 ) {
                     HStack {
-                        Text("Artist keeps")
+                        Text("\(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry)) keeps")
                         Spacer()
                         Text("\(memberSettings.paymentSplitPercent)%")
                             .foregroundStyle(.secondary)

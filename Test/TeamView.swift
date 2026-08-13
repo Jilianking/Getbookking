@@ -256,7 +256,7 @@ private struct TeamMemberOverviewContent: View {
         if let me = currentMember {
             LabeledContent("Job title", value: me.badgeLabel)
             LabeledContent("Booking type", value: me.personalBookingTypeDisplayName)
-            if let split = me.paymentSplitSummary {
+            if let split = me.paymentSplitSummary(forIndustry: viewModel.tenantIndustry) {
                 LabeledContent("Payment split", value: split)
                 Text("Split applies to the service amount before any card processing fee at checkout.")
                     .font(.caption)

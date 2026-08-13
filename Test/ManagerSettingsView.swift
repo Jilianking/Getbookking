@@ -61,17 +61,17 @@ struct ManagerSettingsView: View {
                             OwnerPublicBookingProfileView(viewModel: viewModel, member: member)
                                 .environmentObject(authViewModel)
                         } label: {
-                            TeamMemberRow(member: member)
+                            TeamMemberRow(member: member, industry: viewModel.tenantIndustry)
                         }
                     } else if viewModel.isTenantOwner && member.isEditable {
                         NavigationLink {
                             TeamMemberDetailView(viewModel: viewModel, member: member)
                                 .environmentObject(authViewModel)
                         } label: {
-                            TeamMemberRow(member: member)
+                            TeamMemberRow(member: member, industry: viewModel.tenantIndustry)
                         }
                     } else {
-                        TeamMemberRow(member: member)
+                        TeamMemberRow(member: member, industry: viewModel.tenantIndustry)
                     }
                 }
                 if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.allowsTeamInvites {
@@ -119,6 +119,7 @@ private struct TeamManagementNavigationTitle: ViewModifier {
 
 struct TeamMemberRow: View {
     let member: TenantTeamMember
+    var industry: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -143,7 +144,7 @@ struct TeamMemberRow: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                if let split = member.paymentSplitSummary {
+                if let split = member.paymentSplitSummary(forIndustry: industry) {
                     Text(split)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

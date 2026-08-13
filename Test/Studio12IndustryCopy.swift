@@ -20,6 +20,7 @@ enum Studio12IndustryCopy {
         case .barber: return "Cuts · Fades · Detail"
         case .tattoos: return "Design · Ink · Detail"
         case .nails: return "Color · Care · Finish"
+        case .charters: return "Boat · Fish · Explore"
         case .custom: return "Book · Visit · Connect"
         }
     }
@@ -31,6 +32,7 @@ enum Studio12IndustryCopy {
         case .barber: return "Cuts that define"
         case .tattoos: return "Ink that tells"
         case .nails: return "Nails that elevate"
+        case .charters: return "Days that belong"
         case .custom: return "Work that reflects"
         }
     }
@@ -45,6 +47,7 @@ enum Studio12IndustryCopy {
         case .barber: return "you."
         case .tattoos: return "your story."
         case .nails: return "every day."
+        case .charters: return "on the water."
         case .custom: return "you."
         }
     }
@@ -81,6 +84,8 @@ enum Studio12IndustryCopy {
             return "Custom work, clean execution, and a calm studio experience from idea to healed piece."
         case .nails:
             return "Clean finishes, thoughtful details, and sets built to last — book your next appointment."
+        case .charters:
+            return "Private charters and fishing trips planned around your group, the conditions, and the day you want on the water."
         case .custom:
             return "Professional service, thoughtful communication, and a smooth booking experience."
         }
@@ -94,6 +99,7 @@ enum Studio12IndustryCopy {
         case .barber: return "Precision is more than"
         case .tattoos: return "Art is more than"
         case .nails: return "Polish is more than"
+        case .charters: return "A charter is more than"
         case .custom: return "Quality is more than"
         }
     }
@@ -104,6 +110,7 @@ enum Studio12IndustryCopy {
         case .barber: return "a fade."
         case .tattoos: return "ink on skin."
         case .nails: return "color."
+        case .charters: return "a boat ride."
         case .custom: return "a checklist."
         }
     }
@@ -114,6 +121,7 @@ enum Studio12IndustryCopy {
         case .barber: return "It's confidence."
         case .tattoos: return "It's permanence with intention."
         case .nails: return "It's the details."
+        case .charters: return "It's the day you remember."
         case .custom: return "It's consistency."
         }
     }
@@ -139,7 +147,7 @@ enum Studio12IndustryCopy {
 
     static func bookCtaLine1Placeholder(for t: BookingTemplate) -> String {
         switch t {
-        case .hair, .barber, .nails: return "Ready for your"
+        case .hair, .barber, .nails, .charters: return "Ready for your"
         case .tattoos: return "Ready for your"
         case .custom: return "Ready to"
         }
@@ -151,6 +159,7 @@ enum Studio12IndustryCopy {
         case .barber: return "next cut?"
         case .tattoos: return "next piece?"
         case .nails: return "next set?"
+        case .charters: return "next trip?"
         case .custom: return "book?"
         }
     }
@@ -245,6 +254,13 @@ enum Studio12IndustryCopy {
                 Studio12ProcessStep(id: 1, title: "Consultation", body: "We confirm shape, length, color, and any nail-art details."),
                 Studio12ProcessStep(id: 2, title: "The service", body: "Careful prep and application for a clean, lasting finish."),
                 Studio12ProcessStep(id: 3, title: "Aftercare", body: "Home care tips so your set stays fresh longer.")
+            ]
+        case .charters:
+            return [
+                Studio12ProcessStep(id: 0, title: "Book online", body: "Choose your trip and send a request. We'll confirm availability and details."),
+                Studio12ProcessStep(id: 1, title: "Plan the trip", body: "We align on party size, timing, and fishing or cruise goals."),
+                Studio12ProcessStep(id: 2, title: "Cast off", body: "Meet at the dock — gear guidance and a day built around your group."),
+                Studio12ProcessStep(id: 3, title: "After the trip", body: "Photos, tips, and easy rebooking for your next day on the water.")
             ]
         case .custom:
             return [

@@ -37,13 +37,23 @@ struct OwnerPublicBookingProfileView: View {
         }
     }
 
+    private var defaultOwnerTitle: String {
+        let role = BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry).lowercased()
+        return "Owner & \(role)"
+    }
+
+    private var publicTitleFooter: String {
+        let role = BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry).lowercased()
+        return "Shown under your name on the booking picker — e.g. Lead \(role) or Owner & \(role)."
+    }
+
     private var resolvedJobTitle: String {
         if jobTitlePresetId == TeamJobTitleCatalog.customOptionId {
             let c = customJobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            return c.isEmpty ? "Owner & artist" : String(c.prefix(60))
+            return c.isEmpty ? defaultOwnerTitle : String(c.prefix(60))
         }
         return TeamJobTitleCatalog.ownerPublicTitleOptions(for: viewModel.tenantIndustry)
-            .first(where: { $0.id == jobTitlePresetId })?.label ?? "Owner & artist"
+            .first(where: { $0.id == jobTitlePresetId })?.label ?? defaultOwnerTitle
     }
 
     var body: some View {
@@ -56,7 +66,7 @@ struct OwnerPublicBookingProfileView: View {
 
             Section(
                 header: Text("Public title"),
-                footer: Text("Shown under your name on the booking picker — e.g. Lead artist or Owner & artist.")
+                footer: Text(publicTitleFooter)
                     .font(.caption2)
             ) {
                 Picker("Title", selection: $jobTitlePresetId) {

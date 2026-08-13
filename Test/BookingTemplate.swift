@@ -12,6 +12,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     case barber = "barber"
     case tattoos = "tattoos"
     case nails = "nails"
+    case charters = "charters"
     case custom = "custom"
 
     var id: String { rawValue }
@@ -22,6 +23,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "Barber shop"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
+        case .charters: return "Boating / Fishing Charter"
         case .custom: return "Custom / Blank"
         }
     }
@@ -48,6 +50,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "mustache.fill"
         case .tattoos: return "paintbrush.fill"
         case .nails: return "hand.raised.fill"
+        case .charters: return "sailboat.fill"
         case .custom: return "doc.plaintext"
         }
     }
@@ -267,6 +270,67 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ),
                 FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
             ]
+        case .charters:
+            return base + [
+                FormField(
+                    id: "trip_type",
+                    key: "tripType",
+                    label: "Trip type",
+                    type: .select,
+                    required: false,
+                    options: [
+                        "Sightseeing / cruise",
+                        "Fishing",
+                        "Sunset / evening",
+                        "Private group",
+                        "Other",
+                    ],
+                    placeholder: "Select trip type"
+                ),
+                FormField(
+                    id: "party_size",
+                    key: "partySize",
+                    label: "Party size",
+                    type: .select,
+                    required: false,
+                    options: ["1–2", "3–4", "5–6", "7–10", "11+"],
+                    placeholder: "Select party size"
+                ),
+                FormField(
+                    id: "preferred_date",
+                    key: "preferredDate",
+                    label: "Preferred date",
+                    type: .text,
+                    required: false,
+                    placeholder: "e.g. Sat Aug 22 or flexible"
+                ),
+                FormField(
+                    id: "departure_preference",
+                    key: "departurePreference",
+                    label: "Departure preference",
+                    type: .select,
+                    required: false,
+                    options: ["Morning", "Afternoon", "Evening / sunset", "Flexible"],
+                    placeholder: "Select preference"
+                ),
+                FormField(
+                    id: "experience_level",
+                    key: "experienceLevel",
+                    label: "Experience on the water",
+                    type: .select,
+                    required: false,
+                    options: ["First time", "Some experience", "Experienced", "N/A"],
+                    placeholder: "Select experience"
+                ),
+                FormField(
+                    id: "referenceImages",
+                    key: "referenceImages",
+                    label: "Reference photos (optional)",
+                    type: .file,
+                    required: false
+                ),
+                FormField(id: "notes", key: "notes", label: "Notes", type: .textarea, required: false),
+            ]
         case .custom:
             return FormField.defaultFields
         }
@@ -304,6 +368,14 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Gel manicure", 60),
                 ("Acrylic full set", 90),
                 ("Nail art", 30),
+            ]
+        case .charters:
+            return [
+                ("Half-day charter", 240),
+                ("Full-day charter", 480),
+                ("Sunset / evening trip", 180),
+                ("Private group charter", 360),
+                ("Fishing charter", 300),
             ]
         case .custom:
             return [
@@ -345,6 +417,13 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
                 ("Gel set", "Long-lasting color with high shine.", 60),
                 ("Acrylic set", "Strong, sculpted nails with precision.", 90),
                 ("Full service", "Complete nail care and design.", 90),
+            ]
+        case .charters:
+            return [
+                ("Half-day charter", "A focused outing on the water — fishing or sightseeing.", 240),
+                ("Full-day charter", "All-day trip with time to explore and relax.", 480),
+                ("Sunset trip", "Evening cruise timed for golden hour on the water.", 180),
+                ("Fishing charter", "Targeted fishing with gear guidance from the captain.", 300),
             ]
         case .custom:
             return [

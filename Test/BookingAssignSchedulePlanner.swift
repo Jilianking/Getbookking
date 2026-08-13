@@ -32,14 +32,32 @@ enum BookingAssignSchedulePlanner {
     static let slotIntervalMinutes = 30
     static let defaultServiceDurationMinutes = 30
 
-    static func assignTitle(for industry: String?) -> String {
+    static func providerRoleLabel(for industry: String?) -> String {
         switch BookingTemplate(rawValue: (industry ?? "").lowercased()) ?? .custom {
-        case .tattoos: return "Assign artist"
-        case .barber: return "Assign barber"
-        case .hair: return "Assign stylist"
-        case .nails: return "Assign technician"
-        case .custom: return "Assign team member"
+        case .tattoos: return "Artist"
+        case .barber: return "Barber"
+        case .hair: return "Stylist"
+        case .nails: return "Technician"
+        case .charters: return "Captain"
+        case .custom: return "Team member"
         }
+    }
+
+    static func providerRoleLabelPlural(for industry: String?) -> String {
+        switch BookingTemplate(rawValue: (industry ?? "").lowercased()) ?? .custom {
+        case .tattoos: return "artists"
+        case .barber: return "barbers"
+        case .hair: return "stylists"
+        case .nails: return "technicians"
+        case .charters: return "captains"
+        case .custom: return "team members"
+        }
+    }
+
+    static func assignTitle(for industry: String?) -> String {
+        let role = providerRoleLabel(for: industry)
+        if role == "Team member" { return "Assign team member" }
+        return "Assign \(role.lowercased())"
     }
 
     static func dateStrip(anchor: Date, calendar: Calendar = .current) -> [Date] {

@@ -81,6 +81,12 @@ enum TeamJobTitleCatalog {
                 TeamJobTitleOption(id: "nail_tech", label: "Nail technician"),
                 TeamJobTitleOption(id: "nail_artist", label: "Nail artist"),
             ]
+        case .charters:
+            return [
+                TeamJobTitleOption(id: "captain", label: "Captain"),
+                TeamJobTitleOption(id: "first_mate", label: "First mate"),
+                TeamJobTitleOption(id: "guide", label: "Guide"),
+            ]
         case .custom:
             return [
                 TeamJobTitleOption(id: "team_member", label: "Team member"),
@@ -92,9 +98,10 @@ enum TeamJobTitleCatalog {
 
     /// Titles for the owner's public booking page (picker + profile).
     static func ownerPublicTitleOptions(for industry: String?) -> [TeamJobTitleOption] {
+        let role = BookingAssignSchedulePlanner.providerRoleLabel(for: industry).lowercased()
         var opts: [TeamJobTitleOption] = [
-            TeamJobTitleOption(id: "owner_artist", label: "Owner & artist"),
-            TeamJobTitleOption(id: "lead", label: "Lead artist"),
+            TeamJobTitleOption(id: "owner_artist", label: "Owner & \(role)"),
+            TeamJobTitleOption(id: "lead", label: "Lead \(role)"),
         ]
         opts.append(contentsOf: primaryOptions(for: industry))
         return opts
@@ -380,10 +387,15 @@ struct TenantTeamMember: Identifiable, Equatable {
     }
 
     var paymentSplitSummary: String? {
+        paymentSplitSummary(forIndustry: nil)
+    }
+
+    func paymentSplitSummary(forIndustry industry: String?) -> String? {
         guard memberSettings.paymentSplitEnabled, memberSettings.paymentSplitPercent > 0 else { return nil }
-        let artist = memberSettings.paymentSplitPercent
-        let studio = max(0, 100 - artist)
-        return "Artist keeps \(artist)% · Studio \(studio)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
+        let keep = memberSettings.paymentSplitPercent
+        let studio = max(0, 100 - keep)
+        let role = BookingAssignSchedulePlanner.providerRoleLabel(for: industry)
+        return "\(role) keeps \(keep)% · Studio \(studio)% · \(memberSettings.paymentSplitAppliesTo.displayName)"
     }
 
     var payoutModeSummary: String? {

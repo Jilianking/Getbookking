@@ -203,7 +203,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                         )
 
                         if canPickArtist {
-                            Picker("Artist", selection: $selectedMemberUid) {
+                            Picker(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry), selection: $selectedMemberUid) {
                                 ForEach(roster) { member in
                                     Text(artistLabel(for: member)).tag(Optional(member.uid))
                                 }

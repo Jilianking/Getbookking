@@ -113,6 +113,7 @@ struct RequestsView: View {
                 }
                 .onAppear {
                     viewModel.sessionStore = sessionStore
+                    applyRequestsDeepLinkFilterIfNeeded()
                 }
                 .task {
                     viewModel.sessionStore = sessionStore
@@ -121,10 +122,26 @@ struct RequestsView: View {
                         sessionStore: sessionStore
                     )
                 }
+                .onChange(of: drawerState.requestsInitialFilter) { _, filter in
+                    if filter != nil {
+                        applyRequestsDeepLinkFilterIfNeeded()
+                    }
+                }
                 .onChange(of: drawerState.appTourDismissModalsToken) { _, _ in
                     selectedBookingRequest = nil
                     selectedRequest = nil
                 }
+        }
+    }
+
+    private func applyRequestsDeepLinkFilterIfNeeded() {
+        guard let filter = drawerState.requestsInitialFilter else { return }
+        drawerState.requestsInitialFilter = nil
+        switch filter {
+        case .newOnly:
+            requestFilter = .newOnly
+        case .confirmed:
+            requestFilter = .confirmed
         }
     }
 

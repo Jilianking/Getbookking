@@ -345,6 +345,7 @@ html { scroll-behavior: smooth; width: 100%; }
     section:last-of-type { border-bottom: none; }
 
     .sec-inner { max-width: 860px; margin: 0 auto; }
+    .sec-inner--pricing { max-width: 1180px; }
 
     .sec-label {
       font-size: 11px;
@@ -373,23 +374,50 @@ html { scroll-behavior: smooth; width: 100%; }
     }
 
     /* ── FEATURES ── */
-    .features-bg { background: var(--brand-offwhite); }
+    .features-bg {
+      background: var(--brand-offwhite);
+      overflow-x: hidden;
+    }
+
+    .features-bg .sec-header { margin-bottom: 40px; }
 
     .feat-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 20px;
     }
 
     .feat-card {
-      padding: 28px;
+      padding: 36px 32px;
       border: 1px solid var(--border);
       border-radius: 14px;
       background: #fff;
-      transition: border-color 0.2s, transform 0.2s;
+      opacity: 0;
+      transition:
+        border-color 0.2s ease,
+        box-shadow 0.3s ease,
+        transform 0.7s ease,
+        opacity 0.7s ease;
     }
 
-    .feat-card:hover { border-color: var(--brand-muted); transform: translateY(-2px); }
+    .feat-card--from-left { transform: translateX(-44px); }
+    .feat-card--from-right {
+      transform: translateX(44px);
+      transition-delay: 0.06s;
+    }
+
+    .feat-card.is-in {
+      opacity: 1;
+      transform: translateX(0) translateY(0);
+    }
+
+    .feat-card.is-in:hover {
+      border-color: var(--brand-muted);
+      transform: translateX(0) translateY(-4px);
+      box-shadow: 0 18px 36px rgba(26, 20, 16, 0.1);
+      transition-delay: 0s;
+      transition-duration: 0.25s;
+    }
 
     a.feat-card {
       display: block;
@@ -398,7 +426,7 @@ html { scroll-behavior: smooth; width: 100%; }
       cursor: pointer;
     }
 
-    a.feat-card:hover {
+    a.feat-card.is-in:hover {
       border-color: var(--brand-warm);
       text-decoration: none;
       color: inherit;
@@ -406,26 +434,26 @@ html { scroll-behavior: smooth; width: 100%; }
 
     a.feat-card .feat-card-cta {
       display: inline-block;
-      margin-top: 14px;
-      font-size: 13px;
+      margin-top: 16px;
+      font-size: 14px;
       font-weight: 500;
       color: var(--brand-warm);
     }
 
     .feat-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
       background: #F5F0E8;
-      margin-bottom: 20px;
+      margin-bottom: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     .feat-icon svg {
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       stroke: var(--brand-warm);
       fill: none;
       stroke-width: 1.5;
@@ -433,8 +461,19 @@ html { scroll-behavior: smooth; width: 100%; }
       stroke-linejoin: round;
     }
 
-    .feat-card h3 { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
-    .feat-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+    .feat-card h3 { font-size: 20px; font-weight: 500; margin-bottom: 12px; }
+    .feat-card p { font-size: 16px; color: var(--text-secondary); line-height: 1.6; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .feat-card,
+      .feat-card--from-left,
+      .feat-card--from-right {
+        opacity: 1;
+        transform: none;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .feat-card.is-in:hover { transform: none; }
+    }
 
     /* ── HOW IT WORKS ── */
     .how-section {
@@ -518,19 +557,39 @@ html { scroll-behavior: smooth; width: 100%; }
     .pricing-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
+      gap: 18px;
     }
 
     .plan {
+      position: relative;
       padding: 32px 28px;
       border: 1px solid var(--border);
       border-radius: 14px;
       background: #fff;
       display: flex;
       flex-direction: column;
+      box-shadow: 0 8px 20px rgba(26, 20, 16, 0.04);
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+
+    .plan:hover {
+      z-index: 2;
+      transform: translateY(-12px) scale(1.02);
+      box-shadow: 0 32px 56px rgba(26, 20, 16, 0.18);
+      border-color: var(--brand-muted);
     }
 
     .plan.featured { border: 2px solid var(--brand-warm); }
+
+    .plan.featured:hover {
+      border-color: var(--brand-warm);
+      box-shadow: 0 32px 56px rgba(26, 20, 16, 0.2);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .plan { transition: none; }
+      .plan:hover { transform: none; }
+    }
 
     .plan-badge {
       font-size: 11px;
@@ -902,7 +961,7 @@ html { scroll-behavior: smooth; width: 100%; }
         <p>One platform for your website, bookings, payments, and client communication.</p>
       </div>
       <div class="feat-grid">
-        <a class="feat-card" href="templates.html">
+        <a class="feat-card feat-card--from-left" href="templates.html">
           <div class="feat-icon">
             <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
           </div>
@@ -911,14 +970,14 @@ html { scroll-behavior: smooth; width: 100%; }
           <p>Customize it, showcase your work, and start booking clients right away.</p>
           <span class="feat-card-cta">Browse templates →</span>
         </a>
-        <div class="feat-card">
+        <div class="feat-card feat-card--from-right">
           <div class="feat-icon">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
           </div>
           <h3>Online booking</h3>
           <p>Clients book anytime while you stay in control of your schedule.</p>
         </div>
-        <a class="feat-card" href="tap-to-pay.html">
+        <a class="feat-card feat-card--from-left" href="tap-to-pay.html">
           <div class="feat-icon">
             <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
           </div>
@@ -926,7 +985,7 @@ html { scroll-behavior: smooth; width: 100%; }
           <p>Accept payments with Tap to Pay on iPhone or online. Track tips, split payments, and keep clean records automatically.</p>
           <span class="feat-card-cta">Learn about Tap to Pay on iPhone →</span>
         </a>
-        <a class="feat-card" href="messaging.html">
+        <a class="feat-card feat-card--from-right" href="messaging.html">
           <div class="feat-icon">
             <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
@@ -990,7 +1049,7 @@ html { scroll-behavior: smooth; width: 100%; }
 
   <!-- PRICING -->
   <section id="pricing" class="pricing-bg">
-    <div class="sec-inner">
+    <div class="sec-inner sec-inner--pricing">
       <div class="sec-header">
         <div class="sec-label">Pricing</div>
         <h2>Simple, honest pricing</h2>
@@ -1004,10 +1063,12 @@ html { scroll-behavior: smooth; width: 100%; }
           <div class="plan-desc">Just you</div>
           <div class="plan-divider"></div>
           <ul class="plan-feats">
-            <li>Professional website</li>
-            <li>Online booking &amp; deposits</li>
+            <li>Professional website &amp; customizable templates</li>
+            <li>Online booking your way — instant, request &amp; approve, deposit to confirm, or calendar slots</li>
             <li>Tap to Pay on iPhone &amp; card checkout</li>
-            <li>Client texting</li>
+            <li>Client texting (1 business number)</li>
+            <li>Appointment reminders &amp; deposit requests</li>
+            <li>Free subdomain · connect your own domain</li>
           </ul>
           <a href="signup.html?plan=solo" class="plan-cta outline">Start free trial</a>
         </div>
@@ -1023,6 +1084,8 @@ html { scroll-behavior: smooth; width: 100%; }
             <li>Up to 5 team members</li>
             <li>Team scheduling &amp; invites</li>
             <li>Roles, permissions &amp; payouts</li>
+            <li>Each member’s own login &amp; calendar</li>
+            <li>2 free texting numbers included · purchase more anytime</li>
           </ul>
           <a href="signup.html?plan=studio" class="plan-cta dark">Start free trial</a>
         </div>
@@ -1035,8 +1098,8 @@ html { scroll-behavior: smooth; width: 100%; }
           <ul class="plan-feats">
             <li>Everything in Studio</li>
             <li>Up to 10 team members</li>
-            <li>Built for multi-chair teams</li>
-            <li>Each member gets their own login &amp; calendar</li>
+            <li>Built for multi-chair / multi-station teams</li>
+            <li>Scale your whole floor on one platform</li>
           </ul>
           <a href="signup.html?plan=shop" class="plan-cta outline">Start free trial</a>
         </div>
@@ -1162,5 +1225,35 @@ html { scroll-behavior: smooth; width: 100%; }
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
   <script src="assets/nav-auth.js?v=4"></script>
+  <script>
+    (function () {
+      var cards = document.querySelectorAll('#features .feat-card');
+      if (!cards.length) return;
+
+      function revealAll() {
+        cards.forEach(function (card) { card.classList.add('is-in'); });
+      }
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        revealAll();
+        return;
+      }
+
+      if (!('IntersectionObserver' in window)) {
+        revealAll();
+        return;
+      }
+
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-in');
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.25, rootMargin: '0px 0px -8% 0px' });
+
+      cards.forEach(function (card) { observer.observe(card); });
+    })();
+  </script>
 </body>
 </html>

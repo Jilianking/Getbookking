@@ -40,6 +40,7 @@ enum PreviewQuickEditColorTarget: String, Identifiable {
 struct PreviewQuickEditChrome: View {
     @ObservedObject var viewModel: DesignViewModel
     var bridge: WebViewQuickEditBridge
+    @ObservedObject var history: QuickEditHistoryStore
     @Binding var inlineFocus: QuickEditInlineFocus?
     @Binding var colorsDirty: Bool
     @Binding var selectedColorSurface: PreviewColorSurface?
@@ -53,7 +54,9 @@ struct PreviewQuickEditChrome: View {
     @State private var draggingFabPosition: CGPoint?
     @State private var fabDragStartPosition: CGPoint?
     @State private var isSavingColors = false
-    @State private var showSaveAck = false
+    /// When true, preview color taps (bands + CTA chrome) work; text/sheet taps are ignored.
+    @State private var isBackgroundPaintArmed = false
+    @State private var colorChangeBaseline: (tokens: WebColorPaletteTokens, hero: String)?
 
     private let collapsedFabSize: CGFloat = 52
     private let collapsedFabMargin: CGFloat = 16
@@ -85,6 +88,9 @@ struct PreviewQuickEditChrome: View {
                 onDismiss: {
                     activeColorTarget = nil
                     selectedChromeColorTarget = nil
+                    if target == .button {
+                        setBackgroundPaintArmed(false)
+                    }
                     finishColorSheetDismiss()
                 }
             )
@@ -97,6 +103,7 @@ struct PreviewQuickEditChrome: View {
                 onDismiss: {
                     activeColorSurface = nil
                     selectedColorSurface = nil
+                    setBackgroundPaintArmed(false)
                     finishColorSheetDismiss()
                 }
             )
@@ -125,6 +132,9 @@ struct PreviewQuickEditChrome: View {
                 draggingFabPosition = nil
                 fabDragStartPosition = nil
             }
+        }
+        .onDisappear {
+            setBackgroundPaintArmed(false)
         }
     }
 
@@ -192,6 +202,7 @@ struct PreviewQuickEditChrome: View {
 
     private var addTextButton: some View {
         Button {
+            setBackgroundPaintArmed(false)
             bridge.showEmptyTextSlots()
         } label: {
             VStack(spacing: 4) {
@@ -207,6 +218,7 @@ struct PreviewQuickEditChrome: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Show empty text slots")
+        .opacity(isBackgroundPaintArmed ? 0.45 : 1)
     }
 
     private var collapsedFabButton: some View {
@@ -274,6 +286,8 @@ struct PreviewQuickEditChrome: View {
 
     private var compactTextColorWell: some View {
         Button {
+            setBackgroundPaintArmed(false)
+            beginColorChangeBaseline()
             if let focus = inlineFocus {
                 focusedColorEdit = focus
             } else {
@@ -289,24 +303,69 @@ struct PreviewQuickEditChrome: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit text color")
+        .opacity(isBackgroundPaintArmed ? 0.45 : 1)
+    }
+
+    private var compactBackgroundPaintWell: some View {
+        Button {
+            setBackgroundPaintArmed(!isBackgroundPaintArmed)
+        } label: {
+            VStack(spacing: 4) {
+                PreviewColorWellCircle(hex: viewModel.backgroundColorHex, diameter: 40)
+                    .overlay {
+                        if isBackgroundPaintArmed {
+                            Circle()
+                                .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                        }
+                    }
+                Text("Background")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(isBackgroundPaintArmed ? Color.accentColor : Color.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isBackgroundPaintArmed ? "Background paint on, tap to turn off" : "Paint background colors")
+        .accessibilityAddTraits(isBackgroundPaintArmed ? .isSelected : [])
+    }
+
+    private func setBackgroundPaintArmed(_ armed: Bool) {
+        guard isBackgroundPaintArmed != armed else {
+            if armed {
+                bridge.setBackgroundPaintMode(true)
+            }
+            return
+        }
+        isBackgroundPaintArmed = armed
+        if armed {
+            if inlineFocus != nil {
+                bridge.commitDirtyEdits()
+                inlineFocus = nil
+            }
+            isChromeCollapsed = false
+        }
+        bridge.setBackgroundPaintMode(armed)
     }
 
     private var controlPill: some View {
         HStack(alignment: .center, spacing: 10) {
+            // Hide Background while editing text so font size + undo fit on screen.
+            if isBackgroundPaintArmed || inlineFocus == nil {
+                compactBackgroundPaintWell
+            }
             compactTextColorWell
             addTextButton
 
-            if let focus = inlineFocus {
+            if !isBackgroundPaintArmed, let focus = inlineFocus {
                 activeFieldEditor(focus: focus)
                     .frame(maxWidth: .infinity)
             } else {
                 Spacer(minLength: 0)
             }
 
-            quickEditSaveButton
+            undoRedoButtons
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, inlineFocus == nil ? 8 : 10)
+        .padding(.vertical, inlineFocus == nil || isBackgroundPaintArmed ? 8 : 10)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color(.systemBackground))
@@ -321,49 +380,83 @@ struct PreviewQuickEditChrome: View {
         }
     }
 
-    private var quickEditSaveButton: some View {
-        Button {
-            commitQuickEditSaves()
-        } label: {
-            Group {
-                if showSaveAck {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.white)
-                } else if isSavingColors {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+    private var undoRedoButtons: some View {
+        HStack(spacing: 6) {
+            Button {
+                Task { await performHistory(.undo) }
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(history.canUndo ? Color.primary : Color.secondary.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
             }
-            .frame(width: 44, height: 44)
-            .background(Circle().fill(showSaveAck ? Color.green : Color.black))
+            .buttonStyle(.plain)
+            .disabled(!history.canUndo || isSavingColors)
+            .accessibilityLabel("Undo")
+
+            Button {
+                Task { await performHistory(.redo) }
+            } label: {
+                Image(systemName: "arrow.uturn.forward")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(history.canRedo ? Color.primary : Color.secondary.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!history.canRedo || isSavingColors)
+            .accessibilityLabel("Redo")
         }
-        .buttonStyle(.plain)
-        .disabled(isSavingColors)
-        .accessibilityLabel(showSaveAck ? "Saved" : "Save edits")
     }
 
-    private func commitQuickEditSaves() {
-        bridge.flushPreviewColorPatch()
+    private enum HistoryDirection {
+        case undo
+        case redo
+    }
+
+    private func performHistory(_ direction: HistoryDirection) async {
+        setBackgroundPaintArmed(false)
         bridge.commitDirtyEdits()
         inlineFocus = nil
-        Task {
-            await persistDirtyColorsIfNeeded()
+
+        let entry: QuickEditHistoryEntry?
+        switch direction {
+        case .undo: entry = history.popUndo()
+        case .redo: entry = history.popRedo()
+        }
+        guard let entry else { return }
+
+        history.beginApplyingHistory()
+        defer { history.endApplyingHistory() }
+
+        switch entry {
+        case let .colors(before, after, heroBefore, heroAfter):
+            let tokens = direction == .undo ? before : after
+            let hero = direction == .undo ? heroBefore : heroAfter
             await MainActor.run {
-                if !colorsDirty && !showSaveAck {
-                    flashSaveAck()
-                }
+                viewModel.applyColorTokensLocally(tokens)
+                viewModel.previewHeroSlotColorHex = hero
+                colorsDirty = true
+                pushPreviewColors(heroSlotOverride: hero, fullBandPass: true)
+            }
+            await persistDirtyColorsIfNeeded()
+        case let .text(before, after):
+            let map = direction == .undo ? before : after
+            let pairs = map.map { (fieldKey: $0.key, value: $0.value) }
+            await viewModel.saveQuickEditBatch(pairs, reloadPreview: false)
+            await MainActor.run {
+                bridge.applyTextOverrides(map)
             }
         }
     }
 
-    /// Flush preview paint, then upload colors when the color sheet closes or the user taps save.
+    /// Flush preview paint, then upload colors when the color sheet closes.
     private func finishColorSheetDismiss() {
         bridge.flushPreviewColorPatch()
+        commitColorBaselineIfNeeded()
         guard colorsDirty, !isSavingColors else { return }
         Task { await persistDirtyColorsIfNeeded() }
     }
@@ -377,17 +470,29 @@ struct PreviewQuickEditChrome: View {
             if ok {
                 colorsDirty = false
                 pushPreviewColors()
-                flashSaveAck()
             }
         }
     }
 
-    private func flashSaveAck() {
-        showSaveAck = true
-        Task {
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            await MainActor.run { showSaveAck = false }
+    private func beginColorChangeBaseline() {
+        guard !history.isApplyingHistory else { return }
+        if colorChangeBaseline == nil {
+            colorChangeBaseline = (
+                tokens: viewModel.currentColorTokens(),
+                hero: viewModel.previewHeroSlotColorHex
+            )
         }
+    }
+
+    private func commitColorBaselineIfNeeded() {
+        guard let baseline = colorChangeBaseline else { return }
+        colorChangeBaseline = nil
+        history.recordColors(
+            before: baseline.tokens,
+            after: viewModel.currentColorTokens(),
+            heroBefore: baseline.hero,
+            heroAfter: viewModel.previewHeroSlotColorHex
+        )
     }
 
     private func dismissColorSheets() {
@@ -400,12 +505,14 @@ struct PreviewQuickEditChrome: View {
 
     /// Opens a band color sheet; clears `selectedColorSurface` so the same band can be tapped again after Done.
     private func presentColorSurface(_ surface: PreviewColorSurface) {
+        beginColorChangeBaseline()
         activeColorSurface = surface
         selectedColorSurface = nil
     }
 
     /// Opens Background / Text / Button color; clears binding so the same CTA can be tapped again after Done.
     private func presentChromeColor(_ target: PreviewQuickEditColorTarget) {
+        beginColorChangeBaseline()
         activeColorTarget = target
         selectedChromeColorTarget = nil
     }

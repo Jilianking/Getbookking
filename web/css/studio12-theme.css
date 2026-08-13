@@ -1512,7 +1512,7 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
     display: none;
   }
   .studio12-page .s12-nav-trailing .s12-nav-book {
-    display: none;
+    display: none !important;
   }
   .studio12-page .s12-nav-logo-main {
     font-size: clamp(26px, 7.5vw, 34px);

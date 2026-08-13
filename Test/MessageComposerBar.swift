@@ -716,7 +716,22 @@ struct MessageComposerBar: View {
         if let profile = try? await firebase.fetchProviderProfile(uid: uid),
            let slug = profile.tenantSlug ?? profile.tenantId,
            !slug.isEmpty {
-            bookingUrl = PublicBookingSite.urlString(forSlug: slug)
+            await sessionStore.loadTeamMembersIfNeeded(force: false, isDemoMode: false)
+            let memberSlug = sessionStore.teamMembers
+                .first(where: { $0.uid == uid })?
+                .memberSlug
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? ""
+            let customDomain = PublicBookingSite.activeCustomDomain(fromTenant: sessionStore.tenant)
+            if !memberSlug.isEmpty {
+                bookingUrl = PublicBookingSite.memberBookURLString(
+                    tenantSlug: slug,
+                    memberSlug: memberSlug,
+                    customDomain: customDomain
+                )
+            } else {
+                bookingUrl = PublicBookingSite.urlString(forSlug: slug, customDomain: customDomain) + "/book"
+            }
         }
     }
 }

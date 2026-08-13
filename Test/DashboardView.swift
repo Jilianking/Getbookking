@@ -54,12 +54,20 @@ struct DashboardView: View {
                             subtitle: displayUnreadRequestsCount > 0
                                 ? "\(displayUnreadRequestsCount) unread"
                                 : "awaiting review"
-                        )
+                        ) {
+                            drawerState.requestsInitialFilter = .newOnly
+                            drawerState.selectedSection = .requests
+                            drawerState.isOpen = false
+                        }
                         AppStatCard(
                             title: "Confirmed",
                             value: "\(viewModel.confirmedThisMonthCount)",
                             subtitle: "this month"
-                        )
+                        ) {
+                            drawerState.requestsInitialFilter = .confirmed
+                            drawerState.selectedSection = .requests
+                            drawerState.isOpen = false
+                        }
                     }
                     .padding(.horizontal)
 

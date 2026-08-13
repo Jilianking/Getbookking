@@ -2749,6 +2749,24 @@
       text-decoration: none;
       color: inherit;
     }
+    button.gallery-grid-link,
+    button.s12-gallery-full-link,
+    button.blade-gallery-thumb,
+    button.tattoo-featured-cell,
+    button.luxe-service-card-img-wrap {
+      appearance: none;
+      -webkit-appearance: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      text-align: inherit;
+      display: block;
+      width: 100%;
+    }
     .blade-gallery-item .blade-gallery-thumb {
       display: block;
       width: 100%;
@@ -2788,7 +2806,7 @@
       justify-content: center;
       pointer-events: none;
     }
-    /* Fixed 4:5 stage: same chrome for all layouts; lightbox uses `contain` so the full photo is visible (letterbox). Strip/masonry/grid thumbnails stay `cover`. */
+    /* Fixed 4:5 stage: same crop as gallery tiles (`cover`) so open view matches the preview. */
     .gallery-lightbox-inner .gallery-lightbox-stage {
       pointer-events: auto;
       width: min(88vw, 720px);
@@ -2807,11 +2825,11 @@
       justify-content: center;
     }
     .gallery-lightbox-inner .gallery-lightbox-stage .gallery-lightbox-img {
-      width: auto;
-      height: auto;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      object-fit: cover;
       object-position: center;
       display: block;
       border-radius: 0;
@@ -3687,7 +3705,7 @@
         var gUrls = providerGalleryUrls(provider);
         var grid = gUrls.length
           ? '<div class="bk-provider-gallery-grid">' + gUrls.map(function(u) {
-              return '<div class="gallery-grid-link"><img src="' + esc(u) + '" alt="" loading="lazy"></div>';
+              return galleryLightboxTriggerHtml(u, { className: 'gallery-grid-link' });
             }).join('') + '</div>'
           : '<p class="gallery-empty-hint">No portfolio images yet.</p>';
         return '<div class="container"><div class="bk-provider-gallery-page card">' +
@@ -4960,7 +4978,12 @@
           function bladeMarqueeChunk(urls, includeEditKeys) {
             return urls.map(function(u, gi) {
               var editKey = includeEditKeys ? galleryImageEditKeyAttr(gi) : '';
-              return '<div class="blade-gallery-item"><div class="blade-gallery-thumb"><img' + editKey + ' src="' + esc(u) + '" alt=""></div></div>';
+              return '<div class="blade-gallery-item">' +
+                galleryLightboxTriggerHtml(u, {
+                  className: 'blade-gallery-thumb',
+                  editAttr: editKey,
+                  loading: includeEditKeys
+                }) + '</div>';
             }).join('');
           }
           gallerySection = '<section class="blade-gallery-strip" id="blade-gallery" data-bk-color-surface="featured" data-bk-band-tappable>' +
@@ -5376,7 +5399,11 @@
       }
       function galleryPageGridHtml(items) {
         var imgsHtml = items.map(function(item, gi) {
-          return '<div class="gallery-grid-link"' + galleryMemberAttr(item) + '><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div>';
+          return galleryLightboxTriggerHtml(item.url, {
+            className: 'gallery-grid-link',
+            editAttr: galleryItemEditAttr(item, gi),
+            extraAttrs: galleryMemberAttr(item)
+          });
         }).join('');
         return '<div class="gallery-grid">' + imgsHtml + '</div>';
       }
@@ -5384,13 +5411,19 @@
         if (mode === 'masonry') {
           return '<div class="gallery-alt gallery-alt--masonry">' + items.map(function(item, gi) {
             return '<div class="gallery-alt-masonry-cell"' + galleryMemberAttr(item) + '>' +
-              '<div class="gallery-grid-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
+              galleryLightboxTriggerHtml(item.url, {
+                className: 'gallery-grid-link',
+                editAttr: galleryItemEditAttr(item, gi)
+              }) + '</div>';
           }).join('') + '</div>';
         }
         if (mode === 'horizontal_strip') {
           return '<div class="gallery-alt gallery-alt--strip">' + items.map(function(item, gi) {
             return '<div class="gallery-alt-strip-item"' + galleryMemberAttr(item) + '>' +
-              '<div class="gallery-grid-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
+              galleryLightboxTriggerHtml(item.url, {
+                className: 'gallery-grid-link',
+                editAttr: galleryItemEditAttr(item, gi)
+              }) + '</div>';
           }).join('') + '</div>';
         }
         return '';
@@ -5404,7 +5437,7 @@
       }
       /** Quick edit: tap opens native gallery upload for slot `index`. */
       function galleryImageEditKeyAttr(index) {
-        return ' data-edit-key="galleryImage:' + index + '" role="button" aria-label="Change gallery photo"';
+        return ' data-edit-key="galleryImage:' + index + '" aria-label="Change gallery photo"';
       }
       /** Invisible full-bleed button so hero image slots stay tappable in app Quick edit (above overlays, under nothing). */
       function bkHeroImageHitButtonHtml() {
@@ -7692,10 +7725,23 @@
         return 'classic_grid';
       }
 
+      function galleryLightboxTriggerHtml(url, opts) {
+        opts = opts || {};
+        var className = opts.className || 'gallery-grid-link';
+        var editAttr = opts.editAttr || '';
+        var extraAttrs = opts.extraAttrs || '';
+        var loading = opts.loading === false ? '' : ' loading="lazy"';
+        return '<button type="button" class="' + className + ' gallery-lightbox-trigger" data-gallery-full="' + esc(url) + '"' + extraAttrs + '>' +
+          '<img' + editAttr + ' src="' + esc(url) + '" alt=""' + loading + '></button>';
+      }
+
       function galleryLightboxCell(url, linkClass, gi) {
         linkClass = linkClass || '';
         var editAttr = (typeof gi === 'number' && gi >= 0) ? galleryImageEditKeyAttr(gi) : '';
-        return '<div class="gallery-grid-link ' + linkClass + '"><img' + editAttr + ' src="' + esc(url) + '" alt="" loading="lazy"></div>';
+        return galleryLightboxTriggerHtml(url, {
+          className: ('gallery-grid-link ' + linkClass).trim(),
+          editAttr: editAttr
+        });
       }
 
       /** HTML for optional layouts (not used when style is `default`). */
@@ -7859,7 +7905,11 @@
             galleryBody = '<div class="s12-gallery-empty-state"><p class="s12-phil-body">' + esc(galleryPageEmptyHint(tenant)) + '</p></div>';
           } else if (gLay === 'classic_grid') {
             var imgs12 = gItems.map(function(item, gi) {
-              return '<div class="s12-g-item s12-fade"' + galleryMemberAttr(item) + '><div class="s12-gallery-full-link"><img' + galleryItemEditAttr(item, gi) + ' src="' + esc(item.url) + '" alt="" loading="lazy"></div></div>';
+              return '<div class="s12-g-item s12-fade"' + galleryMemberAttr(item) + '>' +
+                galleryLightboxTriggerHtml(item.url, {
+                  className: 's12-gallery-full-link',
+                  editAttr: galleryItemEditAttr(item, gi)
+                }) + '</div>';
             }).join('');
             galleryBody = '<div class="s12-gallery-page-grid" data-gallery-count="' + Math.min(gItems.length, 24) + '">' + imgs12 + '</div>';
           } else {
@@ -7874,7 +7924,8 @@
           }
           return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) +
             '<div class="' + s12LightClasses + ' gallery-page-band" data-bk-color-surface="gallery" data-bk-band-tappable>' +
-            bkColorBandInnerWrap(s12GalleryInner) + '</div>' + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
+            bkColorBandInnerWrap(s12GalleryInner) + '</div>' + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) +
+            galleryLightboxShellHtml() + '</div>';
         }
 
         var nav = isBladeTheme(tenant)
@@ -8012,7 +8063,10 @@
               var fk = 'featuredWork:' + fi;
               var slotUrl = featuredStripSlotUrl(gallery, fi);
               if (slotUrl) {
-                cells.push('<div class="tattoo-featured-cell"><img data-edit-key="' + esc(fk) + '" src="' + esc(slotUrl) + '" alt=""></div>');
+                cells.push(galleryLightboxTriggerHtml(slotUrl, {
+                  className: 'tattoo-featured-cell',
+                  editAttr: ' data-edit-key="' + esc(fk) + '"'
+                }));
               } else {
                 cells.push('<div class="tattoo-featured-cell tattoo-featured-slot-add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div>');
               }
@@ -8494,7 +8548,11 @@
         }
         var gUrls = galleryPageImageUrls(tenant);
         var gItems = gUrls.map(function(u, gi) {
-          return '<div class="s12-g-item s12-fade"><div class="s12-gallery-full-link"><img' + galleryImageEditKeyAttr(gi) + ' src="' + esc(u) + '" alt="" loading="lazy"></div></div>';
+          return '<div class="s12-g-item s12-fade">' +
+            galleryLightboxTriggerHtml(u, {
+              className: 's12-gallery-full-link',
+              editAttr: galleryImageEditKeyAttr(gi)
+            }) + '</div>';
         }).join('');
         if (!gItems) {
           gItems = '<div class="s12-g-item s12-fade"><div class="s12-hero-img-fallback"' + galleryImageEditKeyAttr(0) + ' style="min-height:280px"></div></div>';
@@ -8677,7 +8735,7 @@
           teamHomeSectionHtml(tenant) +
           '<div class="' + s12InfoClass + '" data-bk-color-surface="about" data-bk-band-tappable>' +
           bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' +
-          studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
+          studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + galleryLightboxShellHtml() + '</div>';
       }
 
       function hairTattooStyleHomePage(tenant, services) {
@@ -8886,8 +8944,10 @@
             var fk = 'featuredWork:' + i;
             var slotUrl = featuredStripSlotUrl(featuredImages, i);
             var imgTag = slotUrl
-              ? ('<div class="luxe-service-card-img-wrap">' +
-                '<img data-edit-key="' + esc(fk) + '" src="' + esc(slotUrl) + '" alt="" loading="lazy"></div>')
+              ? galleryLightboxTriggerHtml(slotUrl, {
+                  className: 'luxe-service-card-img-wrap',
+                  editAttr: ' data-edit-key="' + esc(fk) + '"'
+                })
               : ('<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder luxe-service-placeholder--add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo">\u2726</div></div>');
             serviceCards += '<div class="luxe-service-card">' +
               imgTag +
@@ -9066,7 +9126,6 @@
         var nextBtn = lb.querySelector('.gallery-lightbox-next');
         var counterEl = lb.querySelector('.gallery-lightbox-counter');
         if (!img) return;
-        var isStudio12Page = !!root.querySelector('.studio12-page');
         var urls = [];
         var idx = 0;
         function collectUrls() {
@@ -9074,7 +9133,10 @@
           var list = [];
           var seen = Object.create(null);
           for (var i = 0; i < triggers.length; i++) {
-            var u = triggers[i].getAttribute('data-gallery-full');
+            var t = triggers[i];
+            if (t.closest && t.closest('.gallery-item--hidden')) continue;
+            if (t.closest && t.closest('[aria-hidden="true"]')) continue;
+            var u = t.getAttribute('data-gallery-full');
             if (u && !seen[u]) {
               seen[u] = true;
               list.push(u);
@@ -9129,8 +9191,11 @@
           if (counterEl) counterEl.textContent = '';
         }
         root.addEventListener('click', function(e) {
+          // App Quick Edit owns image taps while editing.
+          if (document.getElementById('bk-quick-edit-style')) return;
           var t = e.target.closest('.gallery-lightbox-trigger');
           if (!t || !root.contains(t)) return;
+          if (t.closest('.gallery-item--hidden')) return;
           if (!t.getAttribute('data-gallery-full')) return;
           e.preventDefault();
           e.stopPropagation();
@@ -9155,21 +9220,19 @@
             goNext();
           });
         }
-        if (!isStudio12Page) {
-          var touchStartX = null;
-          img.addEventListener('touchstart', function(e) {
-            if (e.changedTouches.length !== 1) return;
-            touchStartX = e.changedTouches[0].clientX;
-          }, { passive: true });
-          img.addEventListener('touchend', function(e) {
-            if (touchStartX == null || e.changedTouches.length !== 1) return;
-            var dx = e.changedTouches[0].clientX - touchStartX;
-            touchStartX = null;
-            if (urls.length <= 1) return;
-            if (dx > 56) goPrev();
-            else if (dx < -56) goNext();
-          }, { passive: true });
-        }
+        var touchStartX = null;
+        img.addEventListener('touchstart', function(e) {
+          if (e.changedTouches.length !== 1) return;
+          touchStartX = e.changedTouches[0].clientX;
+        }, { passive: true });
+        img.addEventListener('touchend', function(e) {
+          if (touchStartX == null || e.changedTouches.length !== 1) return;
+          var dx = e.changedTouches[0].clientX - touchStartX;
+          touchStartX = null;
+          if (urls.length <= 1) return;
+          if (dx > 56) goPrev();
+          else if (dx < -56) goNext();
+        }, { passive: true });
       }
       function shopCartStorageKey(tenantId) {
         return 'bk_shop_cart_v1_' + tenantId;

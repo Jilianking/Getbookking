@@ -348,8 +348,20 @@ struct AppStatCard: View {
     let title: String
     let value: String
     let subtitle: String
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { cardContent }
+                    .buttonStyle(.plain)
+            } else {
+                cardContent
+            }
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.caption)

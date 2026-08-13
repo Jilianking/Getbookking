@@ -67,10 +67,6 @@ enum AdminSection: String, CaseIterable, Identifiable {
 
     static let drawerGroupOrder: [DrawerGroup] = [.main, .business, .more]
 
-    var showsBetaBadge: Bool {
-        self == .shop
-    }
-
     var icon: String {
         switch self {
         case .dashboard: return "square.grid.2x2.fill"
@@ -87,6 +83,11 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .settings: return "gear"
         }
     }
+}
+
+enum RequestsDeepLinkFilter: String, Equatable {
+    case newOnly
+    case confirmed
 }
 
 @Observable
@@ -107,6 +108,8 @@ final class DrawerState {
     var suppressDrawerEdgeOpen = false
     /// Dashboard Schedule quick action → Calendar + New Booking sheet.
     var calendarShouldOpenNewBooking = false
+    /// Dashboard New requests / Confirmed cards → Requests with matching filter chip.
+    var requestsInitialFilter: RequestsDeepLinkFilter?
     /// Incremented when the app tour advances — child views dismiss sheets / inline panels.
     var appTourDismissModalsToken: Int = 0
 
@@ -538,15 +541,6 @@ struct AdminRootView: View {
                     .font(.system(size: 15, weight: .medium))
                 Text(section.shortTitle)
                     .font(.subheadline.weight(selected ? .semibold : .regular))
-                if section.showsBetaBadge {
-                    Text("Beta")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(AppDesign.brandWarm)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(AppDesign.brandWarm.opacity(0.12))
-                        .clipShape(Capsule())
-                }
                 Spacer()
                 AppDrawerBadge(count: badgeCount(for: section))
                     .id(section == .requests ? sessionStore.unreadRequestsCount : 0)

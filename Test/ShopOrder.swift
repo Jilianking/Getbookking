@@ -45,11 +45,24 @@ struct ShopOrder: Identifiable, Equatable {
 
     var isUnread: Bool { readAt == nil }
 
-    var hasCustomerContact: Bool {
+    /// Stripe checkout placeholder until the customer provides a real email.
+    var isPlaceholderCustomerEmail: Bool {
+        let email = (customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return email.hasSuffix("@checkout.pending")
+    }
+
+    /// Real customer email, or nil when missing / checkout placeholder.
+    var realCustomerEmail: String? {
         let email = (customerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, !isPlaceholderCustomerEmail else { return nil }
+        return email
+    }
+
+    var hasCustomerContact: Bool {
         let phone = (customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let name = (customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return !name.isEmpty && (!email.isEmpty || !phone.isEmpty)
+        let hasEmail = realCustomerEmail != nil || isPlaceholderCustomerEmail
+        return !name.isEmpty && (hasEmail || !phone.isEmpty)
     }
 
     var statusLower: String {

@@ -35,6 +35,7 @@ struct ShopManagerView: View {
     let sectionTitle: String
 
     @State private var selectedTab: ShopManagerTab = .catalog
+    @State private var ordersFilter: ShopOrderFilter = .all
     @State private var showSettings = false
 
     var body: some View {
@@ -115,17 +116,23 @@ struct ShopManagerView: View {
                 value: viewModel.shopOrders.isEmpty ? "—" : String(format: "$%.0f", Double(viewModel.shopOrdersRevenueCents) / 100.0),
                 caption: "Revenue",
                 valueColor: AppDesign.accentBlue
-            )
+            ) {
+                showOrders()
+            }
             ShopStatTile(
                 value: viewModel.shopOrders.isEmpty ? "—" : "\(viewModel.shopOrders.count)",
                 caption: "Orders",
                 valueColor: AppDesign.accentRed
-            )
+            ) {
+                showOrders()
+            }
             ShopStatTile(
                 value: "\(viewModel.products.count)",
                 caption: "Products",
                 valueColor: AppDesign.textPrimary
-            )
+            ) {
+                withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .catalog }
+            }
         }
     }
 
@@ -172,10 +179,15 @@ struct ShopManagerView: View {
         case .catalog:
             ShopProductCatalogContent(viewModel: viewModel, style: .hub)
         case .orders:
-            ShopOrdersTabContent(viewModel: viewModel, drawerState: drawerState)
+            ShopOrdersTabContent(viewModel: viewModel, drawerState: drawerState, filter: $ordersFilter)
         case .analytics:
-            ShopAnalyticsTabContent(viewModel: viewModel)
+            ShopAnalyticsTabContent(viewModel: viewModel, onShowOrders: showOrders)
         }
+    }
+
+    private func showOrders(_ filter: ShopOrderFilter = .all) {
+        ordersFilter = filter
+        withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .orders }
     }
 }
 
@@ -183,6 +195,7 @@ struct ShopManagerView: View {
 
 private struct ShopAnalyticsTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
+    var onShowOrders: (ShopOrderFilter) -> Void = { _ in }
     @State private var selectedRange: ShopAnalyticsRange = .days30
 
     private var snapshot: ShopAnalyticsSnapshot {
@@ -240,10 +253,18 @@ private struct ShopAnalyticsTabContent: View {
                 .padding(.vertical, 28)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    ShopAnalyticsMetricTile(title: "Revenue", value: snapshot.formattedTotalRevenue, tint: AppDesign.accentBlue)
-                    ShopAnalyticsMetricTile(title: "Orders", value: "\(snapshot.orderCount)", tint: AppDesign.accentRed)
-                    ShopAnalyticsMetricTile(title: "Avg order", value: snapshot.orderCount > 0 ? snapshot.formattedAverageOrder : "—", tint: AppDesign.textPrimary)
-                    ShopAnalyticsMetricTile(title: "Fulfilled", value: snapshot.formattedFulfillmentRate, tint: AppDesign.accentGreen)
+                    ShopAnalyticsMetricTile(title: "Revenue", value: snapshot.formattedTotalRevenue, tint: AppDesign.accentBlue) {
+                        onShowOrders(.all)
+                    }
+                    ShopAnalyticsMetricTile(title: "Orders", value: "\(snapshot.orderCount)", tint: AppDesign.accentRed) {
+                        onShowOrders(.all)
+                    }
+                    ShopAnalyticsMetricTile(title: "Avg order", value: snapshot.orderCount > 0 ? snapshot.formattedAverageOrder : "—", tint: AppDesign.textPrimary) {
+                        onShowOrders(.all)
+                    }
+                    ShopAnalyticsMetricTile(title: "Fulfilled", value: snapshot.formattedFulfillmentRate, tint: AppDesign.accentGreen) {
+                        onShowOrders(.fulfilled)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -256,12 +277,15 @@ private struct ShopAnalyticsTabContent: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(snapshot.dailyRevenue) { row in
-                            ShopAnalyticsBarRow(
-                                label: row.label,
-                                valueLabel: row.revenueCents > 0 ? row.formattedRevenue : "—",
-                                value: row.revenueCents,
-                                maxValue: max(maxDailyRevenue, 1)
-                            )
+                            Button { onShowOrders(.all) } label: {
+                                ShopAnalyticsBarRow(
+                                    label: row.label,
+                                    valueLabel: row.revenueCents > 0 ? row.formattedRevenue : "—",
+                                    value: row.revenueCents,
+                                    maxValue: max(maxDailyRevenue, 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -278,12 +302,15 @@ private struct ShopAnalyticsTabContent: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(snapshot.topProducts) { product in
-                            ShopAnalyticsBarRow(
-                                label: product.name,
-                                valueLabel: product.formattedRevenue,
-                                value: product.revenueCents,
-                                maxValue: max(maxProductRevenue, 1)
-                            )
+                            Button { onShowOrders(.all) } label: {
+                                ShopAnalyticsBarRow(
+                                    label: product.name,
+                                    valueLabel: product.formattedRevenue,
+                                    value: product.revenueCents,
+                                    maxValue: max(maxProductRevenue, 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -297,9 +324,15 @@ private struct ShopAnalyticsTabContent: View {
                         Spacer()
                     }
                     HStack(spacing: 8) {
-                        ShopAnalyticsStatusChip(label: "Pending", count: snapshot.pendingCount, color: AppDesign.brandWarm)
-                        ShopAnalyticsStatusChip(label: "Fulfilled", count: snapshot.fulfilledCount, color: AppDesign.accentGreen)
-                        ShopAnalyticsStatusChip(label: "Cancelled", count: snapshot.cancelledCount, color: AppDesign.textSecondary)
+                        ShopAnalyticsStatusChip(label: "Pending", count: snapshot.pendingCount, color: AppDesign.brandWarm) {
+                            onShowOrders(.pending)
+                        }
+                        ShopAnalyticsStatusChip(label: "Fulfilled", count: snapshot.fulfilledCount, color: AppDesign.accentGreen) {
+                            onShowOrders(.fulfilled)
+                        }
+                        ShopAnalyticsStatusChip(label: "Cancelled", count: snapshot.cancelledCount, color: AppDesign.textSecondary) {
+                            onShowOrders(.cancelled)
+                        }
                     }
                 }
                 .padding(14)
@@ -328,8 +361,20 @@ private struct ShopAnalyticsMetricTile: View {
     let title: String
     let value: String
     var tint: Color = AppDesign.textPrimary
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { tileContent }
+                    .buttonStyle(.plain)
+            } else {
+                tileContent
+            }
+        }
+    }
+
+    private var tileContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.caption2)
@@ -384,8 +429,20 @@ private struct ShopAnalyticsStatusChip: View {
     let label: String
     let count: Int
     let color: Color
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { chipContent }
+                    .buttonStyle(.plain)
+            } else {
+                chipContent
+            }
+        }
+    }
+
+    private var chipContent: some View {
         VStack(spacing: 4) {
             Text("\(count)")
                 .font(.subheadline.weight(.bold))
@@ -440,8 +497,8 @@ private enum ShopOrderFilter: String, CaseIterable, Identifiable {
 private struct ShopOrdersTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
     var drawerState: DrawerState
+    @Binding var filter: ShopOrderFilter
     @State private var searchText = ""
-    @State private var filter: ShopOrderFilter = .all
     @State private var selectedOrder: ShopOrder?
 
     private var filteredOrders: [ShopOrder] {
@@ -609,6 +666,12 @@ private struct ShopOrderDetailSheet: View {
     @State private var contactInAddressBook = false
     @State private var contactCheckDone = false
     @State private var contactSaved = false
+    @State private var copiedField: CopiedContactField?
+
+    private enum CopiedContactField: Equatable {
+        case email
+        case phone
+    }
 
     private var currentOrder: ShopOrder {
         viewModel.shopOrders.first(where: { $0.id == order.id }) ?? order
@@ -644,28 +707,26 @@ private struct ShopOrderDetailSheet: View {
                                 Label(name, systemImage: "person.fill")
                                     .font(.subheadline)
                             }
-                            if let email = currentOrder.customerEmail?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
-                                Label(email, systemImage: "envelope.fill")
-                                    .font(.subheadline)
-                            }
-                            if let phone = currentOrder.customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty {
-                                Label(phone, systemImage: "phone.fill")
-                                    .font(.subheadline)
-                            }
-                            if contactCheckDone && !contactInAddressBook {
-                                Button {
-                                    Task {
-                                        contactSaved = await viewModel.addShopOrderCustomerToContacts(currentOrder)
-                                        if contactSaved { contactInAddressBook = true }
+                            contactEmailRow
+                            contactPhoneRow
+                            let canSaveContact = currentOrder.realCustomerEmail != nil
+                                || !(currentOrder.customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+                            if canSaveContact {
+                                if contactCheckDone && !contactInAddressBook {
+                                    Button {
+                                        Task {
+                                            contactSaved = await viewModel.addShopOrderCustomerToContacts(currentOrder)
+                                            if contactSaved { contactInAddressBook = true }
+                                        }
+                                    } label: {
+                                        Label("Add to contacts", systemImage: "person.crop.circle.badge.plus")
+                                            .font(.subheadline.weight(.medium))
                                     }
-                                } label: {
-                                    Label("Add to contacts", systemImage: "person.crop.circle.badge.plus")
-                                        .font(.subheadline.weight(.medium))
+                                } else if contactInAddressBook || contactSaved {
+                                    Label("Saved to contacts", systemImage: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AppDesign.accentGreen)
                                 }
-                            } else if contactInAddressBook || contactSaved {
-                                Label("Saved to contacts", systemImage: "checkmark.circle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(AppDesign.accentGreen)
                             }
                         }
                         .padding(14)
@@ -754,6 +815,92 @@ private struct ShopOrderDetailSheet: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var contactEmailRow: some View {
+        if let email = currentOrder.realCustomerEmail {
+            Button {
+                copyContactValue(email, field: .email)
+            } label: {
+                HStack(spacing: 8) {
+                    Label(email, systemImage: "envelope.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Image(systemName: copiedField == .email ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(copiedField == .email ? AppDesign.accentGreen : AppDesign.textSecondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(copiedField == .email ? "Email copied" : "Copy email")
+            .contextMenu {
+                Button {
+                    copyContactValue(email, field: .email)
+                } label: {
+                    Label("Copy Email", systemImage: "doc.on.doc")
+                }
+                if let mailURL = URL(string: "mailto:\(email)") {
+                    Link(destination: mailURL) {
+                        Label("Send Email", systemImage: "envelope")
+                    }
+                }
+            }
+        } else if currentOrder.isPlaceholderCustomerEmail {
+            Label("Email pending", systemImage: "envelope")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var contactPhoneRow: some View {
+        if let phone = currentOrder.customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty {
+            Button {
+                copyContactValue(phone, field: .phone)
+            } label: {
+                HStack(spacing: 8) {
+                    Label(phone, systemImage: "phone.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Image(systemName: copiedField == .phone ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(copiedField == .phone ? AppDesign.accentGreen : AppDesign.textSecondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(copiedField == .phone ? "Phone copied" : "Copy phone")
+            .contextMenu {
+                Button {
+                    copyContactValue(phone, field: .phone)
+                } label: {
+                    Label("Copy Phone", systemImage: "doc.on.doc")
+                }
+                let digits = phone.filter(\.isNumber)
+                if !digits.isEmpty, let telURL = URL(string: "tel:\(digits)") {
+                    Link(destination: telURL) {
+                        Label("Call", systemImage: "phone")
+                    }
+                }
+            }
+        }
+    }
+
+    private func copyContactValue(_ value: String, field: CopiedContactField) {
+        UIPasteboard.general.string = value
+        copiedField = field
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                if copiedField == field { copiedField = nil }
+            }
+        }
+    }
 }
 
 // MARK: - Settings sheet
@@ -804,43 +951,6 @@ private struct ShopSettingsSheet: View {
                                             ? "Shippo live rates on"
                                             : "Pickup and Shippo rates"
                                     )
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        Divider().padding(.leading, 14)
-
-                        NavigationLink {
-                            ShopComingSoonView(
-                                title: "Store settings",
-                                tint: .gray,
-                                bullets: [
-                                    "Currency & locale",
-                                    "Policies (returns, privacy)",
-                                    "Shop URL & branding",
-                                ]
-                            )
-                        } label: {
-                            HStack(alignment: .center, spacing: 12) {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 28, alignment: .center)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Store settings")
-                                        .font(.body.weight(.medium))
-                                        .foregroundStyle(Color.primary)
-                                    Text("Currency, policies")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -909,8 +1019,20 @@ private struct ShopStatTile: View {
     let value: String
     let caption: String
     var valueColor: Color = AppDesign.textPrimary
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let action {
+                Button(action: action) { tileContent }
+                    .buttonStyle(.plain)
+            } else {
+                tileContent
+            }
+        }
+    }
+
+    private var tileContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(value)
                 .font(.title3.weight(.bold))

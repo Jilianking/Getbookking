@@ -15,7 +15,7 @@ enum WebViewQuickEditEvent {
     /// Open `PreviewQuickEditSheet` (or service / hero flows) in SwiftUI.
     case openSheet(key: String, initialText: String)
     /// Persist multiple edited fields after Quick edit is turned off (single preview reload).
-    case inlineSaveBatch(changes: [String: String])
+    case inlineSaveBatch(changes: [String: String], previous: [String: String])
     /// Inline text field is active (font stepper + navigation in `PreviewQuickEditChrome`).
     case inlineFocus(QuickEditInlineFocus)
     /// Inline text field closed without turning off quick edit.
@@ -29,6 +29,8 @@ enum WebViewQuickEditEvent {
 /// Native → WebView commands while quick edit is active.
 final class WebViewQuickEditBridge {
     weak var coordinator: WebViewRepresentable.Coordinator?
+    /// Mirrored so reinstall of the injected script can restore paint mode.
+    private(set) var backgroundPaintArmed = false
 
     func navigateEditable(delta: Int) {
         coordinator?.evaluateQuickEdit("window.__bkQuickEditNavigateEditable&&window.__bkQuickEditNavigateEditable(\(delta))")
@@ -48,6 +50,23 @@ final class WebViewQuickEditBridge {
 
     func showEmptyTextSlots() {
         coordinator?.evaluateQuickEdit("window.__bkQuickEditShowEmptyTextSlots&&window.__bkQuickEditShowEmptyTextSlots()")
+    }
+
+    /// When true, band / CTA color taps work as before; text/sheet taps are ignored. When false, color taps are ignored.
+    func setBackgroundPaintMode(_ enabled: Bool) {
+        backgroundPaintArmed = enabled
+        let flag = enabled ? "true" : "false"
+        coordinator?.evaluateQuickEdit(
+            "window.__bkQuickEditSetBackgroundPaint&&window.__bkQuickEditSetBackgroundPaint(\(flag))"
+        )
+    }
+
+    func applyTextOverrides(_ map: [String: String]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: map),
+              let json = String(data: data, encoding: .utf8) else { return }
+        coordinator?.evaluateQuickEdit(
+            "window.__bkQuickEditApplyTextMap&&window.__bkQuickEditApplyTextMap(\(json))"
+        )
     }
 
     func schedulePreviewColorPatch(_ payload: [String: String], full: Bool = false) {
@@ -117,11 +136,13 @@ struct WebViewRepresentable: UIViewRepresentable {
         webView.scrollView.bounces = false
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
+        context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
         context.coordinator.onQuickEdit = onQuickEdit
         context.coordinator.quickEditEnabled = quickEditEnabled
@@ -141,6 +162,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         let messageHandlerName: String
         var lastLoadedURL: URL?
         weak var webView: WKWebView?
+        weak var bridge: WebViewQuickEditBridge?
         var quickEditEnabled = false
         var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
         /// Avoid re-running `installQuickEdit` on every `updateUIView` — reinstall calls JS cleanup, which commits inline edits and triggers a full preview reload.
@@ -190,8 +212,9 @@ struct WebViewRepresentable: UIViewRepresentable {
             pendingColorPatch = nil
             pendingColorPatchNeedsFull = false
             let opts = full ? "{full:true}" : "{full:false}"
+            // Ensure patch fn exists (hosting may be stale; cleanup must not leave us without it).
             evaluateQuickEdit(
-                "window.__bkApplyPreviewColorPatch&&window.__bkApplyPreviewColorPatch(\(json),\(opts))"
+                "(window.__bkQuickEditEnsureColorPatch&&window.__bkQuickEditEnsureColorPatch(),window.__bkApplyPreviewColorPatch&&window.__bkApplyPreviewColorPatch(\(json),\(opts)))"
             )
         }
 
@@ -227,7 +250,14 @@ struct WebViewRepresentable: UIViewRepresentable {
                     if let s = v as? String { changes[k] = s }
                     else if let n = v as? NSNumber { changes[k] = n.stringValue }
                 }
-                event = .inlineSaveBatch(changes: changes)
+                var previous: [String: String] = [:]
+                if let rawPrev = body["previous"] as? [String: Any] {
+                    for (k, v) in rawPrev {
+                        if let s = v as? String { previous[k] = s }
+                        else if let n = v as? NSNumber { previous[k] = n.stringValue }
+                    }
+                }
+                event = .inlineSaveBatch(changes: changes, previous: previous)
             } else if action == "inlineFocus",
                       let key = body["key"] as? String {
                 let fontSize = (body["fontSize"] as? NSNumber)?.intValue ?? 16
@@ -315,6 +345,8 @@ struct WebViewRepresentable: UIViewRepresentable {
             (function(){
               if (window.__bkQuickEditCleanup) { try { window.__bkQuickEditCleanup(false); } catch(e) {} }
               var dirty = {};
+              var dirtyPrev = {};
+              var editBaseline = {};
               var inlinePrevText = '';
               // Button labels must stay non-empty so the blue text hit target never collapses.
               var requiredCtaDefaults = {
@@ -353,7 +385,33 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var k = el.getAttribute('data-edit-key');
                 if (!k || isSheetOnlyKey(k)) return;
                 ensureRequiredCtaLabel(el);
+                if (!(k in dirtyPrev)) {
+                  dirtyPrev[k] = (k in editBaseline) ? editBaseline[k] : currentText(el);
+                }
                 dirty[k] = currentText(el);
+              }
+              function flushDirtyToNative() {
+                var keys = Object.keys(dirty);
+                if (!keys.length) {
+                  dirtyPrev = {};
+                  return;
+                }
+                var changes = {};
+                var previous = {};
+                keys.forEach(function(k) {
+                  var next = dirty[k] == null ? '' : String(dirty[k]);
+                  var prev = (k in dirtyPrev)
+                    ? String(dirtyPrev[k])
+                    : ((k in editBaseline) ? String(editBaseline[k]) : '');
+                  if (next !== prev) {
+                    changes[k] = next;
+                    previous[k] = prev;
+                  }
+                });
+                dirty = {};
+                dirtyPrev = {};
+                if (!Object.keys(changes).length) return;
+                postToNative({ action: 'inlineSaveBatch', changes: changes, previous: previous });
               }
               var sheet = document.createElement('style');
               sheet.id = 'bk-quick-edit-style';
@@ -361,14 +419,14 @@ struct WebViewRepresentable: UIViewRepresentable {
               var bkCtaButtonSelector = 'a.classic-btn-primary,a.classic-btn-ghost,a.luxe-hero-cta,a.luxe-promo-cta,a.tattoo-gallery-link,a.blade-btn-primary,a.blade-btn-ghost,a.blade-nav-book,a.stonecut-btn,a.s12-btn-dark,a.s12-btn-outline,a.s12-nav-book,a.s12-gallery-link';
               sheet.textContent = '[data-edit-key]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;-webkit-tap-highlight-color:rgba(0,122,255,0.12);}' +
                 '[data-edit-key][data-bk-inline-editing]{cursor:text!important;outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
-                bkGroupedTextSelector + '{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;}' +
+                // Grouped titles: one tight outline around the text block (not full band width).
+                bkGroupedTextSelector + '{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:4px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;border-radius:2px!important;width:fit-content!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 bkGroupedTextSelector + ' [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
-                // CTA chrome is for color; the nested label keeps the blue text outline (Featured Work–style).
+                // CTA chrome: no outer button box; nested label keeps the blue text outline.
                 bkCtaButtonSelector + '{cursor:pointer!important;outline:none!important;box-shadow:none!important;}' +
                 bkCtaButtonSelector + ' [data-edit-key]{cursor:text!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 bkCtaButtonSelector + ' [data-edit-key][data-bk-inline-editing]{outline:2.5px dashed rgba(0,122,255,0.88)!important;outline-offset:3px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.85),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '.luxe-hero-cta [data-edit-key],.luxe-promo-cta [data-edit-key],a.luxe-hero-cta [data-edit-key],a.luxe-promo-cta [data-edit-key],.classic-btn-primary [data-edit-key],.classic-btn-ghost [data-edit-key],a.classic-btn-primary [data-edit-key],a.classic-btn-ghost [data-edit-key],.tattoo-gallery-link [data-edit-key],.blade-btn-primary [data-edit-key],.blade-btn-ghost [data-edit-key],a.blade-btn-primary [data-edit-key],a.blade-btn-ghost [data-edit-key],a.blade-nav-book [data-edit-key]{display:inline-block!important;box-sizing:border-box!important;}' +
-                // Keep empty / T+ CTA labels large enough to type into; padding outside still hits button color.
                 bkCtaButtonSelector + ' [data-edit-key][data-bk-empty-slot]{min-width:7em!important;width:auto!important;max-width:100%!important;}' +
 
                 '[data-edit-key^="svc:"][data-edit-key$=":edit"] [data-edit-key],[data-edit-key^="s12Process:"][data-edit-key$=":edit"] [data-edit-key],div.s12-process-cell[data-edit-key] [data-edit-key]{outline:none!important;box-shadow:none!important;}' +
@@ -380,28 +438,33 @@ struct WebViewRepresentable: UIViewRepresentable {
                 'a.s12-nav-book [data-edit-key],a.s12-btn-dark [data-edit-key],a.s12-btn-outline [data-edit-key],.luxe-contact-item h3 [data-edit-key],.s12-phil-label [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
                 '[data-edit-key^="s12Process:"][data-edit-key$=":body"]{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin-top:4px!important;}' +
                 '.s12-footer-brand [data-edit-key]{display:inline-block!important;margin:0 3px!important;}' +
+                // Pictures keep blue outlines; hero image hit button itself stays invisible.
                 'button.bk-hero-image-hit[data-edit-key="heroImage"],button.luxe-hero-image-hit[data-edit-key="heroImage"]{outline:none!important;outline-offset:0!important;box-shadow:none!important;}' +
-                '.luxe-hero:has(.bk-hero-image-hit),.blade-hero-right:has(.bk-hero-image-hit),.stonecut-hero-right:has(.bk-hero-image-hit),.studio12-page .s12-hero-img-col:has(.bk-hero-image-hit){box-shadow:inset 0 0 0 2px rgba(0,122,255,0.68)!important;}' +
-                '.classic-hero-right:has(.bk-hero-image-hit),.classic-hero-right:has([data-edit-key="heroImage"]){outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;overflow:visible!important;}' +
                 '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;cursor:pointer!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 'img[data-edit-key="heroImage"],img[data-edit-key^="galleryImage"],img[data-edit-key^="featuredWork"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],img[data-edit-key="classicAboutImage"],' +
                 '[data-edit-key^="featuredWork"].luxe-service-placeholder,[data-edit-key^="featuredWork"].tattoo-featured-slot-add,[data-edit-key^="featuredWork"].tattoo-featured-cell,.tattoo-featured-placeholder[data-edit-key],' +
                 '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback,[data-edit-key="classicAboutImage"].classic-about-photo--empty' +
                 '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 '[data-bk-color-surface] [data-edit-key]{display:inline-block!important;max-width:100%!important;box-sizing:border-box!important;}' +
-                '[data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;box-shadow:none!important;}' +
-                '[data-bk-color-surface][data-bk-color-active]{outline:3px dashed rgba(0,122,255,0.88)!important;}' +
+                // Studio 12: nav Book Now is desktop-only; keep it hidden on mobile even in Quick Edit.
+                '@media (max-width:900px){.studio12-page .s12-nav-trailing .s12-nav-book,.studio12-page .s12-nav-trailing a.s12-nav-book[data-edit-key],.studio12-page .s12-nav-trailing a.s12-nav-book[data-bk-empty-slot]{display:none!important;}}' +
+                // No idle full-band blue boxes — only while Background paint mode is armed.
+                '[data-bk-color-surface]{outline:none!important;box-shadow:none!important;}' +
+                'html[data-bk-paint-mode] [data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.55)!important;outline-offset:0!important;box-shadow:none!important;}' +
+                'html[data-bk-paint-mode] [data-bk-color-surface][data-bk-color-active]{outline:3px dashed rgba(0,122,255,0.88)!important;}' +
                 bkGroupedTextSelector + '[data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 bkGroupedTextSelector + '[data-bk-quick-edit-selected] [data-edit-key],' + bkGroupedTextSelector + ':has([data-bk-inline-editing]) [data-edit-key],'+ bkGroupedTextSelector + ':has([data-bk-inline-editing]) [data-edit-key][data-bk-inline-editing]{outline:none!important;box-shadow:none!important;}' +
                 bkGroupedTextSelector + ':has([data-bk-inline-editing]){position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '[data-edit-key][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
-                '[data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                'html[data-bk-paint-mode] [data-bk-color-surface][data-bk-quick-edit-selected]{position:relative!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 '[data-edit-key][data-bk-inline-editing][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38),0 0 0 4px rgba(0,122,255,0.18)!important;}' +
                 '[data-edit-key][data-bk-empty-slot]{display:inline-flex!important;align-items:center!important;box-sizing:border-box!important;min-width:132px!important;max-width:100%!important;min-height:30px!important;padding:4px 8px!important;border:1px dashed rgba(0,122,255,0.72)!important;border-radius:5px!important;background:rgba(0,122,255,0.12)!important;color:#007aff!important;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif!important;line-height:20px!important;vertical-align:middle!important;cursor:text!important;}' +
-                'a.classic-btn-primary[data-bk-quick-edit-selected],a.classic-btn-ghost[data-bk-quick-edit-selected],a.luxe-hero-cta[data-bk-quick-edit-selected],a.luxe-promo-cta[data-bk-quick-edit-selected],a.tattoo-gallery-link[data-bk-quick-edit-selected],a.blade-btn-primary[data-bk-quick-edit-selected],a.blade-btn-ghost[data-bk-quick-edit-selected],a.blade-nav-book[data-bk-quick-edit-selected],a.stonecut-btn[data-bk-quick-edit-selected],a.s12-btn-dark[data-bk-quick-edit-selected],a.s12-btn-outline[data-bk-quick-edit-selected],a.s12-nav-book[data-bk-quick-edit-selected],a.s12-gallery-link[data-bk-quick-edit-selected]{display:inline-block!important;box-sizing:border-box!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
+                // Selected CTA: highlight the label, not the whole button chrome.
+                bkCtaButtonSelector + '[data-bk-quick-edit-selected]{outline:none!important;box-shadow:none!important;}' +
+                bkCtaButtonSelector + '[data-bk-quick-edit-selected] [data-edit-key],'+ bkCtaButtonSelector + ':has([data-bk-inline-editing]) [data-edit-key]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:3px!important;border-radius:8px!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,0.2),0 0 0 1px rgba(255,255,255,0.38)!important;}' +
                 'button.bk-hero-image-hit[data-bk-quick-edit-selected],button.luxe-hero-image-hit[data-bk-quick-edit-selected]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
                 'img[data-edit-key][data-bk-quick-edit-selected]{outline:2px solid rgba(255,255,255,0.92)!important;outline-offset:2px!important;}' +
-                'button.bk-color-band-hit,button.bk-hero-band-hit{outline:none!important;box-shadow:none!important;cursor:pointer!important;}' +
+                'button.bk-color-band-hit,button.bk-hero-band-hit{outline:none!important;box-shadow:none!important;cursor:pointer!important;pointer-events:auto!important;}' +
                 '[data-bk-band-tappable]{position:relative!important;}' +
                 '.bk-band-content,.blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
                 '.bk-band-content [data-edit-key],.bk-band-content a,.bk-band-content button,.bk-band-content [role="button"],' +
@@ -517,6 +580,31 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var el = ev.target;
                 while (el && el.nodeType !== 1) el = el.parentNode;
                 if (!el || !el.closest) return { type: 'none' };
+                // Background paint mode: prefer section/button color over text hits.
+                if (isBackgroundPaintArmed()) {
+                  var ctaPaint = el.closest(bkCtaButtonSelector);
+                  if (ctaPaint) return { type: 'buttonColor', el: ctaPaint };
+                  if (isHeroImageQuickEditTarget(el)) return { type: 'none' };
+                  if (isLuxeHeroPhotoSurface(el)) return { type: 'none' };
+                  var surfPaint = el.closest('[data-bk-color-surface]');
+                  if (surfPaint) {
+                    var sidPaint = surfPaint.getAttribute('data-bk-color-surface');
+                    if (sidPaint === 'hero' && isHeroImageColumnTarget(el)) {
+                      return { type: 'none' };
+                    }
+                    if (sidPaint) {
+                      return { type: 'color', surface: sidPaint, el: surfPaint };
+                    }
+                  }
+                  if (isBandOpenSpaceTap(el)) {
+                    var bandPaint = el.closest('[data-bk-color-surface]');
+                    if (bandPaint) {
+                      var sidBandPaint = bandPaint.getAttribute('data-bk-color-surface');
+                      if (sidBandPaint) return { type: 'color', surface: sidBandPaint, el: bandPaint };
+                    }
+                  }
+                  return { type: 'none' };
+                }
                 // Restored template slots must take precedence over surrounding hero/image hit targets.
                 var emptySlot = el.closest('[data-bk-empty-slot]');
                 if (emptySlot) return { type: 'text', el: emptySlot };
@@ -593,7 +681,11 @@ struct WebViewRepresentable: UIViewRepresentable {
               function resolveHighlightTarget(el) {
                 if (!el || !el.closest) return el;
                 var btn = el.closest(bkCtaButtonSelector);
-                if (btn && btn.querySelector('[data-edit-key]')) return btn;
+                if (btn) {
+                  var labelHit = btn.querySelector('[data-edit-key]');
+                  if (labelHit) return labelHit;
+                  return btn;
+                }
                 var innerKey = el.closest('[data-edit-key]');
                 if (innerKey) {
                   var grouped = innerKey.closest(bkGroupedTextSelector);
@@ -746,6 +838,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 noteDirtyFrom(inlineEl);
                 stripEditableShell(inlineEl);
                 inlineEl = null;
+                flushDirtyToNative();
                 postInlineBlur();
               }
               function onInlineBlur() {
@@ -763,6 +856,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!host) return;
                 var k = host.getAttribute('data-edit-key');
                 if (!k || isSheetOnlyKey(k)) return;
+                if (!(k in dirtyPrev)) dirtyPrev[k] = (k in editBaseline) ? editBaseline[k] : '';
                 dirty[k] = currentText(host);
               }
               function startInline(t) {
@@ -783,6 +877,8 @@ struct WebViewRepresentable: UIViewRepresentable {
                   t.textContent = requiredCtaDefaults[t.getAttribute('data-edit-key')] || 'Book now';
                   inlinePrevText = currentText(t);
                 }
+                var baselineKey = t.getAttribute('data-edit-key');
+                if (baselineKey) editBaseline[baselineKey] = inlinePrevText;
                 inlineEl = t;
                 setQuickEditSelected(t);
                 t.setAttribute('contenteditable', 'true');
@@ -806,18 +902,26 @@ struct WebViewRepresentable: UIViewRepresentable {
                 setQuickEditSelected(el);
                 postToNative({ action: 'openChromeColor', target: targetId || 'button' });
               }
+              function isBackgroundPaintArmed() {
+                return !!window.__bkQuickEditBackgroundPaint;
+              }
               function activateQuickEditHit(hit) {
                 if (!hit || hit.type === 'none') return;
+                var paint = isBackgroundPaintArmed();
                 if (hit.type === 'color') {
+                  if (!paint) return;
                   if (inlineEl) finishActiveInlineNoSave();
                   openColorSurface(hit.surface, hit.el);
                   return;
                 }
                 if (hit.type === 'buttonColor') {
+                  if (!paint) return;
                   if (inlineEl) finishActiveInlineNoSave();
                   openChromeColorTarget('button', hit.el);
                   return;
                 }
+                // Paint mode is color-only; ignore text / image / sheet hits.
+                if (paint) return;
                 var t = hit.el;
                 if (!t || !t.isConnected) return;
                 if (hit.type === 'sheet') {
@@ -851,7 +955,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 touchEditHit = hit;
                 var touchTarget = ev.target;
                 while (touchTarget && touchTarget.nodeType !== 1) touchTarget = touchTarget.parentNode;
-                if (hit.type === 'color' && hit.surface === 'hero' && isHeroImageQuickEditTarget(touchTarget)) {
+                if (!isBackgroundPaintArmed()) {
+                  /* Color long-press only while Background paint mode is armed. */
+                } else if (hit.type === 'color' && hit.surface === 'hero' && isHeroImageQuickEditTarget(touchTarget)) {
                   if (isLuxeHeroPhotoSurface(touchTarget)) {
                     /* Luxe hero is photo-only; no long-press color. */
                   } else {
@@ -956,11 +1062,40 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (h) inlineEl.style.color = h;
               };
               window.__bkQuickEditCommitDirty = function() {
-                finishActiveInlineNoSave();
-                var keys = Object.keys(dirty);
-                if (keys.length) {
-                  postToNative({ action: 'inlineSaveBatch', changes: dirty });
-                  dirty = {};
+                if (inlineEl) {
+                  noteDirtyFrom(inlineEl);
+                  stripEditableShell(inlineEl);
+                  inlineEl = null;
+                  postInlineBlur();
+                }
+                flushDirtyToNative();
+              };
+              window.__bkQuickEditApplyTextMap = function(map) {
+                if (!map) return;
+                Object.keys(map).forEach(function(k) {
+                  var el = null;
+                  [].forEach.call(document.querySelectorAll('[data-edit-key]'), function(node) {
+                    if (!el && node.getAttribute('data-edit-key') === k) el = node;
+                  });
+                  if (!el) return;
+                  var val = map[k] == null ? '' : String(map[k]);
+                  el.textContent = val;
+                  if (val) {
+                    el.removeAttribute('data-bk-empty-slot');
+                    el.removeAttribute('data-bk-empty-slot-label');
+                    el.classList.remove('bk-copy-empty');
+                  }
+                });
+              };
+              window.__bkQuickEditBackgroundPaint = false;
+              window.__bkQuickEditSetBackgroundPaint = function(on) {
+                window.__bkQuickEditBackgroundPaint = !!on;
+                if (on) {
+                  if (inlineEl) finishActiveInlineNoSave();
+                  try { document.documentElement.setAttribute('data-bk-paint-mode', '1'); } catch (e) {}
+                } else {
+                  try { document.documentElement.removeAttribute('data-bk-paint-mode'); } catch (e2) {}
+                  setActiveColorSurface(null);
                 }
               };
               function ensureColorBandHitAndWrap(el) {
@@ -1006,15 +1141,64 @@ struct WebViewRepresentable: UIViewRepresentable {
                 });
               }
               upgradeColorBandTaps();
+              /* Live color updates: keep page fn if present; otherwise install a fallback so paint works
+                 even when hosting HTML is behind the app or a prior cleanup wiped the global. */
+              window.__bkQuickEditEnsureColorPatch = function() {
+                if (typeof window.__bkApplyPreviewColorPatch === 'function') return;
+                window.__bkApplyPreviewColorPatch = function(patch, opts) {
+                  if (!patch) return;
+                  var root = document.documentElement;
+                  function setVar(k, v) { if (v) root.style.setProperty(k, v); }
+                  setVar('--bk-bg', patch.backgroundColor);
+                  setVar('--bk-fg', patch.textColor);
+                  setVar('--bk-card', patch.cardSurfaceColor);
+                  setVar('--bk-accent', patch.primaryColor);
+                  setVar('--bk-accent-hover', patch.primaryColorHover);
+                  setVar('--bk-featured-bg', patch.featuredWorkBackgroundColor);
+                  setVar('--bk-featured-fg', patch.featuredWorkTextColor);
+                  setVar('--bk-gallery-bg', patch.galleryPageBackgroundColor);
+                  setVar('--bk-gallery-fg', patch.galleryPageTextColor);
+                  setVar('--bk-about-bg', patch.aboutSectionBackgroundColor);
+                  setVar('--bk-about-fg', patch.aboutSectionTextColor);
+                  if (patch.heroSlotBg) setVar('--bk-hero-slot-bg', patch.heroSlotBg);
+                  if (patch.backgroundColor) {
+                    document.body.style.background = patch.backgroundColor;
+                    document.body.style.backgroundImage = '';
+                    if (patch.textColor) document.body.style.color = patch.textColor;
+                  }
+                  var full = !opts || opts.full !== false;
+                  if (!full) return;
+                  [].forEach.call(document.querySelectorAll('[data-bk-color-surface]'), function(el) {
+                    if (el.tagName === 'NAV') return;
+                    var sid = el.getAttribute('data-bk-color-surface');
+                    var bg = null, fg = null;
+                    if (sid === 'page' || sid === 'hero') {
+                      bg = patch.backgroundColor; fg = patch.textColor;
+                    } else if (sid === 'card') {
+                      bg = patch.cardSurfaceColor; fg = patch.textColor;
+                    } else if (sid === 'featured') {
+                      bg = patch.featuredWorkBackgroundColor; fg = patch.featuredWorkTextColor;
+                    } else if (sid === 'gallery') {
+                      bg = patch.galleryPageBackgroundColor; fg = patch.galleryPageTextColor;
+                    } else if (sid === 'about') {
+                      bg = patch.aboutSectionBackgroundColor; fg = patch.aboutSectionTextColor;
+                    }
+                    if (bg) el.style.background = bg;
+                    if (fg) el.style.color = fg;
+                  });
+                };
+              };
+              window.__bkQuickEditEnsureColorPatch();
               window.__bkQuickEditInstalled = true;
               window.__bkQuickEditCleanup = function(commitToNative) {
                 if (commitToNative !== false) {
-                  finishActiveInlineNoSave();
-                  var keys = Object.keys(dirty);
-                  if (keys.length) {
-                    postToNative({ action: 'inlineSaveBatch', changes: dirty });
-                    dirty = {};
+                  if (inlineEl) {
+                    noteDirtyFrom(inlineEl);
+                    stripEditableShell(inlineEl);
+                    inlineEl = null;
+                    postInlineBlur();
                   }
+                  flushDirtyToNative();
                 }
                 [].forEach.call(document.querySelectorAll('[data-bk-quick-edit-selected]'), function(node) {
                   node.removeAttribute('data-bk-quick-edit-selected');
@@ -1026,14 +1210,19 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var s = document.getElementById('bk-quick-edit-style');
                 if (s) s.remove();
                 window.__bkQuickEditInstalled = false;
+                window.__bkQuickEditBackgroundPaint = false;
+                try { document.documentElement.removeAttribute('data-bk-paint-mode'); } catch (e3) {}
                 delete window.__bkQuickEditSuppressClickUntil;
                 delete window.__bkQuickEditNavigateEditable;
                 delete window.__bkQuickEditSetInlineColor;
                 delete window.__bkQuickEditSetFontSize;
                 delete window.__bkQuickEditCommitDirty;
+                delete window.__bkQuickEditApplyTextMap;
+                delete window.__bkQuickEditSetBackgroundPaint;
                 clearEmptyTextSlots();
                 delete window.__bkQuickEditShowEmptyTextSlots;
-                delete window.__bkApplyPreviewColorPatch;
+                // Keep __bkApplyPreviewColorPatch — live paint must survive Edit off/on without a full reload.
+                delete window.__bkQuickEditEnsureColorPatch;
                 delete window.__bkQuickEditCleanup;
               };
             })();
@@ -1043,6 +1232,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 self.quickEditInstallInFlight = false
                 guard error == nil, self.quickEditEnabled else { return }
                 self.quickEditInstalledForDocument = true
+                if let bridge = self.bridge, bridge.backgroundPaintArmed {
+                    bridge.setBackgroundPaintMode(true)
+                }
             }
         }
 

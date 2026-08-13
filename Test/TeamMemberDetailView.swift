@@ -248,6 +248,16 @@ struct TeamMemberDetailView: View {
                     }
                 }
             }
+            if member.accessRole != .owner {
+                Section(
+                    header: Text("Artist self-service"),
+                    footer: Text("When on, they can update these in Website profile. You can always edit them here too.")
+                        .font(.caption2)
+                ) {
+                    Toggle("Artist can edit portfolio", isOn: $memberSettings.canEditPortfolio)
+                    Toggle("Artist can edit bio", isOn: $memberSettings.canEditPublicBio)
+                }
+            }
         }
         Section(
             header: Text("Booking"),

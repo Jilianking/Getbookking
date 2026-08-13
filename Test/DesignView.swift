@@ -22,6 +22,7 @@ struct DesignView: View {
     @State private var studio12ProcessStepEditIndex = 0
     @State private var isQuickEditEnabled = false
     @State private var quickEditBridge = WebViewQuickEditBridge()
+    @StateObject private var quickEditHistory = QuickEditHistoryStore()
     @State private var quickEditInlineFocus: QuickEditInlineFocus?
     @State private var previewColorsDirty = false
     @State private var selectedColorSurface: PreviewColorSurface?
@@ -617,8 +618,9 @@ struct DesignView: View {
             bridge: quickEditBridge,
             onQuickEdit: { event in
                 switch event {
-                case let .inlineSaveBatch(changes):
+                case let .inlineSaveBatch(changes, previous):
                     guard !changes.isEmpty else { return }
+                    quickEditHistory.recordText(before: previous, after: changes)
                     Task {
                         let pairs = changes.map { (fieldKey: $0.key, value: $0.value) }
                         await viewModel.saveQuickEditBatch(pairs, reloadPreview: false)
@@ -722,6 +724,7 @@ struct DesignView: View {
                     PreviewQuickEditChrome(
                         viewModel: viewModel,
                         bridge: quickEditBridge,
+                        history: quickEditHistory,
                         inlineFocus: $quickEditInlineFocus,
                         colorsDirty: $previewColorsDirty,
                         selectedColorSurface: $selectedColorSurface,
@@ -739,6 +742,8 @@ struct DesignView: View {
                 selectedColorSurface = nil
                 selectedChromeColorTarget = nil
                 isQuickEditChromeCollapsed = false
+                quickEditBridge.setBackgroundPaintMode(false)
+                quickEditHistory.clear()
             }
         }
         .onChange(of: viewModel.webPreviewColorPatchToken) { _, _ in

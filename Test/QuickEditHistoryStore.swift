@@ -1,0 +1,100 @@
+//
+//  QuickEditHistoryStore.swift
+//
+//  Session undo/redo for Design Quick Edit (text + colors).
+//
+
+import Combine
+import Foundation
+import SwiftUI
+
+enum QuickEditHistoryEntry: Equatable {
+    case colors(
+        before: WebColorPaletteTokens,
+        after: WebColorPaletteTokens,
+        heroBefore: String,
+        heroAfter: String
+    )
+    case text(before: [String: String], after: [String: String])
+}
+
+@MainActor
+final class QuickEditHistoryStore: ObservableObject {
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
+
+    private var undoStack: [QuickEditHistoryEntry] = []
+    private var redoStack: [QuickEditHistoryEntry] = []
+    private(set) var isApplyingHistory = false
+    private let maxEntries = 40
+
+    func clear() {
+        undoStack.removeAll()
+        redoStack.removeAll()
+        refreshFlags()
+    }
+
+    func recordColors(
+        before: WebColorPaletteTokens,
+        after: WebColorPaletteTokens,
+        heroBefore: String,
+        heroAfter: String
+    ) {
+        guard !isApplyingHistory else { return }
+        guard before != after || heroBefore != heroAfter else { return }
+        pushUndo(
+            .colors(before: before, after: after, heroBefore: heroBefore, heroAfter: heroAfter)
+        )
+    }
+
+    func recordText(before: [String: String], after: [String: String]) {
+        guard !isApplyingHistory else { return }
+        var filteredBefore: [String: String] = [:]
+        var filteredAfter: [String: String] = [:]
+        for (key, newValue) in after {
+            let oldValue = before[key] ?? ""
+            if oldValue != newValue {
+                filteredBefore[key] = oldValue
+                filteredAfter[key] = newValue
+            }
+        }
+        guard !filteredAfter.isEmpty else { return }
+        pushUndo(.text(before: filteredBefore, after: filteredAfter))
+    }
+
+    func popUndo() -> QuickEditHistoryEntry? {
+        guard let entry = undoStack.popLast() else { return nil }
+        redoStack.append(entry)
+        refreshFlags()
+        return entry
+    }
+
+    func popRedo() -> QuickEditHistoryEntry? {
+        guard let entry = redoStack.popLast() else { return nil }
+        undoStack.append(entry)
+        refreshFlags()
+        return entry
+    }
+
+    func beginApplyingHistory() {
+        isApplyingHistory = true
+    }
+
+    func endApplyingHistory() {
+        isApplyingHistory = false
+    }
+
+    private func pushUndo(_ entry: QuickEditHistoryEntry) {
+        undoStack.append(entry)
+        if undoStack.count > maxEntries {
+            undoStack.removeFirst(undoStack.count - maxEntries)
+        }
+        redoStack.removeAll()
+        refreshFlags()
+    }
+
+    private func refreshFlags() {
+        canUndo = !undoStack.isEmpty
+        canRedo = !redoStack.isEmpty
+    }
+}

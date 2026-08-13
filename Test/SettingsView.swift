@@ -1004,7 +1004,6 @@ private struct AccountSettingsDetailView: View {
 
             • Booking form switches to a generic field set (editable in Website Design).
             • Your current services are removed and replaced with four generic starter services.
-            • In Website Design, only templates for Custom are available under Website templates.
 
             You can customize everything after saving.
             """

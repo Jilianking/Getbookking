@@ -111,6 +111,7 @@ enum StudioBookingTypeOption: String, CaseIterable, Identifiable, Hashable {
         case .depositToConfirm: return .depositToConfirm
         case .approveAndDeposit: return .approveAndDeposit
         case .consultationFirst: return .consultationFirst
+        case .payInFull: return .instantBook
         }
     }
 
@@ -123,6 +124,41 @@ enum StudioBookingTypeOption: String, CaseIterable, Identifiable, Hashable {
         mode = .form
         if let t = confirmationType {
             confirmation = t
+        }
+    }
+}
+
+// MARK: - Fishing charter (calendar only)
+
+/// Charter plan: guests always pick a slot; pay later, deposit, or full price.
+enum CharterPaymentPolicy: String, CaseIterable, Identifiable, Hashable {
+    case requestApprove = "request_approve"
+    case deposit = "deposit"
+    case payInFull = "pay_in_full"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .requestApprove: return "Request & approve"
+        case .deposit: return "Deposit"
+        case .payInFull: return "Pay in full"
+        }
+    }
+
+    var confirmationType: BookingConfirmationType {
+        switch self {
+        case .requestApprove: return .requestApprove
+        case .deposit: return .depositToConfirm
+        case .payInFull: return .payInFull
+        }
+    }
+
+    static func from(confirmation: BookingConfirmationType) -> CharterPaymentPolicy {
+        switch confirmation {
+        case .payInFull: return .payInFull
+        case .depositToConfirm, .approveAndDeposit: return .deposit
+        default: return .requestApprove
         }
     }
 }

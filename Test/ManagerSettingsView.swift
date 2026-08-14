@@ -33,7 +33,7 @@ struct ManagerSettingsView: View {
 
             if !authViewModel.isDemoMode && !viewModel.tenantSubscriptionPlan.allowsTeamInvites {
                 Section {
-                    Text("Solo is owner only. Upgrade to Studio or Shop to invite team members.")
+                    Text("This plan is owner only. Upgrade to Studio or Shop to invite team members.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

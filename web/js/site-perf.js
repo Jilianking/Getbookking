@@ -36,6 +36,8 @@
   var FONT_HREF = {
     classic:
       'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kanit:wght@400;600;700&family=Unbounded:wght@300;500;700;900&display=swap',
+    charter:
+      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kanit:wght@400;600;700&display=swap',
     luxe:
       'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Libre+Baskerville:wght@400;700&display=swap',
     blade:
@@ -52,6 +54,7 @@
     if (id === 'blade-v1' || id === 'blade') return 'blade';
     if (id === 'stonecut-v1' || id === 'stonecut') return 'stonecut';
     if (id === 'studio-12-v1' || id === 'studio12' || id === 'studio-12') return 'studio12';
+    if (id === 'charter-v1' || id === 'charter') return 'charter';
     return 'classic';
   }
 
@@ -68,6 +71,7 @@
     luxe: '/css/luxe-theme.css?v=20260812m',
     stonecut: '/css/stonecut-theme.css?v=20260812m',
     classic: '/css/classic-theme.css?v=20260812m',
+    charter: '/css/charter-theme.css?v=20260814q',
   };
 
   function ensureThemeCss(themeId) {

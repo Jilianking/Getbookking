@@ -68,7 +68,7 @@ enum BookingAssignSchedulePlanner {
     }
 
     static func preferredMinutes(for request: BookingRequest, calendar: Calendar = .current) -> Int? {
-        if let start = request.requestedStartTime {
+        if let start = request.departureStart {
             return minutesSinceMidnight(start, calendar: calendar)
         }
         return parseTimeLabelToMinutes(request.preferredTime)
@@ -228,11 +228,16 @@ enum BookingAssignSchedulePlanner {
         }
         for booking in bookings {
             if booking.documentId == excludingRequestId { continue }
-            guard booking.hasAssignedMember else { continue }
-            guard booking.matchesAssigneeFilter(key: member.uid, roster: [member]) else { continue }
-            guard let otherStart = booking.requestedStartTime else { continue }
+            let occupies = booking.occupiesCharterSlot || booking.hasAssignedMember
+            guard occupies else { continue }
+            if booking.hasAssignedMember {
+                guard booking.matchesAssigneeFilter(key: member.uid, roster: [member]) else { continue }
+            }
+            guard let otherStart = booking.departureStart else { continue }
             guard calendar.isDate(otherStart, inSameDayAs: start) else { continue }
-            let otherEnd = calendar.date(byAdding: .minute, value: defaultServiceDurationMinutes, to: otherStart) ?? otherStart
+            let occupyMin = booking.durationMinutes.flatMap { $0 > 0 ? $0 : nil }
+                ?? (booking.occupiesCharterSlot ? 240 : defaultServiceDurationMinutes)
+            let otherEnd = calendar.date(byAdding: .minute, value: occupyMin, to: otherStart) ?? otherStart
             if rangesOverlap(start, slotEnd, otherStart, otherEnd) { return true }
         }
         return false

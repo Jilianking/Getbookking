@@ -736,6 +736,139 @@ const DEMO_ACTIVITY_BY_SLUG = {
       },
     ],
   },
+  "harbor-charters": {
+    businessLine: "+13055550110",
+    paymentPreset: { availableBalanceCents: 246800, pendingBalanceCents: 41200 },
+    customers: [
+      {
+        name: "Danielle Ruiz",
+        email: "danielle.ruiz.kw@gmail.com",
+        phone: "+13055551102",
+        notes: "Loves the yellowtail bite. Prefers sunrise departures from Garrison Bight.",
+        vip: true,
+        bookings: [
+          { service: "Half-Day Reef Charter", status: "completed", dayOffset: -41, price: 450 },
+          { service: "Half-Day Reef Charter", status: "confirmed", dayOffset: 5, price: 450 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -6, body: "We still meeting at Garrison Bight at 6:30?" },
+          { dir: "outbound", dayOffset: -6, body: "Yep — Sea Ya Later, slip side of the bight. Sunscreen and a cooler for the catch." },
+          { dir: "inbound", dayOffset: -5, body: "Y’all got the yellowtail bite this week?" },
+          { dir: "outbound", dayOffset: -5, body: "It’s been on. Patch reefs have been lighting up after the first chum." },
+        ],
+      },
+      {
+        name: "Chris Pell",
+        email: "chris.pell@gmail.com",
+        phone: "+13055551148",
+        bookings: [
+          { service: "Bachelor / Bachelorette Boat Day", status: "completed", dayOffset: -22, price: 1400 },
+          { service: "Key West Sandbar Day", status: "confirmed", dayOffset: 9, price: 680 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -8, body: "Wedding crew wants another sandbar day — Bluetooth and cooler ok?" },
+          { dir: "outbound", dayOffset: -8, body: "That’s the whole point. BYOB, no glass. Conch Crusher holds 8." },
+        ],
+      },
+      {
+        name: "Sam Torres",
+        email: "sam.torres.fl@gmail.com",
+        phone: "+13055551207",
+        bookings: [
+          { service: "Family Flats & Harbor Trip", status: "completed", dayOffset: -18, price: 500 },
+          { service: "Family Flats & Harbor Trip", status: "NEW", dayOffset: 3, price: 500 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -2, body: "Kids ok on the flats trip? They’re 7 and 10." },
+          { dir: "outbound", dayOffset: -2, body: "Perfect ages. Life jackets on board, we work the harbor close to the bight." },
+        ],
+      },
+      {
+        name: "Jamie Ortiz",
+        email: "jamie.ortiz.kw@gmail.com",
+        phone: "+13055551284",
+        bookings: [
+          { service: "Full-Day Offshore Charter", status: "completed", dayOffset: -33, price: 950 },
+          { service: "Full-Day Offshore Charter", status: "confirmed", dayOffset: 12, price: 950 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -4, body: "Bringing a cooler for mahi — that cool?" },
+          { dir: "outbound", dayOffset: -4, body: "Bring a big one. We’ll filet at the dock when we hit Garrison Bight." },
+        ],
+      },
+      {
+        name: "Elena Vasquez",
+        email: "elena.v.keys@gmail.com",
+        phone: "+13055551351",
+        bookings: [
+          { service: "Mallory Square Sunset Cruise", status: "completed", dayOffset: -9, price: 250 },
+          { service: "Mallory Square Sunset Cruise", status: "confirmed", dayOffset: 2, price: 250 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -1, body: "Sunset still going out if it’s breezy?" },
+          { dir: "outbound", dayOffset: -1, body: "If we can leave the bight safely, we’re on. I’ll text if we need to move it." },
+        ],
+      },
+      {
+        name: "Marcus Hale",
+        email: "marcus.hale@gmail.com",
+        phone: "+13055551419",
+        bookings: [
+          { service: "Night Yellowtail Bite", status: "completed", dayOffset: -14, price: 480 },
+          { service: "Night Yellowtail Bite", status: "confirmed", dayOffset: 6, price: 480 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -3, body: "What time do we meet for the night bite?" },
+          { dir: "outbound", dayOffset: -3, body: "7:30 at Garrison Bight. Bring a light jacket — it cools off on the run." },
+        ],
+      },
+      {
+        name: "Priya Shah",
+        email: "priya.shah.fl@gmail.com",
+        phone: "+13055551486",
+        bookings: [
+          { service: "Key West Sandbar Day", status: "completed", dayOffset: -27, price: 680 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -7, body: "Snorkel gear on the boat or should we pack ours?" },
+          { dir: "outbound", dayOffset: -7, body: "We have masks on board. Pack sunscreen — Keys sun is no joke." },
+        ],
+      },
+      {
+        name: "Tyler Brooks",
+        email: "tyler.brooks.kw@gmail.com",
+        phone: "+13055551553",
+        bookings: [
+          { service: "Half-Day Reef Charter", status: "NEW", dayOffset: 1, price: 450 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: 0, body: "First time in Key West — reef trip for 4 tomorrow morning?" },
+          { dir: "outbound", dayOffset: 0, body: "Sea Ya Later is open at 7. Gear and FL licenses are included." },
+        ],
+      },
+      {
+        name: "Lauren Kim",
+        email: "lauren.kim.fl@gmail.com",
+        phone: "+13055551620",
+        bookings: [
+          { service: "Full-Day Offshore Charter", status: "completed", dayOffset: -48, price: 950 },
+        ],
+        sms: [],
+      },
+      {
+        name: "Drew Coleman",
+        email: "drew.coleman.kw@gmail.com",
+        phone: "+13055551688",
+        bookings: [
+          { service: "Bachelor / Bachelorette Boat Day", status: "cancelled", dayOffset: -11, price: 1400 },
+        ],
+        sms: [
+          { dir: "inbound", dayOffset: -11, body: "Have to push the boat day — storm coming through?" },
+          { dir: "outbound", dayOffset: -11, body: "Yeah, Keys are kicking up. I’ll refund and you can rebook a calmer day." },
+        ],
+      },
+    ],
+  },
 };
 
 /**
@@ -748,6 +881,7 @@ const SHOWCASE_WEEKLY_NET_DOLLARS = {
   "studio-amara": [180, 210, 195, 225, 215, 245, 230, 285],
   "gilded-palm": [420, 480, 450, 520, 495, 560, 530, 640],
   "iron-district-gym": [280, 320, 300, 350, 335, 380, 355, 430],
+  "harbor-charters": [980, 1120, 1040, 1280, 1180, 1420, 1340, 1680],
 };
 
 function startOfWeek(date) {

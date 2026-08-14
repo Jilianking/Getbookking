@@ -57,9 +57,14 @@ struct PreviewQuickEditChrome: View {
     /// When true, preview color taps (bands + CTA chrome) work; text/sheet taps are ignored.
     @State private var isBackgroundPaintArmed = false
     @State private var colorChangeBaseline: (tokens: WebColorPaletteTokens, hero: String)?
+    @State private var fieldColorBaseline: (key: String, hex: String)?
+    @State private var textColorSaveTask: Task<Void, Never>?
 
     private let collapsedFabSize: CGFloat = 52
     private let collapsedFabMargin: CGFloat = 16
+    /// Undo + redo (40 each + 6 gap) + 8 spacing + FAB.
+    private var collapsedClusterWidth: CGFloat { 40 + 6 + 40 + 8 + collapsedFabSize }
+    private var collapsedClusterHeight: CGFloat { collapsedFabSize }
 
     var body: some View {
         GeometryReader { geo in
@@ -114,6 +119,8 @@ struct PreviewQuickEditChrome: View {
                 initialHex: focus.colorHex,
                 onChange: { applyFocusedElementColor(hex: $0, focus: focus) },
                 onDismiss: {
+                    commitFieldColorBaselineIfNeeded()
+                    flushFocusedTextColorSave()
                     focusedColorEdit = nil
                     finishColorSheetDismiss()
                 }
@@ -173,31 +180,33 @@ struct PreviewQuickEditChrome: View {
 
     private func collapsedFloatingFAB(in containerSize: CGSize) -> some View {
         let position = resolvedFabPosition(in: containerSize)
-        return collapsedFabButton
-            .position(position)
-            .gesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { value in
-                        if fabDragStartPosition == nil {
-                            fabDragStartPosition = resolvedFabPosition(in: containerSize)
-                        }
-                        guard let origin = fabDragStartPosition else { return }
-                        let next = CGPoint(
-                            x: origin.x + value.translation.width,
-                            y: origin.y + value.translation.height
-                        )
-                        draggingFabPosition = clampFabPosition(next, in: containerSize)
+        return HStack(spacing: 8) {
+            undoRedoButtons
+            collapsedFabButton
+        }
+        .position(position)
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in
+                    if fabDragStartPosition == nil {
+                        fabDragStartPosition = resolvedFabPosition(in: containerSize)
                     }
-                    .onEnded { _ in
-                        if let draggingFabPosition {
-                            persistFabPosition(draggingFabPosition)
-                        }
-                        draggingFabPosition = nil
-                        fabDragStartPosition = nil
+                    guard let origin = fabDragStartPosition else { return }
+                    let next = CGPoint(
+                        x: origin.x + value.translation.width,
+                        y: origin.y + value.translation.height
+                    )
+                    draggingFabPosition = clampFabPosition(next, in: containerSize)
+                }
+                .onEnded { _ in
+                    if let draggingFabPosition {
+                        persistFabPosition(draggingFabPosition)
                     }
-            )
-            .accessibilityLabel(colorsDirty ? "Show edit tools, unsaved colors" : "Show edit tools")
-            .accessibilityAddTraits(.isButton)
+                    draggingFabPosition = nil
+                    fabDragStartPosition = nil
+                }
+        )
+        .accessibilityAddTraits(.isButton)
     }
 
     private var addTextButton: some View {
@@ -248,20 +257,22 @@ struct PreviewQuickEditChrome: View {
     }
 
     private func defaultFabPosition(in size: CGSize) -> CGPoint {
-        let half = collapsedFabSize / 2
+        let halfW = collapsedClusterWidth / 2
+        let halfH = collapsedClusterHeight / 2
         let margin = collapsedFabMargin
         return CGPoint(
-            x: size.width - margin - half,
-            y: size.height - margin - half
+            x: size.width - margin - halfW,
+            y: size.height - margin - halfH
         )
     }
 
     private func clampFabPosition(_ point: CGPoint, in size: CGSize) -> CGPoint {
-        let half = collapsedFabSize / 2
+        let halfW = collapsedClusterWidth / 2
+        let halfH = collapsedClusterHeight / 2
         let margin = collapsedFabMargin
         return CGPoint(
-            x: min(size.width - margin - half, max(margin + half, point.x)),
-            y: min(size.height - margin - half, max(margin + half, point.y))
+            x: min(size.width - margin - halfW, max(margin + halfW, point.x)),
+            y: min(size.height - margin - halfH, max(margin + halfH, point.y))
         )
     }
 
@@ -287,10 +298,11 @@ struct PreviewQuickEditChrome: View {
     private var compactTextColorWell: some View {
         Button {
             setBackgroundPaintArmed(false)
-            beginColorChangeBaseline()
             if let focus = inlineFocus {
+                beginFieldColorBaseline(focus: focus)
                 focusedColorEdit = focus
             } else {
+                beginColorChangeBaseline()
                 activeColorTarget = .text
             }
         } label: {
@@ -419,8 +431,6 @@ struct PreviewQuickEditChrome: View {
 
     private func performHistory(_ direction: HistoryDirection) async {
         setBackgroundPaintArmed(false)
-        bridge.commitDirtyEdits()
-        inlineFocus = nil
 
         let entry: QuickEditHistoryEntry?
         switch direction {
@@ -431,6 +441,14 @@ struct PreviewQuickEditChrome: View {
 
         history.beginApplyingHistory()
         defer { history.endApplyingHistory() }
+
+        switch entry {
+        case .fontSize, .fieldColor:
+            break
+        default:
+            bridge.commitDirtyEdits()
+            inlineFocus = nil
+        }
 
         switch entry {
         case let .colors(before, after, heroBefore, heroAfter):
@@ -450,6 +468,26 @@ struct PreviewQuickEditChrome: View {
             await MainActor.run {
                 bridge.applyTextOverrides(map)
             }
+        case let .fontSize(key, before, after):
+            let px = direction == .undo ? before : after
+            await MainActor.run {
+                bridge.applyFontSizes([key: px])
+                if var focus = inlineFocus, focus.key == key {
+                    focus.fontSize = px
+                    inlineFocus = focus
+                }
+            }
+            await viewModel.persistQuickEditFontSize(fieldKey: key, px: px)
+        case let .fieldColor(key, before, after):
+            let hex = direction == .undo ? before : after
+            await MainActor.run {
+                bridge.applyFieldColors([key: hex])
+                if var focus = inlineFocus, focus.key == key {
+                    focus.colorHex = hex
+                    inlineFocus = focus
+                }
+            }
+            await viewModel.persistQuickEditTextColor(fieldKey: key, hex: hex)
         }
     }
 
@@ -495,6 +533,20 @@ struct PreviewQuickEditChrome: View {
         )
     }
 
+    private func beginFieldColorBaseline(focus: QuickEditInlineFocus) {
+        guard !history.isApplyingHistory else { return }
+        if fieldColorBaseline == nil {
+            fieldColorBaseline = (key: focus.key, hex: focus.colorHex)
+        }
+    }
+
+    private func commitFieldColorBaselineIfNeeded() {
+        guard let baseline = fieldColorBaseline else { return }
+        fieldColorBaseline = nil
+        let after = inlineFocus?.key == baseline.key ? (inlineFocus?.colorHex ?? baseline.hex) : baseline.hex
+        history.recordFieldColor(key: baseline.key, before: baseline.hex, after: after)
+    }
+
     private func dismissColorSheets() {
         activeColorTarget = nil
         activeColorSurface = nil
@@ -520,15 +572,7 @@ struct PreviewQuickEditChrome: View {
     private func fontSizeStepper(focus: QuickEditInlineFocus) -> some View {
         HStack(spacing: 8) {
             Button {
-                let next = max(10, focus.fontSize - 2)
-                bridge.setInlineFontSize(next)
-                inlineFocus = QuickEditInlineFocus(
-                    key: focus.key,
-                    fontSize: next,
-                    fontAdjustable: true,
-                    colorHex: focus.colorHex,
-                    colorRole: focus.colorRole
-                )
+                applyFontSizeChange(focus: focus, next: max(10, focus.fontSize - 2))
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 14, weight: .semibold))
@@ -544,15 +588,7 @@ struct PreviewQuickEditChrome: View {
                 .frame(minWidth: 32)
 
             Button {
-                let next = min(96, focus.fontSize + 2)
-                bridge.setInlineFontSize(next)
-                inlineFocus = QuickEditInlineFocus(
-                    key: focus.key,
-                    fontSize: next,
-                    fontAdjustable: true,
-                    colorHex: focus.colorHex,
-                    colorRole: focus.colorRole
-                )
+                applyFontSizeChange(focus: focus, next: min(96, focus.fontSize + 2))
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .semibold))
@@ -564,6 +600,20 @@ struct PreviewQuickEditChrome: View {
         }
     }
 
+    private func applyFontSizeChange(focus: QuickEditInlineFocus, next: Int) {
+        guard next != focus.fontSize else { return }
+        history.recordFontSize(key: focus.key, before: focus.fontSize, after: next)
+        bridge.setInlineFontSize(next)
+        inlineFocus = QuickEditInlineFocus(
+            key: focus.key,
+            fontSize: next,
+            fontAdjustable: true,
+            colorHex: focus.colorHex,
+            colorRole: focus.colorRole
+        )
+        Task { await viewModel.persistQuickEditFontSize(fieldKey: focus.key, px: next) }
+    }
+
     private func hex(for target: PreviewQuickEditColorTarget) -> String {
         switch target {
         case .background: return viewModel.backgroundColorHex
@@ -572,22 +622,33 @@ struct PreviewQuickEditChrome: View {
         }
     }
 
+    /// Recolors only the focused blue-box node. Site-wide Text / Button tokens stay on the unfocused wells.
     private func applyFocusedElementColor(hex: String, focus: QuickEditInlineFocus) {
         let normalized = WebColorPalettes.normalizeHex(hex)
         bridge.setInlineColor(normalized)
-        if focus.colorRole == "button" {
-            viewModel.primaryColorHex = normalized
-            viewModel.primaryColorHoverHex = PreviewQuickEditChrome.derivedHoverHex(for: normalized)
-            viewModel.syncPreviewHeroSlotColorFromTokens()
-        } else {
-            viewModel.textColorHex = normalized
-        }
-        colorsDirty = true
-        pushPreviewColors()
         if var current = inlineFocus, current.key == focus.key {
             current.colorHex = normalized
             inlineFocus = current
         }
+        scheduleFocusedTextColorSave(key: focus.key, hex: normalized)
+    }
+
+    private func scheduleFocusedTextColorSave(key: String, hex: String) {
+        textColorSaveTask?.cancel()
+        textColorSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await viewModel.persistQuickEditTextColor(fieldKey: key, hex: hex)
+        }
+    }
+
+    private func flushFocusedTextColorSave() {
+        textColorSaveTask?.cancel()
+        textColorSaveTask = nil
+        guard let focus = inlineFocus ?? focusedColorEdit else { return }
+        let key = focus.key
+        let hex = focus.colorHex
+        Task { await viewModel.persistQuickEditTextColor(fieldKey: key, hex: hex) }
     }
 
     private func applyChromeColor(target: PreviewQuickEditColorTarget, hex: String) {

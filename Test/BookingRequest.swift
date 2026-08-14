@@ -23,6 +23,11 @@ struct BookingRequest: Identifiable {
     var preferredDays: [String]?
     var preferredTime: String?
     var requestedStartTime: Date?
+    /// Charter occupancy (website + app). ISO `YYYY-MM-DD` in the tenant timezone.
+    var scheduledDate: String? = nil
+    var scheduledStartMin: Int? = nil
+    var boatId: String? = nil
+    var durationMinutes: Int? = nil
     var notes: String?
     var formResponses: [String: Any]?
     var createdAt: Date?
@@ -69,6 +74,61 @@ struct BookingRequest: Identifiable {
         let keyUid = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyUid.isEmpty, !reqUid.isEmpty else { return false }
         return reqUid == keyUid
+    }
+
+    static func intField(_ raw: Any?) -> Int? {
+        if let n = raw as? Int { return n }
+        if let n = raw as? Double { return Int(n) }
+        if let n = raw as? NSNumber { return n.intValue }
+        if let s = raw as? String { return Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        return nil
+    }
+
+    static func isoDateString(from date: Date, timeZone: TimeZone = .current) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let p = cal.dateComponents([.year, .month, .day], from: date)
+        let y = p.year ?? 0
+        let m = p.month ?? 0
+        let d = p.day ?? 0
+        return String(format: "%04d-%02d-%02d", y, m, d)
+    }
+
+    static func minutesSinceMidnight(from date: Date, timeZone: TimeZone = .current) -> Int {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        return cal.component(.hour, from: date) * 60 + cal.component(.minute, from: date)
+    }
+
+    static func date(fromScheduledDate iso: String?, startMin: Int?, timeZone: TimeZone = .current) -> Date? {
+        let raw = (iso ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let startMin, raw.count >= 10 else { return nil }
+        let parts = raw.split(separator: "-")
+        guard parts.count == 3,
+              let y = Int(parts[0]), let mo = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        var comps = DateComponents()
+        comps.calendar = Calendar(identifier: .gregorian)
+        comps.timeZone = timeZone
+        comps.year = y
+        comps.month = mo
+        comps.day = d
+        comps.hour = startMin / 60
+        comps.minute = startMin % 60
+        comps.second = 0
+        return comps.date
+    }
+
+    /// Departure instant: charter occupancy fields first, then `requestedStartTime`.
+    var departureStart: Date? {
+        if let d = Self.date(fromScheduledDate: scheduledDate, startMin: scheduledStartMin) {
+            return d
+        }
+        return requestedStartTime
+    }
+
+    var occupiesCharterSlot: Bool {
+        let date = (scheduledDate ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return date.count >= 10 && scheduledStartMin != nil
     }
 }
 

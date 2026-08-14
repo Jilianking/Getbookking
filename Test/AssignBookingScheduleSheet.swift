@@ -20,12 +20,12 @@ struct AssignBookingScheduleSheet: View {
         self.request = request
         self.viewModel = viewModel
         self.showsStaffPicker = showsStaffPicker
-        let initial = request.requestedStartTime ?? request.createdAt ?? Date()
+        let initial = request.departureStart ?? request.createdAt ?? Date()
         _selectedDay = State(initialValue: Calendar.current.startOfDay(for: initial))
         if let uid = request.assignedMemberUid?.trimmingCharacters(in: .whitespacesAndNewlines), !uid.isEmpty {
             _selectedMemberUid = State(initialValue: uid)
         }
-        _selectedSlotStart = State(initialValue: request.requestedStartTime)
+        _selectedSlotStart = State(initialValue: request.departureStart)
     }
 
     private var currentRequest: BookingRequest {
@@ -57,7 +57,7 @@ struct AssignBookingScheduleSheet: View {
     }
 
     private var preferredLabel: String? {
-        if let start = currentRequest.requestedStartTime {
+        if let start = currentRequest.departureStart {
             return "Preferred \(BookingAssignSchedulePlanner.formatSlotLabel(start))"
         }
         let pt = (currentRequest.preferredTime ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -121,7 +121,7 @@ struct AssignBookingScheduleSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(headerLine)
                 .font(.subheadline.weight(.semibold))
-            if let day = currentRequest.requestedStartTime ?? currentRequest.createdAt {
+            if let day = currentRequest.departureStart ?? currentRequest.createdAt {
                 Text(day.formatted(.dateTime.month(.abbreviated).day().year()))
                     .font(.caption)
                     .foregroundStyle(.secondary)

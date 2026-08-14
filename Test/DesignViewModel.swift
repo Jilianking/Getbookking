@@ -20,11 +20,22 @@ enum DesignTab: String, CaseIterable {
     case about
     case team
     case shop
+    /// Boat / Fishing charter plan manage tabs.
+    case charters
+    case howItWorks
 
     static let manageTabs: [DesignTab] = [.gallery, .book, .about, .team, .shop]
 
     /// Manage segment tabs; omit `.team` when the tenant is Solo (no public team pages).
     static func manageTabs(showTeam: Bool) -> [DesignTab] {
+        manageTabs(showTeam: showTeam, isCharterPlan: false)
+    }
+
+    /// Charter plan uses fishing-site tabs; other plans keep Gallery / Book / About / Team / Shop.
+    static func manageTabs(showTeam: Bool, isCharterPlan: Bool) -> [DesignTab] {
+        if isCharterPlan {
+            return [.charters, .howItWorks, .shop, .about, .book]
+        }
         var tabs: [DesignTab] = [.gallery, .book, .about]
         if showTeam { tabs.append(.team) }
         tabs.append(.shop)
@@ -38,8 +49,16 @@ enum DesignTab: String, CaseIterable {
         case .about: return "About"
         case .team: return "Team"
         case .shop: return "Shop"
+        case .charters: return "Charters"
+        case .howItWorks: return "How it works"
         default: return rawValue.capitalized
         }
+    }
+
+    /// Segment label; charter plan uses “Book now” to match the fishing site nav.
+    func manageSegmentTitle(isCharterPlan: Bool) -> String {
+        if isCharterPlan, self == .book { return "Book now" }
+        return manageSegmentTitle
     }
 }
 
@@ -48,6 +67,13 @@ struct Studio12ProcessStep: Identifiable, Equatable {
     var id: Int
     var title: String
     var body: String
+}
+
+/// FAQ rows on Boat / Fishing charter How it works (`charterFaqs` in Firestore).
+struct CharterFaq: Identifiable, Equatable {
+    var id: Int
+    var question: String
+    var answer: String
 }
 
 class DesignViewModel: ObservableObject, BusinessHoursEditing {
@@ -126,7 +152,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     // MARK: - Studio 12 home only (`studio-12-v1`)
     /// Italic phrase in “Hair that reflects …” on Studio 12 hero (`heroTagline` in Firestore; web falls back to `heroSubtitle`).
+    /// Boat / Fishing charter: primary hero headline.
     @Published var heroTagline: String = ""
+    /// Boat / Fishing charter hero lead; also legacy Studio 12 fallback for `heroTagline`.
+    @Published var heroSubtitle: String = ""
     /// Optional overrides; empty uses industry defaults on the site (`studio12HeroEyebrow` / headline).
     @Published var studio12HeroEyebrow: String = ""
     /// One line; the public site splits into two display lines (`… that …` or balanced at a space).
@@ -138,6 +167,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     /// Three parts separated by ` · ` (space–middle dot–space); site renders as three lines with the last in italics.
     @Published var studio12PhilosophyHeadline: String = ""
     @Published var studio12ProcessSteps: [Studio12ProcessStep] = Studio12IndustryCopy.processSteps(for: .custom)
+    /// Boat / Fishing charter How it works FAQs (`charterFaqs` in Firestore).
+    @Published var charterFaqs: [CharterFaq] = DesignViewModel.defaultCharterFaqs
+    /// Meeting point shown on charter confirmation (`webCopyOverrides.wc.charter.meetingPoint`).
+    @Published var charterMeetingPoint: String = "Garrison Bight Marina"
     /// Two parts separated by ` · `; site renders first line + italic second line.
     @Published var studio12BookCtaHeadline: String = ""
     @Published var studio12BookCtaBody: String = ""
@@ -238,6 +271,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     // Template / industry (business type — set in Settings)
     @Published var industry: String?
     @Published var industryCustomLabel: String = ""
+    /// From tenant `subscriptionPlan` (Harbor Charters → `charter`).
+    @Published var subscriptionPlan: SubscriptionPlan = .solo
+    /// Fleet from Settings → Boats (`tenants.charterBoats`).
+    @Published var charterBoats: [CharterBoat] = []
     /// Public site layout variant; see `WebTheme`. Scoped to current `industry`.
     @Published var webThemeId: String = ""
     /// Curated color preset for the active template family (`webColorPaletteId` on tenant).
@@ -454,10 +491,18 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             .map { ["title": $0.title, "body": $0.body] }
     }
 
-    /// Updates one Studio 12 “How it works” step from preview `data-edit-key` (`s12Process:<index>:title|body`).
+    /// Boat / Fishing charter site (`charter-v1`).
+    var usesCharterWebTheme: Bool {
+        subscriptionPlan.isCharterPlan
+            || industry == BookingTemplate.charters.rawValue
+            || webThemeId == WebTheme.charterV1.rawValue
+    }
+
+    /// Updates one Studio 12 / charter “How it works” step from preview `data-edit-key` (`s12Process:<index>:title|body`).
     private func persistQuickEditStudio12ProcessField(fieldKey: String, trimmed: String) async throws {
         guard let tid = tenantId else { return }
-        guard (WebTheme(rawValue: webThemeId)?.family ?? .classic) == .studio12 else { return }
+        let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
+        guard fam == .studio12 || usesCharterWebTheme else { return }
         let parts = fieldKey.split(separator: ":").map(String.init)
         guard parts.count == 3, parts[0] == "s12Process", let index = Int(parts[1]) else { return }
         let field = parts[2]
@@ -481,6 +526,43 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         try await firebaseService.updateTenant(
             tenantId: tid,
             updates: ["studio12ProcessSteps": await MainActor.run { studio12ProcessStepsFirestorePayload() }]
+        )
+        await MainActor.run { errorMessage = nil }
+    }
+
+    private func charterFaqsFirestorePayload() -> [[String: String]] {
+        charterFaqs
+            .sorted { $0.id < $1.id }
+            .map { ["question": $0.question, "answer": $0.answer] }
+    }
+
+    /// Updates one FAQ from preview `data-edit-key` (`charterFaq:<index>:question|answer`).
+    private func persistQuickEditCharterFaqField(fieldKey: String, trimmed: String) async throws {
+        guard let tid = tenantId else { return }
+        guard usesCharterWebTheme else { return }
+        let parts = fieldKey.split(separator: ":").map(String.init)
+        guard parts.count == 3, parts[0] == "charterFaq", let index = Int(parts[1]) else { return }
+        let field = parts[2]
+        guard field == "question" || field == "answer" else { return }
+
+        var faqs = await MainActor.run { charterFaqs }
+        guard faqs.indices.contains(index) else {
+            await MainActor.run { errorMessage = "That FAQ was not found. Refresh and try again." }
+            return
+        }
+        if field == "question", trimmed.isEmpty {
+            await MainActor.run { errorMessage = "Question can't be empty." }
+            return
+        }
+        if field == "question" {
+            faqs[index].question = trimmed
+        } else {
+            faqs[index].answer = trimmed
+        }
+        await MainActor.run { charterFaqs = faqs }
+        try await firebaseService.updateTenant(
+            tenantId: tid,
+            updates: ["charterFaqs": await MainActor.run { charterFaqsFirestorePayload() }]
         )
         await MainActor.run { errorMessage = nil }
     }
@@ -554,6 +636,43 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             map[key] = value
         }
         try await firebaseService.updateTenant(tenantId: tenantId, updates: ["webCopyOverrides": map])
+    }
+
+    private static let quickEditStyleKeyPattern = "^[a-zA-Z0-9_.:-]+$"
+
+    private static func isPersistableQuickEditStyleKey(_ key: String) -> Bool {
+        if key.isEmpty || key.hasPrefix("color:") { return false }
+        if key == "heroImage" || key == "studio12PhilosophyImage" || key == "studio12BookCtaImage" || key == "classicAboutImage" { return false }
+        if key.hasPrefix("featuredWork:") || key.hasPrefix("galleryImage:") { return false }
+        if key.hasPrefix("svc:"), key.hasSuffix(":edit") { return false }
+        if key.hasPrefix("s12Process:"), key.hasSuffix(":edit") { return false }
+        if key.hasPrefix("charterFaq:"), key.hasSuffix(":edit") { return false }
+        return key.range(of: quickEditStyleKeyPattern, options: .regularExpression) != nil
+    }
+
+    private func persistQuickEditStyleMap(field: String, key: String, value: String) async {
+        guard let tid = tenantId, Self.isPersistableQuickEditStyleKey(key) else { return }
+        do {
+            guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
+            var map = Self.coercedStringMap(doc[field])
+            map[key] = value
+            try await firebaseService.updateTenant(tenantId: tid, updates: [field: map])
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Per-field text color for Quick Edit (`webTextColors` on the tenant). Does not change site-wide `textColor`.
+    func persistQuickEditTextColor(fieldKey: String, hex: String) async {
+        let normalized = WebColorPalettes.normalizeHex(hex)
+        guard normalized.hasPrefix("#") else { return }
+        await persistQuickEditStyleMap(field: "webTextColors", key: fieldKey, value: normalized)
+    }
+
+    /// Per-field font size in px (`webTextFontSizes` on the tenant).
+    func persistQuickEditFontSize(fieldKey: String, px: Int) async {
+        let size = min(96, max(10, px))
+        await persistQuickEditStyleMap(field: "webTextFontSizes", key: fieldKey, value: String(size))
     }
 
     private func persistOptionalSiteTextField(
@@ -719,19 +838,42 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     assign: { self.luxeHomeServicesHeading = $0 }, invalidatePreview: invalidatePreview
                 )
             case "heroTagline":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await persistOptionalSiteTextField(
                     tenantId: tid, field: "heroTagline", trimmed: trimmed,
                     assign: { self.heroTagline = $0 }, invalidatePreview: invalidatePreview
                 )
+            case "heroSubtitle":
+                guard usesCharterWebTheme else { return }
+                try await persistOptionalSiteTextField(
+                    tenantId: tid, field: "heroSubtitle", trimmed: trimmed,
+                    assign: { self.heroSubtitle = $0 }, invalidatePreview: invalidatePreview
+                )
+            case "serviceArea":
+                await MainActor.run {
+                    serviceArea = trimmed
+                    let parsed = USStateServiceAreaFormatting.parseStoredServiceArea(trimmed)
+                    serviceCity = parsed.city
+                    serviceStateAbbr = parsed.stateAbbr
+                }
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["serviceArea": trimmed])
+                await MainActor.run {
+                    if invalidatePreview { invalidateWebPreview() }
+                }
+            case "aboutText":
+                try await firebaseService.updateTenant(tenantId: tid, updates: ["aboutText": trimmed])
+                await MainActor.run {
+                    aboutText = trimmed
+                    if invalidatePreview { invalidateWebPreview() }
+                }
             case "studio12HeroEyebrow":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await persistOptionalSiteTextField(
                     tenantId: tid, field: "studio12HeroEyebrow", trimmed: trimmed,
                     assign: { self.studio12HeroEyebrow = $0 }, invalidatePreview: invalidatePreview
                 )
             case "studio12HeroLine1":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
                 let line2Stored: String
@@ -747,7 +889,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
             case "studio12HeroLine2":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedHero = Self.trimmedFirestoreString(doc, key: "studio12HeroHeadline")
                 let line1Stored: String
@@ -763,7 +905,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
             case "studio12BookCtaLine1":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
                 let italicStored: String
@@ -780,7 +922,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
             case "studio12BookCtaItalic":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
                 let mergedBook = Self.trimmedFirestoreString(doc, key: "studio12BookCtaHeadline")
                 let bookLine1Stored: String
@@ -797,13 +939,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 ])
                 await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
             case "studio12BookCtaBody":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await persistOptionalSiteTextField(
                     tenantId: tid, field: "studio12BookCtaBody", trimmed: trimmed,
                     assign: { self.studio12BookCtaBody = $0 }, invalidatePreview: invalidatePreview
                 )
             case "studio12PhilosophyHeadLine1":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
                     "studio12PhilosophyHeadLine1": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
@@ -813,7 +955,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     if invalidatePreview { invalidateWebPreview() }
                 }
             case "studio12PhilosophyHeadLine2":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
                     "studio12PhilosophyHeadLine2": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
@@ -823,7 +965,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     if invalidatePreview { invalidateWebPreview() }
                 }
             case "studio12PhilosophyHeadItalic":
-                guard fam == .studio12 else { return }
+                guard fam == .studio12 || usesCharterWebTheme else { return }
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
                     "studio12PhilosophyHeadItalic": Self.encodeOptionalSiteText(trimmed),
                     "studio12PhilosophyHeadline": "",
@@ -839,11 +981,17 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 } else if fieldKey.hasPrefix("s12Process:") {
                     try await persistQuickEditStudio12ProcessField(fieldKey: fieldKey, trimmed: trimmed)
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
+                } else if fieldKey.hasPrefix("charterFaq:") {
+                    try await persistQuickEditCharterFaqField(fieldKey: fieldKey, trimmed: trimmed)
+                    await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
                 } else if fieldKey.hasPrefix("wc.") {
                     let rest = String(fieldKey.dropFirst(3))
                     guard !rest.isEmpty,
                           rest.range(of: "^[a-zA-Z0-9_.-]+$", options: .regularExpression) != nil else { break }
                     try await persistWebCopyOverride(tenantId: tid, key: fieldKey, value: trimmed)
+                    if fieldKey == "wc.charter.meetingPoint" {
+                        await MainActor.run { charterMeetingPoint = trimmed.isEmpty ? "Garrison Bight Marina" : trimmed }
+                    }
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
                 }
             }
@@ -969,12 +1117,20 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                         : PublicBookingSite.urlString(forSlug: slug, customDomain: nil)
                     applyPublicDomain(fromTenant: tenant, slug: slug)
                     industry = tenant["industry"] as? String
-                    webThemeId = tenant["webThemeId"] as? String ?? ""
+                    subscriptionPlan = SubscriptionPlan.normalized(
+                        fromFirestore: tenant["subscriptionPlan"] as? String
+                    )
+                    webThemeId = WebTheme.resolvedThemeId(
+                        stored: tenant["webThemeId"] as? String,
+                        industry: tenant["industry"] as? String,
+                        subscriptionPlan: subscriptionPlan
+                    )
                     serviceArea = tenant["serviceArea"] as? String ?? ""
                     serviceCity = tenant["serviceCity"] as? String ?? ""
                     serviceStateAbbr = tenant["serviceStateAbbr"] as? String ?? ""
                     formFields = FormField.defaultFields
                     services = []
+                    charterBoats = CharterBoat.parseList(tenant["charterBoats"])
                     galleryImages = tenant["galleryImages"] as? [String] ?? []
                     featuredWorkImages = tenant["featuredWorkImages"] as? [String] ?? []
                     showGalleryPage = tenant["showGalleryPage"] as? Bool ?? true
@@ -999,7 +1155,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 customDomainStatus = "none"
                 formFields = FormField.defaultFields
                 services = []
+                charterBoats = []
                 industry = nil
+                subscriptionPlan = .solo
                 webThemeId = ""
                 serviceArea = ""
                 serviceCity = ""
@@ -1025,7 +1183,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     customDomainStatus = "none"
                     formFields = FormField.defaultFields
                     services = []
+                    charterBoats = []
                     industry = nil
+                    subscriptionPlan = .solo
                     webThemeId = ""
                     serviceArea = ""
                     serviceCity = ""
@@ -1100,6 +1260,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 let ht = Self.decodeOptionalSiteText(tenant?["heroTagline"])
                 let hs = Self.decodeOptionalSiteText(tenant?["heroSubtitle"])
                 heroTagline = ht.isEmpty ? hs : ht
+                heroSubtitle = hs
                 studio12HeroEyebrow = Self.decodeOptionalSiteText(tenant?["studio12HeroEyebrow"])
                 let heroHeadNew = (tenant?["studio12HeroHeadline"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !heroHeadNew.isEmpty {
@@ -1195,6 +1356,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     formFields = FormField.defaultFields
                 }
                 services = svc
+                charterBoats = CharterBoat.parseList(tenant?["charterBoats"])
                 aboutText = tenant?["aboutText"] as? String ?? ""
                 contactPhone = tenant?["contactPhone"] as? String ?? ""
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
@@ -1255,13 +1417,22 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 industry = tenant?["industry"] as? String
                 industryCustomLabel = (tenant?["industryCustomLabel"] as? String ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                subscriptionPlan = SubscriptionPlan.normalized(
+                    fromFirestore: tenant?["subscriptionPlan"] as? String
+                )
                 studio12ProcessSteps = Self.mergedStudio12ProcessSteps(
                     from: tenant?["studio12ProcessSteps"],
                     industry: tenant?["industry"] as? String
                 )
+                charterFaqs = Self.mergedCharterFaqs(from: tenant?["charterFaqs"])
+                let copyMap = Self.coercedStringMap(tenant?["webCopyOverrides"])
+                let meet = (copyMap["wc.charter.meetingPoint"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                charterMeetingPoint = meet.isEmpty ? "Garrison Bight Marina" : meet
+                let plan = SubscriptionPlan.normalized(fromFirestore: tenant?["subscriptionPlan"] as? String)
                 let resolvedTheme = WebTheme.resolvedThemeId(
                     stored: tenant?["webThemeId"] as? String,
-                    industry: tenant?["industry"] as? String
+                    industry: tenant?["industry"] as? String,
+                    subscriptionPlan: plan
                 )
                 webThemeId = resolvedTheme
                 let paletteFamily = WebTheme(rawValue: resolvedTheme)?.family ?? .classic
@@ -1285,7 +1456,12 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 await MainActor.run { errorMessage = error.localizedDescription }
             }
             if tenant?["webThemeId"] == nil {
-                let def = WebTheme.resolvedThemeId(stored: nil, industry: tenant?["industry"] as? String)
+                let plan = SubscriptionPlan.normalized(fromFirestore: tenant?["subscriptionPlan"] as? String)
+                let def = WebTheme.resolvedThemeId(
+                    stored: nil,
+                    industry: tenant?["industry"] as? String,
+                    subscriptionPlan: plan
+                )
                 try? await firebaseService.updateTenant(tenantId: tid, updates: ["webThemeId": def])
             }
             if let split = persistSplit {
@@ -1412,6 +1588,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["studio12ProcessSteps"] = studio12ProcessSteps
                 .sorted { $0.id < $1.id }
                 .map { ["title": $0.title, "body": $0.body] }
+        }
+        if usesCharterWebTheme {
+            updates["heroTagline"] = Self.bulkSaveOptionalSiteText(heroTagline, existingFirestore: existingDoc?["heroTagline"])
+            updates["heroSubtitle"] = Self.bulkSaveOptionalSiteText(heroSubtitle, existingFirestore: existingDoc?["heroSubtitle"])
+            updates["aboutText"] = aboutText
+            updates["studio12ProcessSteps"] = studio12ProcessStepsFirestorePayload()
+            updates["charterFaqs"] = charterFaqsFirestorePayload()
         }
         await saveTenantUpdates(tid, updates)
     }
@@ -2002,7 +2185,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         name: String,
         durationMinutes: Int?,
         description: String? = nil,
-        startingPrice: Double? = nil
+        startingPrice: Double? = nil,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) async {
         guard let tid = tenantId else { return }
         await MainActor.run { errorMessage = nil }
@@ -2014,7 +2199,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 durationMinutes: durationMinutes,
                 description: description,
                 sortOrder: nextOrder,
-                startingPrice: startingPrice
+                startingPrice: startingPrice,
+                itinerary: itinerary,
+                boatIds: boatIds
             )
             await loadData()
             await MainActor.run { invalidateWebPreview() }
@@ -2029,7 +2216,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         name: String,
         description: String?,
         durationMinutes: Int?,
-        startingPrice: Double?
+        startingPrice: Double?,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) async -> Bool {
         guard let tid = tenantId else { return false }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2042,7 +2231,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 slug: slug,
                 durationMinutes: durationMinutes,
                 description: description,
-                startingPrice: startingPrice
+                startingPrice: startingPrice,
+                itinerary: itinerary,
+                boatIds: boatIds
             )
             try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
             let descStored = description?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2059,6 +2250,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     s.durationMinutes = durationMinutes
                     s.description = finalDesc
                     s.price = finalPrice
+                    if let itinerary { s.itinerary = itinerary.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+                    if let boatIds { s.boatIds = boatIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
                     services[idx] = s
                 }
                 isSavingBladeServices = false
@@ -2306,6 +2499,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         let tokens = currentColorTokens()
         var payload: [String: String] = [
             "webThemeId": webThemeId,
+            "resolvedWebThemeId": webThemeId,
+            "subscriptionPlan": subscriptionPlan.rawValue,
+            "industry": industry ?? "",
             "backgroundColor": tokens.backgroundColor,
             "textColor": tokens.textColor,
             "cardSurfaceColor": tokens.cardSurfaceColor,
@@ -2392,7 +2588,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     /// Applies a **web layout** only. Business type stays in Settings (`industry` unchanged).
     func applyWebTheme(_ theme: WebTheme) async {
         guard let tid = tenantId else { return }
-        guard theme.isUniversal || (industry != nil && theme.bookingIndustry.rawValue == industry) else {
+        let industryMatches = industry != nil && theme.bookingIndustry.rawValue == industry
+        let charterOk = theme == .charterV1 && (industry == BookingTemplate.charters.rawValue)
+        guard theme.isUniversal || industryMatches || charterOk else {
             await MainActor.run { errorMessage = "This layout doesn’t match your business type. Change it in Settings if needed." }
             return
         }
@@ -2892,6 +3090,14 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
     /// Studio 12 “How it works” — max steps stored and rendered on web.
     static let studio12ProcessStepsLimit = 12
+    static let charterFaqsLimit = 8
+
+    static let defaultCharterFaqs: [CharterFaq] = [
+        CharterFaq(id: 0, question: "What happens if the weather is bad?", answer: "Captains will reschedule or fully refund trips cancelled for weather."),
+        CharterFaq(id: 1, question: "Is gear included?", answer: "Rods, bait, ice and fishing licenses are included on every listed charter unless noted."),
+        CharterFaq(id: 2, question: "Can I bring my own group?", answer: "Yes, most charters are private bookings for your group only."),
+        CharterFaq(id: 3, question: "How do I cancel or reschedule?", answer: "Manage your booking from My Trips up to 48 hours before departure.")
+    ]
 
     func moveStudio12ProcessStep(from index: Int, direction: Int) {
         let j = index + direction
@@ -2961,6 +3167,73 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 id: i,
                 title: tRaw.isEmpty ? fallback.title : tRaw,
                 body: bRaw.isEmpty ? fallback.body : bRaw
+            )
+        }
+    }
+
+    func updateCharterFaq(at index: Int, question: String, answer: String) {
+        guard charterFaqs.indices.contains(index) else { return }
+        var faqs = charterFaqs
+        faqs[index].question = question
+        faqs[index].answer = answer
+        charterFaqs = faqs
+    }
+
+    func addCharterFaq() {
+        guard charterFaqs.count < Self.charterFaqsLimit else { return }
+        charterFaqs.append(CharterFaq(id: charterFaqs.count, question: "New question", answer: ""))
+        normalizeCharterFaqIds()
+    }
+
+    func deleteCharterFaq(at index: Int) {
+        guard charterFaqs.indices.contains(index) else { return }
+        charterFaqs.remove(at: index)
+        if charterFaqs.isEmpty {
+            charterFaqs = Self.defaultCharterFaqs
+        } else {
+            normalizeCharterFaqIds()
+        }
+    }
+
+    func moveCharterFaq(from index: Int, direction: Int) {
+        let j = index + direction
+        guard charterFaqs.indices.contains(index), charterFaqs.indices.contains(j) else { return }
+        charterFaqs.swapAt(index, j)
+        normalizeCharterFaqIds()
+    }
+
+    func persistCharterFaqs(invalidatePreview: Bool = true) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        do {
+            try await firebaseService.updateTenant(
+                tenantId: tid,
+                updates: ["charterFaqs": charterFaqsFirestorePayload()]
+            )
+            await MainActor.run {
+                if invalidatePreview { invalidateWebPreview() }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func normalizeCharterFaqIds() {
+        charterFaqs = charterFaqs.enumerated().map {
+            CharterFaq(id: $0.offset, question: $0.element.question, answer: $0.element.answer)
+        }
+    }
+
+    private static func mergedCharterFaqs(from raw: Any?) -> [CharterFaq] {
+        guard let arr = raw as? [[String: Any]], !arr.isEmpty else { return defaultCharterFaqs }
+        return Array(arr.prefix(charterFaqsLimit)).enumerated().map { i, d in
+            let q = (d["question"] as? String ?? d["q"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let a = (d["answer"] as? String ?? d["a"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = i < defaultCharterFaqs.count ? defaultCharterFaqs[i] : defaultCharterFaqs[defaultCharterFaqs.count - 1]
+            return CharterFaq(
+                id: i,
+                question: q.isEmpty ? fallback.question : q,
+                answer: a.isEmpty ? fallback.answer : a
             )
         }
     }

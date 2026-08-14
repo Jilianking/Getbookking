@@ -15,6 +15,7 @@ class BookingFormViewModel: ObservableObject {
     @Published var availableTimeSlots: [String] = []
     @Published var isLoading = false
     @Published var isLoadingSlots = false
+    @Published var isCharterPlan = false
 
     private var providerAvailability: ProviderAvailability = .default
     private let firebaseService = FirebaseService()
@@ -48,10 +49,14 @@ class BookingFormViewModel: ObservableObject {
             providerAvailability = profile?.availability ?? .default
             if let tid = profile?.tenantId {
                 let services = try await firebaseService.fetchTenantServices(tenantId: tid)
+                let tenant = try await firebaseService.fetchTenant(tenantId: tid)
                 await MainActor.run {
                     tenantId = tid
                     tenantServices = services
                     legacyServices = []
+                    isCharterPlan = SubscriptionPlan.normalized(
+                        fromFirestore: tenant?["subscriptionPlan"] as? String
+                    ).isCharterPlan
                     isLoading = false
                 }
             } else {
@@ -105,6 +110,34 @@ class BookingFormViewModel: ObservableObject {
         notes: String?
     ) async throws -> String {
         guard let tid = tenantId else { throw NSError(domain: "BookingForm", code: -1, userInfo: [NSLocalizedDescriptionKey: "No tenant configured"]) }
+        if isCharterPlan, let start = requestedStartTime {
+            var payload: [String: Any] = [
+                "scheduledDate": BookingRequest.isoDateString(from: start),
+                "scheduledStartMin": BookingRequest.minutesSinceMidnight(from: start),
+                "preferredTime": preferredTime,
+                "customerName": customerName,
+                "customerEmail": customerEmail,
+                "serviceId": serviceId,
+                "serviceSlug": serviceSlug,
+                "serviceName": serviceName,
+                "status": "NEW",
+            ]
+            if let customerPhone { payload["customerPhone"] = customerPhone }
+            if let notes { payload["notes"] = notes }
+            if let svc = tenantServices.first(where: { $0.id == serviceId }),
+               let dur = svc.durationMinutes, dur > 0 {
+                payload["durationMinutes"] = dur
+            }
+            do {
+                return try await firebaseService.syncCharterBookingSlot(payload)
+            } catch {
+                throw NSError(
+                    domain: "BookingForm",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: FirebaseFunctionsErrorHelper.message(from: error)]
+                )
+            }
+        }
         return try await firebaseService.createTenantBookingRequest(
             tenantId: tid,
             customerName: customerName,

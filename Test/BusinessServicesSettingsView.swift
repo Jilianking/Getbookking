@@ -11,17 +11,21 @@ struct BusinessServicesSettingsView: View {
     @State private var serviceToEdit: TenantService?
     @State private var showAdd = false
 
+    private var isCharter: Bool { viewModel.tenantSubscriptionPlan.isCharterPlan }
+
     var body: some View {
         List {
             Section {
-                Text("These appear on your book page. Same services as Design.")
+                Text(isCharter
+                     ? "These trips appear on Charters and Book now. Add an itinerary on each trip — clock times follow the guest’s departure."
+                     : "These appear on your book page. Same services as Design.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 if viewModel.services.isEmpty {
-                    Text("No services yet. Add one so clients can book.")
+                    Text(isCharter ? "No trips yet. Add one so guests can book." : "No services yet. Add one so clients can book.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -45,6 +49,14 @@ struct BusinessServicesSettingsView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    if isCharter, !service.boatIds.isEmpty {
+                                        let names = service.boatIds.compactMap { id in
+                                            viewModel.charterBoats.first(where: { $0.id == id })?.displayName
+                                        }
+                                        Text(names.isEmpty ? "\(service.boatIds.count) boats" : names.joined(separator: ", "))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                             Spacer()
@@ -61,7 +73,7 @@ struct BusinessServicesSettingsView: View {
                 Button {
                     showAdd = true
                 } label: {
-                    Label("Add service", systemImage: "plus")
+                    Label(isCharter ? "Add trip" : "Add service", systemImage: "plus")
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(.plain)
@@ -76,34 +88,40 @@ struct BusinessServicesSettingsView: View {
             }
         }
         .appListSurface()
-        .navigationTitle("Services")
+        .navigationTitle(isCharter ? "Trips" : "Services")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.reloadServices()
         }
         .sheet(isPresented: $showAdd) {
-            BusinessServiceEditorSheet(mode: .add) { name, duration, desc, price in
+            BusinessServiceEditorSheet(mode: .add, isCharter: isCharter, boats: viewModel.charterBoats) { name, duration, desc, price, itinerary, boatIds in
                 await viewModel.addService(
                     name: name,
                     durationMinutes: duration,
                     description: desc,
-                    startingPrice: price
+                    startingPrice: price,
+                    itinerary: itinerary,
+                    boatIds: boatIds
                 )
             }
         }
         .sheet(item: $serviceToEdit) { service in
             BusinessServiceEditorSheet(
                 mode: .edit(service),
+                isCharter: isCharter,
+                boats: viewModel.charterBoats,
                 onDelete: {
                     Task { await viewModel.deleteService(service) }
                 }
-            ) { name, duration, desc, price in
+            ) { name, duration, desc, price, itinerary, boatIds in
                 _ = await viewModel.updateService(
                     serviceId: service.id,
                     name: name,
                     description: desc,
                     durationMinutes: duration,
-                    startingPrice: price
+                    startingPrice: price,
+                    itinerary: itinerary,
+                    boatIds: boatIds
                 )
             }
         }
@@ -126,8 +144,10 @@ private struct BusinessServiceEditorSheet: View {
     }
 
     let mode: Mode
+    var isCharter: Bool = false
+    var boats: [CharterBoat] = []
     var onDelete: (() -> Void)?
-    var onSave: (String, Int?, String?, Double?) async -> Void
+    var onSave: (String, Int?, String?, Double?, [CharterItineraryStep]?, [String]?) async -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -137,16 +157,25 @@ private struct BusinessServiceEditorSheet: View {
     @State private var showStartingPrice = false
     @State private var priceText = ""
     @State private var isSaving = false
+    @State private var itinerary: [CharterItineraryStep] = []
+    @State private var boatIds: [String] = []
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Service name", text: $name)
+                TextField(isCharter ? "Trip name" : "Service name", text: $name)
                 TextField("Description (optional)", text: $descriptionText, axis: .vertical)
                     .lineLimit(2...6)
                 Toggle("Include duration", isOn: $includeDuration)
                 if includeDuration {
-                    Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    Stepper(
+                        isCharter
+                            ? (duration % 60 == 0 ? "Duration: \(duration / 60) hrs" : "Duration: \(duration) min")
+                            : "Duration: \(duration) min",
+                        value: $duration,
+                        in: isCharter ? 30...720 : 15...240,
+                        step: isCharter ? 30 : 15
+                    )
                 }
                 Toggle("Show starting price", isOn: $showStartingPrice)
                 if showStartingPrice {
@@ -154,9 +183,18 @@ private struct BusinessServiceEditorSheet: View {
                         .keyboardType(.decimalPad)
                 }
 
+                if isCharter {
+                    CharterBoatPicker(boats: boats, boatIds: $boatIds, disabled: isSaving)
+                    CharterItineraryEditor(
+                        steps: $itinerary,
+                        durationMinutes: includeDuration ? duration : 240,
+                        disabled: isSaving
+                    )
+                }
+
                 if case .edit = mode, onDelete != nil {
                     Section {
-                        Button("Delete service", role: .destructive) {
+                        Button(isCharter ? "Delete trip" : "Delete service", role: .destructive) {
                             onDelete?()
                             dismiss()
                         }
@@ -179,7 +217,9 @@ private struct BusinessServiceEditorSheet: View {
                                 name.trimmingCharacters(in: .whitespacesAndNewlines),
                                 includeDuration ? duration : nil,
                                 desc.isEmpty ? nil : desc,
-                                price
+                                price,
+                                isCharter ? itinerary : nil,
+                                isCharter ? boatIds : nil
                             )
                             isSaving = false
                             dismiss()
@@ -194,12 +234,19 @@ private struct BusinessServiceEditorSheet: View {
 
     private var title: String {
         switch mode {
-        case .add: return "New service"
-        case .edit: return "Edit service"
+        case .add: return isCharter ? "New trip" : "New service"
+        case .edit: return isCharter ? "Edit trip" : "Edit service"
         }
     }
 
     private func seedFromMode() {
+        if isCharter, case .add = mode {
+            includeDuration = true
+            duration = 240
+            itinerary = CharterItineraryStep.defaults(durationMinutes: 240)
+            boatIds = boats.map(\.id)
+            return
+        }
         guard case .edit(let s) = mode else { return }
         name = s.name
         descriptionText = s.description ?? ""
@@ -210,6 +257,12 @@ private struct BusinessServiceEditorSheet: View {
         if let p = s.price, p > 0 {
             showStartingPrice = true
             priceText = p.rounded() == p ? "\(Int(p))" : String(format: "%.2f", p)
+        }
+        if isCharter {
+            itinerary = s.itinerary.isEmpty
+                ? CharterItineraryStep.defaults(durationMinutes: s.durationMinutes ?? 240)
+                : s.itinerary
+            boatIds = s.boatIds
         }
     }
 

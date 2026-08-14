@@ -292,7 +292,7 @@ struct ClientProfileView: View {
                 ProfileStatCard(title: "Avg/month", value: formatCurrency(viewModel.averagePerMonth))
             }
 
-            if let upcoming = viewModel.upcomingBooking, let date = upcoming.requestedStartTime {
+            if let upcoming = viewModel.upcomingBooking, let date = upcoming.departureStart {
                 Button {
                     openBookingDetail(upcoming)
                 } label: {
@@ -551,7 +551,7 @@ struct ClientProfileView: View {
                         ProfileDetailCard(sectionTitle: booking.serviceName ?? "Booking") {
                             VStack(alignment: .leading, spacing: 10) {
                                 BookingRequestDetailRow(label: "Status", value: BookingRequestStatus.displayLabel(booking.status))
-                                if let date = booking.requestedStartTime ?? booking.createdAt {
+                                if let date = booking.departureStart ?? booking.createdAt {
                                     BookingRequestDetailRow(
                                         label: "Date",
                                         value: date.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()),

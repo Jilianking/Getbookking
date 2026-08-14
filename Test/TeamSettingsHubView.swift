@@ -16,6 +16,11 @@ struct TeamSettingsHubView: View {
 
     private var isSoloBusinessSettings: Bool { !includeTeamManagementSections }
 
+    private var isCharterPlan: Bool {
+        settingsViewModel.tenantSubscriptionPlan.isCharterPlan
+            || authViewModel.tenantSubscriptionPlan.isCharterPlan
+    }
+
     var body: some View {
         List {
             if includeTeamManagementSections {
@@ -26,7 +31,9 @@ struct TeamSettingsHubView: View {
                 }
             } else {
                 Section {
-                    Text("Booking and client texting for your business.")
+                    Text(isCharterPlan
+                         ? "Booking, boats, and client texting for your charters."
+                         : "Booking and client texting for your business.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -53,18 +60,31 @@ struct TeamSettingsHubView: View {
                 } label: {
                     settingsRow(
                         title: "Booking settings",
-                        subtitle: isSoloBusinessSettings
-                            ? "Booking type, deposits, and client flow"
-                            : "Client flow, owner access, booking alerts"
+                        subtitle: bookingSettingsSubtitle
                     )
+                }
+
+                if isCharterPlan {
+                    NavigationLink {
+                        CharterBoatsSettingsView(viewModel: settingsViewModel)
+                    } label: {
+                        settingsRow(
+                            title: "Boats",
+                            subtitle: settingsViewModel.charterBoats.isEmpty
+                                ? "Type, capacity, and photos"
+                                : "\(settingsViewModel.charterBoats.count) boat\(settingsViewModel.charterBoats.count == 1 ? "" : "s")"
+                        )
+                    }
                 }
 
                 NavigationLink {
                     BusinessServicesSettingsView(viewModel: settingsViewModel)
                 } label: {
                     settingsRow(
-                        title: "Services",
-                        subtitle: "Name, duration, and pricing for booking"
+                        title: isCharterPlan ? "Trips" : "Services",
+                        subtitle: isCharterPlan
+                            ? "Name, duration, itinerary, and pricing"
+                            : "Name, duration, and pricing for booking"
                     )
                 }
 
@@ -103,19 +123,21 @@ struct TeamSettingsHubView: View {
                     )
                 }
 
-                NavigationLink {
-                    TeamNotificationsSettingsView(
-                        viewModel: teamPolicyViewModel,
-                        isSoloBusinessSettings: isSoloBusinessSettings
-                    )
-                    .environmentObject(authViewModel)
-                } label: {
-                    settingsRow(
-                        title: "Notifications",
-                        subtitle: isSoloBusinessSettings
-                            ? "Client texts and summary email"
-                            : "Client SMS toggles and summary email"
-                    )
+                if !isCharterPlan {
+                    NavigationLink {
+                        TeamNotificationsSettingsView(
+                            viewModel: teamPolicyViewModel,
+                            isSoloBusinessSettings: isSoloBusinessSettings
+                        )
+                        .environmentObject(authViewModel)
+                    } label: {
+                        settingsRow(
+                            title: "Notifications",
+                            subtitle: isSoloBusinessSettings
+                                ? "Client texts and summary email"
+                                : "Client SMS toggles and summary email"
+                        )
+                    }
                 }
             }
 
@@ -136,6 +158,16 @@ struct TeamSettingsHubView: View {
         .refreshable {
             await teamPolicyViewModel.load(isDemoMode: isDemoMode)
         }
+    }
+
+    private var bookingSettingsSubtitle: String {
+        if isCharterPlan {
+            return "Request, deposit, or pay in full"
+        }
+        if isSoloBusinessSettings {
+            return "Booking type, deposits, and client flow"
+        }
+        return "Client flow, owner access, booking alerts"
     }
 
     private func settingsRow(title: String, subtitle: String) -> some View {

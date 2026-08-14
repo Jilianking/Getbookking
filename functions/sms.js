@@ -700,10 +700,10 @@ function smsRefreshNeedsPurchase(tenant, planNorm, occupiedCount) {
   return lifetime >= free;
 }
 
-/** Hard caps match seat limits: Solo 1 · Studio 5 · Shop 10. */
+/** Hard caps match seat limits: Solo/Charter 1 · Studio 5 · Shop 10. */
 function maxSmsLinesForPlan(planNorm) {
   const p = (planNorm || "solo").toString().trim().toLowerCase();
-  if (p === "solo") return 1;
+  if (p === "solo" || p === "charter") return 1;
   if (p === "studio") return 5;
   if (p === "shop") return 10;
   return 1;
@@ -773,9 +773,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
-  // Studio/Shop: recurring Extra SMS seats. Solo: one-time $12 replacement only (max 1).
-  const canPurchaseExtra = plan !== "solo" && !atMax;
-  const canPurchaseSoloReplacement = plan === "solo" && needsPurchaseForNext;
+  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12 replacement only (max 1).
+  const canPurchaseExtra = plan !== "solo" && plan !== "charter" && !atMax;
+  const canPurchaseSoloReplacement =
+    (plan === "solo" || plan === "charter") && needsPurchaseForNext;
   return {
     plan,
     freeIncluded,
@@ -818,8 +819,8 @@ function smsExtraNeededForUsage(planNorm, lineCount) {
 function newSmsLineBlockReason(tenant, planNorm, lineCount) {
   const summary = buildSmsLineSummary(tenant, planNorm, lineCount);
   if (summary.atMax) {
-    if (summary.plan === "solo") {
-      return "Solo includes 1 texting number.";
+    if (summary.plan === "solo" || summary.plan === "charter") {
+      return "This plan includes 1 texting number.";
     }
     return (
       `Your ${summary.plan} plan allows up to ${summary.maxLines} texting numbers. ` +
@@ -827,9 +828,9 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
     );
   }
   if (!summary.canProvisionNext) {
-    if (summary.plan === "solo") {
+    if (summary.plan === "solo" || summary.plan === "charter") {
       return (
-        "You've used your included Solo texting number. " +
+        "You've used your included texting number. " +
         "Getting another costs a $12 fee (not monthly)."
       );
     }

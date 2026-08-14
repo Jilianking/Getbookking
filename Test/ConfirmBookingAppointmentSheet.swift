@@ -45,7 +45,7 @@ struct ConfirmBookingAppointmentSheet: View {
         self.depositAmount = depositAmount
         self.canSendDepositSms = canSendDepositSms
 
-        let seed = request.requestedStartTime ?? request.createdAt ?? Date()
+        let seed = request.departureStart ?? request.createdAt ?? Date()
         let calendar = Calendar.current
         _confirmedDate = State(initialValue: calendar.startOfDay(for: seed))
         _confirmedTime = State(initialValue: seed)
@@ -112,10 +112,10 @@ struct ConfirmBookingAppointmentSheet: View {
     }
 
     private var clientRequestedTimeHint: String? {
-        if isReschedule, let start = currentRequest.requestedStartTime {
+        if isReschedule, let start = currentRequest.departureStart {
             return "Currently scheduled for \(start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))."
         }
-        if let start = currentRequest.requestedStartTime {
+        if let start = currentRequest.departureStart {
             return "Client requested \(start.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))."
         }
         let preferred = (currentRequest.preferredTime ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

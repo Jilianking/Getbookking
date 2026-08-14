@@ -63,6 +63,8 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     @Published var tenantSubscriptionPlan: SubscriptionPlan = .solo
     /// True when the signed-in user is `tenants.ownerUid`.
     @Published var isTenantOwner: Bool = false
+    /// Fishing charter fleet (Settings → Boats). Empty on other plans.
+    @Published var charterBoats: [CharterBoat] = []
     /// Shareable team invite URL (owner creates via Cloud Function).
     @Published var teamInviteShareURL: URL?
     @Published var isCreatingTeamInvite = false
@@ -265,6 +267,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 businessNameDraft = "Demo Studio"
                 tenantSubscriptionPlan = .solo
                 isTenantOwner = false
+                charterBoats = []
                 teamInviteShareURL = nil
                 teamInviteError = nil
                 isCreatingTeamInvite = false
@@ -355,6 +358,12 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     } else {
                         managersApproveAppointments = tenantManagersApprove
                     }
+                    if planResolved.isCharterPlan {
+                        applyCharterBookingConstraints()
+                    }
+                    charterBoats = planResolved.isCharterPlan
+                        ? CharterBoat.parseList(loadedTenant?["charterBoats"])
+                        : []
                     applyTenantBusinessHours(from: loadedTenant)
                     timeZoneId = Self.normalizedTimeZoneId(
                         p.availability.timeZone.isEmpty ? TimeZone.current.identifier : p.availability.timeZone
@@ -519,6 +528,59 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
+    /// Fishing charter: calendar / slots only; confirmation is deposit or request + approve.
+    func applyCharterBookingConstraints() {
+        guard tenantSubscriptionPlan.isCharterPlan else { return }
+        bookingMode = .calendarSlots
+        confirmationType = CharterPaymentPolicy.from(confirmation: confirmationType).confirmationType
+        personalConfirmationType = confirmationType
+        tenantConfirmationType = confirmationType
+        managersApproveAppointments = true
+    }
+
+    func saveCharterBoats() async {
+        guard tenantSubscriptionPlan.isCharterPlan, let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil; saveSuccess = false; isLoading = true }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "charterBoats": charterBoats.map { $0.toFirestore() },
+            ])
+            await MainActor.run { markBookingSettingsSaved() }
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func upsertCharterBoat(_ boat: CharterBoat) async {
+        var list = charterBoats
+        if let i = list.firstIndex(where: { $0.id == boat.id }) {
+            list[i] = boat
+        } else {
+            list.append(boat)
+        }
+        charterBoats = list
+        await saveCharterBoats()
+    }
+
+    func deleteCharterBoat(id: String) async {
+        charterBoats.removeAll { $0.id == id }
+        await saveCharterBoats()
+    }
+
+    func uploadCharterBoatImage(imageData: Data) async -> String? {
+        guard let tid = tenantId else { return nil }
+        await MainActor.run { errorMessage = nil }
+        do {
+            return try await firebaseService.uploadCharterBoatImage(tenantId: tid, imageData: imageData)
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+            return nil
+        }
+    }
+
     /// Writes form vs calendar to the **tenant** doc so public `/book` updates.
     /// Direct client write is primary (hosting reads Firestore); CF keeps server policy in sync.
     private func persistPublicBookingModeToTenant(
@@ -645,7 +707,12 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             }
             return
         }
-        await MainActor.run { errorMessage = nil; saveSuccess = false; isLoading = true }
+        await MainActor.run {
+            errorMessage = nil
+            saveSuccess = false
+            isLoading = true
+            applyCharterBookingConstraints()
+        }
         do {
             // Force public calendar/form mode onto the tenant first (what /book reads).
             try await persistPublicBookingModeToTenant(tenantId: tid, managersApprove: true)
@@ -673,6 +740,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                         personalConfirmationType = confirmationType
                         personalDepositAmount = depositAmount
                         isTenantOwner = true
+                        applyCharterBookingConstraints()
                     }
                     try await persistPublicBookingModeToTenant(tenantId: tid, managersApprove: true)
                 }
@@ -758,6 +826,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 try await firebaseService.updateTenant(tenantId: tid, updates: [
                     "blockedDates": Array(blockedDates).sorted(),
                     "blockedTimeRanges": sortedBlocks.map { $0.firestoreMap() },
+                    "timeZone": resolvedTimeZone,
                 ])
             }
             await MainActor.run {
@@ -863,7 +932,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         name: String,
         durationMinutes: Int?,
         description: String? = nil,
-        startingPrice: Double? = nil
+        startingPrice: Double? = nil,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) async {
         guard let tid = tenantId else { return }
         await MainActor.run { errorMessage = nil }
@@ -875,7 +946,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 durationMinutes: durationMinutes,
                 description: description,
                 sortOrder: nextOrder,
-                startingPrice: startingPrice
+                startingPrice: startingPrice,
+                itinerary: itinerary,
+                boatIds: boatIds
             )
             await reloadServices()
         } catch {
@@ -888,7 +961,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         name: String,
         description: String?,
         durationMinutes: Int?,
-        startingPrice: Double?
+        startingPrice: Double?,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) async -> Bool {
         guard let tid = tenantId else { return false }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -901,7 +976,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 slug: slug,
                 durationMinutes: durationMinutes,
                 description: description,
-                startingPrice: startingPrice
+                startingPrice: startingPrice,
+                itinerary: itinerary,
+                boatIds: boatIds
             )
             try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
             await reloadServices()

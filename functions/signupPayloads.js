@@ -366,7 +366,11 @@ const defaultServicesByIndustry = {
   ],
 };
 
-function themesForIndustry(industry) {
+function themesForIndustry(industry, subscriptionPlan) {
+  const plan = (subscriptionPlan || "").toString().trim().toLowerCase();
+  if (plan === "charter" || plan === "charters") {
+    return new Set(["charter-v1"]);
+  }
   const ind = (industry || "").trim().toLowerCase();
   const universal = ["luxe-v1", "blade-v1", "stonecut-v1", "studio-12-v1"];
   const classicByIndustry = {
@@ -374,9 +378,12 @@ function themesForIndustry(industry) {
     barber: "barber-shop-v1",
     tattoos: "tattoo-studio-v1",
     nails: "nail-salon-v1",
-    charters: "charter-v1",
     custom: "custom-standard",
   };
+  // Legacy tenants may still have industry=charters — keep charter-v1 only.
+  if (ind === "charters") {
+    return new Set(["charter-v1"]);
+  }
   if (!ind || !(ind in classicByIndustry)) {
     return new Set(["custom-standard", ...universal]);
   }
@@ -384,14 +391,14 @@ function themesForIndustry(industry) {
   return new Set([base, ...universal]);
 }
 
-function defaultThemeForIndustry(industry) {
-  const allowed = themesForIndustry(industry);
+function defaultThemeForIndustry(industry, subscriptionPlan) {
+  const allowed = themesForIndustry(industry, subscriptionPlan);
+  if (allowed.has("charter-v1") && allowed.size === 1) return "charter-v1";
   const first = [
     "hair-salon-v1",
     "barber-shop-v1",
     "tattoo-studio-v1",
     "nail-salon-v1",
-    "charter-v1",
     "custom-standard",
   ];
   for (const id of first) {
@@ -400,8 +407,9 @@ function defaultThemeForIndustry(industry) {
   return "custom-standard";
 }
 
-function resolveWebThemeId(industry, preset) {
-  const allowed = themesForIndustry(industry);
+function resolveWebThemeId(industry, preset, subscriptionPlan) {
+  const allowed = themesForIndustry(industry, subscriptionPlan);
+  if (allowed.has("charter-v1") && allowed.size === 1) return "charter-v1";
   const map = {
     obsidian: "blade-v1",
     blanc: "luxe-v1",
@@ -410,10 +418,10 @@ function resolveWebThemeId(industry, preset) {
   };
   let id = map[preset];
   if (preset === "portfolio" || !id) {
-    return defaultThemeForIndustry(industry);
+    return defaultThemeForIndustry(industry, subscriptionPlan);
   }
   if (!allowed.has(id)) {
-    return defaultThemeForIndustry(industry);
+    return defaultThemeForIndustry(industry, subscriptionPlan);
   }
   return id;
 }
@@ -426,6 +434,7 @@ function slugFromBusiness(business) {
     .join("");
 }
 
+/** Industries selectable at signup / Settings. Fishing is a subscription plan, not an industry. */
 function normalizeIndustry(raw) {
   const s = (raw || "").trim().toLowerCase();
   const map = {
@@ -434,12 +443,12 @@ function normalizeIndustry(raw) {
     tattoo: "tattoos",
     tattoos: "tattoos",
     nails: "nails",
-    charter: "charters",
-    charters: "charters",
-    boating: "charters",
-    fishing: "charters",
     custom: "custom",
   };
+  // Legacy aliases — still resolve for existing tenants, not offered as new picks.
+  if (s === "charter" || s === "charters" || s === "boating" || s === "fishing") {
+    return "charters";
+  }
   return map[s] || (["hair", "barber", "tattoos", "nails", "charters", "custom"].includes(s) ? s : "custom");
 }
 

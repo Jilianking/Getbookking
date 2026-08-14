@@ -15,11 +15,15 @@ struct DesignView: View {
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .gallery
     @State private var isShowingManage = false
+    /// Path suffix for Design preview when Manage tabs map to site pages (charter plan).
+    @State private var managePreviewPath: String = ""
     @State private var showBladeStarterConfirm = false
     @State private var showStudio12ProcessStartersConfirm = false
     @State private var bladeServiceToEdit: TenantService?
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
+    @State private var isEditingCharterFaq = false
+    @State private var charterFaqEditIndex = 0
     @State private var isQuickEditEnabled = false
     @State private var quickEditBridge = WebViewQuickEditBridge()
     @StateObject private var quickEditHistory = QuickEditHistoryStore()
@@ -96,7 +100,7 @@ struct DesignView: View {
                                 }
                                 Button("Manage") {
                                     isQuickEditEnabled = false
-                                    selectedTab = .gallery
+                                    selectedTab = isCharterPlan ? .charters : .gallery
                                     isShowingManage = true
                                 }
                                 .font(.caption.weight(.semibold))
@@ -121,6 +125,10 @@ struct DesignView: View {
                     sessionStore: sessionStore
                 )
                 await authViewModel.refreshTeamAccess()
+                // Tenant doc is source of truth for Design (Harbor → charter plan).
+                if viewModel.hasTenant {
+                    authViewModel.applyLoadedSubscriptionPlan(viewModel.subscriptionPlan)
+                }
             }
             .onDisappear {
                 if isQuickEditEnabled {
@@ -258,6 +266,17 @@ struct DesignView: View {
                             stepIndex: studio12ProcessStepEditIndex,
                             viewModel: viewModel,
                             onDismiss: { isEditingStudio12ProcessStep = false }
+                        )
+                    }
+                }
+            }
+            .sheet(isPresented: $isEditingCharterFaq) {
+                Group {
+                    if viewModel.charterFaqs.indices.contains(charterFaqEditIndex) {
+                        EditCharterFaqSheet(
+                            faqIndex: charterFaqEditIndex,
+                            viewModel: viewModel,
+                            onDismiss: { isEditingCharterFaq = false }
                         )
                     }
                 }
@@ -547,12 +566,31 @@ struct DesignView: View {
     private var sitePreviewURL: URL? {
         guard viewModel.hasTenant, !viewModel.bookingUrl.isEmpty,
               var components = URLComponents(string: viewModel.bookingUrl) else { return nil }
+        if isShowingManage, isCharterPlan {
+            let suffix = managePreviewPathForCharterTab(selectedTab)
+            if !suffix.isEmpty {
+                let base = viewModel.bookingUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                components = URLComponents(string: base + suffix) ?? components
+            }
+        }
         var q = components.queryItems ?? []
+        q.removeAll { $0.name == "_cb" || $0.name == "bk_template_preview" }
         q.append(URLQueryItem(name: "_cb", value: String(viewModel.webPreviewReloadToken)))
         // Keep structural template controls visible in the in-app editor even when their public page is disabled.
         q.append(URLQueryItem(name: "bk_template_preview", value: "1"))
         components.queryItems = q
         return components.url
+    }
+
+    private func managePreviewPathForCharterTab(_ tab: DesignTab) -> String {
+        switch tab {
+        case .charters: return "/charters"
+        case .howItWorks: return "/how-it-works"
+        case .shop: return "/shop"
+        case .about: return "/about"
+        case .book: return "/book"
+        default: return ""
+        }
     }
 
     private var activePaletteDisplayName: String {
@@ -606,6 +644,7 @@ struct DesignView: View {
                     templateFamily: activeTemplateFamily,
                     accentHex: viewModel.primaryColorHex,
                     industry: viewModel.industry,
+                    showTemplatePicker: !isCharterPlan,
                     isColorPickerPresented: $isColorPickerPresented,
                     isTemplatePickerPresented: $isTemplatePickerPresented
                 )
@@ -632,7 +671,6 @@ struct DesignView: View {
                     }
                 case let .inlineFocus(focus):
                     quickEditInlineFocus = focus
-                    isQuickEditChromeCollapsed = true
                 case .inlineBlur:
                     quickEditInlineFocus = nil
                 case let .openColorSurface(surfaceId):
@@ -683,6 +721,18 @@ struct DesignView: View {
                            viewModel.studio12ProcessSteps.indices.contains(idx) {
                             studio12ProcessStepEditIndex = idx
                             isEditingStudio12ProcessStep = true
+                            return
+                        }
+                    }
+                    if key.hasPrefix("charterFaq:") {
+                        let parts = key.split(separator: ":").map(String.init)
+                        if parts.count == 3,
+                           parts[0] == "charterFaq",
+                           ["edit", "question", "answer"].contains(parts[2]),
+                           let idx = Int(parts[1]),
+                           viewModel.charterFaqs.indices.contains(idx) {
+                            charterFaqEditIndex = idx
+                            isEditingCharterFaq = true
                             return
                         }
                     }
@@ -759,11 +809,30 @@ struct DesignView: View {
             ManageSegmentTabs(
                 tabs: visibleManageTabs,
                 selectedTab: $selectedTab,
-                title: { $0.manageSegmentTitle }
+                title: { $0.manageSegmentTitle(isCharterPlan: isCharterPlan) }
             )
             .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
                 if !visibleManageTabs.contains(selectedTab) {
                     selectedTab = visibleManageTabs.first ?? .gallery
+                }
+            }
+            .onChange(of: viewModel.subscriptionPlan) { _, _ in
+                if !visibleManageTabs.contains(selectedTab) {
+                    selectedTab = visibleManageTabs.first ?? (isCharterPlan ? .charters : .gallery)
+                }
+            }
+            .onChange(of: selectedTab) { _, tab in
+                if isCharterPlan {
+                    managePreviewPath = managePreviewPathForCharterTab(tab)
+                    viewModel.invalidateWebPreview()
+                }
+            }
+            .onAppear {
+                if isCharterPlan {
+                    if !visibleManageTabs.contains(selectedTab) {
+                        selectedTab = .charters
+                    }
+                    managePreviewPath = managePreviewPathForCharterTab(selectedTab)
                 }
             }
             ScrollView {
@@ -797,20 +866,31 @@ struct DesignView: View {
                                 showGalleryPickerLoadError: $showGalleryPickerLoadError
                             )
                         case .book:
-                            ManageBookTabContent(
-                                viewModel: viewModel,
-                                teamAccess: authViewModel.teamAccess,
-                                serviceToEdit: $bladeServiceToEdit
-                            )
+                            if isCharterPlan {
+                                ManageCharterBookTabContent(viewModel: viewModel)
+                            } else {
+                                ManageBookTabContent(
+                                    viewModel: viewModel,
+                                    teamAccess: authViewModel.teamAccess,
+                                    serviceToEdit: $bladeServiceToEdit
+                                )
+                            }
                         case .about:
                             ManageAboutTabContent(
                                 viewModel: viewModel,
-                                isClassicTemplate: isClassicTemplate
+                                isClassicTemplate: isClassicTemplate || isCharterPlan
                             )
                         case .team:
                             ManageTeamTabContent(viewModel: viewModel)
                         case .shop:
                             ManageShopTabContent(viewModel: viewModel)
+                        case .charters:
+                            ManageChartersTabContent(
+                                viewModel: viewModel,
+                                serviceToEdit: $bladeServiceToEdit
+                            )
+                        case .howItWorks:
+                            ManageHowItWorksTabContent(viewModel: viewModel)
                         default:
                             EmptyView()
                         }
@@ -881,8 +961,18 @@ struct DesignView: View {
         Studio12IndustryCopy.template(from: viewModel.industry)
     }
 
+    /// Fishing charter subscription from tenant (preferred) or team-access refresh.
+    private var isCharterPlan: Bool {
+        viewModel.subscriptionPlan.isCharterPlan
+            || authViewModel.tenantSubscriptionPlan.isCharterPlan
+    }
+
     private var visibleManageTabs: [DesignTab] {
-        DesignTab.manageTabs(showTeam: authViewModel.tenantSubscriptionPlan.allowsTeamInvites)
+        DesignTab.manageTabs(
+            showTeam: viewModel.subscriptionPlan.allowsTeamInvites
+                || authViewModel.tenantSubscriptionPlan.allowsTeamInvites,
+            isCharterPlan: isCharterPlan
+        )
     }
 
     /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.
@@ -977,18 +1067,34 @@ struct DesignView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Template")
                     .font(.title2.bold())
-                Text("Choose a template first. Your business type then fills in that template with industry-specific defaults.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                if isCharterPlan {
+                    Text("Boat / Fishing charter includes one site template. Manage Charters, How it works, About, and Book now from the Manage tabs.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Choose a template first. Your business type then fills in that template with industry-specific defaults.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
-            ForEach(TemplateFamily.allCases) { family in
+            if isCharterPlan {
                 TemplateFamilyCard(
-                    family: family,
-                    isActive: activeTemplateFamily == family,
+                    family: .classic,
+                    isActive: true,
                     isBusy: viewModel.isLoading
                 ) {
-                    let theme = WebTheme.theme(for: family, industry: viewModel.industry)
-                    Task { await viewModel.applyWebTheme(theme) }
+                    Task { await viewModel.applyWebTheme(.charterV1) }
+                }
+            } else {
+                ForEach(TemplateFamily.allCases) { family in
+                    TemplateFamilyCard(
+                        family: family,
+                        isActive: activeTemplateFamily == family,
+                        isBusy: viewModel.isLoading
+                    ) {
+                        let theme = WebTheme.theme(for: family, industry: viewModel.industry)
+                        Task { await viewModel.applyWebTheme(theme) }
+                    }
                 }
             }
 
@@ -997,9 +1103,15 @@ struct DesignView: View {
             Text("Pages on your site")
                 .font(.headline)
                 .padding(.top, 12)
-            Text("Gallery, Book, About, and Shop each have an Enable … page toggle at the bottom of that tab. Add and edit products from Shop in the main menu.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if isCharterPlan {
+                Text("Charters, How it works, About, and Book now are managed from the Manage tabs.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Gallery, Book, About, and Shop each have an Enable … page toggle at the bottom of that tab. Add and edit products from Shop in the main menu.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
@@ -2546,36 +2658,64 @@ struct AddServiceSheet: View {
     @State private var showStartingPrice = false
     @State private var priceText = ""
     @State private var showingSheet = false
+    @State private var itinerary: [CharterItineraryStep] = CharterItineraryStep.defaults(durationMinutes: 240)
+    @State private var boatIds: [String] = []
+
+    private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
 
     var body: some View {
-        Button(action: { showingSheet = true }) {
+        Button(action: {
+            if isCharter {
+                includeDuration = true
+                if duration == 30 { duration = 240 }
+                if itinerary.isEmpty { itinerary = CharterItineraryStep.defaults(durationMinutes: duration) }
+                if boatIds.isEmpty { boatIds = viewModel.charterBoats.map(\.id) }
+            }
+            showingSheet = true
+        }) {
             HStack {
                 Image(systemName: "plus")
-                Text("Add service")
+                Text(isCharter ? "Add trip" : "Add service")
             }
         }
         .disabled(disabled)
         .sheet(isPresented: $showingSheet) {
             NavigationStack {
                 Form {
-                    TextField("Service name", text: $name)
-                    TextField("Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
+                    TextField(isCharter ? "Trip name" : "Service name", text: $name)
+                    TextField(isCharter ? "Description (optional)" : "Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
                         .lineLimit(2...6)
                     Toggle("Include duration", isOn: $includeDuration)
                     if includeDuration {
-                        Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                        Stepper(
+                            isCharter
+                                ? (duration % 60 == 0 ? "Duration: \(duration / 60) hrs" : "Duration: \(duration) min")
+                                : "Duration: \(duration) min",
+                            value: $duration,
+                            in: isCharter ? 30...720 : 15...240,
+                            step: isCharter ? 30 : 15
+                        )
                     }
                     Toggle("Show starting price", isOn: $showStartingPrice)
                     if showStartingPrice {
                         TextField("Amount (USD)", text: $priceText)
                             .keyboardType(.decimalPad)
                     } else {
-                        Text("Your site shows “Book for pricing” when this is off.")
+                        Text(isCharter
+                             ? "When off, price is hidden on trip cards."
+                             : "Your site shows “Book for pricing” when this is off.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    if isCharter {
+                        CharterBoatPicker(boats: viewModel.charterBoats, boatIds: $boatIds)
+                        CharterItineraryEditor(
+                            steps: $itinerary,
+                            durationMinutes: includeDuration ? duration : 240
+                        )
+                    }
                 }
-                .navigationTitle("New service")
+                .navigationTitle(isCharter ? "New trip" : "New service")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -2590,7 +2730,9 @@ struct AddServiceSheet: View {
                                     name: name,
                                     durationMinutes: includeDuration ? duration : nil,
                                     description: desc.isEmpty ? nil : desc,
-                                    startingPrice: price
+                                    startingPrice: price,
+                                    itinerary: isCharter ? itinerary : nil,
+                                    boatIds: isCharter ? boatIds : nil
                                 )
                                 name = ""
                                 includeDuration = false
@@ -2598,6 +2740,8 @@ struct AddServiceSheet: View {
                                 descriptionText = ""
                                 showStartingPrice = false
                                 priceText = ""
+                                itinerary = CharterItineraryStep.defaults(durationMinutes: 240)
+                                boatIds = []
                                 showingSheet = false
                             }
                         }
@@ -2856,6 +3000,150 @@ private struct EditStudio12ProcessStepSheet: View {
     }
 }
 
+private struct EditCharterFaqSheet: View {
+    let faqIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var questionText = ""
+    @State private var answerText = ""
+
+    private var placeholderPair: (String, String) {
+        let base = DesignViewModel.defaultCharterFaqs
+        guard faqIndex >= 0, faqIndex < base.count else {
+            return ("Question", "Answer for guests")
+        }
+        let f = base[faqIndex]
+        return (f.question, f.answer)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Question", text: $questionText, prompt: Text(placeholderPair.0), axis: .vertical)
+                    .lineLimit(2...4)
+                TextField("Answer", text: $answerText, prompt: Text(placeholderPair.1), axis: .vertical)
+                    .lineLimit(3...10)
+            }
+            .navigationTitle("Edit FAQ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let q = questionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let a = answerText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        viewModel.updateCharterFaq(at: faqIndex, question: q, answer: a)
+                        Task { await viewModel.persistCharterFaqs() }
+                        onDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard viewModel.charterFaqs.indices.contains(faqIndex) else { return }
+            let f = viewModel.charterFaqs[faqIndex]
+            questionText = f.question
+            answerText = f.answer
+        }
+    }
+}
+
+struct CharterBoatPicker: View {
+    let boats: [CharterBoat]
+    @Binding var boatIds: [String]
+    var disabled: Bool = false
+
+    var body: some View {
+        Section {
+            if boats.isEmpty {
+                Text("Add boats in Business settings → Boats, then assign them to this trip.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(boats) { boat in
+                    Toggle(isOn: Binding(
+                        get: { boatIds.contains(boat.id) },
+                        set: { on in
+                            if on {
+                                if !boatIds.contains(boat.id) { boatIds.append(boat.id) }
+                            } else {
+                                boatIds.removeAll { $0 == boat.id }
+                            }
+                        }
+                    )) {
+                        Text("\(boat.displayName) · \(boat.capacityLabel)")
+                    }
+                    .disabled(disabled)
+                }
+                Text("Check every boat this trip can run on. Guests can filter Our charters by boat.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Boats")
+        }
+    }
+}
+
+struct CharterItineraryEditor: View {
+    @Binding var steps: [CharterItineraryStep]
+    var durationMinutes: Int
+    var disabled: Bool = false
+
+    var body: some View {
+        Section {
+            Text("Times are relative to departure. Guests see clock times after they pick a time on this trip.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach($steps) { $step in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(step.offsetCaption)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(role: .destructive) {
+                            steps.removeAll { $0.id == step.id }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(disabled || steps.count <= 1)
+                    }
+                    Stepper(
+                        offsetStepperLabel(step.offsetMinutes),
+                        value: $step.offsetMinutes,
+                        in: -180...720,
+                        step: 15
+                    )
+                    .disabled(disabled)
+                    TextField("What happens", text: $step.text, axis: .vertical)
+                        .lineLimit(2...4)
+                        .disabled(disabled)
+                }
+                .padding(.vertical, 4)
+            }
+            Button {
+                let last = steps.last?.offsetMinutes ?? 0
+                let next = min(720, last + max(30, durationMinutes > 0 ? durationMinutes / max(steps.count, 1) : 60))
+                steps.append(CharterItineraryStep(offsetMinutes: next, text: ""))
+            } label: {
+                Label("Add itinerary step", systemImage: "plus")
+            }
+            .disabled(disabled || steps.count >= 8)
+        } header: {
+            Text("Itinerary")
+        }
+    }
+
+    private func offsetStepperLabel(_ minutes: Int) -> String {
+        if minutes == 0 { return "At departure" }
+        if minutes < 0 { return "\(abs(minutes)) min before" }
+        return "+\(minutes) min"
+    }
+}
+
 private struct EditTenantServiceSheet: View {
     let service: TenantService
     @ObservedObject var viewModel: DesignViewModel
@@ -2866,6 +3154,13 @@ private struct EditTenantServiceSheet: View {
     @State private var duration = 30
     @State private var showStartingPrice = false
     @State private var priceText = ""
+    @State private var itinerary: [CharterItineraryStep] = []
+    @State private var boatIds: [String] = []
+
+    private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
+
+    private var durationRange: ClosedRange<Int> { isCharter ? 30...720 : 15...240 }
+    private var durationStep: Int { isCharter ? 30 : 15 }
 
     private var descriptionFieldTitle: String {
         let fam = WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
@@ -2889,7 +3184,14 @@ private struct EditTenantServiceSheet: View {
                     .lineLimit(3...8)
                 Toggle("Include duration", isOn: $includeDuration)
                 if includeDuration {
-                    Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    Stepper(
+                        isCharter
+                            ? (duration % 60 == 0 ? "Duration: \(duration / 60) hrs" : "Duration: \(duration) min")
+                            : "Duration: \(duration) min",
+                        value: $duration,
+                        in: durationRange,
+                        step: durationStep
+                    )
                 }
                 Toggle("Show starting price", isOn: $showStartingPrice)
                 if showStartingPrice {
@@ -2900,8 +3202,20 @@ private struct EditTenantServiceSheet: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                if isCharter {
+                    CharterBoatPicker(
+                        boats: viewModel.charterBoats,
+                        boatIds: $boatIds,
+                        disabled: viewModel.isSavingBladeServices
+                    )
+                    CharterItineraryEditor(
+                        steps: $itinerary,
+                        durationMinutes: includeDuration ? duration : 240,
+                        disabled: viewModel.isSavingBladeServices
+                    )
+                }
             }
-            .navigationTitle("Edit service")
+            .navigationTitle(isCharter ? "Edit trip" : "Edit service")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2917,7 +3231,9 @@ private struct EditTenantServiceSheet: View {
                                 name: name,
                                 description: desc.isEmpty ? nil : desc,
                                 durationMinutes: includeDuration ? duration : nil,
-                                startingPrice: price
+                                startingPrice: price,
+                                itinerary: isCharter ? itinerary : nil,
+                                boatIds: isCharter ? boatIds : nil
                             )
                             if ok { onDismiss() }
                         }
@@ -2943,6 +3259,12 @@ private struct EditTenantServiceSheet: View {
                 showStartingPrice = false
                 priceText = ""
             }
+            if isCharter {
+                itinerary = service.itinerary.isEmpty
+                    ? CharterItineraryStep.defaults(durationMinutes: service.durationMinutes ?? 240)
+                    : service.itinerary
+                boatIds = service.boatIds
+            }
         }
     }
 }
@@ -2956,6 +3278,8 @@ private struct DesignThemePickerBar: View {
     let templateFamily: TemplateFamily
     let accentHex: String
     let industry: String?
+    /// Boat / Fishing charter plan has one locked template — hide the template dropdown.
+    var showTemplatePicker: Bool = true
     @Binding var isColorPickerPresented: Bool
     @Binding var isTemplatePickerPresented: Bool
 
@@ -2986,26 +3310,28 @@ private struct DesignThemePickerBar: View {
                 if isOpen { isTemplatePickerPresented = false }
             }
 
-            DesignPickerPill(
-                title: templateFamily.displayName,
-                isPresented: $isTemplatePickerPresented,
-                isDisabled: viewModel.isLoading
-            ) {
-                Image(systemName: templateFamily.icon)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
-            } popover: {
-                DesignTemplatePickerPopover(
-                    viewModel: viewModel,
-                    industry: industry,
-                    onDismiss: { isTemplatePickerPresented = false }
-                )
-                .frame(width: 340)
-                .presentationCompactAdaptation(.popover)
-            }
-            .onChange(of: isTemplatePickerPresented) { _, isOpen in
-                if isOpen { isColorPickerPresented = false }
+            if showTemplatePicker {
+                DesignPickerPill(
+                    title: templateFamily.displayName,
+                    isPresented: $isTemplatePickerPresented,
+                    isDisabled: viewModel.isLoading
+                ) {
+                    Image(systemName: templateFamily.icon)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                } popover: {
+                    DesignTemplatePickerPopover(
+                        viewModel: viewModel,
+                        industry: industry,
+                        onDismiss: { isTemplatePickerPresented = false }
+                    )
+                    .frame(width: 340)
+                    .presentationCompactAdaptation(.popover)
+                }
+                .onChange(of: isTemplatePickerPresented) { _, isOpen in
+                    if isOpen { isColorPickerPresented = false }
+                }
             }
 
             Spacer(minLength: 0)

@@ -72,7 +72,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
     case tattooStudioV1 = "tattoo-studio-v1"
     /// Nails: classic portfolio template.
     case nailSalonV1 = "nail-salon-v1"
-    /// Charters: classic portfolio template for boating / fishing.
+    /// Charters: fishing vertical template for `SubscriptionPlan.charter` (not an industry picker option).
     case charterV1 = "charter-v1"
     /// Custom: neutral classic portfolio template.
     case customStandard = "custom-standard"
@@ -118,7 +118,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Classic"
         case .tattooStudioV1: return "Classic"
         case .nailSalonV1: return "Classic"
-        case .charterV1: return "Classic"
+        case .charterV1: return "Boat / Fishing"
         case .customStandard: return "Classic"
         case .luxeV1: return "Luxe"
         case .bladeV1: return "Blade"
@@ -132,7 +132,7 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .barberShopV1: return "Hero, featured work, about, sidebar"
         case .tattooStudioV1: return "Hero, featured work, about, sidebar"
         case .nailSalonV1: return "Hero, featured work, about, sidebar"
-        case .charterV1: return "Hero, featured work, about, sidebar"
+        case .charterV1: return "Charters browse, trip detail, how it works, book"
         case .customStandard: return "Hero, featured work, about, sidebar"
         case .luxeV1: return "Elegant hero, services, promo, team, sidebar"
         case .bladeV1: return "Dark hero, services, gallery, reviews, shop, sidebar"
@@ -165,7 +165,8 @@ enum WebTheme: String, CaseIterable, Identifiable {
         case .studio12V1: return "Ivory editorial, marquee, horizontal gallery"
         case .hairSalonV1, .barberShopV1: return "Portfolio hero, featured work, book flow"
         case .tattooStudioV1: return "Bold hero, featured grid, sidebar"
-        case .nailSalonV1, .charterV1, .customStandard: return "Neutral portfolio layout with gallery and about"
+        case .charterV1: return "Fishing charter booking — trips, captains, book flow"
+        case .nailSalonV1, .customStandard: return "Neutral portfolio layout with gallery and about"
         }
     }
 
@@ -178,7 +179,9 @@ enum WebTheme: String, CaseIterable, Identifiable {
             return ["Hero", "Artists", "Portfolio", "Styles", "Process", "Booking"]
         case .luxeV1:
             return ["Hero", "Services", "Gallery", "Promo", "Shop", "Booking"]
-        case .nailSalonV1, .charterV1, .customStandard:
+        case .charterV1:
+            return ["Home", "Charters", "How it works", "About", "Book"]
+        case .nailSalonV1, .customStandard:
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
         case .hairSalonV1, .barberShopV1, .tattooStudioV1:
             return ["Hero", "Featured", "About", "Gallery", "Booking"]
@@ -230,31 +233,40 @@ enum WebTheme: String, CaseIterable, Identifiable {
     }
 
     /// Themes shown in Website Design for the current business type from Settings.
-    static func themes(forIndustry industry: String?) -> [WebTheme] {
+    /// Charter (fishing) plan tenants only get `charter-v1` — no Luxe/Blade/etc.
+    static func themes(forIndustry industry: String?, subscriptionPlan: SubscriptionPlan? = nil) -> [WebTheme] {
+        if subscriptionPlan?.isCharterPlan == true || industry == BookingTemplate.charters.rawValue {
+            return [.charterV1]
+        }
         guard let raw = industry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               let bt = BookingTemplate(rawValue: raw) else {
             return [.customStandard] + allCases.filter(\.isUniversal)
         }
-        return allCases.filter { $0.bookingIndustry == bt || $0.isUniversal }
+        // Charters is plan-gated; never offer it as a classic industry theme here.
+        if bt == .charters {
+            return [.charterV1]
+        }
+        return allCases.filter { ($0.bookingIndustry == bt || $0.isUniversal) && $0 != .charterV1 }
     }
 
     /// Default theme when `webThemeId` is missing or invalid for the current industry.
-    static func defaultTheme(forIndustry industry: String?) -> WebTheme {
-        let list = themes(forIndustry: industry)
+    static func defaultTheme(forIndustry industry: String?, subscriptionPlan: SubscriptionPlan? = nil) -> WebTheme {
+        let list = themes(forIndustry: industry, subscriptionPlan: subscriptionPlan)
         return list.first ?? .customStandard
     }
 
     /// Resolves stored id; falls back if industry changed in Settings and old id no longer applies.
-    static func resolvedThemeId(stored: String?, industry: String?) -> String {
-        let allowed = Set(themes(forIndustry: industry).map(\.rawValue))
+    static func resolvedThemeId(stored: String?, industry: String?, subscriptionPlan: SubscriptionPlan? = nil) -> String {
+        let allowed = Set(themes(forIndustry: industry, subscriptionPlan: subscriptionPlan).map(\.rawValue))
         if let s = stored, allowed.contains(s) { return s }
-        return defaultTheme(forIndustry: industry).rawValue
+        return defaultTheme(forIndustry: industry, subscriptionPlan: subscriptionPlan).rawValue
     }
 
     /// Industry-specific Classic themes only (Studio 12 is its own `TemplateFamily` in the app).
     static func classicVariants(forIndustry industry: String?) -> [WebTheme] {
         guard let raw = industry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               let bt = BookingTemplate(rawValue: raw) else { return [] }
-        return allCases.filter { $0.family == .classic && $0.bookingIndustry == bt }
+        if bt == .charters { return [.charterV1] }
+        return allCases.filter { $0.family == .classic && $0.bookingIndustry == bt && $0 != .charterV1 }
     }
 }

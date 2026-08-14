@@ -576,7 +576,7 @@ struct BookingRequestListRow: View {
     private var metadataChipsRow: some View {
         HStack(spacing: 8) {
             AppMetadataChip(text: serviceName)
-            if let start = request.requestedStartTime {
+            if let start = request.departureStart {
                 AppMetadataChip(
                     text: start.formatted(.dateTime.month(.abbreviated).day())
                 )
@@ -690,10 +690,10 @@ struct BookingRequestDetailView: View {
     }
 
     private var confirmedTimeLabel: String {
-        if statusLower == BookingRequestStatus.confirmed, let start = currentRequest.requestedStartTime {
+        if statusLower == BookingRequestStatus.confirmed, let start = currentRequest.departureStart {
             return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         }
-        if BookingRequestStatus.isInFlightPending(currentRequest.status), let start = currentRequest.requestedStartTime {
+        if BookingRequestStatus.isInFlightPending(currentRequest.status), let start = currentRequest.departureStart {
             return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         }
         return "Not set yet"
@@ -847,7 +847,7 @@ struct BookingRequestDetailView: View {
     private var appointmentCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             BookingRequestSectionHeader(title: "Appointment request")
-            if let start = request.requestedStartTime {
+            if let start = request.departureStart {
                 BookingRequestDetailRow(
                     label: "Requested date",
                     value: start.formatted(.dateTime.month(.abbreviated).day().year())
@@ -1088,7 +1088,7 @@ struct BookingRequestDetailView: View {
     private var assignFromScheduleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let staff = currentRequest.assignedMemberDisplayLabel,
-               let start = currentRequest.requestedStartTime {
+               let start = currentRequest.departureStart {
                 BookingRequestDetailRow(
                     label: "Assigned to",
                     value: "\(staff) · \(start.formatted(date: .omitted, time: .shortened))"
@@ -1117,7 +1117,7 @@ struct BookingRequestDetailView: View {
         if showsStaffAssignmentUI {
             return currentRequest.hasAssignedMember ? "Change time & assignee" : "Pick time & assign"
         }
-        return currentRequest.requestedStartTime != nil ? "Change time" : "Pick time"
+        return currentRequest.departureStart != nil ? "Change time" : "Pick time"
     }
 
     private var quickAssignPicker: some View {

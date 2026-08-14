@@ -12,10 +12,16 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
     case barber = "barber"
     case tattoos = "tattoos"
     case nails = "nails"
+    /// Locked industry for `SubscriptionPlan.charter` — not shown in Settings industry picker.
     case charters = "charters"
     case custom = "custom"
 
     var id: String { rawValue }
+
+    /// Industries owners can pick in Settings (excludes fishing — that is a subscription plan).
+    static var selectableCases: [BookingTemplate] {
+        allCases.filter { $0 != .charters }
+    }
 
     var displayName: String {
         switch self {
@@ -23,7 +29,7 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
         case .barber: return "Barber shop"
         case .tattoos: return "Tattoo Studio"
         case .nails: return "Nail Salon"
-        case .charters: return "Boating / Fishing Charter"
+        case .charters: return "Boat / Fishing charter"
         case .custom: return "Custom / Blank"
         }
     }

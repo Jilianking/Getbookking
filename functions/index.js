@@ -62,6 +62,7 @@ const {
   ALLOWED_DEMO_APP_SLUGS,
   buildDemoAppSnapshot,
 } = require("./demoAppSnapshot");
+const charterOccupancy = require("./charterOccupancy");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -109,7 +110,7 @@ function customerDocIdForTenant(name, email, phone) {
   return `${safe || "customer"}_${Date.now()}`;
 }
 
-/** Canonical plan slug: `solo` | `studio` | `shop` (accepts legacy `basic` and older aliases). */
+/** Canonical plan slug: `solo` | `studio` | `shop` | `charter` (accepts legacy aliases). */
 function normalizeSubscriptionPlan(plan) {
   const p = (plan || "").toString().trim().toLowerCase();
   const legacy = {
@@ -120,10 +121,21 @@ function normalizeSubscriptionPlan(plan) {
     growth: "studio",
     pro: "studio",
     enterprise: "shop",
+    charter: "charter",
+    charters: "charter",
+    boat: "charter",
+    fishing: "charter",
+    boating: "charter",
   };
   if (legacy[p]) return legacy[p];
-  if (p === "solo" || p === "studio" || p === "shop") return p;
+  if (p === "solo" || p === "studio" || p === "shop" || p === "charter") return p;
   return "solo";
+}
+
+/** Owner-only plans (no team invites): Solo and Boat / Fishing charter. */
+function isSingleSeatPlan(plan) {
+  const p = normalizeSubscriptionPlan(plan);
+  return p === "solo" || p === "charter";
 }
 
 const US_STATE_ABBRS = new Set([
@@ -157,7 +169,7 @@ function parseStripeSubscriptionPriceIds() {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Set secret STRIPE_SUBSCRIPTION_PRICE_IDS to JSON: " +
-        '{"solo":"price_...","studio":"price_...","shop":"price_..."}'
+        '{"solo":"price_...","studio":"price_...","shop":"price_...","charter":"price_..."}'
     );
   }
   let map;
@@ -174,14 +186,24 @@ function parseStripeSubscriptionPriceIds() {
 
 function stripePriceIdForPlan(planNorm) {
   const map = parseStripeSubscriptionPriceIds();
-  const id = map[planNorm];
+  let id = map[planNorm];
   if (!id || typeof id !== "string") {
     throw new functions.https.HttpsError(
       "failed-precondition",
       `No Stripe price id for plan "${planNorm}" in STRIPE_SUBSCRIPTION_PRICE_IDS.`
     );
   }
-  return id.trim();
+  id = id.trim();
+  if (planNorm === "charter") {
+    const soloId = (map.solo || "").toString().trim();
+    if (soloId && soloId === id) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Charter needs its own Stripe price id in STRIPE_SUBSCRIPTION_PRICE_IDS (must not reuse Solo)."
+      );
+    }
+  }
+  return id;
 }
 
 /** Optional $12/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
@@ -656,7 +678,7 @@ async function reconcileSmsExtraPaidToUsage(
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
   );
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     return { tenant, paid: 0, changed: false };
   }
   const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
@@ -791,7 +813,7 @@ async function maybeReduceSmsExtraAfterReleasingOccupiedLine(
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
   );
-  if (plan === "solo") return null;
+  if (isSingleSeatPlan(plan)) return null;
   const usedAfter = await sms.countOccupiedSmsLines(tenantId, tenant);
   const result = await reconcileSmsExtraPaidToUsage(
     stripe,
@@ -906,7 +928,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
 
   const {
     teamSize,
-    industry,
+    industry: industryRaw,
     industryCustomLabel,
     businessName,
     city,
@@ -918,8 +940,15 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     plan,
   } = pending;
 
+  const subscriptionPlan = normalizeSubscriptionPlan(plan);
+  // Boat / Fishing charter is a plan, not an industry picker — lock industry + theme.
+  const industry =
+    subscriptionPlan === "charter" ? "charters" : industryRaw;
   const slug = slugFromBusiness(businessName);
-  const webThemeId = resolveWebThemeId(industry, templatePreset || "portfolio");
+  const webThemeId =
+    subscriptionPlan === "charter"
+      ? "charter-v1"
+      : resolveWebThemeId(industry, templatePreset || "portfolio");
   const formSchema = formSchemaForIndustry(industry);
   const cityDisplay = titleCaseCityWords(city);
   const serviceArea = composeServiceArea(cityDisplay, stateAbbr);
@@ -927,7 +956,6 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   const now = admin.firestore.FieldValue.serverTimestamp();
   const tenantRef = db.collection("tenants").doc();
   const tenantId = tenantRef.id;
-  const subscriptionPlan = normalizeSubscriptionPlan(plan);
 
   const subscriptionStatus =
     billing.subscriptionStatus &&
@@ -957,7 +985,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     updatedAt: now,
     galleryGridLayout: "3x1",
     galleryLayoutStyle: "classic_grid",
-    shopEnabled: false,
+    shopEnabled: subscriptionPlan === "charter",
     shopTaxEnabled: false,
     inPersonTaxEnabled: false,
     aboutText: "",
@@ -968,7 +996,9 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     heroSubtitle: "",
     managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
     managerNotifications: DEFAULT_MANAGER_NOTIFICATIONS,
-    workflow: DEFAULT_TENANT_WORKFLOW,
+    workflow: defaultWorkflowForPlan(subscriptionPlan),
+    bookingMode: subscriptionPlan === "charter" ? "calendar_slots" : "form",
+    timeZone: "America/New_York",
   };
 
   if (billing.stripeCustomerId) {
@@ -1011,6 +1041,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     workflow: {
       confirmationType: "request_approve",
       responseTimeHours: 24,
+      ...(subscriptionPlan === "charter" ? { bookingMode: "calendar_slots" } : {}),
     },
     createdAt: now,
     onboarding: {
@@ -1182,7 +1213,11 @@ async function finalizeResubscribeFromCheckoutSession(stripe, session, uid) {
     stripeSubscriptionId: sub.id,
   };
   if (customerId) syncPatch.stripeCustomerId = customerId;
-  const planNorm = planNormFromStripeSubscription(sub);
+  const planNorm = subscriptionPlanFromStripe(
+    ctx.tenant && ctx.tenant.subscriptionPlan,
+    planNormFromStripeSubscription(sub),
+    sub
+  );
   if (planNorm) syncPatch.subscriptionPlan = planNorm;
 
   await sms.syncSubscriptionStatusForTenant(ctx.tenantId, sub.status, syncPatch);
@@ -1198,13 +1233,15 @@ async function finalizeResubscribeFromCheckoutSession(stripe, session, uid) {
 function planNormFromPriceId(priceId) {
   const pid = (priceId || "").toString().trim();
   if (!pid) return null;
+  const planKeys = ["solo", "studio", "shop", "charter"];
   try {
     const map = parseStripeSubscriptionPriceIds();
-    for (const [plan, id] of Object.entries(map)) {
-      if ((id || "").toString().trim() === pid) {
-        return normalizeSubscriptionPlan(plan);
-      }
+    const matches = [];
+    for (const key of planKeys) {
+      if ((map[key] || "").toString().trim() === pid) matches.push(key);
     }
+    if (matches.length === 1) return matches[0];
+    return null;
   } catch (_) {
     /* secrets unavailable in some contexts */
   }
@@ -1213,34 +1250,44 @@ function planNormFromPriceId(priceId) {
 
 function planNormFromStripeSubscription(sub) {
   if (!sub || typeof sub !== "object") return null;
-  const metaPlan = sub.metadata && sub.metadata.plan;
-  if (metaPlan) return normalizeSubscriptionPlan(metaPlan);
+  const metaRaw = sub.metadata && sub.metadata.plan;
+  const metaPlan = planNormFromMetadata(metaRaw);
+  if (metaPlan) return metaPlan;
   const items = (sub.items && sub.items.data) || [];
-  // Prefer plan price ids; ignore smsExtra add-on item.
-  try {
-    const map = parseStripeSubscriptionPriceIds();
-    const planKeys = ["solo", "studio", "shop"];
-    for (const item of items) {
-      const price = item.price;
-      const priceId =
-        (price && typeof price === "object" && price.id) ||
-        (typeof price === "string" ? price : null);
-      if (!priceId) continue;
-      const fromMap = planNormFromPriceId(priceId);
-      if (fromMap && planKeys.includes(fromMap)) return fromMap;
-    }
-  } catch (_) {
-    /* */
-  }
+  const planKeys = ["solo", "studio", "shop", "charter"];
   for (const item of items) {
     const price = item.price;
     const priceId =
       (price && typeof price === "object" && price.id) ||
       (typeof price === "string" ? price : null);
+    if (!priceId) continue;
     const fromMap = planNormFromPriceId(priceId);
-    if (fromMap) return fromMap;
+    if (fromMap && planKeys.includes(fromMap)) return fromMap;
   }
   return null;
+}
+
+function planNormFromMetadata(raw) {
+  const p = (raw || "").toString().trim().toLowerCase();
+  if (!p) return null;
+  if (p === "solo" || p === "studio" || p === "shop" || p === "charter") return p;
+  if (p === "charters" || p === "boat" || p === "fishing" || p === "boating") return "charter";
+  if (p === "basic" || p === "free" || p === "starter") return "solo";
+  if (p === "growth" || p === "pro") return "studio";
+  if (p === "enterprise") return "shop";
+  return null;
+}
+
+function subscriptionPlanFromStripe(existingPlan, planNorm, sub) {
+  if (!planNorm) return null;
+  const existing = (existingPlan || "").toString().trim().toLowerCase();
+  const existingNorm =
+    existing === "charter" || existing === "charters" ? "charter" : normalizeSubscriptionPlan(existingPlan);
+  const metaPlan = planNormFromMetadata(sub && sub.metadata && sub.metadata.plan);
+  if (existingNorm === "charter" && planNorm === "solo" && metaPlan !== "solo") {
+    return null;
+  }
+  return planNorm;
 }
 
 async function deactivateTenantPaymentLinks(stripe, tenantId, tenantData) {
@@ -1309,7 +1356,11 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   const patch = {};
   if (sub && sub.id) patch.stripeSubscriptionId = sub.id;
   patch.stripeCustomerId = cid;
-  const planNorm = planNormFromStripeSubscription(sub);
+  const planNorm = subscriptionPlanFromStripe(
+    snap.docs[0].data() && snap.docs[0].data().subscriptionPlan,
+    planNormFromStripeSubscription(sub),
+    sub
+  );
   if (planNorm) patch.subscriptionPlan = planNorm;
   try {
     const extraPriceIds = stripeSmsExtraPriceIds();
@@ -4186,13 +4237,23 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   if (serviceSlug) bookingData.serviceSlug = serviceSlug;
   if (serviceName) bookingData.serviceName = serviceName;
   if (preferredTime) bookingData.preferredTime = preferredTime;
+  const startMin = charterParseTimeToMin(preferredTime);
+  if (startMin != null) bookingData.scheduledStartMin = startMin;
   if (preferredDays) bookingData.preferredDays = preferredDays;
   if (notes) bookingData.notes = notes;
+  const partySize = parseInt(String(data?.partySize ?? ""), 10);
+  if (Number.isFinite(partySize) && partySize > 0) bookingData.partySize = partySize;
+  const durationMinutes = parseInt(String(data?.durationMinutes ?? ""), 10);
+  if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+    bookingData.durationMinutes = durationMinutes;
+  }
+  const scheduledDate = (data?.scheduledDate || "").toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) bookingData.scheduledDate = scheduledDate;
 
   const memberSlug = normalizeMemberSlugInput(data?.memberSlug);
   if (memberSlug) {
     const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
-    if (plan === "solo") {
+    if (isSingleSeatPlan(plan)) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Team member booking pages are not available on this plan."
@@ -4240,11 +4301,21 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     bookingData.formResponses = fr;
   }
 
-  const ref = await db
-    .collection("tenants")
-    .doc(tenantId)
-    .collection("bookingRequests")
-    .add(bookingData);
+  const boatFilterId = (data?.boatId || data?.boat || "").toString().trim();
+  const isCharterPlan = normalizeSubscriptionPlan(tenantData.subscriptionPlan) === "charter";
+  let ref;
+  if (isCharterPlan) {
+    ref = await reserveCharterSlot(tenantId, tenantData, bookingData, {
+      paymentHold: false,
+      boatFilterId,
+    });
+  } else {
+    ref = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("bookingRequests")
+      .add(bookingData);
+  }
 
   const customerRef = db
     .collection("tenants")
@@ -4272,6 +4343,326 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
 
   return { requestId: ref.id };
 });
+
+function charterOccupyingStatus(status) {
+  return charterOccupancy.occupyingStatus(status);
+}
+
+function charterParseTimeToMin(raw) {
+  const t = (raw || "").toString().trim();
+  if (!t) return null;
+  const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (hm) {
+    const h = parseInt(hm[1], 10);
+    const m = parseInt(hm[2], 10);
+    if (h >= 0 && h < 24 && m >= 0 && m < 60) return h * 60 + m;
+  }
+  const am = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (am) {
+    let h = parseInt(am[1], 10) % 12;
+    if (/pm/i.test(am[3])) h += 12;
+    return h * 60 + parseInt(am[2], 10);
+  }
+  return null;
+}
+
+/**
+ * Assign a hull and write the booking in a transaction so two checkouts cannot take the same boat.
+ * paymentHold: pending_deposit / pending_payment (15-minute holdUntil). Request & approve: no holdUntil.
+ */
+async function reserveCharterSlot(tenantId, tenantData, bookingData, opts) {
+  const options = opts || {};
+  const dateIso = bookingData.scheduledDate;
+  const startMin = bookingData.scheduledStartMin;
+  const dur = bookingData.durationMinutes || 240;
+  if (!dateIso || startMin == null) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Pick a date and departure time."
+    );
+  }
+  const now = new Date();
+  let service = options.service || null;
+  if (!service && (bookingData.serviceId || bookingData.serviceSlug)) {
+    service = await loadCharterServiceDoc(tenantId, bookingData.serviceId, bookingData.serviceSlug);
+  }
+  charterOccupancy.assertHoursAndClock(tenantData, dateIso, startMin, dur, now, service);
+  const occWin = charterOccupancy.occupancyWindow(startMin, dur, service);
+  bookingData.scheduledOccStartMin = occWin.occStartMin;
+  bookingData.scheduledOccEndMin = occWin.occEndMin;
+  const boatFilterId = (options.boatFilterId || bookingData.boatId || "").toString().trim();
+  const eligible = charterOccupancy.eligibleBoats(
+    tenantData,
+    service,
+    bookingData.partySize || 0,
+    boatFilterId
+  );
+  if (!eligible.length) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "No boat in the fleet can take this trip."
+    );
+  }
+  const bookingRef =
+    options.bookingRef ||
+    db.collection("tenants").doc(tenantId).collection("bookingRequests").doc();
+  await db.runTransaction(async (tx) => {
+    const col = db.collection("tenants").doc(tenantId).collection("bookingRequests");
+    const prevIso = charterOccupancy.addDaysToIso(dateIso, -1);
+    const nextIso = charterOccupancy.addDaysToIso(dateIso, 1);
+    const snapPrev = prevIso ? await tx.get(col.where("scheduledDate", "==", prevIso)) : null;
+    const snapDay = await tx.get(col.where("scheduledDate", "==", dateIso));
+    const snapNext = nextIso ? await tx.get(col.where("scheduledDate", "==", nextIso)) : null;
+    const rows = charterOccupancy.occupyingRowsFromSnaps(
+      [snapPrev, snapDay, snapNext].filter(Boolean),
+      now.getTime()
+    );
+    const boat = charterOccupancy.pickFreeBoat(
+      eligible,
+      rows,
+      dateIso,
+      startMin,
+      dur,
+      bookingRef.id,
+      service
+    );
+    if (!boat) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "That departure is no longer open."
+      );
+    }
+    bookingData.boatId = String(boat.id);
+    if (options.paymentHold) {
+      bookingData.holdUntil = admin.firestore.Timestamp.fromMillis(
+        now.getTime() + charterOccupancy.CHARTER_PAYMENT_HOLD_MINUTES * 60 * 1000
+      );
+    }
+    tx.set(bookingRef, bookingData);
+  });
+  return bookingRef;
+}
+
+/**
+ * App walk-in / confirm / reschedule: same hull occupancy as the website.
+ * Charter plan only. Writes scheduledDate, scheduledStartMin, boatId, occ window, requestedStartTime.
+ */
+exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan) !== "charter") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Charter occupancy is only for Boat / Fishing charter."
+    );
+  }
+  const requestId = ((data && data.requestId) || "").toString().trim();
+  const col = db.collection("tenants").doc(ctx.tenantId).collection("bookingRequests");
+  let existing = {};
+  let bookingRef;
+  if (requestId) {
+    bookingRef = col.doc(requestId);
+    const snap = await bookingRef.get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError("not-found", "Booking not found.");
+    }
+    existing = snap.data() || {};
+  } else {
+    bookingRef = col.doc();
+  }
+
+  const preferredTime = (
+    (data && data.preferredTime) ||
+    existing.preferredTime ||
+    ""
+  )
+    .toString()
+    .trim();
+  let startMin =
+    data && data.scheduledStartMin != null && Number.isFinite(Number(data.scheduledStartMin))
+      ? Number(data.scheduledStartMin)
+      : charterParseTimeToMin(preferredTime);
+  if (startMin == null && existing.scheduledStartMin != null) {
+    startMin = Number(existing.scheduledStartMin);
+  }
+  let scheduledDate = ((data && data.scheduledDate) || existing.scheduledDate || "")
+    .toString()
+    .trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+    throw new functions.https.HttpsError("invalid-argument", "Pick a date and departure time.");
+  }
+  const durRaw = data && data.durationMinutes != null ? Number(data.durationMinutes) : Number(existing.durationMinutes);
+  const dur = Number.isFinite(durRaw) && durRaw > 0 ? durRaw : 240;
+
+  const bookingData = { ...existing };
+  delete bookingData.id;
+  bookingData.tenantId = ctx.tenantId;
+  bookingData.source = existing.source || "admin_app";
+  bookingData.scheduledDate = scheduledDate;
+  bookingData.scheduledStartMin = startMin;
+  bookingData.durationMinutes = dur;
+  bookingData.preferredDays = [scheduledDate];
+  if (preferredTime) bookingData.preferredTime = preferredTime;
+  const startDate = charterOccupancy.instantFromIsoAndMin(
+    scheduledDate,
+    startMin,
+    charterOccupancy.tenantTimeZone(ctx.tenant)
+  );
+  if (startDate) {
+    bookingData.requestedStartTime = admin.firestore.Timestamp.fromDate(startDate);
+  }
+  const customerName = data && data.customerName != null ? String(data.customerName).trim() : "";
+  if (customerName) bookingData.customerName = customerName;
+  const customerEmail = data && data.customerEmail != null ? String(data.customerEmail).trim() : "";
+  if (customerEmail) bookingData.customerEmail = customerEmail;
+  if (data && data.customerPhone != null) {
+    const phone = normalizeCustomerPhone(data.customerPhone);
+    if (phone) bookingData.customerPhone = phone;
+  }
+  if (data && data.serviceId) bookingData.serviceId = String(data.serviceId).trim();
+  if (data && data.serviceSlug) bookingData.serviceSlug = String(data.serviceSlug).trim();
+  if (data && data.serviceName) bookingData.serviceName = String(data.serviceName).trim();
+  if (data && data.notes != null) {
+    const notes = String(data.notes).trim();
+    if (notes) bookingData.notes = notes.slice(0, 4000);
+  }
+  if (data && data.partySize != null && Number.isFinite(Number(data.partySize))) {
+    bookingData.partySize = Number(data.partySize);
+  }
+  if (data && data.status) {
+    bookingData.status = String(data.status).trim().toLowerCase() || bookingData.status;
+  }
+  if (!bookingData.status) bookingData.status = requestId ? "NEW" : "confirmed";
+  if (data && data.assignedMemberUid) {
+    bookingData.assignedMemberUid = String(data.assignedMemberUid).trim();
+    if (data.assignedMemberName) bookingData.assignedMemberName = String(data.assignedMemberName).trim();
+    if (data.assignedMemberEmail) bookingData.assignedMemberEmail = String(data.assignedMemberEmail).trim();
+  }
+  if (!bookingData.createdAt) {
+    bookingData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  await reserveCharterSlot(ctx.tenantId, ctx.tenant, bookingData, {
+    paymentHold: false,
+    boatFilterId: ((data && (data.boatId || data.boat)) || "").toString().trim(),
+    bookingRef,
+  });
+
+  return {
+    ok: true,
+    requestId: bookingRef.id,
+    boatId: bookingData.boatId || "",
+  };
+});
+
+/** Public occupancy for charter search (no PII). Slots by trip date + assigned boat. */
+exports.listPublicCharterOccupancy = functions.https.onCall(async (data) => {
+  const tenantSlug = (data?.tenantSlug || "").toString().trim().toLowerCase();
+  if (!tenantSlug) {
+    throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
+  }
+  const tenantSnap = await db
+    .collection("tenants")
+    .where("slug", "==", tenantSlug)
+    .limit(1)
+    .get();
+  if (tenantSnap.empty) {
+    throw new functions.https.HttpsError("not-found", "Business not found");
+  }
+  const tenantDoc = tenantSnap.docs[0];
+  const tenantData = tenantDoc.data() || {};
+  const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
+  if (plan !== "charter") return { slots: [], holdMinutes: charterOccupancy.CHARTER_PAYMENT_HOLD_MINUTES };
+
+  const now = new Date();
+  const tz = charterOccupancy.tenantTimeZone(tenantData);
+  const fromIso = charterOccupancy.isoDateInTz(now, tz);
+  const toIso = charterOccupancy.addDaysToIso(
+    fromIso,
+    charterOccupancy.CHARTER_OCCUPANCY_HORIZON_DAYS
+  );
+  const queryFromIso = charterOccupancy.addDaysToIso(fromIso, -1) || fromIso;
+
+  const col = db.collection("tenants").doc(tenantDoc.id).collection("bookingRequests");
+  const nowMs = now.getTime();
+  const slots = [];
+  let lastDoc = null;
+  let truncated = false;
+  for (let page = 0; page < 20; page++) {
+    let q = col
+      .where("scheduledDate", ">=", queryFromIso)
+      .where("scheduledDate", "<=", toIso)
+      .orderBy("scheduledDate")
+      .limit(400);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snap = await q.get();
+    if (snap.empty) break;
+    snap.forEach((doc) => {
+      const d = doc.data() || {};
+      d.id = doc.id;
+      if (!charterOccupancy.rowStillOccupies(d, nowMs)) return;
+      const pub = charterOccupancy.publicSlotsFromRow(d);
+      for (let i = 0; i < pub.length; i++) {
+        if (pub[i] && pub[i].date) slots.push(pub[i]);
+      }
+    });
+    lastDoc = snap.docs[snap.docs.length - 1];
+    if (snap.size < 400) break;
+    if (page === 19) truncated = true;
+  }
+  return {
+    slots,
+    holdMinutes: charterOccupancy.CHARTER_PAYMENT_HOLD_MINUTES,
+    serverNowMs: nowMs,
+    occupancyUntilIso: toIso,
+    truncated,
+  };
+});
+
+/** Drop unpaid charter checkout holds after CHARTER_PAYMENT_HOLD_MINUTES. */
+exports.expireCharterPaymentHolds = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .pubsub.schedule("every 5 minutes")
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const snap = await db
+      .collectionGroup("bookingRequests")
+      .where("holdUntil", "<=", now)
+      .limit(80)
+      .get();
+    let n = 0;
+    const secretKey = stripeSecretKey.value();
+    const stripe = secretKey ? new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" }) : null;
+    for (const doc of snap.docs) {
+      const d = doc.data() || {};
+      if (!charterOccupancy.isPaymentHoldStatus(d.status)) continue;
+      await doc.ref.set(
+        {
+          status: "cancelled",
+          cancelReason: "hold_expired",
+          cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      n += 1;
+      const piId = (d.stripePaymentIntentId || "").toString().trim();
+      const acct = (d.chargeStripeAccountId || "").toString().trim();
+      if (stripe && piId.startsWith("pi_")) {
+        try {
+          const opts = acct ? { stripeAccount: acct } : undefined;
+          await stripe.paymentIntents.cancel(piId, opts);
+        } catch (e) {
+          /* already succeeded or canceled */
+        }
+      }
+    }
+    if (n) console.log("expireCharterPaymentHolds", n);
+    return null;
+  });
+
 
 const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop"]);
 
@@ -5376,6 +5767,356 @@ exports.finalizeShopOrderPayment = onCall(publicShopCallableOptions, async (requ
     return markShopOrderPaidFromPaymentIntent(stripe, tenantId, orderId, paymentIntentId);
   });
 
+async function resolvePublicCharterTenant(tenantSlug) {
+  const slug = (tenantSlug || "").toString().trim().toLowerCase();
+  if (!slug) {
+    throw new HttpsError("invalid-argument", "tenantSlug is required");
+  }
+  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
+  if (tenantSnap.empty) {
+    throw new HttpsError("not-found", "Business not found");
+  }
+  const tenantDoc = tenantSnap.docs[0];
+  const tenantId = tenantDoc.id;
+  const tenantData = tenantDoc.data() || {};
+  if (tenantData.isActive === false) {
+    throw new HttpsError("failed-precondition", "This business is not accepting bookings");
+  }
+  const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
+  if (plan !== "charter") {
+    throw new HttpsError("failed-precondition", "This checkout is only for fishing charters.");
+  }
+  if (tenantData.isDemoAccount === true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This demo site is read-only. Sign up for your own account to accept bookings."
+    );
+  }
+  await assertPublicPaymentAccessForTenant(tenantId, tenantData);
+  return { tenantId, tenantData };
+}
+
+function charterServicePriceCents(svc) {
+  if (!svc) return 0;
+  if (typeof svc.priceCents === "number" && svc.priceCents > 0) {
+    return Math.round(svc.priceCents);
+  }
+  if (typeof svc.price === "number" && svc.price > 0) {
+    return Math.round(svc.price * 100);
+  }
+  return 0;
+}
+
+function charterPayModeFromTenant(tenantData) {
+  const t = (
+    (tenantData && tenantData.workflow && tenantData.workflow.confirmationType) ||
+    ""
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+  if (t === "pay_in_full") return "full";
+  if (t === "deposit_to_confirm" || t === "approve_and_deposit") return "deposit";
+  return "request";
+}
+
+async function loadCharterServiceDoc(tenantId, serviceId, serviceSlug) {
+  const col = db.collection("tenants").doc(tenantId).collection("services");
+  const sid = (serviceId || "").toString().trim();
+  if (sid) {
+    const snap = await col.doc(sid).get();
+    if (snap.exists) return { id: snap.id, ...(snap.data() || {}) };
+  }
+  const slug = (serviceSlug || "").toString().trim();
+  if (slug) {
+    const q = await col.where("slug", "==", slug).limit(1).get();
+    if (!q.empty) {
+      const doc = q.docs[0];
+      return { id: doc.id, ...(doc.data() || {}) };
+    }
+  }
+  return null;
+}
+
+async function markCharterBookingPaidFromPaymentIntent(
+  stripe,
+  tenantId,
+  requestId,
+  paymentIntentId
+) {
+  const reqRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .doc(requestId);
+  const snap = await reqRef.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "Booking not found");
+  }
+  const booking = snap.data() || {};
+  const storedPi = (booking.stripePaymentIntentId || "").toString().trim();
+  if (storedPi && storedPi !== paymentIntentId) {
+    throw new HttpsError("failed-precondition", "Payment does not match this booking.");
+  }
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  const tenantData = tenantSnap.exists ? tenantSnap.data() || {} : {};
+  const stripeAccountId = (tenantData.stripeAccountId || "").toString().trim();
+  if (!stripeAccountId) {
+    throw new HttpsError("failed-precondition", "Online card payments are not set up yet.");
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  if (!pi || pi.status !== "succeeded") {
+    throw new HttpsError("failed-precondition", "Payment is not complete yet.");
+  }
+  const status = (booking.status || "").toString().trim().toLowerCase();
+  if (status === "confirmed") {
+    return { ok: true, requestId, alreadyPaid: true };
+  }
+  if (status === "cancelled" || status === "declined") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This hold is no longer available. Start checkout again."
+    );
+  }
+  const holdUntilMs = charterOccupancy.holdUntilMillis(booking);
+  if (
+    charterOccupancy.isPaymentHoldStatus(status) &&
+    holdUntilMs > 0 &&
+    holdUntilMs <= Date.now()
+  ) {
+    await reqRef.set(
+      {
+        status: "cancelled",
+        cancelReason: "hold_expired",
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    throw new HttpsError(
+      "failed-precondition",
+      "Your 15-minute hold expired. Start checkout again."
+    );
+  }
+  await reqRef.set(
+    {
+      status: "confirmed",
+      depositPaidAt: admin.firestore.FieldValue.serverTimestamp(),
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+      paidCents: pi.amount || 0,
+      stripePaymentIntentId: paymentIntentId,
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      holdUntil: admin.firestore.FieldValue.delete(),
+    },
+    { merge: true }
+  );
+  return { ok: true, requestId, alreadyPaid: false, paidCents: pi.amount || 0 };
+}
+
+/**
+ * Public web: create charter booking + Stripe PaymentIntent (deposit or trip total).
+ */
+exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  try {
+    const { tenantId, tenantData } = await resolvePublicCharterTenant(data.tenantSlug);
+    const payMode = charterPayModeFromTenant(tenantData);
+    if (payMode === "request") {
+      throw new HttpsError(
+        "failed-precondition",
+        "This charter does not collect a card at checkout."
+      );
+    }
+    const customerName = (data.customerName || "").toString().trim();
+    const customerEmail = (data.customerEmail || "").toString().trim().toLowerCase();
+    if (!customerName || !customerEmail) {
+      throw new HttpsError("invalid-argument", "Name and email are required.");
+    }
+    const svc = await loadCharterServiceDoc(tenantId, data.serviceId, data.serviceSlug);
+    if (!svc) {
+      throw new HttpsError("not-found", "Trip not found.");
+    }
+    const tripCents = charterServicePriceCents(svc);
+    let addonCents = Math.round(Number(data.addonCents) || 0);
+    if (!Number.isFinite(addonCents) || addonCents < 0) addonCents = 0;
+    addonCents = Math.min(addonCents, 200000);
+    const tripTotalCents = tripCents + addonCents;
+    const depositRaw = Number(tenantData.workflow && tenantData.workflow.depositAmount);
+    const depositCents =
+      Number.isFinite(depositRaw) && depositRaw > 0 ? Math.round(depositRaw * 100) : 0;
+    const chargeCents =
+      payMode === "deposit"
+        ? Math.max(50, Math.min(depositCents || Math.round(tripTotalCents * 0.2), tripTotalCents || depositCents))
+        : tripTotalCents;
+    if (chargeCents < 50) {
+      throw new HttpsError(
+        "failed-precondition",
+        payMode === "deposit"
+          ? "Set a deposit amount in Booking settings (at least $0.50)."
+          : "This trip needs a price of at least $0.50 to pay by card."
+      );
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const stripeAccountId = await assertTenantShopStripeReady(stripe, tenantData);
+    const checkout = computeCardCheckoutAmounts(chargeCents, "online");
+    const piAmount = checkout.totalCents;
+    const feeCents = platformFeeCents(piAmount);
+    const paymentKind = payMode === "deposit" ? "deposit" : "service";
+    const bookingStatus = payMode === "deposit" ? "pending_deposit" : "pending_payment";
+
+    const customerPhone = normalizeCustomerPhone(data.customerPhone);
+    const bookingRef = db.collection("tenants").doc(tenantId).collection("bookingRequests").doc();
+    const requestId = bookingRef.id;
+    const bookingData = {
+      status: bookingStatus,
+      source: "web",
+      tenantId,
+      customerName,
+      customerEmail,
+      serviceId: svc.id,
+      serviceSlug: (svc.slug || data.serviceSlug || "").toString() || null,
+      serviceName: (svc.name || data.serviceName || "").toString() || null,
+      charterPayMode: payMode,
+      tripCents,
+      addonCents,
+      chargeCents,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (customerPhone) bookingData.customerPhone = customerPhone;
+    const preferredTime = data.preferredTime ? data.preferredTime.toString().trim() : "";
+    if (preferredTime) bookingData.preferredTime = preferredTime;
+    const startMin = charterParseTimeToMin(preferredTime);
+    if (startMin != null) bookingData.scheduledStartMin = startMin;
+    const scheduledDate = (data.scheduledDate || "").toString().trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+      bookingData.scheduledDate = scheduledDate;
+      bookingData.preferredDays = [scheduledDate];
+    }
+    const partySize = parseInt(String(data.partySize ?? ""), 10);
+    if (Number.isFinite(partySize) && partySize > 0) bookingData.partySize = partySize;
+    const durationMinutes = parseInt(String(data.durationMinutes ?? svc.durationMinutes ?? ""), 10);
+    if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+      bookingData.durationMinutes = durationMinutes;
+    }
+    const notes = data.notes ? data.notes.toString().trim() : "";
+    if (notes) bookingData.notes = notes;
+    bookingData.chargeStripeAccountId = stripeAccountId;
+
+    const boatFilterId = (data.boatId || data.boat || "").toString().trim();
+    await reserveCharterSlot(tenantId, tenantData, bookingData, {
+      paymentHold: true,
+      boatFilterId,
+      service: svc,
+      bookingRef,
+    });
+
+    let pi;
+    try {
+      pi = await stripe.paymentIntents.create(
+        {
+          amount: piAmount,
+          currency: "usd",
+          automatic_payment_methods: { enabled: true },
+          application_fee_amount: feeCents,
+          receipt_email: customerEmail,
+          metadata: {
+            tenantId,
+            paymentKind,
+            bookingRequestId: requestId,
+            charterPayMode: payMode,
+            serviceAmountCents: String(chargeCents),
+            surchargeCents: String(checkout.surchargeCents),
+            chargeStripeAccountId: stripeAccountId,
+            chargeStripeScope: "tenant",
+          },
+        },
+        { stripeAccount: stripeAccountId }
+      );
+    } catch (piErr) {
+      await bookingRef.set(
+        {
+          status: "cancelled",
+          cancelReason: "payment_intent_failed",
+          cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          holdUntil: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+      throw piErr;
+    }
+    await bookingRef.set(
+      { stripePaymentIntentId: pi.id, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+
+    const customerRef = db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("customers")
+      .doc(customerDocIdForTenant(customerName, customerEmail, customerPhone));
+    await customerRef.set(
+      {
+        name: customerName,
+        email: customerEmail,
+        ...(customerPhone ? { phone: customerPhone } : {}),
+        source: "booking_request_web",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const pkOut = stripePublishableKeyParam.value().trim();
+    const out = {
+      requestId,
+      clientSecret: pi.client_secret,
+      paymentIntentId: pi.id,
+      stripeAccountId,
+      chargeCents,
+      surchargeCents: checkout.surchargeCents,
+      platformFeeCents: feeCents,
+      totalCents: piAmount,
+      payMode,
+    };
+    if (pkOut) out.publishableKey = pkOut;
+    return out;
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    if (err instanceof functions.https.HttpsError) throw err;
+    console.error("createCharterCheckoutPayment", err);
+    throw new HttpsError("internal", stripeErrorMessage(err));
+  }
+});
+
+exports.finalizeCharterBookingPayment = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  const requestId = (data.requestId || "").toString().trim();
+  const paymentIntentId = (data.paymentIntentId || "").toString().trim();
+  if (!tenantSlug || !requestId || !paymentIntentId || !paymentIntentId.startsWith("pi_")) {
+    throw new HttpsError(
+      "invalid-argument",
+      "tenantSlug, requestId, and paymentIntentId are required"
+    );
+  }
+  const { tenantId } = await resolvePublicCharterTenant(tenantSlug);
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) {
+    throw new HttpsError("failed-precondition", "Stripe is not configured");
+  }
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  return markCharterBookingPaidFromPaymentIntent(stripe, tenantId, requestId, paymentIntentId);
+});
+
 /**
  * Creates a PaymentIntent for Tap to Pay. amountCents in USD cents.
  * Returns { clientSecret, paymentIntentId } for Stripe Terminal SDK.
@@ -6086,10 +6827,10 @@ exports.createProviderSubscriptionCheckout = functions
         customer_email: email,
         client_reference_id: uid,
         line_items: [{ price: priceId, quantity: 1 }],
-        metadata: { firebaseUid: uid },
+        metadata: { firebaseUid: uid, plan: normalized.plan },
         subscription_data: {
           trial_period_days: 14,
-          metadata: { firebaseUid: uid },
+          metadata: { firebaseUid: uid, plan: normalized.plan },
         },
         return_url: returnUrl,
       });
@@ -6384,6 +7125,36 @@ const DEFAULT_TENANT_WORKFLOW = {
   managersApproveAppointments: false,
 };
 
+function defaultWorkflowForPlan(plan) {
+  const subscriptionPlan = normalizeSubscriptionPlan(plan);
+  if (subscriptionPlan === "charter") {
+    return {
+      confirmationType: "request_approve",
+      responseTimeHours: 24,
+      bookingMode: "calendar_slots",
+      managersApproveAppointments: true,
+    };
+  }
+  return { ...DEFAULT_TENANT_WORKFLOW };
+}
+
+/** Charter /book is always calendar slots; payment is request, deposit, or pay in full. */
+function applyCharterBookingWorkflow(tenant, workflow) {
+  const plan = normalizeSubscriptionPlan(tenant && tenant.subscriptionPlan);
+  if (plan !== "charter" || !workflow || typeof workflow !== "object") return workflow;
+  workflow.bookingMode = "calendar_slots";
+  workflow.managersApproveAppointments = true;
+  const t = (workflow.confirmationType || "").toString().trim().toLowerCase();
+  if (t === "pay_in_full") {
+    workflow.confirmationType = "pay_in_full";
+  } else if (t === "deposit_to_confirm" || t === "approve_and_deposit") {
+    workflow.confirmationType = "deposit_to_confirm";
+  } else {
+    workflow.confirmationType = "request_approve";
+  }
+  return workflow;
+}
+
 function bookingRequiresApproval(confirmationType) {
   const t = (confirmationType || "").toString().trim().toLowerCase();
   return (
@@ -6405,7 +7176,7 @@ async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId) {
   const snap = await reqRef.get();
   if (!snap.exists) return false;
   const status = (snap.data().status || "").toString().trim().toLowerCase();
-  if (status !== "pending_deposit") return false;
+  if (status !== "pending_deposit" && status !== "pending_payment") return false;
   await reqRef.set(
     {
       status: "confirmed",
@@ -7135,10 +7906,10 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
   };
 }
 
-/** Seat caps: Solo 1, Studio 2–5, Shop 6–10. */
+/** Seat caps: Solo/Charter 1, Studio 2–5, Shop 6–10. */
 function maxSeatsForPlanNormalized(plan) {
   const p = normalizeSubscriptionPlan(plan);
-  if (p === "solo") return 1;
+  if (p === "solo" || p === "charter") return 1;
   if (p === "studio") return 5;
   return 10;
 }
@@ -7181,7 +7952,7 @@ exports.getTenantInvitePreview = functions.https.onCall(async (data) => {
   }
   const t = tenantSnap.data();
   const plan = normalizeSubscriptionPlan(t.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is not accepting team invites on its current plan."
@@ -7224,10 +7995,10 @@ exports.createTenantInvite = functions.https.onCall(async (data, context) => {
     );
   }
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Solo plan is owner only. Upgrade to Studio or Shop to invite team members."
+      "This plan is owner only. Upgrade to Studio or Shop to invite team members."
     );
   }
   const memberCount = await countUsersForTenant(tenantId);
@@ -7319,10 +8090,10 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
   }
 
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "This business is on the Solo plan (owner only) and cannot add team members."
+      "This business is on an owner-only plan and cannot add team members."
     );
   }
   const memberCount = await countUsersForTenant(tenantId);
@@ -7442,7 +8213,7 @@ exports.listPublicProviders = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     return { providers: [], subscriptionPlan: plan, tenantSlug };
   }
   if (tenant.isActive === false || tenant.isDemoAccount === true) {
@@ -7482,7 +8253,7 @@ exports.listTeamRoster = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     return { members: [], subscriptionPlan: plan, tenantSlug };
   }
   if (tenant.isActive === false || tenant.isDemoAccount === true) {
@@ -7526,7 +8297,7 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (plan === "solo") {
+  if (isSingleSeatPlan(plan)) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
   if (tenant.isActive === false) {
@@ -7584,7 +8355,7 @@ exports.updateProviderGallery = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
   }
   const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
-  if (plan === "solo" && targetUid !== ctx.tenant.ownerUid) {
+  if (isSingleSeatPlan(plan) && targetUid !== ctx.tenant.ownerUid) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Member portfolios are for Studio and Shop teams."
@@ -7749,6 +8520,7 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
       "deposit_to_confirm",
       "approve_and_deposit",
       "consultation_first",
+      "pay_in_full",
     ];
     if (!allowed.includes(confirmationType)) {
       throw new functions.https.HttpsError("invalid-argument", "Invalid confirmation type.");
@@ -7763,6 +8535,8 @@ exports.updateTenantBookingWorkflow = functions.https.onCall(async (data, contex
       else delete workflow.depositAmount;
     }
   }
+
+  applyCharterBookingWorkflow(ctx.tenant, workflow);
 
   const resolvedBookingMode =
     workflow.bookingMode || existingWf.bookingMode || DEFAULT_TENANT_WORKFLOW.bookingMode || "form";
@@ -9157,7 +9931,7 @@ exports.getBillingSummary = functions
         try {
           const map = parseStripeSubscriptionPriceIds();
           const planIds = new Set(
-            ["solo", "studio", "shop"]
+            ["solo", "studio", "shop", "charter"]
               .map((k) => (map[k] || "").toString().trim())
               .filter(Boolean)
           );
@@ -9336,7 +10110,12 @@ async function linkAndSyncTenantStripeBilling(stripe, tenantId, tenant, ownerEma
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscriptionId || undefined,
   };
-  if (planNorm) syncPatch.subscriptionPlan = planNorm;
+  const planToWrite = subscriptionPlanFromStripe(
+    tenant && tenant.subscriptionPlan,
+    planNorm,
+    sub
+  );
+  if (planToWrite) syncPatch.subscriptionPlan = planToWrite;
   try {
     if (sub) {
       const extraPriceIds = stripeSmsExtraPriceIds();
@@ -9907,10 +10686,10 @@ exports.purchaseSmsExtraLine = functions
     const ownerData = ctx.ownerUserData || ctx.userData;
     const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
     const memberUid = ((data && data.memberUid) || "").toString().trim();
-    if (plan === "solo") {
+    if (isSingleSeatPlan(plan)) {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "Solo includes 1 texting number. Upgrade to Studio or Shop for team lines."
+        "This plan includes 1 texting number. Upgrade to Studio or Shop for team lines."
       );
     }
     if (!memberUid || memberUid === tenant.ownerUid) {

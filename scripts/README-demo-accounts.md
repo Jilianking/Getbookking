@@ -1,6 +1,6 @@
 # Marketing demo accounts
 
-Five solo showcase tenants for public sites (no visitor login).
+Six showcase tenants for public sites (no visitor login). Harbor Charters uses the Boat / Fishing charter subscription plan.
 
 ## Seed / update
 
@@ -41,6 +41,7 @@ Password: `DEMO_ACCOUNT_PASSWORD` env var, or default `BookkingDemo2026!`.
 | `studio-amara` | Studio Amara | Studio 12 | https://studio-amara.getbookking.com |
 | `stone-cut-barbers` | Stone Cut Barbers | Stonecut | https://stone-cut-barbers.getbookking.com |
 | `gilded-palm` | Maison Lumière | Luxe | https://gilded-palm.getbookking.com |
+| `harbor-charters` | Harbor Charters | Boat / Fishing charter | https://harbor-charters.getbookking.com |
 
 Staging: `https://test-app-96812.web.app/{slug}`
 
@@ -53,6 +54,7 @@ Staging: `https://test-app-96812.web.app/{slug}`
 | demo-studio-amara@getbookking.com | studio-amara |
 | demo-stone-cut-barbers@getbookking.com | stone-cut-barbers |
 | demo-gilded-palm@getbookking.com | gilded-palm |
+| demo-harbor-charters@getbookking.com | harbor-charters |
 
 Use owner accounts to upload photos and tweak copy in the app. Do not share passwords publicly.
 
@@ -65,7 +67,7 @@ Use owner accounts to upload photos and tweak copy in the app. Do not share pass
 | studio-amara | `rose-quartz` (custom) | User nail set: hero + 6-gallery + philosophy + book CTA (`scripts/assets/studio-amara/`) |
 | stone-cut-barbers | `barber-chocolate` (custom) | Custom hero + 9-gallery + about photo (see `scripts/assets/stone-cut-barbers/`) |
 | gilded-palm | `terracotta-clay` (custom) | Custom hero + 10-gallery + 5 shop products (see `scripts/assets/gilded-palm/`) |
-| *(charters assets)* | — | Hero + 5 gallery for Boating / Fishing Charter (`scripts/assets/harbor-charters/`) |
+| harbor-charters | default | Hero + 5 gallery (`scripts/assets/harbor-charters/`) · plan `charter` · Key West / Garrison Bight copy |
 
 Re-run `node scripts/seed-demo-accounts.js` to refresh. Replace with your own uploads in Website Design anytime.
 

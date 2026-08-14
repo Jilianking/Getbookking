@@ -490,7 +490,15 @@ class FirebaseService: ObservableObject {
                 bookingModeUsed: d["bookingModeUsed"] as? String,
                 preferredDays: d["preferredDays"] as? [String],
                 preferredTime: d["preferredTime"] as? String,
-                requestedStartTime: (d["requestedStartTime"] as? Timestamp)?.dateValue(),
+                requestedStartTime: (d["requestedStartTime"] as? Timestamp)?.dateValue()
+                    ?? BookingRequest.date(
+                        fromScheduledDate: d["scheduledDate"] as? String,
+                        startMin: BookingRequest.intField(d["scheduledStartMin"])
+                    ),
+                scheduledDate: d["scheduledDate"] as? String,
+                scheduledStartMin: BookingRequest.intField(d["scheduledStartMin"]),
+                boatId: d["boatId"] as? String,
+                durationMinutes: BookingRequest.intField(d["durationMinutes"]),
                 notes: d["notes"] as? String,
                 formResponses: d["formResponses"] as? [String: Any],
                 createdAt: (d["createdAt"] as? Timestamp)?.dateValue(),
@@ -524,6 +532,30 @@ class FirebaseService: ObservableObject {
         try await db.collection("tenants").document(tenantId)
             .collection("bookingRequests").document(requestId)
             .setData(firestoreUpdates, merge: true)
+    }
+
+    /// Charter only: assign a hull and write website occupancy fields.
+    @discardableResult
+    func syncCharterBookingSlot(_ payload: [String: Any]) async throws -> String {
+        var data: [String: Any] = [:]
+        do {
+            let result = try await functions.httpsCallable("syncCharterBookingSlot").call(payload)
+            data = result.data as? [String: Any] ?? [:]
+        } catch {
+            throw NSError(
+                domain: "FirebaseService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: FirebaseFunctionsErrorHelper.message(from: error)]
+            )
+        }
+        if let id = (data["requestId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
+            return id
+        }
+        throw NSError(
+            domain: "FirebaseService",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Could not reserve that departure."]
+        )
     }
 
     func createTenantBookingRequest(tenantId: String, customerName: String, customerEmail: String, customerPhone: String?, serviceId: String?, serviceSlug: String?, serviceName: String?, preferredTime: String?, requestedStartTime: Date?, notes: String?, formResponses: [String: Any]?) async throws -> String {
@@ -868,6 +900,7 @@ class FirebaseService: ObservableObject {
         let mapped = snapshot.documents.compactMap { doc -> TenantService? in
             let d = doc.data()
             guard let slug = d["slug"] as? String, let name = d["name"] as? String else { return nil }
+            if d["isActive"] as? Bool == false { return nil }
             let rawPrice = d["price"]
             let price: Double? = {
                 if let x = rawPrice as? Double, x > 0 { return x }
@@ -891,13 +924,17 @@ class FirebaseService: ObservableObject {
                 price: price,
                 isActive: d["isActive"] as? Bool ?? true,
                 bookingModeOverride: d["bookingModeOverride"] as? String,
-                formSchema: d["formSchema"] as? [[String: Any]]
+                formSchema: d["formSchema"] as? [[String: Any]],
+                itinerary: CharterItineraryStep.fromFirestore(d["itinerary"]),
+                boatIds: TenantService.parseBoatIds(d)
             )
         }
-        return mapped.sorted {
+        let sorted = mapped.sorted {
             if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
+        var seen = Set<String>()
+        return sorted.filter { seen.insert($0.slug).inserted }
     }
 
     /// Merge payload for name, slug, duration, optional description, optional starting price on Blade.
@@ -906,7 +943,9 @@ class FirebaseService: ObservableObject {
         slug: String,
         durationMinutes: Int?,
         description: String?,
-        startingPrice: Double?
+        startingPrice: Double?,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) -> [String: Any] {
         var u: [String: Any] = [
             "name": name,
@@ -928,6 +967,26 @@ class FirebaseService: ObservableObject {
         } else {
             u["price"] = FieldValue.delete()
         }
+        if let itinerary {
+            let rows = itinerary
+                .map { CharterItineraryStep(offsetMinutes: $0.offsetMinutes, text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .filter { !$0.text.isEmpty }
+                .map(\.firestoreDict)
+            if rows.isEmpty {
+                u["itinerary"] = FieldValue.delete()
+            } else {
+                u["itinerary"] = rows
+            }
+        }
+        if let boatIds {
+            let cleaned = boatIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if cleaned.isEmpty {
+                u["boatIds"] = FieldValue.delete()
+            } else {
+                u["boatIds"] = cleaned
+            }
+            u["boatId"] = FieldValue.delete()
+        }
         return u
     }
 
@@ -938,7 +997,9 @@ class FirebaseService: ObservableObject {
         slug: String? = nil,
         description: String? = nil,
         sortOrder: Int = 0,
-        startingPrice: Double? = nil
+        startingPrice: Double? = nil,
+        itinerary: [CharterItineraryStep]? = nil,
+        boatIds: [String]? = nil
     ) async throws -> String {
         let slugValue = slug ?? self.slug(from: name)
         var data: [String: Any] = [
@@ -955,6 +1016,21 @@ class FirebaseService: ObservableObject {
         }
         if let p = startingPrice, p > 0 {
             data["price"] = p
+        }
+        if let itinerary {
+            let rows = itinerary
+                .map { CharterItineraryStep(offsetMinutes: $0.offsetMinutes, text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .filter { !$0.text.isEmpty }
+                .map(\.firestoreDict)
+            if !rows.isEmpty {
+                data["itinerary"] = rows
+            }
+        }
+        if let boatIds {
+            let cleaned = boatIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if !cleaned.isEmpty {
+                data["boatIds"] = cleaned
+            }
         }
         let ref = try await db.collection("tenants").document(tenantId).collection("services").addDocument(data: data)
         return ref.documentID
@@ -1213,6 +1289,18 @@ class FirebaseService: ObservableObject {
         let storage = Storage.storage()
         let name = UUID().uuidString + ".jpg"
         let ref = storage.reference().child("tenants/\(tenantId)/gallery/\(name)")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
+    func uploadCharterBoatImage(tenantId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/boats/\(name)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
         let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)

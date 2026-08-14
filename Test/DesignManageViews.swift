@@ -2236,3 +2236,266 @@ struct ManageShopTabContent: View {
         }
     }
 }
+
+// MARK: - Boat / Fishing charter manage tabs
+
+struct ManageChartersTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @Binding var serviceToEdit: TenantService?
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ManageSectionHeader("Trips")
+            ManageCard {
+                if viewModel.services.isEmpty {
+                    Text("No charters yet—add trips clients can book (half-day, offshore, flats, etc.).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(14)
+                } else {
+                    ForEach(Array(viewModel.services.enumerated()), id: \.element.id) { index, service in
+                        if index > 0 { ManageCardDivider() }
+                        ManageServiceRow(
+                            service: service,
+                            controlsDisabled: controlsDisabled,
+                            onEdit: { serviceToEdit = service },
+                            onMoveUp: {
+                                Task { await viewModel.moveService(from: index, direction: -1) }
+                            },
+                            onMoveDown: {
+                                Task { await viewModel.moveService(from: index, direction: 1) }
+                            },
+                            canMoveUp: index > 0,
+                            canMoveDown: index < viewModel.services.count - 1
+                        )
+                    }
+                }
+                ManageCardDivider()
+                AddServiceSheet(viewModel: viewModel, disabled: controlsDisabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+            }
+
+            Text("Trip photos and details appear on Charters and Home. Tap a trip (or use Quick Edit) to open the edit sheet.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct ManageHowItWorksTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+    @State private var faqEditIndex: Int?
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ManageSectionHeader("Steps")
+            Text("Three steps on your How it works page.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ManageCard {
+                ForEach(Array(viewModel.studio12ProcessSteps.prefix(3).enumerated()), id: \.element.id) { index, _ in
+                    if index > 0 { ManageCardDivider() }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Step \(index + 1)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField("Title", text: $viewModel.studio12ProcessSteps[index].title)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(controlsDisabled)
+                        TextField("Description", text: $viewModel.studio12ProcessSteps[index].body, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(2...4)
+                            .disabled(controlsDisabled)
+                    }
+                    .padding(14)
+                }
+            }
+
+            ManageSectionHeader("FAQs")
+            Text("Shown under Frequently asked on How it works. Tap Edit for a full question + answer sheet.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ManageCard {
+                ForEach(Array(viewModel.charterFaqs.enumerated()), id: \.element.id) { index, faq in
+                    if index > 0 { ManageCardDivider() }
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(faq.question.isEmpty ? "Question" : faq.question)
+                                .font(.subheadline.weight(.semibold))
+                            Text(faq.answer.isEmpty ? "No answer yet" : faq.answer)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        VStack(spacing: 6) {
+                            Button("Edit") { faqEditIndex = index }
+                                .buttonStyle(.bordered)
+                                .disabled(controlsDisabled)
+                            HStack(spacing: 4) {
+                                Button {
+                                    viewModel.moveCharterFaq(from: index, direction: -1)
+                                } label: { Image(systemName: "chevron.up") }
+                                .disabled(controlsDisabled || index == 0)
+                                Button {
+                                    viewModel.moveCharterFaq(from: index, direction: 1)
+                                } label: { Image(systemName: "chevron.down") }
+                                .disabled(controlsDisabled || index >= viewModel.charterFaqs.count - 1)
+                                Button(role: .destructive) {
+                                    viewModel.deleteCharterFaq(at: index)
+                                } label: { Image(systemName: "trash") }
+                                .disabled(controlsDisabled)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    .padding(14)
+                }
+                ManageCardDivider()
+                Button {
+                    viewModel.addCharterFaq()
+                } label: {
+                    Label("Add FAQ", systemImage: "plus")
+                }
+                .disabled(controlsDisabled || viewModel.charterFaqs.count >= DesignViewModel.charterFaqsLimit)
+                .padding(14)
+            }
+
+            HStack(spacing: 12) {
+                Button("Discard") {
+                    Task { await viewModel.loadData() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(controlsDisabled)
+                Button("Save changes") {
+                    Task {
+                        await viewModel.persistStudio12ProcessSteps(invalidatePreview: false)
+                        await viewModel.persistCharterFaqs()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(controlsDisabled)
+            }
+        }
+        .sheet(item: Binding(
+            get: { faqEditIndex.map { CharterFaqEditItem(id: $0) } },
+            set: { faqEditIndex = $0?.id }
+        )) { item in
+            EditCharterFaqManageSheet(faqIndex: item.id, viewModel: viewModel) {
+                faqEditIndex = nil
+            }
+        }
+    }
+}
+
+struct ManageCharterBookTabContent: View {
+    @ObservedObject var viewModel: DesignViewModel
+
+    private var controlsDisabled: Bool {
+        !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ManageSectionHeader("Book now")
+            Text("Checkout page guests see after Continue to booking — contact, add-ons, and order summary.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ManageCard {
+                ManageToggleRow(
+                    title: "Book now page enabled",
+                    subtitle: "Visible at /book on your site",
+                    isOn: $viewModel.showBookPage,
+                    disabled: controlsDisabled
+                ) {
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            }
+
+            ManageSectionHeader("Meeting point")
+            ManageCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Shown on the trip confirmation page.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Garrison Bight Marina", text: $viewModel.charterMeetingPoint)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(controlsDisabled)
+                    Button("Save meeting point") {
+                        Task {
+                            await viewModel.saveQuickEdit(
+                                fieldKey: "wc.charter.meetingPoint",
+                                value: viewModel.charterMeetingPoint
+                            )
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(controlsDisabled)
+                }
+                .padding(14)
+            }
+
+            Text("Trip list and pricing live under Manage → Charters.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct CharterFaqEditItem: Identifiable {
+    let id: Int
+}
+
+private struct EditCharterFaqManageSheet: View {
+    let faqIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var questionText = ""
+    @State private var answerText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Question", text: $questionText, axis: .vertical)
+                    .lineLimit(2...4)
+                TextField("Answer", text: $answerText, axis: .vertical)
+                    .lineLimit(3...10)
+            }
+            .navigationTitle("Edit FAQ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        viewModel.updateCharterFaq(
+                            at: faqIndex,
+                            question: questionText.trimmingCharacters(in: .whitespacesAndNewlines),
+                            answer: answerText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        Task { await viewModel.persistCharterFaqs() }
+                        onDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard viewModel.charterFaqs.indices.contains(faqIndex) else { return }
+            questionText = viewModel.charterFaqs[faqIndex].question
+            answerText = viewModel.charterFaqs[faqIndex].answer
+        }
+    }
+}

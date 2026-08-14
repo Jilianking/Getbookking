@@ -34,6 +34,9 @@ enum QuickEditFieldTitles {
         case "luxeHomeServicesEyebrow": return "Services section label"
         case "luxeHomeServicesHeading": return "Services section title"
         case "heroTagline": return "Hero accent line"
+        case "heroSubtitle": return "Hero description"
+        case "serviceArea": return "Service area"
+        case "aboutText": return "About text"
         case "studio12HeroEyebrow": return "Hero eyebrow"
         case "studio12HeroLine1": return "Hero headline (line 1)"
         case "studio12HeroLine2": return "Hero headline (line 2)"
@@ -61,6 +64,13 @@ enum QuickEditFieldTitles {
                 if parts.count == 3, parts[2] == "body" { return "Step description" }
                 return "Process step"
             }
+            if key.hasPrefix("charterFaq:") {
+                let parts = key.split(separator: ":").map(String.init)
+                if parts.count == 3, parts[2] == "edit" { return "Edit FAQ" }
+                if parts.count == 3, parts[2] == "question" { return "FAQ question" }
+                if parts.count == 3, parts[2] == "answer" { return "FAQ answer" }
+                return "FAQ"
+            }
             if key.hasPrefix("svc:") {
                 let parts = key.split(separator: ":").map(String.init)
                 if parts.count == 3, parts[2] == "edit" { return "Edit service" }
@@ -86,6 +96,9 @@ enum QuickEditFieldTitles {
                 let tail = String(key.dropFirst("wc.svc.".count))
                 if tail.hasSuffix(".name") { return "Service name (website only)" }
                 if tail.hasSuffix(".description") { return "Service description (website only)" }
+                if tail.hasSuffix(".price") { return "Service price (website only)" }
+                if tail.hasSuffix(".duration") { return "Service duration (website only)" }
+                if tail.hasSuffix(".details") { return "Service details link (website only)" }
                 return "Service text (website only)"
             }
             if key == "wc.classic.heroTag" || key == "wc.classic.heroTagline" { return "Hero tagline (website only)" }
@@ -93,6 +106,8 @@ enum QuickEditFieldTitles {
             if key == "wc.luxe.promoTag" { return "Promo line (website only)" }
             if key == "wc.luxe.teamBio" { return "Team bio (website only)" }
             if key == "wc.s12.heroLead" || key == "wc.s12.navSub" { return "Hero intro (website only)" }
+            if key == "wc.charter.heroEyebrow" { return "Hero location line" }
+            if key == "wc.charter.captainName" { return "Captain name (website only)" }
             if key.hasPrefix("wc.") {
                 let tail = String(key.dropFirst(3)).replacingOccurrences(of: ".", with: " → ")
                 return "Site text: \(tail)"

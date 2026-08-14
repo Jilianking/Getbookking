@@ -8,8 +8,10 @@ struct TeamBookingSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var teamPolicyViewModel: ManagerSettingsViewModel
-    /// Solo Business settings: owner booking type only (no manager sections).
+    /// Solo / charter Business settings: owner booking type only (no manager sections).
     var isSoloBusinessSettings: Bool = false
+    @State private var depositAmountText = ""
+    @FocusState private var isDepositAmountFocused: Bool
 
     /// Single Booking type picker: classic types + Calendar / slots.
     private var bookingTypeSelection: Binding<StudioBookingTypeOption> {
@@ -30,13 +32,30 @@ struct TeamBookingSettingsView: View {
         )
     }
 
+    private var isCharterPlan: Bool {
+        settingsViewModel.tenantSubscriptionPlan.isCharterPlan
+            || authViewModel.tenantSubscriptionPlan.isCharterPlan
+    }
+
+    private var charterPaymentSelection: Binding<CharterPaymentPolicy> {
+        Binding(
+            get: { CharterPaymentPolicy.from(confirmation: settingsViewModel.confirmationType) },
+            set: { policy in
+                settingsViewModel.bookingMode = .calendarSlots
+                settingsViewModel.confirmationType = policy.confirmationType
+            }
+        )
+    }
+
     private var isCalendarType: Bool {
-        settingsViewModel.bookingMode == .calendarSlots
+        isCharterPlan || settingsViewModel.bookingMode == .calendarSlots
     }
 
     var body: some View {
         List {
-            if isSoloBusinessSettings {
+            if isCharterPlan {
+                charterBookingSection
+            } else if isSoloBusinessSettings {
                 soloBookingSection
             } else {
                 studioBookingPolicySection
@@ -61,6 +80,35 @@ struct TeamBookingSettingsView: View {
         .appListSurface()
         .navigationTitle("Booking settings")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if isCharterPlan {
+                settingsViewModel.applyCharterBookingConstraints()
+            }
+            syncDepositAmountTextFromModel()
+        }
+        .onChange(of: settingsViewModel.depositAmount) { _, _ in
+            guard !isDepositAmountFocused else { return }
+            syncDepositAmountTextFromModel()
+        }
+    }
+
+    // MARK: Charter
+
+    private var charterBookingSection: some View {
+        Section(
+            header: Text("How clients book"),
+            footer: Text("Guests pick a day and time. Request & approve: you confirm, no card. Deposit: card for the deposit only. Pay in full: card for the trip total. Set hours under Availability.")
+                .font(.caption2)
+        ) {
+            Picker("Booking type", selection: charterPaymentSelection) {
+                ForEach(CharterPaymentPolicy.allCases) { policy in
+                    Text(policy.displayName).tag(policy)
+                }
+            }
+            if settingsViewModel.confirmationType.requiresDeposit {
+                depositAmountRow
+            }
+        }
     }
 
     // MARK: Solo
@@ -145,22 +193,33 @@ struct TeamBookingSettingsView: View {
     private var depositAmountRow: some View {
         HStack {
             Text("Deposit amount")
-            TextField("0", value: Binding(
-                get: { settingsViewModel.depositAmount ?? 0 },
-                set: { settingsViewModel.depositAmount = $0 > 0 ? $0 : nil }
-            ), format: .number)
+            Spacer()
+            TextField("0.00", text: $depositAmountText)
                 .keyboardType(.decimalPad)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
                 .multilineTextAlignment(.trailing)
-                .frame(width: 80)
+                .focused($isDepositAmountFocused)
+                .onChange(of: depositAmountText) { _, newValue in
+                    settingsViewModel.depositAmount = DepositAmountInput.parse(newValue)
+                }
             Text("USD")
                 .foregroundStyle(.secondary)
         }
     }
 
+    private func syncDepositAmountTextFromModel() {
+        depositAmountText = DepositAmountInput.initialText(defaultAmount: settingsViewModel.depositAmount)
+    }
+
     private var availabilitySection: some View {
         Section(
             header: Text("Availability"),
-            footer: Text("Weekly shop hours set when you’re open on public /book. Availability calendar is only for days off and blocked times of day.")
+            footer: Text(
+                isCharterPlan
+                    ? "Weekly hours set when you’re open on public /book. The availability calendar is for days off and blocked times."
+                    : "Weekly shop hours set when you’re open on public /book. Availability calendar is only for days off and blocked times of day."
+            )
                 .font(.caption2)
         ) {
             NavigationLink {
@@ -232,7 +291,7 @@ struct TeamBookingSettingsView: View {
 
             if settingsViewModel.saveSuccess || teamPolicyViewModel.saveSuccess {
                 Label(
-                    settingsViewModel.bookingMode == .calendarSlots
+                    isCharterPlan || settingsViewModel.bookingMode == .calendarSlots
                         ? "Saved — public /book uses calendar"
                         : "Saved — public /book uses form",
                     systemImage: "checkmark.circle.fill"

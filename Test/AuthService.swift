@@ -15,12 +15,15 @@ enum SubscriptionPlan: String, CaseIterable {
     case solo = "solo"
     case studio = "studio"
     case shop = "shop"
+    /// Fishing / boat charter subscription (1 seat; shop + SMS included).
+    case charter = "charter"
 
     var displayName: String {
         switch self {
         case .solo: return "Solo"
         case .studio: return "Studio"
         case .shop: return "Shop"
+        case .charter: return "Boat / Fishing charter"
         }
     }
 
@@ -29,31 +32,35 @@ enum SubscriptionPlan: String, CaseIterable {
         case .solo: return "Just you"
         case .studio: return "2–5 people"
         case .shop: return "6–10 people"
+        case .charter: return "Fishing charter site · just you"
         }
     }
 
     var monthlyPriceLabel: String {
         switch self {
-        case .solo: return "$39/mo"
+        case .solo, .charter: return "$39/mo"
         case .studio: return "$79/mo"
         case .shop: return "$149/mo"
         }
     }
 
-    /// Solo is owner-only; team invites require Studio or Shop.
+    /// Studio and Shop can invite team members; Solo and Fishing charter cannot.
     var allowsTeamInvites: Bool {
-        self != .solo
+        self == .studio || self == .shop
     }
 
-    /// Solo owners use Business settings (not Team settings) in the app.
+    /// Owner-only plans use Business settings (not Team settings) in the app.
     var usesBusinessSettingsHub: Bool {
-        self == .solo
+        self == .solo || self == .charter
     }
+
+    /// Fishing charter subscription (locked fishing template + Manage page names).
+    var isCharterPlan: Bool { self == .charter }
 
     /// Total members (owner + staff) allowed for this plan tier.
     var maxSeats: Int {
         switch self {
-        case .solo: return 1
+        case .solo, .charter: return 1
         case .studio: return 5
         case .shop: return 10
         }
@@ -62,12 +69,12 @@ enum SubscriptionPlan: String, CaseIterable {
     /// Free client texting lines included (studio number + optional personal lines).
     var freeIncludedSmsLines: Int {
         switch self {
-        case .solo: return 1
+        case .solo, .charter: return 1
         case .studio, .shop: return 2
         }
     }
 
-    /// Max texting lines = seat cap (Studio 5, Shop 10, Solo 1).
+    /// Max texting lines = seat cap (Studio 5, Shop 10, Solo 1, Fishing charter 1).
     var maxSmsLines: Int { maxSeats }
 
     /// Aligns with `normalizeSubscriptionPlan` in Cloud Functions / web sign-up.
@@ -77,9 +84,11 @@ enum SubscriptionPlan: String, CaseIterable {
         case "basic", "solo", "free", "starter": return .solo
         case "growth", "pro": return .studio
         case "enterprise": return .shop
+        case "charter", "charters", "boat", "fishing", "boating": return .charter
         case SubscriptionPlan.solo.rawValue: return .solo
         case SubscriptionPlan.studio.rawValue: return .studio
         case SubscriptionPlan.shop.rawValue: return .shop
+        case SubscriptionPlan.charter.rawValue: return .charter
         default: return .solo
         }
     }
@@ -309,6 +318,11 @@ class AuthViewModel: ObservableObject {
         }
         teamAccess = access
         tenantSubscriptionPlan = access.subscriptionPlan
+    }
+
+    /// Prefer tenant document plan after Design/Settings load (e.g. Harbor Charters → charter).
+    func applyLoadedSubscriptionPlan(_ plan: SubscriptionPlan) {
+        tenantSubscriptionPlan = plan
     }
 
     /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.

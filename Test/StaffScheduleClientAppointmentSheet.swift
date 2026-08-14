@@ -21,7 +21,7 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var customerName: String
     @State private var customerEmail: String
     @State private var customerPhone: String
-    @State private var services: [(id: String, name: String, slug: String)] = []
+    @State private var services: [(id: String, name: String, slug: String, durationMinutes: Int?)] = []
     @State private var isLoadingServices = true
     @State private var selectedServiceId: String?
     @State private var confirmedDate: Date
@@ -88,7 +88,7 @@ struct StaffScheduleClientAppointmentSheet: View {
         return roster.first(where: { $0.uid == uid })
     }
 
-    private var selectedService: (id: String, name: String, slug: String)? {
+    private var selectedService: (id: String, name: String, slug: String, durationMinutes: Int?)? {
         guard let id = selectedServiceId else { return nil }
         return services.first(where: { $0.id == id })
     }
@@ -334,7 +334,9 @@ struct StaffScheduleClientAppointmentSheet: View {
         }
         do {
             let fetched = try await FirebaseService().fetchTenantServices(tenantId: tid)
-            let active = fetched.filter(\.isActive).map { (id: $0.id, name: $0.name, slug: $0.slug) }
+            let active = fetched.filter(\.isActive).map {
+                (id: $0.id, name: $0.name, slug: $0.slug, durationMinutes: $0.durationMinutes)
+            }
             await MainActor.run {
                 services = active
                 selectedServiceId = active.first?.id
@@ -357,7 +359,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             serviceName: service.name,
             member: member,
             scheduledStart: start,
-            notes: trimmedNotes.isEmpty ? nil : trimmedNotes
+            notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+            durationMinutes: service.durationMinutes
         )
         if requestId != nil,
            willSendDeposit,

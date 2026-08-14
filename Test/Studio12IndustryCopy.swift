@@ -257,10 +257,9 @@ enum Studio12IndustryCopy {
             ]
         case .charters:
             return [
-                Studio12ProcessStep(id: 0, title: "Book online", body: "Choose your trip and send a request. We'll confirm availability and details."),
-                Studio12ProcessStep(id: 1, title: "Plan the trip", body: "We align on party size, timing, and fishing or cruise goals."),
-                Studio12ProcessStep(id: 2, title: "Cast off", body: "Meet at the dock — gear guidance and a day built around your group."),
-                Studio12ProcessStep(id: 3, title: "After the trip", body: "Photos, tips, and easy rebooking for your next day on the water.")
+                Studio12ProcessStep(id: 0, title: "Search & compare", body: "Filter by trip type, price and timing to find the right charter."),
+                Studio12ProcessStep(id: 1, title: "Book & pay online", body: "Pick a date and time, add extras, and confirm securely."),
+                Studio12ProcessStep(id: 2, title: "Meet at the dock", body: "Show up with your confirmation — gear is covered, the captain handles the rest.")
             ]
         case .custom:
             return [

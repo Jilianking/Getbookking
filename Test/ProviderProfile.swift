@@ -331,6 +331,7 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
     case depositToConfirm = "deposit_to_confirm"
     case approveAndDeposit = "approve_and_deposit"
     case consultationFirst = "consultation_first"
+    case payInFull = "pay_in_full"
 
     var displayName: String {
         switch self {
@@ -339,6 +340,7 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
         case .depositToConfirm: return "Deposit to confirm"
         case .approveAndDeposit: return "Approve + deposit"
         case .consultationFirst: return "Consultation first"
+        case .payInFull: return "Pay in full"
         }
     }
 
@@ -349,28 +351,36 @@ enum BookingConfirmationType: String, CaseIterable, Codable {
         case .depositToConfirm: return "Auto-confirm once deposit paid"
         case .approveAndDeposit: return "Approve first, then deposit"
         case .consultationFirst: return "Consultation, then book service"
+        case .payInFull: return "Charge the trip total at checkout"
         }
     }
 
     var requiresApproval: Bool {
         switch self {
-        case .instantBook, .depositToConfirm: return false
+        case .instantBook, .depositToConfirm, .payInFull: return false
         case .requestApprove, .approveAndDeposit, .consultationFirst: return true
         }
     }
 
     var requiresDeposit: Bool {
         switch self {
-        case .instantBook, .requestApprove: return false
+        case .instantBook, .requestApprove, .payInFull: return false
         case .depositToConfirm, .approveAndDeposit: return true
         case .consultationFirst: return false
+        }
+    }
+
+    var requiresPaymentAtCheckout: Bool {
+        switch self {
+        case .depositToConfirm, .payInFull: return true
+        default: return false
         }
     }
 
     /// Uses fixed date selection (tap to select available) vs block dates (shop hours, tap to block)
     var usesFixedSlots: Bool {
         switch self {
-        case .instantBook, .depositToConfirm: return true
+        case .instantBook, .depositToConfirm, .payInFull: return true
         case .requestApprove, .approveAndDeposit, .consultationFirst: return false
         }
     }

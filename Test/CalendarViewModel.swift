@@ -109,7 +109,8 @@ class CalendarViewModel: ObservableObject {
         let service = (booking.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let client = (booking.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let end = start.addingTimeInterval(3600)
+        let endMinutes = booking.durationMinutes.flatMap { $0 > 0 ? $0 : nil } ?? 60
+        let end = start.addingTimeInterval(TimeInterval(endMinutes * 60))
 
         return Event(
             id: booking.documentId ?? booking.id,
@@ -127,7 +128,7 @@ class CalendarViewModel: ObservableObject {
     }
 
     static func appointmentStart(for booking: BookingRequest) -> Date? {
-        if let start = booking.requestedStartTime { return start }
+        if let start = booking.departureStart { return start }
         guard let slot = booking.preferredTime?.trimmingCharacters(in: .whitespacesAndNewlines), !slot.isEmpty else {
             return nil
         }

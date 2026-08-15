@@ -661,8 +661,8 @@ async function countPaidSmsLines(tenantId, tenant) {
 }
 
 /**
- * Canonical SMS line free allotments: Solo 1 · Studio/Shop 2.
- * Plan slug should already be normalized (solo|studio|shop).
+ * Canonical SMS line free allotments: Solo/Charter 1 · Studio/Shop 2.
+ * Plan slug should already be normalized (solo|studio|shop|charter).
  */
 function freeIncludedSmsLinesForPlan(planNorm) {
   const p = (planNorm || "solo").toString().trim().toLowerCase();
@@ -774,8 +774,8 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
   // Studio/Shop: recurring Extra SMS seats. Solo: one-time $12 replacement only (max 1).
-  const canPurchaseExtra = plan !== "solo" && !atMax;
-  const canPurchaseSoloReplacement = plan === "solo" && needsPurchaseForNext;
+  const canPurchaseExtra = plan !== "solo" && plan !== "charter" && !atMax;
+  const canPurchaseSoloReplacement = (plan === "solo" || plan === "charter") && needsPurchaseForNext;
   return {
     plan,
     freeIncluded,
@@ -818,8 +818,10 @@ function smsExtraNeededForUsage(planNorm, lineCount) {
 function newSmsLineBlockReason(tenant, planNorm, lineCount) {
   const summary = buildSmsLineSummary(tenant, planNorm, lineCount);
   if (summary.atMax) {
-    if (summary.plan === "solo") {
-      return "Solo includes 1 texting number.";
+    if (summary.plan === "solo" || summary.plan === "charter") {
+      return summary.plan === "charter"
+        ? "Charter includes 1 texting number."
+        : "Solo includes 1 texting number.";
     }
     return (
       `Your ${summary.plan} plan allows up to ${summary.maxLines} texting numbers. ` +
@@ -827,9 +829,9 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
     );
   }
   if (!summary.canProvisionNext) {
-    if (summary.plan === "solo") {
+    if (summary.plan === "solo" || summary.plan === "charter") {
       return (
-        "You've used your included Solo texting number. " +
+        "You've used your included texting number. " +
         "Getting another costs a $12 fee (not monthly)."
       );
     }

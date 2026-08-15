@@ -830,15 +830,15 @@
       var paidRow = document.getElementById('smsLinesPaidRow');
       var freeRow = document.getElementById('smsLinesFreeRow');
       var linesNote = document.getElementById('smsLinesNote');
-      if (plan === 'solo') {
+      if (plan === 'solo' || plan === 'charter') {
         if (paidRow) paidRow.classList.add('hidden');
         if (freeRow) freeRow.classList.remove('hidden');
         if (linesNote) {
           linesNote.textContent =
-            'Solo includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
+            'This plan includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
         }
         note.textContent =
-          'Solo includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
+          'This plan includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
         note.classList.remove('hidden');
         return;
       }

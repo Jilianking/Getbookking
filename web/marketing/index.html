@@ -560,6 +560,15 @@ html { scroll-behavior: smooth; width: 100%; }
       gap: 18px;
     }
 
+    .pricing-grid--charter {
+      grid-template-columns: minmax(280px, 380px);
+      justify-content: center;
+    }
+
+    .pricing-charter-header {
+      margin-top: 72px;
+    }
+
     .plan {
       position: relative;
       padding: 32px 28px;
@@ -1052,8 +1061,8 @@ html { scroll-behavior: smooth; width: 100%; }
     <div class="sec-inner sec-inner--pricing">
       <div class="sec-header">
         <div class="sec-label">Pricing</div>
-        <h2>Simple, honest pricing</h2>
-        <p>Start free for a month. Upgrade as your team grows.</p>
+        <h2>For Studios and Shops</h2>
+        <p>14-day trial. Upgrade as your team grows.</p>
       </div>
       <div class="pricing-grid">
 
@@ -1105,7 +1114,28 @@ html { scroll-behavior: smooth; width: 100%; }
         </div>
 
       </div>
-      <p class="trial-note">All plans include a 14-day website builder trial. Card required.</p>
+
+      <div class="sec-header pricing-charter-header">
+        <h2>For Fishing Charters</h2>
+      </div>
+      <div class="pricing-grid pricing-grid--charter">
+        <div class="plan">
+          <div class="plan-name">Charter</div>
+          <div class="plan-price">$24 <span>/ mo</span></div>
+          <div class="plan-desc">Everything included</div>
+          <div class="plan-divider"></div>
+          <ul class="plan-feats">
+            <li>Professional website &amp; customizable templates</li>
+            <li>Trip booking your way — instant, request &amp; approve, deposit to hold, or open calendar slots</li>
+            <li>Tap to Pay on iPhone &amp; card checkout</li>
+            <li>Guest texting (1 business number)</li>
+            <li>Trip reminders &amp; deposit requests</li>
+            <li>Free subdomain · connect your own domain</li>
+          </ul>
+          <a href="signup.html?plan=charter&amp;industry=charters" class="plan-cta outline">Start free trial</a>
+        </div>
+      </div>
+      <p class="trial-note">All plans include a 14-day trial. Card required.</p>
     </div>
   </section>
 

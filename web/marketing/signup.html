@@ -236,6 +236,115 @@
       margin-top: 4px;
     }
 
+    .path-pick-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .path-pick {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 22px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .path-pick:hover {
+      border-color: var(--brand-muted);
+      background: var(--brand-offwhite);
+    }
+
+    .path-pick.selected {
+      border-color: var(--brand-warm);
+      background: #FAF5ED;
+    }
+
+    .path-pick-name {
+      font-size: 17px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .path-pick-desc {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .industry-lock {
+      display: none;
+      margin-bottom: 24px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #FAF5ED;
+    }
+
+    .industry-lock-kicker {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 4px;
+    }
+
+    .industry-lock-label {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .signup-card[data-path="charters"] .choice-grid,
+    .signup-card[data-path="charters"] .plan-pick-grid {
+      display: none;
+    }
+
+    .signup-card[data-path="charters"] .industry-lock {
+      display: block;
+    }
+
+    .signup-card[data-path="studios"] .plan-pick[data-value="charter"] {
+      display: none;
+    }
+
+    .charter-plan-lock {
+      display: none;
+      margin-bottom: 24px;
+      padding: 18px 20px;
+      border: 1px solid var(--brand-warm);
+      border-radius: 12px;
+      background: #FAF5ED;
+    }
+
+    .signup-card[data-path="charters"] .charter-plan-lock {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .charter-plan-lock-name {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .charter-plan-lock-desc {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .charter-plan-lock-price {
+      font-family: 'Instrument Serif', serif;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
     .field {
       margin-bottom: 18px;
     }
@@ -1048,17 +1157,37 @@
     </div>
   </div>
 
-  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 33.33%"></div></div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 25%"></div></div>
 
   <!-- CARD -->
   <div class="signup-wrap">
-    <div class="signup-card">
-      <p class="signup-step-label" id="stepIndicator">Step 1 of 3</p>
+    <div class="signup-card" id="signupCard">
+      <p class="signup-step-label" id="stepIndicator">Step 1 of 4</p>
+
+      <!-- STEP 0 — Path -->
+      <div class="step-panel active" id="step0">
+        <h2>What kind of business?</h2>
+        <p class="subtitle">Choose a path first. We’ll tailor signup, your site, and billing from this.</p>
+        <div class="path-pick-grid">
+          <button type="button" class="path-pick" data-value="studios" onclick="pickSignupPath('studios')">
+            <div class="path-pick-name">Studios and Shops</div>
+            <div class="path-pick-desc">Barbers, salons, tattoo, nails, and more · Solo, Studio, or Shop</div>
+          </button>
+          <button type="button" class="path-pick" data-value="charters" onclick="pickSignupPath('charters')">
+            <div class="path-pick-name">Fishing Charters</div>
+            <div class="path-pick-desc">$24/mo · Trip booking, guest texting, and your site</div>
+          </button>
+        </div>
+      </div>
 
       <!-- STEP 1 — Business (industry + name + location) -->
-      <div class="step-panel active" id="step1">
+      <div class="step-panel" id="step1">
         <h2>Tell us about your business</h2>
         <p class="subtitle">We'll tailor your booking form, services, and site from this. All editable after signup.</p>
+        <div class="industry-lock" id="industryLock">
+          <div class="industry-lock-kicker">Business type</div>
+          <div class="industry-lock-label">Boating / Fishing Charter</div>
+        </div>
         <div class="choice-grid">
           <button class="choice-btn" data-value="barber" onclick="pickIndustry(this)">
             <div class="choice-label">Barbershop</div>
@@ -1071,9 +1200,6 @@
           </button>
           <button class="choice-btn" data-value="nails" onclick="pickIndustry(this)">
             <div class="choice-label">Nail salon</div>
-          </button>
-          <button class="choice-btn" data-value="charters" onclick="pickIndustry(this)">
-            <div class="choice-label">Boating / Fishing Charter</div>
           </button>
           <button class="choice-btn" data-value="custom" onclick="pickIndustry(this)">
             <div class="choice-label">Custom</div>
@@ -1102,6 +1228,7 @@
           </div>
         </div>
         <div class="btn-row">
+          <button class="btn-back" id="btnBackPath" onclick="goTo(0)">Back</button>
           <button class="btn-next" id="btn1" disabled onclick="goTo(2)">Continue</button>
         </div>
       </div>
@@ -1157,8 +1284,15 @@
 
       <!-- STEP 3 — Plan & pay -->
       <div class="step-panel" id="step3">
-        <h2>Choose your plan</h2>
-        <p class="subtitle">14-day website builder trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.</p>
+        <h2 id="step3Title">Choose your plan</h2>
+        <p class="subtitle" id="step3Subtitle">14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.</p>
+        <div class="charter-plan-lock" id="charterPlanLock">
+          <div>
+            <div class="charter-plan-lock-name">Charter</div>
+            <div class="charter-plan-lock-desc">Fishing charters</div>
+          </div>
+          <div class="charter-plan-lock-price">$24<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+        </div>
         <div class="plan-pick-grid">
           <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
             <div class="plan-pick-left">
@@ -1261,10 +1395,12 @@
       });
     }
 
-    const TOTAL_STEPS = 3;
-    let currentStep = 1;
+    const TOTAL_STEPS_FULL = 4;
+    let currentStep = 0;
 
     const state = {
+      signupPath: null,
+      skipPathStep: false,
       industry: null,
       bizName: '',
       bizCity: '',
@@ -1278,25 +1414,99 @@
       plan: null,
     };
 
-    /* Pre-fill plan from query string (from pricing CTA); legacy slugs map to canonical. */
+    /* Pre-fill plan / industry from query string (from pricing CTA); legacy slugs map to canonical. */
     (function() {
       const params = new URLSearchParams(location.search);
       const p = (params.get('plan') || '').trim().toLowerCase();
-      const legacy = { basic: 'solo', free: 'solo', starter: 'solo', solo: 'solo', growth: 'studio', pro: 'studio', enterprise: 'shop' };
+      const legacy = { basic: 'solo', free: 'solo', starter: 'solo', solo: 'solo', growth: 'studio', pro: 'studio', enterprise: 'shop', charter: 'charter', charters: 'charter' };
       const canon = legacy[p] || p;
-      if (['solo', 'studio', 'shop'].includes(canon)) {
+      if (['solo', 'studio', 'shop', 'charter'].includes(canon)) {
         state.plan = canon;
       }
+      const ind = (params.get('industry') || '').trim().toLowerCase();
+      const industries = ['barber', 'hair', 'tattoos', 'nails', 'charters', 'custom'];
+      if (industries.includes(ind)) {
+        state.industry = ind;
+      }
+      if (state.plan === 'charter' || state.industry === 'charters') {
+        state.signupPath = 'charters';
+        state.plan = 'charter';
+        state.industry = 'charters';
+        state.skipPathStep = true;
+      } else if (state.plan === 'solo' || state.plan === 'studio' || state.plan === 'shop') {
+        state.signupPath = 'studios';
+        state.skipPathStep = true;
+        if (state.industry === 'charters') state.industry = null;
+      }
     })();
+
+    function isCharterPath() {
+      return state.signupPath === 'charters';
+    }
+
+    function stepCount() {
+      return state.skipPathStep ? 3 : TOTAL_STEPS_FULL;
+    }
+
+    function displayStepNumber(step) {
+      if (state.skipPathStep) return step;
+      return step + 1;
+    }
+
+    function updateStepChrome(step) {
+      var total = stepCount();
+      var shown = displayStepNumber(step);
+      var ind = document.getElementById('stepIndicator');
+      if (ind) {
+        ind.textContent = 'Step ' + shown + ' of ' + total;
+        ind.classList.remove('is-done');
+      }
+      var bar = document.getElementById('progressFill');
+      if (bar) bar.style.width = ((shown / total) * 100) + '%';
+    }
 
     var PLAN_CHECKOUT_INFO = {
       solo: { name: 'Solo', price: '$39' },
       studio: { name: 'Studio', price: '$79' },
       shop: { name: 'Shop', price: '$149' },
+      charter: { name: 'Charter', price: '$24' },
     };
 
+    function applySignupPathUI() {
+      var card = document.getElementById('signupCard');
+      if (card) card.setAttribute('data-path', state.signupPath || '');
+      document.querySelectorAll('.path-pick').forEach(function(el) {
+        el.classList.toggle('selected', el.dataset.value === state.signupPath);
+      });
+      var backPath = document.getElementById('btnBackPath');
+      if (backPath) backPath.style.display = state.skipPathStep ? 'none' : '';
+      var nameEl = document.getElementById('bizName');
+      var cityEl = document.getElementById('bizCity');
+      if (isCharterPath()) {
+        if (nameEl) nameEl.placeholder = 'e.g. Harbor Charters';
+        if (cityEl) cityEl.placeholder = 'e.g. Key West';
+      } else {
+        if (nameEl) nameEl.placeholder = 'e.g. Brandon Smith Barbershop';
+        if (cityEl) cityEl.placeholder = 'e.g. St. Petersburg';
+      }
+      var title = document.getElementById('step3Title');
+      var sub = document.getElementById('step3Subtitle');
+      if (isCharterPath()) {
+        if (title) title.textContent = 'Charter · $24/mo';
+        if (sub) sub.textContent = '14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.';
+      } else {
+        if (title) title.textContent = 'Choose your plan';
+        if (sub) sub.textContent = '14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.';
+      }
+      var wrap = document.getElementById('industryCustomWrap');
+      if (wrap) wrap.style.display = (!isCharterPath() && state.industry === 'custom') ? 'block' : 'none';
+      document.querySelectorAll('.choice-grid .choice-btn').forEach(function(b) {
+        b.classList.toggle('selected', !isCharterPath() && b.dataset.value === state.industry);
+      });
+    }
+
     function refreshCheckoutSummary() {
-      var plan = state.plan || 'solo';
+      var plan = state.plan || (isCharterPath() ? 'charter' : 'solo');
       var info = PLAN_CHECKOUT_INFO[plan] || PLAN_CHECKOUT_INFO.solo;
       var nameEl = document.getElementById('checkoutPlanName');
       var priceEl = document.getElementById('checkoutPlanPrice');
@@ -1356,22 +1566,28 @@
 
     /* ── Navigation ── */
     function goTo(step) {
+      if (state.skipPathStep && step === 0) return;
       if (currentStep === 3 && step !== 3) {
         teardownEmbeddedCheckout();
       }
-      document.getElementById('step' + currentStep).classList.remove('active');
+      var prev = document.getElementById('step' + currentStep);
+      if (prev) prev.classList.remove('active');
       currentStep = step;
-      document.getElementById('step' + currentStep).classList.add('active');
-      document.getElementById('stepIndicator').textContent = 'Step ' + step + ' of ' + TOTAL_STEPS;
-      document.getElementById('stepIndicator').classList.remove('is-done');
-      document.getElementById('progressFill').style.width = ((step / TOTAL_STEPS) * 100) + '%';
+      var next = document.getElementById('step' + currentStep);
+      if (next) next.classList.add('active');
+      updateStepChrome(step);
 
-      if (step === 1) validateBusinessStep();
+      if (step === 0) applySignupPathUI();
+      if (step === 1) {
+        applySignupPathUI();
+        validateBusinessStep();
+      }
       if (step === 2) {
         updatePasswordReqIndicators();
         validateAboutYou();
       }
       if (step === 3) {
+        applySignupPathUI();
         refreshCheckoutSummary();
         if (state.plan) {
           document.querySelectorAll('.plan-pick').forEach(function(p) {
@@ -1390,11 +1606,27 @@
     }
 
     function teamSizeFromPlan(plan) {
-      return plan === 'solo' ? 'solo' : 'team';
+      return (plan === 'solo' || plan === 'charter') ? 'solo' : 'team';
     }
 
     /* ── Choice helpers ── */
+    function pickSignupPath(path) {
+      state.signupPath = path;
+      if (path === 'charters') {
+        state.industry = 'charters';
+        state.plan = 'charter';
+        var custom = document.getElementById('industryCustom');
+        if (custom) custom.value = '';
+      } else {
+        if (state.plan === 'charter') state.plan = null;
+        if (state.industry === 'charters') state.industry = null;
+      }
+      applySignupPathUI();
+      goTo(1);
+    }
+
     function pickIndustry(btn) {
+      if (isCharterPath()) return;
       btn.parentElement.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.industry = btn.dataset.value;
@@ -1410,9 +1642,12 @@
     }
 
     function pickPlan(el) {
+      if (isCharterPath()) return;
+      var val = el.dataset.value;
+      if (val === 'charter') return;
       document.querySelectorAll('.plan-pick').forEach(p => p.classList.remove('selected'));
       el.classList.add('selected');
-      state.plan = el.dataset.value;
+      state.plan = val;
       refreshCheckoutSummary();
       if (currentStep === 3) {
         scheduleEmbeddedCheckoutIfReady();
@@ -1880,7 +2115,7 @@
       if (s3) s3.classList.add('active');
       var ind = document.getElementById('stepIndicator');
       if (ind) {
-        ind.textContent = 'Step 3 of 3';
+        ind.textContent = 'Step ' + displayStepNumber(3) + ' of ' + stepCount();
         ind.classList.remove('is-done');
       }
       var bar = document.getElementById('progressFill');
@@ -1905,6 +2140,19 @@
     document.addEventListener('DOMContentLoaded', function() {
       populateBizStateSelect();
       configurePublicTestFlightLink();
+      applySignupPathUI();
+      if (state.skipPathStep) {
+        var pathPanel = document.getElementById('step0');
+        var bizPanel = document.getElementById('step1');
+        if (pathPanel) pathPanel.classList.remove('active');
+        if (bizPanel) bizPanel.classList.add('active');
+        currentStep = 1;
+        updateStepChrome(1);
+        validateBusinessStep();
+      } else {
+        currentStep = 0;
+        updateStepChrome(0);
+      }
       if (state.plan) {
         document.querySelectorAll('.plan-pick').forEach(function(p) {
           p.classList.toggle('selected', p.dataset.value === state.plan);
@@ -1923,7 +2171,7 @@
       var sessionId = params.get('session_id');
       var skipGate = false;
       try { skipGate = sessionStorage.getItem('bk_signup_gate_seen') === '1'; } catch (e) {}
-      if (checkout === 'success' || checkout === 'cancel' || skipGate) {
+      if (checkout === 'success' || checkout === 'cancel' || skipGate || isCharterPath()) {
         dismissSignupGate();
       } else if (gate) {
         gate.hidden = false;

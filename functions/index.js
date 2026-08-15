@@ -6,7 +6,7 @@
  *   firebase functions:secrets:set SHIPPO_API_TOKEN
  *     (Shippo API token — use shippo_test_… while developing shop shipping)
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
- *     (JSON map solo/studio/shop → price_… and optional smsExtra $12/mo add-on;
+ *     (JSON map solo/studio/shop/charter → price_… and optional smsExtra $12/mo add-on;
  *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
@@ -68,7 +68,7 @@ const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 /** Shippo API token (shippo_test_… or live). Rates-only at checkout — Bookking never buys labels. */
 const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
-/** JSON map: solo, studio, shop → Stripe Price id; optional smsExtra ($10/mo per extra SMS line). */
+/** JSON map: solo, studio, shop, charter → Stripe Price id; optional smsExtra ($10/mo per extra SMS line). */
 const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
 /** Stripe Dashboard → Webhooks → Signing secret (whsec_…). */
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
@@ -110,7 +110,7 @@ function customerDocIdForTenant(name, email, phone) {
   return `${safe || "customer"}_${Date.now()}`;
 }
 
-/** Canonical plan slug: `solo` | `studio` | `shop` | `charter` (accepts legacy aliases). */
+/** Canonical plan slug: `solo` | `studio` | `shop` | `charter` (accepts legacy `basic` and older aliases). */
 function normalizeSubscriptionPlan(plan) {
   const p = (plan || "").toString().trim().toLowerCase();
   const legacy = {
@@ -132,8 +132,7 @@ function normalizeSubscriptionPlan(plan) {
   return "solo";
 }
 
-/** Owner-only plans (no team invites): Solo and Boat / Fishing charter. */
-function isSingleSeatPlan(plan) {
+function isSingleOperatorPlan(plan) {
   const p = normalizeSubscriptionPlan(plan);
   return p === "solo" || p === "charter";
 }
@@ -678,7 +677,7 @@ async function reconcileSmsExtraPaidToUsage(
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
   );
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     return { tenant, paid: 0, changed: false };
   }
   const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
@@ -813,7 +812,7 @@ async function maybeReduceSmsExtraAfterReleasingOccupiedLine(
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
   );
-  if (isSingleSeatPlan(plan)) return null;
+  if (isSingleOperatorPlan(plan)) return null;
   const usedAfter = await sms.countOccupiedSmsLines(tenantId, tenant);
   const result = await reconcileSmsExtraPaidToUsage(
     stripe,
@@ -1254,7 +1253,22 @@ function planNormFromStripeSubscription(sub) {
   const metaPlan = planNormFromMetadata(metaRaw);
   if (metaPlan) return metaPlan;
   const items = (sub.items && sub.items.data) || [];
+  // Prefer plan price ids; ignore smsExtra add-on item.
   const planKeys = ["solo", "studio", "shop", "charter"];
+  try {
+    parseStripeSubscriptionPriceIds();
+    for (const item of items) {
+      const price = item.price;
+      const priceId =
+        (price && typeof price === "object" && price.id) ||
+        (typeof price === "string" ? price : null);
+      if (!priceId) continue;
+      const fromMap = planNormFromPriceId(priceId);
+      if (fromMap && planKeys.includes(fromMap)) return fromMap;
+    }
+  } catch (_) {
+    /* */
+  }
   for (const item of items) {
     const price = item.price;
     const priceId =
@@ -1468,7 +1482,11 @@ async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
     return { stripeAccountId: storedIdTrimmed, account: storedAccount };
   }
 
-  // Incomplete / missing / review: pick best matching Standard account by email.
+  // No stored id: skip listing every Connect account (that scan times out on
+  // large platforms). Caller creates a fresh Standard account instead.
+  if (!storedIdTrimmed) return null;
+
+  // Incomplete stored account: pick a better matching Standard account by email.
   const storedScore = connectAccountPriority(storedAccount);
   const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
   const emailScore = connectAccountPriority(bestByEmail);
@@ -1538,22 +1556,23 @@ async function replaceExpressWithStandardConnectAccount(
 async function ensureConnectAccountId(stripe, accountRef, email, storedId) {
   const storedIdTrimmed = (storedId || "").toString().trim();
 
-  // Always try stored + email reconciliation first (including bare email with no stored id).
-  const reconciled = await reconcileConnectAccountId(
-    stripe,
-    accountRef,
-    storedIdTrimmed,
-    email
-  );
-  if (reconciled) {
-    const migrated = await replaceExpressWithStandardConnectAccount(
+  if (storedIdTrimmed) {
+    const reconciled = await reconcileConnectAccountId(
       stripe,
       accountRef,
-      email,
-      reconciled.account
+      storedIdTrimmed,
+      email
     );
-    if (migrated) return migrated;
-    return reconciled;
+    if (reconciled) {
+      const migrated = await replaceExpressWithStandardConnectAccount(
+        stripe,
+        accountRef,
+        email,
+        reconciled.account
+      );
+      if (migrated) return migrated;
+      return reconciled;
+    }
   }
 
   const freshDoc = await accountRef.get();
@@ -1568,24 +1587,6 @@ async function ensureConnectAccountId(stripe, accountRef, email, storedId) {
     );
     if (migrated) return migrated;
     return { stripeAccountId: raceId, account };
-  }
-
-  // Last chance: another concurrent call may have linked an account for this email.
-  const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
-  if (bestByEmail) {
-    await accountRef.set({ stripeAccountId: bestByEmail.id }, { merge: true });
-    console.log("ensureConnectAccountId reused by email", {
-      id: bestByEmail.id,
-      email: (email || "").toString().trim(),
-    });
-    const migrated = await replaceExpressWithStandardConnectAccount(
-      stripe,
-      accountRef,
-      email,
-      bestByEmail
-    );
-    if (migrated) return migrated;
-    return { stripeAccountId: bestByEmail.id, account: bestByEmail };
   }
 
   const account = await createStandardConnectAccount(stripe, email);
@@ -1708,7 +1709,7 @@ async function connectAccountStatusUrl(stripe, account, stripeAccountId) {
  * Returns { url: string } to open in a browser for onboarding.
  */
 exports.createConnectAccountLink = functions
-  .runWith({ secrets: [stripeSecretKey] })
+  .runWith({ secrets: [stripeSecretKey], timeoutSeconds: 120 })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
@@ -4253,7 +4254,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
   const memberSlug = normalizeMemberSlugInput(data?.memberSlug);
   if (memberSlug) {
     const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
-    if (isSingleSeatPlan(plan)) {
+    if (isSingleOperatorPlan(plan)) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Team member booking pages are not available on this plan."
@@ -4283,7 +4284,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
       .trim()
       .toLowerCase();
     const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
-    if (assignmentPreference === "first_available" && plan !== "solo") {
+    if (assignmentPreference === "first_available" && !isSingleOperatorPlan(plan)) {
       const picked = await pickMemberForFirstAvailable(tenantId, tenantData);
       if (picked) {
         attachAssignedMemberToBookingData(bookingData, picked);
@@ -4664,8 +4665,7 @@ exports.expireCharterPaymentHolds = functions
   });
 
 
-const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop"]);
-
+const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop", "charter"]);
 const BETA_WAITLIST_BUSINESS_TYPES = new Set([
   "barber",
   "hair",
@@ -4694,10 +4694,12 @@ function validateBetaWaitlistPlanAndTeamSize(plan, teamSize) {
       "Enter the number of users on your team."
     );
   }
-  if (plan === "solo" && teamSize !== 1) {
+  if ((plan === "solo" || plan === "charter") && teamSize !== 1) {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "Solo is for one user. Choose Studio or Shop for teams."
+      plan === "charter"
+        ? "Charter is for one user."
+        : "Solo is for one user. Choose Studio or Shop for teams."
     );
   }
   if (plan === "studio" && (teamSize < 2 || teamSize > 5)) {
@@ -7911,7 +7913,8 @@ function maxSeatsForPlanNormalized(plan) {
   const p = normalizeSubscriptionPlan(plan);
   if (p === "solo" || p === "charter") return 1;
   if (p === "studio") return 5;
-  return 10;
+  if (p === "shop") return 10;
+  return 1;
 }
 
 async function countUsersForTenant(tenantId) {
@@ -7952,7 +7955,7 @@ exports.getTenantInvitePreview = functions.https.onCall(async (data) => {
   }
   const t = tenantSnap.data();
   const plan = normalizeSubscriptionPlan(t.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is not accepting team invites on its current plan."
@@ -7995,7 +7998,7 @@ exports.createTenantInvite = functions.https.onCall(async (data, context) => {
     );
   }
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This plan is owner only. Upgrade to Studio or Shop to invite team members."
@@ -8090,7 +8093,7 @@ exports.acceptTenantInvite = functions.https.onCall(async (data, context) => {
   }
 
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "This business is on an owner-only plan and cannot add team members."
@@ -8213,7 +8216,7 @@ exports.listPublicProviders = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     return { providers: [], subscriptionPlan: plan, tenantSlug };
   }
   if (tenant.isActive === false || tenant.isDemoAccount === true) {
@@ -8253,7 +8256,7 @@ exports.listTeamRoster = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     return { members: [], subscriptionPlan: plan, tenantSlug };
   }
   if (tenant.isActive === false || tenant.isDemoAccount === true) {
@@ -8297,7 +8300,7 @@ exports.getPublicProvider = functions.https.onCall(async (data) => {
   const tenant = resolved.data;
   const tenantId = resolved.id;
   const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan)) {
+  if (isSingleOperatorPlan(plan)) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
   if (tenant.isActive === false) {
@@ -8355,7 +8358,7 @@ exports.updateProviderGallery = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError("failed-precondition", "No tenant linked.");
   }
   const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
-  if (isSingleSeatPlan(plan) && targetUid !== ctx.tenant.ownerUid) {
+  if (isSingleOperatorPlan(plan) && targetUid !== ctx.tenant.ownerUid) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Member portfolios are for Studio and Shop teams."
@@ -10686,7 +10689,7 @@ exports.purchaseSmsExtraLine = functions
     const ownerData = ctx.ownerUserData || ctx.userData;
     const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
     const memberUid = ((data && data.memberUid) || "").toString().trim();
-    if (isSingleSeatPlan(plan)) {
+    if (isSingleOperatorPlan(plan)) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "This plan includes 1 texting number. Upgrade to Studio or Shop for team lines."

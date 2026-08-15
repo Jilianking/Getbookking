@@ -10,7 +10,7 @@
    ```
    Paste your Stripe secret key when prompted (e.g. `sk_test_...` for test mode)
 
-3. **Set subscription price IDs secret** (JSON map `solo` / `studio` / `shop` → Stripe Price id, plus optional **`smsExtra`** for $5/mo extra texting lines). Example for the Get Bookking test products is committed as `stripe-subscription-price-ids.example.json` (copy price IDs from Stripe if yours differ). Paste the one-line JSON when prompted, or pipe the file:
+3. **Set subscription price IDs secret** (JSON map `solo` / `studio` / `shop` / `charter` → Stripe Price id, plus optional **`smsExtra`** for extra texting lines). Example for the Get Bookking test products is committed as `stripe-subscription-price-ids.example.json` (copy price IDs from Stripe if yours differ). Paste the one-line JSON when prompted, or pipe the file:
    ```bash
    firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS --project test-app-96812 < functions/stripe-subscription-price-ids.example.json
    ```

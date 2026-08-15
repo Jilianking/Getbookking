@@ -23,7 +23,7 @@ enum SubscriptionPlan: String, CaseIterable {
         case .solo: return "Solo"
         case .studio: return "Studio"
         case .shop: return "Shop"
-        case .charter: return "Boat / Fishing charter"
+        case .charter: return "Charter"
         }
     }
 
@@ -32,24 +32,25 @@ enum SubscriptionPlan: String, CaseIterable {
         case .solo: return "Just you"
         case .studio: return "2–5 people"
         case .shop: return "6–10 people"
-        case .charter: return "Fishing charter site · just you"
+        case .charter: return "Fishing charters"
         }
     }
 
     var monthlyPriceLabel: String {
         switch self {
-        case .solo, .charter: return "$39/mo"
+        case .solo: return "$39/mo"
         case .studio: return "$79/mo"
         case .shop: return "$149/mo"
+        case .charter: return "$24/mo"
         }
     }
 
-    /// Studio and Shop can invite team members; Solo and Fishing charter cannot.
+    /// Solo and Charter are owner-only; team invites require Studio or Shop.
     var allowsTeamInvites: Bool {
         self == .studio || self == .shop
     }
 
-    /// Owner-only plans use Business settings (not Team settings) in the app.
+    /// Solo and Charter owners use Business settings (not Team settings) in the app.
     var usesBusinessSettingsHub: Bool {
         self == .solo || self == .charter
     }
@@ -74,7 +75,7 @@ enum SubscriptionPlan: String, CaseIterable {
         }
     }
 
-    /// Max texting lines = seat cap (Studio 5, Shop 10, Solo 1, Fishing charter 1).
+    /// Max texting lines = seat cap (Studio 5, Shop 10, Solo/Charter 1).
     var maxSmsLines: Int { maxSeats }
 
     /// Aligns with `normalizeSubscriptionPlan` in Cloud Functions / web sign-up.

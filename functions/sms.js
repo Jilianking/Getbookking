@@ -661,8 +661,8 @@ async function countPaidSmsLines(tenantId, tenant) {
 }
 
 /**
- * Canonical SMS line free allotments: Solo 1 · Studio/Shop 2.
- * Plan slug should already be normalized (solo|studio|shop).
+ * Canonical SMS line free allotments: Solo/Charter 1 · Studio/Shop 2.
+ * Plan slug should already be normalized (solo|studio|shop|charter).
  */
 function freeIncludedSmsLinesForPlan(planNorm) {
   const p = (planNorm || "solo").toString().trim().toLowerCase();
@@ -820,7 +820,9 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
   const summary = buildSmsLineSummary(tenant, planNorm, lineCount);
   if (summary.atMax) {
     if (summary.plan === "solo" || summary.plan === "charter") {
-      return "This plan includes 1 texting number.";
+      return summary.plan === "charter"
+        ? "Charter includes 1 texting number."
+        : "Solo includes 1 texting number.";
     }
     return (
       `Your ${summary.plan} plan allows up to ${summary.maxLines} texting numbers. ` +

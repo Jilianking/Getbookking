@@ -16,3 +16,9 @@ node scripts/upload-tenant-gallery.js --slug=YOUR_SLUG \
 ```
 
 Industry raw value: `charters` · Classic theme id: `charter-v1`
+
+Demo copy is Key West / Garrison Bight (Florida fishing + sandbar boat days). Re-seed with:
+
+```bash
+node scripts/seed-demo-accounts.js --only=harbor-charters --with-activity
+```

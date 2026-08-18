@@ -10,6 +10,7 @@ class RequestsViewModel: ObservableObject {
     @Published var tenantId: String?
     /// Firestore `tenants/{id}.industry` (BookingTemplate raw value); drives booking detail section titles.
     @Published var tenantIndustry: String?
+    @Published var isCharterPlan = false
     @Published var teamMembers: [TenantTeamMember] = []
     @Published var studioAvailability: ProviderAvailability = .default
     @Published var workflowDepositAmount: Double?
@@ -39,6 +40,16 @@ class RequestsViewModel: ObservableObject {
         teamMembers.first { $0.accessRole == .owner }
     }
 
+    var charterBoats: [CharterBoat] {
+        CharterBoat.parseList(sessionStore?.tenant?["charterBoats"])
+    }
+
+    func charterBoatName(id: String?) -> String? {
+        let wanted = (id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return nil }
+        return charterBoats.first(where: { $0.id == wanted })?.displayName ?? wanted
+    }
+
     /// For industry-specific copy (e.g. booking request form section titles).
     var tenantBookingTemplate: BookingTemplate? {
         guard let raw = tenantIndustry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
@@ -65,6 +76,9 @@ class RequestsViewModel: ObservableObject {
                 await MainActor.run {
                     tenantId = sessionStore.tenantId
                     tenantIndustry = industryRaw.isEmpty ? nil : industryRaw
+                    isCharterPlan = SubscriptionPlan.normalized(
+                        fromFirestore: sessionStore.tenant?["subscriptionPlan"] as? String
+                    ).isCharterPlan
                     bookingRequests = sessionStore.bookingRequests
                     teamMembers = sessionStore.teamMembers
                     studioAvailability = availability
@@ -79,6 +93,7 @@ class RequestsViewModel: ObservableObject {
                 bookingRequests = []
                 tenantId = nil
                 tenantIndustry = nil
+                isCharterPlan = false
                 teamMembers = []
                 studioAvailability = .default
                 workflowDepositAmount = nil
@@ -107,6 +122,9 @@ class RequestsViewModel: ObservableObject {
                 await MainActor.run {
                     tenantId = sessionStore.tenantId
                     tenantIndustry = industryRaw.isEmpty ? nil : industryRaw
+                    isCharterPlan = SubscriptionPlan.normalized(
+                        fromFirestore: sessionStore.tenant?["subscriptionPlan"] as? String
+                    ).isCharterPlan
                     bookingRequests = sessionStore.bookingRequests
                     teamMembers = sessionStore.teamMembers
                     studioAvailability = availability
@@ -140,6 +158,9 @@ class RequestsViewModel: ObservableObject {
                 await MainActor.run {
                     tenantId = tid
                     tenantIndustry = industryRaw?.isEmpty == false ? industryRaw : nil
+                    isCharterPlan = SubscriptionPlan.normalized(
+                        fromFirestore: tenant?["subscriptionPlan"] as? String
+                    ).isCharterPlan
                     bookingRequests = bookingList
                     teamMembers = roster
                     studioAvailability = availability
@@ -152,6 +173,7 @@ class RequestsViewModel: ObservableObject {
                 await MainActor.run {
                     tenantId = nil
                     tenantIndustry = nil
+                    isCharterPlan = false
                     teamMembers = []
                     studioAvailability = baseAvailability
                     requests = fetched
@@ -241,8 +263,18 @@ class RequestsViewModel: ObservableObject {
         ]
         if let notes { payload["notes"] = notes }
         do {
-            _ = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
+            let result = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
             await reloadAfterMutation()
+            if let data = result.data as? [String: Any] {
+                let refundPending = data["refundPending"] as? Bool ?? false
+                let refundError = (data["refundError"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !refundPending, !refundError.isEmpty {
+                    await MainActor.run {
+                        actionError = "Trip cancelled. Refund could not be completed: \(refundError)"
+                    }
+                }
+            }
         } catch {
             await MainActor.run {
                 actionError = error.localizedDescription
@@ -253,6 +285,56 @@ class RequestsViewModel: ObservableObject {
         }
     }
 
+    private func durationMinutesForCharter(requestId: String?) -> Int {
+        if let requestId,
+           let existing = bookingRequests.first(where: { $0.documentId == requestId }),
+           let d = existing.durationMinutes, d > 0 {
+            return d
+        }
+        return 240
+    }
+
+    private func charterSlotPayload(
+        requestId: String?,
+        scheduledStart: Date,
+        preferredTimeLabel: String,
+        member: TenantTeamMember?,
+        status: String?,
+        customerName: String? = nil,
+        customerEmail: String? = nil,
+        customerPhone: String? = nil,
+        serviceId: String? = nil,
+        serviceSlug: String? = nil,
+        serviceName: String? = nil,
+        notes: String? = nil,
+        durationMinutes: Int? = nil,
+        boatId: String? = nil
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "scheduledDate": BookingRequest.isoDateString(from: scheduledStart),
+            "scheduledStartMin": BookingRequest.minutesSinceMidnight(from: scheduledStart),
+            "preferredTime": preferredTimeLabel,
+            "durationMinutes": durationMinutes
+                ?? durationMinutesForCharter(requestId: requestId),
+        ]
+        if let requestId, !requestId.isEmpty { payload["requestId"] = requestId }
+        if let status, !status.isEmpty { payload["status"] = status }
+        if let member {
+            payload["assignedMemberUid"] = member.uid
+            payload["assignedMemberName"] = member.displayName
+            payload["assignedMemberEmail"] = member.email
+        }
+        if let customerName { payload["customerName"] = customerName }
+        if let customerEmail { payload["customerEmail"] = customerEmail }
+        if let customerPhone { payload["customerPhone"] = customerPhone }
+        if let serviceId { payload["serviceId"] = serviceId }
+        if let serviceSlug { payload["serviceSlug"] = serviceSlug }
+        if let serviceName { payload["serviceName"] = serviceName }
+        if let notes { payload["notes"] = notes }
+        if let boatId, !boatId.isEmpty { payload["boatId"] = boatId }
+        return payload
+    }
+
     /// Assigns time + artist and sets workflow status (confirmed, pending_deposit, pending_consultation).
     func confirmBookingAppointment(
         requestId: String,
@@ -260,7 +342,8 @@ class RequestsViewModel: ObservableObject {
         scheduledStart: Date,
         preferredTimeLabel: String,
         notes: String?,
-        targetStatus: String = BookingRequestStatus.confirmed
+        targetStatus: String = BookingRequestStatus.confirmed,
+        boatId: String? = nil
     ) async {
         if let store = sessionStore, store.isDemoSession {
             await markBookingRequestAsRead(requestId: requestId)
@@ -287,16 +370,36 @@ class RequestsViewModel: ObservableObject {
             isUpdatingStatus = true
             actionError = nil
         }
-        await assignBookingRequest(
-            requestId: requestId,
-            member: member,
-            scheduledStart: scheduledStart,
-            preferredTimeLabel: preferredTimeLabel,
-            managesLoadingState: false
-        )
-        if actionError != nil {
-            await MainActor.run { isUpdatingStatus = false }
-            return
+        if isCharterPlan {
+            do {
+                let payload = charterSlotPayload(
+                    requestId: requestId,
+                    scheduledStart: scheduledStart,
+                    preferredTimeLabel: preferredTimeLabel,
+                    member: member,
+                    status: nil,
+                    boatId: boatId
+                )
+                _ = try await firebaseService.syncCharterBookingSlot(payload)
+            } catch {
+                await MainActor.run {
+                    actionError = FirebaseFunctionsErrorHelper.message(from: error)
+                    isUpdatingStatus = false
+                }
+                return
+            }
+        } else {
+            await assignBookingRequest(
+                requestId: requestId,
+                member: member,
+                scheduledStart: scheduledStart,
+                preferredTimeLabel: preferredTimeLabel,
+                managesLoadingState: false
+            )
+            if actionError != nil {
+                await MainActor.run { isUpdatingStatus = false }
+                return
+            }
         }
         await setBookingRequestStatus(
             requestId: requestId,
@@ -312,7 +415,8 @@ class RequestsViewModel: ObservableObject {
         requestId: String,
         member: TenantTeamMember,
         scheduledStart: Date,
-        preferredTimeLabel: String
+        preferredTimeLabel: String,
+        boatId: String? = nil
     ) async {
         if let store = sessionStore, store.isDemoSession {
             await MainActor.run {
@@ -329,6 +433,30 @@ class RequestsViewModel: ObservableObject {
                 status: "confirmed"
             )
             await reloadAfterMutation(isDemoMode: true)
+            await MainActor.run { isUpdatingAssignment = false }
+            return
+        }
+        if isCharterPlan {
+            await MainActor.run {
+                isUpdatingAssignment = true
+                actionError = nil
+            }
+            do {
+                let payload = charterSlotPayload(
+                    requestId: requestId,
+                    scheduledStart: scheduledStart,
+                    preferredTimeLabel: preferredTimeLabel,
+                    member: member,
+                    status: nil,
+                    boatId: boatId
+                )
+                _ = try await firebaseService.syncCharterBookingSlot(payload)
+                await reloadAfterMutation()
+            } catch {
+                await MainActor.run {
+                    actionError = FirebaseFunctionsErrorHelper.message(from: error)
+                }
+            }
             await MainActor.run { isUpdatingAssignment = false }
             return
         }
@@ -350,7 +478,9 @@ class RequestsViewModel: ObservableObject {
         serviceName: String,
         member: TenantTeamMember,
         scheduledStart: Date,
-        notes: String?
+        notes: String?,
+        durationMinutes: Int? = nil,
+        boatId: String? = nil
     ) async -> String? {
         if let store = sessionStore, store.isDemoSession {
             await MainActor.run {
@@ -368,6 +498,28 @@ class RequestsViewModel: ObservableObject {
         }
         do {
             let preferred = BookingAssignSchedulePlanner.formatSlotLabel(scheduledStart)
+            if isCharterPlan {
+                let payload = charterSlotPayload(
+                    requestId: nil,
+                    scheduledStart: scheduledStart,
+                    preferredTimeLabel: preferred,
+                    member: member,
+                    status: "confirmed",
+                    customerName: client.name,
+                    customerEmail: client.email,
+                    customerPhone: client.phone,
+                    serviceId: serviceId,
+                    serviceSlug: serviceSlug,
+                    serviceName: serviceName,
+                    notes: notes,
+                    durationMinutes: durationMinutes,
+                    boatId: boatId
+                )
+                let requestId = try await firebaseService.syncCharterBookingSlot(payload)
+                await reloadAfterMutation()
+                await MainActor.run { isUpdatingStatus = false }
+                return requestId
+            }
             let requestId = try await firebaseService.createTenantBookingRequest(
                 tenantId: tid,
                 customerName: client.name,
@@ -476,6 +628,31 @@ class RequestsViewModel: ObservableObject {
                 "assignedMemberName": member.displayName,
                 "assignedMemberEmail": member.email,
             ]
+            if let scheduledStart, isCharterPlan, member != nil {
+                let preferred = (preferredTimeLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = preferred.isEmpty
+                    ? BookingAssignSchedulePlanner.formatSlotLabel(scheduledStart)
+                    : preferred
+                do {
+                    let payload = charterSlotPayload(
+                        requestId: requestId,
+                        scheduledStart: scheduledStart,
+                        preferredTimeLabel: label,
+                        member: member,
+                        status: nil
+                    )
+                    _ = try await firebaseService.syncCharterBookingSlot(payload)
+                    await reloadAfterMutation()
+                } catch {
+                    await MainActor.run {
+                        actionError = FirebaseFunctionsErrorHelper.message(from: error)
+                    }
+                }
+                if managesLoadingState {
+                    await MainActor.run { isUpdatingAssignment = false }
+                }
+                return
+            }
             if let scheduledStart {
                 updates["requestedStartTime"] = scheduledStart
             }

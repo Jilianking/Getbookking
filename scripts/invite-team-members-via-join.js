@@ -131,13 +131,15 @@ function normalizePlan(raw) {
   if (["basic", "free", "starter", "solo"].includes(p)) return "solo";
   if (["growth", "pro", "studio"].includes(p)) return "studio";
   if (["enterprise", "shop"].includes(p)) return "shop";
-  return p === "studio" || p === "shop" ? p : "solo";
+  if (["charter", "charters", "boat", "fishing", "boating"].includes(p)) return "charter";
+  return p === "studio" || p === "shop" || p === "charter" ? p : "solo";
 }
 
 function maxSeats(plan) {
-  if (plan === "solo") return 1;
+  if (plan === "solo" || plan === "charter") return 1;
   if (plan === "studio") return 5;
-  return 10;
+  if (plan === "shop") return 10;
+  return 1;
 }
 
 function defaultJobTitle(industry) {

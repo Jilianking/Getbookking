@@ -15,11 +15,15 @@ struct DesignView: View {
     @StateObject private var viewModel = DesignViewModel()
     @State private var selectedTab: DesignTab = .gallery
     @State private var isShowingManage = false
+    /// Path suffix for Design preview when Manage tabs map to site pages (charter plan).
+    @State private var managePreviewPath: String = ""
     @State private var showBladeStarterConfirm = false
     @State private var showStudio12ProcessStartersConfirm = false
     @State private var bladeServiceToEdit: TenantService?
     @State private var isEditingStudio12ProcessStep = false
     @State private var studio12ProcessStepEditIndex = 0
+    @State private var isEditingCharterFaq = false
+    @State private var charterFaqEditIndex = 0
     @State private var isQuickEditEnabled = false
     @State private var quickEditBridge = WebViewQuickEditBridge()
     @StateObject private var quickEditHistory = QuickEditHistoryStore()
@@ -96,7 +100,7 @@ struct DesignView: View {
                                 }
                                 Button("Manage") {
                                     isQuickEditEnabled = false
-                                    selectedTab = .gallery
+                                    selectedTab = isCharterPlan ? .charters : .gallery
                                     isShowingManage = true
                                 }
                                 .font(.caption.weight(.semibold))
@@ -121,6 +125,10 @@ struct DesignView: View {
                     sessionStore: sessionStore
                 )
                 await authViewModel.refreshTeamAccess()
+                // Tenant doc is source of truth for Design (Harbor → charter plan).
+                if viewModel.hasTenant {
+                    authViewModel.applyLoadedSubscriptionPlan(viewModel.subscriptionPlan)
+                }
             }
             .onDisappear {
                 if isQuickEditEnabled {
@@ -186,7 +194,9 @@ struct DesignView: View {
                         Studio12AuxImageUploadSection(
                             label: "About photo",
                             advice: "",
-                            allowedCropChoices: [.portrait4_5, .landscape16_9, .square],
+                            allowedCropChoices: viewModel.subscriptionPlan.isCharterPlan
+                                ? [.portrait4_5]
+                                : [.portrait4_5, .landscape16_9, .square],
                             defaultCropChoice: .portrait4_5,
                             imageUrl: $viewModel.classicAboutImageUrl,
                             isUploading: viewModel.isUploadingClassicAboutImage,
@@ -258,6 +268,17 @@ struct DesignView: View {
                             stepIndex: studio12ProcessStepEditIndex,
                             viewModel: viewModel,
                             onDismiss: { isEditingStudio12ProcessStep = false }
+                        )
+                    }
+                }
+            }
+            .sheet(isPresented: $isEditingCharterFaq) {
+                Group {
+                    if viewModel.charterFaqs.indices.contains(charterFaqEditIndex) {
+                        EditCharterFaqSheet(
+                            faqIndex: charterFaqEditIndex,
+                            viewModel: viewModel,
+                            onDismiss: { isEditingCharterFaq = false }
                         )
                     }
                 }
@@ -338,7 +359,13 @@ struct DesignView: View {
             return url
         }
 
-        private let previewThumbSize = CGSize(width: 72, height: 72)
+        private var lockedCropChoice: UploadCropAspectChoice {
+            viewModel.subscriptionPlan.isCharterPlan ? .landscape16_9 : .portrait4_5
+        }
+
+        private var previewAspect: CGFloat {
+            lockedCropChoice.aspectWidthOverHeight ?? 1
+        }
 
         var body: some View {
             NavigationStack {
@@ -346,7 +373,7 @@ struct DesignView: View {
                     Section {
                         Text("Gallery photo")
                             .font(.subheadline.weight(.medium))
-                        HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Group {
                                 if let url = slotImageURL {
                                     AsyncImage(url: url) { image in
@@ -354,17 +381,19 @@ struct DesignView: View {
                                     } placeholder: {
                                         AppDesign.searchBackground
                                     }
-                                    .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                    .aspectRatio(previewAspect, contentMode: .fit)
+                                    .frame(maxWidth: .infinity)
                                     .clipped()
                                     .cornerRadius(8)
                                 } else {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(AppDesign.searchBackground)
-                                        .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                        .aspectRatio(previewAspect, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
                                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                                 }
                             }
-                            VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 16) {
                                 PhotosPicker(
                                     selection: $selectedItem,
                                     matching: .images,
@@ -391,6 +420,17 @@ struct DesignView: View {
                                         }
                                     }
                                 }
+                                if hasImageAtSlot {
+                                    Button("Adjust framing") {
+                                        Task {
+                                            guard let image = await UploadRemoteImageLoader.image(
+                                                from: viewModel.galleryImages[slotIndex]
+                                            ) else { return }
+                                            cropSheetItem = SingleImageCropSheetItem(image: image)
+                                        }
+                                    }
+                                    .font(.subheadline)
+                                }
                                 if viewModel.isUploadingGallery {
                                     HStack(spacing: 8) {
                                         ProgressView()
@@ -401,7 +441,6 @@ struct DesignView: View {
                                     }
                                 }
                             }
-                            Spacer(minLength: 0)
                         }
                     }
                 }
@@ -417,8 +456,8 @@ struct DesignView: View {
                         images: [item.image],
                         advice: "",
                         navigationTitle: "Photo",
-                        allowedChoices: [.portrait4_5, .square, .landscape16_9],
-                        defaultChoice: .portrait4_5,
+                        allowedChoices: [lockedCropChoice],
+                        defaultChoice: lockedCropChoice,
                         showsInstructionalCopy: false,
                         onUseJPEGData: { dataList in
                             guard let data = dataList.first else { return }
@@ -449,8 +488,15 @@ struct DesignView: View {
             return url
         }
 
-        /// Matches home featured strip (4:5); compact like hero thumbnail but portrait.
-        private let previewThumbSize = CGSize(width: 64, height: 80)
+        private var lockedCropChoice: UploadCropAspectChoice {
+            viewModel.subscriptionPlan.isCharterPlan ? .landscape4_3 : .portrait4_5
+        }
+
+        private var previewThumbSize: CGSize {
+            viewModel.subscriptionPlan.isCharterPlan
+                ? CGSize(width: 96, height: 72)
+                : CGSize(width: 64, height: 80)
+        }
 
         var body: some View {
             NavigationStack {
@@ -503,6 +549,17 @@ struct DesignView: View {
                                         }
                                     }
                                 }
+                                if hasImageAtSlot {
+                                    Button("Adjust framing") {
+                                        Task {
+                                            guard let image = await UploadRemoteImageLoader.image(
+                                                from: viewModel.featuredWorkImages[slotIndex]
+                                            ) else { return }
+                                            cropSheetItem = SingleImageCropSheetItem(image: image)
+                                        }
+                                    }
+                                    .font(.subheadline)
+                                }
                                 if viewModel.isUploadingFeaturedWork {
                                     HStack(spacing: 8) {
                                         ProgressView()
@@ -529,8 +586,8 @@ struct DesignView: View {
                         images: [item.image],
                         advice: "",
                         navigationTitle: "Photo",
-                        allowedChoices: [.portrait4_5],
-                        defaultChoice: .portrait4_5,
+                        allowedChoices: [lockedCropChoice],
+                        defaultChoice: lockedCropChoice,
                         showsInstructionalCopy: false,
                         onUseJPEGData: { dataList in
                             guard let data = dataList.first else { return }
@@ -547,12 +604,32 @@ struct DesignView: View {
     private var sitePreviewURL: URL? {
         guard viewModel.hasTenant, !viewModel.bookingUrl.isEmpty,
               var components = URLComponents(string: viewModel.bookingUrl) else { return nil }
+        if isShowingManage, isCharterPlan {
+            let suffix = managePreviewPathForCharterTab(selectedTab)
+            if !suffix.isEmpty {
+                let base = viewModel.bookingUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                components = URLComponents(string: base + suffix) ?? components
+            }
+        }
         var q = components.queryItems ?? []
+        q.removeAll { $0.name == "_cb" || $0.name == "bk_template_preview" }
         q.append(URLQueryItem(name: "_cb", value: String(viewModel.webPreviewReloadToken)))
         // Keep structural template controls visible in the in-app editor even when their public page is disabled.
         q.append(URLQueryItem(name: "bk_template_preview", value: "1"))
         components.queryItems = q
         return components.url
+    }
+
+    private func managePreviewPathForCharterTab(_ tab: DesignTab) -> String {
+        switch tab {
+        case .home: return "/home"
+        case .charters: return "/charters"
+        case .howItWorks: return "/how-it-works"
+        case .shop: return "/shop"
+        case .about: return "/about"
+        case .book: return "/book"
+        default: return ""
+        }
     }
 
     private var activePaletteDisplayName: String {
@@ -606,6 +683,7 @@ struct DesignView: View {
                     templateFamily: activeTemplateFamily,
                     accentHex: viewModel.primaryColorHex,
                     industry: viewModel.industry,
+                    showTemplatePicker: !isCharterPlan,
                     isColorPickerPresented: $isColorPickerPresented,
                     isTemplatePickerPresented: $isTemplatePickerPresented
                 )
@@ -632,7 +710,6 @@ struct DesignView: View {
                     }
                 case let .inlineFocus(focus):
                     quickEditInlineFocus = focus
-                    isQuickEditChromeCollapsed = true
                 case .inlineBlur:
                     quickEditInlineFocus = nil
                 case let .openColorSurface(surfaceId):
@@ -683,6 +760,18 @@ struct DesignView: View {
                            viewModel.studio12ProcessSteps.indices.contains(idx) {
                             studio12ProcessStepEditIndex = idx
                             isEditingStudio12ProcessStep = true
+                            return
+                        }
+                    }
+                    if key.hasPrefix("charterFaq:") {
+                        let parts = key.split(separator: ":").map(String.init)
+                        if parts.count == 3,
+                           parts[0] == "charterFaq",
+                           ["edit", "question", "answer"].contains(parts[2]),
+                           let idx = Int(parts[1]),
+                           viewModel.charterFaqs.indices.contains(idx) {
+                            charterFaqEditIndex = idx
+                            isEditingCharterFaq = true
                             return
                         }
                     }
@@ -759,11 +848,30 @@ struct DesignView: View {
             ManageSegmentTabs(
                 tabs: visibleManageTabs,
                 selectedTab: $selectedTab,
-                title: { $0.manageSegmentTitle }
+                title: { $0.manageSegmentTitle(isCharterPlan: isCharterPlan) }
             )
             .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
                 if !visibleManageTabs.contains(selectedTab) {
                     selectedTab = visibleManageTabs.first ?? .gallery
+                }
+            }
+            .onChange(of: viewModel.subscriptionPlan) { _, _ in
+                if !visibleManageTabs.contains(selectedTab) {
+                    selectedTab = visibleManageTabs.first ?? (isCharterPlan ? .charters : .gallery)
+                }
+            }
+            .onChange(of: selectedTab) { _, tab in
+                if isCharterPlan {
+                    managePreviewPath = managePreviewPathForCharterTab(tab)
+                    viewModel.invalidateWebPreview()
+                }
+            }
+            .onAppear {
+                if isCharterPlan {
+                    if !visibleManageTabs.contains(selectedTab) {
+                        selectedTab = .home
+                    }
+                    managePreviewPath = managePreviewPathForCharterTab(selectedTab)
                 }
             }
             ScrollView {
@@ -788,6 +896,8 @@ struct DesignView: View {
                         contentUnavailable
                     } else {
                         switch selectedTab {
+                        case .home:
+                            homeContent
                         case .gallery:
                             ManageGalleryTabContent(
                                 viewModel: viewModel,
@@ -797,20 +907,32 @@ struct DesignView: View {
                                 showGalleryPickerLoadError: $showGalleryPickerLoadError
                             )
                         case .book:
-                            ManageBookTabContent(
-                                viewModel: viewModel,
-                                teamAccess: authViewModel.teamAccess,
-                                serviceToEdit: $bladeServiceToEdit
-                            )
+                            if isCharterPlan {
+                                ManageCharterBookTabContent(viewModel: viewModel)
+                            } else {
+                                ManageBookTabContent(
+                                    viewModel: viewModel,
+                                    teamAccess: authViewModel.teamAccess,
+                                    serviceToEdit: $bladeServiceToEdit
+                                )
+                            }
                         case .about:
                             ManageAboutTabContent(
                                 viewModel: viewModel,
-                                isClassicTemplate: isClassicTemplate
+                                isClassicTemplate: isClassicTemplate,
+                                isCharterPlan: isCharterPlan
                             )
                         case .team:
                             ManageTeamTabContent(viewModel: viewModel)
                         case .shop:
                             ManageShopTabContent(viewModel: viewModel)
+                        case .charters:
+                            ManageChartersTabContent(
+                                viewModel: viewModel,
+                                serviceToEdit: $bladeServiceToEdit
+                            )
+                        case .howItWorks:
+                            ManageHowItWorksTabContent(viewModel: viewModel)
                         default:
                             EmptyView()
                         }
@@ -881,8 +1003,18 @@ struct DesignView: View {
         Studio12IndustryCopy.template(from: viewModel.industry)
     }
 
+    /// Fishing charter subscription from tenant (preferred) or team-access refresh.
+    private var isCharterPlan: Bool {
+        viewModel.subscriptionPlan.isCharterPlan
+            || authViewModel.tenantSubscriptionPlan.isCharterPlan
+    }
+
     private var visibleManageTabs: [DesignTab] {
-        DesignTab.manageTabs(showTeam: authViewModel.tenantSubscriptionPlan.allowsTeamInvites)
+        DesignTab.manageTabs(
+            showTeam: viewModel.subscriptionPlan.allowsTeamInvites
+                || authViewModel.tenantSubscriptionPlan.allowsTeamInvites,
+            isCharterPlan: isCharterPlan
+        )
     }
 
     /// Matches `defaultLuxeHeroTaglineForIndustry` in `web/index.html` for empty saved hero tagline.
@@ -977,18 +1109,34 @@ struct DesignView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Template")
                     .font(.title2.bold())
-                Text("Choose a template first. Your business type then fills in that template with industry-specific defaults.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                if isCharterPlan {
+                    Text("Boat / Fishing charter includes one site template. Manage Charters, How it works, About, and Book now from the Manage tabs.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Choose a template first. Your business type then fills in that template with industry-specific defaults.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
-            ForEach(TemplateFamily.allCases) { family in
+            if isCharterPlan {
                 TemplateFamilyCard(
-                    family: family,
-                    isActive: activeTemplateFamily == family,
+                    family: .classic,
+                    isActive: true,
                     isBusy: viewModel.isLoading
                 ) {
-                    let theme = WebTheme.theme(for: family, industry: viewModel.industry)
-                    Task { await viewModel.applyWebTheme(theme) }
+                    Task { await viewModel.applyWebTheme(.charterV1) }
+                }
+            } else {
+                ForEach(TemplateFamily.allCases) { family in
+                    TemplateFamilyCard(
+                        family: family,
+                        isActive: activeTemplateFamily == family,
+                        isBusy: viewModel.isLoading
+                    ) {
+                        let theme = WebTheme.theme(for: family, industry: viewModel.industry)
+                        Task { await viewModel.applyWebTheme(theme) }
+                    }
                 }
             }
 
@@ -997,23 +1145,33 @@ struct DesignView: View {
             Text("Pages on your site")
                 .font(.headline)
                 .padding(.top, 12)
-            Text("Gallery, Book, About, and Shop each have an Enable … page toggle at the bottom of that tab. Add and edit products from Shop in the main menu.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if isCharterPlan {
+                Text("Charters, How it works, About, and Book now are managed from the Manage tabs.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Gallery, Book, About, and Shop each have an Enable … page toggle at the bottom of that tab. Add and edit products from Shop in the main menu.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
     private var homeContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Site template")
-                    .font(.headline)
-                Text("You’re using \(activeTemplateDisplayName). Switch designs anytime in the Template tab.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            if !isCharterPlan {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Site template")
+                        .font(.headline)
+                    Text("You’re using \(activeTemplateDisplayName). Switch designs anytime in the Template tab.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
 
-            if isStudio12Template {
+            if isCharterPlan {
+                charterHomeSections
+            } else if isStudio12Template {
                 studio12HomeSections
             } else {
             // Hero
@@ -1137,6 +1295,22 @@ struct DesignView: View {
                 Task { await viewModel.saveHome() }
             }
             .buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder
+    private var charterHomeSections: some View {
+        Group {
+            Text("Name on website")
+                .font(.subheadline.weight(.medium))
+            TextField(
+                "Name on website",
+                text: $viewModel.displayName,
+                prompt: Text(viewModel.appBusinessName.isEmpty ? "Harbor Charters" : viewModel.appBusinessName)
+            )
+            .textFieldStyle(.roundedBorder)
+
+            HeroImageUploadSection(viewModel: viewModel, compactPreview: true)
         }
     }
 
@@ -1651,9 +1825,15 @@ struct ServiceAreaCityStateFields: View {
     }
 }
 
+private enum CompactImageUploadMetrics {
+    static let previewMaxWidth: CGFloat = 112
+    static let previewMaxHeight: CGFloat = 63
+}
+
 // MARK: - Hero image upload
 struct HeroImageUploadSection: View {
     @ObservedObject var viewModel: DesignViewModel
+    var compactPreview: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
 
@@ -1678,6 +1858,81 @@ struct HeroImageUploadSection: View {
         isLuxeTemplate ? UploadImageAdvice.heroLuxe : UploadImageAdvice.hero
     }
 
+    @ViewBuilder
+    private var heroPreview: some View {
+        let aspect = heroLockedCropChoice.aspectWidthOverHeight ?? (16 / 9)
+        Group {
+            if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
+               let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    AppDesign.searchBackground
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppDesign.searchBackground)
+                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            }
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+        .frame(
+            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
+        )
+        .clipped()
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private var heroControls: some View {
+        HStack(spacing: 16) {
+            PhotosPicker(
+                selection: $selectedItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Image(systemName: "photo.badge.plus")
+                    Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
+                }
+                .font(.subheadline)
+            }
+            .onChange(of: selectedItem) { _, newItem in
+                Task {
+                    guard let newItem else {
+                        return
+                    }
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       !data.isEmpty,
+                       let uiImage = UIImage(data: data) {
+                        await MainActor.run {
+                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                            selectedItem = nil
+                        }
+                    } else {
+                        await MainActor.run { selectedItem = nil }
+                    }
+                }
+            }
+            if !viewModel.heroImageUrl.isEmpty {
+                Button("Adjust framing") {
+                    Task {
+                        guard let image = await UploadRemoteImageLoader.image(from: viewModel.heroImageUrl) else {
+                            return
+                        }
+                        cropSheetItem = SingleImageCropSheetItem(image: image)
+                    }
+                }
+                .font(.subheadline)
+            }
+            if viewModel.isUploadingHero {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Hero background image")
@@ -1685,58 +1940,16 @@ struct HeroImageUploadSection: View {
             Text(heroAdvice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            HStack(spacing: 16) {
-                if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
-                   let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        AppDesign.searchBackground
-                    }
-                    .frame(width: 80, height: 56)
-                    .clipped()
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(AppDesign.searchBackground)
-                        .frame(width: 80, height: 56)
-                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            if compactPreview {
+                HStack(alignment: .center, spacing: 12) {
+                    heroPreview
+                    heroControls
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
-                        }
-                        .font(.subheadline)
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem else {
-                                return
-                            }
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
-                               !data.isEmpty,
-                               let uiImage = UIImage(data: data) {
-                                await MainActor.run {
-                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                                    selectedItem = nil
-                                }
-                            } else {
-                                await MainActor.run { selectedItem = nil }
-                            }
-                        }
-                    }
-                    if viewModel.isUploadingHero {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    heroPreview
+                    heroControls
                 }
-                Spacer()
             }
         }
         .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
@@ -1765,8 +1978,79 @@ struct Studio12AuxImageUploadSection: View {
     @Binding var imageUrl: String
     let isUploading: Bool
     let upload: (Data) async -> Void
+    var compactPreview: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
+
+    @ViewBuilder
+    private var auxPreview: some View {
+        let aspect = defaultCropChoice.aspectWidthOverHeight ?? 1
+        Group {
+            if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    AppDesign.searchBackground
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppDesign.searchBackground)
+                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            }
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+        .frame(
+            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
+        )
+        .clipped()
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private var auxControls: some View {
+        HStack(spacing: 16) {
+            PhotosPicker(
+                selection: $selectedItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Image(systemName: "photo.badge.plus")
+                    Text(imageUrl.isEmpty ? "Choose image" : "Change image")
+                }
+                .font(.subheadline)
+            }
+            .onChange(of: selectedItem) { _, newItem in
+                Task {
+                    guard let newItem else { return }
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       !data.isEmpty,
+                       let uiImage = UIImage(data: data) {
+                        await MainActor.run {
+                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                            selectedItem = nil
+                        }
+                    } else {
+                        await MainActor.run { selectedItem = nil }
+                    }
+                }
+            }
+            if !imageUrl.isEmpty {
+                Button("Adjust framing") {
+                    Task {
+                        guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
+                        cropSheetItem = SingleImageCropSheetItem(image: image)
+                    }
+                }
+                .font(.subheadline)
+            }
+            if isUploading {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1775,55 +2059,16 @@ struct Studio12AuxImageUploadSection: View {
             Text(advice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            HStack(spacing: 16) {
-                if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        AppDesign.searchBackground
-                    }
-                    .frame(width: 80, height: 56)
-                    .clipped()
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(AppDesign.searchBackground)
-                        .frame(width: 80, height: 56)
-                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            if compactPreview {
+                HStack(alignment: .center, spacing: 12) {
+                    auxPreview
+                    auxControls
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text(imageUrl.isEmpty ? "Choose image" : "Change image")
-                        }
-                        .font(.subheadline)
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
-                               !data.isEmpty,
-                               let uiImage = UIImage(data: data) {
-                                await MainActor.run {
-                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                                    selectedItem = nil
-                                }
-                            } else {
-                                await MainActor.run { selectedItem = nil }
-                            }
-                        }
-                    }
-                    if isUploading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    auxPreview
+                    auxControls
                 }
-                Spacer()
             }
         }
         .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
@@ -2546,36 +2791,64 @@ struct AddServiceSheet: View {
     @State private var showStartingPrice = false
     @State private var priceText = ""
     @State private var showingSheet = false
+    @State private var itinerary: [CharterItineraryStep] = CharterItineraryStep.defaults(durationMinutes: 240)
+    @State private var boatIds: [String] = []
+
+    private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
 
     var body: some View {
-        Button(action: { showingSheet = true }) {
+        Button(action: {
+            if isCharter {
+                includeDuration = true
+                if duration == 30 { duration = 240 }
+                if itinerary.isEmpty { itinerary = CharterItineraryStep.defaults(durationMinutes: duration) }
+                if boatIds.isEmpty { boatIds = viewModel.charterBoats.map(\.id) }
+            }
+            showingSheet = true
+        }) {
             HStack {
                 Image(systemName: "plus")
-                Text("Add service")
+                Text(isCharter ? "Add trip" : "Add service")
             }
         }
         .disabled(disabled)
         .sheet(isPresented: $showingSheet) {
             NavigationStack {
                 Form {
-                    TextField("Service name", text: $name)
-                    TextField("Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
+                    TextField(isCharter ? "Trip name" : "Service name", text: $name)
+                    TextField(isCharter ? "Description (optional)" : "Description (optional, Blade card)", text: $descriptionText, axis: .vertical)
                         .lineLimit(2...6)
                     Toggle("Include duration", isOn: $includeDuration)
                     if includeDuration {
-                        Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                        Stepper(
+                            isCharter
+                                ? (duration % 60 == 0 ? "Duration: \(duration / 60) hrs" : "Duration: \(duration) min")
+                                : "Duration: \(duration) min",
+                            value: $duration,
+                            in: isCharter ? 30...720 : 15...240,
+                            step: isCharter ? 30 : 15
+                        )
                     }
                     Toggle("Show starting price", isOn: $showStartingPrice)
                     if showStartingPrice {
                         TextField("Amount (USD)", text: $priceText)
                             .keyboardType(.decimalPad)
                     } else {
-                        Text("Your site shows “Book for pricing” when this is off.")
+                        Text(isCharter
+                             ? "When off, price is hidden on trip cards."
+                             : "Your site shows “Book for pricing” when this is off.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    if isCharter {
+                        CharterBoatPicker(boats: viewModel.charterBoats, boatIds: $boatIds)
+                        CharterItineraryEditor(
+                            steps: $itinerary,
+                            durationMinutes: includeDuration ? duration : 240
+                        )
+                    }
                 }
-                .navigationTitle("New service")
+                .navigationTitle(isCharter ? "New trip" : "New service")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -2590,7 +2863,9 @@ struct AddServiceSheet: View {
                                     name: name,
                                     durationMinutes: includeDuration ? duration : nil,
                                     description: desc.isEmpty ? nil : desc,
-                                    startingPrice: price
+                                    startingPrice: price,
+                                    itinerary: isCharter ? itinerary : nil,
+                                    boatIds: isCharter ? boatIds : nil
                                 )
                                 name = ""
                                 includeDuration = false
@@ -2598,6 +2873,8 @@ struct AddServiceSheet: View {
                                 descriptionText = ""
                                 showStartingPrice = false
                                 priceText = ""
+                                itinerary = CharterItineraryStep.defaults(durationMinutes: 240)
+                                boatIds = []
                                 showingSheet = false
                             }
                         }
@@ -2856,6 +3133,320 @@ private struct EditStudio12ProcessStepSheet: View {
     }
 }
 
+private struct EditCharterFaqSheet: View {
+    let faqIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var questionText = ""
+    @State private var answerText = ""
+
+    private var placeholderPair: (String, String) {
+        let base = DesignViewModel.defaultCharterFaqs
+        guard faqIndex >= 0, faqIndex < base.count else {
+            return ("Question", "Answer for guests")
+        }
+        let f = base[faqIndex]
+        return (f.question, f.answer)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Question", text: $questionText, prompt: Text(placeholderPair.0), axis: .vertical)
+                    .lineLimit(2...4)
+                TextField("Answer", text: $answerText, prompt: Text(placeholderPair.1), axis: .vertical)
+                    .lineLimit(3...10)
+            }
+            .navigationTitle("Edit FAQ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let q = questionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let a = answerText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        viewModel.updateCharterFaq(at: faqIndex, question: q, answer: a)
+                        Task { await viewModel.persistCharterFaqs() }
+                        onDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard viewModel.charterFaqs.indices.contains(faqIndex) else { return }
+            let f = viewModel.charterFaqs[faqIndex]
+            questionText = f.question
+            answerText = f.answer
+        }
+    }
+}
+
+struct CharterBoatPicker: View {
+    let boats: [CharterBoat]
+    @Binding var boatIds: [String]
+    var disabled: Bool = false
+
+    var body: some View {
+        Section {
+            if boats.isEmpty {
+                Text("Add boats in Business settings → Boats, then assign them to this trip.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(boats) { boat in
+                    Toggle(isOn: Binding(
+                        get: { boatIds.contains(boat.id) },
+                        set: { on in
+                            if on {
+                                if !boatIds.contains(boat.id) { boatIds.append(boat.id) }
+                            } else {
+                                boatIds.removeAll { $0 == boat.id }
+                            }
+                        }
+                    )) {
+                        Text("\(boat.displayName) · \(boat.capacityLabel)")
+                    }
+                    .disabled(disabled)
+                }
+                Text("Check every boat this trip can run on. Guests can filter Our charters by boat.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Boats")
+        }
+    }
+}
+
+struct CharterItineraryEditor: View {
+    @Binding var steps: [CharterItineraryStep]
+    var durationMinutes: Int
+    var disabled: Bool = false
+    var onPersist: (([CharterItineraryStep]) async -> Bool)? = nil
+    @State private var isPresented = false
+    @State private var draftSteps: [CharterItineraryStep] = []
+    @State private var isPersisting = false
+
+    var body: some View {
+        Section {
+            Button {
+                draftSteps = steps
+                isPresented = true
+            } label: {
+                HStack {
+                    Label("Itinerary", systemImage: "map")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(stepCountLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(disabled)
+        }
+        .sheet(isPresented: $isPresented) {
+            CharterItineraryEditorSheet(
+                steps: $draftSteps,
+                durationMinutes: durationMinutes,
+                disabled: disabled || isPersisting,
+                onCancel: { isPresented = false },
+                onSave: {
+                    guard let onPersist else {
+                        steps = draftSteps
+                        isPresented = false
+                        return
+                    }
+                    Task {
+                        isPersisting = true
+                        let saved = await onPersist(draftSteps)
+                        isPersisting = false
+                        if saved {
+                            steps = draftSteps
+                            isPresented = false
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private var stepCountLabel: String {
+        "\(steps.count) \(steps.count == 1 ? "step" : "steps")"
+    }
+}
+
+private struct CharterItineraryEditorSheet: View {
+    @Binding var steps: [CharterItineraryStep]
+    let durationMinutes: Int
+    let disabled: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+    @State private var stepToEdit: CharterItineraryStep?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Times are relative to departure. Guests see clock times after they pick a time on this trip.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    ForEach(steps) { step in
+                        Button {
+                            stepToEdit = step
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(step.offsetCaption)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text(step.text.isEmpty ? "Add step details" : step.text)
+                                        .foregroundStyle(step.text.isEmpty ? .secondary : .primary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(disabled)
+                    }
+                    Button {
+                        let last = steps.last?.offsetMinutes ?? 0
+                        let interval = max(30, durationMinutes > 0 ? durationMinutes / max(steps.count, 1) : 60)
+                        stepToEdit = CharterItineraryStep(
+                            offsetMinutes: min(720, last + interval),
+                            text: ""
+                        )
+                    } label: {
+                        Label("Add itinerary step", systemImage: "plus")
+                    }
+                    .disabled(disabled || steps.count >= 8)
+                }
+            }
+            .sheet(item: $stepToEdit) { step in
+                CharterItineraryStepEditorSheet(
+                    step: step,
+                    canDelete: steps.contains(where: { $0.id == step.id }),
+                    onCancel: { stepToEdit = nil },
+                    onSave: { updated in
+                        if let index = steps.firstIndex(where: { $0.id == updated.id }) {
+                            steps[index] = updated
+                        } else {
+                            steps.append(updated)
+                        }
+                        stepToEdit = nil
+                    },
+                    onDelete: {
+                        steps.removeAll { $0.id == step.id }
+                        stepToEdit = nil
+                    }
+                )
+            }
+            .navigationTitle("Edit itinerary")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: onSave)
+                        .disabled(disabled)
+                }
+            }
+        }
+    }
+}
+
+private struct CharterItineraryStepEditorSheet: View {
+    let step: CharterItineraryStep
+    var canDelete: Bool = false
+    let onCancel: () -> Void
+    let onSave: (CharterItineraryStep) -> Void
+    var onDelete: (() -> Void)? = nil
+    @State private var offsetMinutes: Int
+    @State private var text: String
+
+    init(
+        step: CharterItineraryStep,
+        canDelete: Bool = false,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (CharterItineraryStep) -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.step = step
+        self.canDelete = canDelete
+        self.onCancel = onCancel
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _offsetMinutes = State(initialValue: step.offsetMinutes)
+        _text = State(initialValue: step.text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Timing") {
+                    Stepper(
+                        offsetStepperLabel(offsetMinutes),
+                        value: $offsetMinutes,
+                        in: -180...720,
+                        step: 15
+                    )
+                }
+                Section("What happens") {
+                    TextField("Step details", text: $text, axis: .vertical)
+                        .lineLimit(2...6)
+                }
+                if canDelete, onDelete != nil {
+                    Section {
+                        Button("Delete step", role: .destructive) {
+                            onDelete?()
+                        }
+                    }
+                }
+            }
+            .navigationTitle(step.text.isEmpty ? "Add itinerary step" : "Edit itinerary step")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(
+                            CharterItineraryStep(
+                                id: step.id,
+                                offsetMinutes: offsetMinutes,
+                                text: text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                        )
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func offsetStepperLabel(_ minutes: Int) -> String {
+        if minutes == 0 { return "At departure" }
+        if minutes < 0 { return "\(abs(minutes)) min before" }
+        return "+\(minutes) min"
+    }
+}
+
 private struct EditTenantServiceSheet: View {
     let service: TenantService
     @ObservedObject var viewModel: DesignViewModel
@@ -2866,6 +3457,16 @@ private struct EditTenantServiceSheet: View {
     @State private var duration = 30
     @State private var showStartingPrice = false
     @State private var priceText = ""
+    @State private var itinerary: [CharterItineraryStep] = []
+    @State private var boatIds: [String] = []
+    @State private var serviceImageUrl = ""
+    @State private var imagePickerItem: PhotosPickerItem?
+    @State private var imageCropItem: SingleImageCropSheetItem?
+
+    private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
+
+    private var durationRange: ClosedRange<Int> { isCharter ? 30...720 : 15...240 }
+    private var durationStep: Int { isCharter ? 30 : 15 }
 
     private var descriptionFieldTitle: String {
         let fam = WebTheme(rawValue: viewModel.webThemeId)?.family ?? .classic
@@ -2889,7 +3490,14 @@ private struct EditTenantServiceSheet: View {
                     .lineLimit(3...8)
                 Toggle("Include duration", isOn: $includeDuration)
                 if includeDuration {
-                    Stepper("Duration: \(duration) min", value: $duration, in: 15...240, step: 15)
+                    Stepper(
+                        isCharter
+                            ? (duration % 60 == 0 ? "Duration: \(duration / 60) hrs" : "Duration: \(duration) min")
+                            : "Duration: \(duration) min",
+                        value: $duration,
+                        in: durationRange,
+                        step: durationStep
+                    )
                 }
                 Toggle("Show starting price", isOn: $showStartingPrice)
                 if showStartingPrice {
@@ -2900,8 +3508,89 @@ private struct EditTenantServiceSheet: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                if isCharter {
+                    Section("Trip photo") {
+                        Group {
+                            if let url = URL(string: serviceImageUrl), !serviceImageUrl.isEmpty {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    AppDesign.searchBackground
+                                }
+                            } else {
+                                AppDesign.searchBackground
+                                    .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                            }
+                        }
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        PhotosPicker(selection: $imagePickerItem, matching: .images) {
+                            Label(serviceImageUrl.isEmpty ? "Add trip photo" : "Replace photo", systemImage: "photo.badge.plus")
+                        }
+                        .disabled(viewModel.isSavingBladeServices)
+                        .onChange(of: imagePickerItem) { _, item in
+                            Task {
+                                guard let item,
+                                      let data = try? await item.loadTransferable(type: Data.self),
+                                      let image = UIImage(data: data) else {
+                                    imagePickerItem = nil
+                                    return
+                                }
+                                imageCropItem = SingleImageCropSheetItem(image: image)
+                                imagePickerItem = nil
+                            }
+                        }
+                        if !serviceImageUrl.isEmpty {
+                            Button("Adjust framing") {
+                                Task {
+                                    guard let image = await UploadRemoteImageLoader.image(from: serviceImageUrl) else { return }
+                                    imageCropItem = SingleImageCropSheetItem(image: image)
+                                }
+                            }
+                            .disabled(viewModel.isSavingBladeServices)
+                        }
+                    }
+                    CharterBoatPicker(
+                        boats: viewModel.charterBoats,
+                        boatIds: $boatIds,
+                        disabled: viewModel.isSavingBladeServices
+                    )
+                    CharterItineraryEditor(
+                        steps: $itinerary,
+                        durationMinutes: includeDuration ? duration : 240,
+                        disabled: viewModel.isSavingBladeServices,
+                        onPersist: { updated in
+                            await viewModel.updateServiceItinerary(
+                                serviceId: service.id,
+                                itinerary: updated
+                            )
+                        }
+                    )
+                }
             }
-            .navigationTitle("Edit service")
+            .sheet(item: $imageCropItem, onDismiss: { imageCropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: "Trip cards and detail pages use a landscape photo.",
+                    navigationTitle: "Trip photo",
+                    allowedChoices: [.landscape4_3],
+                    defaultChoice: .landscape4_3,
+                    onUseJPEGData: { dataList in
+                        guard let data = dataList.first else { return }
+                        imageCropItem = nil
+                        Task {
+                            if await viewModel.uploadTenantServiceImage(serviceId: service.id, imageData: data),
+                               let updated = viewModel.services.first(where: { $0.id == service.id }) {
+                                serviceImageUrl = updated.imageUrl
+                            }
+                        }
+                    }
+                )
+            }
+            .navigationTitle(isCharter ? "Edit trip" : "Edit service")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2917,7 +3606,9 @@ private struct EditTenantServiceSheet: View {
                                 name: name,
                                 description: desc.isEmpty ? nil : desc,
                                 durationMinutes: includeDuration ? duration : nil,
-                                startingPrice: price
+                                startingPrice: price,
+                                itinerary: isCharter ? itinerary : nil,
+                                boatIds: isCharter ? boatIds : nil
                             )
                             if ok { onDismiss() }
                         }
@@ -2943,6 +3634,19 @@ private struct EditTenantServiceSheet: View {
                 showStartingPrice = false
                 priceText = ""
             }
+            if isCharter {
+                let idx = viewModel.services.firstIndex(where: { $0.id == service.id }) ?? 0
+                let feats = viewModel.featuredWorkImages
+                let gallery = viewModel.galleryImages
+                let fallbacks = feats.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                    ? feats
+                    : gallery
+                serviceImageUrl = service.resolvedImageURL(fallbackImages: fallbacks, index: idx)
+                itinerary = service.hasConfiguredItinerary
+                    ? service.itinerary
+                    : CharterItineraryStep.defaults(durationMinutes: service.durationMinutes ?? 240)
+                boatIds = service.boatIds
+            }
         }
     }
 }
@@ -2956,6 +3660,8 @@ private struct DesignThemePickerBar: View {
     let templateFamily: TemplateFamily
     let accentHex: String
     let industry: String?
+    /// Boat / Fishing charter plan has one locked template — hide the template dropdown.
+    var showTemplatePicker: Bool = true
     @Binding var isColorPickerPresented: Bool
     @Binding var isTemplatePickerPresented: Bool
 
@@ -2986,26 +3692,28 @@ private struct DesignThemePickerBar: View {
                 if isOpen { isTemplatePickerPresented = false }
             }
 
-            DesignPickerPill(
-                title: templateFamily.displayName,
-                isPresented: $isTemplatePickerPresented,
-                isDisabled: viewModel.isLoading
-            ) {
-                Image(systemName: templateFamily.icon)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
-            } popover: {
-                DesignTemplatePickerPopover(
-                    viewModel: viewModel,
-                    industry: industry,
-                    onDismiss: { isTemplatePickerPresented = false }
-                )
-                .frame(width: 340)
-                .presentationCompactAdaptation(.popover)
-            }
-            .onChange(of: isTemplatePickerPresented) { _, isOpen in
-                if isOpen { isColorPickerPresented = false }
+            if showTemplatePicker {
+                DesignPickerPill(
+                    title: templateFamily.displayName,
+                    isPresented: $isTemplatePickerPresented,
+                    isDisabled: viewModel.isLoading
+                ) {
+                    Image(systemName: templateFamily.icon)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                } popover: {
+                    DesignTemplatePickerPopover(
+                        viewModel: viewModel,
+                        industry: industry,
+                        onDismiss: { isTemplatePickerPresented = false }
+                    )
+                    .frame(width: 340)
+                    .presentationCompactAdaptation(.popover)
+                }
+                .onChange(of: isTemplatePickerPresented) { _, isOpen in
+                    if isOpen { isColorPickerPresented = false }
+                }
             }
 
             Spacer(minLength: 0)

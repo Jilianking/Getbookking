@@ -54,6 +54,7 @@ struct RequestsView: View {
     @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = RequestsViewModel()
     @State private var requestFilter: BookingRequestFilter = .newOnly
+    @State private var usedDeepLinkFilter = false
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
@@ -69,6 +70,7 @@ struct RequestsView: View {
             (.newOnly, "New"),
             (.pendingOnly, "Pending"),
             (.confirmed, "Confirmed"),
+            (.cancelledOrDeclined, "Cancelled"),
         ]
     }
 
@@ -117,10 +119,13 @@ struct RequestsView: View {
                 }
                 .task {
                     viewModel.sessionStore = sessionStore
-                    await viewModel.loadRequests(
+                    await viewModel.refreshRequests(
                         isDemoMode: authViewModel.isDemoMode,
                         sessionStore: sessionStore
                     )
+                    if !usedDeepLinkFilter, viewModel.isCharterPlan {
+                        requestFilter = .all
+                    }
                 }
                 .onChange(of: drawerState.requestsInitialFilter) { _, filter in
                     if filter != nil {
@@ -137,6 +142,7 @@ struct RequestsView: View {
     private func applyRequestsDeepLinkFilterIfNeeded() {
         guard let filter = drawerState.requestsInitialFilter else { return }
         drawerState.requestsInitialFilter = nil
+        usedDeepLinkFilter = true
         switch filter {
         case .newOnly:
             requestFilter = .newOnly
@@ -496,6 +502,7 @@ struct BookingRequestListRow: View {
     var onMarkRead: ((String) -> Void)? = nil
     var onAccept: (() -> Void)? = nil
     var onOpenDetail: (() -> Void)? = nil
+    @State private var showCancelConfirm = false
 
     private var statusLower: String {
         BookingRequestStatus.normalized(request.status)
@@ -513,12 +520,16 @@ struct BookingRequestListRow: View {
         canManageActions && BookingRequestStatus.canShowDecline(request.status)
     }
 
+    private var canShowCancelAction: Bool {
+        canManageActions && BookingRequestStatus.canShowCancel(request.status)
+    }
+
     private var canShowAcceptAction: Bool {
         canManageActions && BookingRequestStatus.canShowAccept(request.status)
     }
 
     private var canShowApprovalActions: Bool {
-        canShowDeclineAction || canShowAcceptAction
+        canShowDeclineAction || canShowCancelAction || canShowAcceptAction
     }
 
     private var serviceName: String {
@@ -540,6 +551,22 @@ struct BookingRequestListRow: View {
         }
         .padding(16)
         .appCard()
+        .alert("Cancel booking?", isPresented: $showCancelConfirm) {
+            Button("Keep booking", role: .cancel) {}
+            Button(request.refundablePaidCents > 0 ? "Cancel and refund" : "Cancel booking", role: .destructive) {
+                guard let docId = request.documentId, !docId.isEmpty else { return }
+                onMarkRead?(docId)
+                Task {
+                    await viewModel.setBookingRequestStatus(
+                        requestId: docId,
+                        status: BookingRequestStatus.cancelled,
+                        notes: request.notes
+                    )
+                }
+            }
+        } message: {
+            Text(request.cancelConfirmMessage)
+        }
     }
 
     private var summarySection: some View {
@@ -563,7 +590,7 @@ struct BookingRequestListRow: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    AppStatusPill(text: request.status, soft: true)
+                    AppStatusPill(text: request.statusPillText, soft: true)
                 }
 
                 metadataChipsRow
@@ -576,7 +603,7 @@ struct BookingRequestListRow: View {
     private var metadataChipsRow: some View {
         HStack(spacing: 8) {
             AppMetadataChip(text: serviceName)
-            if let start = request.requestedStartTime {
+            if let start = request.departureStart {
                 AppMetadataChip(
                     text: start.formatted(.dateTime.month(.abbreviated).day())
                 )
@@ -595,6 +622,9 @@ struct BookingRequestListRow: View {
             HStack(spacing: 12) {
                 if canShowDeclineAction {
                     declineButton(docId: docId)
+                }
+                if canShowCancelAction {
+                    cancelButton
                 }
                 if canShowAcceptAction {
                     acceptButton
@@ -615,6 +645,16 @@ struct BookingRequestListRow: View {
             }
         } label: {
             Text("Decline")
+        }
+        .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
+        .disabled(viewModel.isUpdatingStatus)
+    }
+
+    private var cancelButton: some View {
+        Button {
+            showCancelConfirm = true
+        } label: {
+            Text("Cancel")
         }
         .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus))
         .disabled(viewModel.isUpdatingStatus)
@@ -644,6 +684,7 @@ struct BookingRequestDetailView: View {
     @State private var confirmAppointmentSheetIsReschedule = false
     @State private var contactAlreadyExists = false
     @State private var didPresentInitialConfirm = false
+    @State private var showCancelConfirm = false
 
     private var currentRequest: BookingRequest {
         guard let id = request.documentId,
@@ -677,10 +718,6 @@ struct BookingRequestDetailView: View {
         )
     }
 
-    private var canShowApprovalActions: Bool {
-        canManageActions && BookingRequestStatus.canShowDecline(currentRequest.status)
-    }
-
     private var canConfirmPendingAppointment: Bool {
         canManageActions && BookingRequestStatus.isNew(currentRequest.status)
     }
@@ -689,14 +726,22 @@ struct BookingRequestDetailView: View {
         canManageActions && BookingRequestStatus.canShowDecline(currentRequest.status)
     }
 
+    private var canShowCancelAction: Bool {
+        canManageActions && BookingRequestStatus.canShowCancel(currentRequest.status)
+    }
+
     private var confirmedTimeLabel: String {
-        if statusLower == BookingRequestStatus.confirmed, let start = currentRequest.requestedStartTime {
+        if statusLower == BookingRequestStatus.confirmed, let start = currentRequest.departureStart {
             return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         }
-        if BookingRequestStatus.isInFlightPending(currentRequest.status), let start = currentRequest.requestedStartTime {
+        if BookingRequestStatus.isInFlightPending(currentRequest.status), let start = currentRequest.departureStart {
             return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         }
         return "Not set yet"
+    }
+
+    private var isCharter: Bool {
+        viewModel.isCharterPlan
     }
 
     private var isPendingConfirmation: Bool {
@@ -769,6 +814,28 @@ struct BookingRequestDetailView: View {
             .toolbar { detailToolbar }
         }
         .navigationViewStyle(.stack)
+        .alert("Cancel booking?", isPresented: $showCancelConfirm) {
+            Button("Keep booking", role: .cancel) {}
+            Button(currentRequest.refundablePaidCents > 0 ? "Cancel and refund" : "Cancel booking", role: .destructive) {
+                Task { await cancelCurrentBooking() }
+            }
+        } message: {
+            Text(currentRequest.cancelConfirmMessage)
+        }
+    }
+
+    private func cancelCurrentBooking() async {
+        let docId = (currentRequest.documentId ?? request.documentId ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !docId.isEmpty else { return }
+        await viewModel.setBookingRequestStatus(
+            requestId: docId,
+            status: BookingRequestStatus.cancelled,
+            notes: currentRequest.notes
+        )
+        if viewModel.actionError == nil {
+            dismiss()
+        }
     }
 
     @ViewBuilder
@@ -815,7 +882,13 @@ struct BookingRequestDetailView: View {
             Text(request.customerName ?? "Unknown")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(AppDesign.textPrimary)
-            AppStatusPill(text: currentRequest.status, soft: true)
+            AppStatusPill(text: currentRequest.statusPillText, soft: true)
+            if currentRequest.isRefundPending {
+                Text("Refund pending — typically 5–10 business days.")
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
@@ -825,11 +898,14 @@ struct BookingRequestDetailView: View {
 
     private var serviceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            BookingRequestSectionHeader(title: "Service")
+            BookingRequestSectionHeader(title: isCharter ? "Trip" : "Service")
             BookingRequestDetailRow(
-                label: "Appointment type",
+                label: isCharter ? "Charter type" : "Appointment type",
                 value: currentRequest.serviceName ?? currentRequest.serviceSlug ?? "—"
             )
+            if isCharter, let boat = viewModel.charterBoatName(id: currentRequest.boatId) {
+                BookingRequestDetailRow(label: "Boat", value: boat)
+            }
             if canManageAssignment, !isPendingConfirmation, showsStaffAssignmentUI {
                 assignFromScheduleSection
             } else if let staff = currentRequest.assignedMemberDisplayLabel {
@@ -846,14 +922,14 @@ struct BookingRequestDetailView: View {
 
     private var appointmentCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            BookingRequestSectionHeader(title: "Appointment request")
-            if let start = request.requestedStartTime {
+            BookingRequestSectionHeader(title: isCharter ? "Charter schedule" : "Appointment request")
+            if let start = request.departureStart {
                 BookingRequestDetailRow(
-                    label: "Requested date",
+                    label: isCharter ? "Trip date" : "Requested date",
                     value: start.formatted(.dateTime.month(.abbreviated).day().year())
                 )
                 BookingRequestDetailRow(
-                    label: "Requested time",
+                    label: isCharter ? "Departure" : "Requested time",
                     value: start.formatted(date: .omitted, time: .shortened)
                 )
             } else if let created = request.createdAt {
@@ -883,7 +959,7 @@ struct BookingRequestDetailView: View {
         if canEditConfirmedTime {
             Button(action: openConfirmedTimeEditor) {
                 BookingRequestDetailRow(
-                    label: "Confirmed time",
+                    label: isCharter ? "Confirmed departure" : "Confirmed time",
                     value: confirmedTimeLabel,
                     showsChevron: true
                 )
@@ -891,7 +967,7 @@ struct BookingRequestDetailView: View {
             .buttonStyle(.plain)
         } else {
             BookingRequestDetailRow(
-                label: "Confirmed time",
+                label: isCharter ? "Confirmed departure" : "Confirmed time",
                 value: confirmedTimeLabel
             )
         }
@@ -1036,7 +1112,7 @@ struct BookingRequestDetailView: View {
 
     @ViewBuilder
     private var approvalActionsCard: some View {
-        if canConfirmPendingAppointment || canShowDeclineAction {
+        if canConfirmPendingAppointment || canShowDeclineAction || canShowCancelAction {
             VStack(spacing: 12) {
                 if let err = viewModel.actionError {
                     Text(err)
@@ -1056,6 +1132,16 @@ struct BookingRequestDetailView: View {
                             }
                         } label: {
                             Text("Decline")
+                        }
+                        .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
+                        .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
+                    }
+
+                    if canShowCancelAction {
+                        Button {
+                            showCancelConfirm = true
+                        } label: {
+                            Text("Cancel booking")
                         }
                         .buttonStyle(AppDeclineButtonStyle(enabled: !viewModel.isUpdatingStatus && !(request.documentId ?? "").isEmpty))
                         .disabled(viewModel.isUpdatingStatus || (request.documentId ?? "").isEmpty)
@@ -1088,7 +1174,7 @@ struct BookingRequestDetailView: View {
     private var assignFromScheduleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let staff = currentRequest.assignedMemberDisplayLabel,
-               let start = currentRequest.requestedStartTime {
+               let start = currentRequest.departureStart {
                 BookingRequestDetailRow(
                     label: "Assigned to",
                     value: "\(staff) · \(start.formatted(date: .omitted, time: .shortened))"
@@ -1117,7 +1203,7 @@ struct BookingRequestDetailView: View {
         if showsStaffAssignmentUI {
             return currentRequest.hasAssignedMember ? "Change time & assignee" : "Pick time & assign"
         }
-        return currentRequest.requestedStartTime != nil ? "Change time" : "Pick time"
+        return currentRequest.departureStart != nil ? "Change time" : "Pick time"
     }
 
     private var quickAssignPicker: some View {

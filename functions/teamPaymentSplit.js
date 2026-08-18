@@ -451,7 +451,7 @@ async function recordAndSettleTenantPayment(stripe, deps) {
     normalizeSubscriptionPlan,
   });
 
-  if (paymentKind === "deposit" && bookingRequestId) {
+  if (bookingRequestId && (paymentKind === "deposit" || paymentKind === "service")) {
     await confirmBookingAfterDepositPaid(tenantId, bookingRequestId);
   }
 

@@ -188,10 +188,21 @@ function smsEligibilityBlockReason(tenant, userData, managerPermissions) {
     return "No client texting number on file. Enable client texting under Team → Notifications.";
   }
   const perms = managerPermissions || {};
-  if (perms.sendClientNotifications === false) {
+  if (!tenantIsCharterPlan(tenant) && perms.sendClientNotifications === false) {
     return "Manager policy has client texting notifications turned off.";
   }
   return null;
+}
+
+function tenantIsCharterPlan(tenant) {
+  const p = ((tenant && tenant.subscriptionPlan) || "").toString().trim().toLowerCase();
+  return (
+    p === "charter" ||
+    p === "charters" ||
+    p === "boat" ||
+    p === "fishing" ||
+    p === "boating"
+  );
 }
 
 function getMasterTwilioClient() {
@@ -700,10 +711,10 @@ function smsRefreshNeedsPurchase(tenant, planNorm, occupiedCount) {
   return lifetime >= free;
 }
 
-/** Hard caps match seat limits: Solo 1 · Studio 5 · Shop 10. */
+/** Hard caps match seat limits: Solo/Charter 1 · Studio 5 · Shop 10. */
 function maxSmsLinesForPlan(planNorm) {
   const p = (planNorm || "solo").toString().trim().toLowerCase();
-  if (p === "solo") return 1;
+  if (p === "solo" || p === "charter") return 1;
   if (p === "studio") return 5;
   if (p === "shop") return 10;
   return 1;
@@ -773,9 +784,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
-  // Studio/Shop: recurring Extra SMS seats. Solo: one-time $12 replacement only (max 1).
+  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12 replacement only (max 1).
   const canPurchaseExtra = plan !== "solo" && plan !== "charter" && !atMax;
-  const canPurchaseSoloReplacement = (plan === "solo" || plan === "charter") && needsPurchaseForNext;
+  const canPurchaseSoloReplacement =
+    (plan === "solo" || plan === "charter") && needsPurchaseForNext;
   return {
     plan,
     freeIncluded,
@@ -1098,7 +1110,7 @@ async function sendOutboundClientSms({
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
   }
-  if (!(await phoneHasSmsConsent(tenantId, toE164))) {
+  if (!(await phoneHasSmsConsent(tenantId, toE164, meta))) {
     throw new Error(
       "Recipient has not opted into appointment-related text messages."
     );
@@ -1303,7 +1315,7 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   const blockReason = smsEligibilityBlockReason(
     tenant,
     ownerUserData,
-    tenant.managerPermissions
+    tenantIsCharterPlan(tenant) ? {} : tenant.managerPermissions
   );
   if (blockReason) {
     throw new Error(blockReason);
@@ -1318,7 +1330,7 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
   }
-  if (!(await phoneHasSmsConsent(tenantId, toE164))) {
+  if (!(await phoneHasSmsConsent(tenantId, toE164, meta))) {
     throw new Error(
       "Recipient has not opted into appointment-related text messages."
     );
@@ -1749,6 +1761,153 @@ function bookingStatusSmsBody(tenant, status, booking) {
   return null;
 }
 
+function wrapClockMin(min) {
+  const n = Number(min);
+  if (!Number.isFinite(n)) return null;
+  return ((n % 1440) + 1440) % 1440;
+}
+
+function formatClockMin(min) {
+  const wrap = wrapClockMin(min);
+  if (wrap == null) return "";
+  let h = Math.floor(wrap / 60);
+  const m = wrap % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function parsePreferredTimeToMin(raw) {
+  const t = (raw || "").toString().trim();
+  if (!t) return null;
+  const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (hm) {
+    const h = parseInt(hm[1], 10);
+    const m = parseInt(hm[2], 10);
+    if (h >= 0 && h < 24 && m >= 0 && m < 60) return h * 60 + m;
+  }
+  const am = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (am) {
+    let h = parseInt(am[1], 10) % 12;
+    if (/pm/i.test(am[3])) h += 12;
+    return h * 60 + parseInt(am[2], 10);
+  }
+  return null;
+}
+
+function charterBookingStartMin(booking) {
+  if (!booking) return null;
+  if (booking.scheduledStartMin != null && Number.isFinite(Number(booking.scheduledStartMin))) {
+    return Number(booking.scheduledStartMin);
+  }
+  return parsePreferredTimeToMin(booking.preferredTime);
+}
+
+function charterWhenPhrase(booking) {
+  const dateLabel = formatCharterConfirmDate(booking && booking.scheduledDate);
+  const startMin = charterBookingStartMin(booking);
+  const timeLabel =
+    startMin != null ? formatClockMin(startMin) : ((booking && booking.preferredTime) || "").toString().trim();
+  if (dateLabel && timeLabel) return ` for ${dateLabel} at ${timeLabel}`;
+  if (dateLabel) return ` for ${dateLabel}`;
+  if (timeLabel) return ` at ${timeLabel}`;
+  return "";
+}
+
+function formatCharterConfirmDate(iso) {
+  const m = String(iso || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(dt);
+}
+
+function normalizeCharterItinerarySteps(raw) {
+  if (!Array.isArray(raw)) return [];
+  const steps = [];
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i] || {};
+    const text = String(row.text || "").trim();
+    if (!text) continue;
+    const off = Number(row.offsetMinutes);
+    steps.push({ offsetMinutes: Number.isFinite(off) ? off : 0, text });
+  }
+  return steps;
+}
+
+/**
+ * Guest SMS when a fishing charter request is submitted (not yet confirmed).
+ */
+function charterRequestReceivedSmsBody(tenant, booking) {
+  const business = ((tenant && (tenant.businessName || tenant.displayName)) || "Your charter")
+    .toString()
+    .trim() || "Your charter";
+  const name = ((booking && booking.serviceName) || "").toString().trim() || "your charter";
+  const when = charterWhenPhrase(booking);
+  return (
+    `${business}: We received your request for ${name}${when}. We'll confirm shortly.\n\n` +
+    "Reply STOP to opt out."
+  ).trim().slice(0, 1600);
+}
+
+/**
+ * Guest SMS when a fishing charter is cancelled.
+ */
+function charterCancelledSmsBody(tenant, booking) {
+  const business = ((tenant && (tenant.businessName || tenant.displayName)) || "Your charter")
+    .toString()
+    .trim() || "Your charter";
+  const name = ((booking && booking.serviceName) || "").toString().trim() || "your charter";
+  const when = charterWhenPhrase(booking);
+  const paidCents = Number(booking && booking.paidCents);
+  let body = `${business}: ${name}${when} has been cancelled.`;
+  if (Number.isFinite(paidCents) && paidCents > 0) {
+    body += " If you paid, a refund typically takes 5–10 business days.";
+  }
+  body += "\n\nReply STOP to opt out.";
+  return body.trim().slice(0, 1600);
+}
+
+/**
+ * Guest SMS when a fishing charter is confirmed: date, time, trip name, itinerary if set.
+ */
+function charterConfirmationSmsBody(tenant, booking, itinerarySteps) {
+  const business = ((tenant && (tenant.businessName || tenant.displayName)) || "Your charter")
+    .toString()
+    .trim() || "Your charter";
+  const name = ((booking && booking.serviceName) || "").toString().trim() || "your charter";
+  const when = charterWhenPhrase(booking);
+  const startMin = charterBookingStartMin(booking);
+
+  let body = `${business}: ${name} is confirmed${when}.`;
+  const paidCents = Number(booking && booking.paidCents);
+  if (Number.isFinite(paidCents) && paidCents > 0) {
+    body += ` Paid today $${(paidCents / 100).toFixed(2)}.`;
+  }
+  const steps = normalizeCharterItinerarySteps(itinerarySteps);
+  if (steps.length) {
+    const lines = steps.map((st) => {
+      const clock =
+        startMin != null
+          ? formatClockMin(startMin + st.offsetMinutes)
+          : st.offsetMinutes === 0
+            ? "Depart"
+            : st.offsetMinutes < 0
+              ? `${Math.abs(st.offsetMinutes)} min before`
+              : `+${st.offsetMinutes} min`;
+      return `${clock} — ${st.text}`;
+    });
+    body += `\n\n${lines.join("\n")}`;
+  }
+  body += "\n\nReply STOP to opt out.";
+  return body.trim().slice(0, 1600);
+}
+
 function extractCustomerPhone(booking) {
   const direct = booking.customerPhone;
   if (direct) {
@@ -1867,10 +2026,11 @@ async function clearPhoneOptOut(tenantId, phone) {
 }
 
 /**
- * True only when the customer record contains an affirmative opt-in and
- * server-recorded evidence of when and how consent was obtained.
+ * True when the guest opted in: booking checkbox, or a customer record with consent.
+ * `smsConsentSource` is compliance metadata — it must not block a recorded opt-in.
  */
-async function phoneHasSmsConsent(tenantId, phone) {
+async function phoneHasSmsConsent(tenantId, phone, meta) {
+  if (meta && meta.smsConsentAccepted === true) return true;
   const last10 = phoneLast10(phone);
   if (!tenantId || !last10) return false;
 
@@ -1882,11 +2042,37 @@ async function phoneHasSmsConsent(tenantId, phone) {
     .get();
   if (!customerSnap.exists) return false;
   const customer = customerSnap.data() || {};
-  return customer.smsOptedIn === true
-    && !!customer.smsConsentAt
-    && ["web_booking", "inbound_sms"].includes(
-      (customer.smsConsentSource || "").toString()
-    );
+  return customer.smsOptedIn === true && !!customer.smsConsentAt;
+}
+
+/** Persist web-checkout SMS consent under the last-10 customer id Twilio lookup uses. */
+async function ensureWebBookingSmsConsent(tenantId, phone, extras) {
+  const last10 = phoneLast10(phone);
+  const e164 = toE164US(phone) || (phone || "").toString().trim();
+  if (!tenantId || !last10 || !e164) return false;
+  const extra = extras || {};
+  const ref = getDb()
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("customers")
+    .doc(last10);
+  const snap = await ref.get();
+  const existing = snap.exists ? snap.data() || {} : {};
+  await ref.set(
+    {
+      name: (extra.name || existing.name || "Guest").toString().slice(0, 120),
+      email: (extra.email || existing.email || "").toString().trim().toLowerCase(),
+      phone: e164,
+      smsOptedIn: true,
+      smsConsentAt: existing.smsConsentAt || admin.firestore.FieldValue.serverTimestamp(),
+      smsConsentSource: "web_booking",
+      source: existing.source || "booking_request_web",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(snap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+    },
+    { merge: true }
+  );
+  return true;
 }
 
 async function grantInboundSmsConsent(tenantId, phone) {
@@ -2130,6 +2316,11 @@ module.exports = {
   normalizeSmsQuickPresets,
   renderSmsPreset,
   bookingStatusSmsBody,
+  charterRequestReceivedSmsBody,
+  charterCancelledSmsBody,
+  charterConfirmationSmsBody,
+  tenantIsCharterPlan,
+  ensureWebBookingSmsConsent,
   SMS_PRESET_MAX_LEN,
   SMS_QUICK_REPLY_MAX,
   PAID_FEATURE_UPGRADE_MESSAGE,

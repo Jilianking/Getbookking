@@ -21,12 +21,13 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var customerName: String
     @State private var customerEmail: String
     @State private var customerPhone: String
-    @State private var services: [(id: String, name: String, slug: String)] = []
+    @State private var services: [(id: String, name: String, slug: String, durationMinutes: Int?)] = []
     @State private var isLoadingServices = true
     @State private var selectedServiceId: String?
     @State private var confirmedDate: Date
     @State private var confirmedTime: Date
     @State private var selectedMemberUid: String?
+    @State private var selectedBoatId: String?
     @State private var notes = ""
     @State private var sendDepositLinkViaText = true
     @State private var depositAmountText: String
@@ -73,6 +74,7 @@ struct StaffScheduleClientAppointmentSheet: View {
         } else {
             _selectedMemberUid = State(initialValue: roster.first?.uid)
         }
+        _selectedBoatId = State(initialValue: viewModel.charterBoats.first?.id)
         _sendDepositLinkViaText = State(initialValue: studioCanSendSms)
         _depositAmountText = State(initialValue: DepositAmountInput.initialText(defaultAmount: depositAmount))
     }
@@ -88,7 +90,7 @@ struct StaffScheduleClientAppointmentSheet: View {
         return roster.first(where: { $0.uid == uid })
     }
 
-    private var selectedService: (id: String, name: String, slug: String)? {
+    private var selectedService: (id: String, name: String, slug: String, durationMinutes: Int?)? {
         guard let id = selectedServiceId else { return nil }
         return services.first(where: { $0.id == id })
     }
@@ -160,6 +162,7 @@ struct StaffScheduleClientAppointmentSheet: View {
             && selectedService != nil
             && scheduledStart != nil
             && selectedMember != nil
+            && (!viewModel.isCharterPlan || (selectedBoatId != nil && !viewModel.charterBoats.isEmpty))
             && !isSaving
             && !isLoadingServices
             && !depositSendBlocksSubmit
@@ -172,18 +175,22 @@ struct StaffScheduleClientAppointmentSheet: View {
                     customerSection
 
                     VStack(alignment: .leading, spacing: 16) {
-                        BookingRequestSectionHeader(title: "Confirmed appointment")
+                        BookingRequestSectionHeader(
+                            title: viewModel.isCharterPlan ? "Confirmed charter" : "Confirmed appointment"
+                        )
 
                         if isLoadingServices {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
                         } else if services.isEmpty {
-                            Text("Add services in Settings before scheduling.")
+                            Text(viewModel.isCharterPlan
+                                 ? "Add trips in Business settings before scheduling."
+                                 : "Add services in Settings before scheduling.")
                                 .font(.caption)
                                 .foregroundStyle(AppDesign.textSecondary)
                         } else {
-                            Picker("Service", selection: $selectedServiceId) {
-                                Text("Select service").tag(Optional<String>.none)
+                            Picker(viewModel.isCharterPlan ? "Trip" : "Service", selection: $selectedServiceId) {
+                                Text(viewModel.isCharterPlan ? "Select trip" : "Select service").tag(Optional<String>.none)
                                 ForEach(services, id: \.id) { service in
                                     Text(service.name).tag(Optional(service.id))
                                 }
@@ -191,13 +198,13 @@ struct StaffScheduleClientAppointmentSheet: View {
                         }
 
                         DatePicker(
-                            "Confirmed date",
+                            viewModel.isCharterPlan ? "Trip date" : "Confirmed date",
                             selection: $confirmedDate,
                             displayedComponents: .date
                         )
 
                         DatePicker(
-                            "Confirmed time",
+                            viewModel.isCharterPlan ? "Departure time" : "Confirmed time",
                             selection: $confirmedTime,
                             displayedComponents: .hourAndMinute
                         )
@@ -206,6 +213,21 @@ struct StaffScheduleClientAppointmentSheet: View {
                             Picker(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry), selection: $selectedMemberUid) {
                                 ForEach(roster) { member in
                                     Text(artistLabel(for: member)).tag(Optional(member.uid))
+                                }
+                            }
+                        }
+
+                        if viewModel.isCharterPlan {
+                            if viewModel.charterBoats.isEmpty {
+                                Label("Add a boat in Business settings before confirming.", systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            } else {
+                                Picker("Boat", selection: $selectedBoatId) {
+                                    ForEach(viewModel.charterBoats) { boat in
+                                        Text("\(boat.displayName) · \(boat.capacityLabel)")
+                                            .tag(Optional(boat.id))
+                                    }
                                 }
                             }
                         }
@@ -249,7 +271,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text("Confirm")
+                                Text(viewModel.isCharterPlan ? "Confirm charter" : "Confirm")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -260,7 +282,9 @@ struct StaffScheduleClientAppointmentSheet: View {
                 .padding(16)
             }
             .appScreenBackground()
-            .navigationTitle(isWalkIn ? "New booking" : "Schedule appointment")
+            .navigationTitle(isWalkIn
+                ? (viewModel.isCharterPlan ? "New charter" : "New booking")
+                : (viewModel.isCharterPlan ? "Schedule charter" : "Schedule appointment"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -334,7 +358,9 @@ struct StaffScheduleClientAppointmentSheet: View {
         }
         do {
             let fetched = try await FirebaseService().fetchTenantServices(tenantId: tid)
-            let active = fetched.filter(\.isActive).map { (id: $0.id, name: $0.name, slug: $0.slug) }
+            let active = fetched.filter(\.isActive).map {
+                (id: $0.id, name: $0.name, slug: $0.slug, durationMinutes: $0.durationMinutes)
+            }
             await MainActor.run {
                 services = active
                 selectedServiceId = active.first?.id
@@ -357,7 +383,9 @@ struct StaffScheduleClientAppointmentSheet: View {
             serviceName: service.name,
             member: member,
             scheduledStart: start,
-            notes: trimmedNotes.isEmpty ? nil : trimmedNotes
+            notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+            durationMinutes: service.durationMinutes,
+            boatId: viewModel.isCharterPlan ? selectedBoatId : nil
         )
         if requestId != nil,
            willSendDeposit,

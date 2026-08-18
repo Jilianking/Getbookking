@@ -15,6 +15,7 @@ enum SubscriptionPlan: String, CaseIterable {
     case solo = "solo"
     case studio = "studio"
     case shop = "shop"
+    /// Fishing / boat charter subscription (1 seat; shop + SMS included).
     case charter = "charter"
 
     var displayName: String {
@@ -54,6 +55,9 @@ enum SubscriptionPlan: String, CaseIterable {
         self == .solo || self == .charter
     }
 
+    /// Fishing charter subscription (locked fishing template + Manage page names).
+    var isCharterPlan: Bool { self == .charter }
+
     /// Total members (owner + staff) allowed for this plan tier.
     var maxSeats: Int {
         switch self {
@@ -81,7 +85,7 @@ enum SubscriptionPlan: String, CaseIterable {
         case "basic", "solo", "free", "starter": return .solo
         case "growth", "pro": return .studio
         case "enterprise": return .shop
-        case "charter", "charters": return .charter
+        case "charter", "charters", "boat", "fishing", "boating": return .charter
         case SubscriptionPlan.solo.rawValue: return .solo
         case SubscriptionPlan.studio.rawValue: return .studio
         case SubscriptionPlan.shop.rawValue: return .shop
@@ -315,6 +319,11 @@ class AuthViewModel: ObservableObject {
         }
         teamAccess = access
         tenantSubscriptionPlan = access.subscriptionPlan
+    }
+
+    /// Prefer tenant document plan after Design/Settings load (e.g. Harbor Charters → charter).
+    func applyLoadedSubscriptionPlan(_ plan: SubscriptionPlan) {
+        tenantSubscriptionPlan = plan
     }
 
     /// Loads `logoUrl` from Firestore (profile → tenant). Prefer `applyTenantLogoCache` when URL is already known.

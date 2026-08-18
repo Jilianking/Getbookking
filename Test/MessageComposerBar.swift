@@ -723,14 +723,23 @@ struct MessageComposerBar: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased() ?? ""
             let customDomain = PublicBookingSite.activeCustomDomain(fromTenant: sessionStore.tenant)
-            if !memberSlug.isEmpty {
+            let tenantPlan = SubscriptionPlan.normalized(
+                fromFirestore: sessionStore.tenant?["subscriptionPlan"] as? String
+            )
+            let tenantIndustry = (sessionStore.tenant?["industry"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let baseURL = PublicBookingSite.urlString(forSlug: slug, customDomain: customDomain)
+            if tenantPlan.isCharterPlan || tenantIndustry == BookingTemplate.charters.rawValue {
+                bookingUrl = baseURL + "/charters"
+            } else if !memberSlug.isEmpty {
                 bookingUrl = PublicBookingSite.memberBookURLString(
                     tenantSlug: slug,
                     memberSlug: memberSlug,
                     customDomain: customDomain
                 )
             } else {
-                bookingUrl = PublicBookingSite.urlString(forSlug: slug, customDomain: customDomain) + "/book"
+                bookingUrl = baseURL + "/book"
             }
         }
     }

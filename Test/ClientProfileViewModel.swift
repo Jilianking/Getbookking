@@ -98,7 +98,7 @@ final class ClientProfileViewModel: ObservableObject {
     var averagePerMonth: Double {
         let visits = matchingBookings.filter { Self.isVisitStatus($0.status) }
         guard !visits.isEmpty else { return 0 }
-        let dates = visits.compactMap { $0.requestedStartTime ?? $0.createdAt }
+        let dates = visits.compactMap { $0.departureStart ?? $0.createdAt }
         guard let earliest = dates.min() else { return 0 }
         let months = max(1, Calendar.current.dateComponents([.month], from: earliest, to: Date()).month ?? 1)
         return totalSpent / Double(months)
@@ -116,9 +116,9 @@ final class ClientProfileViewModel: ObservableObject {
         return matchingBookings
             .filter {
                 $0.status.lowercased() == "confirmed" &&
-                ($0.requestedStartTime ?? .distantPast) >= now
+                ($0.departureStart ?? .distantPast) >= now
             }
-            .sorted { ($0.requestedStartTime ?? .distantFuture) < ($1.requestedStartTime ?? .distantFuture) }
+            .sorted { ($0.departureStart ?? .distantFuture) < ($1.departureStart ?? .distantFuture) }
             .first
     }
 
@@ -140,9 +140,9 @@ final class ClientProfileViewModel: ObservableObject {
             if let upcoming = matched
                 .filter({
                     $0.status.lowercased() == "confirmed" &&
-                    ($0.requestedStartTime ?? .distantPast) >= now
+                    ($0.departureStart ?? .distantPast) >= now
                 })
-                .sorted(by: { ($0.requestedStartTime ?? .distantFuture) < ($1.requestedStartTime ?? .distantFuture) })
+                .sorted(by: { ($0.departureStart ?? .distantFuture) < ($1.departureStart ?? .distantFuture) })
                 .first {
                 return .reschedule(upcoming)
             }
@@ -155,18 +155,18 @@ final class ClientProfileViewModel: ObservableObject {
         return matchingBookings
             .filter {
                 Self.isVisitStatus($0.status) &&
-                ($0.requestedStartTime ?? $0.createdAt ?? .distantPast) <= now
+                ($0.departureStart ?? $0.createdAt ?? .distantPast) <= now
             }
             .sorted {
-                ($0.requestedStartTime ?? $0.createdAt ?? .distantPast) >
-                ($1.requestedStartTime ?? $1.createdAt ?? .distantPast)
+                ($0.departureStart ?? $0.createdAt ?? .distantPast) >
+                ($1.departureStart ?? $1.createdAt ?? .distantPast)
             }
             .prefix(5)
             .map { booking in
                 ClientVisitSummary(
                     id: booking.id,
                     serviceName: booking.serviceName ?? "Appointment",
-                    date: booking.requestedStartTime ?? booking.createdAt ?? Date(),
+                    date: booking.departureStart ?? booking.createdAt ?? Date(),
                     status: booking.status,
                     price: price(for: booking)
                 )

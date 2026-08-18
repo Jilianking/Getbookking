@@ -1,7 +1,7 @@
 //
 //  QuickEditHistoryStore.swift
 //
-//  Session undo/redo for Design Quick Edit (text + colors).
+//  Session undo/redo for Design Quick Edit (text, colors, font size, field color).
 //
 
 import Combine
@@ -16,6 +16,8 @@ enum QuickEditHistoryEntry: Equatable {
         heroAfter: String
     )
     case text(before: [String: String], after: [String: String])
+    case fontSize(key: String, before: Int, after: Int)
+    case fieldColor(key: String, before: String, after: String)
 }
 
 @MainActor
@@ -60,6 +62,20 @@ final class QuickEditHistoryStore: ObservableObject {
         }
         guard !filteredAfter.isEmpty else { return }
         pushUndo(.text(before: filteredBefore, after: filteredAfter))
+    }
+
+    func recordFontSize(key: String, before: Int, after: Int) {
+        guard !isApplyingHistory else { return }
+        guard !key.isEmpty, before != after else { return }
+        pushUndo(.fontSize(key: key, before: before, after: after))
+    }
+
+    func recordFieldColor(key: String, before: String, after: String) {
+        guard !isApplyingHistory else { return }
+        let oldHex = before.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let newHex = after.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty, oldHex != newHex else { return }
+        pushUndo(.fieldColor(key: key, before: before, after: after))
     }
 
     func popUndo() -> QuickEditHistoryEntry? {

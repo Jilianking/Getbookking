@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Seed marketing demo tenants (solo).
+ * Seed marketing demo tenants (Auth + Firestore + services).
+ * Harbor Charters uses subscriptionPlan "charter"; other demos stay on "solo".
  * Creates Auth owners + Firestore tenants + services.
  *
  * Usage (from Test/):
@@ -575,6 +576,269 @@ const DEMO_ACCOUNTS = [
       },
     ],
   },
+  {
+    slug: "harbor-charters",
+    email: "demo-harbor-charters@getbookking.com",
+    firstName: "Mike",
+    lastName: "Reyes",
+    business: "Harbor Charters",
+    displayName: "Harbor Charters",
+    industry: "charters",
+    webThemeId: "charter-v1",
+    subscriptionPlan: "charter",
+    shopEnabled: true,
+    tagline: "Key West fishing & boat days.",
+    heroTagline: "Fish the Keys. Soak the sandbar.",
+    heroSubtitle:
+      "Private trips out of Garrison Bight — yellowtail on the reef, mahi offshore, tarpon in the harbor, and lazy boat days on the sandbar. Florida sunshine, ice-cold cooler, catch cleaned at the dock.",
+    aboutText:
+      "Harbor Charters is a Key West outfit run by Capt. Mike Reyes. We fish the patch reefs, the Gulf Stream, and the backcountry — and we run boat days when the crew would rather swim than cast.\n\nGear, bait, ice, and Florida fishing licenses are on us. Meet at Garrison Bight Marina. Bring sunscreen, polarized shades, and a cooler for the catch. Weather on the water always wins — we’ll move you if the Keys kick up.",
+    serviceCity: "Key West",
+    serviceStateAbbr: "FL",
+    address: "Garrison Bight Marina\nKey West, FL 33040",
+    businessHours: "Trips daily · sunrise to sunset · weather permitting",
+    businessHoursWeekly: weekSameHours(7 * 60, 19 * 60),
+    mapEmbedLat: 24.5647,
+    mapEmbedLng: -81.7889,
+    instagramHandle: "harborcharterskw",
+    reviews: [
+      {
+        quote:
+          "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys.",
+        text:
+          "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys.",
+        name: "Danielle R. · Half-Day Reef Charter",
+        service: "Half-Day Reef Charter",
+      },
+      {
+        quote:
+          "Sandbar day with the wedding crew — turquoise water, Bluetooth, zero stress. Peak Florida.",
+        text:
+          "Sandbar day with the wedding crew — turquoise water, Bluetooth, zero stress. Peak Florida.",
+        name: "Chris P. · Bachelor / Bachelorette Boat Day",
+        service: "Bachelor / Bachelorette Boat Day",
+      },
+      {
+        quote:
+          "Kids caught mangrove snapper in the harbor and we still made it back for key lime pie.",
+        text:
+          "Kids caught mangrove snapper in the harbor and we still made it back for key lime pie.",
+        name: "Sam T. · Family Flats & Harbor Trip",
+        service: "Family Flats & Harbor Trip",
+      },
+    ],
+    studio12ProcessSteps: [
+      {
+        title: "Pick your Keys day",
+        body: "Reef, offshore, flats, sandbar, or sunset. We’ll match the bite and the breeze.",
+      },
+      {
+        title: "Book from the dock",
+        body: "Pick a date, boat, and extras online. Florida licenses and gear are already covered.",
+      },
+      {
+        title: "Meet at Garrison Bight",
+        body: "Park, hop on, sunscreen up. Capt. Mike handles the rest.",
+      },
+    ],
+    charterFaqs: [
+      {
+        question: "What if the weather turns?",
+        answer:
+          "Afternoon storms are Keys-normal. We reschedule or fully refund if we can’t leave Garrison Bight safely.",
+      },
+      {
+        question: "Do I need a Florida fishing license?",
+        answer:
+          "No — we cover FL saltwater licenses on fishing trips. Just bring an ID.",
+      },
+      {
+        question: "What’s included?",
+        answer:
+          "Rods, bait, ice, licenses, and a cooler. You bring sunscreen, polarized glasses, and whatever you want in the cooler (no glass).",
+      },
+      {
+        question: "Can I keep the fish?",
+        answer:
+          "Yes, within FWC limits. We filet at the dock; bring a cooler for the ride home.",
+      },
+      {
+        question: "Sandbar vs fishing?",
+        answer:
+          "Sandbar and sunset days are swim and cruise. Reef, offshore, night bite, and flats are fishing.",
+      },
+      {
+        question: "Where do we meet?",
+        answer:
+          "Garrison Bight Marina, Key West. We’ll text slip details the night before.",
+      },
+    ],
+    webCopyOverrides: {
+      "wc.charter.heroEyebrow": "Key West, FL",
+      "wc.charter.captainName": "Capt. Mike Reyes",
+      "wc.charter.captainRole": "USCG · Key West, FL",
+      "wc.charter.meetingPoint": "Garrison Bight Marina",
+      "wc.charter.shopLead":
+        "Rash guards, hats, and dock extras for a day on the water in Key West.",
+      "wc.charter.quote":
+        "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys.",
+      "wc.charter.quoteBy": "Danielle R. · Half-Day Reef Charter",
+      "wc.charter.tag0": "Florida Keys",
+      "wc.charter.tag1": "Gear & FL license included",
+      "wc.charter.tag2": "Garrison Bight, Key West",
+      "wc.charter.howSub": "Three steps between you and a day on the water in Key West.",
+      "wc.charter.howCtaHeading": "Ready for a Florida boat day?",
+    },
+    charterBoats: [
+      {
+        id: "harbor-center-console",
+        boatType: "Sea Ya Later",
+        maxPeople: 6,
+        imageUrl: "",
+      },
+      {
+        id: "harbor-sportfisher",
+        boatType: "Conch Crusher",
+        maxPeople: 8,
+        imageUrl: "",
+      },
+    ],
+    products: [
+      {
+        name: "Harbor Charters rash guard",
+        category: "Apparel",
+        description: "UPF sun shirt for reef days and sandbar runs out of Key West.",
+        price: 48,
+      },
+      {
+        name: "Key West trucker hat",
+        category: "Apparel",
+        description: "Mesh-back hat for the run to the Stream and the dock after.",
+        price: 28,
+      },
+      {
+        name: "Dock tumbler",
+        category: "Drinkware",
+        description: "Insulated tumbler that stays cold from Garrison Bight to the sandbar.",
+        price: 32,
+      },
+      {
+        name: "Frozen ballyhoo pack",
+        category: "Tackle",
+        description: "Add-on bait for mahi and wahoo on the full-day offshore.",
+        price: 25,
+      },
+      {
+        name: "Filet & bag the catch",
+        category: "Dock extras",
+        description: "We clean your fish at the marina and pack it on ice for the ride home.",
+        price: 40,
+      },
+    ],
+    /* hero + gallery: scripts/assets/harbor-charters/ */
+    services: [
+      {
+        name: "Half-Day Reef Charter",
+        description:
+          "Patch-reef run for yellowtail, mangrove snapper, and grouper on the Atlantic side of Key West. Rods, bait, ice, and a Florida license included.",
+        durationMinutes: 240,
+        price: 450,
+        boatIds: ["harbor-center-console", "harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -30, text: "Meet at Garrison Bight, gear briefing" },
+          { offsetMinutes: 0, text: "Run the patch reefs" },
+          { offsetMinutes: 150, text: "Second spot, chum the yellowtail" },
+          { offsetMinutes: 240, text: "Back to the bight, filet at the marina" },
+        ],
+      },
+      {
+        name: "Full-Day Offshore Charter",
+        description:
+          "Gulf Stream day for mahi, blackfin tuna, and wahoo aboard Conch Crusher. Lunch on the water, fish cleaned when we hit Garrison Bight.",
+        durationMinutes: 480,
+        price: 950,
+        boatIds: ["harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -30, text: "Meet at the dock, load gear and ice" },
+          { offsetMinutes: 0, text: "Run the Gulf Stream" },
+          { offsetMinutes: 240, text: "Second weedline and lunch on the water" },
+          { offsetMinutes: 480, text: "Return to Garrison Bight, filet the catch" },
+        ],
+      },
+      {
+        name: "Key West Sandbar Day",
+        description:
+          "Cruise to a Boca Grande / Content Keys sandbar — swim, snorkel, Bluetooth, cooler. Classic Florida boat day.",
+        durationMinutes: 360,
+        price: 680,
+        boatIds: ["harbor-center-console", "harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -20, text: "Meet at Garrison Bight, load coolers" },
+          { offsetMinutes: 0, text: "Cast off for the sandbar" },
+          { offsetMinutes: 90, text: "Anchor up, swim and snorkel" },
+          { offsetMinutes: 240, text: "Island stop and photos" },
+          { offsetMinutes: 360, text: "Return to the dock" },
+        ],
+      },
+      {
+        name: "Mallory Square Sunset Cruise",
+        description:
+          "Evening run toward Mallory Square — no fishing, drinks and snacks, Keys sunset.",
+        durationMinutes: 120,
+        price: 250,
+        boatIds: ["harbor-center-console", "harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -15, text: "Board at Garrison Bight, drinks and snacks" },
+          { offsetMinutes: 0, text: "Cast off for the Mallory Square sunset" },
+          { offsetMinutes: 90, text: "Photos on the water" },
+          { offsetMinutes: 120, text: "Return to the marina" },
+        ],
+      },
+      {
+        name: "Night Yellowtail Bite",
+        description:
+          "After-dark Key West run for mangrove and yellowtail snapper under the lights.",
+        durationMinutes: 240,
+        price: 480,
+        boatIds: ["harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -20, text: "Meet at the dock after dark" },
+          { offsetMinutes: 0, text: "Run to the lights on the reef" },
+          { offsetMinutes: 120, text: "Yellowtail under the lights" },
+          { offsetMinutes: 240, text: "Return, filet the catch" },
+        ],
+      },
+      {
+        name: "Family Flats & Harbor Trip",
+        description:
+          "Light tackle for baby tarpon, mangrove snapper, and a shot at permit — kid-friendly, close to Garrison Bight.",
+        durationMinutes: 240,
+        price: 500,
+        boatIds: ["harbor-center-console", "harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -30, text: "Meet at the marina, kid briefing" },
+          { offsetMinutes: 0, text: "Work the harbor and nearby flats" },
+          { offsetMinutes: 120, text: "Light tackle around the mangroves" },
+          { offsetMinutes: 240, text: "Back at Garrison Bight" },
+        ],
+      },
+      {
+        name: "Bachelor / Bachelorette Boat Day",
+        description:
+          "Private Keys party day — sandbar, music, cooler, captain. BYOB, Florida sunshine included.",
+        durationMinutes: 480,
+        price: 1400,
+        boatIds: ["harbor-sportfisher"],
+        itinerary: [
+          { offsetMinutes: -20, text: "Meet at Garrison Bight, load the party" },
+          { offsetMinutes: 0, text: "Run to the sandbar" },
+          { offsetMinutes: 120, text: "Sandbar swim and photos" },
+          { offsetMinutes: 300, text: "Cruise the mangrove islands, music on" },
+          { offsetMinutes: 480, text: "Back at the marina" },
+        ],
+      },
+    ],
+  },
 ];
 
 /** Industry booking fields; demos can override with `formSchema` on the demo object. */
@@ -598,6 +862,44 @@ function demoFormSchema(demo) {
         placeholder: "Select preferred time",
       },
     ]);
+  }
+  if (demo.slug === "harbor-charters") {
+    return base.map(function (field) {
+      if (field.key === "tripType") {
+        return Object.assign({}, field, {
+          options: [
+            "Reef fishing",
+            "Offshore (mahi / tuna / wahoo)",
+            "Flats & harbor",
+            "Sandbar boat day",
+            "Sunset cruise",
+            "Night yellowtail",
+            "Other",
+          ],
+        });
+      }
+      if (field.key === "preferredDate") {
+        return Object.assign({}, field, {
+          placeholder: "e.g. Sat in Key West or flexible",
+        });
+      }
+      if (field.key === "departurePreference") {
+        return Object.assign({}, field, {
+          options: ["Sunrise", "Morning", "Afternoon", "Sunset", "Night bite", "Flexible"],
+        });
+      }
+      if (field.key === "experienceLevel") {
+        return Object.assign({}, field, {
+          options: [
+            "First time in the Keys",
+            "Some experience",
+            "Experienced angler",
+            "Boat day only",
+          ],
+        });
+      }
+      return field;
+    });
   }
   return base;
 }
@@ -641,9 +943,14 @@ async function upsertServices(db, tenantId, services) {
     .collection("services")
     .get();
   const bySlug = new Map();
+  const extras = [];
   for (const doc of existing.docs) {
     const s = doc.data().slug || slugify(doc.data().name || "");
-    bySlug.set(s, doc.id);
+    if (bySlug.has(s)) extras.push(doc);
+    else bySlug.set(s, doc.id);
+  }
+  for (const extra of extras) {
+    await extra.ref.delete();
   }
 
   const activeSlugs = new Set();
@@ -661,8 +968,16 @@ async function upsertServices(db, tenantId, services) {
       isActive: true,
       updatedAt: FieldValue.serverTimestamp(),
     };
+    if (Array.isArray(svc.itinerary) && svc.itinerary.length) {
+      payload.itinerary = svc.itinerary;
+    }
+    const boatIds = Array.isArray(svc.boatIds)
+      ? svc.boatIds
+      : (svc.boatId ? [svc.boatId] : []);
+    if (boatIds.length) payload.boatIds = boatIds;
     const existingId = bySlug.get(slug);
     if (existingId) {
+      payload.boatId = FieldValue.delete();
       await db
         .collection("tenants")
         .doc(tenantId)
@@ -680,9 +995,81 @@ async function upsertServices(db, tenantId, services) {
     }
   }
 
+  const extraIds = new Set(extras.map(function (d) { return d.id; }));
   for (const doc of existing.docs) {
+    if (extraIds.has(doc.id)) continue;
     const s = doc.data().slug || slugify(doc.data().name || "");
     if (!activeSlugs.has(s) && doc.data().isActive !== false) {
+      await doc.ref.set(
+        { isActive: false, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    }
+  }
+}
+
+function mergeCharterBoats(existing, next) {
+  const byId = new Map();
+  if (Array.isArray(existing)) {
+    for (const boat of existing) {
+      if (boat && boat.id) byId.set(boat.id, boat);
+    }
+  }
+  return next.map(function (boat) {
+    const prev = byId.get(boat.id) || {};
+    const imageUrl =
+      (boat.imageUrl && String(boat.imageUrl).trim()) ||
+      (prev.imageUrl && String(prev.imageUrl).trim()) ||
+      "";
+    return {
+      id: boat.id,
+      boatType: boat.boatType || prev.boatType || "Boat",
+      maxPeople: boat.maxPeople || prev.maxPeople || 6,
+      imageUrl,
+    };
+  });
+}
+
+async function upsertProducts(db, tenantId, products) {
+  const col = db.collection("tenants").doc(tenantId).collection("products");
+  const existing = await col.get();
+  const bySlug = new Map();
+  for (const doc of existing.docs) {
+    const s = slugify(doc.data().name || "");
+    if (s && !bySlug.has(s)) bySlug.set(s, doc.id);
+  }
+
+  const activeSlugs = new Set();
+  for (let i = 0; i < products.length; i++) {
+    const item = products[i];
+    const slug = slugify(item.name);
+    if (!slug) continue;
+    activeSlugs.add(slug);
+    const payload = {
+      name: item.name,
+      category: item.category || "",
+      description: item.description || "",
+      price: typeof item.price === "number" ? item.price : 0,
+      isActive: item.isActive !== false,
+      sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : i,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const existingId = bySlug.get(slug);
+    if (existingId) {
+      const prev = existing.docs.find(function (d) { return d.id === existingId; });
+      const prevUrl = prev && prev.data().imageUrl;
+      if (prevUrl) payload.imageUrl = prevUrl;
+      await col.doc(existingId).set(payload, { merge: true });
+    } else {
+      payload.imageUrl = item.imageUrl || "";
+      payload.createdAt = FieldValue.serverTimestamp();
+      await col.doc().set(payload);
+    }
+  }
+
+  for (const doc of existing.docs) {
+    const s = slugify(doc.data().name || "");
+    if (s && !activeSlugs.has(s) && doc.data().isActive !== false) {
       await doc.ref.set(
         { isActive: false, updatedAt: FieldValue.serverTimestamp() },
         { merge: true }
@@ -717,6 +1104,7 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
     subscriptionStatus: "active",
     isActive: true,
     isDemoAccount: true,
+    timeZone: "America/New_York",
     bookingModeDefault: "request",
     requireApprovalForSlotBookings: true,
     maxBookingWindowDays: 30,
@@ -744,13 +1132,21 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
   if (demo.mapCaptureImageUrl) tenantPatch.mapCaptureImageUrl = demo.mapCaptureImageUrl;
   if (demo.aboutText) tenantPatch.aboutText = demo.aboutText;
   if (demo.reviews && demo.reviews.length) tenantPatch.reviews = demo.reviews;
+  if (demo.charterFaqs && demo.charterFaqs.length) tenantPatch.charterFaqs = demo.charterFaqs;
+  if (demo.webCopyOverrides && typeof demo.webCopyOverrides === "object") {
+    tenantPatch.webCopyOverrides = demo.webCopyOverrides;
+  }
   if (demo.luxeHeroTagline) tenantPatch.luxeHeroTagline = demo.luxeHeroTagline;
   if (demo.heroTagline) tenantPatch.heroTagline = demo.heroTagline;
+  if (demo.heroSubtitle) tenantPatch.heroSubtitle = demo.heroSubtitle;
   if (demo.luxeShowHomeServicesSection === true) {
     tenantPatch.luxeShowHomeServicesSection = true;
   }
   if (demo.shopEnabled === true) {
     tenantPatch.shopEnabled = true;
+  }
+  if (demo.studio12ProcessSteps && demo.studio12ProcessSteps.length) {
+    tenantPatch.studio12ProcessSteps = demo.studio12ProcessSteps;
   }
   if (demo.studio12HeroEyebrow) tenantPatch.studio12HeroEyebrow = demo.studio12HeroEyebrow;
   if (demo.studio12HeroHeadline) tenantPatch.studio12HeroHeadline = demo.studio12HeroHeadline;
@@ -768,6 +1164,38 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
   }
   if (demo.paletteKey && PALETTES[demo.paletteKey]) {
     Object.assign(tenantPatch, PALETTES[demo.paletteKey]);
+  }
+
+  if (demo.subscriptionPlan === "charter") {
+    tenantPatch.bookingMode = "calendar_slots";
+    tenantPatch.bookingFormStyleId = "calendar";
+    tenantPatch.workflow = {
+      confirmationType: "request_approve",
+      responseTimeHours: 24,
+      bookingMode: "calendar_slots",
+      managersApproveAppointments: true,
+    };
+    const boats =
+      Array.isArray(demo.charterBoats) && demo.charterBoats.length
+        ? demo.charterBoats
+        : [
+            {
+              id: "harbor-center-console",
+              boatType: "Center console",
+              maxPeople: 6,
+              imageUrl: "",
+            },
+            {
+              id: "harbor-sportfisher",
+              boatType: "Sportfisher",
+              maxPeople: 8,
+              imageUrl: "",
+            },
+          ];
+    tenantPatch.charterBoats = mergeCharterBoats(
+      tenant && tenant.data && tenant.data.charterBoats,
+      boats
+    );
   }
 
   if (tenant) {
@@ -797,13 +1225,20 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
     subscriptionStatus: "active",
     profilePhotoUrl: "",
     availability: {
-      timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
-      daysOpen: [1, 2, 3, 4, 5, 6],
+      timeSlots: [
+        {
+          open: demo.subscriptionPlan === "charter" ? 6 : 9,
+          close: demo.subscriptionPlan === "charter" ? 20 : 18,
+          type: "open_booking",
+        },
+      ],
+      daysOpen: demo.subscriptionPlan === "charter" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6],
       timeZone: "America/New_York",
     },
     workflow: {
       confirmationType: "request_approve",
       responseTimeHours: 24,
+      ...(demo.subscriptionPlan === "charter" ? { bookingMode: "calendar_slots" } : {}),
     },
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -812,6 +1247,9 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
   await db.collection("users").doc(auth.uid).set(userPatch, { merge: true });
 
   await upsertServices(db, tenantId, demo.services);
+  if (Array.isArray(demo.products) && demo.products.length) {
+    await upsertProducts(db, tenantId, demo.products);
+  }
 
   if (opts.withActivity) {
     const activity = await seedDemoActivity(db, tenantId, demo.slug, Timestamp, {

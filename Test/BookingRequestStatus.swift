@@ -9,6 +9,7 @@ enum BookingRequestStatus {
     static let new = "new"
     static let pending = "pending"
     static let pendingDeposit = "pending_deposit"
+    static let pendingPayment = "pending_payment"
     static let pendingConsultation = "pending_consultation"
     static let confirmed = "confirmed"
     static let declined = "declined"
@@ -25,7 +26,7 @@ enum BookingRequestStatus {
     /// Client-side in-flight: awaiting deposit, consult, or legacy pending.
     static func isInFlightPending(_ status: String) -> Bool {
         switch normalized(status) {
-        case pending, pendingDeposit, pendingConsultation:
+        case pending, pendingDeposit, pendingPayment, pendingConsultation:
             return true
         default:
             return false
@@ -37,7 +38,12 @@ enum BookingRequestStatus {
     }
 
     static func canShowDecline(_ status: String) -> Bool {
-        isNew(status) || isInFlightPending(status)
+        isNew(status)
+    }
+
+    /// Confirmed trips and payment/consult holds — frees the occupancy slot.
+    static func canShowCancel(_ status: String) -> Bool {
+        isInFlightPending(status) || normalized(status) == confirmed
     }
 
     static func displayLabel(_ status: String) -> String {
@@ -45,10 +51,12 @@ enum BookingRequestStatus {
         case new: return "New"
         case pending: return "Pending"
         case pendingDeposit: return "Awaiting deposit"
+        case pendingPayment: return "Awaiting payment"
         case pendingConsultation: return "Consult scheduled"
         case confirmed: return "Confirmed"
         case declined: return "Declined"
         case cancelled: return "Cancelled"
+        case "refund_pending": return "Refund pending"
         default:
             let raw = status.trimmingCharacters(in: .whitespacesAndNewlines)
             if raw.isEmpty { return "Unknown" }

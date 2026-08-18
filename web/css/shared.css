@@ -1,5 +1,52 @@
 /* Shared site chrome — always loaded. Quick Edit hit targets + empty-copy collapse. */
 
+/**
+ * Critical Boat / Fishing charter hero — must live here so a missed theme CSS
+ * load cannot leave the hero photo at native ~5k resolution.
+ */
+.charter-page { overflow-x: hidden; }
+.charter-hero {
+  position: relative;
+  min-height: 420px;
+  height: min(72vh, 560px);
+  max-height: 560px;
+  display: flex;
+  align-items: center;
+  background: #1d1f20;
+  color: #fff;
+  overflow: hidden;
+}
+.charter-hero-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+.charter-hero-media img,
+.charter-hero img[data-edit-key="heroImage"] {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: cover !important;
+  display: block;
+}
+.charter-hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(29,31,32,.78) 0%, rgba(29,31,32,.55) 45%, rgba(29,31,32,0) 75%);
+}
+.charter-hero-inner {
+  position: relative;
+  z-index: 2;
+  padding: 56px 48px;
+  max-width: 820px;
+}
+
 /** Full-bleed invisible tap target for hero photo (native picker in app Quick edit). */
 .bk-hero-image-hit,
 .luxe-hero-image-hit {
@@ -65,6 +112,20 @@
 .bk-band-content .bk-book-artist-wrap,
 .bk-band-content .bk-book-artist-field,
 .bk-band-content #bk-book-artist,
+.bk-band-content .charter-search,
+.bk-band-content .charter-search input,
+.bk-band-content .charter-search select,
+.bk-band-content .charter-search label,
+.bk-band-content .charter-browse-layout input,
+.bk-band-content .charter-browse-layout select,
+.bk-band-content .charter-browse-layout label,
+.bk-band-content .charter-browse-layout button,
+.bk-band-content .charter-drop,
+.bk-band-content .charter-drop select,
+.bk-band-content .charter-drop label,
+.bk-band-content [data-charter-detail-date],
+.bk-band-content [data-charter-detail-time],
+.bk-band-content [data-charter-detail-people],
 .blade-band-content [data-edit-key],
 .blade-band-content a,
 .blade-band-content button,
@@ -81,7 +142,21 @@
 .blade-band-content .upload-drop,
 .blade-band-content .bk-book-artist-wrap,
 .blade-band-content .bk-book-artist-field,
-.blade-band-content #bk-book-artist {
+.blade-band-content #bk-book-artist,
+.blade-band-content .charter-search,
+.blade-band-content .charter-search input,
+.blade-band-content .charter-search select,
+.blade-band-content .charter-search label,
+.blade-band-content .charter-browse-layout input,
+.blade-band-content .charter-browse-layout select,
+.blade-band-content .charter-browse-layout label,
+.blade-band-content .charter-browse-layout button,
+.blade-band-content .charter-drop,
+.blade-band-content .charter-drop select,
+.blade-band-content .charter-drop label,
+.blade-band-content [data-charter-detail-date],
+.blade-band-content [data-charter-detail-time],
+.blade-band-content [data-charter-detail-people] {
   pointer-events: auto;
 }
 /* Quick-edit hit targets sit behind band content; disable on live site so empty taps reach the page. */

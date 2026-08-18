@@ -28,7 +28,7 @@ struct DayCalendarTimelineView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 32)
             } else if events.isEmpty {
-                Text("No confirmed appointments on this day.")
+                Text("No appointments on this day.")
                     .font(.subheadline)
                     .foregroundStyle(AppDesign.textSecondary)
                     .padding(.vertical, 12)
@@ -171,6 +171,10 @@ struct DayCalendarTimelineView: View {
 private struct DayTimelineEventCard: View {
     let event: Event
 
+    private var accent: Color {
+        event.status == .pending ? AppDesign.statusPending : AppDesign.calendarAppointmentAccent
+    }
+
     private var initials: String {
         let parts = event.clientName
             .split(separator: " ")
@@ -188,7 +192,7 @@ private struct DayTimelineEventCard: View {
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(AppDesign.calendarAppointmentAccent)
+                .fill(accent)
                 .frame(width: 4)
 
             HStack(alignment: .top, spacing: 10) {
@@ -196,7 +200,7 @@ private struct DayTimelineEventCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(AppDesign.calendarAppointmentAccent))
+                    .background(Circle().fill(accent))
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .top) {
@@ -214,7 +218,7 @@ private struct DayTimelineEventCard: View {
                                 .foregroundStyle(AppDesign.textSecondary)
                         }
                         Spacer(minLength: 8)
-                        AppStatusPill(text: "Confirmed", soft: true)
+                        AppStatusPill(text: event.status.calendarLabel, soft: true)
                     }
                 }
             }

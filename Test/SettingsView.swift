@@ -193,6 +193,9 @@ struct SettingsView: View {
     }
 
     private var planIndustryPill: String {
+        if viewModel.tenantSubscriptionPlan.isCharterPlan {
+            return viewModel.tenantSubscriptionPlan.displayName
+        }
         let industry = BookingTemplate.displayLabel(
             forIndustryRaw: viewModel.selectedIndustry,
             customLabel: viewModel.industryCustomLabel
@@ -548,6 +551,9 @@ struct PersonalSchedulingSettingsView: View {
     }
 
     private var schedulingSettingsFooter: String {
+        if viewModel.tenantSubscriptionPlan.isCharterPlan {
+            return "Hours and the availability calendar set the slots guests can pick on /book. Deposit vs no deposit is in Business settings → Booking settings."
+        }
         let calNote: String
         if viewModel.bookingMode == .calendarSlots {
             calNote = "Booking type is Calendar / slots — these hours and the availability calendar power public /book times."
@@ -766,13 +772,22 @@ private struct AccountSettingsDetailView: View {
                     }
                 }
                 if viewModel.hasProfile, viewModel.isTenantOwner {
+                    if viewModel.tenantSubscriptionPlan.isCharterPlan {
+                        Section(
+                            header: Text("Industry"),
+                            footer: Text("Boat / Fishing charter is a subscription plan. Your site uses the fishing charter template; industry isn’t selectable.")
+                                .font(.caption2)
+                        ) {
+                            LabeledContent("Business type", value: BookingTemplate.charters.displayName)
+                        }
+                    } else {
                     Section(
                         header: Text("Industry"),
                         footer: Text("Industry controls your booking form, default services, and how template copy is auto-filled. Changing it asks for confirmation because your current services are replaced. Template choice lives in Website Design.")
                             .font(.caption2)
                     ) {
                         Picker("Industry", selection: $viewModel.selectedIndustry) {
-                            ForEach(BookingTemplate.allCases) { template in
+                            ForEach(BookingTemplate.selectableCases) { template in
                                 Text(template.displayName).tag(template.rawValue)
                             }
                         }
@@ -810,6 +825,7 @@ private struct AccountSettingsDetailView: View {
                                     .foregroundColor(.green)
                             }
                         }
+                    }
                     }
                 }
                 if viewModel.hasProfile, viewModel.tenantId != nil {

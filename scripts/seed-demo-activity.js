@@ -40,6 +40,7 @@ const DEMO_OWNER_EMAIL_BY_SLUG = {
   "studio-amara": "demo-studio-amara@getbookking.com",
   "stone-cut-barbers": "demo-stone-cut-barbers@getbookking.com",
   "gilded-palm": "demo-gilded-palm@getbookking.com",
+  "harbor-charters": "demo-harbor-charters@getbookking.com",
 };
 
 const FIREBASE_CLI_CLIENT_ID =

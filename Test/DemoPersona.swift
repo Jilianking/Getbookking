@@ -124,7 +124,15 @@ enum DemoSnapshotParser {
             bookingModeUsed: dict["bookingModeUsed"] as? String,
             preferredDays: dict["preferredDays"] as? [String],
             preferredTime: dict["preferredTime"] as? String,
-            requestedStartTime: parseDate(dict["requestedStartTime"]),
+            requestedStartTime: parseDate(dict["requestedStartTime"])
+                ?? BookingRequest.date(
+                    fromScheduledDate: dict["scheduledDate"] as? String,
+                    startMin: BookingRequest.intField(dict["scheduledStartMin"])
+                ),
+            scheduledDate: dict["scheduledDate"] as? String,
+            scheduledStartMin: BookingRequest.intField(dict["scheduledStartMin"]),
+            boatId: dict["boatId"] as? String,
+            durationMinutes: BookingRequest.intField(dict["durationMinutes"]),
             notes: dict["notes"] as? String,
             formResponses: dict["formResponses"] as? [String: Any],
             createdAt: parseDate(dict["createdAt"]),
@@ -133,7 +141,10 @@ enum DemoSnapshotParser {
             assignedMemberName: dict["assignedMemberName"] as? String,
             assignedMemberEmail: dict["assignedMemberEmail"] as? String,
             smsConsentAccepted: dict["smsConsentAccepted"] as? Bool,
-            smsConsentAt: parseDate(dict["smsConsentAt"])
+            smsConsentAt: parseDate(dict["smsConsentAt"]),
+            paidCents: BookingRequest.intField(dict["paidCents"]),
+            stripePaymentIntentId: dict["stripePaymentIntentId"] as? String,
+            cancelRefundStatus: dict["cancelRefundStatus"] as? String
         )
     }
 

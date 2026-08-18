@@ -301,6 +301,8 @@ final class TenantSessionStore: ObservableObject {
             request.assignedMemberEmail = memberEmail
             request.requestedStartTime = scheduledStart
             request.preferredTime = preferredTimeLabel
+            request.scheduledDate = BookingRequest.isoDateString(from: scheduledStart)
+            request.scheduledStartMin = BookingRequest.minutesSinceMidnight(from: scheduledStart)
         }
         if let idx = bookingRequests.firstIndex(where: matches) {
             var updated = bookingRequests[idx]

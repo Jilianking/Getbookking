@@ -1811,6 +1811,20 @@ private struct ShopProductFormSheet: View {
                     .onChange(of: imageItem) { _, item in
                         Task { await loadPhoto(from: item) }
                     }
+                    if imageData == nil,
+                       let existingUrl = editingProduct?.imageUrl,
+                       !existingUrl.isEmpty {
+                        Button("Adjust framing") {
+                            Task {
+                                guard let image = await UploadRemoteImageLoader.image(from: existingUrl) else {
+                                    showPhotoLoadError = true
+                                    return
+                                }
+                                cropItem = SingleImageCropSheetItem(image: image)
+                            }
+                        }
+                        .font(.subheadline)
+                    }
 
                     shopSheetSectionHeader("Product info")
                     VStack(spacing: 0) {
@@ -1918,7 +1932,9 @@ private struct ShopProductFormSheet: View {
                     images: [item.image],
                     advice: UploadImageAdvice.product,
                     navigationTitle: "Product photo",
-                    allowedChoices: UploadCropPresetMenu.product,
+                    allowedChoices: viewModel.subscriptionPlan.isCharterPlan
+                        ? [.square]
+                        : UploadCropPresetMenu.product,
                     defaultChoice: .square,
                     onUseJPEGData: { dataList in
                         imageData = dataList.first
@@ -1956,7 +1972,7 @@ private struct ShopProductFormSheet: View {
                     .resizable()
                     .scaledToFill()
                     .frame(maxWidth: .infinity)
-                    .frame(height: 200)
+                    .aspectRatio(1, contentMode: .fill)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding(8)
@@ -1970,7 +1986,7 @@ private struct ShopProductFormSheet: View {
                     ProgressView()
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 200)
+                .aspectRatio(1, contentMode: .fill)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .padding(8)
@@ -1978,7 +1994,8 @@ private struct ShopProductFormSheet: View {
                 dashedPhotoPlaceholder
             }
         }
-        .frame(height: 200)
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
     }
 

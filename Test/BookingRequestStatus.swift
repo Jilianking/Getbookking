@@ -38,7 +38,12 @@ enum BookingRequestStatus {
     }
 
     static func canShowDecline(_ status: String) -> Bool {
-        isNew(status) || isInFlightPending(status)
+        isNew(status)
+    }
+
+    /// Confirmed trips and payment/consult holds — frees the occupancy slot.
+    static func canShowCancel(_ status: String) -> Bool {
+        isInFlightPending(status) || normalized(status) == confirmed
     }
 
     static func displayLabel(_ status: String) -> String {
@@ -51,6 +56,7 @@ enum BookingRequestStatus {
         case confirmed: return "Confirmed"
         case declined: return "Declined"
         case cancelled: return "Cancelled"
+        case "refund_pending": return "Refund pending"
         default:
             let raw = status.trimmingCharacters(in: .whitespacesAndNewlines)
             if raw.isEmpty { return "Unknown" }

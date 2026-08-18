@@ -71,7 +71,7 @@
     luxe: '/css/luxe-theme.css?v=20260812m',
     stonecut: '/css/stonecut-theme.css?v=20260812m',
     classic: '/css/classic-theme.css?v=20260812m',
-    charter: '/css/charter-theme.css?v=20260814q',
+    charter: '/css/charter-theme.css?v=20260818b',
   };
 
   function ensureThemeCss(themeId) {

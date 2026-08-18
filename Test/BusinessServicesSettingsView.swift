@@ -5,6 +5,8 @@
 //
 
 import SwiftUI
+import PhotosUI
+import UIKit
 
 struct BusinessServicesSettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
@@ -33,7 +35,18 @@ struct BusinessServicesSettingsView: View {
                     Button {
                         serviceToEdit = service
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
+                            if isCharter,
+                               !tripImageURLString(for: service).isEmpty,
+                               let photoURL = URL(string: tripImageURLString(for: service)) {
+                                AsyncImage(url: photoURL) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Color(.secondarySystemFill)
+                                }
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(service.name)
                                     .font(.subheadline.weight(.medium))
@@ -57,6 +70,18 @@ struct BusinessServicesSettingsView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                }
+                                if isCharter {
+                                    Label(
+                                        service.hasConfiguredItinerary
+                                            ? (service.itinerary.isEmpty
+                                                ? "No itinerary · tap to add"
+                                                : "\(service.itinerary.count) itinerary \(service.itinerary.count == 1 ? "step" : "steps") · tap to edit")
+                                            : "Default itinerary · tap to edit",
+                                        systemImage: "map"
+                                    )
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Color.accentColor)
                                 }
                             }
                             Spacer()
@@ -110,8 +135,21 @@ struct BusinessServicesSettingsView: View {
                 mode: .edit(service),
                 isCharter: isCharter,
                 boats: viewModel.charterBoats,
+                fallbackImageUrl: fallbackImageURLString(for: service),
                 onDelete: {
                     Task { await viewModel.deleteService(service) }
+                },
+                onUploadImage: { data in
+                    guard await viewModel.uploadTenantServiceImage(serviceId: service.id, imageData: data) else {
+                        return nil
+                    }
+                    return viewModel.services.first(where: { $0.id == service.id })?.imageUrl
+                },
+                onPersistItinerary: { updated in
+                    await viewModel.updateServiceItinerary(
+                        serviceId: service.id,
+                        itinerary: updated
+                    )
                 }
             ) { name, duration, desc, price, itinerary, boatIds in
                 _ = await viewModel.updateService(
@@ -125,6 +163,18 @@ struct BusinessServicesSettingsView: View {
                 )
             }
         }
+    }
+
+    private func fallbackImageURLString(for service: TenantService) -> String {
+        guard let index = viewModel.services.firstIndex(where: { $0.id == service.id }) else { return "" }
+        return service.resolvedImageURL(
+            fallbackImages: viewModel.charterTripFallbackImages,
+            index: index
+        )
+    }
+
+    private func tripImageURLString(for service: TenantService) -> String {
+        fallbackImageURLString(for: service)
     }
 
     private func deleteServices(at offsets: IndexSet) {
@@ -146,7 +196,10 @@ private struct BusinessServiceEditorSheet: View {
     let mode: Mode
     var isCharter: Bool = false
     var boats: [CharterBoat] = []
+    var fallbackImageUrl: String = ""
     var onDelete: (() -> Void)?
+    var onUploadImage: ((Data) async -> String?)?
+    var onPersistItinerary: (([CharterItineraryStep]) async -> Bool)?
     var onSave: (String, Int?, String?, Double?, [CharterItineraryStep]?, [String]?) async -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -159,6 +212,10 @@ private struct BusinessServiceEditorSheet: View {
     @State private var isSaving = false
     @State private var itinerary: [CharterItineraryStep] = []
     @State private var boatIds: [String] = []
+    @State private var imageUrl = ""
+    @State private var imagePickerItem: PhotosPickerItem?
+    @State private var imageCropItem: SingleImageCropSheetItem?
+    @State private var isUploadingImage = false
 
     var body: some View {
         NavigationStack {
@@ -184,12 +241,64 @@ private struct BusinessServiceEditorSheet: View {
                 }
 
                 if isCharter {
-                    CharterBoatPicker(boats: boats, boatIds: $boatIds, disabled: isSaving)
+                    Section("Trip photo") {
+                        if isEditMode {
+                            Group {
+                                if let url = URL(string: imageUrl), !imageUrl.isEmpty {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        Color(.secondarySystemFill)
+                                    }
+                                } else {
+                                    Color(.secondarySystemFill)
+                                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                                }
+                            }
+                            .aspectRatio(4 / 3, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                            PhotosPicker(selection: $imagePickerItem, matching: .images) {
+                                Label(imageUrl.isEmpty ? "Add trip photo" : "Replace photo", systemImage: "photo.badge.plus")
+                            }
+                            .disabled(isUploadingImage)
+                            .onChange(of: imagePickerItem) { _, item in
+                                Task {
+                                    guard let item,
+                                          let data = try? await item.loadTransferable(type: Data.self),
+                                          let image = UIImage(data: data) else {
+                                        imagePickerItem = nil
+                                        return
+                                    }
+                                    imageCropItem = SingleImageCropSheetItem(image: image)
+                                    imagePickerItem = nil
+                                }
+                            }
+                            if !imageUrl.isEmpty {
+                                Button("Adjust framing") {
+                                    Task {
+                                        guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
+                                        imageCropItem = SingleImageCropSheetItem(image: image)
+                                    }
+                                }
+                                .disabled(isUploadingImage)
+                            }
+                            if isUploadingImage { ProgressView("Uploading…") }
+                        } else {
+                            Text("Save this trip first, then reopen it to add a photo.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     CharterItineraryEditor(
                         steps: $itinerary,
                         durationMinutes: includeDuration ? duration : 240,
-                        disabled: isSaving
+                        disabled: isSaving,
+                        onPersist: onPersistItinerary
                     )
+                    CharterBoatPicker(boats: boats, boatIds: $boatIds, disabled: isSaving)
                 }
 
                 if case .edit = mode, onDelete != nil {
@@ -201,7 +310,27 @@ private struct BusinessServiceEditorSheet: View {
                     }
                 }
             }
-            .navigationTitle(title)
+            .sheet(item: $imageCropItem, onDismiss: { imageCropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: "Trip cards and detail pages use a landscape photo.",
+                    navigationTitle: "Trip photo",
+                    allowedChoices: [.landscape4_3],
+                    defaultChoice: .landscape4_3,
+                    onUseJPEGData: { dataList in
+                        guard let data = dataList.first else { return }
+                        imageCropItem = nil
+                        Task {
+                            isUploadingImage = true
+                            if let uploaded = await onUploadImage?(data) {
+                                imageUrl = uploaded
+                            }
+                            isUploadingImage = false
+                        }
+                    }
+                )
+            }
+            .navigationTitle(isCharter && isEditMode ? "Edit trip & itinerary" : title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -239,6 +368,11 @@ private struct BusinessServiceEditorSheet: View {
         }
     }
 
+    private var isEditMode: Bool {
+        if case .edit = mode { return true }
+        return false
+    }
+
     private func seedFromMode() {
         if isCharter, case .add = mode {
             includeDuration = true
@@ -259,9 +393,10 @@ private struct BusinessServiceEditorSheet: View {
             priceText = p.rounded() == p ? "\(Int(p))" : String(format: "%.2f", p)
         }
         if isCharter {
-            itinerary = s.itinerary.isEmpty
-                ? CharterItineraryStep.defaults(durationMinutes: s.durationMinutes ?? 240)
-                : s.itinerary
+            imageUrl = s.imageUrl.isEmpty ? fallbackImageUrl : s.imageUrl
+            itinerary = s.hasConfiguredItinerary
+                ? s.itinerary
+                : CharterItineraryStep.defaults(durationMinutes: s.durationMinutes ?? 240)
             boatIds = s.boatIds
         }
     }

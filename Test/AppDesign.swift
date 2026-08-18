@@ -118,7 +118,7 @@ enum AppDesign {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "new":
             return (brandWarm, brandCream)
-        case "pending", "pending_deposit", "pending_consultation":
+        case "pending", "pending_deposit", "pending_consultation", "refund_pending":
             return (statusPending, pendingBackground)
         case "confirmed":
             return (textPrimary, searchBackground)

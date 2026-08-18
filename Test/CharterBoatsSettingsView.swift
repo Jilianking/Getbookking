@@ -6,6 +6,7 @@
 
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct CharterBoatsSettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
@@ -114,6 +115,7 @@ private struct CharterBoatEditorSheet: View {
     @State private var maxPeople = 6
     @State private var imageUrl = ""
     @State private var pickerItem: PhotosPickerItem?
+    @State private var cropItem: SingleImageCropSheetItem?
     @State private var isUploading = false
 
     var body: some View {
@@ -134,13 +136,24 @@ private struct CharterBoatEditorSheet: View {
                                 Color(.secondarySystemFill)
                             }
                         }
-                        .frame(height: 160)
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     PhotosPicker(selection: $pickerItem, matching: .images) {
                         Label(imageUrl.isEmpty ? "Add photo" : "Replace photo", systemImage: "photo")
                     }
                     .disabled(isUploading || viewModel.tenantId == nil)
+                    if !imageUrl.isEmpty {
+                        Button("Adjust framing") {
+                            Task {
+                                guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
+                                cropItem = SingleImageCropSheetItem(image: image)
+                            }
+                        }
+                        .disabled(isUploading)
+                    }
                     if isUploading {
                         ProgressView()
                     }
@@ -178,13 +191,34 @@ private struct CharterBoatEditorSheet: View {
             .onChange(of: pickerItem) { _, item in
                 guard let item else { return }
                 Task {
-                    isUploading = true
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let url = await viewModel.uploadCharterBoatImage(imageData: data) {
-                        imageUrl = url
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        pickerItem = nil
+                        return
                     }
-                    isUploading = false
+                    cropItem = SingleImageCropSheetItem(image: image)
+                    pickerItem = nil
                 }
+            }
+            .sheet(item: $cropItem, onDismiss: { cropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: "Boat cards use a landscape 4:3 photo.",
+                    navigationTitle: "Boat photo",
+                    allowedChoices: [.landscape4_3],
+                    defaultChoice: .landscape4_3,
+                    onUseJPEGData: { dataList in
+                        guard let data = dataList.first else { return }
+                        cropItem = nil
+                        Task {
+                            isUploading = true
+                            if let url = await viewModel.uploadCharterBoatImage(imageData: data) {
+                                imageUrl = url
+                            }
+                            isUploading = false
+                        }
+                    }
+                )
             }
         }
     }

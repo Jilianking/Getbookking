@@ -10,6 +10,28 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Existing remote images
+
+enum UploadRemoteImageLoader {
+    /// Downloads an already-uploaded image so it can be reopened in the crop editor.
+    /// Callers intentionally treat `nil` as a quiet failure or surface their existing photo error UI.
+    @MainActor
+    static func image(from urlString: String) async -> UIImage? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                return nil
+            }
+            guard !data.isEmpty else { return nil }
+            return UIImage(data: data)
+        } catch {
+            return nil
+        }
+    }
+}
+
 // MARK: - Identifiable tokens for .sheet(item:)
 
 struct SingleImageCropSheetItem: Identifiable {

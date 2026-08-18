@@ -40,6 +40,16 @@ class RequestsViewModel: ObservableObject {
         teamMembers.first { $0.accessRole == .owner }
     }
 
+    var charterBoats: [CharterBoat] {
+        CharterBoat.parseList(sessionStore?.tenant?["charterBoats"])
+    }
+
+    func charterBoatName(id: String?) -> String? {
+        let wanted = (id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return nil }
+        return charterBoats.first(where: { $0.id == wanted })?.displayName ?? wanted
+    }
+
     /// For industry-specific copy (e.g. booking request form section titles).
     var tenantBookingTemplate: BookingTemplate? {
         guard let raw = tenantIndustry?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
@@ -253,8 +263,18 @@ class RequestsViewModel: ObservableObject {
         ]
         if let notes { payload["notes"] = notes }
         do {
-            _ = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
+            let result = try await functions.httpsCallable("updateBookingRequestStatus").call(payload)
             await reloadAfterMutation()
+            if let data = result.data as? [String: Any] {
+                let refundPending = data["refundPending"] as? Bool ?? false
+                let refundError = (data["refundError"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !refundPending, !refundError.isEmpty {
+                    await MainActor.run {
+                        actionError = "Trip cancelled. Refund could not be completed: \(refundError)"
+                    }
+                }
+            }
         } catch {
             await MainActor.run {
                 actionError = error.localizedDescription
@@ -287,7 +307,8 @@ class RequestsViewModel: ObservableObject {
         serviceSlug: String? = nil,
         serviceName: String? = nil,
         notes: String? = nil,
-        durationMinutes: Int? = nil
+        durationMinutes: Int? = nil,
+        boatId: String? = nil
     ) -> [String: Any] {
         var payload: [String: Any] = [
             "scheduledDate": BookingRequest.isoDateString(from: scheduledStart),
@@ -310,6 +331,7 @@ class RequestsViewModel: ObservableObject {
         if let serviceSlug { payload["serviceSlug"] = serviceSlug }
         if let serviceName { payload["serviceName"] = serviceName }
         if let notes { payload["notes"] = notes }
+        if let boatId, !boatId.isEmpty { payload["boatId"] = boatId }
         return payload
     }
 
@@ -320,7 +342,8 @@ class RequestsViewModel: ObservableObject {
         scheduledStart: Date,
         preferredTimeLabel: String,
         notes: String?,
-        targetStatus: String = BookingRequestStatus.confirmed
+        targetStatus: String = BookingRequestStatus.confirmed,
+        boatId: String? = nil
     ) async {
         if let store = sessionStore, store.isDemoSession {
             await markBookingRequestAsRead(requestId: requestId)
@@ -354,7 +377,8 @@ class RequestsViewModel: ObservableObject {
                     scheduledStart: scheduledStart,
                     preferredTimeLabel: preferredTimeLabel,
                     member: member,
-                    status: nil
+                    status: nil,
+                    boatId: boatId
                 )
                 _ = try await firebaseService.syncCharterBookingSlot(payload)
             } catch {
@@ -391,7 +415,8 @@ class RequestsViewModel: ObservableObject {
         requestId: String,
         member: TenantTeamMember,
         scheduledStart: Date,
-        preferredTimeLabel: String
+        preferredTimeLabel: String,
+        boatId: String? = nil
     ) async {
         if let store = sessionStore, store.isDemoSession {
             await MainActor.run {
@@ -422,7 +447,8 @@ class RequestsViewModel: ObservableObject {
                     scheduledStart: scheduledStart,
                     preferredTimeLabel: preferredTimeLabel,
                     member: member,
-                    status: nil
+                    status: nil,
+                    boatId: boatId
                 )
                 _ = try await firebaseService.syncCharterBookingSlot(payload)
                 await reloadAfterMutation()
@@ -453,7 +479,8 @@ class RequestsViewModel: ObservableObject {
         member: TenantTeamMember,
         scheduledStart: Date,
         notes: String?,
-        durationMinutes: Int? = nil
+        durationMinutes: Int? = nil,
+        boatId: String? = nil
     ) async -> String? {
         if let store = sessionStore, store.isDemoSession {
             await MainActor.run {
@@ -485,7 +512,8 @@ class RequestsViewModel: ObservableObject {
                     serviceSlug: serviceSlug,
                     serviceName: serviceName,
                     notes: notes,
-                    durationMinutes: durationMinutes
+                    durationMinutes: durationMinutes,
+                    boatId: boatId
                 )
                 let requestId = try await firebaseService.syncCharterBookingSlot(payload)
                 await reloadAfterMutation()

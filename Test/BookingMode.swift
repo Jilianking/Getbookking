@@ -162,3 +162,84 @@ enum CharterPaymentPolicy: String, CaseIterable, Identifiable, Hashable {
         }
     }
 }
+
+/// Charter calendar capacity: one dock vs overlapping hulls. Not team assignment.
+enum CharterBookBy: String, CaseIterable, Identifiable, Hashable {
+    case location = "location"
+    case boat = "boat"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .location: return "One location"
+        case .boat: return "By boat"
+        }
+    }
+
+    static func resolved(_ raw: String?) -> CharterBookBy {
+        let s = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if s == "boat" || s == "boats" || s == "fleet" { return .boat }
+        return .location
+    }
+}
+
+enum CharterBufferMinutes: Int, CaseIterable, Identifiable, Hashable {
+    case none = 0
+    case fifteen = 15
+    case thirty = 30
+    case sixty = 60
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .fifteen: return "15 min"
+        case .thirty: return "30 min"
+        case .sixty: return "1 hour"
+        }
+    }
+
+    static func resolved(_ raw: Any?) -> CharterBufferMinutes {
+        if let n = raw as? Int, let v = CharterBufferMinutes(rawValue: n) { return v }
+        if let n = raw as? Double, let v = CharterBufferMinutes(rawValue: Int(n)) { return v }
+        return .thirty
+    }
+}
+
+enum CharterLastBooking: Int, CaseIterable, Identifiable, Hashable {
+    case endOfHours = -1
+    case hour10 = 600
+    case hour11 = 660
+    case hour12 = 720
+    case hour13 = 780
+    case hour14 = 840
+    case hour15 = 900
+    case hour16 = 960
+    case hour17 = 1020
+    case hour18 = 1080
+    case hour19 = 1140
+    case hour20 = 1200
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        if self == .endOfHours { return "End of hours" }
+        let h = rawValue / 60
+        let m = rawValue % 60
+        let cal = Calendar(identifier: .gregorian)
+        let d = cal.date(from: DateComponents(calendar: cal, year: 2000, month: 1, day: 1, hour: h, minute: m)) ?? Date()
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "h:mm a"
+        return f.string(from: d)
+    }
+
+    static func resolved(_ raw: Any?) -> CharterLastBooking {
+        guard let n = (raw as? Int) ?? (raw as? Double).map({ Int($0) }), n >= 0 else {
+            return .endOfHours
+        }
+        return CharterLastBooking(rawValue: n) ?? .endOfHours
+    }
+}

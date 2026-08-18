@@ -71,7 +71,7 @@ struct TeamSettingsHubView: View {
                         settingsRow(
                             title: "Boats",
                             subtitle: settingsViewModel.charterBoats.isEmpty
-                                ? "Type, capacity, and photos"
+                                ? "Add a boat so guests can book"
                                 : "\(settingsViewModel.charterBoats.count) boat\(settingsViewModel.charterBoats.count == 1 ? "" : "s")"
                         )
                     }

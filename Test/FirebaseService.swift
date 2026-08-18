@@ -507,7 +507,10 @@ class FirebaseService: ObservableObject {
                 assignedMemberName: d["assignedMemberName"] as? String,
                 assignedMemberEmail: d["assignedMemberEmail"] as? String,
                 smsConsentAccepted: d["smsConsentAccepted"] as? Bool,
-                smsConsentAt: (d["smsConsentAt"] as? Timestamp)?.dateValue()
+                smsConsentAt: (d["smsConsentAt"] as? Timestamp)?.dateValue(),
+                paidCents: BookingRequest.intField(d["paidCents"]),
+                stripePaymentIntentId: d["stripePaymentIntentId"] as? String,
+                cancelRefundStatus: d["cancelRefundStatus"] as? String
             )
         }
         if status != nil {
@@ -774,16 +777,18 @@ class FirebaseService: ObservableObject {
             )
         }
         let slugValue = slug(from: business).isEmpty ? "business\(uid.prefix(8))" : slug(from: business)
+        let plan = SubscriptionPlan.normalized(fromFirestore: subscriptionPlan)
         let indNorm = industry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let trimmedIndustry = industry.trimmingCharacters(in: .whitespacesAndNewlines)
-        let template = BookingTemplate(rawValue: indNorm) ?? BookingTemplate(rawValue: trimmedIndustry) ?? .custom
+        let requestedTemplate = BookingTemplate(rawValue: indNorm) ?? BookingTemplate(rawValue: trimmedIndustry) ?? .custom
+        let template: BookingTemplate = plan.isCharterPlan ? .charters : requestedTemplate
 
         let tenantId = try await createTenant(
             displayName: business,
             slug: slugValue,
             industry: template.rawValue,
             ownerUid: uid,
-            subscriptionPlan: subscriptionPlan
+            subscriptionPlan: plan.rawValue
         )
 
         // Apply booking template immediately so services/form fields are ready right after sign up.
@@ -797,11 +802,18 @@ class FirebaseService: ObservableObject {
                 sortOrder: index
             )
         }
-        let webThemeId = WebTheme.defaultTheme(forIndustry: template.rawValue).rawValue
+        let webThemeId = WebTheme.defaultTheme(
+            forIndustry: template.rawValue,
+            subscriptionPlan: plan
+        ).rawValue
         try await updateTenant(tenantId: tenantId, updates: [
             "formSchema": schema,
             "industry": template.rawValue,
-            "webThemeId": webThemeId
+            "webThemeId": webThemeId,
+            "resolvedWebThemeId": webThemeId,
+            "shopEnabled": plan.isCharterPlan,
+            "bookingMode": plan.isCharterPlan ? "calendar_slots" : "form",
+            "charterBoatSetupPending": plan.isCharterPlan
         ])
 
         let data: [String: Any] = [
@@ -814,7 +826,7 @@ class FirebaseService: ObservableObject {
             "profilePhotoUrl": "",
             "business": business,
             "industry": template.rawValue,
-            "subscriptionPlan": subscriptionPlan,
+            "subscriptionPlan": plan.rawValue,
             "subscriptionStatus": "trialing",
             "availability": [
                 "timeSlots": [["open": 9, "close": 18, "type": "open_booking"]],
@@ -823,7 +835,8 @@ class FirebaseService: ObservableObject {
             ],
             "workflow": [
                 "confirmationType": ProviderWorkflow.default.confirmationType.rawValue,
-                "responseTimeHours": ProviderWorkflow.default.responseTimeHours
+                "responseTimeHours": ProviderWorkflow.default.responseTimeHours,
+                "bookingMode": plan.isCharterPlan ? "calendar_slots" : "form"
             ],
             "createdAt": Timestamp(date: Date()),
             "onboarding": [
@@ -926,7 +939,13 @@ class FirebaseService: ObservableObject {
                 bookingModeOverride: d["bookingModeOverride"] as? String,
                 formSchema: d["formSchema"] as? [[String: Any]],
                 itinerary: CharterItineraryStep.fromFirestore(d["itinerary"]),
-                boatIds: TenantService.parseBoatIds(d)
+                hasConfiguredItinerary: d.keys.contains("itinerary"),
+                boatIds: TenantService.parseBoatIds(d),
+                imageUrl: {
+                    let dedicated = (d["imageUrl"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !dedicated.isEmpty { return dedicated }
+                    return (d["photoUrl"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                }()
             )
         }
         let sorted = mapped.sorted {
@@ -972,11 +991,8 @@ class FirebaseService: ObservableObject {
                 .map { CharterItineraryStep(offsetMinutes: $0.offsetMinutes, text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines)) }
                 .filter { !$0.text.isEmpty }
                 .map(\.firestoreDict)
-            if rows.isEmpty {
-                u["itinerary"] = FieldValue.delete()
-            } else {
-                u["itinerary"] = rows
-            }
+            // Keep an explicit empty array so deleting every step does not restore defaults later.
+            u["itinerary"] = rows
         }
         if let boatIds {
             let cleaned = boatIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -1038,6 +1054,45 @@ class FirebaseService: ObservableObject {
 
     func updateTenantService(tenantId: String, serviceId: String, updates: [String: Any]) async throws {
         try await db.collection("tenants").document(tenantId).collection("services").document(serviceId).setData(updates, merge: true)
+    }
+
+    /// Drop a deleted hull from every trip's `boatIds` so occupancy does not keep a dead id.
+    func stripBoatIdFromTenantServices(tenantId: String, boatId: String) async throws {
+        let wanted = boatId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return }
+        let services = try await fetchTenantServices(tenantId: tenantId)
+        for svc in services {
+            guard svc.boatIds.contains(wanted) else { continue }
+            let next = svc.boatIds.filter { $0 != wanted }
+            var updates: [String: Any] = ["boatId": FieldValue.delete()]
+            if next.isEmpty {
+                updates["boatIds"] = FieldValue.delete()
+            } else {
+                updates["boatIds"] = next
+            }
+            try await updateTenantService(tenantId: tenantId, serviceId: svc.id, updates: updates)
+        }
+    }
+
+    func updateTenantServiceItinerary(
+        tenantId: String,
+        serviceId: String,
+        itinerary: [CharterItineraryStep]
+    ) async throws {
+        let rows = itinerary
+            .map {
+                CharterItineraryStep(
+                    offsetMinutes: $0.offsetMinutes,
+                    text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+            .filter { !$0.text.isEmpty }
+            .map(\.firestoreDict)
+        try await updateTenantService(
+            tenantId: tenantId,
+            serviceId: serviceId,
+            updates: ["itinerary": rows]
+        )
     }
 
     func deleteTenantService(tenantId: String, serviceId: String) async throws {
@@ -1309,6 +1364,18 @@ class FirebaseService: ObservableObject {
         return url.absoluteString
     }
 
+    func uploadTenantServiceImage(tenantId: String, serviceId: String, imageData: Data) async throws -> String {
+        let storage = Storage.storage()
+        let name = UUID().uuidString + ".jpg"
+        let ref = storage.reference().child("tenants/\(tenantId)/services/\(serviceId)/\(name)")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 1680, compressionQuality: 0.82)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return url.absoluteString
+    }
+
     func uploadProviderGalleryImage(tenantId: String, providerUid: String, imageData: Data) async throws -> String {
         let storage = Storage.storage()
         let name = UUID().uuidString + ".jpg"
@@ -1339,23 +1406,33 @@ class FirebaseService: ObservableObject {
         subscriptionPlan: String
     ) async throws -> String {
         let ref = db.collection("tenants").document()
-        try await ref.setData([
+        let plan = SubscriptionPlan.normalized(fromFirestore: subscriptionPlan)
+        var data: [String: Any] = [
             "slug": slug,
             "displayName": displayName,
-            "industry": industry,
+            "industry": plan.isCharterPlan ? BookingTemplate.charters.rawValue : industry,
             "ownerUid": ownerUid,
-            "subscriptionPlan": subscriptionPlan,
+            "subscriptionPlan": plan.rawValue,
             "subscriptionStatus": "trialing",
             "isActive": true,
-            "bookingModeDefault": "request",
+            "bookingModeDefault": plan.isCharterPlan ? "calendar_slots" : "request",
+            "bookingMode": plan.isCharterPlan ? "calendar_slots" : "form",
             "requireApprovalForSlotBookings": true,
             "maxBookingWindowDays": 30,
             "bufferMinutes": 15,
             "workflow": [
                 "confirmationType": ProviderWorkflow.default.confirmationType.rawValue,
-                "responseTimeHours": ProviderWorkflow.default.responseTimeHours
+                "responseTimeHours": ProviderWorkflow.default.responseTimeHours,
+                "bookingMode": plan.isCharterPlan ? "calendar_slots" : "form"
             ]
-        ])
+        ]
+        if plan.isCharterPlan {
+            data["shopEnabled"] = true
+            data["charterBoats"] = []
+            data["charterBoatSetupPending"] = true
+            data["charterOnboardingVersion"] = 1
+        }
+        try await ref.setData(data)
         return ref.documentID
     }
 

@@ -97,12 +97,27 @@ struct TeamBookingSettingsView: View {
     private var charterBookingSection: some View {
         Section(
             header: Text("How clients book"),
-            footer: Text("Guests pick a day and time. Request & approve: you confirm, no card. Deposit: card for the deposit only. Pay in full: card for the trip total. Set hours under Availability.")
+            footer: Text("Guests pick a day and time. Request & approve: you confirm, no card. Deposit: card for the deposit only. Pay in full: card for the trip total. One location: one trip at a time. By boat: boats can run at the same time. Buffer is turnaround after a trip. Last booking is the latest departure guests can pick (End of hours uses your close time). Set hours under Availability.")
                 .font(.caption2)
         ) {
             Picker("Booking type", selection: charterPaymentSelection) {
                 ForEach(CharterPaymentPolicy.allCases) { policy in
                     Text(policy.displayName).tag(policy)
+                }
+            }
+            Picker("Book by", selection: $settingsViewModel.charterBookBy) {
+                ForEach(CharterBookBy.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            Picker("Buffer between trips", selection: $settingsViewModel.charterBufferMinutes) {
+                ForEach(CharterBufferMinutes.allCases) { mins in
+                    Text(mins.displayName).tag(mins)
+                }
+            }
+            Picker("Last booking", selection: $settingsViewModel.charterLastBooking) {
+                ForEach(CharterLastBooking.allCases) { last in
+                    Text(last.displayName).tag(last)
                 }
             }
             if settingsViewModel.confirmationType.requiresDeposit {

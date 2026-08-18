@@ -12,9 +12,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/js/site-perf.js?v=20260814h"></script>
-  <link rel="stylesheet" href="/css/shared.css?v=20260813h">
-  <link rel="stylesheet" href="/css/charter-theme.css?v=20260814q" id="bk-theme-css-charter-preload">
+  <script src="/js/site-perf.js?v=20260818b"></script>
+  <link rel="stylesheet" href="/css/shared.css?v=20260817z">
+  <link rel="stylesheet" href="/css/charter-theme.css?v=20260818b" id="bk-theme-css-charter-preload">
   <style>
     @font-face {
       font-family: 'Foglihten No06';
@@ -3862,7 +3862,7 @@
         } else if (/stonecut/i.test(String(themeId || ''))) {
           css = loadThemeStylesheet('/css/stonecut-theme.css?v=20260812m', 'bk-theme-css-stonecut');
         } else if (/charter/i.test(String(themeId || ''))) {
-          css = loadThemeStylesheet('/css/charter-theme.css?v=20260814q', 'bk-theme-css-charter');
+          css = loadThemeStylesheet('/css/charter-theme.css?v=20260818b', 'bk-theme-css-charter');
         } else {
           css = loadThemeStylesheet('/css/classic-theme.css?v=20260812m', 'bk-theme-css-classic');
         }
@@ -4002,6 +4002,9 @@
         root.style.setProperty('--bk-accent', c.accent);
         root.style.setProperty('--bk-accent-hover', c.accentHover);
         root.style.setProperty('--bk-accent-fg', c.accentFg);
+        root.style.setProperty('--bk-sidebar-accent-bg', c.accent);
+        root.style.setProperty('--bk-sidebar-accent-fg', c.accentFg);
+        root.style.setProperty('--bk-sidebar-accent-divider', rgbaFromHex(c.accentFg, 0.28));
         root.style.setProperty('--bk-featured-bg', c.featuredBg);
         root.style.setProperty('--bk-featured-fg', c.featuredFg);
         root.style.setProperty('--bk-gallery-bg', c.galleryBg);
@@ -4044,7 +4047,9 @@
           '.stonecut-page .stonecut-hero-photo--empty',
           '.studio12-page .s12-hero-img-fallback',
           '.studio12-page .s12-hero-img-col:not(:has(img))',
-          '.luxe-hero--empty'
+          '.luxe-hero--empty',
+          '.charter-hero-media [data-edit-key="heroImage"]:not(img)',
+          '.charter-hero-slot'
         ];
         heroSelectors.forEach(function(sel) {
           [].forEach.call(document.querySelectorAll(sel), function(el) {
@@ -4056,7 +4061,12 @@
           '.studio12-page .s12-aux-img-wrap:not(:has(img))',
           '.tattoo-featured-slot-add',
           '.classic-home .tattoo-featured-slot-add',
-          '.luxe-service-placeholder--add'
+          '.luxe-service-placeholder--add',
+          '.charter-page .charter-photo-slot',
+          '.charter-page .charter-browse-ph',
+          '.charter-page .charter-about-photo--empty',
+          '.charter-page .charter-quote-media [data-edit-key]:not(img)',
+          '.charter-page .charter-quote-ph'
         ];
         slotSelectors.forEach(function(sel) {
           [].forEach.call(document.querySelectorAll(sel), function(el) {
@@ -4127,6 +4137,59 @@
           el.style.background = c.aboutBg;
           el.style.color = c.aboutFg;
           el.style.borderTopColor = lineColor;
+        });
+      }
+
+      /** Charter: page/nav/footer/bands follow palette tokens, including text. */
+      function applyCharterHomeBandColors(tenant) {
+        if (!isCharterTheme(tenant)) return;
+        var c = tenantColors(tenant);
+        applyEmptyImageSlotColors(tenant);
+        var isCharterAboutPage = !!document.querySelector('.charter-page > .charter-about-section');
+        [].forEach.call(document.querySelectorAll('.charter-page'), function(el) {
+          var shellBg = isCharterAboutPage ? c.aboutBg : c.bg;
+          var shellFg = isCharterAboutPage ? c.aboutFg : c.fg;
+          el.style.background = shellBg;
+          el.style.color = shellFg;
+          el.style.setProperty('--charter-bg', shellBg);
+          el.style.setProperty('--charter-ink', shellFg);
+          el.style.setProperty('--charter-surface', c.card);
+          el.style.setProperty('--charter-accent', c.accent);
+          el.style.setProperty('--charter-accent-ink', c.accentFg);
+          el.style.setProperty('--charter-muted', rgbaFromHex(shellFg, 0.58));
+          el.style.setProperty('--charter-line', rgbaFromHex(shellFg, 0.10));
+        });
+        if (isCharterAboutPage) {
+          document.body.style.background = c.aboutBg;
+          document.body.style.color = c.aboutFg;
+        }
+        [].forEach.call(document.querySelectorAll('.charter-nav'), function(el) {
+          el.style.background = c.bg;
+          el.style.color = c.fg;
+          el.style.setProperty('--charter-bg', c.bg);
+          el.style.setProperty('--charter-ink', c.fg);
+        });
+        [].forEach.call(document.querySelectorAll('.charter-page [data-bk-color-surface]'), function(el) {
+          if (el.tagName === 'NAV') return;
+          var sid = el.getAttribute('data-bk-color-surface') || 'page';
+          if (sid === 'hero') return;
+          var s = tenantSurfaceColors(tenant, sid);
+          el.style.setProperty('--charter-bg', s.bg);
+          el.style.setProperty('--charter-ink', s.fg);
+          el.style.setProperty('--charter-muted', rgbaFromHex(s.fg, 0.58));
+          el.style.setProperty('--charter-line', rgbaFromHex(s.fg, 0.10));
+          el.style.setProperty('--charter-surface', c.card);
+          el.style.setProperty('--charter-accent', c.accent);
+          el.style.setProperty('--charter-accent-ink', c.accentFg);
+        });
+        [].forEach.call(document.querySelectorAll('.charter-footer'), function(el) {
+          el.style.background = c.aboutBg;
+          el.style.color = c.aboutFg;
+          el.style.setProperty('--charter-bg', c.aboutBg);
+          el.style.setProperty('--charter-ink', c.aboutFg);
+          el.style.setProperty('--charter-muted', rgbaFromHex(c.aboutFg, 0.65));
+          el.style.setProperty('--charter-line', rgbaFromHex(c.aboutFg, 0.16));
+          el.style.borderTopColor = rgbaFromHex(c.aboutFg, 0.16);
         });
       }
 
@@ -4207,11 +4270,14 @@
           applyEmptyImageSlotColors(patch);
         } else if (isStudio12Theme(patch)) {
           applyStudio12HomeBandColors(patch);
+        } else if (isCharterTheme(patch)) {
+          applyEmptyImageSlotColors(patch);
         } else if (isClassicTheme(patch) && !isStudio12Theme(patch)) {
           applyClassicHomePlaceholderColors(patch);
           applyEmptyImageSlotColors(patch);
         }
         applyColorSurfaceBands(patch);
+        if (isCharterTheme(patch)) applyCharterHomeBandColors(patch);
       }
       window.__bkApplyPreviewColorPatch = applyPreviewColorPatch;
 
@@ -4221,10 +4287,10 @@
         var c = tenantColors(t);
         var bodySurface = 'page';
         if (isLuxeTheme(t) || isBladeTheme(t) || isStonecutTheme(t) || isStudio12Theme(t) ||
-            (isClassicTheme(t) && !isStudio12Theme(t))) {
+            isCharterTheme(t) || (isClassicTheme(t) && !isStudio12Theme(t))) {
           bodySurface = 'page';
         } else if (t.industry === 'hair' || t.industry === 'barber' || t.industry === 'nails' ||
-            t.industry === 'custom' || t.industry === 'tattoos' || t.industry === 'charters') {
+            t.industry === 'custom' || t.industry === 'tattoos') {
           bodySurface = 'featured';
         }
         applyBodyPageColors(t, bodySurface);
@@ -4235,6 +4301,7 @@
         applyStonecutHomeBandColors(t);
         applyStudio12HomeBandColors(t);
         applyColorSurfaceBands(t);
+        applyCharterHomeBandColors(t);
         [].forEach.call(document.querySelectorAll('.card'), function(el) {
           el.style.background = c.card;
         });
@@ -4280,6 +4347,8 @@
           if (col && col.charAt(0) === '#') {
             try { el.style.setProperty('color', col, 'important'); }
             catch (e) { el.style.color = col; }
+          } else {
+            el.style.removeProperty('color');
           }
           var sz = parseInt(sizes[k], 10);
           if (sz >= 10 && sz <= 96) {
@@ -4596,6 +4665,19 @@
         if (digits.length === 11 && digits.charAt(0) === '1') return 'tel:+' + digits;
         return 'tel:+' + digits;
       }
+      /** Guest-first SMS link (iOS/Android). Optional prefilled body. */
+      function smsHrefFromPhone(phone, body) {
+        if (!phone) return '';
+        var digits = String(phone).replace(/\D/g, '');
+        if (digits.length < 10) return '';
+        var e164 = digits.length === 10
+          ? '+1' + digits
+          : (digits.length === 11 && digits.charAt(0) === '1' ? '+' + digits : '+' + digits);
+        var href = 'sms:' + e164;
+        var text = (body || '').toString().trim();
+        if (text) href += '?body=' + encodeURIComponent(text);
+        return href;
+      }
       /** US display (xxx) xxx-xxxx; matches iOS `PhoneFormatting` / booking submit. */
       function displayPhoneUS(raw) {
         var s = (raw || '').toString().trim();
@@ -4654,6 +4736,12 @@
       }
       function tenantShowAboutPage(tenant) {
         return tenant.showAboutPage !== false;
+      }
+      function tenantShowChartersPage(tenant) {
+        return tenant.showChartersPage !== false;
+      }
+      function tenantShowHowItWorksPage(tenant) {
+        return tenant.showHowItWorksPage !== false;
       }
       function tenantShowTeamPage(tenant) {
         return isTeamPlan(tenant) && tenant.showTeamPage !== false;
@@ -4769,10 +4857,15 @@
         return links.filter(function(l) {
           if (!l || !l.target) return true;
           if (l.target === 'gallery') return tenantShowGalleryPage(tenant);
-          if (l.target === 'book') return tenantShowBookPage(tenant);
+          if (l.target === 'book') {
+            return tenantShowBookPage(tenant) &&
+              (!isCharterTheme(tenant) || tenantShowChartersPage(tenant));
+          }
           if (l.target === 'about') return tenantShowAboutPage(tenant);
           if (l.target === 'team') return tenantShowTeamPage(tenant);
           if (l.target === 'shop') return tenantShowShopPage(tenant);
+          if (l.target === 'charters') return tenantShowChartersPage(tenant);
+          if (l.target === 'how-it-works' || l.target === 'how') return tenantShowHowItWorksPage(tenant);
           return true;
         });
       }
@@ -4800,6 +4893,9 @@
         return isPortfolioIndustry(tenant.industry) || isLuxeTheme(tenant) || isBladeTheme(tenant) || isStonecutTheme(tenant);
       }
 
+      function charterBandAttrs(surface) {
+        return ' data-bk-color-surface="' + surface + '" data-bk-band-tappable';
+      }
       function charterLocHtml(tenant) {
         var area = (tenant.serviceArea || '').toString().trim();
         return area
@@ -4813,16 +4909,16 @@
           var cls = active === key ? ' class="is-active"' : '';
           return '<a href="' + href + '"' + cls + '>' + label + '</a>';
         }
-        return '<nav class="charter-nav">' +
+        return '<nav class="charter-nav"' + charterBandAttrs('page') + '>' +
           '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters') + '</a>' +
           '<div class="charter-nav-links">' +
-            link(base + '/charters', 'Charters', 'charters') +
-            link(base + '/how-it-works', 'How it works', 'how') +
+            (tenantShowChartersPage(tenant) ? link(base + '/charters', 'Charters', 'charters') : '') +
+            (tenantShowHowItWorksPage(tenant) ? link(base + '/how-it-works', 'How it works', 'how') : '') +
             (tenantShowShopPage(tenant) ? link(base + '/shop', 'Shop', 'shop') : '') +
             (tenantShowAboutPage(tenant) ? link(base + '/about', 'About', 'about') : '') +
           '</div>' +
-          (tenantShowBookPage(tenant)
-            ? '<a class="charter-btn" href="' + base + '/book">' + wcSpan(tenant, 'wc.charter.navBook', 'Book now') + '</a>'
+          (tenantShowBookPage(tenant) && tenantShowChartersPage(tenant)
+            ? '<a class="charter-btn" href="' + base + '/charters">' + wcSpan(tenant, 'wc.charter.navBook', 'Book now') + '</a>'
             : '') +
           '<button type="button" class="tattoo-nav-menu charter-nav-menu" aria-label="Menu">' +
             hamburgerMenuSvg() +
@@ -4831,16 +4927,43 @@
           charterSidebarHtml(tenant);
       }
 
+      function charterInstagramHandle(tenant) {
+        var raw = String((tenant && tenant.instagramHandle) || '').trim();
+        if (!raw) return '';
+        raw = raw.replace(/^@+/, '');
+        var fromUrl = raw.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+        if (fromUrl) raw = fromUrl[1];
+        raw = raw.split(/[/?#]/)[0].replace(/\/+$/, '');
+        if (!/^[A-Za-z0-9._]{1,30}$/.test(raw)) return '';
+        return raw;
+      }
+
+      function charterInstagramUrl(tenant) {
+        var handle = charterInstagramHandle(tenant);
+        return handle ? ('https://www.instagram.com/' + encodeURIComponent(handle)) : '';
+      }
+
+      function charterInstagramLinkHtml(tenant, className) {
+        var handle = charterInstagramHandle(tenant);
+        var url = charterInstagramUrl(tenant);
+        if (!handle || !url) return '';
+        var cls = className ? (' class="' + className + '"') : '';
+        return '<a href="' + esc(url) + '"' + cls + ' target="_blank" rel="noopener noreferrer">@' +
+          esc(handle) + '</a>';
+      }
+
       function charterFooterHtml(tenant) {
         var base = tenantBaseUrl(tenant);
         var year = new Date().getFullYear();
-        return '<footer class="charter-footer">' +
+        var igHtml = charterInstagramLinkHtml(tenant, 'charter-footer-ig');
+        return '<footer class="charter-footer"' + charterBandAttrs('about') + '>' +
           '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters') + '</a>' +
-          '<a href="' + base + '/charters">Charters</a>' +
-          '<a href="' + base + '/how-it-works">How it works</a>' +
+          (tenantShowChartersPage(tenant) ? '<a href="' + base + '/charters">Charters</a>' : '') +
+          (tenantShowHowItWorksPage(tenant) ? '<a href="' + base + '/how-it-works">How it works</a>' : '') +
           (tenantShowShopPage(tenant) ? '<a href="' + base + '/shop">Shop</a>' : '') +
           (tenantShowAboutPage(tenant) ? '<a href="' + base + '/about">About</a>' : '') +
-          (tenantShowBookPage(tenant) ? '<a href="' + base + '/book">Book now</a>' : '') +
+          (tenantShowBookPage(tenant) && tenantShowChartersPage(tenant) ? '<a href="' + base + '/charters">Book now</a>' : '') +
+          igHtml +
           charterLocHtml(tenant) +
           '<span class="copy">&copy; ' + year + ' ' + esc(tenantSiteDisplayName(tenant, 'Harbor Charters')) + '</span>' +
           '</footer>';
@@ -5030,6 +5153,7 @@
         tenant._charterHoldMinutes = (data && data.holdMinutes) || 15;
         tenant._charterOccupancyFailed = false;
         tenant._charterOccupancyReady = true;
+        tenant._charterOccupancyFetchedAt = Date.now();
         tenant._charterOccupancyUntilIso = String((data && data.occupancyUntilIso) || '').trim();
         tenant._charterOccupancyTruncated = !!(data && data.truncated);
         var slots = (data && data.slots) || [];
@@ -5043,20 +5167,136 @@
       function charterMarkOccupancyFailed(tenant) {
         tenant._charterOccupancyFailed = true;
         tenant._charterOccupancyReady = true;
+        tenant._charterOccupancyFetchedAt = 0;
         tenant._charterOccupancy = [];
         tenant._charterOccupancyUntilIso = '';
       }
 
+      var CHARTER_OCCUPANCY_TTL_MS = 30000;
+      var CHARTER_OCCUPANCY_POLL_MS = 10000;
+
+      function charterOccupancyIsFresh(tenant) {
+        if (!tenant || tenant._charterOccupancyFailed) return false;
+        if (!tenant._charterOccupancyReady) return false;
+        var at = Number(tenant._charterOccupancyFetchedAt) || 0;
+        return at > 0 && (Date.now() - at) < CHARTER_OCCUPANCY_TTL_MS;
+      }
+
+      function charterInvalidateOccupancy(tenant) {
+        if (!tenant) return;
+        tenant._charterOccupancyReady = false;
+        tenant._charterOccupancyFetchedAt = 0;
+        tenant._charterOccupancyPromise = null;
+      }
+
+      function charterRefreshOccupancyUi() {
+        if (typeof window.__charterOccupancyUiRefresh === 'function') {
+          window.__charterOccupancyUiRefresh();
+        }
+      }
+
+      function charterPollOccupancy() {
+        if (document.visibilityState !== 'visible') return;
+        var t = window.__charterActiveTenant;
+        if (!t) return;
+        charterLoadOccupancy(t, { silent: true }).then(charterRefreshOccupancyUi).catch(function() {});
+      }
+
+      function charterBindOccupancyLifecycle(tenant, onReload) {
+        window.__charterActiveTenant = tenant;
+        window.__charterOccupancyUiRefresh = typeof onReload === 'function' ? onReload : null;
+        if (!window.__charterOccupancyVisBound) {
+          window.__charterOccupancyVisBound = true;
+          document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState !== 'visible') return;
+            charterPollOccupancy();
+          });
+        }
+        if (!window.__charterOccupancyPoll) {
+          window.__charterOccupancyPoll = setInterval(charterPollOccupancy, CHARTER_OCCUPANCY_POLL_MS);
+        }
+      }
+
+      /** Shared public occupancy loader. Retry once; never expose slots after a failed load. */
+      function charterLoadOccupancy(tenant, opts) {
+        var force = !!(opts && opts.force);
+        var silent = !!(opts && opts.silent);
+        if (!tenant || !tenant.slug || typeof functions === 'undefined') {
+          if (tenant && !silent) charterMarkOccupancyFailed(tenant);
+          return Promise.reject(new Error('Charter availability is unavailable.'));
+        }
+        if (!force && !silent && charterOccupancyIsFresh(tenant)) {
+          return Promise.resolve(tenant._charterOccupancy || []);
+        }
+        if (tenant._charterOccupancyPromise) return tenant._charterOccupancyPromise;
+        var keepShowing = silent && tenant._charterOccupancyReady && !tenant._charterOccupancyFailed;
+        if (!keepShowing) {
+          tenant._charterOccupancyReady = false;
+          tenant._charterOccupancyFailed = false;
+        }
+
+        function request(remainingRetries) {
+          return functions.httpsCallable('listPublicCharterOccupancy')({ tenantSlug: tenant.slug })
+            .then(function(res) {
+              charterApplyOccupancy(tenant, res && res.data);
+              return tenant._charterOccupancy;
+            })
+            .catch(function(err) {
+              if (remainingRetries > 0) {
+                return new Promise(function(resolve) { setTimeout(resolve, 700); })
+                  .then(function() { return request(remainingRetries - 1); });
+              }
+              if (!keepShowing) charterMarkOccupancyFailed(tenant);
+              throw err;
+            });
+        }
+
+        tenant._charterOccupancyPromise = request(1).then(function(rows) {
+          tenant._charterOccupancyPromise = null;
+          return rows;
+        }, function(err) {
+          tenant._charterOccupancyPromise = null;
+          throw err;
+        });
+        return tenant._charterOccupancyPromise;
+      }
+
       function charterOccupancyUsableForDate(tenant, dateIso) {
         if (!tenant) return false;
+        if (!tenant._charterOccupancyReady) return false;
         if (tenant._charterOccupancyFailed) return false;
         var until = String(tenant._charterOccupancyUntilIso || '').trim();
         if (until && dateIso && dateIso > until) return false;
         return true;
       }
 
-      function charterDepartureMins() {
-        return [7 * 60, 13 * 60];
+      /** Hourly departures from Scheduling hours; last start must return by close. */
+      function charterOccupancySpanMin(service, durationMin) {
+        var win = charterOccWindow(service, 0, durationMin);
+        return Math.max(30, Number(win.occEndMin) || Number(durationMin) || 60);
+      }
+
+      function charterDepartureMinsForDay(day, durationMin, service, tenant) {
+        if (!day || day.closed || !day.ranges || !day.ranges.length) return [];
+        var span = charterOccupancySpanMin(service, durationMin);
+        var seen = {};
+        var out = [];
+        var lastBook = charterLastBookingMin(tenant);
+        for (var i = 0; i < day.ranges.length; i++) {
+          var r = day.ranges[i];
+          var first = Math.ceil(r.openMin / 60) * 60;
+          if (first < r.openMin) first += 60;
+          var last = span > 1440 ? r.closeMin : (r.closeMin - span);
+          for (var t = first; t <= last && t <= r.closeMin; t += 60) {
+            if (lastBook != null && t > lastBook) continue;
+            if (t >= r.openMin && !seen[t]) {
+              seen[t] = true;
+              out.push(t);
+            }
+          }
+        }
+        out.sort(function(a, b) { return a - b; });
+        return out;
       }
 
       function charterAddDaysIso(dateIso, days) {
@@ -5108,11 +5348,14 @@
         return segs;
       }
 
-      function charterStartInHours(day, startMin) {
+      function charterStartInHours(day, startMin, durationMin, service) {
         if (!day || day.closed || !day.ranges || !day.ranges.length) return false;
-        if (startMin === 7 * 60 || startMin === 13 * 60) return true;
+        var span = charterOccupancySpanMin(service, durationMin);
+        var end = startMin + span;
         for (var i = 0; i < day.ranges.length; i++) {
-          if (startMin >= day.ranges[i].openMin && startMin <= day.ranges[i].closeMin) return true;
+          var r = day.ranges[i];
+          if (startMin < r.openMin || startMin > r.closeMin) continue;
+          if (span > 1440 || end <= r.closeMin) return true;
         }
         return false;
       }
@@ -5129,6 +5372,18 @@
           }
         }
         return false;
+      }
+
+      function charterHasFleet(tenant) {
+        var boats = (tenant && Array.isArray(tenant.charterBoats)) ? tenant.charterBoats : [];
+        for (var i = 0; i < boats.length; i++) {
+          if (boats[i] && String(boats[i].id || '').trim()) return true;
+        }
+        return false;
+      }
+
+      function charterNoFleetMessage() {
+        return "Charters aren't available to book yet. Check back soon.";
       }
 
       function charterEligibleBoats(tenant, service, partySize, boatFilterId) {
@@ -5160,6 +5415,7 @@
         if (!eligible.length) return false;
         var segs = charterOccSegments(dateIso, charterOccWindow(service, startMin, durMin));
         var list = occupancy || [];
+        var locationWide = charterBookByLocation(tenant);
         function blocked(boatId) {
           for (var i = 0; i < list.length; i++) {
             var o = list[i];
@@ -5170,7 +5426,7 @@
               if (String(o.date || '') !== String(segs[s].date || '')) continue;
               if (!(segs[s].startMin < oe && segs[s].endMin > os)) continue;
               var bid = String(o.boatId || '');
-              if (!bid || bid === boatId) return true;
+              if (locationWide || !bid || bid === boatId) return true;
             }
           }
           return false;
@@ -5195,10 +5451,10 @@
         var occupancy = opts.occupancy || tenant._charterOccupancy || [];
         var dateIso = calendarIsoDate(date);
         if (!charterOccupancyUsableForDate(tenant, dateIso)) return out;
-        var clocks = charterDepartureMins();
+        var clocks = charterDepartureMinsForDay(day, dur, opts.service, tenant);
         for (var i = 0; i < clocks.length; i++) {
           var t = clocks[i];
-          if (!charterStartInHours(day, t)) continue;
+          if (!charterStartInHours(day, t, dur, opts.service)) continue;
           if (charterSlotTooSoon(date, t, tenant)) continue;
           var segs = charterOccSegments(dateIso, charterOccWindow(opts.service, t, dur));
           if (charterSegmentsHitBlocks(tenant, segs)) continue;
@@ -5285,6 +5541,32 @@
         return 'request';
       }
 
+      function charterBookByLocation(tenant) {
+        var raw = '';
+        if (tenant && tenant.workflow && tenant.workflow.charterBookBy != null) {
+          raw = tenant.workflow.charterBookBy;
+        } else if (tenant && tenant.charterBookBy != null) {
+          raw = tenant.charterBookBy;
+        }
+        raw = String(raw || 'location').trim().toLowerCase();
+        return raw !== 'boat' && raw !== 'boats' && raw !== 'fleet';
+      }
+
+      function charterBufferMinutes(tenant) {
+        var n = Number(tenant && tenant.workflow && tenant.workflow.charterBufferMinutes);
+        if (n === 0) return 0;
+        if (!isFinite(n) || n < 0) return 30;
+        return Math.min(240, Math.round(n));
+      }
+
+      function charterLastBookingMin(tenant) {
+        var raw = tenant && tenant.workflow ? tenant.workflow.charterLastBookingMin : null;
+        if (raw == null || raw === '') return null;
+        var n = Number(raw);
+        if (!isFinite(n) || n < 0) return null;
+        return Math.min(24 * 60, Math.round(n));
+      }
+
       function charterDepositAmount(tenant) {
         var n = tenant && tenant.workflow && tenant.workflow.depositAmount;
         n = Number(n);
@@ -5335,7 +5617,8 @@
       }
 
       function charterResolveItinerary(service) {
-        var raw = service && Array.isArray(service.itinerary) ? service.itinerary : [];
+        var hasConfigured = !!(service && Object.prototype.hasOwnProperty.call(service, 'itinerary') && Array.isArray(service.itinerary));
+        var raw = hasConfigured ? service.itinerary : [];
         var steps = [];
         for (var i = 0; i < raw.length; i++) {
           var row = raw[i] || {};
@@ -5344,7 +5627,7 @@
           var off = Number(row.offsetMinutes);
           steps.push({ offsetMinutes: isFinite(off) ? off : 0, text: text });
         }
-        if (!steps.length) steps = charterDefaultItinerary(service && service.durationMinutes);
+        if (!hasConfigured) steps = charterDefaultItinerary(service && service.durationMinutes);
         return steps;
       }
 
@@ -5394,14 +5677,14 @@
         if (!charterOccupancyUsableForDate(tenant, dateIso)) return false;
         var wantStart = opts.startMin != null ? opts.startMin : null;
         function slotOk(t) {
-          if (!charterStartInHours(day, t)) return false;
+          if (!charterStartInHours(day, t, dur, opts.service)) return false;
           if (charterSlotTooSoon(date, t, tenant)) return false;
           var segs = charterOccSegments(dateIso, charterOccWindow(opts.service, t, dur));
           if (charterSegmentsHitBlocks(tenant, segs)) return false;
           if (!charterSlotHasFreeBoat(tenant, occupancy, dateIso, t, dur, opts.service, people, opts.boatFilterId)) return false;
           return true;
         }
-        var clocks = charterDepartureMins();
+        var clocks = charterDepartureMinsForDay(day, dur, opts.service, tenant);
         if (wantStart != null) {
           return clocks.indexOf(wantStart) >= 0 && slotOk(wantStart);
         }
@@ -5452,9 +5735,13 @@
         });
         if (cleaned.length) {
           return cleaned.slice(0, 8).map(function(f, i) {
+            var a = String(f.answer || f.a || '').trim();
+            if (/my trips/i.test(a)) {
+              a = 'Call your captain to cancel or reschedule. Their number is on your confirmation text and on the booking confirmation page.';
+            }
             return {
               q: String(f.question || f.q || '').trim() || ('Question ' + (i + 1)),
-              a: String(f.answer || f.a || '').trim()
+              a: a
             };
           });
         }
@@ -5462,7 +5749,7 @@
           { q: 'What happens if the weather is bad?', a: 'Captains will reschedule or fully refund trips cancelled for weather.' },
           { q: 'Is gear included?', a: 'Rods, bait, ice and fishing licenses are included on every listed charter unless noted.' },
           { q: 'Can I bring my own group?', a: 'Yes, most charters are private bookings for your group only.' },
-          { q: 'How do I cancel or reschedule?', a: 'Manage your booking from My Trips up to 48 hours before departure.' }
+          { q: 'How do I cancel or reschedule?', a: 'Call your captain to cancel or reschedule. Their number is on your confirmation text and on the booking confirmation page.' }
         ];
       }
 
@@ -5478,10 +5765,12 @@
           var price = charterPriceLabel(s);
           var dur = charterDurationLabel(s);
           var href = charterTripHref(tenant, s);
+          var hasServiceImage = !!(s.imageUrl || s.photoUrl);
           return '<a class="charter-blueprint charter-feat-card" href="' + href + '"' + svcEditAttr(sid) + '>' +
             '<div class="media">' +
               (img
-                ? '<img data-edit-key="featuredWork:' + i + '" src="' + esc(typeof img === 'string' ? img : '') + '" alt="">'
+                ? '<img' + (hasServiceImage ? '' : ' data-edit-key="featuredWork:' + i + '"') +
+                  ' src="' + esc(typeof img === 'string' ? img : '') + '" alt="">'
                 : '<div data-edit-key="featuredWork:' + i + '" style="height:100%"></div>') +
             '</div>' +
             '<div class="body">' +
@@ -5542,7 +5831,7 @@
         var cards = list.length
           ? list.map(function(p) { return charterProductCardHtml(p, { shopHref: base + '/shop' }); }).join('')
           : '<div class="charter-blueprint charter-trip-card"><p><em>Add products in Shop to show them here.</em></p></div>';
-        return '<section class="charter-section" id="shop">' +
+        return '<section class="charter-section" id="shop"' + charterBandAttrs('card') + '>' +
           '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:28px">' +
             '<h2 class="charter-sec-heading" style="margin:0">' + wcSpan(tenant, 'wc.charter.shopHeading', 'Shop') + '</h2>' +
             '<a href="' + base + '/shop" style="font-weight:600;font-size:14px;color:var(--charter-accent)">' +
@@ -5576,7 +5865,7 @@
           : '<p class="charter-browse-empty">No products yet. Add them in Shop.</p>';
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'shop') +
-          '<div class="charter-section charter-browse-head">' +
+          '<div class="charter-section charter-browse-head"' + charterBandAttrs('page') + '>' +
             '<div class="charter-sec-label charter-sec-label--ink">' +
               wcSpan(tenant, 'wc.charter.shopCountLabel', countLabel.toUpperCase()) + '</div>' +
             '<h2 class="charter-sec-heading">' + wcSpan(tenant, 'wc.charter.shopPageHeading', 'Shop') + '</h2>' +
@@ -5584,7 +5873,7 @@
               wcSpan(tenant, 'wc.charter.shopLead', 'Apparel, drinkware and tackle from the boat.') +
             '</p>' +
           '</div>' +
-          '<div class="charter-shop-layout">' +
+          '<div class="charter-shop-layout"' + charterBandAttrs('card') + '>' +
             '<aside class="charter-filters">' +
               (cats.length
                 ? ('<div class="charter-filter-block">' +
@@ -5652,16 +5941,6 @@
           return 'Licensed captains, our own boats, transparent pricing. Half-day to full-day trips out of Key West.';
         });
         var heroImg = tenant.heroImageUrl || '';
-        var tripTypes = (services || []).slice(0, 4);
-        var tripTypeHtml = tripTypes.length
-          ? tripTypes.map(function(s) {
-              var sid = s.id || s.slug || '';
-              return '<div class="charter-blueprint charter-trip-card"' + (sid ? svcEditAttr(sid) : '') + '>' +
-                '<svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22V8M5 12H2a10 10 0 0020 0h-3M12 8a3 3 0 100-6 3 3 0 000 6z"></path></svg>' +
-                '<h3>' + (sid ? svcSpan(tenant, sid, 'name', s.name || 'Trip') : esc(s.name || 'Trip')) + '</h3>' +
-                '<p>' + (sid ? svcSpan(tenant, sid, 'description', s.description || charterDurationLabel(s) || 'Trip') : esc(s.description || charterDurationLabel(s) || 'Trip')) + '</p></div>';
-            }).join('')
-          : '<div class="charter-blueprint charter-trip-card"><p><em>Add trips in Manage → Charters.</em></p></div>';
         var quoteFallback = (tenant.reviews && tenant.reviews[0] && (tenant.reviews[0].text || tenant.reviews[0].quote))
           ? (tenant.reviews[0].text || tenant.reviews[0].quote)
           : "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys.";
@@ -5671,11 +5950,11 @@
         var quoteImg = (tenant.galleryImages && tenant.galleryImages[0] && (tenant.galleryImages[0].url || tenant.galleryImages[0])) || '';
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'home') +
-          '<section class="charter-hero">' +
+          '<section class="charter-hero"' + charterBandAttrs('hero') + '>' +
             '<div class="charter-hero-media">' +
               (heroImg
                 ? '<img data-edit-key="heroImage" src="' + esc(heroImg) + '" alt="">'
-                : '<div data-edit-key="heroImage" style="width:100%;height:100%;background:#2a2e30"></div>') +
+                : '<div data-edit-key="heroImage" class="charter-hero-slot"></div>') +
               '<button type="button" class="bk-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
             '</div>' +
             '<div class="charter-hero-scrim"></div>' +
@@ -5684,7 +5963,7 @@
                 wcSpan(tenant, 'wc.charter.heroEyebrow', area) + '</div>' +
               '<h1 class="charter-hero-title">' + siteTextSpan('heroTagline', heroTitleRaw) + '</h1>' +
               '<p class="charter-hero-lead">' + siteTextSpan('heroSubtitle', heroLeadRaw) + '</p>' +
-              '<div class="charter-search">' +
+              (tenantShowChartersPage(tenant) && tenantShowBookPage(tenant) ? '<div class="charter-search">' +
                 '<div class="field">' +
                   '<label>Day</label>' +
                   '<input type="date" class="charter-search-date" data-charter-home-date>' +
@@ -5707,6 +5986,7 @@
                     '<option value="480">Full day (8 hrs)</option>' +
                   '</select>' +
                 '</div>' +
+                (charterBookByLocation(tenant) ? '' :
                 '<div class="field">' +
                   '<label>Boat</label>' +
                   '<select class="charter-search-date" data-charter-home-boat>' +
@@ -5715,17 +5995,12 @@
                       return '<option value="' + esc(b.id || '') + '">' + esc(charterBoatLabel(b)) + '</option>';
                     }).join('')) +
                   '</select>' +
-                '</div>' +
+                '</div>') +
                 '<a class="charter-btn charter-search-go" data-charter-home-search href="' + base + '/charters">Search</a>' +
-              '</div>' +
+              '</div>' : '') +
             '</div>' +
           '</section>' +
-          '<section class="charter-section">' +
-            '<div class="charter-sec-label charter-sec-label--ink">' + wcSpan(tenant, 'wc.charter.tripTypesLabel', 'Trip types') + '</div>' +
-            '<h2 class="charter-sec-heading">' + wcSpan(tenant, 'wc.charter.tripTypesHeading', 'Find your trip') + '</h2>' +
-            '<div class="charter-trip-grid">' + tripTypeHtml + '</div>' +
-          '</section>' +
-          '<section class="charter-section">' +
+          (tenantShowChartersPage(tenant) ? '<section class="charter-section"' + charterBandAttrs('featured') + '>' +
             '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:28px">' +
               '<div><div class="charter-sec-label charter-sec-label--ink">' + wcSpan(tenant, 'wc.charter.featuredLabel', 'Featured') + '</div>' +
               '<h2 class="charter-sec-heading" style="margin:0">' + wcSpan(tenant, 'wc.charter.featuredHeading', 'Our charters') + '</h2></div>' +
@@ -5733,9 +6008,9 @@
                 wcSpan(tenant, 'wc.charter.viewAll', 'View all →') + '</a>' +
             '</div>' +
             '<div class="charter-feat-grid">' + charterFeaturedHtml(tenant, services, 3) + '</div>' +
-          '</section>' +
+          '</section>' : '') +
           charterHomeShopSectionHtml(tenant) +
-          '<section class="charter-section">' +
+          '<section class="charter-section"' + charterBandAttrs('card') + '>' +
             '<div class="charter-blueprint charter-quote">' +
               '<div class="charter-quote-copy">' +
                 '<p>' + wcSpan(tenant, 'wc.charter.quote', quoteFallback) + '</p>' +
@@ -5744,7 +6019,7 @@
               '<div class="charter-quote-media">' +
                 (quoteImg
                   ? '<img data-edit-key="galleryImage:0" src="' + esc(typeof quoteImg === 'string' ? quoteImg : '') + '" alt="">'
-                  : '<div data-edit-key="galleryImage:0" style="min-height:180px;background:#e8ecef" role="button" aria-label="Add quote photo"></div>') +
+                  : '<div data-edit-key="galleryImage:0" class="charter-quote-ph" role="button" aria-label="Add quote photo"></div>') +
               '</div>' +
             '</div>' +
           '</section>' +
@@ -5752,7 +6027,60 @@
           '</div>';
       }
 
-      function bindCharterHomeSearch(tenant) {
+      function bindCharterScrollReveal(root) {
+        var scope = root || document;
+        var page = scope.querySelector ? scope.querySelector('.charter-page') : null;
+        if (!page || page.dataset.charterRevealBound === '1') return;
+        page.dataset.charterRevealBound = '1';
+
+        var selector = [
+          '.charter-section',
+          '.charter-trip-card',
+          '.charter-feat-card',
+          '.charter-shop-home-grid > *',
+          '.charter-shop-grid > *',
+          '.charter-browse-row',
+          '.charter-detail-lead',
+          '.charter-detail-gallery',
+          '.charter-detail-body > *',
+          '.charter-about-heading',
+          '.charter-about-story',
+          '.charter-about-media',
+          '.charter-steps > *'
+        ].join(',');
+        var targets = Array.prototype.slice.call(page.querySelectorAll(selector));
+        if (!targets.length) return;
+
+        var staggerGroups = page.querySelectorAll(
+          '.charter-trip-grid,.charter-feat-grid,.charter-shop-home-grid,' +
+          '.charter-shop-grid,.charter-browse-list,.charter-steps'
+        );
+        for (var g = 0; g < staggerGroups.length; g++) {
+          var children = staggerGroups[g].children;
+          for (var c = 0; c < children.length; c++) {
+            children[c].style.setProperty('--charter-reveal-delay', Math.min(c, 4) * 65 + 'ms');
+          }
+        }
+        for (var i = 0; i < targets.length; i++) targets[i].classList.add('charter-reveal');
+
+        if (!window.IntersectionObserver ||
+            (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+          for (var j = 0; j < targets.length; j++) targets[j].classList.add('charter-reveal--visible');
+          return;
+        }
+        if (window.__charterRevealObserver) window.__charterRevealObserver.disconnect();
+        var observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('charter-reveal--visible');
+            observer.unobserve(entry.target);
+          });
+        }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+        window.__charterRevealObserver = observer;
+        for (var k = 0; k < targets.length; k++) observer.observe(targets[k]);
+      }
+
+      function bindCharterHomeSearch(tenant, services) {
         var dateEl = document.querySelector('[data-charter-home-date]');
         var timeEl = document.querySelector('[data-charter-home-time]');
         var peopleEl = document.querySelector('[data-charter-home-people]');
@@ -5780,10 +6108,48 @@
           var picked = charterDateFromIso(String(dateEl.value || '').trim());
           timeEl.innerHTML = '';
           timeEl.appendChild(new Option('Any time', ''));
-          var clocks = charterDepartureMins();
+          if (!tenant._charterOccupancyReady) {
+            timeEl.appendChild(new Option('Loading availability…', '', true, false));
+            timeEl.options[timeEl.options.length - 1].disabled = true;
+            return;
+          }
+          if (tenant._charterOccupancyFailed) {
+            timeEl.appendChild(new Option('Availability unavailable', '', true, false));
+            timeEl.options[timeEl.options.length - 1].disabled = true;
+            return;
+          }
+          if (!charterHasFleet(tenant)) {
+            timeEl.appendChild(new Option('Not available yet', '', true, false));
+            timeEl.options[timeEl.options.length - 1].disabled = true;
+            return;
+          }
+          var wantedDur = durEl ? parseInt(durEl.value || '0', 10) : 0;
+          var people = peopleEl ? parseInt(peopleEl.value || '0', 10) : 0;
+          var boat = boatEl ? String(boatEl.value || '').trim() : '';
+          var seen = {};
+          var clocks = [];
+          var tripList = services || [];
+          for (var si = 0; picked && si < tripList.length; si++) {
+            var svc = tripList[si];
+            var svcDur = Number(svc.durationMinutes) || 240;
+            if (wantedDur > 0 && Math.abs(svcDur - wantedDur) > 45) continue;
+            var starts = charterOpenStartsForTrip(tenant, picked, svcDur, {
+              occupancy: tenant._charterOccupancy || [],
+              people: people,
+              maxPeople: charterMaxPeopleForTrip(tenant, svc),
+              service: svc,
+              boatFilterId: boat
+            });
+            for (var st = 0; st < starts.length; st++) {
+              if (!seen[starts[st]]) {
+                seen[starts[st]] = true;
+                clocks.push(starts[st]);
+              }
+            }
+          }
+          clocks.sort(function(a, b) { return a - b; });
           for (var ci = 0; ci < clocks.length; ci++) {
             var m = clocks[ci];
-            if (picked && charterSlotTooSoon(picked, m, tenant)) continue;
             var hh = String(Math.floor(m / 60)).padStart(2, '0');
             var mm = String(m % 60).padStart(2, '0');
             var val = hh + ':' + mm;
@@ -5802,18 +6168,29 @@
             time: timeEl ? String(timeEl.value || '').trim() : '',
             people: peopleEl ? parseInt(peopleEl.value || '0', 10) : 0,
             duration: durEl ? parseInt(durEl.value || '0', 10) : 0,
-            boat: boatEl ? String(boatEl.value || '').trim() : ''
+            boat: (charterBookByLocation(tenant) || !boatEl) ? '' : String(boatEl.value || '').trim()
           }));
         }
         [dateEl, timeEl, peopleEl, durEl, boatEl].forEach(function(el) {
           if (!el) return;
           el.addEventListener('change', function() {
-            if (el === dateEl) fillHomeTimes();
+            if (el === dateEl || el === durEl || el === peopleEl || el === boatEl) fillHomeTimes();
             syncHref();
           });
           el.addEventListener('input', syncHref);
         });
         syncHref();
+        charterBindOccupancyLifecycle(tenant, function() {
+          fillHomeTimes();
+          syncHref();
+        });
+        charterLoadOccupancy(tenant, { force: true }).then(function() {
+          fillHomeTimes();
+          syncHref();
+        }).catch(function() {
+          fillHomeTimes();
+          syncHref();
+        });
       }
 
       function charterBrowsePage(tenant, services) {
@@ -5822,6 +6199,7 @@
         var rows = list.map(function(s, i) {
           var sid = s.id || s.slug || String(i);
           var img = (s.imageUrl || s.photoUrl || (feats[i] && (feats[i].url || feats[i])) || '');
+          var hasServiceImage = !!(s.imageUrl || s.photoUrl);
           var price = charterPriceLabel(s);
           var dur = charterDurationLabel(s);
           var tripKey = String(s.name || '').trim().toLowerCase();
@@ -5835,7 +6213,8 @@
             ' data-charter-boats="' + esc(charterServiceBoatIds(s).join(',')) + '" hidden>' +
             '<a class="media" data-charter-trip-link href="' + charterTripHref(tenant, s) + '">' +
               (img
-                ? '<img data-edit-key="featuredWork:' + i + '" src="' + esc(typeof img === 'string' ? img : '') + '" alt="">'
+                ? '<img' + (hasServiceImage ? '' : ' data-edit-key="featuredWork:' + i + '"') +
+                  ' src="' + esc(typeof img === 'string' ? img : '') + '" alt="">'
                 : '<div data-edit-key="featuredWork:' + i + '" class="charter-browse-ph"></div>') +
             '</a>' +
             '<div class="body">' +
@@ -5873,15 +6252,17 @@
         for (var gp = 1; gp <= maxGuests; gp++) {
           peopleOpts += '<option value="' + gp + '">' + gp + (gp === 1 ? ' person' : ' people') + '</option>';
         }
-        var emptyHtml = list.length
-          ? '<p class="charter-browse-empty" data-charter-browse-empty>Pick an open day to see charters.</p>'
-          : '<p class="charter-browse-empty">No charters listed yet. Add trips in Manage → Charters.</p>';
+        var emptyHtml = !charterHasFleet(tenant)
+          ? '<p class="charter-browse-empty" data-charter-browse-empty>' + charterNoFleetMessage() + '</p>'
+          : (list.length
+            ? '<p class="charter-browse-empty" data-charter-browse-empty>Pick an open day to see charters.</p>'
+            : '<p class="charter-browse-empty">No charters listed yet. Add trips in Manage → Charters.</p>');
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'charters') +
-          '<div class="charter-section charter-browse-head">' +
+          '<div class="charter-section charter-browse-head"' + charterBandAttrs('page') + '>' +
             '<h2 class="charter-sec-heading">' + wcSpan(tenant, 'wc.charter.browseHeading', 'Our charters') + '</h2>' +
           '</div>' +
-          '<div class="charter-browse-layout">' +
+          '<div class="charter-browse-layout"' + charterBandAttrs('page') + '>' +
             '<div class="charter-browse-dropdowns">' +
               '<label class="charter-drop">' +
                 '<span>Trip type</span>' +
@@ -5902,10 +6283,11 @@
                 '<span>People</span>' +
                 '<select data-charter-people-filter>' + peopleOpts + '</select>' +
               '</label>' +
+              (charterBookByLocation(tenant) ? '' :
               '<label class="charter-drop">' +
                 '<span>Boat</span>' +
                 '<select data-charter-boat-filter>' + boatOpts + '</select>' +
-              '</label>' +
+              '</label>') +
               '<button type="button" class="charter-clear-filters" data-charter-browse-clear>Clear</button>' +
             '</div>' +
             '<div class="charter-sec-label charter-sec-label--ink" data-charter-browse-count>PICK A DAY</div>' +
@@ -5982,7 +6364,9 @@
             startMin: startMin,
             maxPeople: maxPeopleForFilteredTrip(s),
             service: s,
-            boatFilterId: boatSel ? String(boatSel.value || '') : ''
+            boatFilterId: charterBookByLocation(tenant)
+              ? ''
+              : (boatSel ? String(boatSel.value || '') : '')
           };
         }
 
@@ -6047,6 +6431,15 @@
         function applyFilters() {
           var selDate = charterDateFromIso(selectedIso);
           var rows = listEl.querySelectorAll('[data-charter-row]');
+          if (!charterHasFleet(tenant)) {
+            for (var i = 0; i < rows.length; i++) rows[i].hidden = true;
+            if (emptyEl) {
+              emptyEl.hidden = false;
+              emptyEl.textContent = charterNoFleetMessage();
+            }
+            if (countEl) countEl.textContent = 'NOT AVAILABLE YET';
+            return;
+          }
           var shown = 0;
           for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
@@ -6100,7 +6493,13 @@
             if (ok) shown += 1;
           }
           if (emptyEl) {
-            if (!list.length) {
+            if (!tenant._charterOccupancyReady) {
+              emptyEl.hidden = false;
+              emptyEl.textContent = 'Loading live availability…';
+            } else if (tenant._charterOccupancyFailed) {
+              emptyEl.hidden = false;
+              emptyEl.textContent = 'Live availability is temporarily unavailable. Please refresh and try again.';
+            } else if (!list.length) {
               emptyEl.hidden = true;
             } else if (!selDate) {
               emptyEl.hidden = false;
@@ -6111,7 +6510,9 @@
             }
           }
           if (countEl) {
-            if (!selDate) countEl.textContent = 'PICK A DAY';
+            if (!tenant._charterOccupancyReady) countEl.textContent = 'LOADING AVAILABILITY';
+            else if (tenant._charterOccupancyFailed) countEl.textContent = 'AVAILABILITY UNAVAILABLE';
+            else if (!selDate) countEl.textContent = 'PICK A DAY';
             else countEl.textContent = (shown === 1 ? '1 CHARTER' : (shown + ' CHARTERS'));
           }
         }
@@ -6204,19 +6605,8 @@
           });
         }
         refreshBrowse();
-        if (typeof functions !== 'undefined' && tenant && tenant.slug) {
-          functions.httpsCallable('listPublicCharterOccupancy')({ tenantSlug: tenant.slug })
-            .then(function(res) {
-              charterApplyOccupancy(tenant, res && res.data);
-              paintMonth();
-              applyFilters();
-            })
-            .catch(function() {
-              charterMarkOccupancyFailed(tenant);
-              paintMonth();
-              applyFilters();
-            });
-        }
+        charterBindOccupancyLifecycle(tenant, refreshBrowse);
+        charterLoadOccupancy(tenant, { force: true }).then(refreshBrowse).catch(refreshBrowse);
       }
 
       function charterDetailPage(tenant, service, services) {
@@ -6227,9 +6617,24 @@
         var dur = charterDurationLabel(s) || 'Half-day trip';
         var area = (tenant.serviceArea || '').toString().trim() || 'Key West, FL';
         var feats = (tenant.featuredWorkImages || tenant.galleryImages || []);
-        var mainImg = s.imageUrl || s.photoUrl || (feats[0] && (feats[0].url || feats[0])) || tenant.heroImageUrl || '';
-        var img2 = (feats[1] && (feats[1].url || feats[1])) || '';
-        var img3 = (feats[2] && (feats[2].url || feats[2])) || '';
+        var serviceImage = s.imageUrl || s.photoUrl || '';
+        var selectedServiceIndex = Math.max(0, (services || []).findIndex(function(candidate) {
+          return candidate === s ||
+            String(candidate.id || candidate.slug || '') === String(s.id || s.slug || '');
+        }));
+        var mainFeaturedIndex = selectedServiceIndex;
+        var mainImg = serviceImage ||
+          (feats[mainFeaturedIndex] && (feats[mainFeaturedIndex].url || feats[mainFeaturedIndex])) ||
+          tenant.heroImageUrl || '';
+        var sideIndices = [];
+        for (var fi = 0; fi < feats.length && sideIndices.length < 2; fi++) {
+          if (!serviceImage && fi === mainFeaturedIndex) continue;
+          sideIndices.push(fi);
+        }
+        var sideIndex2 = sideIndices.length ? sideIndices[0] : (mainFeaturedIndex === 0 ? 1 : 0);
+        var sideIndex3 = sideIndices.length > 1 ? sideIndices[1] : (sideIndex2 === 1 ? 2 : 1);
+        var img2 = (feats[sideIndex2] && (feats[sideIndex2].url || feats[sideIndex2])) || '';
+        var img3 = (feats[sideIndex3] && (feats[sideIndex3].url || feats[sideIndex3])) || '';
         // Never leave the lead gallery cell empty — promote the first available photo.
         if (!mainImg) {
           mainImg = img2 || img3 || '';
@@ -6251,9 +6656,10 @@
           people: peopleVal
         });
         var ownerName = tenant.displayName || tenant.businessName || 'Captain';
-        function featSlot(idx, url) {
+        function featSlot(idx, url, editable) {
           if (url) {
-            return '<img data-edit-key="featuredWork:' + idx + '" src="' + esc(typeof url === 'string' ? url : '') + '" alt="">';
+            return '<img' + (editable === false ? '' : ' data-edit-key="featuredWork:' + idx + '"') +
+              ' src="' + esc(typeof url === 'string' ? url : '') + '" alt="">';
           }
           return '<div data-edit-key="featuredWork:' + idx + '" class="charter-photo-slot" role="button" aria-label="Add photo"></div>';
         }
@@ -6262,8 +6668,8 @@
           '<div class="charter-itinerary-list" data-charter-itinerary-list>' +
             charterItineraryListHtml(s, search.time || '') +
           '</div></div>';
-        var bookHtml =
-          '<div class="charter-blueprint charter-sticky-book elev-md" data-charter-detail-book="1">' +
+        var bookHtml = tenantShowBookPage(tenant)
+          ? '<div class="charter-blueprint charter-sticky-book elev-md" data-charter-detail-book="1">' +
             '<div class="price">' + esc(price) + ' <span class="per">/ trip</span></div>' +
             '<div class="charter-field"><label>Date</label>' +
               '<input type="date" data-charter-detail-date value="' + esc(dateIso) + '"></div>' +
@@ -6274,20 +6680,21 @@
             '<p class="charter-browse-empty" data-charter-detail-hint hidden></p>' +
             '<a class="charter-btn charter-btn-block" data-charter-detail-continue href="' + esc(bookHref) + '">' +
               wcSpan(tenant, 'wc.charter.continueBook', 'Continue to booking') + '</a>' +
-          '</div>';
+          '</div>'
+          : '';
         var galleryHtml = '<div class="charter-detail-gallery">' +
-          '<div class="charter-blueprint main">' + featSlot(0, mainImg) + '</div>' +
+          '<div class="charter-blueprint main">' + featSlot(mainFeaturedIndex, mainImg, !serviceImage) + '</div>' +
           '<div class="side">' +
-            '<div class="charter-blueprint">' + featSlot(1, img2) + '</div>' +
-            '<div class="charter-blueprint">' + featSlot(2, img3) + '</div>' +
+            '<div class="charter-blueprint">' + featSlot(sideIndex2, img2, true) + '</div>' +
+            '<div class="charter-blueprint">' + featSlot(sideIndex3, img3, true) + '</div>' +
           '</div></div>';
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'charters') +
-          '<div class="charter-detail-crumbs">' +
+          '<div class="charter-detail-crumbs"' + charterBandAttrs('page') + '>' +
             '<a class="charter-back" href="' + esc(charterSearchHref(tenant, { date: dateIso || '', time: '', people: search.people || 0, boat: search.boat || '' })) + '">‹ Charters</a>' +
             '<span> / ' + esc(s.name || 'Trip') + '</span>' +
           '</div>' +
-          '<div class="charter-detail-top">' +
+          '<div class="charter-detail-top"' + charterBandAttrs('page') + '>' +
             '<div class="charter-detail-lead"' + svcEditAttr(sid) + '>' +
               '<h1>' + (sid ? svcSpan(tenant, sid, 'name', s.name || 'Charter') : esc(s.name || 'Charter')) + '</h1>' +
               '<div class="charter-meta">' + svcSpan(tenant, sid, 'duration', dur || 'Trip') + '</div>' +
@@ -6301,7 +6708,7 @@
             '</div>' +
             galleryHtml +
           '</div>' +
-          '<div class="charter-detail-body">' +
+          '<div class="charter-detail-body"' + charterBandAttrs('card') + '>' +
             '<div class="charter-blueprint charter-captain">' +
               '<div class="charter-captain-avatar"></div>' +
               '<div style="flex:1"><div class="charter-card-title charter-captain-name" style="font-size:16px">' +
@@ -6361,7 +6768,7 @@
         function syncContinue() {
           var x = extras();
           btn.setAttribute('href', charterBookHref(tenant, service, x));
-          var ready = !!x.date && !!x.time && x.people > 0;
+          var ready = !!x.date && !!x.time && x.people > 0 && charterHasFleet(tenant);
           btn.style.opacity = ready ? '1' : '0.55';
           btn.setAttribute('aria-disabled', ready ? 'false' : 'true');
           paintItinerary();
@@ -6374,6 +6781,16 @@
           timeEl.innerHTML = '<option value="">Choose a time</option>';
           if (!date) {
             showHint('Pick an open day.');
+            syncContinue();
+            return;
+          }
+          if (!charterHasFleet(tenant)) {
+            showHint(charterNoFleetMessage());
+            syncContinue();
+            return;
+          }
+          if (tenant._charterOccupancyFailed) {
+            showHint('Live availability is temporarily unavailable. Please refresh and try again.');
             syncContinue();
             return;
           }
@@ -6416,24 +6833,9 @@
         function start() {
           fillTimes();
         }
-        if (Array.isArray(tenant._charterOccupancy)) {
-          start();
-          return;
-        }
-        if (typeof functions !== 'undefined' && tenant && tenant.slug) {
-          functions.httpsCallable('listPublicCharterOccupancy')({ tenantSlug: tenant.slug })
-            .then(function(res) {
-              charterApplyOccupancy(tenant, res && res.data);
-              start();
-            })
-            .catch(function() {
-              charterMarkOccupancyFailed(tenant);
-              start();
-            });
-        } else {
-          charterMarkOccupancyFailed(tenant);
-          start();
-        }
+        showHint('Loading live availability…');
+        charterBindOccupancyLifecycle(tenant, start);
+        charterLoadOccupancy(tenant, { force: true }).then(start).catch(start);
       }
 
       function charterHowItWorksPage(tenant) {
@@ -6449,25 +6851,25 @@
         }).join('');
         var faqs = charterFaqsForTenant(tenant);
         var faqHtml = faqs.map(function(f, i) {
-          return '<div class="charter-faq-item" data-edit-key="charterFaq:' + i + ':edit" role="button" aria-label="Edit FAQ">' +
+          return '<div class="charter-faq-item" data-edit-key="charterFaq:' + i + ':edit">' +
             '<h4>' + '<span data-edit-key="charterFaq:' + i + ':question">' + esc(f.q) + '</span></h4>' +
             '<p>' + '<span data-edit-key="charterFaq:' + i + ':answer">' + esc(f.a).replace(/\n/g, '<br>') + '</span></p></div>';
         }).join('');
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'how') +
-          '<section class="charter-section" style="text-align:center;padding-bottom:8px">' +
+          '<section class="charter-section" style="text-align:center;padding-bottom:8px"' + charterBandAttrs('page') + '>' +
             '<div class="charter-sec-label charter-sec-label--ink">' + wcSpan(tenant, 'wc.charter.howLabel', 'How it works') + '</div>' +
             '<h1 class="charter-sec-heading" style="max-width:600px;margin:0 auto 12px">' +
               wcSpan(tenant, 'wc.charter.howHeading', "Booking a charter shouldn't be complicated") + '</h1>' +
             '<p style="max-width:520px;margin:0 auto;opacity:.7;font-size:15px">' +
               wcSpan(tenant, 'wc.charter.howSub', 'Three steps between you and a day on the water.') + '</p>' +
           '</section>' +
-          '<section class="charter-section"><div class="charter-steps">' + stepsHtml + '</div></section>' +
-          '<section class="charter-section">' +
+          '<section class="charter-section"' + charterBandAttrs('card') + '><div class="charter-steps">' + stepsHtml + '</div></section>' +
+          '<section class="charter-section"' + charterBandAttrs('card') + '>' +
             '<h3 class="charter-sec-heading" style="margin-bottom:20px">' + wcSpan(tenant, 'wc.charter.faqHeading', 'Frequently asked') + '</h3>' +
             '<div class="charter-faq">' + faqHtml + '</div>' +
           '</section>' +
-          '<section class="charter-section" style="text-align:center">' +
+          '<section class="charter-section" style="text-align:center"' + charterBandAttrs('page') + '>' +
             '<h2 class="charter-sec-heading" style="margin-bottom:16px">' + wcSpan(tenant, 'wc.charter.howCtaHeading', 'Ready to get on the water?') + '</h2>' +
             '<a class="charter-btn" href="' + base + '/charters" style="height:46px;padding:0 28px">' +
               wcSpan(tenant, 'wc.charter.howCta', 'Browse charters') + '</a>' +
@@ -6479,12 +6881,55 @@
       function charterAboutPage(tenant) {
         var about = (tenant.aboutText || '').toString().trim()
           || 'Private fishing charters planned around your group, the conditions, and the day you want on the water.';
+        var aboutImg = (tenant.classicAboutImageUrl || tenant.heroImageUrl || '').toString().trim();
+        var photoHtml = aboutImg
+          ? '<img class="charter-about-photo" data-edit-key="classicAboutImage" src="' + esc(aboutImg) + '" alt="">'
+          : '<div class="charter-about-photo charter-about-photo--empty" data-edit-key="classicAboutImage" role="button" aria-label="Add about photo"></div>';
+        var showCaptain = tenant.showCharterContactCaptain === true;
+        var smsPhone = (tenant.smsPhoneNumber || '').toString().trim();
+        var contactPhone = (tenant.contactPhone || '').toString().trim();
+        var useTwilio = tenantClientSmsActive(tenant) &&
+          !!smsHrefFromPhone(smsPhone);
+        var captainPhone = useTwilio ? smsPhone : contactPhone;
+        var smsHref = smsHrefFromPhone(captainPhone, 'Hi Captain — I have a question about your charters.');
+        var captainHtml = '';
+        if (showCaptain && smsHref) {
+          var phoneLabel = displayPhoneUS(captainPhone) || captainPhone;
+          var bodyDefault = useTwilio
+            ? 'Questions before you book? Text this number — reply YES when asked so the captain can message you back.'
+            : 'Questions before you book? Text the captain at this number.';
+          var bodyKey = useTwilio ? 'wc.charter.contactCaptainBody' : 'wc.charter.contactCaptainBodyPersonal';
+          captainHtml =
+            '<div class="charter-blueprint charter-about-contact">' +
+              '<div class="charter-card-title" style="font-size:16px;margin-bottom:6px">' +
+                wcSpan(tenant, 'wc.charter.contactCaptainHeading', 'Contact the captain') +
+              '</div>' +
+              '<p style="margin:0 0 14px;font-size:14px;line-height:1.5;opacity:.8">' +
+                wcSpan(tenant, bodyKey, bodyDefault) +
+              '</p>' +
+              '<a class="charter-btn" href="' + esc(smsHref) + '">' +
+                wcSpan(tenant, 'wc.charter.contactCaptainCta', 'Text the captain') +
+              '</a>' +
+              '<div class="charter-about-contact-number">' + esc(phoneLabel) + '</div>' +
+            '</div>';
+        }
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'about') +
-          '<section class="charter-section">' +
-            '<div class="charter-sec-label charter-sec-label--ink">' + wcSpan(tenant, 'wc.charter.aboutLabel', 'About') + '</div>' +
-            '<h1 class="charter-about-title charter-sec-heading" style="margin:0 0 16px">' + siteNameSpan(tenant, 'Harbor Charters') + '</h1>' +
-            '<p data-edit-key="aboutText" style="max-width:640px;line-height:1.6;opacity:.85;white-space:pre-wrap">' + esc(about) + '</p>' +
+          '<section class="charter-section charter-about-section"' + charterBandAttrs('about') + '>' +
+            '<div class="charter-about-layout">' +
+              '<div class="charter-about-copy">' +
+                '<div class="charter-about-heading">' +
+                  '<div class="charter-sec-label charter-sec-label--ink">' + wcSpan(tenant, 'wc.charter.aboutLabel', 'About') + '</div>' +
+                  '<h1 class="charter-about-title charter-sec-heading">' + siteNameSpan(tenant, 'Harbor Charters') + '</h1>' +
+                '</div>' +
+                '<div class="charter-about-story">' +
+                  '<p data-edit-key="aboutText" class="charter-about-text">' + esc(about) + '</p>' +
+                  captainHtml +
+                  charterInstagramLinkHtml(tenant, 'charter-about-instagram') +
+                '</div>' +
+              '</div>' +
+              '<div class="charter-about-media">' + photoHtml + '</div>' +
+            '</div>' +
           '</section>' +
           charterFooterHtml(tenant) +
           '</div>';
@@ -6508,7 +6953,7 @@
               people: q.people || 0,
               boat: q.boat || ''
             });
-        return '<nav class="charter-nav">' +
+        return '<nav class="charter-nav"' + charterBandAttrs('page') + '>' +
           '<a class="charter-back charter-back--nav" href="' + esc(back) + '">‹ Back</a>' +
           '<a href="' + tenantBaseUrl(tenant) + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters') + '</a>' +
           '<span style="margin-left:auto;font-size:13px;opacity:.5">' +
@@ -6559,7 +7004,13 @@
         else priceNum = 450;
         var perAngler = Math.round(priceNum / 2);
         var feats = (tenant.featuredWorkImages || tenant.galleryImages || []);
-        var thumb = s.imageUrl || s.photoUrl || (feats[0] && (feats[0].url || feats[0])) || tenant.heroImageUrl || '';
+        var selectedServiceIndex = Math.max(0, (services || []).findIndex(function(candidate) {
+          return candidate === s ||
+            String(candidate.id || candidate.slug || '') === String(s.id || s.slug || '');
+        }));
+        var thumb = s.imageUrl || s.photoUrl ||
+          (feats[selectedServiceIndex] && (feats[selectedServiceIndex].url || feats[selectedServiceIndex])) ||
+          tenant.heroImageUrl || '';
         var addons = charterCheckoutAddons(tenant);
         var addonsHtml = addons.map(function(a, i) {
           var img = a.imageUrl
@@ -6588,18 +7039,28 @@
         metaBits.push(people + ' guests');
         var payMode = charterPayMode(tenant);
         var depositAmt = charterDepositAmount(tenant);
+        var responseHours = Number(tenant && tenant.workflow && tenant.workflow.responseTimeHours);
+        if (!isFinite(responseHours) || responseHours <= 0) responseHours = 24;
+        responseHours = Math.max(1, Math.min(168, Math.round(responseHours)));
         var cta = payMode === 'full' ? 'Pay in full'
           : payMode === 'deposit' ? 'Pay deposit'
           : 'Request to book';
         var payNote = payMode === 'full'
-          ? 'You’ll pay the trip total by card. Completing checkout holds this boat for 15 minutes while you pay; the hold is released if payment isn’t finished in time.'
+          ? 'You’ll pay the trip total today to confirm your booking.'
           : payMode === 'deposit'
             ? (depositAmt
-              ? 'You’ll pay a $' + Math.round(depositAmt) + ' deposit by card. Completing checkout holds this boat for 15 minutes while you pay. The rest is due before departure.'
-              : 'You’ll pay a deposit by card to hold the boat. Completing checkout holds this boat for 15 minutes while you pay. Set the amount in Booking settings.')
-            : 'You’ll hear back after the captain approves this request. The request holds a boat until the captain approves or declines — no payment is taken now.';
+              ? 'You’ll pay a $' + Math.round(depositAmt) + ' deposit today to confirm your trip. The remaining balance is due before departure.'
+              : 'You’ll pay a deposit today to confirm your trip. The remaining balance is due before departure.')
+            : 'You’ll hear back after the captain reviews this request. The boat is held for up to ' +
+              responseHours + ' hours while they respond — no payment is taken now.';
         var dueLabel = payMode === 'deposit' ? 'Due now (deposit)' : (payMode === 'full' ? 'Due now' : 'Trip total');
-        var dueAmt = payMode === 'deposit' && depositAmt > 0 ? depositAmt : priceNum;
+        var dueAmt = priceNum;
+        if (payMode === 'deposit') {
+          var configuredDeposit = depositAmt > 0 ? depositAmt : Math.round(priceNum * 0.2 * 100) / 100;
+          dueAmt = priceNum > 0
+            ? Math.max(0.5, Math.min(configuredDeposit, priceNum))
+            : Math.max(0.5, configuredDeposit);
+        }
         return '<div class="charter-page">' +
           charterCheckoutNavHtml(tenant, s) +
           '<div class="charter-checkout">' +
@@ -6613,7 +7074,13 @@
                 '<div class="charter-field"><label>First name</label><input name="firstName" placeholder="Jamie" autocomplete="given-name"></div>' +
                 '<div class="charter-field"><label>Last name</label><input name="lastName" placeholder="Rivera" autocomplete="family-name"></div>' +
                 '<div class="charter-field charter-field--full"><label>Email</label><input name="email" type="email" placeholder="jamie@email.com" autocomplete="email"></div>' +
-                '<div class="charter-field charter-field--full"><label>Phone</label><input name="phone" type="tel" placeholder="(305) 555-0148" autocomplete="tel"></div>' +
+              '<div class="charter-field charter-field--full"><label>Mobile number</label><input name="phone" type="tel" placeholder="(305) 555-0148" autocomplete="tel" required></div>' +
+              '<div class="charter-sms-consent charter-field--full">' +
+                '<label class="charter-sms-consent-label">' +
+                  '<input name="smsConsent" type="checkbox">' +
+                  '<span>I agree to receive booking-related text messages at this number. Message and data rates may apply. Reply STOP to opt out.</span>' +
+                '</label>' +
+              '</div>' +
               '</div>' +
               addonsBlock +
               '<div class="charter-pay-box" data-charter-pay-box hidden>' +
@@ -6639,8 +7106,19 @@
                   '<div class="row"><span class="muted" data-line="anglers">' + people + ' anglers</span><span data-line="tripTotal">$' + Math.round(priceNum) + '</span></div>' +
                   (addons.length ? '<div class="row"><span class="muted">Add-ons</span><span data-line="addons">$0</span></div>' : '') +
                   '<div class="hr"></div>' +
-                  '<div class="row total"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">$' + Math.round(dueAmt) + '</span></div>' +
-                  '<div class="row" data-line="card-total-row" hidden><span class="muted">Charged on card</span><span data-line="card-total"></span></div>' +
+                  '<div class="row total" data-line="due-row"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">$' + Math.round(dueAmt) + '</span></div>' +
+                  (payMode === 'request' ? '' :
+                    '<div class="row" data-line="fee-row">' +
+                      '<span class="charter-fee-label">' +
+                        '<span class="muted">Processing &amp; service fees</span>' +
+                        '<span class="bk-shop-fee-info-wrap" id="bk-charter-fee-info-wrap">' +
+                          '<button type="button" class="bk-shop-fee-info" id="bk-charter-fee-info" aria-label="Processing fee details" aria-expanded="false" aria-controls="bk-charter-fee-tip">i</button>' +
+                          '<div class="bk-shop-fee-tip" id="bk-charter-fee-tip" role="tooltip"></div>' +
+                        '</span>' +
+                      '</span>' +
+                      '<span data-line="fees" class="bk-shop-checkout-summary-fee-pending">Calculated at checkout</span>' +
+                    '</div>' +
+                    '<div class="row total" data-line="card-total-row" hidden><span>Charged on card</span><span data-line="card-total"></span></div>') +
                 '</div>' +
                 '<button type="button" class="charter-btn charter-btn-block" data-charter-confirm>' + esc(cta) + '</button>' +
               '</div>' +
@@ -6663,6 +7141,46 @@
         var errEl = root.querySelector('[data-charter-checkout-error]');
         var btn = root.querySelector('[data-charter-confirm]');
         var charterPay = null;
+        var feeLine = order.querySelector('[data-line="fees"]');
+        var feeTip = document.getElementById('bk-charter-fee-tip');
+        var feeInfoWrap = document.getElementById('bk-charter-fee-info-wrap');
+        var feeInfoBtn = document.getElementById('bk-charter-fee-info');
+        var dueRow = order.querySelector('[data-line="due-row"]');
+        var cardRow = order.querySelector('[data-line="card-total-row"]');
+
+        function charterMoney(cents) {
+          var n = (Number(cents) || 0) / 100;
+          return (typeof formatMoney === 'function') ? formatMoney(n) : ('$' + n.toFixed(2));
+        }
+        function setCharterFeePending(label) {
+          if (!feeLine) return;
+          feeLine.textContent = label || 'Calculated at checkout';
+          feeLine.className = 'bk-shop-checkout-summary-fee-pending';
+          if (feeTip && typeof shopCheckoutFeeTooltipHtml === 'function') {
+            feeTip.innerHTML = shopCheckoutFeeTooltipHtml(null);
+          }
+          if (cardRow) cardRow.hidden = true;
+          if (dueRow) dueRow.classList.add('total');
+        }
+        function bindCharterFeeTooltip() {
+          if (!feeInfoBtn || !feeInfoWrap) return;
+          if (feeTip && typeof shopCheckoutFeeTooltipHtml === 'function') {
+            feeTip.innerHTML = shopCheckoutFeeTooltipHtml(null);
+          }
+          feeInfoBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var open = feeInfoWrap.classList.toggle('bk-shop-fee-tip-open');
+            feeInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          });
+          document.addEventListener('click', function(e) {
+            if (!feeInfoWrap.contains(e.target)) {
+              feeInfoWrap.classList.remove('bk-shop-fee-tip-open');
+              feeInfoBtn.setAttribute('aria-expanded', 'false');
+            }
+          });
+        }
+        bindCharterFeeTooltip();
 
         function addonTotal() {
           var add = 0;
@@ -6677,8 +7195,12 @@
         }
         function tripTotal() { return Math.round(base) + addonTotal(); }
         function dueNow() {
-          if (payMode === 'deposit' && depositAmt > 0) return Math.round(depositAmt);
-          return tripTotal();
+          var total = tripTotal();
+          if (payMode !== 'deposit') return total;
+          var configured = depositAmt > 0 ? depositAmt : Math.round(total * 0.2 * 100) / 100;
+          return total > 0
+            ? Math.max(0.5, Math.min(configured, total))
+            : Math.max(0.5, configured);
         }
         function refresh() {
           var add = addonTotal();
@@ -6686,6 +7208,7 @@
           var elDue = order.querySelector('[data-line="due"]');
           if (elAdd) elAdd.textContent = '$' + add;
           if (elDue) elDue.textContent = '$' + dueNow();
+          setCharterFeePending('Calculated at checkout');
           charterPay = null;
         }
         var boxes = root.querySelectorAll('[data-charter-addon]');
@@ -6693,20 +7216,36 @@
           boxes[j].addEventListener('change', refresh);
         }
         refresh();
-        if (!btn) return;
-
         function showErr(msg) {
           if (!errEl) { window.alert(msg); return; }
           errEl.textContent = msg;
           errEl.hidden = !msg;
         }
-        function goConfirmed() {
+        if (!charterHasFleet(tenant)) {
+          showErr(charterNoFleetMessage());
+          if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.55';
+          }
+          return;
+        }
+        if (!btn) return;
+        function confirmationUrl(totalCents) {
           var search = charterSearchQuery();
           var done = tenantBaseUrl(tenant).replace(/\/$/, '') + '/book/confirmed';
           var q = [];
           if (service && service.slug) q.push('trip=' + encodeURIComponent(service.slug));
           if (search.date) q.push('date=' + encodeURIComponent(search.date));
-          window.location.href = q.length ? (done + '?' + q.join('&')) : done;
+          if (search.time) q.push('time=' + encodeURIComponent(search.time));
+          if (search.people) q.push('people=' + encodeURIComponent(search.people));
+          q.push('mode=' + encodeURIComponent(payMode));
+          if (totalCents != null && isFinite(Number(totalCents))) {
+            q.push('paid=' + encodeURIComponent(String(Math.max(0, Math.round(Number(totalCents))))));
+          }
+          return q.length ? (done + '?' + q.join('&')) : done;
+        }
+        function goConfirmed() {
+          window.location.href = confirmationUrl(charterPay && charterPay.totalCents);
         }
         function contact() {
           var first = (root.querySelector('input[name="firstName"]') || {}).value || '';
@@ -6724,12 +7263,15 @@
           var notes = [];
           if (search.people) notes.push('Party of ' + search.people);
           var picked = [];
+          var pickedProductIds = [];
           var addonBoxes = root.querySelectorAll('[data-charter-addon]');
           for (var ai = 0; ai < addonBoxes.length; ai++) {
             if (!addonBoxes[ai].checked) continue;
             var lab = addonBoxes[ai].closest('[data-addon-name]');
             var nm = lab ? String(lab.getAttribute('data-addon-name') || '').trim() : '';
             if (nm) picked.push(nm);
+            var productId = lab ? String(lab.getAttribute('data-addon-product') || '').trim() : '';
+            if (productId) pickedProductIds.push(productId);
           }
           if (picked.length) notes.push('Add-ons: ' + picked.join(', '));
           return {
@@ -6737,7 +7279,7 @@
             customerName: c.name,
             customerEmail: c.email,
             customerPhone: c.phone || null,
-            smsConsentAccepted: !!c.phone,
+            smsConsentAccepted: !!(root.querySelector('input[name="smsConsent"]') || {}).checked,
             serviceId: order.getAttribute('data-service-id') || (service && service.id) || null,
             serviceSlug: order.getAttribute('data-service-slug') || (service && service.slug) || null,
             serviceName: order.getAttribute('data-service-name') || (service && service.name) || null,
@@ -6747,7 +7289,7 @@
             partySize: search.people || null,
             durationMinutes: parseInt(order.getAttribute('data-duration') || '0', 10) || (service && service.durationMinutes) || null,
             notes: notes.length ? notes.join('. ') : null,
-            addonCents: Math.round(addonTotal() * 100),
+            addonProductIds: pickedProductIds,
             boatId: search.boat || null
           };
         }
@@ -6766,15 +7308,30 @@
           elements.create('payment', { layout: 'tabs' }).mount('#bk-charter-payment-element');
           if (payBox) payBox.hidden = false;
           if (payLoading) payLoading.hidden = true;
-          var cardRow = order.querySelector('[data-line="card-total-row"]');
           var cardTot = order.querySelector('[data-line="card-total"]');
+          var addonLine = order.querySelector('[data-line="addons"]');
+          var dueLine = order.querySelector('[data-line="due"]');
+          if (feeLine && data.surchargeCents != null) {
+            feeLine.textContent = charterMoney(data.surchargeCents);
+            feeLine.className = '';
+          }
+          if (feeTip && typeof shopCheckoutFeeTooltipHtml === 'function') {
+            feeTip.innerHTML = shopCheckoutFeeTooltipHtml({
+              surchargeCents: data.surchargeCents || 0,
+              platformFeeCents: data.platformFeeCents || 0
+            });
+          }
           if (cardRow) cardRow.hidden = false;
-          if (cardTot && data.totalCents) cardTot.textContent = '$' + (data.totalCents / 100).toFixed(2);
+          if (dueRow) dueRow.classList.remove('total');
+          if (cardTot && data.totalCents != null) cardTot.textContent = charterMoney(data.totalCents);
+          if (addonLine && data.addonCents != null) addonLine.textContent = charterMoney(data.addonCents);
+          if (dueLine && data.chargeCents != null) dueLine.textContent = charterMoney(data.chargeCents);
           charterPay = {
             stripe: stripe,
             elements: elements,
             requestId: data.requestId,
-            paymentIntentId: data.paymentIntentId
+            paymentIntentId: data.paymentIntentId,
+            totalCents: data.totalCents
           };
           btn.textContent = payMode === 'deposit' ? 'Pay deposit' : 'Pay now';
         }
@@ -6782,8 +7339,12 @@
         btn.addEventListener('click', function() {
           showErr('');
           var c = contact();
-          if (!c.name || !c.email) {
-            showErr('Enter your name and email to continue.');
+          if (!c.name || !c.email || !c.phone) {
+            showErr('Enter your name, email, and mobile number to continue.');
+            return;
+          }
+          if (!(root.querySelector('input[name="smsConsent"]') || {}).checked) {
+            showErr('Agree to receive booking-related text messages to continue.');
             return;
           }
           if (payMode === 'request') {
@@ -6806,7 +7367,7 @@
               elements: charterPay.elements,
               redirect: 'if_required',
               confirmParams: {
-                return_url: tenantBaseUrl(tenant).replace(/\/$/, '') + '/book/confirmed'
+                return_url: confirmationUrl(null)
               }
             }).then(function(result) {
               if (result.error) throw result.error;
@@ -6826,6 +7387,7 @@
           }
           btn.disabled = true;
           btn.textContent = 'Loading payment…';
+          setCharterFeePending('Calculating…');
           if (payBox) payBox.hidden = false;
           if (payLoading) payLoading.hidden = false;
           var stripeReady = (window.BKSitePerf && window.BKSitePerf.ensureStripe)
@@ -6848,6 +7410,7 @@
               btn.disabled = false;
               btn.textContent = payMode === 'deposit' ? 'Pay deposit' : 'Pay in full';
               if (payLoading) payLoading.hidden = true;
+              if (!charterPay) setCharterFeePending('Calculated at checkout');
               showErr(formatFirebaseHttpsError(e));
             });
         });
@@ -6856,39 +7419,60 @@
       function charterConfirmationPage(tenant, service) {
         var base = tenantBaseUrl(tenant);
         var s = service || { name: 'Half-Day Reef Charter' };
-        var price = charterPriceLabel(s) || '$450';
-        var priceNum = 0;
-        if (typeof s.priceCents === 'number') priceNum = s.priceCents / 100;
-        else if (typeof s.price === 'number') priceNum = s.price;
-        else priceNum = 450;
+        var search = charterSearchQuery();
+        var params;
+        try { params = new URLSearchParams(location.search || ''); } catch (_) { params = null; }
+        var mode = params ? String(params.get('mode') || '').toLowerCase() : '';
+        var paidCents = params ? parseInt(params.get('paid') || '', 10) : NaN;
+        var isRequest = mode === 'request';
+        var title = isRequest ? 'Request sent' : 'Trip booked';
+        var subtitle = isRequest
+          ? 'The captain will review your request and contact you soon.'
+          : 'Your payment was completed and your trip is confirmed.';
+        var dateText = search.date ? charterPrettyDateFromIso(search.date) : '—';
+        var startMin = charterParseTimeToMin(search.time);
+        var timeText = startMin == null ? '—' : charterFormatMin(startMin);
+        var guestsText = search.people > 0
+          ? search.people + (search.people === 1 ? ' angler' : ' anglers')
+          : '—';
         var meeting = webCopyOverrideText(tenant, 'wc.charter.meetingPoint', 'Garrison Bight Marina');
-        var emailHint = webCopyOverrideText(tenant, 'wc.charter.confirmEmailHint', 'jamie@email.com');
+        var paidRow = !isRequest && isFinite(paidCents)
+          ? '<div class="hr"></div><div class="row total"><span>Paid today</span><span>$' +
+            (paidCents / 100).toFixed(2) + '</span></div>'
+          : '';
+        var smsPhone = (tenant.smsPhoneNumber || '').toString().trim();
+        var contactPhone = (tenant.contactPhone || '').toString().trim();
+        var captainPhone = (tenantClientSmsActive(tenant) && smsPhone) ? smsPhone : contactPhone;
+        var captainTel = telHrefFromPhone(captainPhone);
+        var captainLabel = displayPhoneUS(captainPhone) || captainPhone;
+        var captainNote = '';
+        if (!isRequest && captainPhone) {
+          var phoneHtml = captainTel
+            ? '<a href="' + esc(captainTel) + '">' + esc(captainLabel) + '</a>'
+            : esc(captainLabel);
+          captainNote = '<p class="charter-confirm-note">To reschedule or cancel your trip, please reach out to your captain at ' +
+            phoneHtml + '.</p>';
+        }
         return '<div class="charter-page" style="display:flex;flex-direction:column;min-height:100vh">' +
           charterNavHtml(tenant, 'book') +
           '<div class="charter-confirm">' +
             '<div class="charter-blueprint charter-confirm-check">' +
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="34" height="34"><path d="M20 6L9 17l-5-5"></path></svg>' +
             '</div>' +
-            '<div><h2 style="margin:0 0 6px">' + wcSpan(tenant, 'wc.charter.confirmTitle', 'Trip booked') + '</h2>' +
-            '<p style="margin:0;font-size:14px;opacity:.7">' +
-              wcSpan(tenant, 'wc.charter.confirmSub', 'A confirmation has been sent to ' + emailHint) +
-            '</p></div>' +
+            '<div><h2 style="margin:0 0 6px">' + esc(title) + '</h2>' +
+            '<p style="margin:0;font-size:14px;opacity:.7">' + esc(subtitle) + '</p></div>' +
             '<div class="charter-blueprint charter-confirm-card elev-sm">' +
               '<div class="charter-card-title" style="margin-bottom:10px">' + esc(s.name || 'Charter') + '</div>' +
               '<div class="charter-confirm-rows">' +
-                '<div class="row"><span class="muted">Date</span><span>' + wcSpan(tenant, 'wc.charter.confirmDate', 'Sat, Aug 22') + '</span></div>' +
-                '<div class="row"><span class="muted">Departure</span><span>' + wcSpan(tenant, 'wc.charter.confirmDepart', '6:30 AM') + '</span></div>' +
-                '<div class="row"><span class="muted">Guests</span><span>' + wcSpan(tenant, 'wc.charter.confirmGuests', '2 anglers') + '</span></div>' +
+                '<div class="row"><span class="muted">Date</span><span>' + esc(dateText) + '</span></div>' +
+                '<div class="row"><span class="muted">Departure</span><span>' + esc(timeText) + '</span></div>' +
+                '<div class="row"><span class="muted">Guests</span><span>' + esc(guestsText) + '</span></div>' +
                 '<div class="row"><span class="muted">Meeting point</span><span data-edit-key="wc.charter.meetingPoint">' + esc(meeting) + '</span></div>' +
-                '<div class="hr"></div>' +
-                '<div class="row total"><span>Total paid</span><span>$' + (Math.round(priceNum) + 25) + '</span></div>' +
+                paidRow +
               '</div>' +
             '</div>' +
+            captainNote +
             '<div class="charter-confirm-actions">' +
-              '<button type="button" class="charter-btn charter-btn-secondary">' +
-                wcSpan(tenant, 'wc.charter.addCalendar', 'Add to calendar') + '</button>' +
-              '<button type="button" class="charter-btn charter-btn-secondary">' +
-                wcSpan(tenant, 'wc.charter.getDirections', 'Get directions') + '</button>' +
               '<a class="charter-btn" href="' + base + '/charters">' +
                 wcSpan(tenant, 'wc.charter.browseMore', 'Browse more charters') + '</a>' +
             '</div>' +
@@ -9712,6 +10296,8 @@
             var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
               smsEnabled: data.smsEnabled === true,
               smsStatus: (data.smsStatus || '').toString(),
+              smsPhoneNumber: (data.smsPhoneNumber || '').toString(),
+              showCharterContactCaptain: data.showCharterContactCaptain === true,
               backgroundColor: data.backgroundColor, cardSurfaceColor: data.cardSurfaceColor, textColor: data.textColor,
               primaryColor: data.primaryColor, primaryColorHover: data.primaryColorHover || '',
               formSchema: data.formSchema, showContactOnPage: data.showContactOnPage,
@@ -9795,6 +10381,8 @@
               showGalleryPage: data.showGalleryPage !== false,
               showBookPage: data.showBookPage !== false,
               showAboutPage: data.showAboutPage !== false,
+              showChartersPage: data.showChartersPage !== false,
+              showHowItWorksPage: data.showHowItWorksPage !== false,
               showTeamPage: data.showTeamPage !== false,
               showMeetTheTeamOnHome: data.showMeetTheTeamOnHome !== false,
               shopEnabled: data.shopEnabled || false,
@@ -9854,8 +10442,10 @@
           return 'background:' + tc.card + ';color:' + tc.fg;
         }
         if (usesAccentSidebarDrawer(tenant)) {
-          return 'background:' + tc.accent + ';color:' + tc.accentFg +
-            ';--bk-sidebar-divider:' + rgbaFromHex(tc.accentFg, 0.28);
+          return 'background:var(--bk-sidebar-accent-bg,' + tc.accent + ')' +
+            ';color:var(--bk-sidebar-accent-fg,' + tc.accentFg + ')' +
+            ';--bk-sidebar-divider:var(--bk-sidebar-accent-divider,' +
+              rgbaFromHex(tc.accentFg, 0.28) + ')';
         }
         return tattooSiteThemeInlineStyle(tenant);
       }
@@ -9880,11 +10470,11 @@
         if (!links.length) {
           if (isCharterTheme(tenant)) {
             links = [{ label: 'Home', type: 'internal', target: 'home' }];
-            links.push({ label: 'Charters', type: 'internal', target: 'charters' });
-            links.push({ label: 'How it works', type: 'internal', target: 'how-it-works' });
+            if (tenantShowChartersPage(tenant)) links.push({ label: 'Charters', type: 'internal', target: 'charters' });
+            if (tenantShowHowItWorksPage(tenant)) links.push({ label: 'How it works', type: 'internal', target: 'how-it-works' });
             if (tenantShowShopPage(tenant)) links.push({ label: 'Shop', type: 'internal', target: 'shop' });
             if (tenantShowAboutPage(tenant)) links.push({ label: 'About', type: 'internal', target: 'about' });
-            if (tenantShowBookPage(tenant)) links.push({ label: 'Book now', type: 'internal', target: 'book' });
+            if (tenantShowBookPage(tenant) && tenantShowChartersPage(tenant)) links.push({ label: 'Book now', type: 'internal', target: 'charters' });
           } else {
           links = [{ label: 'Home', type: 'internal', target: 'home' }];
           if (tenantShowGalleryPage(tenant)) links.push({ label: 'Gallery', type: 'internal', target: 'gallery' });
@@ -9909,7 +10499,7 @@
           if (l.type === 'external' && l.url) {
             href = l.url;
           } else if (l.target === 'book') {
-            href = bookUrl;
+            href = (isCharterTheme(tenant) || isCharterPlan(tenant)) ? (base + '/charters') : bookUrl;
           } else if (l.target === 'gallery') {
             href = galleryUrl;
           } else if (l.target === 'shop') {
@@ -11953,6 +12543,13 @@
       }
       function shopCheckoutCardStyle(tenant) {
         var c = tenantColors(tenant);
+        if (isCharterTheme(tenant)) {
+          return '--bk-checkout-card:var(--charter-surface);--bk-checkout-fg:var(--charter-ink);' +
+            '--bk-checkout-muted:var(--charter-muted);--bk-checkout-border:var(--charter-line);' +
+            '--bk-checkout-input-bg:color-mix(in srgb, var(--charter-ink) 4%, var(--charter-bg));' +
+            '--bk-checkout-accent:var(--charter-accent);--bk-checkout-accent-fg:var(--charter-accent-ink);' +
+            '--bk-checkout-shadow:none;';
+        }
         var pageDark = isStonecutTheme(tenant);
         var checkoutCard = '#ffffff';
         var checkoutFg = pageDark ? '#111111' : (c.fg || '#111111');
@@ -11978,22 +12575,10 @@
       function shopCheckoutSubtitleLine(tenant) {
         return tenantSiteDisplayName(tenant, '');
       }
-      function shopCheckoutFeeTooltipHtml(stripeState) {
-        if (!stripeState || !stripeState.surchargeCents) {
-          return '<p>Includes Stripe card processing (2.9% + 30\u00a2) and a 1% platform fee.</p>' +
-            '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
-        }
-        var platform = stripeState.platformFeeCents || 0;
-        var processing = Math.max(0, stripeState.surchargeCents - platform);
-        var html = '';
-        if (processing > 0) {
-          html += '<p>Card processing (Stripe 2.9% + 30\u00a2): ' + formatMoney(processing / 100) + '</p>';
-        }
-        if (platform > 0) {
-          html += '<p>Platform fee (1%): ' + formatMoney(platform / 100) + '</p>';
-        }
-        html += '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
-        return html;
+      function shopCheckoutFeeTooltipHtml() {
+        return '<p>Card processing (Stripe 2.9% + 30\u00a2)</p>' +
+          '<p>Platform fee (1%)</p>' +
+          '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
       }
       function updateShopCheckoutSummary(cart, stripeState, contactOk, isPreparing) {
         var summaryEl = document.getElementById('bk-shop-checkout-summary');
@@ -12186,15 +12771,18 @@
       }
       function shopPaymentElementAppearance(tenant) {
         var c = tenantColors(tenant);
+        var isCharter = isCharterTheme(tenant);
         return {
           theme: 'stripe',
           variables: {
             colorPrimary: c.accent,
-            colorBackground: '#ffffff',
-            colorText: '#111111',
+            colorBackground: isCharter ? (c.card || c.bg || '#ffffff') : '#ffffff',
+            colorText: isCharter ? (c.fg || '#111111') : '#111111',
             colorDanger: '#df1b41',
-            borderRadius: '10px',
-            fontFamily: 'var(--font-display), system-ui, sans-serif',
+            borderRadius: isCharter ? '6px' : '10px',
+            fontFamily: isCharter
+              ? 'Inter, system-ui, sans-serif'
+              : 'var(--font-display), system-ui, sans-serif',
           },
         };
       }
@@ -12354,6 +12942,15 @@
       function stonecutShopCheckoutPage(tenant) {
         var main = '<main class="stonecut-shop-shell stonecut-checkout-shell">' + shopCheckoutInnerHtml(tenant) + '</main>';
         return '<div class="stonecut-page">' + stonecutNavHtml(tenant) + main + stonecutSiteFooterHtml(tenant) + tattooSidebarShellHtml(tenant) + '</div>';
+      }
+      function charterShopCheckoutPage(tenant) {
+        return '<div class="charter-page">' +
+          charterNavHtml(tenant, 'shop') +
+          '<div class="charter-shop-checkout-shell"' + charterBandAttrs('page') + '>' +
+            shopCheckoutInnerHtml(tenant) +
+          '</div>' +
+          charterFooterHtml(tenant) +
+          '</div>';
       }
       function bindShopCheckoutPage(tenant) {
         bindShopPage(tenant);
@@ -13015,7 +13612,10 @@
                 applyBranding(tenant);
                 return;
               }
-              if (isBladeTheme(tenant)) {
+              if (isCharterTheme(tenant)) {
+                document.getElementById('root').innerHTML = charterShopCheckoutPage(tenant);
+                bindTattooSidebar();
+              } else if (isBladeTheme(tenant)) {
                 document.getElementById('root').innerHTML = bladeShopCheckoutPage(tenant);
                 bindTattooSidebar();
                 bindBladeChrome();
@@ -13041,7 +13641,7 @@
               return;
             }
             if (isShop) {
-              if (!tenant.shopEnabled) {
+              if (!tenant.shopEnabled && !isTemplatePreview()) {
                 var shopBase = tenantBaseUrl(tenant);
                 document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p>Shop is not enabled.</p><p><a href="' + esc(shopBase + '/home') + '">Back to home</a></p></div></div>';
                 applyBranding(tenant);
@@ -13084,22 +13684,41 @@
               else applySidebarIconColor(tenant, false, true);
               return;
             }
-            if (p.isGalleryPath && !tenantShowGalleryPage(tenant)) {
+            if (p.isGalleryPath && !tenantShowGalleryPage(tenant) && !isTemplatePreview()) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
-            if (p.isAboutPath && !tenantShowAboutPage(tenant)) {
+            if (p.isAboutPath && !tenantShowAboutPage(tenant) && !isTemplatePreview()) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
-            if (p.isTeamPath && !tenantShowTeamPage(tenant)) {
+            if (p.isTeamPath && !tenantShowTeamPage(tenant) && !isTemplatePreview()) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
-            if (p.isBookPath && !tenantShowBookPage(tenant)) {
+            if (p.isBookPath &&
+                (!tenantShowBookPage(tenant) ||
+                 (isCharterTheme(tenant) && !tenantShowChartersPage(tenant))) &&
+                !isTemplatePreview()) {
+              document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
+              applyBranding(tenant);
+              return;
+            }
+            if (isCharterTheme(tenant) &&
+                (p.isChartersPath || p.isCharterDetailPath) &&
+                !tenantShowChartersPage(tenant) &&
+                !isTemplatePreview()) {
+              document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
+              applyBranding(tenant);
+              return;
+            }
+            if (isCharterTheme(tenant) &&
+                p.isHowItWorksPath &&
+                !tenantShowHowItWorksPage(tenant) &&
+                !isTemplatePreview()) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
@@ -13155,6 +13774,7 @@
             if (isCharterSite && isChartersBrowse) {
               document.getElementById('root').innerHTML = charterBrowsePage(tenant, services);
               bindCharterBrowse(tenant, services);
+              bindCharterScrollReveal(document.getElementById('root'));
               bindTattooSidebar();
               applyBranding(tenant);
               return;
@@ -13167,18 +13787,21 @@
               }
               document.getElementById('root').innerHTML = charterDetailPage(tenant, detailSvc, services);
               bindCharterDetail(tenant, detailSvc);
+              bindCharterScrollReveal(document.getElementById('root'));
               bindTattooSidebar();
               applyBranding(tenant);
               return;
             }
             if (isCharterSite && isHowItWorks) {
               document.getElementById('root').innerHTML = charterHowItWorksPage(tenant);
+              bindCharterScrollReveal(document.getElementById('root'));
               bindTattooSidebar();
               applyBranding(tenant);
               return;
             }
             if (isCharterSite && p.isAboutPath) {
               document.getElementById('root').innerHTML = charterAboutPage(tenant);
+              bindCharterScrollReveal(document.getElementById('root'));
               bindTattooSidebar();
               applyBranding(tenant);
               return;
@@ -13200,15 +13823,51 @@
                   }
                 }
               }
-              if (!charterBookSvc && services.length) charterBookSvc = services[0];
               if (isCharterConfirmed) {
+                if (!charterBookSvc && services.length) charterBookSvc = services[0];
                 document.getElementById('root').innerHTML = charterConfirmationPage(tenant, charterBookSvc);
-              } else {
+                bindTattooSidebar();
+                applyBranding(tenant);
+                return;
+              }
+
+              var checkoutSearch = charterSearchQuery();
+              var checkoutTime = charterParseTimeToMin(checkoutSearch.time);
+              var backToAvailability = charterSearchHref(tenant, {
+                slug: charterBookSvc ? charterBookSvc.slug : '',
+                date: checkoutSearch.date || '',
+                people: checkoutSearch.people || 0,
+                duration: checkoutSearch.duration || 0,
+                boat: checkoutSearch.boat || ''
+              });
+              if (!charterBookSvc || !checkoutSearch.date || checkoutTime == null) {
+                window.location.replace(backToAvailability);
+                return;
+              }
+
+              charterBindOccupancyLifecycle(tenant);
+              charterLoadOccupancy(tenant, { force: true }).then(function() {
+                var checkoutDate = charterDateFromIso(checkoutSearch.date);
+                var checkoutDur = Number(charterBookSvc.durationMinutes) || 240;
+                var slotIsOpen = charterTripFitsDate(tenant, checkoutDate, checkoutDur, {
+                  occupancy: tenant._charterOccupancy || [],
+                  people: checkoutSearch.people || 0,
+                  startMin: checkoutTime,
+                  maxPeople: charterMaxPeopleForTrip(tenant, charterBookSvc),
+                  service: charterBookSvc,
+                  boatFilterId: checkoutSearch.boat || ''
+                });
+                if (!slotIsOpen) {
+                  window.location.replace(backToAvailability);
+                  return;
+                }
                 document.getElementById('root').innerHTML = charterCheckoutPage(tenant, charterBookSvc, services);
                 bindCharterCheckout(tenant, charterBookSvc);
-              }
-              bindTattooSidebar();
-              applyBranding(tenant);
+                bindTattooSidebar();
+                applyBranding(tenant);
+              }).catch(function() {
+                window.location.replace(backToAvailability);
+              });
               return;
             }
             if (isTeam) {
@@ -13275,7 +13934,10 @@
                 if (tenantShouldBindShopCart(tenant)) {
                   bindShopPage(tenant);
                 }
-                if (isChartersHome) bindCharterHomeSearch(tenant);
+                if (isChartersHome) {
+                  bindCharterHomeSearch(tenant, services);
+                  bindCharterScrollReveal(document.getElementById('root'));
+                }
                 applyBranding(tenant);
                 applySidebarIconColor(tenant, p.isBookPath, false);
                 if (p.sectionTarget) {

@@ -65,6 +65,12 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     @Published var isTenantOwner: Bool = false
     /// Fishing charter fleet (Settings → Boats). Empty on other plans.
     @Published var charterBoats: [CharterBoat] = []
+    /// One location = one trip at a time. By boat = hulls can overlap.
+    @Published var charterBookBy: CharterBookBy = .location
+    @Published var charterBufferMinutes: CharterBufferMinutes = .thirty
+    @Published var charterLastBooking: CharterLastBooking = .endOfHours
+    /// Legacy website trip-card photos used when a trip has no dedicated `imageUrl`.
+    @Published var charterTripFallbackImages: [String] = []
     /// Shareable team invite URL (owner creates via Cloud Function).
     @Published var teamInviteShareURL: URL?
     @Published var isCreatingTeamInvite = false
@@ -268,6 +274,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 tenantSubscriptionPlan = .solo
                 isTenantOwner = false
                 charterBoats = []
+                charterBookBy = .location
+                charterBufferMinutes = .thirty
+                charterLastBooking = .endOfHours
                 teamInviteShareURL = nil
                 teamInviteError = nil
                 isCreatingTeamInvite = false
@@ -291,6 +300,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             var tenantDeposit: Double?
             var tenantManagersApprove = true
             var resolvedBookingMode = BookingMode.form
+            var resolvedCharterBookBy = CharterBookBy.location
+            var resolvedCharterBuffer = CharterBufferMinutes.thirty
+            var resolvedCharterLast = CharterLastBooking.endOfHours
             var memberSettings = TeamMemberSettings()
             var resolvedBusinessName = profile?.business.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             var loadedTenant: [String: Any]?
@@ -319,15 +331,19 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                         workflowMode: wf?["bookingMode"] as? String,
                         bookingFormStyleId: styleId
                     )
-                    if let wf,
-                       let typeRaw = wf["confirmationType"] as? String,
-                       let type = BookingConfirmationType(rawValue: typeRaw) {
+                    if let wf {
+                       if let typeRaw = wf["confirmationType"] as? String,
+                          let type = BookingConfirmationType(rawValue: typeRaw) {
                         resolvedTenantType = type
                         resolvedTenantRequiresApproval = type.requiresApproval
                         tenantDeposit = wf["depositAmount"] as? Double
                         if let ma = wf["managersApproveAppointments"] as? Bool {
                             tenantManagersApprove = ma
                         }
+                       }
+                       resolvedCharterBookBy = CharterBookBy.resolved(wf["charterBookBy"] as? String)
+                       resolvedCharterBuffer = CharterBufferMinutes.resolved(wf["charterBufferMinutes"])
+                       resolvedCharterLast = CharterLastBooking.resolved(wf["charterLastBookingMin"])
                     }
                 }
             }
@@ -364,6 +380,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     charterBoats = planResolved.isCharterPlan
                         ? CharterBoat.parseList(loadedTenant?["charterBoats"])
                         : []
+                    charterBookBy = planResolved.isCharterPlan ? resolvedCharterBookBy : .location
+                    charterBufferMinutes = planResolved.isCharterPlan ? resolvedCharterBuffer : .thirty
+                    charterLastBooking = planResolved.isCharterPlan ? resolvedCharterLast : .endOfHours
                     applyTenantBusinessHours(from: loadedTenant)
                     timeZoneId = Self.normalizedTimeZoneId(
                         p.availability.timeZone.isEmpty ? TimeZone.current.identifier : p.availability.timeZone
@@ -544,6 +563,7 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: [
                 "charterBoats": charterBoats.map { $0.toFirestore() },
+                "charterBoatSetupPending": charterBoats.isEmpty,
             ])
             await MainActor.run { markBookingSettingsSaved() }
         } catch {
@@ -568,6 +588,13 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     func deleteCharterBoat(id: String) async {
         charterBoats.removeAll { $0.id == id }
         await saveCharterBoats()
+        guard let tid = tenantId else { return }
+        do {
+            try await firebaseService.stripBoatIdFromTenantServices(tenantId: tid, boatId: id)
+            await reloadServices()
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
     }
 
     func uploadCharterBoatImage(imageData: Data) async -> String? {
@@ -598,11 +625,27 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 workflowPatch["depositAmount"] = amount
             }
         }
+        if tenantSubscriptionPlan.isCharterPlan {
+            workflowPatch["charterBookBy"] = charterBookBy.rawValue
+            workflowPatch["charterBufferMinutes"] = charterBufferMinutes.rawValue
+            if charterLastBooking == .endOfHours {
+                workflowPatch["charterLastBookingMin"] = NSNull()
+            } else {
+                workflowPatch["charterLastBookingMin"] = charterLastBooking.rawValue
+            }
+        }
         // Public fields /book loads from tenants/{id}. Deep-merge under workflow.
         try await firebaseService.updateTenant(tenantId: tid, updates: [
             "bookingMode": modeRaw,
             "workflow": workflowPatch,
         ])
+    }
+
+    private func applyCharterScheduleFields(to payload: inout [String: Any]) {
+        guard tenantSubscriptionPlan.isCharterPlan else { return }
+        payload["charterBookBy"] = charterBookBy.rawValue
+        payload["charterBufferMinutes"] = charterBufferMinutes.rawValue
+        payload["charterLastBookingMin"] = charterLastBooking == .endOfHours ? -1 : charterLastBooking.rawValue
     }
 
     private func markBookingSettingsSaved() {
@@ -647,6 +690,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     callable["depositAmount"] = amount
                 }
             }
+            if tenantSubscriptionPlan.isCharterPlan {
+                applyCharterScheduleFields(to: &callable)
+            }
             do {
                 let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
                 if let data = result.data as? [String: Any] {
@@ -685,6 +731,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 if let amount = depositAmount, amount > 0 {
                     workflowData["depositAmount"] = amount
                 }
+            }
+            if tenantSubscriptionPlan.isCharterPlan {
+                applyCharterScheduleFields(to: &workflowData)
             }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "workflow": workflowData
@@ -725,6 +774,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
                 callable["depositAmount"] = amount
             }
+            if tenantSubscriptionPlan.isCharterPlan {
+                applyCharterScheduleFields(to: &callable)
+            }
             do {
                 let result = try await functions.httpsCallable("updateTenantBookingWorkflow").call(callable)
                 if let data = result.data as? [String: Any] {
@@ -761,6 +813,9 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             ]
             if confirmationType.requiresDeposit, let amount = depositAmount, amount > 0 {
                 workflowData["depositAmount"] = amount
+            }
+            if tenantSubscriptionPlan.isCharterPlan {
+                applyCharterScheduleFields(to: &workflowData)
             }
             try await firebaseService.updateProviderProfile(uid: uid, updates: [
                 "workflow": workflowData
@@ -921,11 +976,21 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
 
     func reloadServices() async {
         guard let tid = tenantId else {
-            await MainActor.run { services = [] }
+            await MainActor.run {
+                services = []
+                charterTripFallbackImages = []
+            }
             return
         }
         let svc = (try? await firebaseService.fetchTenantServices(tenantId: tid)) ?? []
-        await MainActor.run { services = svc }
+        let tenant = try? await firebaseService.fetchTenant(tenantId: tid)
+        let featured = TenantService.parseImageURLList(tenant?["featuredWorkImages"])
+        let gallery = TenantService.parseImageURLList(tenant?["galleryImages"])
+        let fallbacks = featured.contains(where: { !$0.isEmpty }) ? featured : gallery
+        await MainActor.run {
+            services = svc
+            charterTripFallbackImages = fallbacks
+        }
     }
 
     func addService(
@@ -981,6 +1046,49 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                 boatIds: boatIds
             )
             try await firebaseService.updateTenantService(tenantId: tid, serviceId: serviceId, updates: updates)
+            await reloadServices()
+            return true
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+            return false
+        }
+    }
+
+    func updateServiceItinerary(
+        serviceId: String,
+        itinerary: [CharterItineraryStep]
+    ) async -> Bool {
+        guard let tid = tenantId else { return false }
+        await MainActor.run { errorMessage = nil }
+        do {
+            try await firebaseService.updateTenantServiceItinerary(
+                tenantId: tid,
+                serviceId: serviceId,
+                itinerary: itinerary
+            )
+            await reloadServices()
+            return true
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+            return false
+        }
+    }
+
+    @discardableResult
+    func uploadTenantServiceImage(serviceId: String, imageData: Data) async -> Bool {
+        guard let tid = tenantId else { return false }
+        await MainActor.run { errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantServiceImage(
+                tenantId: tid,
+                serviceId: serviceId,
+                imageData: imageData
+            )
+            try await firebaseService.updateTenantService(
+                tenantId: tid,
+                serviceId: serviceId,
+                updates: ["imageUrl": url]
+            )
             await reloadServices()
             return true
         } catch {

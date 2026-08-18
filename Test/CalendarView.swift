@@ -190,7 +190,15 @@ struct CalendarView: View {
                         }
                     }
             }
-            .sheet(item: $selectedBookingRequest) { booking in
+            .sheet(item: $selectedBookingRequest, onDismiss: {
+                Task {
+                    await viewModel.loadEvents(
+                        forMonthAround: displayedMonth,
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore
+                    )
+                }
+            }) { booking in
                 BookingRequestDetailView(
                     request: booking,
                     viewModel: requestsViewModel,
@@ -261,7 +269,7 @@ struct CalendarView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
             } else if filteredEvents.isEmpty {
-                Text("No confirmed appointments on this day.")
+                Text("No appointments on this day.")
                     .font(.subheadline)
                     .foregroundStyle(AppDesign.textSecondary)
                     .padding(.horizontal)
@@ -316,7 +324,7 @@ struct EventRow: View {
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
             HStack {
-                AppStatusPill(text: "Confirmed", soft: true)
+                AppStatusPill(text: event.status.calendarLabel, soft: true)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))

@@ -141,7 +141,10 @@ enum DemoSnapshotParser {
             assignedMemberName: dict["assignedMemberName"] as? String,
             assignedMemberEmail: dict["assignedMemberEmail"] as? String,
             smsConsentAccepted: dict["smsConsentAccepted"] as? Bool,
-            smsConsentAt: parseDate(dict["smsConsentAt"])
+            smsConsentAt: parseDate(dict["smsConsentAt"]),
+            paidCents: BookingRequest.intField(dict["paidCents"]),
+            stripePaymentIntentId: dict["stripePaymentIntentId"] as? String,
+            cancelRefundStatus: dict["cancelRefundStatus"] as? String
         )
     }
 

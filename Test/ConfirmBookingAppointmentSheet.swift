@@ -21,6 +21,7 @@ struct ConfirmBookingAppointmentSheet: View {
     @State private var confirmedDate: Date
     @State private var confirmedTime: Date
     @State private var selectedMemberUid: String?
+    @State private var selectedBoatId: String?
     @State private var sendDepositLinkViaText = true
     @State private var depositAmountText: String
 
@@ -51,6 +52,12 @@ struct ConfirmBookingAppointmentSheet: View {
         _confirmedTime = State(initialValue: seed)
         _sendDepositLinkViaText = State(initialValue: isReschedule ? false : canSendDepositSms)
         _depositAmountText = State(initialValue: DepositAmountInput.initialText(defaultAmount: depositAmount))
+        let existingBoatId = request.boatId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        _selectedBoatId = State(
+            initialValue: (existingBoatId?.isEmpty == false)
+                ? existingBoatId
+                : viewModel.charterBoats.first?.id
+        )
 
         let roster = viewModel.teamFilterRoster
         let assignedUid = request.assignedMemberUid?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,10 +143,10 @@ struct ConfirmBookingAppointmentSheet: View {
     }
 
     private var confirmButtonTitle: String {
-        if isReschedule { return "Update Time" }
+        if isReschedule { return viewModel.isCharterPlan ? "Update charter" : "Update Time" }
         if confirmationType == .consultationFirst { return "Schedule consult" }
         if willSendDeposit { return "Send deposit & hold time" }
-        return "Confirm"
+        return viewModel.isCharterPlan ? "Confirm charter" : "Confirm"
     }
 
     private var isSaving: Bool {
@@ -156,6 +163,7 @@ struct ConfirmBookingAppointmentSheet: View {
     private var canSubmit: Bool {
         scheduledStart != nil
             && selectedMember != nil
+            && (!viewModel.isCharterPlan || selectedBoatId != nil)
             && !(currentRequest.documentId ?? "").isEmpty
             && !isSaving
             && !depositSendBlocksSubmit
@@ -182,17 +190,19 @@ struct ConfirmBookingAppointmentSheet: View {
 
                     VStack(alignment: .leading, spacing: 16) {
                         BookingRequestSectionHeader(
-                            title: isReschedule ? "New confirmed time" : "Confirmed appointment"
+                            title: isReschedule
+                                ? (viewModel.isCharterPlan ? "New charter schedule" : "New confirmed time")
+                                : (viewModel.isCharterPlan ? "Confirmed charter" : "Confirmed appointment")
                         )
 
                         DatePicker(
-                            "Confirmed date",
+                            viewModel.isCharterPlan ? "Trip date" : "Confirmed date",
                             selection: $confirmedDate,
                             displayedComponents: .date
                         )
 
                         DatePicker(
-                            "Confirmed time",
+                            viewModel.isCharterPlan ? "Departure time" : "Confirmed time",
                             selection: $confirmedTime,
                             displayedComponents: .hourAndMinute
                         )
@@ -201,6 +211,21 @@ struct ConfirmBookingAppointmentSheet: View {
                             Picker(BookingAssignSchedulePlanner.providerRoleLabel(for: viewModel.tenantIndustry), selection: $selectedMemberUid) {
                                 ForEach(roster) { member in
                                     Text(artistLabel(for: member)).tag(Optional(member.uid))
+                                }
+                            }
+                        }
+
+                        if viewModel.isCharterPlan {
+                            if viewModel.charterBoats.isEmpty {
+                                Label("Add a boat in Business settings before confirming.", systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            } else {
+                                Picker("Boat", selection: $selectedBoatId) {
+                                    ForEach(viewModel.charterBoats) { boat in
+                                        Text("\(boat.displayName) · \(boat.capacityLabel)")
+                                            .tag(Optional(boat.id))
+                                    }
                                 }
                             }
                         }
@@ -269,7 +294,11 @@ struct ConfirmBookingAppointmentSheet: View {
                 .padding(16)
             }
             .appScreenBackground()
-            .navigationTitle(isReschedule ? "Change Time" : "Confirm Appointment")
+            .navigationTitle(
+                isReschedule
+                    ? (viewModel.isCharterPlan ? "Change Charter" : "Change Time")
+                    : (viewModel.isCharterPlan ? "Confirm Charter" : "Confirm Appointment")
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -306,7 +335,8 @@ struct ConfirmBookingAppointmentSheet: View {
                 requestId: rid,
                 member: member,
                 scheduledStart: start,
-                preferredTimeLabel: preferred
+                preferredTimeLabel: preferred,
+                boatId: selectedBoatId
             )
         } else {
             await viewModel.confirmBookingAppointment(
@@ -315,7 +345,8 @@ struct ConfirmBookingAppointmentSheet: View {
                 scheduledStart: start,
                 preferredTimeLabel: preferred,
                 notes: currentRequest.notes,
-                targetStatus: targetStatus
+                targetStatus: targetStatus,
+                boatId: selectedBoatId
             )
         }
         if viewModel.actionError == nil,

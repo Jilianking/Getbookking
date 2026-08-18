@@ -194,7 +194,9 @@ struct DesignView: View {
                         Studio12AuxImageUploadSection(
                             label: "About photo",
                             advice: "",
-                            allowedCropChoices: [.portrait4_5, .landscape16_9, .square],
+                            allowedCropChoices: viewModel.subscriptionPlan.isCharterPlan
+                                ? [.portrait4_5]
+                                : [.portrait4_5, .landscape16_9, .square],
                             defaultCropChoice: .portrait4_5,
                             imageUrl: $viewModel.classicAboutImageUrl,
                             isUploading: viewModel.isUploadingClassicAboutImage,
@@ -357,7 +359,13 @@ struct DesignView: View {
             return url
         }
 
-        private let previewThumbSize = CGSize(width: 72, height: 72)
+        private var lockedCropChoice: UploadCropAspectChoice {
+            viewModel.subscriptionPlan.isCharterPlan ? .landscape16_9 : .portrait4_5
+        }
+
+        private var previewAspect: CGFloat {
+            lockedCropChoice.aspectWidthOverHeight ?? 1
+        }
 
         var body: some View {
             NavigationStack {
@@ -365,7 +373,7 @@ struct DesignView: View {
                     Section {
                         Text("Gallery photo")
                             .font(.subheadline.weight(.medium))
-                        HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Group {
                                 if let url = slotImageURL {
                                     AsyncImage(url: url) { image in
@@ -373,17 +381,19 @@ struct DesignView: View {
                                     } placeholder: {
                                         AppDesign.searchBackground
                                     }
-                                    .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                    .aspectRatio(previewAspect, contentMode: .fit)
+                                    .frame(maxWidth: .infinity)
                                     .clipped()
                                     .cornerRadius(8)
                                 } else {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(AppDesign.searchBackground)
-                                        .frame(width: previewThumbSize.width, height: previewThumbSize.height)
+                                        .aspectRatio(previewAspect, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
                                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                                 }
                             }
-                            VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 16) {
                                 PhotosPicker(
                                     selection: $selectedItem,
                                     matching: .images,
@@ -410,6 +420,17 @@ struct DesignView: View {
                                         }
                                     }
                                 }
+                                if hasImageAtSlot {
+                                    Button("Adjust framing") {
+                                        Task {
+                                            guard let image = await UploadRemoteImageLoader.image(
+                                                from: viewModel.galleryImages[slotIndex]
+                                            ) else { return }
+                                            cropSheetItem = SingleImageCropSheetItem(image: image)
+                                        }
+                                    }
+                                    .font(.subheadline)
+                                }
                                 if viewModel.isUploadingGallery {
                                     HStack(spacing: 8) {
                                         ProgressView()
@@ -420,7 +441,6 @@ struct DesignView: View {
                                     }
                                 }
                             }
-                            Spacer(minLength: 0)
                         }
                     }
                 }
@@ -436,8 +456,8 @@ struct DesignView: View {
                         images: [item.image],
                         advice: "",
                         navigationTitle: "Photo",
-                        allowedChoices: [.portrait4_5, .square, .landscape16_9],
-                        defaultChoice: .portrait4_5,
+                        allowedChoices: [lockedCropChoice],
+                        defaultChoice: lockedCropChoice,
                         showsInstructionalCopy: false,
                         onUseJPEGData: { dataList in
                             guard let data = dataList.first else { return }
@@ -468,8 +488,15 @@ struct DesignView: View {
             return url
         }
 
-        /// Matches home featured strip (4:5); compact like hero thumbnail but portrait.
-        private let previewThumbSize = CGSize(width: 64, height: 80)
+        private var lockedCropChoice: UploadCropAspectChoice {
+            viewModel.subscriptionPlan.isCharterPlan ? .landscape4_3 : .portrait4_5
+        }
+
+        private var previewThumbSize: CGSize {
+            viewModel.subscriptionPlan.isCharterPlan
+                ? CGSize(width: 96, height: 72)
+                : CGSize(width: 64, height: 80)
+        }
 
         var body: some View {
             NavigationStack {
@@ -522,6 +549,17 @@ struct DesignView: View {
                                         }
                                     }
                                 }
+                                if hasImageAtSlot {
+                                    Button("Adjust framing") {
+                                        Task {
+                                            guard let image = await UploadRemoteImageLoader.image(
+                                                from: viewModel.featuredWorkImages[slotIndex]
+                                            ) else { return }
+                                            cropSheetItem = SingleImageCropSheetItem(image: image)
+                                        }
+                                    }
+                                    .font(.subheadline)
+                                }
                                 if viewModel.isUploadingFeaturedWork {
                                     HStack(spacing: 8) {
                                         ProgressView()
@@ -548,8 +586,8 @@ struct DesignView: View {
                         images: [item.image],
                         advice: "",
                         navigationTitle: "Photo",
-                        allowedChoices: [.portrait4_5],
-                        defaultChoice: .portrait4_5,
+                        allowedChoices: [lockedCropChoice],
+                        defaultChoice: lockedCropChoice,
                         showsInstructionalCopy: false,
                         onUseJPEGData: { dataList in
                             guard let data = dataList.first else { return }
@@ -584,6 +622,7 @@ struct DesignView: View {
 
     private func managePreviewPathForCharterTab(_ tab: DesignTab) -> String {
         switch tab {
+        case .home: return "/home"
         case .charters: return "/charters"
         case .howItWorks: return "/how-it-works"
         case .shop: return "/shop"
@@ -830,7 +869,7 @@ struct DesignView: View {
             .onAppear {
                 if isCharterPlan {
                     if !visibleManageTabs.contains(selectedTab) {
-                        selectedTab = .charters
+                        selectedTab = .home
                     }
                     managePreviewPath = managePreviewPathForCharterTab(selectedTab)
                 }
@@ -857,6 +896,8 @@ struct DesignView: View {
                         contentUnavailable
                     } else {
                         switch selectedTab {
+                        case .home:
+                            homeContent
                         case .gallery:
                             ManageGalleryTabContent(
                                 viewModel: viewModel,
@@ -878,7 +919,8 @@ struct DesignView: View {
                         case .about:
                             ManageAboutTabContent(
                                 viewModel: viewModel,
-                                isClassicTemplate: isClassicTemplate || isCharterPlan
+                                isClassicTemplate: isClassicTemplate,
+                                isCharterPlan: isCharterPlan
                             )
                         case .team:
                             ManageTeamTabContent(viewModel: viewModel)
@@ -1117,15 +1159,19 @@ struct DesignView: View {
 
     private var homeContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Site template")
-                    .font(.headline)
-                Text("You’re using \(activeTemplateDisplayName). Switch designs anytime in the Template tab.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            if !isCharterPlan {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Site template")
+                        .font(.headline)
+                    Text("You’re using \(activeTemplateDisplayName). Switch designs anytime in the Template tab.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
 
-            if isStudio12Template {
+            if isCharterPlan {
+                charterHomeSections
+            } else if isStudio12Template {
                 studio12HomeSections
             } else {
             // Hero
@@ -1249,6 +1295,22 @@ struct DesignView: View {
                 Task { await viewModel.saveHome() }
             }
             .buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder
+    private var charterHomeSections: some View {
+        Group {
+            Text("Name on website")
+                .font(.subheadline.weight(.medium))
+            TextField(
+                "Name on website",
+                text: $viewModel.displayName,
+                prompt: Text(viewModel.appBusinessName.isEmpty ? "Harbor Charters" : viewModel.appBusinessName)
+            )
+            .textFieldStyle(.roundedBorder)
+
+            HeroImageUploadSection(viewModel: viewModel, compactPreview: true)
         }
     }
 
@@ -1763,9 +1825,15 @@ struct ServiceAreaCityStateFields: View {
     }
 }
 
+private enum CompactImageUploadMetrics {
+    static let previewMaxWidth: CGFloat = 112
+    static let previewMaxHeight: CGFloat = 63
+}
+
 // MARK: - Hero image upload
 struct HeroImageUploadSection: View {
     @ObservedObject var viewModel: DesignViewModel
+    var compactPreview: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
 
@@ -1790,6 +1858,81 @@ struct HeroImageUploadSection: View {
         isLuxeTemplate ? UploadImageAdvice.heroLuxe : UploadImageAdvice.hero
     }
 
+    @ViewBuilder
+    private var heroPreview: some View {
+        let aspect = heroLockedCropChoice.aspectWidthOverHeight ?? (16 / 9)
+        Group {
+            if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
+               let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    AppDesign.searchBackground
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppDesign.searchBackground)
+                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            }
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+        .frame(
+            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
+        )
+        .clipped()
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private var heroControls: some View {
+        HStack(spacing: 16) {
+            PhotosPicker(
+                selection: $selectedItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Image(systemName: "photo.badge.plus")
+                    Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
+                }
+                .font(.subheadline)
+            }
+            .onChange(of: selectedItem) { _, newItem in
+                Task {
+                    guard let newItem else {
+                        return
+                    }
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       !data.isEmpty,
+                       let uiImage = UIImage(data: data) {
+                        await MainActor.run {
+                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                            selectedItem = nil
+                        }
+                    } else {
+                        await MainActor.run { selectedItem = nil }
+                    }
+                }
+            }
+            if !viewModel.heroImageUrl.isEmpty {
+                Button("Adjust framing") {
+                    Task {
+                        guard let image = await UploadRemoteImageLoader.image(from: viewModel.heroImageUrl) else {
+                            return
+                        }
+                        cropSheetItem = SingleImageCropSheetItem(image: image)
+                    }
+                }
+                .font(.subheadline)
+            }
+            if viewModel.isUploadingHero {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Hero background image")
@@ -1797,58 +1940,16 @@ struct HeroImageUploadSection: View {
             Text(heroAdvice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            HStack(spacing: 16) {
-                if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
-                   let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        AppDesign.searchBackground
-                    }
-                    .frame(width: 80, height: 56)
-                    .clipped()
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(AppDesign.searchBackground)
-                        .frame(width: 80, height: 56)
-                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            if compactPreview {
+                HStack(alignment: .center, spacing: 12) {
+                    heroPreview
+                    heroControls
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
-                        }
-                        .font(.subheadline)
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem else {
-                                return
-                            }
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
-                               !data.isEmpty,
-                               let uiImage = UIImage(data: data) {
-                                await MainActor.run {
-                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                                    selectedItem = nil
-                                }
-                            } else {
-                                await MainActor.run { selectedItem = nil }
-                            }
-                        }
-                    }
-                    if viewModel.isUploadingHero {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    heroPreview
+                    heroControls
                 }
-                Spacer()
             }
         }
         .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
@@ -1877,8 +1978,79 @@ struct Studio12AuxImageUploadSection: View {
     @Binding var imageUrl: String
     let isUploading: Bool
     let upload: (Data) async -> Void
+    var compactPreview: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
+
+    @ViewBuilder
+    private var auxPreview: some View {
+        let aspect = defaultCropChoice.aspectWidthOverHeight ?? 1
+        Group {
+            if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    AppDesign.searchBackground
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppDesign.searchBackground)
+                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            }
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+        .frame(
+            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
+        )
+        .clipped()
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private var auxControls: some View {
+        HStack(spacing: 16) {
+            PhotosPicker(
+                selection: $selectedItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HStack {
+                    Image(systemName: "photo.badge.plus")
+                    Text(imageUrl.isEmpty ? "Choose image" : "Change image")
+                }
+                .font(.subheadline)
+            }
+            .onChange(of: selectedItem) { _, newItem in
+                Task {
+                    guard let newItem else { return }
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       !data.isEmpty,
+                       let uiImage = UIImage(data: data) {
+                        await MainActor.run {
+                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                            selectedItem = nil
+                        }
+                    } else {
+                        await MainActor.run { selectedItem = nil }
+                    }
+                }
+            }
+            if !imageUrl.isEmpty {
+                Button("Adjust framing") {
+                    Task {
+                        guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
+                        cropSheetItem = SingleImageCropSheetItem(image: image)
+                    }
+                }
+                .font(.subheadline)
+            }
+            if isUploading {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1887,55 +2059,16 @@ struct Studio12AuxImageUploadSection: View {
             Text(advice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            HStack(spacing: 16) {
-                if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        AppDesign.searchBackground
-                    }
-                    .frame(width: 80, height: 56)
-                    .clipped()
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(AppDesign.searchBackground)
-                        .frame(width: 80, height: 56)
-                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            if compactPreview {
+                HStack(alignment: .center, spacing: 12) {
+                    auxPreview
+                    auxControls
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    PhotosPicker(
-                        selection: $selectedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text(imageUrl.isEmpty ? "Choose image" : "Change image")
-                        }
-                        .font(.subheadline)
-                    }
-                    .onChange(of: selectedItem) { _, newItem in
-                        Task {
-                            guard let newItem else { return }
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
-                               !data.isEmpty,
-                               let uiImage = UIImage(data: data) {
-                                await MainActor.run {
-                                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                                    selectedItem = nil
-                                }
-                            } else {
-                                await MainActor.run { selectedItem = nil }
-                            }
-                        }
-                    }
-                    if isUploading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    auxPreview
+                    auxControls
                 }
-                Spacer()
             }
         }
         .sheet(item: $cropSheetItem, onDismiss: { cropSheetItem = nil }) { item in
@@ -3091,49 +3224,219 @@ struct CharterItineraryEditor: View {
     @Binding var steps: [CharterItineraryStep]
     var durationMinutes: Int
     var disabled: Bool = false
+    var onPersist: (([CharterItineraryStep]) async -> Bool)? = nil
+    @State private var isPresented = false
+    @State private var draftSteps: [CharterItineraryStep] = []
+    @State private var isPersisting = false
 
     var body: some View {
         Section {
-            Text("Times are relative to departure. Guests see clock times after they pick a time on this trip.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach($steps) { $step in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(step.offsetCaption)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button(role: .destructive) {
-                            steps.removeAll { $0.id == step.id }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .disabled(disabled || steps.count <= 1)
+            Button {
+                draftSteps = steps
+                isPresented = true
+            } label: {
+                HStack {
+                    Label("Itinerary", systemImage: "map")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(stepCountLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(disabled)
+        }
+        .sheet(isPresented: $isPresented) {
+            CharterItineraryEditorSheet(
+                steps: $draftSteps,
+                durationMinutes: durationMinutes,
+                disabled: disabled || isPersisting,
+                onCancel: { isPresented = false },
+                onSave: {
+                    guard let onPersist else {
+                        steps = draftSteps
+                        isPresented = false
+                        return
                     }
+                    Task {
+                        isPersisting = true
+                        let saved = await onPersist(draftSteps)
+                        isPersisting = false
+                        if saved {
+                            steps = draftSteps
+                            isPresented = false
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private var stepCountLabel: String {
+        "\(steps.count) \(steps.count == 1 ? "step" : "steps")"
+    }
+}
+
+private struct CharterItineraryEditorSheet: View {
+    @Binding var steps: [CharterItineraryStep]
+    let durationMinutes: Int
+    let disabled: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+    @State private var stepToEdit: CharterItineraryStep?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Times are relative to departure. Guests see clock times after they pick a time on this trip.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    ForEach(steps) { step in
+                        Button {
+                            stepToEdit = step
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(step.offsetCaption)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text(step.text.isEmpty ? "Add step details" : step.text)
+                                        .foregroundStyle(step.text.isEmpty ? .secondary : .primary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(disabled)
+                    }
+                    Button {
+                        let last = steps.last?.offsetMinutes ?? 0
+                        let interval = max(30, durationMinutes > 0 ? durationMinutes / max(steps.count, 1) : 60)
+                        stepToEdit = CharterItineraryStep(
+                            offsetMinutes: min(720, last + interval),
+                            text: ""
+                        )
+                    } label: {
+                        Label("Add itinerary step", systemImage: "plus")
+                    }
+                    .disabled(disabled || steps.count >= 8)
+                }
+            }
+            .sheet(item: $stepToEdit) { step in
+                CharterItineraryStepEditorSheet(
+                    step: step,
+                    canDelete: steps.contains(where: { $0.id == step.id }),
+                    onCancel: { stepToEdit = nil },
+                    onSave: { updated in
+                        if let index = steps.firstIndex(where: { $0.id == updated.id }) {
+                            steps[index] = updated
+                        } else {
+                            steps.append(updated)
+                        }
+                        stepToEdit = nil
+                    },
+                    onDelete: {
+                        steps.removeAll { $0.id == step.id }
+                        stepToEdit = nil
+                    }
+                )
+            }
+            .navigationTitle("Edit itinerary")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: onSave)
+                        .disabled(disabled)
+                }
+            }
+        }
+    }
+}
+
+private struct CharterItineraryStepEditorSheet: View {
+    let step: CharterItineraryStep
+    var canDelete: Bool = false
+    let onCancel: () -> Void
+    let onSave: (CharterItineraryStep) -> Void
+    var onDelete: (() -> Void)? = nil
+    @State private var offsetMinutes: Int
+    @State private var text: String
+
+    init(
+        step: CharterItineraryStep,
+        canDelete: Bool = false,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (CharterItineraryStep) -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.step = step
+        self.canDelete = canDelete
+        self.onCancel = onCancel
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _offsetMinutes = State(initialValue: step.offsetMinutes)
+        _text = State(initialValue: step.text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Timing") {
                     Stepper(
-                        offsetStepperLabel(step.offsetMinutes),
-                        value: $step.offsetMinutes,
+                        offsetStepperLabel(offsetMinutes),
+                        value: $offsetMinutes,
                         in: -180...720,
                         step: 15
                     )
-                    .disabled(disabled)
-                    TextField("What happens", text: $step.text, axis: .vertical)
-                        .lineLimit(2...4)
-                        .disabled(disabled)
                 }
-                .padding(.vertical, 4)
+                Section("What happens") {
+                    TextField("Step details", text: $text, axis: .vertical)
+                        .lineLimit(2...6)
+                }
+                if canDelete, onDelete != nil {
+                    Section {
+                        Button("Delete step", role: .destructive) {
+                            onDelete?()
+                        }
+                    }
+                }
             }
-            Button {
-                let last = steps.last?.offsetMinutes ?? 0
-                let next = min(720, last + max(30, durationMinutes > 0 ? durationMinutes / max(steps.count, 1) : 60))
-                steps.append(CharterItineraryStep(offsetMinutes: next, text: ""))
-            } label: {
-                Label("Add itinerary step", systemImage: "plus")
+            .navigationTitle(step.text.isEmpty ? "Add itinerary step" : "Edit itinerary step")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(
+                            CharterItineraryStep(
+                                id: step.id,
+                                offsetMinutes: offsetMinutes,
+                                text: text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                        )
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
-            .disabled(disabled || steps.count >= 8)
-        } header: {
-            Text("Itinerary")
         }
     }
 
@@ -3156,6 +3459,9 @@ private struct EditTenantServiceSheet: View {
     @State private var priceText = ""
     @State private var itinerary: [CharterItineraryStep] = []
     @State private var boatIds: [String] = []
+    @State private var serviceImageUrl = ""
+    @State private var imagePickerItem: PhotosPickerItem?
+    @State private var imageCropItem: SingleImageCropSheetItem?
 
     private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
 
@@ -3203,6 +3509,50 @@ private struct EditTenantServiceSheet: View {
                         .foregroundColor(.secondary)
                 }
                 if isCharter {
+                    Section("Trip photo") {
+                        Group {
+                            if let url = URL(string: serviceImageUrl), !serviceImageUrl.isEmpty {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    AppDesign.searchBackground
+                                }
+                            } else {
+                                AppDesign.searchBackground
+                                    .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                            }
+                        }
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        PhotosPicker(selection: $imagePickerItem, matching: .images) {
+                            Label(serviceImageUrl.isEmpty ? "Add trip photo" : "Replace photo", systemImage: "photo.badge.plus")
+                        }
+                        .disabled(viewModel.isSavingBladeServices)
+                        .onChange(of: imagePickerItem) { _, item in
+                            Task {
+                                guard let item,
+                                      let data = try? await item.loadTransferable(type: Data.self),
+                                      let image = UIImage(data: data) else {
+                                    imagePickerItem = nil
+                                    return
+                                }
+                                imageCropItem = SingleImageCropSheetItem(image: image)
+                                imagePickerItem = nil
+                            }
+                        }
+                        if !serviceImageUrl.isEmpty {
+                            Button("Adjust framing") {
+                                Task {
+                                    guard let image = await UploadRemoteImageLoader.image(from: serviceImageUrl) else { return }
+                                    imageCropItem = SingleImageCropSheetItem(image: image)
+                                }
+                            }
+                            .disabled(viewModel.isSavingBladeServices)
+                        }
+                    }
                     CharterBoatPicker(
                         boats: viewModel.charterBoats,
                         boatIds: $boatIds,
@@ -3211,9 +3561,34 @@ private struct EditTenantServiceSheet: View {
                     CharterItineraryEditor(
                         steps: $itinerary,
                         durationMinutes: includeDuration ? duration : 240,
-                        disabled: viewModel.isSavingBladeServices
+                        disabled: viewModel.isSavingBladeServices,
+                        onPersist: { updated in
+                            await viewModel.updateServiceItinerary(
+                                serviceId: service.id,
+                                itinerary: updated
+                            )
+                        }
                     )
                 }
+            }
+            .sheet(item: $imageCropItem, onDismiss: { imageCropItem = nil }) { item in
+                UploadImagePreparationSheet(
+                    images: [item.image],
+                    advice: "Trip cards and detail pages use a landscape photo.",
+                    navigationTitle: "Trip photo",
+                    allowedChoices: [.landscape4_3],
+                    defaultChoice: .landscape4_3,
+                    onUseJPEGData: { dataList in
+                        guard let data = dataList.first else { return }
+                        imageCropItem = nil
+                        Task {
+                            if await viewModel.uploadTenantServiceImage(serviceId: service.id, imageData: data),
+                               let updated = viewModel.services.first(where: { $0.id == service.id }) {
+                                serviceImageUrl = updated.imageUrl
+                            }
+                        }
+                    }
+                )
             }
             .navigationTitle(isCharter ? "Edit trip" : "Edit service")
             .navigationBarTitleDisplayMode(.inline)
@@ -3260,9 +3635,16 @@ private struct EditTenantServiceSheet: View {
                 priceText = ""
             }
             if isCharter {
-                itinerary = service.itinerary.isEmpty
-                    ? CharterItineraryStep.defaults(durationMinutes: service.durationMinutes ?? 240)
-                    : service.itinerary
+                let idx = viewModel.services.firstIndex(where: { $0.id == service.id }) ?? 0
+                let feats = viewModel.featuredWorkImages
+                let gallery = viewModel.galleryImages
+                let fallbacks = feats.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                    ? feats
+                    : gallery
+                serviceImageUrl = service.resolvedImageURL(fallbackImages: fallbacks, index: idx)
+                itinerary = service.hasConfiguredItinerary
+                    ? service.itinerary
+                    : CharterItineraryStep.defaults(durationMinutes: service.durationMinutes ?? 240)
                 boatIds = service.boatIds
             }
         }

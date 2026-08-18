@@ -203,6 +203,37 @@ function boatsList(tenant) {
   return tenant && Array.isArray(tenant.charterBoats) ? tenant.charterBoats : [];
 }
 
+/** One location = any overlapping trip blocks the dock. By boat = hulls can overlap. */
+function charterBookByLocation(tenant) {
+  const wf = tenant && tenant.workflow && typeof tenant.workflow === "object" ? tenant.workflow : {};
+  const raw = String(wf.charterBookBy || tenant.charterBookBy || "location")
+    .toString()
+    .trim()
+    .toLowerCase();
+  return raw !== "boat" && raw !== "boats" && raw !== "fleet";
+}
+
+function workflowBag(tenant) {
+  return tenant && tenant.workflow && typeof tenant.workflow === "object" ? tenant.workflow : {};
+}
+
+/** Minutes held after a trip before the next departure can start. Default 30. */
+function charterBufferMinutes(tenant) {
+  const n = Number(workflowBag(tenant).charterBufferMinutes);
+  if (n === 0) return 0;
+  if (!Number.isFinite(n) || n < 0) return 30;
+  return Math.min(240, Math.round(n));
+}
+
+/** Latest allowed departure start (minutes from midnight), or null for end of hours. */
+function charterLastBookingMin(tenant) {
+  const raw = workflowBag(tenant).charterLastBookingMin;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.min(24 * 60, Math.round(n));
+}
+
 function serviceBoatIds(service) {
   if (!service) return [];
   if (Array.isArray(service.boatIds) && service.boatIds.length) {
@@ -298,7 +329,7 @@ function occupyingSegments(dateIso, occStartMin, occEndMin, boatId) {
   return segs;
 }
 
-function occupyingWindowFromRow(d) {
+function occupyingWindowFromRow(d, bufferMin) {
   const startMin = Number.isFinite(Number(d.scheduledStartMin))
     ? Number(d.scheduledStartMin)
     : null;
@@ -309,7 +340,8 @@ function occupyingWindowFromRow(d) {
   const occStartMin = Number.isFinite(storedStart)
     ? storedStart
     : startMin - CHARTER_DEFAULT_MEET_PAD_MIN;
-  const occEndMin = Number.isFinite(storedEnd) ? storedEnd : startMin + dur;
+  let occEndMin = Number.isFinite(storedEnd) ? storedEnd : startMin + dur;
+  occEndMin += Math.max(0, Number(bufferMin) || 0);
   return {
     dateIso: String(d.scheduledDate || "").trim(),
     occStartMin,
@@ -318,8 +350,8 @@ function occupyingWindowFromRow(d) {
   };
 }
 
-function occupyingInterval(d) {
-  const win = occupyingWindowFromRow(d);
+function occupyingInterval(d, bufferMin) {
+  const win = occupyingWindowFromRow(d, bufferMin);
   if (!win) return null;
   return {
     startMin: win.occStartMin,
@@ -328,51 +360,80 @@ function occupyingInterval(d) {
   };
 }
 
-function segmentsFromRow(d) {
-  const win = occupyingWindowFromRow(d);
+function segmentsFromRow(d, bufferMin) {
+  const win = occupyingWindowFromRow(d, bufferMin);
   if (!win || !win.dateIso) return [];
   return occupyingSegments(win.dateIso, win.occStartMin, win.occEndMin, win.boatId);
 }
 
-function boatBlockedByRows(boatId, rows, candidateSegs, excludeRequestId) {
+function boatBlockedByRows(boatId, rows, candidateSegs, excludeRequestId, locationWide, bufferMin) {
   const skip = String(excludeRequestId || "");
   const want = String(boatId || "").trim();
   const segs = candidateSegs || [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (skip && String(row.id || "") === skip) continue;
-    const rowSegs = segmentsFromRow(row);
+    const rowSegs = segmentsFromRow(row, bufferMin);
     for (let r = 0; r < rowSegs.length; r++) {
       const rs = rowSegs[r];
       for (let c = 0; c < segs.length; c++) {
         const cs = segs[c];
         if (String(cs.date || "") !== String(rs.date || "")) continue;
         if (!overlaps(cs.startMin, cs.endMin, rs.startMin, rs.endMin)) continue;
-        if (!rs.boatId || rs.boatId === want) return true;
+        if (locationWide || !rs.boatId || rs.boatId === want) return true;
       }
     }
   }
   return false;
 }
 
-function pickFreeBoat(eligible, rows, dateIso, startMin, durationMin, excludeRequestId, service) {
+function pickFreeBoat(eligible, rows, dateIso, startMin, durationMin, excludeRequestId, service, tenant) {
+  const locationWide = charterBookByLocation(tenant);
+  const bufferMin = charterBufferMinutes(tenant);
   const win = occupancyWindow(startMin, durationMin, service);
   const segs = occupyingSegments(dateIso, win.occStartMin, win.occEndMin, "");
   for (let i = 0; i < eligible.length; i++) {
     const id = String(eligible[i].id || "").trim();
     if (!id) continue;
     const withBoat = segs.map((s) => Object.assign({}, s, { boatId: id }));
-    if (!boatBlockedByRows(id, rows, withBoat, excludeRequestId)) {
+    if (!boatBlockedByRows(id, rows, withBoat, excludeRequestId, locationWide, bufferMin)) {
       return eligible[i];
     }
   }
   return null;
 }
 
-function startFitsHours(day, startMin) {
+function startFitsHours(day, startMin, durationMin, service) {
   if (!day || day.closed || !day.ranges || !day.ranges.length) return false;
-  if (startMin === 7 * 60 || startMin === 13 * 60) return true;
-  return day.ranges.some((r) => startMin >= r.openMin && startMin <= r.closeMin);
+  const { maxOff } = itineraryOccupancyOffsets(service, durationMin);
+  const end = startMin + maxOff;
+  return day.ranges.some((r) => {
+    if (startMin < r.openMin || startMin > r.closeMin) return false;
+    if (maxOff > 1440) return true;
+    return end <= r.closeMin;
+  });
+}
+
+function departureMinsForDay(day, durationMin, service, lastBookingMin) {
+  if (!day || day.closed || !day.ranges || !day.ranges.length) return [];
+  const { maxOff } = itineraryOccupancyOffsets(service, durationMin);
+  const seen = new Set();
+  const out = [];
+  const lastCap = Number.isFinite(Number(lastBookingMin)) ? Number(lastBookingMin) : null;
+  for (const r of day.ranges) {
+    let first = Math.ceil(r.openMin / 60) * 60;
+    if (first < r.openMin) first += 60;
+    const last = maxOff > 1440 ? r.closeMin : r.closeMin - maxOff;
+    for (let t = first; t <= last && t <= r.closeMin; t += 60) {
+      if (lastCap != null && t > lastCap) continue;
+      if (t >= r.openMin && !seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+    }
+  }
+  out.sort((a, b) => a - b);
+  return out;
 }
 
 function assertHoursAndClock(tenant, dateIso, startMin, durationMin, now, service) {
@@ -391,7 +452,14 @@ function assertHoursAndClock(tenant, dateIso, startMin, durationMin, now, servic
   if (!day || day.closed || !day.ranges.length) {
     throw failed("We're closed that day.");
   }
-  if (!startFitsHours(day, startMin)) {
+  if (startMin % 60 !== 0) {
+    throw failed("Pick a departure on the hour.");
+  }
+  const lastBook = charterLastBookingMin(tenant);
+  if (lastBook != null && startMin > lastBook) {
+    throw failed("That departure is after the last booking time.");
+  }
+  if (!startFitsHours(day, startMin, durationMin, service)) {
     throw failed("That time is outside our hours.");
   }
   const win = occupancyWindow(startMin, durationMin, service);
@@ -433,10 +501,10 @@ function occupyingRowsFromSnaps(snaps, nowMs) {
   return rows;
 }
 
-function publicSlotsFromRow(d) {
+function publicSlotsFromRow(d, bufferMin) {
   const until = holdUntilMillis(d);
   const holdUntilMs = isPaymentHoldStatus(d.status) ? until : 0;
-  return segmentsFromRow(d)
+  return segmentsFromRow(d, bufferMin)
     .filter((seg) => seg && seg.date)
     .map((seg) => ({
       date: seg.date,
@@ -447,8 +515,8 @@ function publicSlotsFromRow(d) {
     }));
 }
 
-function publicSlotFromRow(d) {
-  const slots = publicSlotsFromRow(d);
+function publicSlotFromRow(d, bufferMin) {
+  const slots = publicSlotsFromRow(d, bufferMin);
   return slots.length ? slots[0] : null;
 }
 
@@ -468,9 +536,13 @@ module.exports = {
   eligibleBoats,
   pickFreeBoat,
   assertHoursAndClock,
+  departureMinsForDay,
   occupyingRowsFromSnap,
   occupyingRowsFromSnaps,
   publicSlotFromRow,
   publicSlotsFromRow,
   boatsList,
+  charterBookByLocation,
+  charterBufferMinutes,
+  charterLastBookingMin,
 };

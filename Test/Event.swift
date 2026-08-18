@@ -24,6 +24,14 @@ struct Event: Codable, Identifiable {
         case confirmed = "confirmed"
         case pending = "pending"
         case cancelled = "cancelled"
+
+        var calendarLabel: String {
+            switch self {
+            case .confirmed: return "Confirmed"
+            case .pending: return "Hold"
+            case .cancelled: return "Cancelled"
+            }
+        }
     }
 }
 

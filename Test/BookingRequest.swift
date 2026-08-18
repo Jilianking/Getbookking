@@ -38,6 +38,36 @@ struct BookingRequest: Identifiable {
     var assignedMemberEmail: String?
     var smsConsentAccepted: Bool?
     var smsConsentAt: Date?
+    /// Cents collected on this booking (deposit or pay-in-full).
+    var paidCents: Int? = nil
+    var stripePaymentIntentId: String? = nil
+    /// `pending` | `refunded` | `failed` | `already_refunded` after a paid cancel.
+    var cancelRefundStatus: String? = nil
+
+    var isRefundPending: Bool {
+        (cancelRefundStatus ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending"
+    }
+
+    var statusPillText: String {
+        if BookingRequestStatus.normalized(status) == BookingRequestStatus.cancelled, isRefundPending {
+            return "refund_pending"
+        }
+        return status
+    }
+
+    var refundablePaidCents: Int {
+        let n = paidCents ?? 0
+        return n > 0 ? n : 0
+    }
+
+    var cancelConfirmMessage: String {
+        let paid = refundablePaidCents
+        if paid > 0 {
+            let dollars = String(format: "%.2f", Double(paid) / 100)
+            return "This trip will be cancelled and the guest will be texted. $\(dollars) will be refunded. Refunds typically take 5–10 business days."
+        }
+        return "This trip will be cancelled and the guest will be texted. The time will open for new bookings."
+    }
 
     var hasAssignedMember: Bool {
         let uid = (assignedMemberUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -118,12 +148,10 @@ struct BookingRequest: Identifiable {
         return comps.date
     }
 
-    /// Departure instant: charter occupancy fields first, then `requestedStartTime`.
+    /// Departure instant: use the server-computed tenant-timezone instant when available.
     var departureStart: Date? {
-        if let d = Self.date(fromScheduledDate: scheduledDate, startMin: scheduledStartMin) {
-            return d
-        }
-        return requestedStartTime
+        if let requestedStartTime { return requestedStartTime }
+        return Self.date(fromScheduledDate: scheduledDate, startMin: scheduledStartMin)
     }
 
     var occupiesCharterSlot: Bool {

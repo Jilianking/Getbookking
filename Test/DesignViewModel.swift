@@ -34,7 +34,7 @@ enum DesignTab: String, CaseIterable {
     /// Charter plan uses fishing-site tabs; other plans keep Gallery / Book / About / Team / Shop.
     static func manageTabs(showTeam: Bool, isCharterPlan: Bool) -> [DesignTab] {
         if isCharterPlan {
-            return [.charters, .howItWorks, .shop, .about, .book]
+            return [.home, .charters, .howItWorks, .shop, .about, .book]
         }
         var tabs: [DesignTab] = [.gallery, .book, .about]
         if showTeam { tabs.append(.team) }
@@ -212,6 +212,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var classicAboutImagePixelWidth: Int = 16
     @Published var classicAboutImagePixelHeight: Int = 9
     @Published var isUploadingClassicAboutImage = false
+    /// Charter About: show “Contact the captain” text-only block (explicit opt-in).
+    @Published var showCharterContactCaptain: Bool = false
 
     // Section surfaces (Design tabs: Home / Gallery / About)
     /// Tattoo template default: warm paper — Featured, Gallery, and Book share this theme on the web.
@@ -258,6 +260,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var showBookPage: Bool = true
     /// Public `/about` route and About nav link to that URL (default on).
     @Published var showAboutPage: Bool = true
+    /// Public Charter `/charters` browse and trip-detail routes (default on).
+    @Published var showChartersPage: Bool = true
+    /// Public Charter `/how-it-works` route (default on).
+    @Published var showHowItWorksPage: Bool = true
     /// Public `/team` roster page for Studio/Shop (default on).
     @Published var showTeamPage: Bool = true
     /// “Meet the team” strip on home before the footer (default on).
@@ -341,6 +347,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         guard !s.isEmpty else { return u }
         guard !u.isEmpty else { return s }
         return s + "\n" + u
+    }
+
+    static func contactPhoneForEditing(_ raw: String, charterPlan: Bool) -> String {
+        charterPlan ? PhoneFormatting.formatAsYouType(raw) : raw
     }
 
     static func parsedStreetAndSuite(from tenant: [String: Any]?) -> (street: String, suite: String) {
@@ -1131,14 +1141,17 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     formFields = FormField.defaultFields
                     services = []
                     charterBoats = CharterBoat.parseList(tenant["charterBoats"])
-                    galleryImages = tenant["galleryImages"] as? [String] ?? []
-                    featuredWorkImages = tenant["featuredWorkImages"] as? [String] ?? []
+                    galleryImages = TenantService.parseImageURLList(tenant["galleryImages"])
+                    featuredWorkImages = TenantService.parseImageURLList(tenant["featuredWorkImages"])
                     showGalleryPage = tenant["showGalleryPage"] as? Bool ?? true
                     galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant["galleryLayoutStyle"] as? String)
                     let parsedAddress = Self.parsedStreetAndSuite(from: tenant)
                     contactAddress = parsedAddress.street
                     contactAddressSuite = parsedAddress.suite
-                    contactPhone = tenant["contactPhone"] as? String ?? ""
+                    contactPhone = Self.contactPhoneForEditing(
+                        tenant["contactPhone"] as? String ?? "",
+                        charterPlan: subscriptionPlan.isCharterPlan
+                    )
                     contactEmail = tenant["contactEmail"] as? String ?? ""
                     instagramHandle = tenant["instagramHandle"] as? String ?? ""
                     isDemoReadOnly = true
@@ -1224,7 +1237,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 }
                 galleryGridLayout = tenant?["galleryGridLayout"] as? String ?? "3x1"
                 galleryLayoutStyle = GalleryLayoutStyle.fromStored(tenant?["galleryLayoutStyle"] as? String)
-                let rawGallery = tenant?["galleryImages"] as? [String] ?? []
+                let rawGallery = TenantService.parseImageURLList(tenant?["galleryImages"])
                 if tenant?["featuredWorkImages"] == nil {
                     /// Legacy: one list served home (prefix) + full gallery page; split into two fields.
                     let maxSlots = featuredWorkImageSlotCount
@@ -1234,7 +1247,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                         persistSplit = (featured: featuredWorkImages, gallery: galleryImages)
                     }
                 } else {
-                    featuredWorkImages = tenant?["featuredWorkImages"] as? [String] ?? []
+                    featuredWorkImages = TenantService.parseImageURLList(tenant?["featuredWorkImages"])
                     galleryImages = rawGallery
                 }
                 backgroundColorHex = tenant?["backgroundColor"] as? String ?? "#FFFFFF"
@@ -1339,6 +1352,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     classicAboutImagePixelWidth = 16
                     classicAboutImagePixelHeight = 9
                 }
+                showCharterContactCaptain = tenant?["showCharterContactCaptain"] as? Bool ?? false
                 featuredWorkBackgroundColorHex = tenant?["featuredWorkBackgroundColor"] as? String ?? "#FAF8F5"
                 featuredWorkTextColorHex = tenant?["featuredWorkTextColor"] as? String ?? "#1C1917"
                 bookingFormCardBackgroundColorHex = tenant?["bookingFormCardBackgroundColor"] as? String ?? "#FFFFFF"
@@ -1358,7 +1372,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 services = svc
                 charterBoats = CharterBoat.parseList(tenant?["charterBoats"])
                 aboutText = tenant?["aboutText"] as? String ?? ""
-                contactPhone = tenant?["contactPhone"] as? String ?? ""
+                let charterPlan = SubscriptionPlan.normalized(fromFirestore: tenant?["subscriptionPlan"] as? String).isCharterPlan
+                contactPhone = Self.contactPhoneForEditing(
+                    tenant?["contactPhone"] as? String ?? "",
+                    charterPlan: charterPlan
+                )
                 contactEmail = tenant?["contactEmail"] as? String ?? ""
                 let parsedAddress = Self.parsedStreetAndSuite(from: tenant)
                 contactAddress = parsedAddress.street
@@ -1412,6 +1430,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 showGalleryPage = tenant?["showGalleryPage"] as? Bool ?? true
                 showBookPage = tenant?["showBookPage"] as? Bool ?? true
                 showAboutPage = tenant?["showAboutPage"] as? Bool ?? true
+                showChartersPage = tenant?["showChartersPage"] as? Bool ?? true
+                showHowItWorksPage = tenant?["showHowItWorksPage"] as? Bool ?? true
                 showTeamPage = tenant?["showTeamPage"] as? Bool ?? true
                 showMeetTheTeamOnHome = tenant?["showMeetTheTeamOnHome"] as? Bool ?? true
                 industry = tenant?["industry"] as? String
@@ -1681,6 +1701,9 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["classicStatRatedLabel"] = Self.bulkSaveOptionalSiteText(classicStatRatedLabel, existingFirestore: existingDoc?["classicStatRatedLabel"])
             updates["classicAboutEyebrow"] = Self.bulkSaveOptionalSiteText(classicAboutEyebrow, existingFirestore: existingDoc?["classicAboutEyebrow"])
             updates["classicAboutHeading"] = Self.bulkSaveOptionalSiteText(classicAboutHeading, existingFirestore: existingDoc?["classicAboutHeading"])
+        }
+        if subscriptionPlan.isCharterPlan {
+            updates["showCharterContactCaptain"] = showCharterContactCaptain
         }
         if let existingDoc,
            let clearedOverrides = Self.webCopyOverridesWithoutContactHours(existingDoc) {
@@ -2250,7 +2273,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     s.durationMinutes = durationMinutes
                     s.description = finalDesc
                     s.price = finalPrice
-                    if let itinerary { s.itinerary = itinerary.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+                    if let itinerary {
+                        s.itinerary = itinerary.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                        s.hasConfiguredItinerary = true
+                    }
                     if let boatIds { s.boatIds = boatIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
                     services[idx] = s
                 }
@@ -2261,6 +2287,72 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     saveSuccess = false
                 }
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                isSavingBladeServices = false
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    func updateServiceItinerary(
+        serviceId: String,
+        itinerary: [CharterItineraryStep]
+    ) async -> Bool {
+        guard let tid = tenantId else { return false }
+        await MainActor.run { isSavingBladeServices = true; errorMessage = nil }
+        do {
+            let cleaned = itinerary.filter {
+                !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            try await firebaseService.updateTenantServiceItinerary(
+                tenantId: tid,
+                serviceId: serviceId,
+                itinerary: cleaned
+            )
+            await MainActor.run {
+                if let index = services.firstIndex(where: { $0.id == serviceId }) {
+                    services[index].itinerary = cleaned
+                    services[index].hasConfiguredItinerary = true
+                }
+                isSavingBladeServices = false
+                invalidateWebPreview()
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                isSavingBladeServices = false
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    func uploadTenantServiceImage(serviceId: String, imageData: Data) async -> Bool {
+        guard let tid = tenantId else { return false }
+        if blockIfDemoReadOnly() { return false }
+        await MainActor.run { isSavingBladeServices = true; errorMessage = nil }
+        do {
+            let url = try await firebaseService.uploadTenantServiceImage(
+                tenantId: tid,
+                serviceId: serviceId,
+                imageData: imageData
+            )
+            try await firebaseService.updateTenantService(
+                tenantId: tid,
+                serviceId: serviceId,
+                updates: ["imageUrl": url]
+            )
+            await MainActor.run {
+                if let index = services.firstIndex(where: { $0.id == serviceId }) {
+                    services[index].imageUrl = url
+                }
+                isSavingBladeServices = false
+                invalidateWebPreview()
             }
             return true
         } catch {
@@ -2559,8 +2651,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         await MainActor.run {
             errorMessage = nil
             applyColorTokensLocally(tokens)
+            bumpWebPreviewColorPatch()
         }
-        await saveTenantUpdates(tid, WebColorPalettes.firestoreUpdates(paletteId: baseId, tokens: tokens))
+        var updates = WebColorPalettes.firestoreUpdates(paletteId: baseId, tokens: tokens)
+        updates["webTextColors"] = [String: String]()
+        await saveTenantUpdates(tid, updates)
     }
 
     /// Applies a curated palette for the current template family and persists tenant colors.
@@ -2578,9 +2673,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             applyColorTokensLocally(palette.tokens)
             bumpWebPreviewColorPatch()
         }
+        var updates = WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens)
+        updates["webTextColors"] = [String: String]()
         await saveTenantUpdates(
             tid,
-            WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens),
+            updates,
             invalidatePreview: false
         )
     }
@@ -2601,6 +2698,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         for (key, value) in WebColorPalettes.firestoreUpdates(paletteId: defaultPalette.id, tokens: defaultPalette.tokens) {
             updates[key] = value
         }
+        updates["webTextColors"] = [String: String]()
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
             await MainActor.run {
@@ -2617,13 +2715,15 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     }
 
     // MARK: - Shop / Products
-    /// Persists gallery, book, about, team, and shop visibility for the public site (nav + direct URLs).
+    /// Persists public page visibility (nav + direct URLs).
     func savePublicPageVisibility() async {
         guard let tid = tenantId else { return }
         await saveTenantUpdates(tid, [
             "showGalleryPage": showGalleryPage,
             "showBookPage": showBookPage,
             "showAboutPage": showAboutPage,
+            "showChartersPage": showChartersPage,
+            "showHowItWorksPage": showHowItWorksPage,
             "showTeamPage": showTeamPage,
             "showMeetTheTeamOnHome": showMeetTheTeamOnHome,
             "shopEnabled": shopEnabled
@@ -3096,7 +3196,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         CharterFaq(id: 0, question: "What happens if the weather is bad?", answer: "Captains will reschedule or fully refund trips cancelled for weather."),
         CharterFaq(id: 1, question: "Is gear included?", answer: "Rods, bait, ice and fishing licenses are included on every listed charter unless noted."),
         CharterFaq(id: 2, question: "Can I bring my own group?", answer: "Yes, most charters are private bookings for your group only."),
-        CharterFaq(id: 3, question: "How do I cancel or reschedule?", answer: "Manage your booking from My Trips up to 48 hours before departure.")
+        CharterFaq(id: 3, question: "How do I cancel or reschedule?", answer: "Call your captain to cancel or reschedule. Their number is on your confirmation text and on the booking confirmation page.")
     ]
 
     func moveStudio12ProcessStep(from index: Int, direction: Int) {
@@ -3230,10 +3330,14 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             let q = (d["question"] as? String ?? d["q"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let a = (d["answer"] as? String ?? d["a"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let fallback = i < defaultCharterFaqs.count ? defaultCharterFaqs[i] : defaultCharterFaqs[defaultCharterFaqs.count - 1]
+            let resolvedAnswer: String = {
+                if a.localizedCaseInsensitiveContains("My Trips") { return fallback.answer }
+                return a.isEmpty ? fallback.answer : a
+            }()
             return CharterFaq(
                 id: i,
                 question: q.isEmpty ? fallback.question : q,
-                answer: a.isEmpty ? fallback.answer : a
+                answer: resolvedAnswer
             )
         }
     }

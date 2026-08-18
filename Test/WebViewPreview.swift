@@ -9,6 +9,7 @@
 
 import SwiftUI
 import WebKit
+import UIKit
 
 /// Messages from the injected quick-edit script (`data-edit-key` in `web/index.html`).
 enum WebViewQuickEditEvent {
@@ -151,6 +152,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.bounces = false
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         context.coordinator.webView = webView
         context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
@@ -174,7 +176,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         context.coordinator.applyQuickEditIfNeeded(webView: webView)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let messageHandlerName: String
         var lastLoadedURL: URL?
         weak var webView: WKWebView?
@@ -306,17 +308,49 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// While quick edit is on, block in-preview link navigation so taps edit instead of loading another page.
+        /// Open Instagram / other off-site links in Safari instead of trapping them in the preview WebView.
+        private func openExternalIfNeeded(_ url: URL?) -> Bool {
+            guard let url else { return false }
+            let scheme = (url.scheme ?? "").lowercased()
+            guard scheme == "http" || scheme == "https" else { return false }
+            let host = (url.host ?? "").lowercased()
+            guard !host.isEmpty else { return false }
+            let siteHost = (lastLoadedURL?.host ?? "").lowercased()
+            let isInstagram = host == "instagram.com" || host.hasSuffix(".instagram.com")
+            let isOffsite = !siteHost.isEmpty && host != siteHost && !host.hasSuffix("." + siteHost)
+            guard isInstagram || isOffsite else { return false }
+            UIApplication.shared.open(url)
+            return true
+        }
+
+        /// While quick edit is on, block in-preview site navigation so taps edit instead of loading another page.
+        /// Off-site links (Instagram) still open in Safari.
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard quickEditEnabled else {
-                decisionHandler(.allow)
+            if navigationAction.navigationType == .linkActivated,
+               openExternalIfNeeded(navigationAction.request.url) {
+                decisionHandler(.cancel)
                 return
             }
-            if navigationAction.navigationType == .linkActivated {
+            if quickEditEnabled, navigationAction.navigationType == .linkActivated {
                 decisionHandler(.cancel)
                 return
             }
             decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if openExternalIfNeeded(navigationAction.request.url) {
+                return nil
+            }
+            if let url = navigationAction.request.url {
+                webView.load(URLRequest(url: url))
+            }
+            return nil
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -447,7 +481,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key="heroImage"].classic-hero-placeholder,[data-edit-key="heroImage"].blade-hero-placeholder,[data-edit-key="heroImage"].stonecut-hero-photo--empty,[data-edit-key="heroImage"].s12-hero-img-fallback{outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:0!important;cursor:pointer!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 'img[data-edit-key="heroImage"],img[data-edit-key^="galleryImage"],img[data-edit-key^="featuredWork"],img[data-edit-key="studio12PhilosophyImage"],img[data-edit-key="studio12BookCtaImage"],img[data-edit-key="classicAboutImage"],' +
                 '[data-edit-key^="featuredWork"].luxe-service-placeholder,[data-edit-key^="featuredWork"].tattoo-featured-slot-add,[data-edit-key^="featuredWork"].tattoo-featured-cell,.tattoo-featured-placeholder[data-edit-key],' +
-                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback,[data-edit-key="classicAboutImage"].classic-about-photo--empty' +
+                '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback,[data-edit-key="classicAboutImage"].classic-about-photo--empty,[data-edit-key="classicAboutImage"].charter-about-photo--empty' +
                 '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 '@media (max-width:900px){.studio12-page .s12-nav-trailing .s12-nav-book,.studio12-page .s12-nav-trailing a.s12-nav-book[data-edit-key],.studio12-page .s12-nav-trailing a.s12-nav-book[data-bk-empty-slot]{display:none!important;}}' +
                 '[data-bk-color-surface]{outline:none!important;box-shadow:none!important;}' +
@@ -471,10 +505,18 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '.bk-band-content .booking-form,.bk-band-content .booking-form--guided,.bk-band-content .booking-guided,' +
                 '.bk-band-content .booking-form input,.bk-band-content .booking-form select,.bk-band-content .booking-form textarea,.bk-band-content .booking-form label,' +
                 '.bk-band-content .field-input,.bk-band-content .pref-days-dropdown,.bk-band-content .upload-drop,' +
+                '.bk-band-content .charter-search,.bk-band-content .charter-search input,.bk-band-content .charter-search select,.bk-band-content .charter-search label,' +
+                '.bk-band-content .charter-browse-layout input,.bk-band-content .charter-browse-layout select,.bk-band-content .charter-browse-layout label,.bk-band-content .charter-browse-layout button,' +
+                '.bk-band-content .charter-drop,.bk-band-content .charter-drop select,.bk-band-content .charter-drop label,' +
+                '.bk-band-content [data-charter-detail-date],.bk-band-content [data-charter-detail-time],.bk-band-content [data-charter-detail-people],' +
                 '.blade-band-content [data-edit-key],.blade-band-content a,.blade-band-content button,.blade-band-content [role="button"],' +
                 '.blade-band-content .booking-form,.blade-band-content .booking-form--guided,.blade-band-content .booking-guided,' +
                 '.blade-band-content .booking-form input,.blade-band-content .booking-form select,.blade-band-content .booking-form textarea,.blade-band-content .booking-form label,' +
-                '.blade-band-content .field-input,.blade-band-content .pref-days-dropdown,.blade-band-content .upload-drop{pointer-events:auto!important;}';
+                '.blade-band-content .field-input,.blade-band-content .pref-days-dropdown,.blade-band-content .upload-drop,' +
+                '.blade-band-content .charter-search,.blade-band-content .charter-search input,.blade-band-content .charter-search select,.blade-band-content .charter-search label,' +
+                '.blade-band-content .charter-browse-layout input,.blade-band-content .charter-browse-layout select,.blade-band-content .charter-browse-layout label,.blade-band-content .charter-browse-layout button,' +
+                '.blade-band-content .charter-drop,.blade-band-content .charter-drop select,.blade-band-content .charter-drop label,' +
+                '.blade-band-content [data-charter-detail-date],.blade-band-content [data-charter-detail-time],.blade-band-content [data-charter-detail-people]{pointer-events:auto!important;}';
               document.head.appendChild(sheet);
               var touchMoveSlopPx = 20;
               function isHeroImageQuickEditTarget(el) {
@@ -1197,7 +1239,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                   ensureColorBandHitAndWrap(half);
                 });
                 [].forEach.call(document.querySelectorAll(
-                  '.charter-section, .charter-footer, .charter-browse-head, .charter-shop-layout, .charter-nav'
+                  '.charter-section, .charter-footer, .charter-browse-head, .charter-shop-layout, .charter-nav, .charter-hero, .charter-browse-layout'
                 ), function(el) {
                   if (!el.getAttribute('data-bk-color-surface')) el.setAttribute('data-bk-color-surface', 'page');
                   if (!el.getAttribute('data-bk-band-tappable')) el.setAttribute('data-bk-band-tappable', '');

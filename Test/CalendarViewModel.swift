@@ -27,7 +27,15 @@ class CalendarViewModel: ObservableObject {
             if let sessionStore, sessionStore.isDemoSession {
                 let bookings = sessionStore.bookingRequests
                 await MainActor.run {
-                    applyMonthEvents(from: bookings, startOfMonth: startOfMonth, endOfMonth: endOfMonth, monthKey: monthKey)
+                    applyMonthEvents(
+                        from: bookings,
+                        startOfMonth: startOfMonth,
+                        endOfMonth: endOfMonth,
+                        monthKey: monthKey,
+                        isCharterPlan: SubscriptionPlan.normalized(
+                            fromFirestore: sessionStore.tenant?["subscriptionPlan"] as? String
+                        ).isCharterPlan
+                    )
                 }
                 return
             }
@@ -62,8 +70,18 @@ class CalendarViewModel: ObservableObject {
             }
 
             let bookings = try await firebaseService.fetchTenantBookingRequests(tenantId: tenantId)
+            let tenant = try? await firebaseService.fetchTenant(tenantId: tenantId)
+            let isCharter = SubscriptionPlan.normalized(
+                fromFirestore: tenant?["subscriptionPlan"] as? String
+            ).isCharterPlan
             await MainActor.run {
-                applyMonthEvents(from: bookings, startOfMonth: startOfMonth, endOfMonth: endOfMonth, monthKey: monthKey)
+                applyMonthEvents(
+                    from: bookings,
+                    startOfMonth: startOfMonth,
+                    endOfMonth: endOfMonth,
+                    monthKey: monthKey,
+                    isCharterPlan: isCharter
+                )
             }
         } catch {
             await MainActor.run { isLoading = false }
@@ -75,7 +93,8 @@ class CalendarViewModel: ObservableObject {
         from bookings: [BookingRequest],
         startOfMonth: Date,
         endOfMonth: Date,
-        monthKey: String
+        monthKey: String,
+        isCharterPlan: Bool = false
     ) {
         var byId: [String: BookingRequest] = [:]
         for booking in bookings {
@@ -83,7 +102,7 @@ class CalendarViewModel: ObservableObject {
                 byId[docId] = booking
             }
         }
-        let inMonth = bookings.compactMap { Self.event(from: $0) }
+        let inMonth = bookings.compactMap { Self.event(from: $0, isCharterPlan: isCharterPlan) }
             .filter { $0.start >= startOfMonth && $0.start < endOfMonth }
             .sorted { $0.start < $1.start }
         events = inMonth
@@ -101,15 +120,20 @@ class CalendarViewModel: ObservableObject {
 
     // MARK: - BookingRequest → Event
 
-    static func event(from booking: BookingRequest) -> Event? {
+    static func event(from booking: BookingRequest, isCharterPlan: Bool = false) -> Event? {
         let statusRaw = booking.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard statusRaw == "confirmed" else { return nil }
+        let isHold = statusRaw == BookingRequestStatus.pendingDeposit
+            || statusRaw == BookingRequestStatus.pendingPayment
+        let occupies = statusRaw == BookingRequestStatus.confirmed || isHold
+            || (isCharterPlan && (statusRaw == "new" || statusRaw == "pending" || statusRaw == "pending_consultation"))
+        guard occupies else { return nil }
         guard let start = appointmentStart(for: booking) else { return nil }
 
         let service = (booking.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let client = (booking.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let endMinutes = booking.durationMinutes.flatMap { $0 > 0 ? $0 : nil } ?? 60
+        let fallbackMinutes = isCharterPlan ? 240 : 60
+        let endMinutes = booking.durationMinutes.flatMap { $0 > 0 ? $0 : nil } ?? fallbackMinutes
         let end = start.addingTimeInterval(TimeInterval(endMinutes * 60))
 
         return Event(
@@ -118,7 +142,7 @@ class CalendarViewModel: ObservableObject {
             start: start,
             end: end,
             type: .appointment,
-            status: .confirmed,
+            status: isHold || statusRaw == "new" || statusRaw == "pending" ? .pending : .confirmed,
             clientId: booking.customerId ?? booking.id,
             clientName: client.isEmpty ? "Client" : client,
             notes: booking.notes,

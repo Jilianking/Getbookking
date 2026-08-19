@@ -37,9 +37,33 @@
     html.bk-capture-mode { overflow-x: hidden; }
     /* Scroll-reveal animations stay opacity:0 until IntersectionObserver fires — force visible for captures */
     html.bk-capture-mode .blade-fade-up,
-    html.bk-capture-mode .studio12-page .s12-fade {
+    html.bk-capture-mode .studio12-page .s12-fade,
+    html.bk-capture-mode .bk-fade-up {
       opacity: 1 !important;
       transform: none !important;
+    }
+
+    .classic-home .bk-fade-up,
+    .luxe-page .bk-fade-up,
+    .stonecut-page .bk-fade-up {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.75s ease, transform 0.75s ease;
+    }
+    .classic-home .bk-fade-up.bk-visible,
+    .luxe-page .bk-fade-up.bk-visible,
+    .stonecut-page .bk-fade-up.bk-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .classic-home .bk-fade-up,
+      .luxe-page .bk-fade-up,
+      .stonecut-page .bk-fade-up {
+        opacity: 1;
+        transform: none;
+        transition: none;
+      }
     }
 
     :root {
@@ -2253,6 +2277,11 @@
       flex-shrink: 0;
       font-weight: 400;
       border-radius: 0;
+    }
+    .tattoo-nav-menu svg {
+      display: block;
+      width: 22px;
+      height: 16px;
     }
     .tattoo-nav .tattoo-nav-menu { display: none; }
     .tattoo-hero-section {
@@ -7496,7 +7525,7 @@
           '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, 'Welcome') + '</a>' +
           '<div class="tattoo-nav-trailing">' +
             '<div class="tattoo-nav-links">' + inner + '</div>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
           '</div>' +
         '</nav>';
       }
@@ -7519,7 +7548,7 @@
           '<a href="' + base + '/home" class="luxe-nav-brand">' + siteNameSpan(tenant, 'Welcome') + '</a>' +
           '<div class="luxe-nav-trailing">' +
             '<div class="luxe-nav-links">' + inner + '</div>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;font-size:1.5rem;cursor:pointer;padding:8px;display:none">&#9776;</button>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;font-size:1.5rem;cursor:pointer;padding:8px;display:none">' + hamburgerMenuSvg() + '</button>' +
           '</div>' +
         '</nav>';
       }
@@ -7550,6 +7579,27 @@
           '<path d="M1 1.5h20M1 8h20M1 14.5h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
           '</svg></span></button>' +
           '</div></nav>';
+      }
+      function bindBkFadeUp() {
+        var els = document.querySelectorAll('.bk-fade-up');
+        if (!els.length) return;
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!window.IntersectionObserver || reduce) {
+          for (var i = 0; i < els.length; i++) els[i].classList.add('bk-visible');
+          return;
+        }
+        if (window.__bkFadeUpObserver) {
+          window.__bkFadeUpObserver.disconnect();
+        }
+        var obs = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('bk-visible');
+            obs.unobserve(entry.target);
+          });
+        }, { threshold: 0.07, rootMargin: '0px 0px -24px 0px' });
+        window.__bkFadeUpObserver = obs;
+        for (var j = 0; j < els.length; j++) obs.observe(els[j]);
       }
       function bindBladeChrome() {
         var root = document.getElementById('root');
@@ -7753,6 +7803,21 @@
           '<div class="blade-section-header blade-fade-up">' +
           '<div><div class="blade-section-label">' + wcSpan(tenant, 'wc.blade.servicesEyebrow', 'What we offer') + '</div><h2 class="blade-section-title">' + wcSpan(tenant, 'wc.blade.servicesTitle', 'OUR SERVICES') + '</h2></div>' +
           '</div>' + servicesBody + '</div></section>';
+        var shopPreviewSection = (function(){
+          if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
+          var cards = luxeTenantProductCardsHtml(tenant);
+          if (!cards) return '';
+          var base = tenantBaseUrl(tenant);
+          return '<section class="blade-shop-preview" id="shop" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="luxe-shop-inner">' +
+              '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.blade.shopEyebrow', 'Retail') + '</p>' +
+              '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.blade.shopHeading', 'Shop') + '</h2>' +
+              '<p style="color:#888;max-width:420px;margin:8px auto 0;text-align:center">' + wcSpan(tenant, 'wc.blade.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p>' +
+              '<div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div>' +
+              '<p style="text-align:center;margin-top:28px"><a href="' + base + '/shop" style="font-weight:600">View full shop →</a></p>' +
+            '</div>') +
+            '</section>';
+        })();
         // Hero already shows the story; skip duplicate "WHO WE ARE" block. `#about` is on the hero for nav / /about.
         var gUrls = galleryPageImageUrls(tenant);
         var gallerySection = '';
@@ -7891,7 +7956,7 @@
           '</div></div>' +
           '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
           '<div class="blade-hero-vertical">' + siteTextSpan('bladeHeroTagline', vertical) + '</div></section>';
-        return '<div class="blade-page">' + nav + hero + servicesSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
+        return '<div class="blade-page">' + nav + hero + servicesSection + shopPreviewSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
       }
       /** Stonecut top bar (fixed); same markup on home, shop, /book, and post-submit. */
       function stonecutNavHtml(tenant) {
@@ -7918,7 +7983,7 @@
           (tenantShowAboutPage(tenant) ? '<li><a href="' + base + '/about">About</a></li>' : '') +
           (tenantShowShopPage(tenant) ? '<li><a href="' + base + '/shop">Shop</a></li>' : '') +
           (tenantShowBookPage(tenant) ? '<li><a href="' + bookUrl + '">' + wcSpan(tenant, 'wc.stonecut.navBook', 'Book') + '</a></li>' : '') + '</ul>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
           '</div></nav>';
       }
       function stonecutHomePage(tenant, services) {
@@ -7941,13 +8006,13 @@
           var sidSc = s.id ? String(s.id) : '';
           var cardInner = '<h3>' + svcSpan(tenant, sidSc, 'name', s.name || 'Service') + '</h3><p>' + svcSpanMultiline(tenant, sidSc, 'description', desc) + '</p><div class="stonecut-price">' + svcSpan(tenant, sidSc, 'price', priceTxt) + '</div>';
           if (tenantShowBookPage(tenant)) {
-            serviceCards += '<a href="' + esc(href) + '" class="stonecut-service-card"' + svcEditAttr(sidSc) + '>' + cardInner + '</a>';
+            serviceCards += '<a href="' + esc(href) + '" class="stonecut-service-card bk-fade-up"' + svcEditAttr(sidSc) + '>' + cardInner + '</a>';
           } else {
-            serviceCards += '<div class="stonecut-service-card"' + svcEditAttr(sidSc) + '>' + cardInner + '</div>';
+            serviceCards += '<div class="stonecut-service-card bk-fade-up"' + svcEditAttr(sidSc) + '>' + cardInner + '</div>';
           }
         }
         if (!serviceCards) {
-          serviceCards = '<div class="stonecut-service-card"><h3>Add services</h3><p>Add active services in the app to populate this section.</p><div class="stonecut-price">Setup needed</div></div>';
+          serviceCards = '<div class="stonecut-service-card bk-fade-up"><h3>Add services</h3><p>Add active services in the app to populate this section.</p><div class="stonecut-price">Setup needed</div></div>';
         }
         var addrRaw = tenantStreetAddressText(tenant);
         var sa = tenant.serviceArea && String(tenant.serviceArea).trim() ? String(tenant.serviceArea).trim() : '';
@@ -7970,10 +8035,10 @@
           var cards = luxeTenantProductCardsHtml(tenant);
           if (!cards) return '';
           return '<section class="stonecut-section stonecut-shop-preview" id="shop" data-bk-color-surface="card" data-bk-band-tappable>' +
-            bkColorBandInnerWrap('<div class="stonecut-eyebrow">Retail</div>' +
-            '<h2 class="stonecut-heading">Shop</h2>' +
-            '<p class="stonecut-shop-lead">Studio retail, curated for clients—see everything on the full shop.</p>' +
-            '<div class="stonecut-shop-grid">' + cards + '</div>' +
+            bkColorBandInnerWrap('<div class="stonecut-eyebrow bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.shopEyebrow', 'Retail') + '</div>' +
+            '<h2 class="stonecut-heading bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.shopHeading', 'Shop') + '</h2>' +
+            '<p class="stonecut-shop-lead bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p>' +
+            '<div class="stonecut-shop-grid bk-fade-up">' + cards + '</div>' +
             '<a href="' + base + '/shop" class="stonecut-btn stonecut-btn-primary" style="margin-top:28px;display:inline-block">' + wcSpan(tenant, 'wc.stonecut.shopFull', 'Full shop') + '</a>') +
             '</section>';
         })();
@@ -7983,19 +8048,19 @@
           var aboutBody = wcSpanMultiline(tenant, 'wc.stonecut.aboutBio', aboutBioPlain);
           return '<section class="stonecut-section stonecut-about-section" id="about" data-bk-color-surface="about" data-bk-band-tappable>' +
             bkColorBandInnerWrap('<div class="stonecut-about-inner">' +
-            '<div class="stonecut-about-copy">' +
+            '<div class="stonecut-about-copy bk-fade-up">' +
             '<div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.aboutEyebrow', 'About') + '</div>' +
             '<h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.aboutTitle', displayName) + '</h2>' +
             '<p class="stonecut-about-bio">' + aboutBody + '</p>' +
             '</div>' +
-            '<div class="stonecut-about-media">' + stonecutAboutPhotoHtml(tenant) + '</div>' +
+            '<div class="stonecut-about-media bk-fade-up">' + stonecutAboutPhotoHtml(tenant) + '</div>' +
             '</div>') + '</section>';
         })();
         return '<div class="stonecut-page">' +
           stonecutNavHtml(tenant) +
           '<section class="stonecut-hero" data-bk-color-surface="hero">' +
           bkHeroBandHitButtonHtml() +
-          '<div class="stonecut-hero-left" data-bk-hero-band-tappable>' +
+          '<div class="stonecut-hero-left bk-fade-up" data-bk-hero-band-tappable>' +
           '<h1 class="stonecut-title">' + stonecutIndustryEmHtml(tenant, '') + siteNameSpan(tenant, 'Studio') + '</h1>' +
           taglineHtml +
           cityTagHtml +
@@ -8004,19 +8069,19 @@
             ? '<img class="stonecut-hero-photo" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
             : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') +
             bkHeroImageHitButtonHtml() + '</div></section>' +
-          '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
+          '<section class="stonecut-section" id="services"><div class="stonecut-eyebrow bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
           '<div class="stonecut-services">' + serviceCards + '</div></section>' +
           shopPreviewSection +
           aboutSection +
           '<section class="stonecut-section" id="location" data-bk-color-surface="about" data-bk-band-tappable>' + bkColorBandInnerWrap('<div class="stonecut-info' + (!tenantShowBusinessHours(tenant) ? ' stonecut-info--no-hours' : '') + '">' +
           (tenantShowBusinessHours(tenant)
-            ? ('<div class="stonecut-info-card"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
+            ? ('<div class="stonecut-info-card bk-fade-up"><div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
               (tenantBusinessHoursTrimmed(tenant)
                 ? '<div style="margin-top:12px;white-space:pre-line;line-height:1.8;color:#a09888">' + wcSpanMultiline(tenant, 'wc.contact.hours', tenantBusinessHoursTrimmed(tenant)) + '</div>'
                 : '<div style="margin-top:12px;color:#a09888">' + wcSpan(tenant, 'wc.contact.hours', 'Add hours in the app.') + '</div>') +
               '</div>')
             : '') +
-          '<div class="stonecut-info-card"><div class="stonecut-eyebrow">Where</div><h3>' + wcSpan(tenant, 'wc.contact.whereHead', whereHeadline) + '</h3>' +
+          '<div class="stonecut-info-card bk-fade-up"><div class="stonecut-eyebrow">Where</div><h3>' + wcSpan(tenant, 'wc.contact.whereHead', whereHeadline) + '</h3>' +
           (mapQuery ? '<a href="' + esc(mapQuery) + '" class="stonecut-address-link" target="_blank" rel="noopener noreferrer">' + addrBodyWrappedSc + '</a>' : '<div class="stonecut-address-link">' + addrBodyWrappedSc + '</div>') +
           (phoneHref ? '<a href="' + esc(phoneHref) + '" class="stonecut-phone">' + wcSpan(tenant, 'wc.contact.phone', tenant.contactPhone ? displayPhoneUS(tenant.contactPhone) : '') + '</a>' : '') +
           '</div></div>') + '</section>' +
@@ -9370,22 +9435,35 @@
         }
         return segs.join('');
       }
-      function guidedStepTitle(tenant, key, fallback) {
+      function guidedStepDefaultTitle(tenant, key) {
+        var industry = String((tenant && tenant.industry) || 'custom').trim().toLowerCase();
+        var defaults = {
+          custom: { service: 'Service', project: 'Project details', contact: 'About you', confirm: 'Confirm' },
+          barber: { service: 'Service', project: 'Cut', contact: 'You', confirm: 'Confirm' },
+          hair: { service: 'Service', project: 'Style', contact: 'You', confirm: 'Confirm' },
+          tattoos: { service: 'Service', project: 'Design', contact: 'You', confirm: 'Confirm' },
+          nails: { service: 'Service', project: 'Details', contact: 'You', confirm: 'Confirm' },
+          charters: { service: 'Service', project: 'Trip details', contact: 'About you', confirm: 'Confirm' }
+        };
+        var map = defaults[industry] || defaults.custom;
+        return map[key] || defaults.custom[key] || key;
+      }
+      function guidedStepTitle(tenant, key) {
         var titles = tenant && tenant.guidedStepTitles;
         if (titles && typeof titles === 'object' && titles[key]) {
           var t = String(titles[key]).trim();
           if (t) return esc(t);
         }
-        return esc(fallback);
+        return esc(guidedStepDefaultTitle(tenant, key));
       }
       function guidedWizardPhaseChromeHtml(tenant) {
         return '' +
           '<div class="booking-guided-steps" data-guided-wizard-steps role="navigation" aria-label="Booking steps">' +
             '<div class="booking-guided-step-labels booking-guided-phase-labels">' +
-              '<span data-guided-phase-label="service" class="is-active">' + guidedStepTitle(tenant, 'service', 'Service') + '</span>' +
-              '<span data-guided-phase-label="project">' + guidedStepTitle(tenant, 'project', 'Cut') + '</span>' +
-              '<span data-guided-phase-label="contact">' + guidedStepTitle(tenant, 'contact', 'You') + '</span>' +
-              '<span data-guided-phase-label="confirm">Confirm</span>' +
+              '<span data-guided-phase-label="service" class="is-active">' + guidedStepTitle(tenant, 'service') + '</span>' +
+              '<span data-guided-phase-label="project">' + guidedStepTitle(tenant, 'project') + '</span>' +
+              '<span data-guided-phase-label="contact">' + guidedStepTitle(tenant, 'contact') + '</span>' +
+              '<span data-guided-phase-label="confirm">' + guidedStepTitle(tenant, 'confirm') + '</span>' +
             '</div>' +
             '<div class="booking-guided-step-row booking-guided-phase-dots">' +
               '<span class="booking-guided-step-dot" data-guided-phase-dot="service">1</span>' +
@@ -10387,6 +10465,7 @@
               showMeetTheTeamOnHome: data.showMeetTheTeamOnHome !== false,
               shopEnabled: data.shopEnabled || false,
               shopPickupEnabled: data.shopPickupEnabled !== false,
+              shopShowPickupAddressOnCheckout: data.shopShowPickupAddressOnCheckout !== false,
               shopShippingEnabled: data.shopShippingEnabled === true,
               shopShipFrom: (data.shopShipFrom && typeof data.shopShipFrom === 'object') ? data.shopShipFrom : null,
               shopDefaultParcel: (data.shopDefaultParcel && typeof data.shopDefaultParcel === 'object') ? data.shopDefaultParcel : null,
@@ -10712,7 +10791,7 @@
           luxeLocationInner = wcSpan(tenant, 'wc.contact.serviceArea', 'Add in app');
         }
         return '<section class="luxe-contact" data-bk-color-surface="about" data-bk-band-tappable>' +
-          bkColorBandInnerWrap('<div class="luxe-contact-inner">' +
+          bkColorBandInnerWrap('<div class="luxe-contact-inner bk-fade-up">' +
             '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactLocation', 'Location') + '</h3><p>' + luxeLocationInner + '</p></div>' +
             luxeHoursBlock +
             '<div class="luxe-contact-item"><h3>' + wcSpan(tenant, 'wc.luxe.contactConnect', 'Connect') + '</h3><p>' + connectHtml + '</p></div>' +
@@ -10821,7 +10900,7 @@
           '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, opts.defaultName) + '</a>' +
           '<div class="tattoo-nav-trailing">' +
             '<div class="tattoo-nav-links">' + navInner + '</div>' +
-          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">&#9776;</button>' +
+          '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
           '</div>' +
         '</nav>';
 
@@ -10849,7 +10928,7 @@
           '<div class="classic-hero-title-row">' +
           '<h1 class="classic-hero-name">' + siteNameSpan(tenant, opts.defaultName) + '</h1>' +
           '<div class="classic-hero-nav-actions">' +
-          '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">&#9776;</button>' +
+          '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
           '</div></div>';
         var taglineTrim = classicTenantTrim('tagline');
         var heroTagInner;
@@ -10863,7 +10942,7 @@
         var heroIndustry = '<p class="classic-hero-tag">' + heroTagInner + '</p>';
         var heroHtml = '<section class="classic-hero" data-bk-color-surface="hero">' +
           bkHeroBandHitButtonHtml() +
-          '<div class="classic-hero-left" data-bk-hero-band-tappable>' +
+          '<div class="classic-hero-left bk-fade-up" data-bk-hero-band-tappable>' +
           heroTitleRow +
           heroIndustry +
           '<div class="classic-hero-actions">' + heroActions + '</div></div>' +
@@ -10892,22 +10971,22 @@
               var slotUrl = featuredStripSlotUrl(gallery, fi);
               if (slotUrl) {
                 cells.push(galleryLightboxTriggerHtml(slotUrl, {
-                  className: 'tattoo-featured-cell',
+                  className: 'tattoo-featured-cell bk-fade-up',
                   editAttr: ' data-edit-key="' + esc(fk) + '"'
                 }));
               } else {
-                cells.push('<div class="tattoo-featured-cell tattoo-featured-slot-add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div>');
+                cells.push('<div class="tattoo-featured-cell tattoo-featured-slot-add bk-fade-up" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div>');
               }
             }
-            return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder" data-edit-key="classicFeaturedWorkEmpty" role="button" aria-label="Edit featured work empty message">' + esc(opts.galleryPlaceholder) + '</div>');
+            return cells.length ? cells.join('') : ('<div class="tattoo-featured-placeholder bk-fade-up" data-edit-key="classicFeaturedWorkEmpty" role="button" aria-label="Edit featured work empty message">' + esc(opts.galleryPlaceholder) + '</div>');
           })();
           featuredHtml = '<section id="featured" class="tattoo-featured-outer" data-bk-color-surface="featured" data-bk-band-tappable>' +
             bkColorBandInnerWrap('<div class="tattoo-featured-inner">' +
-            '<p class="classic-section-eyebrow">' + siteTextSpan('classicFeaturedWorkEyebrow', classicFeaturedEyebrow) + '</p>' +
-            '<h2>' + siteTextSpan('classicFeaturedWorkHeading', classicFeaturedHeading) + '</h2>' +
-            '<p class="tattoo-featured-sub">' + siteTextSpan((gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty'), (gallery.length ? classicFeaturedSub : classicFeaturedEmpty)) + '</p>' +
+            '<p class="classic-section-eyebrow bk-fade-up">' + siteTextSpan('classicFeaturedWorkEyebrow', classicFeaturedEyebrow) + '</p>' +
+            '<h2 class="bk-fade-up">' + siteTextSpan('classicFeaturedWorkHeading', classicFeaturedHeading) + '</h2>' +
+            '<p class="tattoo-featured-sub bk-fade-up">' + siteTextSpan((gallery.length ? 'classicFeaturedWorkSub' : 'classicFeaturedWorkEmpty'), (gallery.length ? classicFeaturedSub : classicFeaturedEmpty)) + '</p>' +
             '<div class="tattoo-featured-grid" style="'+gridStyle+'">' + featuredGridInner + '</div>' +
-            '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link">' + wcSpan(tenant, 'wc.classic.galleryLink', 'View full gallery \u2192') + '</a>' +
+            '<a href="'+esc(galleryUrl)+'" class="tattoo-gallery-link bk-fade-up">' + wcSpan(tenant, 'wc.classic.galleryLink', 'View full gallery \u2192') + '</a>' +
             '</div>') + '</section>';
         }
 
@@ -10941,7 +11020,7 @@
                 descBlock = '<div class="classic-service-e-desc">' + descBr + '</div>';
               }
             }
-            rows += '<div class="classic-service-item classic-service-item--e"' + svcEditAttr(sidCl) + '>' +
+            rows += '<div class="classic-service-item classic-service-item--e' + (classicSvcExpand ? '' : ' bk-fade-up') + '"' + svcEditAttr(sidCl) + '>' +
               '<div class="classic-service-e-row">' +
               '<div class="classic-service-e-copy">' +
               titleH +
@@ -10954,7 +11033,7 @@
           var listBlock = '<div class="classic-service-list">' + rows + '</div>';
           if (classicSvcExpand) {
             servicesHtml = '<section id="services" class="classic-services-section classic-services-section--expandable" data-bk-color-surface="card" data-bk-band-tappable>' +
-              bkColorBandInnerWrap('<div class="classic-services">' +
+              bkColorBandInnerWrap('<div class="classic-services bk-fade-up">' +
               '<details class="classic-services-details">' +
               '<summary class="classic-services-summary">' +
               '<div class="classic-services-summary-text">' +
@@ -10968,12 +11047,28 @@
           } else {
             servicesHtml = '<section id="services" class="classic-services-section" data-bk-color-surface="card" data-bk-band-tappable>' +
               bkColorBandInnerWrap('<div class="classic-services">' +
-              '<p class="classic-section-eyebrow">' + siteTextSpan('classicServicesEyebrow', classicSvcEyebrow) + '</p>' +
-              '<h2>' + siteTextSpan('classicServicesHeading', classicSvcHeading) + '</h2>' +
+              '<p class="classic-section-eyebrow bk-fade-up">' + siteTextSpan('classicServicesEyebrow', classicSvcEyebrow) + '</p>' +
+              '<h2 class="bk-fade-up">' + siteTextSpan('classicServicesHeading', classicSvcHeading) + '</h2>' +
               listBlock +
               '</div>') + '</section>';
           }
         }
+
+        var shopPreviewSection = (function(){
+          if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
+          var cards = luxeTenantProductCardsHtml(tenant);
+          if (!cards) return '';
+          var base = tenantBaseUrl(tenant);
+          return '<section class="classic-shop-preview-home" id="shop" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="luxe-shop-inner">' +
+              '<p class="classic-section-eyebrow">' + wcSpan(tenant, 'wc.classic.shopEyebrow', 'Retail') + '</p>' +
+              '<h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 8px">' + wcSpan(tenant, 'wc.classic.shopHeading', 'Shop') + '</h2>' +
+              '<p style="color:#888;max-width:420px;margin:0 auto 12px;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.classic.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p>' +
+              '<div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div>' +
+              '<p style="text-align:center;margin-top:28px"><a href="' + base + '/shop" style="font-weight:600">View full shop →</a></p>' +
+            '</div>') +
+            '</section>';
+        })();
 
         var aboutBioPlain = ((tenant.aboutText && String(tenant.aboutText).trim()) || (tenant.tagline && String(tenant.tagline).trim()) || String(opts.defaultBio || '').trim());
         var aboutBioDisplay = wcSpanMultiline(tenant, 'wc.classic.aboutBio', aboutBioPlain || 'Tell clients about your work and experience.');
@@ -11037,14 +11132,14 @@
         var aboutHtml = tenantShowAboutPage(tenant)
           ? '<section id="about" class="classic-about-section" data-bk-color-surface="about" data-bk-band-tappable>' +
           bkColorBandInnerWrap('<div class="classic-about-inner-v2">' +
-          '<div class="classic-about-copy">' +
+          '<div class="classic-about-copy bk-fade-up">' +
           '<p class="classic-section-eyebrow">' + siteTextSpan('classicAboutEyebrow', aboutEyebrow) + '</p>' +
           aboutHeadingHtml +
           '<p class="classic-about-bio-v2">' + aboutBioDisplay + '</p>' +
           classicStatsHtml +
           classicContactLines +
           '</div>' +
-          '<div class="classic-about-media">' + aboutPhotoHtml + '</div>' +
+          '<div class="classic-about-media bk-fade-up">' + aboutPhotoHtml + '</div>' +
           '</div>') + '</section>'
           : '';
 
@@ -11052,7 +11147,7 @@
         var teamHtml = teamHomeSectionHtml(tenant);
 
         return '<div class="tattoo-page classic-home classic-home-page">' +
-          nav + heroHtml + featuredHtml + servicesHtml + aboutHtml + teamHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
+          nav + heroHtml + featuredHtml + servicesHtml + shopPreviewSection + aboutHtml + teamHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
           '</div>';
       }
 
@@ -11098,7 +11193,7 @@
           ? '<a class="s12-nav-book" href="' + bookUrl + '" data-edit-key="wc.s12.navBook">' + esc(navBookLbl) + '</a>'
           : '';
         return '<nav class="s12-topnav" id="s12-nav" data-bk-color-surface="page">' +
-          '<button type="button" class="tattoo-nav-menu" aria-label="Menu">&#9776;</button>' +
+          '<button type="button" class="tattoo-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
           '<a href="' + homeUrl + '" class="s12-nav-logo">' +
           '<span class="s12-nav-logo-main">' + siteNameSpan(tenant, 'Studio') + '</span>' +
           studio12NavLogoSubHtml(tenant) + '</a>' +
@@ -11180,8 +11275,9 @@
         if (!cards) return '';
         var base = tenantBaseUrl(tenant);
         return '<section class="s12-services s12-shop-home" id="shop" data-bk-color-surface="card">' +
-          '<div class="s12-section-label">' + wcSpan(tenant, 'wc.s12.shopSectionLabel', 'Shop') + '</div>' +
-          '<h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', 'products') + '</em></h2>' +
+          '<div class="s12-section-label">' + wcSpan(tenant, 'wc.s12.shopSectionLabel', 'Retail') + '</div>' +
+          '<h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Shop') + '<em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', '') + '</em></h2>' +
+          '<p style="text-align:center;color:#888;max-width:420px;margin:0 auto;line-height:1.45">' + wcSpan(tenant, 'wc.s12.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p>' +
           '<div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div>' +
           '<p style="text-align:center;margin-top:28px"><a class="s12-btn-outline" href="' + base + '/shop">' + wcSpan(tenant, 'wc.s12.shopViewAll', 'View full shop') + '</a></p>' +
           '</section>';
@@ -11190,8 +11286,8 @@
       function studio12ShopPage(tenant) {
         var cards = luxeTenantProductCardsHtml(tenant);
         var inner = cards
-          ? '<div class="s12-services" style="padding-top:100px;padding-bottom:80px"><div class="s12-section-label">Shop</div><h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Our') + ' <em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', 'products') + '</em></h2><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
-          : '<div class="s12-services" style="padding-top:120px"><p class="s12-phil-body" style="text-align:center">No products yet. Add them in the app.</p></div>';
+          ? '<div class="s12-services" style="padding-top:40px;padding-bottom:64px"><div class="s12-section-label">' + wcSpan(tenant, 'wc.s12.shopSectionLabel', 'Retail') + '</div><h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Shop') + '<em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', '') + '</em></h2><p style="text-align:center;color:#888;max-width:420px;margin:0 auto;line-height:1.45">' + wcSpan(tenant, 'wc.s12.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div></div>'
+          : '<div class="s12-services" style="padding-top:40px"><div class="s12-section-label">' + wcSpan(tenant, 'wc.s12.shopSectionLabel', 'Retail') + '</div><h2 class="s12-section-title">' + wcSpan(tenant, 'wc.s12.shopTitleLead', 'Shop') + '<em>' + wcSpan(tenant, 'wc.s12.shopTitleEm', '') + '</em></h2><p style="text-align:center;color:#888;max-width:420px;margin:0 auto;line-height:1.45">' + wcSpan(tenant, 'wc.s12.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><p class="s12-phil-body" style="text-align:center;margin-top:18px">No products yet. Add them in the app.</p></div>';
         return '<div class="studio12-page studio12-sub">' + studio12NavHtml(tenant) + inner + studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + '</div>';
       }
 
@@ -11641,7 +11737,7 @@
         var productCards = '';
         for (var pi = 0; pi < tenant._products.length; pi++) {
           var prod = tenant._products[pi];
-          var prodImg = prod.imageUrl ? '<img src="' + esc(prod.imageUrl) + '" alt="" loading="lazy">' : '<div class="luxe-product-placeholder">\u2726</div>';
+          var prodImg = prod.imageUrl ? '<img src="' + esc(prod.imageUrl) + '" alt="" loading="lazy">' : '<div class="luxe-product-placeholder" aria-hidden="true"></div>';
           var priceHtml = '';
           if (prod.salePrice && prod.salePrice < prod.price) {
             priceHtml = '<div class="luxe-product-prices"><span class="luxe-product-price-sale">$' + Number(prod.salePrice).toFixed(2) + '</span><span class="luxe-product-price-original">$' + Number(prod.price).toFixed(2) + '</span></div>';
@@ -11664,9 +11760,9 @@
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
         var inner = productCards
-          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop Our Favorites</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
-          : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#555;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
-        return '<div class="luxe-page luxe-page--sub">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + luxeContactSectionHtml(tenant) + sidebar + '</div>';
+          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.shopEyebrow', 'Retail') + '</p><h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.luxe.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><div class="luxe-shop-grid">' + productCards + '</div></div>'
+          : '<div class="luxe-shop-inner"><p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.shopEyebrow', 'Retail') + '</p><h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.luxe.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><p class="gallery-empty-hint" style="color:#555;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
+        return '<div class="luxe-page luxe-page--sub luxe-shop-page">' + nav + '<div class="luxe-shop-page-shell">' + inner + '</div>' + luxeContactSectionHtml(tenant) + sidebar + '</div>';
       }
       function bladeShopPage(tenant) {
         var base = tenantBaseUrl(tenant);
@@ -11680,8 +11776,8 @@
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
         var inner = productCards
-          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
-          : '<div class="luxe-shop-inner"><p class="luxe-section-label">Our Products</p><h2 class="luxe-section-heading">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Add them in the app.</p></div>';
+          ? '<div class="luxe-shop-inner"><p class="luxe-section-label">' + wcSpan(tenant, 'wc.blade.shopEyebrow', 'Retail') + '</p><h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.blade.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.blade.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><div class="luxe-shop-grid">' + productCards + '</div></div>'
+          : '<div class="luxe-shop-inner"><p class="luxe-section-label">' + wcSpan(tenant, 'wc.blade.shopEyebrow', 'Retail') + '</p><h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.blade.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.blade.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Add them in the app.</p></div>';
         return '<div class="blade-page blade-page--sub">' + nav + '<div class="blade-shop-page-shell">' + inner + '</div>' + bladeSiteFooterHtml(tenant) + sidebar + '</div>';
       }
       function classicShopPage(tenant) {
@@ -11696,8 +11792,8 @@
           '</div></div>';
         var productCards = luxeTenantProductCardsHtml(tenant);
         var inner = productCards
-          ? '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><div class="luxe-shop-grid">' + productCards + '</div></div>'
-          : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">Our Products</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 28px">Shop</h2><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
+          ? '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">' + wcSpan(tenant, 'wc.classic.shopEyebrow', 'Retail') + '</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 8px">' + wcSpan(tenant, 'wc.classic.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto 12px;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.classic.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><div class="luxe-shop-grid">' + productCards + '</div></div>'
+          : '<div class="luxe-shop-inner"><p class="classic-section-eyebrow">' + wcSpan(tenant, 'wc.classic.shopEyebrow', 'Retail') + '</p><h2 style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;margin:0 0 8px">' + wcSpan(tenant, 'wc.classic.shopHeading', 'Shop') + '</h2><p style="color:#888;max-width:420px;margin:0 auto 12px;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.classic.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><p class="gallery-empty-hint" style="color:#888;max-width:420px;margin:24px auto 0">No products yet. Check back soon.</p></div>';
         var shopWrapClass = 'tattoo-page classic-home' + (isStonecutTheme(tenant) ? ' tattoo-page--stonecut' : '');
         return '<div class="' + shopWrapClass + '">' + nav + '<div class="luxe-shop-page-shell" style="padding-top:32px">' + inner + '</div>' + classicSiteFooterHtml(tenant, tenantSiteDisplayName(tenant, 'Studio')) + sidebar + '</div>';
       }
@@ -11713,8 +11809,8 @@
         var nav = stonecutNavHtml(tenant);
         var productCards = luxeTenantProductCardsHtml(tenant);
         var mainInner = productCards
-          ? '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><div class="stonecut-shop-grid">' + productCards + '</div>'
-          : '<div class="stonecut-eyebrow">Retail</div><h2 class="stonecut-heading">Shop</h2><p class="stonecut-shop-empty">No products yet. Check back soon.</p>';
+          ? '<div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.shopEyebrow', 'Retail') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.shopHeading', 'Shop') + '</h2><p class="stonecut-shop-lead">' + wcSpan(tenant, 'wc.stonecut.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><div class="stonecut-shop-grid">' + productCards + '</div>'
+          : '<div class="stonecut-eyebrow">' + wcSpan(tenant, 'wc.stonecut.shopEyebrow', 'Retail') + '</div><h2 class="stonecut-heading">' + wcSpan(tenant, 'wc.stonecut.shopHeading', 'Shop') + '</h2><p class="stonecut-shop-lead">' + wcSpan(tenant, 'wc.stonecut.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p><p class="stonecut-shop-empty">No products yet. Check back soon.</p>';
         var main = '<main class="stonecut-shop-shell">' + mainInner + '</main>';
         return '<div class="stonecut-page">' + nav + main + stonecutSiteFooterHtml(tenant) + sidebar + '</div>';
       }
@@ -11781,7 +11877,7 @@
         var hero = '<section class="' + heroClass + '"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
           '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
-            '<div class="luxe-hero-text">' +
+            '<div class="luxe-hero-text bk-fade-up">' +
               '<h1>' + siteNameSpan(tenant, 'Welcome') + '</h1>' +
               '<p>' + siteTextSpan('luxeHeroTagline', luxeHeroLine) + '</p>' +
               luxeHeroCta +
@@ -11806,17 +11902,33 @@
                   className: 'luxe-service-card-img-wrap',
                   editAttr: ' data-edit-key="' + esc(fk) + '"'
                 })
-              : ('<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder luxe-service-placeholder--add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo">\u2726</div></div>');
-            serviceCards += '<div class="luxe-service-card">' +
+              : ('<div class="luxe-service-card-img-wrap"><div class="luxe-service-placeholder luxe-service-placeholder--add" data-edit-key="' + esc(fk) + '" role="button" aria-label="Add or change featured photo"></div></div>');
+            serviceCards += '<div class="luxe-service-card bk-fade-up">' +
               imgTag +
             '</div>';
           }
           servicesSection = '<section id="gallery" class="luxe-services-section" data-bk-color-surface="featured" data-bk-band-tappable>' +
-            bkColorBandInnerWrap('<p class="luxe-section-label">' + siteTextSpan('luxeFeaturedWorkEyebrow', stripEyebrow) + '</p>' +
-            '<h2 class="luxe-section-heading">' + siteTextSpan('luxeFeaturedWorkHeading', stripHeading) + '</h2>' +
+            bkColorBandInnerWrap('<p class="luxe-section-label bk-fade-up">' + siteTextSpan('luxeFeaturedWorkEyebrow', stripEyebrow) + '</p>' +
+            '<h2 class="luxe-section-heading bk-fade-up">' + siteTextSpan('luxeFeaturedWorkHeading', stripHeading) + '</h2>' +
             '<div class="luxe-services-grid">' + serviceCards + '</div>') +
           '</section>';
         }
+
+        var shopPreviewSection = (function(){
+          if (!tenantShowShopPage(tenant) || !tenant._products || !tenant._products.length) return '';
+          var cards = luxeTenantProductCardsHtml(tenant);
+          if (!cards) return '';
+          var base = tenantBaseUrl(tenant);
+          return '<section class="luxe-shop-preview-home" id="shop" data-bk-color-surface="card" data-bk-band-tappable>' +
+            bkColorBandInnerWrap('<div class="luxe-shop-inner">' +
+              '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.shopEyebrow', 'Retail') + '</p>' +
+              '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.shopHeading', 'Shop') + '</h2>' +
+              '<p style="color:#888;max-width:420px;margin:0 auto;text-align:center;line-height:1.45">' + wcSpan(tenant, 'wc.luxe.shopLead', 'Studio retail, curated for clients—see everything on the full shop.') + '</p>' +
+              '<div class="luxe-shop-grid" style="max-width:960px;margin:0 auto">' + cards + '</div>' +
+              '<p style="text-align:center;margin-top:28px"><a href="' + base + '/shop" style="font-weight:600">View full shop →</a></p>' +
+            '</div>') +
+            '</section>';
+        })();
 
         var homeServicesSection = '';
         if (tenant.luxeShowHomeServicesSection === true && services && services.length > 0) {
@@ -11843,7 +11955,7 @@
                 descH = '<p class="luxe-home-service-desc">' + esc(dTrim).replace(/\n/g, '<br>') + '</p>';
               }
             }
-            menuRows += '<div class="luxe-home-service-row"' + svcEditAttr(sidLx) + '>' +
+            menuRows += '<div class="luxe-home-service-row' + (tenant.luxeHomeServicesExpandableCard === true ? '' : ' bk-fade-up') + '"' + svcEditAttr(sidLx) + '>' +
               '<div class="luxe-home-service-copy">' +
               '<p class="luxe-home-service-name">' + luxeNameInner + '</p>' +
               durH +
@@ -11854,7 +11966,7 @@
           }
           var listInner = '<div class="luxe-home-service-list">' + menuRows + '</div>';
           if (tenant.luxeHomeServicesExpandableCard === true) {
-            homeServicesSection = '<section id="services" class="luxe-home-services-section luxe-home-services-section--expandable">' +
+            homeServicesSection = '<section id="services" class="luxe-home-services-section luxe-home-services-section--expandable bk-fade-up">' +
               '<details class="luxe-home-services-details">' +
               '<summary class="luxe-home-services-summary">' +
               '<div class="luxe-home-services-summary-text">' +
@@ -11867,8 +11979,8 @@
               '</details></section>';
           } else {
             homeServicesSection = '<section id="services" class="luxe-home-services-section">' +
-              '<p class="luxe-section-label">' + siteTextSpan('luxeHomeServicesEyebrow', menuEyebrow) + '</p>' +
-              '<h2 class="luxe-section-heading">' + siteTextSpan('luxeHomeServicesHeading', menuHeading) + '</h2>' +
+              '<p class="luxe-section-label bk-fade-up">' + siteTextSpan('luxeHomeServicesEyebrow', menuEyebrow) + '</p>' +
+              '<h2 class="luxe-section-heading bk-fade-up">' + siteTextSpan('luxeHomeServicesHeading', menuHeading) + '</h2>' +
               listInner +
               '</section>';
           }
@@ -11883,7 +11995,7 @@
           ? '<a href="' + bookUrl + '" class="luxe-promo-cta">' + wcSpan(tenant, 'wc.luxe.promoCta', 'Book Now') + '</a>'
           : '';
         var promo = '<section class="luxe-promo" data-bk-color-surface="card" data-bk-band-tappable>' +
-          bkColorBandInnerWrap('<div class="luxe-promo-inner">' +
+          bkColorBandInnerWrap('<div class="luxe-promo-inner bk-fade-up">' +
             '<h2>' + siteTextSpan('luxePromoHeadline', promoHeadline) + '</h2>' +
             '<p>' + wcSpan(tenant, 'wc.luxe.promoTag', promoTag) + '</p>' +
             promoCta +
@@ -11898,7 +12010,7 @@
 
         var teamSection = tenantShowAboutPage(tenant)
           ? '<section id="about" class="luxe-team-section" data-bk-color-surface="featured" data-bk-band-tappable>' +
-          bkColorBandInnerWrap('<div class="luxe-team-inner">' +
+          bkColorBandInnerWrap('<div class="luxe-team-inner bk-fade-up">' +
             '<p class="luxe-section-label">' + wcSpan(tenant, 'wc.luxe.aboutEyebrow', 'About Us') + '</p>' +
             '<h2 class="luxe-section-heading">' + wcSpan(tenant, 'wc.luxe.teamMeetPrefix', 'Meet') + ' ' + siteNameSpan(tenant, 'Welcome') + '</h2>' +
             '<p class="luxe-team-bio">' + aboutBody + '</p>' +
@@ -11910,10 +12022,11 @@
         var contact = luxeContactSectionHtml(tenant);
         var teamHome = teamHomeSectionHtml(tenant);
 
-        return '<div class="luxe-page">' + nav + hero + servicesSection + homeServicesSection + promo + teamSection + teamHome + contact + galleryLightboxShellHtml() + sidebar + '</div>';
+        return '<div class="luxe-page">' + nav + hero + servicesSection + shopPreviewSection + homeServicesSection + promo + teamSection + teamHome + contact + galleryLightboxShellHtml() + sidebar + '</div>';
       }
 
       function bindTattooSidebar() {
+        bindBkFadeUp();
         var menuBtns = document.querySelectorAll('.tattoo-nav-menu');
         var sidebar = document.getElementById('tattoo-sidebar');
         if (!menuBtns.length || !sidebar) return;
@@ -12699,7 +12812,7 @@
                 '<span><span class="bk-shop-checkout-fulfillment-title">Ship</span><span class="bk-shop-checkout-fulfillment-sub">Live USPS / UPS rates</span></span></button>';
             }
             html += '</div>';
-            if (pickupOn) html += '<p class="bk-shop-checkout-pickup-address" id="bk-shop-pickup-address">' + pickupAddr + '</p>';
+            if (pickupOn && tenant.shopShowPickupAddressOnCheckout !== false) html += '<p class="bk-shop-checkout-pickup-address" id="bk-shop-pickup-address">' + pickupAddr + '</p>';
             if (shipOn) {
               html += '<div class="bk-shop-checkout-ship-fields" id="bk-shop-ship-fields"' + (pickupOn ? ' hidden' : '') + '>' +
                 '<div class="bk-shop-checkout-field"><label for="bk-shop-ship-street">Street</label><input id="bk-shop-ship-street" name="shipStreet" type="text" autocomplete="shipping address-line1" placeholder="123 Main St"></div>' +

@@ -241,6 +241,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var shopEnabled: Bool = false
     /// Offer local pickup at checkout (default on).
     @Published var shopPickupEnabled: Bool = true
+    /// Show the pickup address line on the checkout website (default on).
+    @Published var shopShowPickupAddressOnCheckout: Bool = true
     /// Offer Shippo live rates at checkout (requires SHIPPO_API_TOKEN on Functions).
     @Published var shopShippingEnabled: Bool = false
     /// Optional preferred drop-off (USPS/UPS/etc.) near the business — not used for Shippo rates.
@@ -1404,6 +1406,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 showBusinessHoursOnPage = tenant?["showBusinessHoursOnPage"] as? Bool ?? true
                 shopEnabled = tenant?["shopEnabled"] as? Bool ?? false
                 shopPickupEnabled = tenant?["shopPickupEnabled"] as? Bool ?? true
+                shopShowPickupAddressOnCheckout = tenant?["shopShowPickupAddressOnCheckout"] as? Bool ?? true
                 shopShippingEnabled = tenant?["shopShippingEnabled"] as? Bool ?? false
                 let dropOff =
                     (tenant?["shopDropOffLocation"] as? [String: Any])
@@ -2122,16 +2125,30 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     }
 
     func guidedTitle(for step: GuidedFormStep) -> String {
-        let custom = guidedStepTitles[step.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return custom.isEmpty ? step.defaultTitle : custom
+        guidedTitle(forKey: step.rawValue)
+    }
+
+    func guidedTitle(forKey key: String) -> String {
+        let custom = guidedStepTitles[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !custom.isEmpty { return custom }
+        return defaultGuidedTitle(forKey: key)
+    }
+
+    func defaultGuidedTitle(forKey key: String) -> String {
+        BookingTemplate.template(from: industry).defaultGuidedStepTitle(for: key)
     }
 
     func setGuidedTitle(_ title: String, for step: GuidedFormStep) {
+        setGuidedTitle(title, forKey: step.rawValue)
+    }
+
+    func setGuidedTitle(_ title: String, forKey key: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == step.defaultTitle {
-            guidedStepTitles.removeValue(forKey: step.rawValue)
+        let preset = defaultGuidedTitle(forKey: key)
+        if trimmed.isEmpty || trimmed == preset {
+            guidedStepTitles.removeValue(forKey: key)
         } else {
-            guidedStepTitles[step.rawValue] = trimmed
+            guidedStepTitles[key] = trimmed
         }
     }
 
@@ -2144,7 +2161,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     static func parseGuidedStepTitles(_ raw: [String: Any]?) -> [String: String] {
         guard let raw else { return [:] }
         var titles: [String: String] = [:]
-        for step in GuidedFormStep.allCases {
+        for step in GuidedWizardStepKey.allCases {
             if let value = raw[step.rawValue] as? String {
                 let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { titles[step.rawValue] = trimmed }
@@ -2766,6 +2783,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
 
         var updates: [String: Any] = [
             "shopPickupEnabled": shopPickupEnabled,
+            "shopShowPickupAddressOnCheckout": shopShowPickupAddressOnCheckout,
             "shopShippingEnabled": shopShippingEnabled,
             // Quotes always use business contact address — clear legacy custom origin.
             "shopShipFrom": FieldValue.delete(),

@@ -143,6 +143,8 @@ final class DomainSettingsViewModel: ObservableObject {
     @Published var source: String?
     @Published var providerConfigured = false
     @Published var canBuyOrTransfer = false
+    @Published var domainPurchasingBlockedDuringTestFlight = false
+    @Published var domainPurchaseBlockMessage = ""
     @Published var reassurance: DomainReassurance?
     @Published var transferOutSteps: [String] = []
     @Published var transferOutEmailHint: String?
@@ -159,6 +161,14 @@ final class DomainSettingsViewModel: ObservableObject {
     @Published var autoRenewEnabled = true
     /// Shown as a sheet after successful buy / transfer.
     @Published var successConfirmation: DomainSuccessConfirmation?
+
+    var domainPurchaseBlockedDisplayMessage: String {
+        let trimmed = domainPurchaseBlockMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "Buying domains is blocked during TestFlight."
+        }
+        return trimmed
+    }
 
     private let functions = Functions.functions(region: "us-central1")
 
@@ -218,6 +228,9 @@ final class DomainSettingsViewModel: ObservableObject {
                 ?? false
             providerConfigured = configured
             canBuyOrTransfer = (data["canBuyOrTransfer"] as? Bool) ?? configured
+            domainPurchasingBlockedDuringTestFlight =
+                data["domainPurchasingBlockedDuringTestFlight"] as? Bool ?? false
+            domainPurchaseBlockMessage = (data["domainPurchaseBlockMessage"] as? String) ?? ""
             if let msg = data["message"] as? String, !msg.isEmpty {
                 infoMessage = msg
             }
@@ -630,6 +643,9 @@ final class DomainSettingsViewModel: ObservableObject {
             ?? false
         providerConfigured = configured
         canBuyOrTransfer = data["canBuyOrTransfer"] as? Bool ?? configured
+        domainPurchasingBlockedDuringTestFlight =
+            data["domainPurchasingBlockedDuringTestFlight"] as? Bool ?? false
+        domainPurchaseBlockMessage = (data["domainPurchaseBlockMessage"] as? String) ?? ""
         if let ar = data["autoRenew"] as? Bool {
             autoRenewEnabled = ar
         } else if let r = data["reassurance"] as? [String: Any], let ar = r["autoRenew"] as? Bool {

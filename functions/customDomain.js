@@ -80,6 +80,25 @@ const namecheapProxyToken = defineString("NAMECHEAP_PROXY_TOKEN", {
 const FALLBACK_REGISTER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
 const FALLBACK_TRANSFER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
 
+/**
+ * TestFlight: block domain buy/transfer (live Namecheap charges real money).
+ * Set false before App Store launch when domain sales go live.
+ */
+const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = true;
+const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE =
+  "Buying domains is blocked during TestFlight.";
+
+function isDomainPurchasingBlockedDuringTestFlight() {
+  return BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT === true;
+}
+
+function domainPurchaseBlockReason() {
+  if (isDomainPurchasingBlockedDuringTestFlight()) {
+    return TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE;
+  }
+  return null;
+}
+
 function getDb() {
   return admin.firestore();
 }
@@ -652,6 +671,8 @@ function statusPayload(tenant, tenantId, extras) {
   const source = (tenant.customDomainSource || "").toString().trim() || null;
   const subdomain = (tenant.slug || "").toString().trim().toLowerCase();
   const configured = namecheapConfigured();
+  const domainBlocked = isDomainPurchasingBlockedDuringTestFlight();
+  const domainBlockMessage = domainPurchaseBlockReason() || "";
   const sandbox = isSandboxHost();
   const statusLower = status.toLowerCase();
   const hasDomain = !!domain && statusLower !== "none";
@@ -707,7 +728,9 @@ function statusPayload(tenant, tenantId, extras) {
     statusMessage: (tenant.customDomainStatusMessage || "").toString() || null,
     namecheapConfigured: configured,
     providerConfigured: configured,
-    canBuyOrTransfer: configured,
+    canBuyOrTransfer: configured && !domainBlocked,
+    domainPurchasingBlockedDuringTestFlight: domainBlocked,
+    domainPurchaseBlockMessage: domainBlockMessage,
     connectMode: "namecheap_only",
     sandbox,
     reassurance: {
@@ -1394,6 +1417,8 @@ function registerCustomDomainFunctions(exportsObj) {
       }
 
       const markup = readMarkupConfig();
+      const domainBlocked = isDomainPurchasingBlockedDuringTestFlight();
+      const domainBlockMessage = domainPurchaseBlockReason() || "";
       if (!namecheapConfigured() || !(namecheapApiKey.value() || "").trim()) {
         return {
           ok: true,
@@ -1401,9 +1426,24 @@ function registerCustomDomainFunctions(exportsObj) {
           results: [],
           providerConfigured: false,
           canBuyOrTransfer: false,
+          domainPurchasingBlockedDuringTestFlight: domainBlocked,
+          domainPurchaseBlockMessage: domainBlockMessage,
           markup,
           message:
             "Domain search unlocks once Namecheap API is connected. Your free subdomain still works.",
+        };
+      }
+      if (domainBlocked) {
+        return {
+          ok: true,
+          query,
+          results: [],
+          providerConfigured: true,
+          canBuyOrTransfer: false,
+          domainPurchasingBlockedDuringTestFlight: true,
+          domainPurchaseBlockMessage: domainBlockMessage,
+          markup,
+          message: domainBlockMessage,
         };
       }
 
@@ -1491,6 +1531,8 @@ function registerCustomDomainFunctions(exportsObj) {
         results,
         providerConfigured: true,
         canBuyOrTransfer: true,
+        domainPurchasingBlockedDuringTestFlight: false,
+        domainPurchaseBlockMessage: "",
         markup,
         message: null,
       };
@@ -1502,6 +1544,10 @@ function registerCustomDomainFunctions(exportsObj) {
     .https.onCall(async (data, context) => {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+      }
+      const domainBlock = domainPurchaseBlockReason();
+      if (domainBlock) {
+        throw new functions.https.HttpsError("failed-precondition", domainBlock);
       }
       const uid = context.auth.uid;
       const tenantId = await resolveUidTenant(uid);
@@ -1605,6 +1651,10 @@ function registerCustomDomainFunctions(exportsObj) {
     .https.onCall(async (data, context) => {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+      }
+      const domainBlock = domainPurchaseBlockReason();
+      if (domainBlock) {
+        throw new functions.https.HttpsError("failed-precondition", domainBlock);
       }
       const uid = context.auth.uid;
       const tenantId = await resolveUidTenant(uid);

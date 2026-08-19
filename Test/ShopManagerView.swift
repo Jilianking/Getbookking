@@ -1138,6 +1138,8 @@ struct ShopShippingSettingsView: View {
                     .disabled(controlsDisabled)
                 Toggle("Shipping (live carrier quotes)", isOn: $viewModel.shopShippingEnabled)
                     .disabled(controlsDisabled)
+                Toggle("Show pickup address on checkout", isOn: $viewModel.shopShowPickupAddressOnCheckout)
+                    .disabled(controlsDisabled)
             } header: {
                 Text("How shipping works")
             } footer: {

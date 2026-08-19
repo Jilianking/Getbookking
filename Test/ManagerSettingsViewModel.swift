@@ -71,6 +71,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsExtraPaid: Int = 0
     @Published var smsFreeRemaining: Int = 1
     @Published var smsNeedsPurchaseForNextLine: Bool = false
+    @Published var smsNeedsMonthlyExtraForNextLine: Bool = false
+    @Published var smsNeedsOneTimePurchaseForNextLine: Bool = false
     @Published var smsAtMaxLines: Bool = false
     @Published var smsCanAddWithoutPurchase: Bool = true
     @Published var smsCanPurchaseExtra: Bool = false
@@ -86,25 +88,58 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var refreshingSmsLineId: String? = nil
     @Published var isReleasingSmsLine = false
     @Published var releasingSmsLineId: String? = nil
+    /// TestFlight: Twilio number buy/provision disabled (all plans).
+    @Published var smsPhonePurchasingBlockedDuringTestFlight = false
+    @Published var smsPhonePurchaseBlockMessage = ""
 
-    /// Charge when server says so, concurrent free is full, or lifetime free is used.
+    var smsPhonePurchaseBlockedDisplayMessage: String {
+        let trimmed = smsPhonePurchaseBlockMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "Phone number purchasing is blocked during TestFlight."
+        }
+        return trimmed
+    }
+
+    /// True when the next line requires any payment (server-driven).
     var smsMustChargeForNextLine: Bool {
         if smsAtMaxLines { return false }
-        if smsNeedsPurchaseForNextLine { return true }
-        let localOccupied = smsLineAssignments.filter { row in
-            guard row.kind != .open else { return false }
-            let status = row.status.lowercased()
-            if status == "active" || status == "pending" { return true }
-            return !row.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }.count
-        let used = max(smsLinesUsed, localOccupied)
-        let lifetime = max(smsLifetimeNumbersBought, used)
-        return used >= smsFreeIncluded || lifetime >= smsFreeIncluded
+        return smsNeedsPurchaseForNextLine
     }
 
     /// Solo only: one-time $12 to get another number after the included lifetime get (not monthly).
     var smsMustPaySoloReplacementFee: Bool {
         tenantSubscriptionPlan == .solo && smsMustChargeForNextLine && !smsAtMaxLines
+    }
+
+    /// 3rd+ concurrent line: $12 now + recurring smsExtra on subscription.
+    var smsMustChargeMonthlyForNextLine: Bool {
+        smsNeedsMonthlyExtraForNextLine
+    }
+
+    /// Under 2 concurrent lines but lifetime free allotment used: $12 one-time only.
+    var smsMustChargeOneTimeForNextLine: Bool {
+        smsNeedsOneTimePurchaseForNextLine || smsMustPaySoloReplacementFee
+    }
+
+    var smsNextLinePurchaseLabel: String {
+        if smsNeedsMonthlyExtraForNextLine {
+            return "\(smsExtraOneTimeReplacementLabel) now + \(smsExtraMonthlyPriceLabel)"
+        }
+        if smsNeedsOneTimePurchaseForNextLine || smsMustPaySoloReplacementFee {
+            return smsExtraOneTimeReplacementLabel
+        }
+        return smsExtraMonthlyPriceLabel
+    }
+
+    /// Current recurring smsExtra on subscription (0 when ≤ included concurrent lines).
+    var smsExtraSubscriptionStatusLabel: String {
+        if smsExtraPaid > 0 {
+            return "\(smsExtraMonthlyPriceLabel) × \(smsExtraPaid)"
+        }
+        if smsLinesUsed <= smsFreeIncluded {
+            return "Included — $0/mo extra"
+        }
+        return "$0/mo extra"
     }
 
     @Published var smsPresetConfirmed: String = ManagerSettingsViewModel.defaultPresetConfirmed
@@ -299,6 +334,8 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsExtraPaid = (data["smsExtraPaid"] as? Int) ?? 0
             smsFreeRemaining = (data["smsFreeRemaining"] as? Int) ?? max(0, smsFreeIncluded - smsLinesUsed)
             smsNeedsPurchaseForNextLine = data["smsNeedsPurchaseForNextLine"] as? Bool ?? false
+            smsNeedsMonthlyExtraForNextLine = data["smsNeedsMonthlyExtraForNextLine"] as? Bool ?? false
+            smsNeedsOneTimePurchaseForNextLine = data["smsNeedsOneTimePurchaseForNextLine"] as? Bool ?? false
             smsAtMaxLines = data["smsAtMaxLines"] as? Bool ?? false
             smsCanAddWithoutPurchase = data["smsCanAddWithoutPurchase"] as? Bool ?? true
             smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
@@ -310,16 +347,9 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsLifetimeNumbersBought = (data["smsLifetimeNumbersBought"] as? Int) ?? 0
             smsRefreshNeedsPurchase = data["smsRefreshNeedsPurchase"] as? Bool
                 ?? (smsLifetimeNumbersBought >= smsFreeIncluded)
-            // Local safety: force paid path when concurrent free or lifetime free is exhausted.
-            if !smsAtMaxLines &&
-                (smsLinesUsed >= smsFreeIncluded || smsLifetimeNumbersBought >= smsFreeIncluded) {
-                smsNeedsPurchaseForNextLine = true
-                smsCanAddWithoutPurchase = false
-                smsNextLineIsFree = false
-                if tenantSubscriptionPlan == .solo {
-                    smsCanPurchaseSoloReplacement = true
-                }
-            }
+            smsPhonePurchasingBlockedDuringTestFlight =
+                data["smsPhonePurchasingBlockedDuringTestFlight"] as? Bool ?? false
+            smsPhonePurchaseBlockMessage = (data["smsPhonePurchaseBlockMessage"] as? String) ?? ""
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -430,6 +460,10 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
         guard isTenantOwner else { return }
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
+            return
+        }
         if !forceReprovision {
             guard consentAccepted else {
                 errorMessage = "Accept the client texting terms to continue."
@@ -459,6 +493,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     func requestMemberSmsProvisioning(memberUid: String?, consentAccepted: Bool, forceReprovision: Bool = false) async {
         guard consentAccepted || forceReprovision else {
             errorMessage = "Accept the client texting terms to continue."
+            return
+        }
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
             return
         }
         let targetUid = (memberUid?.isEmpty == false ? memberUid : Auth.auth().currentUser?.uid)
@@ -502,6 +540,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     ) async -> Bool {
         guard consentAccepted else {
             errorMessage = "Accept the client texting terms to continue."
+            return false
+        }
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
             return false
         }
         let targetUid = (memberUid?.isEmpty == false ? memberUid : Auth.auth().currentUser?.uid)
@@ -566,7 +608,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// Owner: after free capacity — start personal line for a teammate (delegates to request SMS phone number).
     func ownerEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async {
         if smsMustChargeForNextLine {
-            errorMessage = "This texting number requires a \(smsExtraMonthlyPriceLabel) purchase first."
+            errorMessage = "This texting number requires a \(smsNextLinePurchaseLabel) purchase first."
             return
         }
         _ = await requestSmsPhoneNumber(memberUid: memberUid, consentAccepted: consentAccepted)
@@ -577,6 +619,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     @discardableResult
     func purchaseAndEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async -> Bool {
         guard isTenantOwner, consentAccepted, !memberUid.isEmpty else { return false }
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
+            return false
+        }
         isProvisioningMemberSms = true
         provisioningMemberUid = memberUid
         errorMessage = nil
@@ -639,6 +685,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     @discardableResult
     func refreshSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
         guard isTenantOwner else { return false }
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
+            return false
+        }
         isRefreshingSmsLine = true
         if scope == "studio" {
             refreshingSmsLineId = "studio"

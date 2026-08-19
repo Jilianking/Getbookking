@@ -361,6 +361,19 @@ struct DomainSettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Buy a domain")
                 .font(.subheadline.weight(.semibold))
+            if viewModel.domainPurchasingBlockedDuringTestFlight {
+                Label("Unavailable during TestFlight", systemImage: "globe.badge.chevron.backward")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.brandWarm)
+                Text(viewModel.domainPurchaseBlockedDisplayMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Your free yourname.getbookking.com link still works. Design is open to explore.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
             Text("Search a name. We’ll show prices for common endings (.com, .net, .org, .co).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -451,6 +464,7 @@ struct DomainSettingsView: View {
                     .foregroundStyle(AppDesign.accentGreen)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -514,6 +528,12 @@ struct DomainSettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Already own a domain?")
                 .font(.subheadline.weight(.semibold))
+            if viewModel.domainPurchasingBlockedDuringTestFlight {
+                Text(viewModel.domainPurchaseBlockedDisplayMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
             Text("Transfer it into Get Bookking. Follow the guide to get your code — we connect it automatically when the transfer finishes.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -576,6 +596,7 @@ struct DomainSettingsView: View {
             .buttonStyle(.borderedProminent)
             .tint(AppDesign.brandDark)
             .disabled(viewModel.isWorking || !viewModel.canBuyOrTransfer)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

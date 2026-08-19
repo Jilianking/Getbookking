@@ -651,9 +651,14 @@
 }
 .blade-page .blade-fade-up.blade-visible { opacity: 1; transform: translateY(0); }
 .blade-page .blade-shop-page-shell {
-  padding: 48px 40px 80px;
+  padding: 32px 40px 72px;
   background: var(--bh-black);
   min-height: 50vh;
+}
+
+/* Main `/shop` product page only (not checkout). */
+.blade-page .blade-shop-page-shell:has(.luxe-section-heading) {
+  padding-top: 16px !important;
 }
 .blade-page .blade-shop-page-shell .luxe-section-label { color: var(--bh-gold); }
 .blade-page .blade-shop-page-shell .luxe-section-heading { color: var(--bh-cream); }

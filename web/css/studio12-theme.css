@@ -490,6 +490,16 @@
   margin: 0 0 56px;
 }
 
+.studio12-page.studio12-sub > .s12-services:has(p[style*="max-width:420px"]) .s12-section-label {
+  /* Match Classic/Luxe shop header density; only affects the /shop block. */
+  margin-bottom: 10px;
+}
+
+.studio12-page.studio12-sub > .s12-services:has(p[style*="max-width:420px"]) .s12-section-title {
+  /* The shop “Shop” title has too much bottom space on large screens. */
+  margin: 0 0 20px;
+}
+
 .studio12-page .s12-section-title em {
   font-style: italic;
   color: var(--s12-clay);

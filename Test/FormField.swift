@@ -96,11 +96,7 @@ enum GuidedFormStep: String, CaseIterable, Identifiable {
     }
 
     var defaultTitle: String {
-        switch self {
-        case .service: return "Service"
-        case .project: return "Project details"
-        case .contact: return "About you"
-        }
+        BookingTemplate.custom.defaultGuidedStepTitle(for: rawValue)
     }
 
     static func forField(_ field: FormField) -> GuidedFormStep {
@@ -126,6 +122,22 @@ enum GuidedFormStep: String, CaseIterable, Identifiable {
             ordered.append(step)
         }
         return ordered
+    }
+}
+
+/// Labels for the four `/book` guided wizard steps (includes confirm — no form fields).
+enum GuidedWizardStepKey: String, CaseIterable, Identifiable {
+    case service
+    case project
+    case contact
+    case confirm
+
+    var id: String { rawValue }
+
+    var isFormStep: Bool { self != .confirm }
+
+    var formStep: GuidedFormStep? {
+        GuidedFormStep(rawValue: rawValue)
     }
 }
 

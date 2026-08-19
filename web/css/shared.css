@@ -203,7 +203,14 @@ body:has(#bk-quick-edit-style) .bk-copy-empty {
 }
 
 /* Shared shop chrome + product cards (all themes). */
-.luxe-shop-page-shell { padding: 96px 40px 80px; background: var(--bk-bg, #FFFDF9); min-height: 55vh; }
+.luxe-shop-page-shell { padding: 48px 40px 72px; background: var(--bk-bg, #FFFDF9); min-height: 55vh; }
+
+/* Main `/shop` product page should sit closer to the top header.
+   Use `:has(...)` so checkout pages that reuse the same wrapper don't move. */
+.luxe-shop-page-shell:has(.luxe-section-heading),
+.luxe-shop-page-shell:has(.classic-section-eyebrow) {
+  padding-top: 24px !important;
+}
 .luxe-shop-inner { max-width: 1200px; margin: 0 auto; text-align: center; }
 .luxe-shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 40px; text-align: left; }
 .luxe-product-card { text-decoration: none; color: inherit; display: block; transition: transform 0.2s; }
@@ -826,6 +833,10 @@ button.luxe-product-card.luxe-product-card--btn:focus-visible {
   .classic-home-page .classic-hero-nav-actions .bk-shop-nav-cart {
     padding: 8px;
   }
-  .luxe-shop-page-shell { padding-left: 20px; padding-right: 20px; }
+  .luxe-shop-page-shell { padding: 32px 20px 56px; }
+  .luxe-shop-page-shell:has(.luxe-section-heading),
+  .luxe-shop-page-shell:has(.classic-section-eyebrow) {
+    padding-top: 16px !important;
+  }
   .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
 }

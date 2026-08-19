@@ -954,7 +954,7 @@ struct ManageBookTabContent: View {
                 ManageNavigationRow(
                     title: resolvedFormStyle == .guided ? "Guided steps" : "Form fields",
                     subtitle: resolvedFormStyle == .guided
-                        ? "3 steps · \(viewModel.formFields.count) fields"
+                        ? "4 steps · \(viewModel.formFields.count) fields"
                         : "\(viewModel.formFields.count) fields",
                     value: "Edit"
                 ) {
@@ -1158,12 +1158,17 @@ private enum GuidedStepsListSpace {
     static let name = "guidedStepsList"
 }
 
+private struct GuidedStepKeyItem: Identifiable {
+    let key: String
+    var id: String { key }
+}
+
 private struct ManageGuidedStepsSheet: View {
     @ObservedObject var viewModel: DesignViewModel
     @Binding var serviceToEdit: TenantService?
     @Environment(\.dismiss) private var dismiss
     @State private var editingField: FormField?
-    @State private var editingStep: GuidedFormStep?
+    @State private var editingStepKeyItem: GuidedStepKeyItem?
     @State private var isSaving = false
     @State private var draggingFieldId: String?
     @State private var draggingServiceId: String?
@@ -1177,6 +1182,7 @@ private struct ManageGuidedStepsSheet: View {
                     ForEach(Array(viewModel.guidedStepOrder.enumerated()), id: \.element.id) { index, step in
                         guidedStepSection(step, displayNumber: index + 1)
                     }
+                    guidedConfirmStepSection(displayNumber: viewModel.guidedStepOrder.count + 1)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
@@ -1220,14 +1226,15 @@ private struct ManageGuidedStepsSheet: View {
                     }
                 )
             }
-            .sheet(item: $editingStep) { step in
+            .sheet(item: $editingStepKeyItem) { item in
                 EditGuidedStepTitleSheet(
-                    step: step,
-                    initialTitle: viewModel.guidedTitle(for: step),
-                    onCancel: { editingStep = nil },
+                    stepKey: item.key,
+                    defaultTitle: viewModel.defaultGuidedTitle(forKey: item.key),
+                    initialTitle: viewModel.guidedTitle(forKey: item.key),
+                    onCancel: { editingStepKeyItem = nil },
                     onSave: { title in
-                        viewModel.setGuidedTitle(title, for: step)
-                        editingStep = nil
+                        viewModel.setGuidedTitle(title, forKey: item.key)
+                        editingStepKeyItem = nil
                     }
                 )
             }
@@ -1264,7 +1271,7 @@ private struct ManageGuidedStepsSheet: View {
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 8)
                 Button {
-                    editingStep = step
+                    editingStepKeyItem = GuidedStepKeyItem(key: step.rawValue)
                 } label: {
                     Image(systemName: "pencil")
                         .font(.body)
@@ -1344,6 +1351,35 @@ private struct ManageGuidedStepsSheet: View {
                 .padding(.top, fields.isEmpty ? 0 : 4)
             }
         }
+    }
+
+    @ViewBuilder
+    private func guidedConfirmStepSection(displayNumber: Int) -> some View {
+        HStack(spacing: 12) {
+            Color.clear.frame(width: 28, height: 44)
+            Text("\(displayNumber)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Color(red: 0.45, green: 0.32, blue: 0.24), in: Circle())
+            Text(viewModel.guidedTitle(forKey: GuidedWizardStepKey.confirm.rawValue))
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.primary)
+            Spacer(minLength: 8)
+            Button {
+                editingStepKeyItem = GuidedStepKeyItem(key: GuidedWizardStepKey.confirm.rawValue)
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+        }
+        Text("Final review before the client submits their request.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 40)
     }
 
     private func reorderStep(_ step: GuidedFormStep, atY y: CGFloat) {
@@ -1473,7 +1509,8 @@ private struct ManageGuidedServiceRow: View {
 }
 
 private struct EditGuidedStepTitleSheet: View {
-    let step: GuidedFormStep
+    let stepKey: String
+    let defaultTitle: String
     let initialTitle: String
     let onCancel: () -> Void
     let onSave: (String) -> Void
@@ -1483,7 +1520,7 @@ private struct EditGuidedStepTitleSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Step title", text: $title, prompt: Text(step.defaultTitle))
+                TextField("Step title", text: $title, prompt: Text(defaultTitle))
             }
             .navigationTitle("Edit step")
             .navigationBarTitleDisplayMode(.inline)
@@ -2249,25 +2286,6 @@ struct ManageShopTabContent: View {
                 }
                 .buttonStyle(.plain)
 
-                ManageCardDivider()
-                NavigationLink {
-                    ShopComingSoonView(
-                        title: "Local pickup details",
-                        tint: .gray,
-                        bullets: [
-                            "Pickup hours (coming soon)",
-                            "Ready-for-pickup notifications",
-                            "In-store handoff",
-                        ]
-                    )
-                } label: {
-                    ManageNavigationRow(
-                        title: "Pickup extras",
-                        subtitle: "Hours and notifications",
-                        value: "Soon"
-                    )
-                }
-                .buttonStyle(.plain)
             }
         }
     }

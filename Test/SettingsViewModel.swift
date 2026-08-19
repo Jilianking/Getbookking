@@ -1133,7 +1133,8 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             try await firebaseService.updateTenant(tenantId: tid, updates: [
                 "formSchema": schema,
                 "industry": template.rawValue,
-                "webThemeId": nextTheme.rawValue
+                "webThemeId": nextTheme.rawValue,
+                "guidedStepTitles": template.defaultGuidedStepTitles,
             ])
             await MainActor.run {
                 isSavingService = false

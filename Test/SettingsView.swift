@@ -144,7 +144,7 @@ struct SettingsView: View {
                 }
                 .padding(16)
                 .appCard()
-            } else if let email = authViewModel.currentUserEmail {
+            } else {
                 NavigationLink {
                     AccountSettingsDetailView(viewModel: viewModel)
                         .environmentObject(authViewModel)
@@ -160,18 +160,6 @@ struct SettingsView: View {
                             Text(profileDisplayName)
                                 .font(.headline)
                                 .foregroundStyle(AppDesign.textPrimary)
-                            Text(email)
-                                .font(.subheadline)
-                                .foregroundStyle(AppDesign.textSecondary)
-                            if viewModel.isTenantOwner {
-                                Text(planIndustryPill)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppDesign.accentGreen)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
-                                    .background(AppDesign.accentGreen.opacity(0.12))
-                                    .clipShape(Capsule())
-                            }
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -190,17 +178,6 @@ struct SettingsView: View {
         if !viewModel.accountDisplayName.isEmpty { return viewModel.accountDisplayName }
         if !viewModel.businessDisplayName.isEmpty { return viewModel.businessDisplayName }
         return authViewModel.currentUserDisplayName ?? "Account"
-    }
-
-    private var planIndustryPill: String {
-        if viewModel.tenantSubscriptionPlan.isCharterPlan {
-            return viewModel.tenantSubscriptionPlan.displayName
-        }
-        let industry = BookingTemplate.displayLabel(
-            forIndustryRaw: viewModel.selectedIndustry,
-            customLabel: viewModel.industryCustomLabel
-        )
-        return "\(viewModel.tenantSubscriptionPlan.displayName) · \(industry)"
     }
 
     /// Non-owners only, when the studio owner does not set a shared booking type.

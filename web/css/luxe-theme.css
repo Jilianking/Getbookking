@@ -196,6 +196,25 @@
   margin: 0 0 40px;
   color: var(--bk-fg, #1a1a1a);
 }
+
+/* Shop pages reuse `.luxe-section-heading` but the default Luxe spacing is too large
+   once we add the editable lead paragraph directly under the heading. */
+.luxe-shop-page-shell .luxe-section-heading,
+.blade-shop-page-shell .luxe-section-heading,
+.luxe-shop-preview-home .luxe-section-heading,
+.blade-shop-preview .luxe-section-heading {
+  margin: 0 0 8px;
+}
+
+/* Also remove extra top spacing on the lead paragraph.
+   The lead paragraph is currently generated with an inline `margin: 8px auto 0`,
+   so we override `margin-top` in a scoped way. */
+.luxe-shop-page-shell .luxe-shop-inner p[style*="margin:8px auto 0"],
+.blade-shop-page-shell .luxe-shop-inner p[style*="margin:8px auto 0"],
+.luxe-shop-preview-home .luxe-shop-inner p[style*="margin:8px auto 0"],
+.blade-shop-preview .luxe-shop-inner p[style*="margin:8px auto 0"] {
+  margin: 0 auto 0 !important;
+}
 .luxe-services-section {
   padding: 80px 40px;
   max-width: 1380px;
@@ -488,6 +507,18 @@
 }
 .luxe-page .booking-page-eyebrow {
   color: var(--bk-accent, #C9A96E);
+}
+/* Luxe /shop: in-flow nav + header line — content sits below the bar (same as /book). */
+.luxe-page.luxe-page--sub.luxe-shop-page .luxe-nav {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  background: var(--bk-bg, #FFFDF9);
+  border-bottom: 1px solid var(--bk-fg-10, rgba(26, 26, 26, 0.1));
+}
+.luxe-page.luxe-page--sub.luxe-shop-page .luxe-shop-page-shell {
+  padding-top: clamp(24px, 4vw, 32px) !important;
 }
 .luxe-page .booking-page-header--branded .booking-page-title {
   font-size: clamp(2rem, 5vw, 2.75rem);

@@ -422,12 +422,29 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
 }
 /* Stonecut /shop + home shop preview: dark shell, product cards match editorial theme */
 .stonecut-page .stonecut-shop-shell {
-  padding: 96px 40px 96px;
+  padding: 28px 40px 80px;
   max-width: 1200px;
   margin: 0 auto;
   min-height: 50vh;
   box-sizing: border-box;
 }
+
+/* Main `/shop` product page only (not checkout). */
+.stonecut-page .stonecut-shop-shell:has(.stonecut-heading) {
+  padding-top: 6px !important;
+  text-align: center;
+}
+
+/* Tighten Stonecut /shop header spacing (only inside the shop shell). */
+.stonecut-page .stonecut-shop-shell:has(.stonecut-heading) .stonecut-eyebrow {
+  margin-bottom: 12px;
+}
+
+.stonecut-page .stonecut-shop-shell:has(.stonecut-heading) .stonecut-heading {
+  /* Global stonecut-heading uses margin-bottom: 28px; shop feels too tall. */
+  margin: 0 0 12px;
+}
+
 .stonecut-page .stonecut-shop-inner { text-align: center; }
 .stonecut-page .stonecut-checkout-shell {
   padding: 48px 24px 80px;
@@ -460,7 +477,7 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   margin: 0 auto;
   max-width: 520px;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.45;
   color: var(--bk-fg-muted, #a09888);
 }
 .stonecut-page .stonecut-shop-empty {
@@ -489,7 +506,8 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   outline-color: var(--bk-accent, #c0221a);
 }
 @media (max-width: 900px) {
-  .stonecut-page .stonecut-shop-shell { padding: 88px 20px 72px; }
+  .stonecut-page .stonecut-shop-shell { padding: 20px 20px 56px; }
+  .stonecut-page .stonecut-shop-shell:has(.stonecut-heading) { padding-top: 8px !important; }
   .stonecut-page .stonecut-checkout-shell { padding: 28px 12px 64px; }
   .stonecut-page .stonecut-checkout-shell .bk-shop-checkout-page { padding: 8px 4px 40px; }
   .stonecut-page .stonecut-shop-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }

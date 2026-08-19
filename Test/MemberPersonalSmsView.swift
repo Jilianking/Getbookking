@@ -2,7 +2,7 @@
 //  MemberPersonalSmsView.swift
 //
 //  Independent members: Request phone number → free capacity provisions;
-//  paid capacity queues a request for the owner ($5/mo).
+//  paid capacity queues a request for the owner ($12 one-time or $12/mo for 3rd+ line).
 //
 
 import SwiftUI
@@ -68,7 +68,7 @@ struct MemberPersonalSmsView: View {
                                     if viewModel.isProvisioningMember(uid: member.uid) {
                                         ProgressView().scaleEffect(0.9)
                                     }
-                                    Text("Charge \(viewModel.smsExtraMonthlyPriceLabel) & enable")
+                                    Text("Charge \(viewModel.smsNextLinePurchaseLabel) & enable")
                                 }
                             }
                             .disabled(viewModel.isProvisioningMemberSms)
@@ -99,6 +99,11 @@ struct MemberPersonalSmsView: View {
                     Text("This studio has reached its maximum texting numbers (\(viewModel.smsMaxLines)).")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                } else if viewModel.smsPhonePurchasingBlockedDuringTestFlight {
+                    Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     requestPhoneNumberForm
                 }
@@ -121,7 +126,7 @@ struct MemberPersonalSmsView: View {
     @ViewBuilder
     private var requestPhoneNumberForm: some View {
         if viewModel.smsMustChargeForNextLine {
-            Text("Additional numbers beyond your plan allotment are \(viewModel.smsExtraMonthlyPriceLabel). The owner pays on the studio plan.")
+            Text("Additional lines may require a one-time or monthly fee depending on how many numbers are active. The owner manages billing under Messaging.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         } else if viewModel.smsNextLineIsFree {
@@ -157,7 +162,7 @@ struct MemberPersonalSmsView: View {
                 Image(systemName: "phone.badge.plus")
                 Text(
                     viewModel.isTenantOwner && ownerEditingMember && viewModel.smsMustChargeForNextLine
-                        ? "Charge \(viewModel.smsExtraMonthlyPriceLabel) & enable"
+                        ? "Charge \(viewModel.smsNextLinePurchaseLabel) & enable"
                         : (viewModel.isTenantOwner && ownerEditingMember ? "Enable phone number" : "Request phone number")
                 )
             }

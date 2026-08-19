@@ -440,4 +440,43 @@ enum BookingTemplate: String, CaseIterable, Identifiable {
             ]
         }
     }
+
+    /// Default guided `/book` wizard step labels — shared with web (`guidedStepTitles` fallbacks).
+    func defaultGuidedStepTitle(for key: String) -> String {
+        switch (self, key) {
+        case (_, "service"):
+            return "Service"
+        case (_, "confirm"):
+            return "Confirm"
+        case (.barber, "project"):
+            return "Cut"
+        case (.hair, "project"):
+            return "Style"
+        case (.tattoos, "project"):
+            return "Design"
+        case (.nails, "project"):
+            return "Details"
+        case (.charters, "project"):
+            return "Trip details"
+        case (_, "project"):
+            return "Project details"
+        case (.barber, "contact"), (.hair, "contact"), (.tattoos, "contact"), (.nails, "contact"):
+            return "You"
+        case (_, "contact"):
+            return "About you"
+        default:
+            return "Project details"
+        }
+    }
+
+    var defaultGuidedStepTitles: [String: String] {
+        GuidedWizardStepKey.allCases.reduce(into: [:]) { titles, step in
+            titles[step.rawValue] = defaultGuidedStepTitle(for: step.rawValue)
+        }
+    }
+
+    static func template(from industry: String?) -> BookingTemplate {
+        let raw = (industry ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return BookingTemplate(rawValue: raw) ?? .custom
+    }
 }

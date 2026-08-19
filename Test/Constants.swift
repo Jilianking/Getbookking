@@ -57,7 +57,7 @@ struct Constants {
         /// Owner billing page — start paid subscription (trial users from the app).
         static var marketingBillingStartURL: String { "\(marketingWebOrigin)/billing.html?start=today" }
         static var marketingBillingURL: String { "\(marketingWebOrigin)/billing.html" }
-        /// Billing → client texting extras ($5/mo numbers).
+        /// Billing → client texting extras ($12 one-time / $12/mo for 3rd+ concurrent line).
         static var marketingBillingMessagingURL: String { "\(marketingWebOrigin)/billing.html#messaging" }
 
         /// Opens web forgot-password with optional email prefill from the iOS app.

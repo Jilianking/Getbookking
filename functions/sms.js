@@ -128,8 +128,28 @@ const PAID_FEATURE_UPGRADE_MESSAGE =
  */
 const BYPASS_SUBSCRIPTION_PAYMENT_GATE = true;
 
+/**
+ * TestFlight: block Twilio number buy/provision/refresh (costs real money on all plans).
+ * Stripe subscription test checkout stays available via BYPASS above.
+ * Set false before App Store launch when SMS sales go live.
+ */
+const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = true;
+const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE =
+  "Phone number purchasing is blocked during TestFlight.";
+
 function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
+}
+
+function isSmsPhonePurchasingBlockedDuringTestFlight() {
+  return BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT === true;
+}
+
+function smsPhonePurchaseBlockReason() {
+  if (isSmsPhonePurchasingBlockedDuringTestFlight()) {
+    return TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE;
+  }
+  return null;
 }
 
 /** Paid subscription: charged (active). Free trial (trialing) does not qualify (unless testing bypass). */
@@ -559,6 +579,10 @@ async function buyMasterLocalNumber(master, areaCode) {
  * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
  */
 async function provisionTenantSms(tenantId, tenant, opts) {
+  const purchaseBlock = smsPhonePurchaseBlockReason();
+  if (purchaseBlock) {
+    throw new Error(purchaseBlock);
+  }
   const master = getMasterTwilioClient();
   const messagingServiceSid = getMasterMessagingServiceSid();
   const areaCode = pickAreaCode(tenant);
@@ -760,9 +784,12 @@ async function countOccupiedSmsLines(tenantId, tenant) {
 /**
  * Snapshot for API / UI.
  *
- * Concurrent free seats: Solo 1 · Studio/Shop 2.
- * Lifetime free gets: same counts — after lifetime free are used, the next
- * new number costs $12 even if a free concurrent seat was freed by a delete.
+ * Studio/Shop billing model:
+ * - ≤2 concurrent active lines → $0/mo smsExtra on subscription.
+ * - 3+ concurrent → smsExtra qty = used − 2 ($12/mo each).
+ * - First 2 Twilio numbers ever are free (lifetime); after that, each new
+ *   number costs $12 one-time even when under 2 concurrent.
+ * - Adding a 3rd concurrent line → $12 one-time + $12/mo subscription seat.
  */
 function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
@@ -778,14 +805,22 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const unusedPaidCapacity = Math.max(0, paidExtras - overage);
   const slotsRemaining = Math.max(0, capacity - used);
   const atMax = used >= maxLines;
-  // Free only while under concurrent free AND lifetime free allotment remains.
-  const nextIsFree = !atMax && used < freeIncluded && lifetime < freeIncluded;
-  const needsPurchaseForNext = !atMax && !nextIsFree;
+  const isTeamPlan = plan === "studio" || plan === "shop";
+  // Twilio provision is free only while lifetime free allotment remains.
+  const nextIsFree = !atMax && lifetime < freeIncluded;
+  // 3rd+ concurrent line adds a recurring smsExtra seat (+ $12 one-time at purchase).
+  const needsMonthlyExtraForNext =
+    !atMax && isTeamPlan && used >= freeIncluded;
+  // Lifetime exhausted but still under concurrent free cap — $12 one-time only.
+  const needsOneTimePurchaseForNext =
+    !atMax && !nextIsFree && !needsMonthlyExtraForNext;
+  const needsPurchaseForNext =
+    needsMonthlyExtraForNext || needsOneTimePurchaseForNext;
   const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
   // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12 replacement only (max 1).
-  const canPurchaseExtra = plan !== "solo" && plan !== "charter" && !atMax;
+  const canPurchaseExtra = isTeamPlan && !atMax && needsPurchaseForNext;
   const canPurchaseSoloReplacement =
     (plan === "solo" || plan === "charter") && needsPurchaseForNext;
   return {
@@ -805,6 +840,8 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     nextIsFree,
     nextUsesPaidCapacity,
     needsPurchaseForNext,
+    needsMonthlyExtraForNext,
+    needsOneTimePurchaseForNext,
     canAddWithoutPurchase,
     canProvisionNext,
     canPurchaseExtra,
@@ -847,9 +884,15 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
         "Getting another costs a $12 fee (not monthly)."
       );
     }
+    if (summary.needsOneTimePurchaseForNext) {
+      return (
+        "You've used your included texting numbers. " +
+        "Getting another costs a $12 fee (not added to your monthly subscription while you have 2 or fewer lines)."
+      );
+    }
     return (
       "You've used your included texting numbers. " +
-      "Add another number for $12/mo under Account → Plan & billing on getbookking.com."
+      "Add another number for $12 now plus $12/mo under Account → Plan & billing on getbookking.com."
     );
   }
   return null;
@@ -924,6 +967,10 @@ async function ensureMemberIncomingNumber(master, memberData, webhook) {
  * Provision a personal SMS number for an independent team member.
  */
 async function provisionMemberSms(tenantId, tenant, memberUid, memberData, opts) {
+  const purchaseBlock = smsPhonePurchaseBlockReason();
+  if (purchaseBlock) {
+    throw new Error(purchaseBlock);
+  }
   const studioBlock = tenantSmsMustBeActiveForMemberLine(tenant);
   if (studioBlock) {
     throw new Error(studioBlock);
@@ -2236,6 +2283,8 @@ module.exports = {
   masterTwilioMessagingServiceSid,
   toE164US,
   isSubscriptionPaymentGateBypassed,
+  isSmsPhonePurchasingBlockedDuringTestFlight,
+  smsPhonePurchaseBlockReason,
   tenantHasPaidSubscription,
   tenantIsTrialing,
   tenantCanUseSms,

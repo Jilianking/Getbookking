@@ -88,6 +88,15 @@ struct TeamSettingsHubView: View {
                     )
                 }
 
+                NavigationLink {
+                    BusinessShopShippingSettingsView()
+                } label: {
+                    settingsRow(
+                        title: "Shipping & pickup",
+                        subtitle: "Pickup address visibility + pickup/shipping options"
+                    )
+                }
+
                 if includeTeamManagementSections {
                     NavigationLink {
                         TeamDesignServicesSettingsView(

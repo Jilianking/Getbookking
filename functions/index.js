@@ -44,6 +44,7 @@ const crypto = require("crypto");
 const Stripe = require("stripe");
 const {
   formSchemaForIndustry,
+  guidedStepTitlesForIndustry,
   defaultServicesByIndustry,
   resolveWebThemeId,
   slugFromBusiness,
@@ -403,33 +404,83 @@ const SMS_EXTRA_MONTHLY_CENTS = 1200;
  * Legacy items are consolidated first with no invoice. Qty changes default to
  * proration_behavior "none" — purchases bill via a separate flat $12 invoice.
  */
+/** Resolve subscription id from tenant doc or Stripe customer lookup. */
+async function resolveTenantStripeSubscriptionId(stripe, tenant) {
+  let subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
+  if (subId) return subId;
+  const customerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
+  if (!customerId || !stripe) return "";
+  try {
+    const list = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 12,
+    });
+    const prefer = new Set(["active", "trialing", "past_due", "paused"]);
+    const ranked = [...list.data].sort((a, b) => {
+      const aP = prefer.has(a.status) ? 0 : 1;
+      const bP = prefer.has(b.status) ? 0 : 1;
+      if (aP !== bP) return aP - bP;
+      return b.created - a.created;
+    });
+    return ranked[0] ? ranked[0].id : "";
+  } catch (e) {
+    console.warn("resolveTenantStripeSubscriptionId", e.message || e);
+    return "";
+  }
+}
+
+async function readSmsExtraQuantityOnStripe(stripe, subId, extraPriceIds) {
+  if (!stripe || !subId) return 0;
+  const sub = await stripe.subscriptions.retrieve(subId, {
+    expand: ["items.data.price"],
+  });
+  return smsExtraQuantityFromSubscription(sub, extraPriceIds);
+}
+
 async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts) {
   const q = Math.max(0, Math.floor(Number(nextQty) || 0));
   const prorationBehavior =
     opts && opts.prorationBehavior === "always_invoice"
       ? "always_invoice"
       : "none";
-  const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
-  if (!subId || !stripe) {
+  const strictStripe = !(opts && opts.strictStripe === false);
+
+  if (!stripe) {
+    if (strictStripe) {
+      throw new Error("Stripe is not configured for texting line billing sync.");
+    }
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
   }
+
   let extraPriceId;
   let extraPriceIds;
   try {
     extraPriceId = stripeSmsExtraPriceId();
     extraPriceIds = stripeSmsExtraPriceIds();
   } catch (e) {
+    if (strictStripe) throw e;
     console.warn("applySmsExtraLineQuantity no smsExtra price", e.message || e);
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
   }
+
+  const subId = await resolveTenantStripeSubscriptionId(stripe, tenant);
+  if (!subId) {
+    if (strictStripe) {
+      throw new Error("No Stripe subscription is linked to this business.");
+    }
+    await syncSmsExtraLineQuantityToTenant(tenantId, q);
+    return q;
+  }
+
   let sub = await stripe.subscriptions.retrieve(subId, {
     expand: ["items.data.price"],
   });
   const migrated = await migrateSmsExtraLegacyToPrimary(stripe, sub);
   sub = migrated.subscription || sub;
-  let primaryItem = migrated.primaryItem;
+  const primaryItem = migrated.primaryItem;
   const currentQty = migrated.quantity;
 
   if (currentQty === q) {
@@ -456,6 +507,13 @@ async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts
       quantity: q,
       proration_behavior: prorationBehavior,
     });
+  }
+
+  const verifiedQty = await readSmsExtraQuantityOnStripe(stripe, subId, extraPriceIds);
+  if (verifiedQty !== q) {
+    throw new Error(
+      `Stripe smsExtra quantity is ${verifiedQty} after update but expected ${q}.`
+    );
   }
   await syncSmsExtraLineQuantityToTenant(tenantId, q);
   return q;
@@ -672,7 +730,8 @@ async function reconcileSmsExtraPaidToUsage(
   tenantId,
   tenant,
   planNorm,
-  usedOpt
+  usedOpt,
+  opts
 ) {
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
@@ -686,32 +745,15 @@ async function reconcileSmsExtraPaidToUsage(
       ? Math.max(0, usedOpt)
       : sms.countOccupiedSmsLinesFromDocs(tenant, snap.docs);
   const free = sms.freeIncludedSmsLinesForPlan(plan);
-  let paidActive = sms.countPaidSmsLinesFromDocs(tenant, snap.docs);
+  // Subscription smsExtra qty = concurrent lines beyond free allotment only.
+  const target = Math.max(0, used - free);
   const paidFs = sms.smsExtraPaidQuantity(tenant);
-
-  // Legacy backfill only while over the free concurrent allotment.
-  if (paidActive === 0 && paidFs > 0 && used > free) {
-    await backfillPaidSmsLineTags(
-      tenantId,
-      tenant,
-      snap.docs,
-      Math.min(paidFs, used - free)
-    );
-    const freshTenant =
-      (await db.collection("tenants").doc(tenantId).get()).data() || tenant;
-    const freshSnap = await db
-      .collection("users")
-      .where("tenantId", "==", tenantId)
-      .get();
-    paidActive = sms.countPaidSmsLinesFromDocs(freshTenant, freshSnap.docs);
-    tenant = freshTenant;
-  }
-
-  // Prefer paid tags. If none, fall back to concurrent overage (clears leftover
-  // Stripe qty when only free seats remain).
-  const target = paidActive > 0 ? paidActive : Math.max(0, used - free);
+  const strictStripe = !(opts && opts.strictStripe === false);
 
   if (!stripe) {
+    if (strictStripe) {
+      throw new Error("Stripe is not configured for texting line billing sync.");
+    }
     if (paidFs === target) {
       return { tenant, paid: paidFs, changed: false };
     }
@@ -722,43 +764,64 @@ async function reconcileSmsExtraPaidToUsage(
       changed: true,
     };
   }
+
+  let extraPriceIds;
   try {
-    let stripeQty = paidFs;
-    const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
-    if (subId) {
-      try {
-        const sub = await stripe.subscriptions.retrieve(subId, {
-          expand: ["items.data.price"],
-        });
-        stripeQty = smsExtraQuantityFromSubscription(sub, stripeSmsExtraPriceIds());
-      } catch (_) {
-        /* use firestore */
-      }
+    extraPriceIds = stripeSmsExtraPriceIds();
+  } catch (e) {
+    if (strictStripe) throw e;
+    console.warn("reconcileSmsExtraPaidToUsage no smsExtra price", e.message || e);
+    if (paidFs === target) {
+      return { tenant, paid: paidFs, changed: false };
     }
-    const current = Math.max(paidFs, stripeQty);
-    if (current === target && paidFs === target) {
-      return { tenant, paid: current, changed: false };
-    }
-    await applySmsExtraLineQuantity(stripe, tenantId, tenant, target, {
-      prorationBehavior: "none",
-    });
+    await syncSmsExtraLineQuantityToTenant(tenantId, target);
     return {
       tenant: { ...tenant, smsExtraLineQuantity: target },
       paid: target,
       changed: true,
     };
-  } catch (e) {
-    console.error("reconcileSmsExtraPaidToUsage", tenantId, e.message || e);
-    if (paidFs !== target) {
-      await syncSmsExtraLineQuantityToTenant(tenantId, target);
-      return {
-        tenant: { ...tenant, smsExtraLineQuantity: target },
-        paid: target,
-        changed: true,
-      };
-    }
-    return { tenant, paid: paidFs, changed: false };
   }
+
+  const resolvedSubId = await resolveTenantStripeSubscriptionId(stripe, tenant);
+  let tenantForApply = tenant;
+  if (resolvedSubId && resolvedSubId !== ((tenant && tenant.stripeSubscriptionId) || "")) {
+    tenantForApply = { ...tenant, stripeSubscriptionId: resolvedSubId };
+    await db.collection("tenants").doc(tenantId).set(
+      {
+        stripeSubscriptionId: resolvedSubId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  let stripeQty = 0;
+  if (resolvedSubId) {
+    stripeQty = await readSmsExtraQuantityOnStripe(stripe, resolvedSubId, extraPriceIds);
+  } else if (strictStripe && (paidFs > 0 || target > 0)) {
+    throw new Error("No Stripe subscription is linked to this business.");
+  }
+
+  const current = Math.max(paidFs, stripeQty);
+  if (current === target && paidFs === target) {
+    return { tenant: tenantForApply, paid: target, changed: false };
+  }
+
+  console.info(
+    "reconcileSmsExtraPaidToUsage",
+    tenantId,
+    JSON.stringify({ used, free, target, paidFs, stripeQty, subId: resolvedSubId || null })
+  );
+
+  await applySmsExtraLineQuantity(stripe, tenantId, tenantForApply, target, {
+    prorationBehavior: "none",
+    strictStripe,
+  });
+  return {
+    tenant: { ...tenantForApply, smsExtraLineQuantity: target },
+    paid: target,
+    changed: true,
+  };
 }
 
 /**
@@ -799,29 +862,38 @@ async function backfillPaidSmsLineTags(tenantId, tenant, userDocs, stripeQty) {
 }
 
 /**
- * After releasing an occupied line, sync Extra SMS qty to active paid-tagged lines.
+ * After releasing a line that held inventory, sync smsExtra subscription qty to usage.
+ * Throws when Stripe is available but billing could not be updated.
  */
 async function maybeReduceSmsExtraAfterReleasingOccupiedLine(
   stripe,
   tenantId,
   tenant,
   planNorm,
-  releasedLineWasOccupied
+  releasedLineHeldSlot
 ) {
-  if (!releasedLineWasOccupied) return null;
+  if (!releasedLineHeldSlot) return null;
   const plan = normalizeSubscriptionPlan(
     planNorm || (tenant && tenant.subscriptionPlan)
   );
   if (isSingleOperatorPlan(plan)) return null;
   const usedAfter = await sms.countOccupiedSmsLines(tenantId, tenant);
-  const result = await reconcileSmsExtraPaidToUsage(
-    stripe,
-    tenantId,
-    tenant,
-    plan,
-    usedAfter
-  );
-  return result.paid;
+  try {
+    const result = await reconcileSmsExtraPaidToUsage(
+      stripe,
+      tenantId,
+      tenant,
+      plan,
+      usedAfter
+    );
+    return result.paid;
+  } catch (e) {
+    console.error("maybeReduceSmsExtraAfterReleasingOccupiedLine", tenantId, e.message || e);
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `The texting number was removed, but subscription billing could not be updated: ${stripeErrorMessage(e)}. Open Billing on getbookking.com or remove the extra line in Stripe.`
+    );
+  }
 }
 
 function stripeClientFromSecret() {
@@ -963,6 +1035,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
       ? "charter-v1"
       : resolveWebThemeId(industry, templatePreset || "portfolio");
   const formSchema = formSchemaForIndustry(industry);
+  const guidedStepTitles = guidedStepTitlesForIndustry(industry);
   const cityDisplay = titleCaseCityWords(city);
   const serviceArea = composeServiceArea(cityDisplay, stateAbbr);
   const displayName = `${firstName} ${lastName}`.trim();
@@ -984,6 +1057,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     slug,
     industry,
     formSchema,
+    guidedStepTitles,
     teamSize: teamSize || "solo",
     city: cityDisplay,
     contactState: stateAbbr,
@@ -9605,7 +9679,14 @@ exports.seedTenantBookingRequests = functions.https.onCall(async (data, context)
 
 /** Tenant members: roster (+ owner-only policy fields for Team screen). */
 exports.listTenantMembers = functions
-  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .runWith({
+    secrets: [
+      sms.twilioAccountSid,
+      sms.twilioAuthToken,
+      stripeSecretKey,
+      stripeSubscriptionPriceIds,
+    ],
+  })
   .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -9935,11 +10016,10 @@ exports.removeTenantMember = functions
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
   const memberData = memberSnap.data();
-  const lineOccupied = sms.countsAsOccupiedSmsLine(memberData.smsStatus);
+  const heldSmsSlot =
+    sms.occupiesSmsLineSlot(memberData) || memberData.smsLineRequestPending === true;
   const hadPersonalSms =
-    lineOccupied ||
-    memberData.smsEnabled === true ||
-    !!(memberData.smsPhoneNumber || "").toString().trim();
+    heldSmsSlot || memberData.smsEnabled === true;
 
   const smsRelease = await sms.releaseMemberSms(memberData);
   const { unassignedBookings, clearedThreads } = await unassignMemberFromTenantRecords(
@@ -9980,7 +10060,7 @@ exports.removeTenantMember = functions
     tenantId,
     tenant,
     plan,
-    lineOccupied
+    heldSmsSlot
   );
   return {
     ok: true,
@@ -10896,17 +10976,25 @@ exports.getBillingSummary = functions
           if (extraIds.size) {
             // Drop prepaid empty extras so 3rd+ always requires purchase when used >= free.
             const usedNow = await sms.countOccupiedSmsLines(tenantId, tenantForMessaging);
-            const reconciled = await reconcileSmsExtraPaidToUsage(
-              stripe,
-              tenantId,
-              tenantForMessaging,
-              firestorePlan,
-              usedNow
-            );
-            tenantForMessaging = reconciled.tenant;
+            try {
+              const reconciled = await reconcileSmsExtraPaidToUsage(
+                stripe,
+                tenantId,
+                tenantForMessaging,
+                firestorePlan,
+                usedNow
+              );
+              tenantForMessaging = reconciled.tenant;
+            } catch (reconcileErr) {
+              console.error(
+                "getBillingSummary reconcileSmsExtra",
+                tenantId,
+                reconcileErr.message || reconcileErr
+              );
+            }
           }
-        } catch (_) {
-          /* price map optional when only listing billing */
+        } catch (priceErr) {
+          console.warn("getBillingSummary plan price map", priceErr.message || priceErr);
         }
 
         let planName = "";
@@ -11117,6 +11205,8 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
     smsExtraPaid: lines.paidExtras,
     smsFreeRemaining: lines.freeRemaining,
     smsNeedsPurchaseForNextLine: lines.needsPurchaseForNext,
+    smsNeedsMonthlyExtraForNextLine: !!lines.needsMonthlyExtraForNext,
+    smsNeedsOneTimePurchaseForNextLine: !!lines.needsOneTimePurchaseForNext,
     smsAtMaxLines: lines.atMax,
     smsCanAddWithoutPurchase: lines.canAddWithoutPurchase,
     smsCanPurchaseExtra: lines.canPurchaseExtra,
@@ -11134,6 +11224,9 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
       plan,
       lines.used
     ),
+    smsPhonePurchasingBlockedDuringTestFlight:
+      sms.isSmsPhonePurchasingBlockedDuringTestFlight() === true,
+    smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason() || "").toString(),
   };
 }
 
@@ -11164,14 +11257,27 @@ async function messagingFieldsWithLineCount(tenantId, tenant, ownerUserData, use
   }
 
   const used = sms.countOccupiedSmsLinesFromDocs(tenant, snapDocs);
-  // Mirror Extra SMS qty to active paid-tagged lines (never wipe a paid seat
-  // just because concurrent count is back at the free allotment).
   let tenantForSummary = tenant;
-  const paidFs = sms.smsExtraPaidQuantity(tenant);
-  const paidActive = sms.countPaidSmsLinesFromDocs(tenant, snapDocs);
-  if (plan !== "solo" && paidActive > 0 && paidFs > paidActive) {
-    await syncSmsExtraLineQuantityToTenant(tenantId, paidActive);
-    tenantForSummary = { ...tenant, smsExtraLineQuantity: paidActive };
+  if (plan === "studio" || plan === "shop") {
+    try {
+      const stripe = stripeClientFromSecret();
+      if (stripe) {
+        const synced = await reconcileSmsExtraPaidToUsage(
+          stripe,
+          tenantId,
+          tenant,
+          plan,
+          used
+        );
+        tenantForSummary = synced.tenant;
+      }
+    } catch (e) {
+      console.error(
+        "messagingFieldsWithLineCount sync extras",
+        tenantId,
+        e.message || e
+      );
+    }
   }
   const lineSummary = sms.buildSmsLineSummary(tenantForSummary, plan, used);
   const fields = serializeMessagingFields(tenantForSummary, ownerUserData, lineSummary);
@@ -11268,14 +11374,12 @@ function listSmsLineAssignmentsForBillingFromDocs(tenant, lineSummary, userDocs)
   }
 
   const used = lineSummary && typeof lineSummary.used === "number" ? lineSummary.used : out.length;
-  // Unassigned rows = unused FREE included only (Shop/Studio: show while
-  // lifetime buys are still under the free allotment). Never invent open
-  // slots from prepaid paid extras — those go through "+ Add … $12/mo".
   const freeIncluded =
     lineSummary && typeof lineSummary.freeIncluded === "number"
       ? lineSummary.freeIncluded
       : 0;
-  const open = Math.max(0, freeIncluded - used);
+  const nextIsFree = !!(lineSummary && lineSummary.nextIsFree);
+  const open = nextIsFree ? Math.max(0, freeIncluded - used) : 0;
   for (let i = 0; i < open; i++) {
     out.push({
       kind: "open",
@@ -11618,6 +11722,10 @@ exports.purchaseSmsExtraLine = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+    }
     const ctx = await getMemberAccessContext(context.auth.uid);
     if (!ctx.isOwner) {
       throw new functions.https.HttpsError(
@@ -11669,11 +11777,13 @@ exports.purchaseSmsExtraLine = functions
       throw new functions.https.HttpsError("failed-precondition", paidBlock);
     }
 
-    // Reset paid qty to match current lines, then always +1 with invoice so
-    // leftover Stripe qty cannot skip the charge (2/5 → 3/5 always bills).
+    // 3rd+ concurrent: $12 now + $12/mo subscription seat.
+    // Under 2 concurrent with lifetime exhausted: $12 one-time only.
     const usedBefore = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
     const free = sms.freeIncludedSmsLinesForPlan(plan);
     const max = sms.maxSmsLinesForPlan(plan);
+    const lifetime = sms.resolveLifetimeNumbersBought(tenant, usedBefore);
+    const needsSubscriptionSeat = usedBefore >= free;
 
     if (usedBefore >= max) {
       throw new functions.https.HttpsError(
@@ -11681,10 +11791,7 @@ exports.purchaseSmsExtraLine = functions
         `Your ${plan} plan allows up to ${max} texting numbers.`
       );
     }
-    const lifetime = sms.resolveLifetimeNumbersBought(tenant, usedBefore);
-    // Only block purchase when a free get is still available (concurrent + lifetime).
-    // After lifetime free are used, allow $12 buy even if under concurrent free seats.
-    if (usedBefore < free && lifetime < free) {
+    if (lifetime < free) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "You still have an included texting number. Enable it under Messaging without purchasing."
@@ -11696,15 +11803,6 @@ exports.purchaseSmsExtraLine = functions
       throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-
-    const floorQty = Math.max(0, usedBefore - free);
-    const nextQty = floorQty + 1;
-    if (free + nextQty > max) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Your ${plan} plan allows up to ${max} texting numbers.`
-      );
-    }
 
     const subId = (tenant.stripeSubscriptionId || "").toString().trim();
     const customerId = (tenant.stripeCustomerId || "").toString().trim();
@@ -11735,61 +11833,104 @@ exports.purchaseSmsExtraLine = functions
 
     const extraPriceIds = stripeSmsExtraPriceIds();
     let currentQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
+    let paidExtrasAfter = currentQty;
+    let chargedInvoice;
+    let freshTenant;
 
-    // Align Stripe qty to current usage with no proration (no credits / partials).
-    if (currentQty !== floorQty) {
-      try {
-        await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenant, floorQty, {
-          prorationBehavior: "none",
-        });
-        currentQty = floorQty;
-      } catch (e) {
-        console.error("purchaseSmsExtraLine reset to floor", e);
+    if (needsSubscriptionSeat) {
+      const floorQty = Math.max(0, usedBefore - free);
+      const nextQty = floorQty + 1;
+      if (free + nextQty > max) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          `Could not sync texting line billing: ${stripeErrorMessage(e)}`
+          `Your ${plan} plan allows up to ${max} texting numbers.`
         );
       }
+
+      if (currentQty !== floorQty) {
+        try {
+          await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenant, floorQty, {
+            prorationBehavior: "none",
+          });
+          currentQty = floorQty;
+        } catch (e) {
+          console.error("purchaseSmsExtraLine reset to floor", e);
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            `Could not sync texting line billing: ${stripeErrorMessage(e)}`
+          );
+        }
+      } else {
+        await syncSmsExtraLineQuantityToTenant(ctx.tenantId, floorQty);
+      }
+
+      const tenantAtFloor = { ...tenant, smsExtraLineQuantity: floorQty };
+
+      try {
+        chargedInvoice = await chargeOneTimeSmsExtraFee(
+          stripe,
+          tenantAtFloor,
+          "Get Bookking extra texting number ($12)"
+        );
+      } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error("purchaseSmsExtraLine flat charge", e);
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Could not charge your card for the texting number: ${stripeErrorMessage(e)}`
+        );
+      }
+
+      try {
+        await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenantAtFloor, nextQty, {
+          prorationBehavior: "none",
+        });
+      } catch (e) {
+        console.error("purchaseSmsExtraLine stripe +1 after paid", e);
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Payment succeeded but texting capacity could not be updated: ${stripeErrorMessage(e)}`
+        );
+      }
+
+      paidExtrasAfter = nextQty;
+      freshTenant = {
+        ...tenantAtFloor,
+        smsExtraLineQuantity: nextQty,
+      };
     } else {
-      await syncSmsExtraLineQuantityToTenant(ctx.tenantId, floorQty);
-    }
-
-    const tenantAtFloor = { ...tenant, smsExtraLineQuantity: floorQty };
-
-    // Flat $12 today — never mid-cycle proration. Recurring seat added separately.
-    let invoice;
-    try {
-      invoice = await chargeOneTimeSmsExtraFee(
+      try {
+        chargedInvoice = await chargeOneTimeSmsExtraFee(
+          stripe,
+          tenant,
+          "Get Bookking texting number ($12)"
+        );
+      } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error("purchaseSmsExtraLine one-time charge", e);
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Could not charge your card for the texting number: ${stripeErrorMessage(e)}`
+        );
+      }
+      // One-time replacement under the concurrent free cap — drop any stale
+      // smsExtra qty left from when the tenant previously had 3+ lines.
+      const reconciled = await reconcileSmsExtraPaidToUsage(
         stripe,
-        tenantAtFloor,
-        "Get Bookking extra texting number ($12)"
+        ctx.tenantId,
+        tenant,
+        plan,
+        usedBefore
       );
-    } catch (e) {
-      if (e instanceof functions.https.HttpsError) throw e;
-      console.error("purchaseSmsExtraLine flat charge", e);
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Could not charge your card for the texting number: ${stripeErrorMessage(e)}`
-      );
-    }
-
-    try {
-      await applySmsExtraLineQuantity(stripe, ctx.tenantId, tenantAtFloor, nextQty, {
-        prorationBehavior: "none",
-      });
-    } catch (e) {
-      console.error("purchaseSmsExtraLine stripe +1 after paid", e);
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Payment succeeded but texting capacity could not be updated: ${stripeErrorMessage(e)}`
-      );
+      freshTenant = reconciled.tenant;
+      paidExtrasAfter = reconciled.paid;
     }
 
     const authorizationId = crypto.randomBytes(24).toString("hex");
     await memberRef.set(
       {
         smsPaidLinePurchaseAuthorizationId: authorizationId,
-        smsPaidLinePurchaseInvoiceId: invoice.id,
+        smsPaidLinePurchaseInvoiceId: chargedInvoice.id,
         smsPaidLinePurchaseAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
         smsPaidLinePurchaseExpiresAt: admin.firestore.Timestamp.fromMillis(
           Date.now() + 15 * 60 * 1000
@@ -11799,10 +11940,6 @@ exports.purchaseSmsExtraLine = functions
       { merge: true }
     );
 
-    const freshTenant = {
-      ...tenantAtFloor,
-      smsExtraLineQuantity: nextQty,
-    };
     const messaging = await messagingFieldsWithLineCount(
       ctx.tenantId,
       freshTenant,
@@ -11810,11 +11947,12 @@ exports.purchaseSmsExtraLine = functions
     );
     return {
       ok: true,
-      paidExtras: nextQty,
+      paidExtras: paidExtrasAfter,
       previousPaidExtras: currentQty,
       charged: true,
+      addsSubscriptionSeat: needsSubscriptionSeat,
       smsPaidLinePurchaseAuthorizationId: authorizationId,
-      stripeInvoiceId: invoice.id,
+      stripeInvoiceId: chargedInvoice.id,
       messaging,
     };
   });
@@ -11849,6 +11987,10 @@ exports.requestTenantSmsProvisioning = functions
         smsPhoneNumber: tenant.smsPhoneNumber,
         alreadyActive: true,
       };
+    }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
     }
     if (forceReprovision) {
       const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
@@ -12101,6 +12243,10 @@ exports.requestMemberSmsProvisioning = functions
         alreadyActive: true,
       };
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+    }
     if (forceReprovision) {
       const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
       const occupied = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
@@ -12253,6 +12399,10 @@ exports.requestSmsPhoneNumber = functions
         alreadyPending: true,
       };
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+    }
 
     const consent = data && data.smsConsentAccepted === true;
     const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
@@ -12269,9 +12419,7 @@ exports.requestSmsPhoneNumber = functions
       authorizationExpiresAt && typeof authorizationExpiresAt.toMillis === "function"
         ? authorizationExpiresAt.toMillis()
         : 0;
-    const requiresPaidPurchase =
-      lineCount >= summary.freeIncluded ||
-      (summary.lifetimeNumbersBought || 0) >= summary.freeIncluded;
+    const requiresPaidPurchase = !summary.nextIsFree;
     const hasPaidPurchaseAuthorization =
       requiresPaidPurchase &&
       !!purchaseAuthorizationId &&
@@ -12305,8 +12453,12 @@ exports.requestSmsPhoneNumber = functions
         smsLineRequestPending: true,
         message:
           targetUid === context.auth.uid
-            ? "Request sent. Your studio owner can add a number for $12/mo under Billing or Messaging."
-            : "This member needs a paid texting number. Confirm the $12/mo purchase, then enable their line.",
+            ? (summary.needsMonthlyExtraForNext
+                ? "Request sent. Your studio owner can add a number ($12 now + $12/mo) under Billing or Messaging."
+                : "Request sent. Your studio owner can add a number ($12 one-time) under Billing or Messaging.")
+            : (summary.needsMonthlyExtraForNext
+                ? "This member needs a paid texting number ($12 now + $12/mo). Confirm the purchase, then enable their line."
+                : "This member needs a texting number ($12 one-time). Confirm the purchase, then enable their line."),
       };
     }
 
@@ -12418,6 +12570,10 @@ exports.refreshSmsPhoneNumber = functions
     if (paidBlock) {
       throw new functions.https.HttpsError("failed-precondition", paidBlock);
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+    }
 
     const scopeRaw = ((data && data.scope) || "").toString().trim().toLowerCase();
     const memberUid = ((data && data.memberUid) || "").toString().trim();
@@ -12446,6 +12602,7 @@ exports.refreshSmsPhoneNumber = functions
     const needsPurchase = sms.smsRefreshNeedsPurchase(tenant, plan, occupied);
 
     let chargedInvoiceId = null;
+    let tenantAfterCharge = tenant;
     if (needsPurchase) {
       const secretKey = stripeSecretKey.value();
       if (!secretKey) {
@@ -12457,6 +12614,24 @@ exports.refreshSmsPhoneNumber = functions
       const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
       const invoice = await chargeOneTimeSmsNumberReplacementFee(stripe, tenant);
       chargedInvoiceId = invoice.id;
+      if (plan === "studio" || plan === "shop") {
+        try {
+          const reconciled = await reconcileSmsExtraPaidToUsage(
+            stripe,
+            ctx.tenantId,
+            tenant,
+            plan,
+            occupied
+          );
+          tenantAfterCharge = reconciled.tenant;
+        } catch (e) {
+          console.error("refreshSmsPhoneNumber reconcile after one-time", e);
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            `The $12 charge succeeded but subscription billing could not be synced: ${stripeErrorMessage(e)}`
+          );
+        }
+      }
     }
 
     if (isStudio) {
@@ -12517,7 +12692,8 @@ exports.refreshSmsPhoneNumber = functions
 
     const messaging = await messagingFieldsWithLineCount(
       ctx.tenantId,
-      (await db.collection("tenants").doc(ctx.tenantId).get()).data() || tenant,
+      (await db.collection("tenants").doc(ctx.tenantId).get()).data() ||
+        tenantAfterCharge,
       ownerData
     );
     return {
@@ -12561,6 +12737,7 @@ exports.releaseSmsPhoneNumber = functions
       scopeRaw === "studio" || scopeRaw === "tenant" || (!memberUid && scopeRaw !== "personal");
     const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
     const stripe = stripeClientFromSecret();
+    const ownerData = ctx.ownerUserData || ctx.userData;
 
     if (isStudio) {
       const tenant = ctx.tenant || {};
@@ -12593,7 +12770,14 @@ exports.releaseSmsPhoneNumber = functions
         ctx.tenantId,
         tenantAfter,
         plan,
-        lineOccupied
+        hadPhone
+      );
+      const freshTenant =
+        (await db.collection("tenants").doc(ctx.tenantId).get()).data() || tenantAfter;
+      const messaging = await messagingFieldsWithLineCount(
+        ctx.tenantId,
+        { ...freshTenant, smsExtraLineQuantity: paidExtras != null ? paidExtras : 0 },
+        ownerData
       );
       return {
         ok: true,
@@ -12603,6 +12787,7 @@ exports.releaseSmsPhoneNumber = functions
         smsMonthlyLimit: usage.limit,
         smsExtraPaid:
           paidExtras != null ? paidExtras : sms.smsExtraPaidQuantity(tenantAfter),
+        messaging,
       };
     }
 
@@ -12644,7 +12829,18 @@ exports.releaseSmsPhoneNumber = functions
       ctx.tenantId,
       ctx.tenant,
       plan,
-      lineOccupied
+      hadPhone
+    );
+    const freshTenant =
+      (await db.collection("tenants").doc(ctx.tenantId).get()).data() || ctx.tenant;
+    const messaging = await messagingFieldsWithLineCount(
+      ctx.tenantId,
+      {
+        ...freshTenant,
+        smsExtraLineQuantity:
+          paidExtras != null ? paidExtras : sms.smsExtraPaidQuantity(freshTenant),
+      },
+      ownerData
     );
     return {
       ok: true,
@@ -12655,6 +12851,7 @@ exports.releaseSmsPhoneNumber = functions
       smsMonthlyLimit: usage.limit,
       smsExtraPaid:
         paidExtras != null ? paidExtras : sms.smsExtraPaidQuantity(ctx.tenant),
+      messaging,
     };
   });
 
@@ -12840,6 +13037,18 @@ exports.onTenantSmsProvisionRequested = functions
       );
       return null;
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      await db.collection("tenants").doc(tenantId).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: smsPurchaseBlock,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
     try {
       const plan = normalizeSubscriptionPlan(after.subscriptionPlan);
       // A Solo replacement needs the existing $12 invoice authorization.
@@ -13006,6 +13215,18 @@ exports.onUserMemberSmsProvisionRequested = functions
       );
       return null;
     }
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    if (smsPurchaseBlock) {
+      await db.collection("users").doc(memberUid).set(
+        {
+          smsStatus: "failed",
+          smsProvisionError: smsPurchaseBlock,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return null;
+    }
 
     try {
       const plan = normalizeSubscriptionPlan(tenant.subscriptionPlan);
@@ -13021,10 +13242,9 @@ exports.onUserMemberSmsProvisionRequested = functions
       // uses other occupied lines: if free allotment is already used, Twilio
       // requires a live Stripe-paid authorization for this member.
       const occupiedExcludingSelf = Math.max(0, lineCount - 1);
-      const lifetime = sms.resolveLifetimeNumbersBought(tenant, occupiedExcludingSelf);
-      const requiresPaidPurchase =
-        occupiedExcludingSelf >= summary.freeIncluded ||
-        lifetime >= summary.freeIncluded;
+      const previewSummary = sms.buildSmsLineSummary(tenant, plan, occupiedExcludingSelf);
+      const requiresPaidPurchase = !previewSummary.nextIsFree;
+      const isPaidExtraLine = occupiedExcludingSelf >= previewSummary.freeIncluded;
       const hasPaidPurchaseAuthorization =
         !!(after.smsPaidLinePurchaseAuthorizationId || "").toString().trim() &&
         !!(after.smsPaidLinePurchaseInvoiceId || "").toString().trim() &&
@@ -13055,7 +13275,7 @@ exports.onUserMemberSmsProvisionRequested = functions
         return null;
       }
       await provisionMemberSms(tenantId, tenant, memberUid, after, {
-        isPaidExtra: requiresPaidPurchase && hasPaidPurchaseAuthorization,
+        isPaidExtra: isPaidExtraLine,
       });
       // Consume the authorization only after Twilio successfully provisions.
       if (requiresPaidPurchase) {

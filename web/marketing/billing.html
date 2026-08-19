@@ -159,7 +159,7 @@
         Choose a teammate to enable their personal texting number.
       </p>
       <p id="addSmsLinePayNote" class="hidden" style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin:12px 0 0;">
-        This will charge your card <strong>now</strong> (prorated <span id="addSmsLineModalPrice">$12/mo</span>) for one additional number, then set up their line.
+        This will charge your card <strong>$12 now</strong><span id="addSmsLineModalMonthlyNote"> plus <span id="addSmsLineModalPrice">$12/mo</span> on your subscription</span> for one additional number, then set up their line.
       </p>
       <label class="bill-sms-consent" style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--text-secondary);line-height:1.45;">
         <input type="checkbox" id="addSmsLineConsent" style="margin-top:3px;" />
@@ -797,13 +797,25 @@
     }
 
     function applySmsExtraPriceCopy(m) {
+      m = m || {};
       var label = smsExtraPriceLabel(m);
       var note = document.getElementById('smsExtraPriceNote');
       if (note) note.textContent = label;
       var modalPrice = document.getElementById('addSmsLineModalPrice');
       if (modalPrice) modalPrice.textContent = label;
       var paidEl = document.getElementById('smsLinesPaid');
-      if (paidEl) paidEl.textContent = label + ' each';
+      var paid = m.smsExtraPaid != null ? Number(m.smsExtraPaid) : 0;
+      var used = m.smsLinesUsed != null ? Number(m.smsLinesUsed) : 0;
+      var free = m.smsFreeIncluded != null ? Number(m.smsFreeIncluded) : 2;
+      if (paidEl) {
+        if (paid > 0) {
+          paidEl.textContent = label + ' × ' + paid;
+        } else if (used <= free) {
+          paidEl.textContent = 'Included — $0/mo extra';
+        } else {
+          paidEl.textContent = '$0/mo extra';
+        }
+      }
     }
 
     function renderMessagingSection(d) {
@@ -825,6 +837,14 @@
       }
       note.classList.add('hidden');
       btn.classList.add('hidden');
+
+      if (m.smsPhonePurchasingBlockedDuringTestFlight) {
+        note.textContent =
+          (m.smsPhonePurchaseBlockMessage || '').trim() ||
+          'Phone number purchasing is blocked during TestFlight.';
+        note.classList.remove('hidden');
+        return;
+      }
 
       var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
       var paidRow = document.getElementById('smsLinesPaidRow');
@@ -858,23 +878,25 @@
       }
 
       var eligible = Array.isArray(m.smsEligibleMembers) ? m.smsEligibleMembers : [];
-      var needsPayNext =
-        !!m.smsNeedsPurchaseForNextLine ||
-        (!!m.smsAtMaxLines === false &&
-          Number(m.smsLinesUsed || 0) >= Number(m.smsFreeIncluded || 2));
+      var needsPayNext = !!m.smsNeedsPurchaseForNextLine;
       if (needsPayNext || m.smsCanAddWithoutPurchase) {
         btn.classList.remove('hidden');
         if (needsPayNext) {
-          note.textContent =
-            'Additional numbers beyond your plan allotment are ' + priceLabel +
-            '. Choose a teammate to assign the next number.';
+          if (m.smsNeedsMonthlyExtraForNextLine) {
+            note.textContent =
+              'A 3rd (or additional) line costs $12 now plus ' + priceLabel +
+              ' on your subscription. Choose a teammate to assign the next number.';
+          } else {
+            note.textContent =
+              'Getting another number costs $12 (one-time). Your subscription stays at $0/mo extra while you have 2 or fewer lines. Choose a teammate.';
+          }
         } else if (!eligible.length) {
           note.textContent =
             'You have capacity available, but no independent teammates without a number. Invite a member or set payout to Independent in the app.';
         } else {
           note.textContent = m.smsNextLineIsFree
             ? 'You have an included slot available. Choose a teammate to enable their personal line.'
-            : 'Confirm purchase for the next number ($12/mo), then choose a teammate.';
+            : 'Confirm the $12 charge for the next number, then choose a teammate.';
         }
         note.classList.remove('hidden');
       }
@@ -883,12 +905,27 @@
     function smsNeedsPayForNext(m) {
       m = m || messagingFromBilling();
       if (m.smsAtMaxLines) return false;
-      if (m.smsNeedsPurchaseForNextLine) return true;
-      return Number(m.smsLinesUsed || 0) >= Number(m.smsFreeIncluded || 2);
+      return !!m.smsNeedsPurchaseForNextLine;
+    }
+
+    function smsPayNoteForNext(m) {
+      m = m || messagingFromBilling();
+      if (m.smsNeedsMonthlyExtraForNextLine) {
+        return '$12 now plus ' + smsExtraPriceLabel(m) + ' on your subscription';
+      }
+      return '$12 one-time (no monthly extra while you have 2 or fewer lines)';
     }
 
     function openAddSmsLineModal() {
       var m = messagingFromBilling();
+      if (m.smsPhonePurchasingBlockedDuringTestFlight) {
+        var blockNote = document.getElementById('smsLineActionNote');
+        blockNote.textContent =
+          (m.smsPhonePurchaseBlockMessage || '').trim() ||
+          'Phone number purchasing is blocked during TestFlight.';
+        blockNote.classList.remove('hidden');
+        return;
+      }
       var err = document.getElementById('addSmsLineModalError');
       err.classList.add('hidden');
       err.textContent = '';
@@ -899,8 +936,16 @@
       closeSmsPurchaseConfirm();
       var needsPay = smsNeedsPayForNext(m);
       var payNote = document.getElementById('addSmsLinePayNote');
-      if (needsPay) payNote.classList.remove('hidden');
-      else payNote.classList.add('hidden');
+      var monthlyNote = document.getElementById('addSmsLineModalMonthlyNote');
+      if (needsPay) {
+        payNote.classList.remove('hidden');
+        if (monthlyNote) {
+          monthlyNote.style.display = m.smsNeedsMonthlyExtraForNextLine ? '' : 'none';
+        }
+        payNote.textContent = 'This will charge your card ' + smsPayNoteForNext(m) + ', then set up their line.';
+      } else {
+        payNote.classList.add('hidden');
+      }
       document.getElementById('addSmsLineModalIntro').textContent = needsPay
         ? 'Choose who gets the new number. You’ll confirm the charge before we set up their line.'
         : 'Choose a teammate to enable their personal texting number.';
@@ -1065,7 +1110,7 @@
             setAddSmsLineWorking(
               true,
               'Charging card…',
-              'Adding ' + smsExtraPriceLabel(m) + ' to your subscription, then setting up ' + name + '.'
+              'Charging ' + smsPayNoteForNext(m) + ', then setting up ' + name + '.'
             );
             return fns.httpsCallable('purchaseSmsExtraLine')({
               memberUid: member.memberUid,

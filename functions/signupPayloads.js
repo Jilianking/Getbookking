@@ -452,10 +452,25 @@ function normalizeIndustry(raw) {
   return map[s] || (["hair", "barber", "tattoos", "nails", "charters", "custom"].includes(s) ? s : "custom");
 }
 
+/** Default guided `/book` wizard step labels — mirrors iOS `BookingTemplate.defaultGuidedStepTitles`. */
+function guidedStepTitlesForIndustry(industry) {
+  const ind = normalizeIndustry(industry);
+  const presets = {
+    custom: { service: "Service", project: "Project details", contact: "About you", confirm: "Confirm" },
+    barber: { service: "Service", project: "Cut", contact: "You", confirm: "Confirm" },
+    hair: { service: "Service", project: "Style", contact: "You", confirm: "Confirm" },
+    tattoos: { service: "Service", project: "Design", contact: "You", confirm: "Confirm" },
+    nails: { service: "Service", project: "Details", contact: "You", confirm: "Confirm" },
+    charters: { service: "Service", project: "Trip details", contact: "About you", confirm: "Confirm" },
+  };
+  return presets[ind] || presets.custom;
+}
+
 module.exports = {
   minimalFormSchema,
   formSchemaForIndustry,
   defaultServicesByIndustry,
+  guidedStepTitlesForIndustry,
   resolveWebThemeId,
   slugFromBusiness,
   normalizeIndustry,

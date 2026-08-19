@@ -264,6 +264,9 @@ struct TeamClientMessagingSettingsView: View {
                 Text("Only the business owner can manage client texting.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            } else if viewModel.smsPhonePurchasingBlockedDuringTestFlight,
+                      !(viewModel.smsStatus == "active" && !viewModel.smsPhoneNumber.isEmpty) {
+                testFlightSmsBlockContent
             } else if viewModel.subscriptionTrialing {
                 trialingPaywallContent
             } else if !viewModel.subscriptionPaid {
@@ -284,7 +287,13 @@ struct TeamClientMessagingSettingsView: View {
         } header: {
             Text("Your number")
         } footer: {
-            if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.smsStatus == "active" {
+            if viewModel.isTenantOwner,
+               !authViewModel.isDemoMode,
+               viewModel.smsPhonePurchasingBlockedDuringTestFlight,
+               !(viewModel.smsStatus == "active" && !viewModel.smsPhoneNumber.isEmpty) {
+                Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
+                    .font(.caption2)
+            } else if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.smsStatus == "active" {
                 Text("Dedicated local number for appointment texts to clients.")
                     .font(.caption2)
             } else if viewModel.isTenantOwner, !authViewModel.isDemoMode, viewModel.subscriptionTrialing {
@@ -297,6 +306,22 @@ struct TeamClientMessagingSettingsView: View {
                 Text("Dedicated local number for appointment texts to clients.")
                     .font(.caption2)
             }
+        }
+    }
+
+    private var testFlightSmsBlockContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Unavailable during TestFlight", systemImage: "phone.badge.waveform.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppDesign.brandWarm)
+            Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("You can still explore billing in test mode and build your website in Design.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -453,7 +478,7 @@ struct TeamClientMessagingSettingsView: View {
                 HStack {
                     Text("Additional numbers")
                     Spacer()
-                    Text("\(viewModel.smsExtraMonthlyPriceLabel) each")
+                    Text(viewModel.smsExtraSubscriptionStatusLabel)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -475,26 +500,33 @@ struct TeamClientMessagingSettingsView: View {
 
             if viewModel.tenantSubscriptionPlan != .solo,
                viewModel.smsStatus == "active" {
-                Button {
-                    if viewModel.smsAtMaxLines {
-                        return
+                if viewModel.smsPhonePurchasingBlockedDuringTestFlight {
+                    Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Button {
+                        if viewModel.smsAtMaxLines {
+                            return
+                        }
+                        addNumberConsent = false
+                        showAddNumberSheet = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "phone.badge.plus")
+                            Text(
+                                viewModel.smsMustChargeForNextLine
+                                    ? "Add a new number — \(viewModel.smsNextLinePurchaseLabel)"
+                                    : "Add a new number"
+                            )
+                        }
                     }
-                    addNumberConsent = false
-                    showAddNumberSheet = true
-                } label: {
-                    HStack {
-                        Image(systemName: "phone.badge.plus")
-                        Text(
-                            viewModel.smsMustChargeForNextLine
-                                ? "Add a new number — \(viewModel.smsExtraMonthlyPriceLabel)"
-                                : "Add a new number"
-                        )
-                    }
+                    .disabled(
+                        viewModel.smsAtMaxLines ||
+                        viewModel.isProvisioningMemberSms
+                    )
                 }
-                .disabled(
-                    viewModel.smsAtMaxLines ||
-                    viewModel.isProvisioningMemberSms
-                )
             }
 
             if viewModel.smsAtMaxLines {
@@ -508,7 +540,7 @@ struct TeamClientMessagingSettingsView: View {
             Text(
                 viewModel.tenantSubscriptionPlan == .solo
                     ? "Solo includes 1 texting number. After you remove it, getting another costs $12 (not monthly)."
-                    : "Additional numbers beyond your plan allotment are \(viewModel.smsExtraMonthlyPriceLabel)."
+                    : "Includes 2 numbers with no $12/mo extra while 2 or fewer are active. A 3rd line is $12 now + $12/mo. After your 2 free lifetime numbers, replacing a line costs $12 one-time until you exceed 2 concurrent lines."
             )
             .font(.caption2)
         }
@@ -523,8 +555,13 @@ struct TeamClientMessagingSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 12) {
-                            if viewModel.smsMustChargeForNextLine {
-                                Button("Charge \(viewModel.smsExtraMonthlyPriceLabel) & enable") {
+                            if viewModel.smsPhonePurchasingBlockedDuringTestFlight {
+                                Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else if viewModel.smsMustChargeForNextLine {
+                                Button("Charge \(viewModel.smsNextLinePurchaseLabel) & enable") {
                                     Task {
                                         _ = await viewModel.purchaseAndEnablePersonalSmsLine(
                                             for: member.uid,
@@ -809,7 +846,7 @@ struct TeamClientMessagingSettingsView: View {
                 Text(
                     viewModel.smsNextLineIsFree
                         ? "An included number is available. Choose an independent teammate to enable their personal line (no extra charge)."
-                        : "This number requires \(viewModel.smsExtraMonthlyPriceLabel). Confirm in the next step, then we’ll set up their line."
+                        : "This number requires \(viewModel.smsNextLinePurchaseLabel). Confirm in the next step, then we’ll set up their line."
                 )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -893,7 +930,7 @@ struct TeamClientMessagingSettingsView: View {
 
     private var assignConfirmActionTitle: String {
         if viewModel.smsMustChargeForNextLine {
-            return "Charge \(viewModel.smsExtraMonthlyPriceLabel) & assign"
+            return "Charge \(viewModel.smsNextLinePurchaseLabel) & assign"
         }
         return "Assign number"
     }
@@ -901,7 +938,10 @@ struct TeamClientMessagingSettingsView: View {
     private var assignConfirmMessage: String {
         let name = pendingAssignMember?.displayName ?? "this teammate"
         if viewModel.smsMustChargeForNextLine {
-            return "Charge your saved Stripe payment method \(viewModel.smsExtraMonthlyPriceLabel), then set up \(name)’s texting number."
+            if viewModel.smsMustChargeMonthlyForNextLine {
+                return "Charge \(viewModel.smsExtraOneTimeReplacementLabel) now and add \(viewModel.smsExtraMonthlyPriceLabel) to your subscription, then set up \(name)’s texting number."
+            }
+            return "Charge your saved Stripe payment method \(viewModel.smsExtraOneTimeReplacementLabel), then set up \(name)’s texting number. No monthly extra while you have 2 or fewer lines."
         }
         return "Enable a personal texting number for \(name)? No extra charge — you have available capacity."
     }

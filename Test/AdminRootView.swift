@@ -217,7 +217,24 @@ struct AdminRootView: View {
             if drawerState.isOpen {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
-                    .onTapGesture { drawerState.isOpen = false }
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            drawerState.isOpen = false
+                        }
+                    }
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+                            .onEnded { value in
+                                // Left swipe => close. Keep the gesture horizontal-dominant to avoid
+                                // interfering with vertical scrolling behind the overlay.
+                                let dx = value.translation.width // left swipe: negative
+                                let dy = abs(value.translation.height)
+                                guard dx < -56, abs(dx) > dy * 1.15 else { return }
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    drawerState.isOpen = false
+                                }
+                            }
+                    )
 
                 drawerContent
                     .frame(width: AppDesign.drawerWidth)
@@ -320,7 +337,9 @@ struct AdminRootView: View {
                             let dx = value.translation.width
                             let dy = abs(value.translation.height)
                             guard dx > 56, dx > dy * 1.15 else { return }
-                            drawerState.isOpen = true
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                drawerState.isOpen = true
+                            }
                         }
                 )
                 .accessibilityHidden(true)
@@ -463,7 +482,7 @@ struct AdminRootView: View {
 
     private var drawerContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 AppAvatarView(
                     tenantLogoURL: drawerHeaderTenantLogoURL,
                     accountPhotoURL: authViewModel.accountPhotoUrl,
@@ -474,12 +493,14 @@ struct AdminRootView: View {
                     Text(drawerDisplayName)
                         .font(.headline)
                         .foregroundStyle(AppDesign.textPrimary)
-                    Text(drawerBusinessSubtitle)
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
                 }
+                .frame(height: 48, alignment: .center)
                 Spacer(minLength: 0)
-                Button(action: { drawerState.isOpen = false }) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        drawerState.isOpen = false
+                    }
+                }) {
                     Image(systemName: "xmark")
                         .font(.body.weight(.medium))
                         .foregroundStyle(AppDesign.textSecondary)
@@ -533,7 +554,9 @@ struct AdminRootView: View {
         let selected = drawerState.selectedSection == section
         return Button {
             drawerState.selectedSection = section
-            drawerState.isOpen = false
+            withAnimation(.easeInOut(duration: 0.2)) {
+                drawerState.isOpen = false
+            }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: section.icon)

@@ -3526,6 +3526,20 @@ function chargeIdFromExpandedBalanceSource(source) {
   return null;
 }
 
+function paymentIntentIdFromExpandedBalanceSource(source) {
+  if (!source) return null;
+  if (typeof source === "string") {
+    return source.startsWith("pi_") ? source : null;
+  }
+  if (source.object === "payment_intent" && source.id) return source.id;
+  if (source.payment_intent) {
+    return typeof source.payment_intent === "string"
+      ? source.payment_intent
+      : source.payment_intent.id || null;
+  }
+  return null;
+}
+
 async function resolveChargeIdForBalanceSourceId(stripe, sourceId, stripeAccountId) {
   const src = (sourceId || "").toString().trim();
   if (!src) return null;
@@ -3555,6 +3569,9 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
       stripeAccountId
     );
   }
+  const paymentIntentId =
+    paymentIntentIdFromExpandedBalanceSource(t.source) ||
+    (sourceId && String(sourceId).startsWith("pi_") ? sourceId : null);
   let attributedMemberUid = null;
   let transferMetaPurpose = null;
   let description = t.description || null;
@@ -3609,9 +3626,214 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
     reportingCategory: t.reporting_category || null,
     sourceId,
     chargeId,
+    paymentIntentId,
     attributedMemberUid,
     purpose: transferMetaPurpose || undefined,
   });
+}
+
+function firestoreTimestampToSeconds(value) {
+  if (!value) return 0;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+  if (typeof value.toMillis === "function") {
+    return Math.floor(value.toMillis() / 1000);
+  }
+  if (typeof value._seconds === "number") return value._seconds;
+  if (typeof value.seconds === "number") return value.seconds;
+  return 0;
+}
+
+function cancelRefundStatusBlocksManualRefund(status, cancelRefundError) {
+  const s = (status || "").toString().trim().toLowerCase();
+  if (s === "pending" || s === "refunded" || s === "already_refunded") return s;
+  if (s === "failed" && isUnsettledRefundError({ message: cancelRefundError })) {
+    return "pending";
+  }
+  return null;
+}
+
+function cancelRefundBlockMessage(blockStatus) {
+  if (blockStatus === "pending") {
+    return "A refund is already pending for this cancelled booking.";
+  }
+  return "A refund has been issued for this payment.";
+}
+
+function collectCancelRefundMatchIds(rows) {
+  const chargeIds = new Set();
+  const piIds = new Set();
+  for (const row of rows || []) {
+    const ch = (row.chargeId || "").toString().trim();
+    const pi = (row.paymentIntentId || "").toString().trim();
+    const sid = (row.sourceId || "").toString().trim();
+    if (ch.startsWith("ch_")) chargeIds.add(ch);
+    if (pi.startsWith("pi_")) piIds.add(pi);
+    if (sid.startsWith("pi_")) piIds.add(sid);
+    if (sid.startsWith("ch_")) chargeIds.add(sid);
+  }
+  return { chargeIds, piIds };
+}
+
+function transactionMatchesCancelRefundIds(t, ids) {
+  if (!t || !ids) return false;
+  const ch = (t.chargeId || "").toString();
+  const sid = (t.sourceId || "").toString();
+  const pi = (t.paymentIntentId || "").toString();
+  return (
+    (ch && ids.chargeIds.has(ch)) ||
+    (sid && (ids.chargeIds.has(sid) || ids.piIds.has(sid))) ||
+    (pi && ids.piIds.has(pi))
+  );
+}
+
+async function loadCancelRefundBlockForCharge(db, tenantId, { chargeId, paymentIntentId }) {
+  if (!tenantId) return null;
+  const col = db.collection("tenants").doc(tenantId).collection("bookingRequests");
+  const docs = [];
+  const seen = new Set();
+  async function addQuery(field, value) {
+    const v = (value || "").toString().trim();
+    if (!v) return;
+    const snap = await col.where(field, "==", v).limit(8).get();
+    for (const doc of snap.docs) {
+      if (seen.has(doc.id)) continue;
+      seen.add(doc.id);
+      docs.push(doc);
+    }
+  }
+  await addQuery("stripeChargeId", chargeId);
+  await addQuery("stripePaymentIntentId", paymentIntentId);
+  for (const doc of docs) {
+    const d = doc.data() || {};
+    const blocked = cancelRefundStatusBlocksManualRefund(
+      d.cancelRefundStatus,
+      d.cancelRefundError
+    );
+    if (blocked) {
+      return { status: blocked, message: cancelRefundBlockMessage(blocked) };
+    }
+  }
+  return null;
+}
+
+function stripeHasRefundForPendingRow(transactions, pendingRow) {
+  const ch = (pendingRow.chargeId || "").toString();
+  const pi = (pendingRow.paymentIntentId || "").toString();
+  return (transactions || []).some((t) => {
+    if ((t.type || "") !== "refund") return false;
+    const tCh = (t.chargeId || "").toString();
+    const tSid = (t.sourceId || "").toString();
+    const tPi = (t.paymentIntentId || "").toString();
+    if (ch && (tCh === ch || tSid === ch)) return true;
+    if (pi && (tSid === pi || tPi === pi)) return true;
+    return false;
+  });
+}
+
+function applyCancelRefundBlocksToTransactions(transactions, { pendingRows, issuedRows }) {
+  const pendingIds = collectCancelRefundMatchIds(pendingRows);
+  const issuedIds = collectCancelRefundMatchIds(issuedRows);
+  for (const t of transactions || []) {
+    const isSyntheticPending = String(t.id || "").startsWith("pending_cancel_refund_");
+    if (isSyntheticPending) {
+      t.refundBlocked = true;
+      t.refundBlockedReason = "This refund is already queued.";
+      continue;
+    }
+    if (transactionMatchesCancelRefundIds(t, pendingIds)) {
+      t.refundBlocked = true;
+      t.refundBlockedReason = cancelRefundBlockMessage("pending");
+      continue;
+    }
+    if (transactionMatchesCancelRefundIds(t, issuedIds)) {
+      t.refundBlocked = true;
+      t.refundBlockedReason = cancelRefundBlockMessage("refunded");
+    }
+  }
+}
+
+async function loadCancelRefundBookingRows(db, tenantId, status) {
+  if (!tenantId || !status) return [];
+  const snap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .where("cancelRefundStatus", "==", status)
+    .limit(40)
+    .get();
+  const rows = [];
+  for (const doc of snap.docs) {
+    const d = doc.data() || {};
+    const bookingStatus = (d.status || "").toString().trim().toLowerCase();
+    if (bookingStatus !== "cancelled" && bookingStatus !== "canceled") continue;
+    const chargeId = (d.stripeChargeId || "").toString().trim();
+    const paymentIntentId = (d.stripePaymentIntentId || "").toString().trim();
+    if (!chargeId.startsWith("ch_") && !paymentIntentId.startsWith("pi_")) continue;
+    rows.push({
+      id: doc.id,
+      chargeId: chargeId.startsWith("ch_") ? chargeId : null,
+      paymentIntentId: paymentIntentId.startsWith("pi_") ? paymentIntentId : null,
+      sourceId: paymentIntentId.startsWith("pi_")
+        ? paymentIntentId
+        : chargeId.startsWith("ch_")
+          ? chargeId
+          : null,
+    });
+  }
+  return rows;
+}
+
+async function pendingCancelRefundTransactionRows(db, tenantId) {
+  if (!tenantId) return [];
+  const snap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .where("cancelRefundStatus", "==", "pending")
+    .limit(40)
+    .get();
+  const rows = [];
+  for (const doc of snap.docs) {
+    const d = doc.data() || {};
+    const bookingStatus = (d.status || "").toString().trim().toLowerCase();
+    if (bookingStatus !== "cancelled" && bookingStatus !== "canceled") continue;
+    const paidCents = Math.max(
+      0,
+      Math.round(Number(d.paidCents) || Number(d.refundCents) || 0)
+    );
+    if (paidCents <= 0) continue;
+    const chargeId = (d.stripeChargeId || "").toString().trim();
+    const paymentIntentId = (d.stripePaymentIntentId || "").toString().trim();
+    const customerName = (d.customerName || "").toString().trim();
+    const created =
+      firestoreTimestampToSeconds(
+        d.cancelRefundQueuedAt || d.cancelledAt || d.updatedAt || d.createdAt
+      ) || Math.floor(Date.now() / 1000);
+    rows.push({
+      id: `pending_cancel_refund_${doc.id}`,
+      type: "refund",
+      amount: paidCents,
+      fee: 0,
+      net: -paidCents,
+      isCredit: false,
+      created,
+      description: customerName || "Refund",
+      reportingCategory: "refund",
+      status: "pending",
+      chargeId: chargeId.startsWith("ch_") ? chargeId : null,
+      sourceId: paymentIntentId.startsWith("pi_")
+        ? paymentIntentId
+        : chargeId.startsWith("ch_")
+          ? chargeId
+          : null,
+      paymentIntentId: paymentIntentId.startsWith("pi_") ? paymentIntentId : null,
+      refundBlocked: true,
+      refundBlockedReason: "This refund is already queued.",
+    });
+  }
+  return rows;
 }
 
 /**
@@ -3717,6 +3939,37 @@ exports.getConnectBalanceTransactions = functions
       payCtx,
       stripeRows
     );
+    let pendingCancelRows = [];
+    let issuedCancelRows = [];
+    try {
+      pendingCancelRows = await pendingCancelRefundTransactionRows(
+        db,
+        payCtx.tenantId
+      );
+      const [refundedRows, alreadyRows] = await Promise.all([
+        loadCancelRefundBookingRows(db, payCtx.tenantId, "refunded"),
+        loadCancelRefundBookingRows(db, payCtx.tenantId, "already_refunded"),
+      ]);
+      issuedCancelRows = [...refundedRows, ...alreadyRows];
+    } catch (err) {
+      console.warn(
+        "pendingCancelRefundTransactionRows",
+        (err && err.message) || err
+      );
+    }
+    const pendingToShow = pendingCancelRows.filter(
+      (row) => !stripeHasRefundForPendingRow(attributed, row)
+    );
+    const pendingAlreadyIssued = pendingCancelRows.filter((row) =>
+      stripeHasRefundForPendingRow(attributed, row)
+    );
+    applyCancelRefundBlocksToTransactions(attributed, {
+      pendingRows: pendingToShow,
+      issuedRows: [...issuedCancelRows, ...pendingAlreadyIssued],
+    });
+    for (const row of pendingToShow) {
+      attributed.push(row);
+    }
     attributed.sort((a, b) => (b.created || 0) - (a.created || 0));
     return { transactions: attributed.slice(0, limit) };
   });
@@ -4002,11 +4255,31 @@ exports.getChargeRefundStatus = functions
       0,
       amountCapturedCents - amountRefundedCents
     );
+    const paymentIntentId =
+      typeof charge.payment_intent === "string"
+        ? charge.payment_intent
+        : charge.payment_intent && charge.payment_intent.id;
+    let refundBlocked = false;
+    let refundBlockedReason = null;
+    try {
+      const block = await loadCancelRefundBlockForCharge(db, payCtx.tenantId, {
+        chargeId,
+        paymentIntentId,
+      });
+      if (block) {
+        refundBlocked = true;
+        refundBlockedReason = block.message;
+      }
+    } catch (err) {
+      console.warn("getChargeRefundStatus cancel block", err && err.message);
+    }
     return {
       amountCents,
       amountCapturedCents,
       amountRefundedCents,
       remainingRefundableCents,
+      refundBlocked,
+      refundBlockedReason,
     };
   });
 
@@ -4203,13 +4476,19 @@ async function refundBookingPaymentIfNeeded({
       idempotencyKey: `cancel_booking_${tenantId}_${requestId}`,
       queueIfUnsettled: true,
     });
+    const chargePatch = { chargeId: String(chargeId) };
     if (result.alreadyRefunded) {
-      return { refunded: false, alreadyRefunded: true };
+      return { refunded: false, alreadyRefunded: true, ...chargePatch };
     }
     if (result.pendingSettlement) {
-      return { refunded: false, refundPending: true, refundCents: result.refundCents };
+      return {
+        refunded: false,
+        refundPending: true,
+        refundCents: result.refundCents,
+        ...chargePatch,
+      };
     }
-    return { refunded: true, refundCents: result.refundCents };
+    return { refunded: true, refundCents: result.refundCents, ...chargePatch };
   } catch (err) {
     const msg = (err && err.message) || "Refund failed.";
     if (isUnsettledRefundError(err)) {
@@ -4222,8 +4501,11 @@ async function refundBookingPaymentIfNeeded({
 
 function cancelRefundPatchFromResult(refundResult) {
   if (!refundResult) return null;
+  const chargeId = (refundResult.chargeId || "").toString().trim();
+  const chargePatch = chargeId.startsWith("ch_") ? { stripeChargeId: chargeId } : {};
   if (refundResult.refunded) {
     return {
+      ...chargePatch,
       refundedAt: admin.firestore.FieldValue.serverTimestamp(),
       refundCents: refundResult.refundCents || 0,
       cancelRefundStatus: "refunded",
@@ -4231,10 +4513,11 @@ function cancelRefundPatchFromResult(refundResult) {
     };
   }
   if (refundResult.alreadyRefunded) {
-    return { cancelRefundStatus: "already_refunded" };
+    return { ...chargePatch, cancelRefundStatus: "already_refunded" };
   }
   if (refundResult.refundPending) {
     return {
+      ...chargePatch,
       cancelRefundStatus: "pending",
       cancelRefundQueuedAt: admin.firestore.FieldValue.serverTimestamp(),
       cancelRefundError: admin.firestore.FieldValue.delete(),
@@ -4242,6 +4525,7 @@ function cancelRefundPatchFromResult(refundResult) {
   }
   if (refundResult.refundError) {
     return {
+      ...chargePatch,
       cancelRefundStatus: "failed",
       cancelRefundError: String(refundResult.refundError).slice(0, 500),
     };
@@ -4308,6 +4592,27 @@ exports.createRefund = functions
       clientIdempotencyKey ||
       `refund_${stripeAccountId}_${chargeId}_${amountCents || "full"}_${context.auth.uid}`
     ).slice(0, 255);
+
+    let paymentIntentId = "";
+    try {
+      const charge = await stripe.charges.retrieve(chargeId, {
+        stripeAccount: stripeAccountId,
+      });
+      const pi = charge.payment_intent;
+      paymentIntentId = typeof pi === "string" ? pi : (pi && pi.id) || "";
+    } catch (err) {
+      console.warn("createRefund retrieve charge for cancel block", err && err.message);
+    }
+    const cancelBlock = await loadCancelRefundBlockForCharge(db, payCtx.tenantId, {
+      chargeId,
+      paymentIntentId,
+    });
+    if (cancelBlock) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        cancelBlock.message
+      );
+    }
 
     const result = await refundConnectCharge({
       stripe,

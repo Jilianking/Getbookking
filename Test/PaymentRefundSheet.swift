@@ -32,6 +32,8 @@ struct PaymentRefundSheet: View {
     @State private var remainingRefundableCents: Int?
     /// Stable per attempt so retries of the same submit do not create duplicate Stripe refunds.
     @State private var refundAttemptId = UUID().uuidString
+    @State private var cancelRefundBlocked = false
+    @State private var cancelRefundBlockedReason: String?
     @FocusState private var amountFocused: Bool
 
     private var chargeTotalUSD: Double {
@@ -83,6 +85,7 @@ struct PaymentRefundSheet: View {
 
     private var canSubmit: Bool {
         guard !alreadyFullyRefunded else { return false }
+        guard !cancelRefundBlocked else { return false }
         guard !insufficientFunds else { return false }
         switch refundMode {
         case .full: return maxRefundCents >= 50
@@ -125,7 +128,7 @@ struct PaymentRefundSheet: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .disabled(alreadyFullyRefunded)
+                .disabled(alreadyFullyRefunded || cancelRefundBlocked)
 
                 if refundMode == .partial {
                     VStack(alignment: .leading, spacing: 8) {
@@ -136,7 +139,7 @@ struct PaymentRefundSheet: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.title3.monospacedDigit())
                             .focused($amountFocused)
-                            .disabled(alreadyFullyRefunded)
+                            .disabled(alreadyFullyRefunded || cancelRefundBlocked)
                         Text("Max \(PaymentsViewModel.formatUSD(maxRefundUSD))")
                             .font(.caption)
                             .foregroundStyle(AppDesign.textSecondary)
@@ -154,7 +157,11 @@ struct PaymentRefundSheet: View {
                     .appCard()
                 }
 
-                if alreadyFullyRefunded {
+                if cancelRefundBlocked {
+                    Text(cancelRefundBlockedReason ?? "A refund is already pending for this cancelled booking.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if alreadyFullyRefunded {
                     Text("This payment has already been fully refunded.")
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -229,12 +236,21 @@ struct PaymentRefundSheet: View {
     @MainActor
     private func refreshRefundContext() async {
         async let balance: Void = viewModel.refreshAvailableBalance()
-        async let remaining: Int? = {
-            guard let chargeId = transaction.chargeId else { return nil as Int? }
-            return await viewModel.fetchRemainingRefundableCents(chargeId: chargeId)
+        async let remaining: (
+            remainingRefundableCents: Int?,
+            refundBlocked: Bool,
+            refundBlockedReason: String?
+        ) = {
+            guard let chargeId = transaction.chargeId else {
+                return (remainingRefundableCents: nil as Int?, refundBlocked: false, refundBlockedReason: nil as String?)
+            }
+            return await viewModel.fetchChargeRefundStatus(chargeId: chargeId)
         }()
         _ = await balance
-        remainingRefundableCents = await remaining
+        let status = await remaining
+        remainingRefundableCents = status.remainingRefundableCents
+        cancelRefundBlocked = status.refundBlocked || transaction.refundBlocked
+        cancelRefundBlockedReason = status.refundBlockedReason ?? transaction.refundBlockedReason
         balanceLoaded = true
     }
 
@@ -245,6 +261,10 @@ struct PaymentRefundSheet: View {
 
         // Re-check available balance and remaining (Dashboard/API may have changed either).
         await refreshRefundContext()
+        if cancelRefundBlocked {
+            localError = cancelRefundBlockedReason ?? "A refund is already pending for this cancelled booking."
+            return
+        }
         if alreadyFullyRefunded {
             localError = "This payment has already been fully refunded."
             return

@@ -24,6 +24,11 @@ struct PaymentTransaction: Identifiable, Hashable {
     let reportingCategory: String?
     /// Stripe charge ID when available; used for receipt and refund.
     let chargeId: String?
+    /// Stripe PaymentIntent ID when available; used to match cancel-booking refunds.
+    let paymentIntentId: String?
+    /// True when a cancel-booking refund is already queued or completed for this charge.
+    let refundBlocked: Bool
+    let refundBlockedReason: String?
     /// Team member who originated a studio-share split (owner credit / member debit).
     let attributedMemberName: String?
     let attributedMemberUid: String?
@@ -98,7 +103,9 @@ struct PaymentTransaction: Identifiable, Hashable {
 
     var channelLabel: String {
         if isStudioShareLine { return "Studio share" }
-        if type == "refund" || isCustomerRefundLine { return "Refund" }
+        if type == "refund" || isCustomerRefundLine {
+            return status == "pending" ? "Refund pending" : "Refund"
+        }
         let desc = (customerName ?? "").lowercased()
         if desc.contains("deposit") { return "Deposit" }
         if desc.contains("tap to pay") || desc.contains("terminal") { return "Tap to Pay on iPhone" }
@@ -145,6 +152,15 @@ struct PaymentTransaction: Identifiable, Hashable {
 
     var isPaid: Bool { isCredit && status != "pending" }
 
+    var allowsManualRefund: Bool {
+        if refundBlocked { return false }
+        if type == "refund" || isCustomerRefundLine { return false }
+        if status == "pending" { return false }
+        if isStudioShareLine || isPayoutLine { return false }
+        guard let chargeId, chargeId.hasPrefix("ch_") else { return false }
+        return true
+    }
+
     static func fromFirestoreDict(_ t: [String: Any]) -> PaymentTransaction? {
         guard let id = t["id"] as? String else { return nil }
         let typeStr = t["type"] as? String ?? "unknown"
@@ -174,6 +190,15 @@ struct PaymentTransaction: Identifiable, Hashable {
             if typeStr == "charge", let sourceId, !sourceId.isEmpty { return sourceId }
             return nil
         }()
+        let paymentIntentRaw = (t["paymentIntentId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let paymentIntentId: String? = {
+            if let paymentIntentRaw, paymentIntentRaw.hasPrefix("pi_") { return paymentIntentRaw }
+            if let sourceId, sourceId.hasPrefix("pi_") { return sourceId }
+            return nil
+        }()
+        let refundBlocked = t["refundBlocked"] as? Bool ?? false
+        let refundBlockedReason = (t["refundBlockedReason"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let attributedMemberName = (t["attributedMemberName"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let attributedMemberUid = (t["attributedMemberUid"] as? String)?
@@ -193,6 +218,9 @@ struct PaymentTransaction: Identifiable, Hashable {
             status: statusRaw,
             reportingCategory: reportingCategory?.isEmpty == false ? reportingCategory : nil,
             chargeId: chargeId,
+            paymentIntentId: paymentIntentId,
+            refundBlocked: refundBlocked,
+            refundBlockedReason: refundBlockedReason?.isEmpty == false ? refundBlockedReason : nil,
             attributedMemberName: attributedMemberName?.isEmpty == false ? attributedMemberName : nil,
             attributedMemberUid: attributedMemberUid?.isEmpty == false ? attributedMemberUid : nil,
             sourcePaymentTotal: sourceGross.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
@@ -366,6 +394,57 @@ class PaymentsViewModel: ObservableObject {
     /// Kept for callers that only want inbound payments.
     var recentCreditTransactions: [PaymentTransaction] {
         Array(transactions.filter { $0.isCredit && $0.showsInActivityFeed }.prefix(5))
+    }
+
+    func canRefund(_ transaction: PaymentTransaction) -> Bool {
+        guard transaction.allowsManualRefund else { return false }
+        if hasPendingCancelRefund(matching: transaction) { return false }
+        if hasIssuedRefund(matching: transaction) { return false }
+        return true
+    }
+
+    func refundBlockReason(for transaction: PaymentTransaction) -> String? {
+        if let reason = transaction.refundBlockedReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !reason.isEmpty {
+            return reason
+        }
+        if hasPendingCancelRefund(matching: transaction) {
+            return "A refund is already pending for this cancelled booking."
+        }
+        if hasIssuedRefund(matching: transaction) {
+            return "A refund has been issued for this payment."
+        }
+        return nil
+    }
+
+    private func hasPendingCancelRefund(matching transaction: PaymentTransaction) -> Bool {
+        matchingRefund(in: transactions, matching: transaction, pendingOnly: true)
+    }
+
+    private func hasIssuedRefund(matching transaction: PaymentTransaction) -> Bool {
+        matchingRefund(in: transactions, matching: transaction, pendingOnly: false)
+    }
+
+    private func matchingRefund(
+        in list: [PaymentTransaction],
+        matching transaction: PaymentTransaction,
+        pendingOnly: Bool
+    ) -> Bool {
+        let chargeId = transaction.chargeId
+        let paymentIntentId = transaction.paymentIntentId
+        return list.contains { other in
+            guard other.id != transaction.id else { return false }
+            if pendingOnly {
+                guard other.status == "pending" else { return false }
+            } else {
+                guard other.status != "pending" else { return false }
+            }
+            let isRefund = other.type == "refund" || (!other.isCredit && other.channelLabel.lowercased().contains("refund"))
+            guard isRefund else { return false }
+            if let chargeId, other.chargeId == chargeId { return true }
+            if let paymentIntentId, other.paymentIntentId == paymentIntentId { return true }
+            return false
+        }
     }
 
     static func formatUSD(_ value: Double) -> String {
@@ -1801,20 +1880,38 @@ class PaymentsViewModel: ObservableObject {
 
     /// Remaining refundable cents for a charge (reflects app + Stripe Dashboard/API refunds).
     func fetchRemainingRefundableCents(chargeId: String) async -> Int? {
+        let status = await fetchChargeRefundStatus(chargeId: chargeId)
+        return status.remainingRefundableCents
+    }
+
+    func fetchChargeRefundStatus(chargeId: String) async -> (
+        remainingRefundableCents: Int?,
+        refundBlocked: Bool,
+        refundBlockedReason: String?
+    ) {
         do {
             let result = try await functions.httpsCallable("getChargeRefundStatus").call([
                 "chargeId": chargeId,
             ])
             let data = result.data as? [String: Any]
-            if let n = data?["remainingRefundableCents"] as? NSNumber {
-                return max(0, n.intValue)
-            }
-            if let n = data?["remainingRefundableCents"] as? Int {
-                return max(0, n)
-            }
-            return nil
+            let remaining: Int? = {
+                if let n = data?["remainingRefundableCents"] as? NSNumber {
+                    return max(0, n.intValue)
+                }
+                if let n = data?["remainingRefundableCents"] as? Int {
+                    return max(0, n)
+                }
+                return nil
+            }()
+            let reason = (data?["refundBlockedReason"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (
+                remainingRefundableCents: remaining,
+                refundBlocked: data?["refundBlocked"] as? Bool ?? false,
+                refundBlockedReason: (reason?.isEmpty == false) ? reason : nil
+            )
         } catch {
-            return nil
+            return (remainingRefundableCents: nil, refundBlocked: false, refundBlockedReason: nil)
         }
     }
 

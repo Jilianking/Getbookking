@@ -69,7 +69,7 @@ struct PaymentTransactionDetailSheet: View {
                                 .background(Color.green.opacity(0.12))
                                 .clipShape(Capsule())
                         } else if transaction.status == "pending" {
-                            Text("Pending")
+                            Text(transaction.type == "refund" ? "Refund pending" : "Pending")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.orange)
                                 .padding(.horizontal, 14)
@@ -148,13 +148,21 @@ struct PaymentTransactionDetailSheet: View {
                             .disabled(isPreparingShare || isLoadingReceipt)
                         }
 
-                        Button("Refund payment") {
-                            showRefundSheet = true
+                        if viewModel.canRefund(transaction) {
+                            Button("Refund payment") {
+                                showRefundSheet = true
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .disabled(viewModel.isRefunding)
+                        } else if transaction.isCredit, let reason = viewModel.refundBlockReason(for: transaction) {
+                            Text(reason)
+                                .font(.caption)
+                                .foregroundStyle(AppDesign.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
                         }
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .disabled(viewModel.isRefunding)
                     }
                 }
                 .padding(16)

@@ -53,7 +53,7 @@ struct RequestsView: View {
     @EnvironmentObject var sessionStore: TenantSessionStore
     @EnvironmentObject var appTour: AppTourCoordinator
     @StateObject private var viewModel = RequestsViewModel()
-    @State private var requestFilter: BookingRequestFilter = .newOnly
+    @State private var requestFilter: BookingRequestFilter = .all
     @State private var usedDeepLinkFilter = false
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
@@ -123,9 +123,13 @@ struct RequestsView: View {
                         isDemoMode: authViewModel.isDemoMode,
                         sessionStore: sessionStore
                     )
-                    if !usedDeepLinkFilter, viewModel.isCharterPlan {
+                    if !usedDeepLinkFilter {
                         requestFilter = .all
                     }
+                }
+                .onChange(of: drawerState.selectedSection) { _, section in
+                    guard section == .requests else { return }
+                    refreshRequests()
                 }
                 .onChange(of: drawerState.requestsInitialFilter) { _, filter in
                     if filter != nil {
@@ -200,18 +204,6 @@ struct RequestsView: View {
                     }
                 }
             }
-            Button(action: refreshRequests) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(AppDesign.textPrimary)
-                    .padding(10)
-                    .background(AppDesign.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(AppDesign.chipBorder, lineWidth: 1)
-                    )
-            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
@@ -253,6 +245,12 @@ struct RequestsView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(AppDesign.background)
+            .refreshable {
+                await viewModel.refreshRequests(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+            }
 
             requestsListFooter
         }
@@ -314,6 +312,18 @@ struct RequestsView: View {
                 Image(systemName: "line.3.horizontal")
                     .foregroundStyle(AppDesign.textPrimary)
             }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: refreshRequests) {
+                if viewModel.isLoading {
+                    ProgressView()
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(AppDesign.textPrimary)
+                }
+            }
+            .accessibilityLabel("Refresh")
+            .disabled(viewModel.isLoading)
         }
         #if DEBUG
         ToolbarItem(placement: .navigationBarTrailing) {

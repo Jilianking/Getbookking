@@ -976,97 +976,12 @@
 
     .success-site-link:hover { text-decoration: underline; }
 
-    /* ── APP AVAILABILITY GATE ── */
-    .signup-gate {
-      position: fixed;
-      inset: 0;
-      z-index: 300;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background: rgba(26, 20, 16, 0.45);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-    }
-
-    .signup-gate[hidden] { display: none !important; }
-
-    body.signup-gate-open {
-      overflow: hidden;
-    }
-
-    .signup-gate-card {
-      width: 100%;
-      max-width: 440px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 36px 32px 28px;
-      box-shadow: 0 16px 48px rgba(26, 20, 16, 0.18);
-      text-align: center;
-    }
-
-    .signup-gate-card h2 {
-      font-family: 'Instrument Serif', serif;
-      font-size: clamp(26px, 4vw, 32px);
-      font-weight: 400;
-      line-height: 1.2;
-      color: var(--text-primary);
-      margin: 0 0 14px;
-    }
-
-    .signup-gate-card p {
-      font-size: 15px;
-      font-weight: 400;
-      color: var(--text-secondary);
-      line-height: 1.65;
-      margin: 0 0 28px;
-    }
-
-    .signup-gate-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .signup-gate-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      padding: 14px 20px;
-      border-radius: 10px;
-      font-size: 15px;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 500;
-      text-decoration: none;
-      cursor: pointer;
-      border: 1.5px solid var(--brand-dark);
-      transition: opacity 0.15s, background 0.15s;
-    }
-
-    .signup-gate-btn:hover { opacity: 0.9; }
-
-    .signup-gate-btn--primary {
-      background: var(--brand-dark);
-      color: var(--brand-cream);
-    }
-
-    .signup-gate-btn--secondary {
-      background: transparent;
-      color: var(--brand-dark);
-    }
-
-    .signup-gate-btn--secondary:hover { background: rgba(0, 0, 0, 0.04); }
-
     /* ── RESPONSIVE ── */
     @media (max-width: 540px) {
       .signup-card { padding: 32px 24px; }
       .choice-grid { grid-template-columns: 1fr; }
       .tpl-pick-grid { grid-template-columns: 1fr; }
       .city-state-row { grid-template-columns: 1fr; }
-      .signup-gate-card { padding: 28px 22px 22px; }
     }
   </style>
   <link rel="stylesheet" href="assets/nav.css?v=19" />
@@ -1123,17 +1038,6 @@
     </nav>
   </aside>
   <div class="nav-backdrop" hidden aria-hidden="true"></div>
-
-  <div class="signup-gate" id="signupGate" role="dialog" aria-modal="true" aria-labelledby="signupGateTitle" aria-describedby="signupGateBody">
-    <div class="signup-gate-card">
-      <h2 id="signupGateTitle">The iPhone app isn’t on the App Store yet</h2>
-      <p id="signupGateBody">Sign up here now and your account and booking site will be ready. When the app is available, sign in with the same email.</p>
-      <div class="signup-gate-actions">
-        <button type="button" class="signup-gate-btn signup-gate-btn--primary" id="signupGateContinue">Continue signup</button>
-        <a href="#" class="signup-gate-btn signup-gate-btn--secondary" id="signupGateBeta" hidden>Join the beta</a>
-      </div>
-    </div>
-  </div>
 
   <div class="subscription-start-backdrop" id="subscriptionStartModal" hidden>
     <div class="subscription-start-card" role="dialog" aria-modal="true" aria-labelledby="subscriptionStartTitle" aria-describedby="subscriptionStartCopy">
@@ -1897,16 +1801,6 @@
       }
     }
 
-    function dismissSignupGate() {
-      var gate = document.getElementById('signupGate');
-      if (gate) {
-        gate.hidden = true;
-        gate.setAttribute('aria-hidden', 'true');
-      }
-      document.body.classList.remove('signup-gate-open');
-      try { sessionStorage.setItem('bk_signup_gate_seen', '1'); } catch (e) {}
-    }
-
     function configurePublicTestFlightLink() {
       var joinUrl = (window.testflightPublicJoinUrl || '').trim();
       var successBeta = document.getElementById('appStoreLink');
@@ -1930,7 +1824,6 @@
     }
 
     function showSuccess() {
-      dismissSignupGate();
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
       var ind = document.getElementById('stepIndicator');
@@ -2160,25 +2053,9 @@
         refreshCheckoutSummary();
       }
 
-      var gate = document.getElementById('signupGate');
-      var gateContinue = document.getElementById('signupGateContinue');
-      if (gateContinue) {
-        gateContinue.addEventListener('click', function() { dismissSignupGate(); });
-      }
-
       var params = new URLSearchParams(window.location.search);
       var checkout = params.get('checkout');
       var sessionId = params.get('session_id');
-      var skipGate = false;
-      try { skipGate = sessionStorage.getItem('bk_signup_gate_seen') === '1'; } catch (e) {}
-      if (checkout === 'success' || checkout === 'cancel' || skipGate || isCharterPath()) {
-        dismissSignupGate();
-      } else if (gate) {
-        gate.hidden = false;
-        gate.removeAttribute('aria-hidden');
-        document.body.classList.add('signup-gate-open');
-        if (gateContinue) gateContinue.focus();
-      }
 
       if (checkout === 'cancel') {
         history.replaceState({}, '', 'signup.html');

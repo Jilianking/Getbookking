@@ -3113,10 +3113,7 @@ function supportsInstantPayout(account) {
   );
 }
 
-/**
- * Default Standard destination + Instant-capable destination labels for Withdraw UI.
- */
-async function loadPayoutDestinationLabels(stripe, stripeAccountId) {
+async function listConnectExternalAccounts(stripe, stripeAccountId) {
   let banks = [];
   let cards = [];
   try {
@@ -3137,8 +3134,38 @@ async function loadPayoutDestinationLabels(stripe, stripeAccountId) {
   } catch (e) {
     console.warn("listExternalAccounts cards failed", e?.message || e);
   }
+  return { banks, cards, all: banks.concat(cards) };
+}
 
-  const all = banks.concat(cards);
+/**
+ * Instant destination + net cents from Balance.net_available, else Instant-capable
+ * external accounts. Stripe Instant payouts fail if destination is omitted and the
+ * default bank is not Instant-eligible.
+ */
+function pickInstantPayoutDestination(balance, externalAccounts) {
+  const instant = (balance?.instant_available || []).find((b) => b.currency === "usd");
+  const netRows = Array.isArray(instant?.net_available) ? instant.net_available : [];
+  let best = null;
+  for (const row of netRows) {
+    const destination = (row?.destination || "").toString().trim();
+    const amount = Math.max(0, Number(row?.amount) || 0);
+    if (!destination) continue;
+    if (!best || amount > best.netAvailableCents) {
+      best = { destination, netAvailableCents: amount };
+    }
+  }
+  if (best) return best;
+  const instantDest = (externalAccounts || []).find((a) => supportsInstantPayout(a));
+  if (!instantDest?.id) return null;
+  const gross = Math.max(0, instant?.amount ?? 0);
+  return { destination: instantDest.id, netAvailableCents: gross };
+}
+
+/**
+ * Default Standard destination + Instant-capable destination labels for Withdraw UI.
+ */
+async function loadPayoutDestinationLabels(stripe, stripeAccountId) {
+  const { all, banks } = await listConnectExternalAccounts(stripe, stripeAccountId);
   const defaultBank =
     banks.find((b) => b.default_for_currency) || banks[0] || null;
   const defaultAny =
@@ -3155,6 +3182,8 @@ async function loadPayoutDestinationLabels(stripe, stripeAccountId) {
     standardPayoutDestinationLabel: formatExternalAccountLabel(defaultAny),
     instantPayoutDestinationLabel: formatExternalAccountLabel(instantDest),
     instantPayoutEligible: Boolean(instantDest),
+    instantPayoutDestinationId: instantDest?.id || null,
+    allExternalAccounts: all,
   };
 }
 
@@ -3289,16 +3318,46 @@ exports.createPayout = functions
       );
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const payoutParams = {
+      amount: Math.round(amountCents),
+      currency: "usd",
+      method,
+    };
     try {
-      await stripe.payouts.create(
-        {
-          amount: Math.round(amountCents),
-          currency: "usd",
-          method,
-        },
-        { stripeAccount: stripeAccountId }
-      );
+      if (method === "instant") {
+        const balance = await stripe.balance.retrieve(
+          { expand: ["instant_available.net_available"] },
+          { stripeAccount: stripeAccountId }
+        );
+        const destInfo = await loadPayoutDestinationLabels(stripe, stripeAccountId);
+        const picked = pickInstantPayoutDestination(
+          balance,
+          destInfo.allExternalAccounts
+        );
+        if (!picked?.destination) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Instant payout failed. Add an Instant-eligible debit or bank in Stripe."
+          );
+        }
+        const maxInstant = Math.max(0, picked.netAvailableCents || 0);
+        if (maxInstant < 50) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Instant payout failed. Funds aren’t Instant-eligible yet."
+          );
+        }
+        if (payoutParams.amount > maxInstant) {
+          throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Amount exceeds Instant-available funds after fees."
+          );
+        }
+        payoutParams.destination = picked.destination;
+      }
+      await stripe.payouts.create(payoutParams, { stripeAccount: stripeAccountId });
     } catch (err) {
+      if (err instanceof functions.https.HttpsError) throw err;
       const msg =
         (err && err.message) ||
         (method === "instant"
@@ -9813,6 +9872,17 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
     if (data && data.jobTitle != null) {
       patch.jobTitle = normalizeJobTitle(data.jobTitle);
     }
+    if (data && data.displayName != null) {
+      const nextName = (data.displayName || "").toString().trim().slice(0, 120);
+      if (!nextName) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Name can’t be empty."
+        );
+      }
+      patch.displayName = nextName;
+      patch.name = nextName;
+    }
     if (data && data.isBookable != null) {
       patch.isBookable = Boolean(data.isBookable);
     }
@@ -9860,6 +9930,17 @@ exports.updateTenantMember = functions.https.onCall(async (data, context) => {
   }
   if (data && data.jobTitle != null) {
     patch.jobTitle = normalizeJobTitle(data.jobTitle);
+  }
+  if (data && data.displayName != null) {
+    const nextName = (data.displayName || "").toString().trim().slice(0, 120);
+    if (!nextName) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Name can’t be empty."
+      );
+    }
+    patch.displayName = nextName;
+    patch.name = nextName;
   }
   if (data && data.memberSettings != null) {
     const existing = normalizeMemberSettings(memberSnap.data().memberSettings);

@@ -94,7 +94,7 @@
           <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" />
           <button type="button" class="portal-auth-eye" data-password-toggle="confirmPassword" aria-label="Show password"></button>
         </div>
-        <button type="button" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="setPasswordBtn">Enter beta portal</button>
+        <button type="button" class="admin-btn admin-btn--primary" style="width:100%;justify-content:center" id="setPasswordBtn">Continue to business setup</button>
       </div>
     </div>
   </div>
@@ -154,7 +154,7 @@
         }).then(function () {
           document.getElementById('stepSignIn').hidden = true;
           document.getElementById('stepNewPassword').hidden = false;
-          document.getElementById('welcomeLead').textContent = 'Choose a new password for your beta account.';
+          document.getElementById('welcomeLead').textContent = 'Choose a new password, then finish business setup at signup.';
           PortalPasswordToggle.bind();
         }).catch(function (err) {
           btn.disabled = false;
@@ -181,9 +181,10 @@
         }).then(function () {
           return auth.currentUser.getIdToken(true);
         }).then(function () {
-          window.location.href = (window.PortalOrigins && !window.PortalOrigins.isDevHost())
-            ? window.PortalOrigins.absoluteUrl('beta', '/beta')
-            : '/beta';
+          var signupUrl = (window.PortalOrigins && window.PortalOrigins.absoluteUrl)
+            ? window.PortalOrigins.absoluteUrl('marketing', '/signup?beta=1')
+            : '/signup?beta=1';
+          window.location.href = signupUrl;
         }).catch(function (err) {
           btn.disabled = false;
           showError((err && err.message) || 'Could not finish setup.');

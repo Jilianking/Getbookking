@@ -40,13 +40,13 @@
       "cleanUrls": true,
       "trailingSlash": false,
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-      "redirects": [
-        { "source": "/testflight", "destination": "/", "type": 302 },
-        { "source": "/testflight.html", "destination": "/", "type": 302 },
-        { "source": "/beta", "destination": "/", "type": 302 },
-        { "source": "/beta/**", "destination": "/", "type": 302 }
-      ],
       "rewrites": [
+        { "source": "/testflight", "destination": "/testflight.html" },
+        { "source": "/beta/login", "destination": "/beta/login.html" },
+        { "source": "/beta/forgot-password", "destination": "/beta/forgot-password.html" },
+        { "source": "/beta/welcome", "destination": "/beta/welcome.html" },
+        { "source": "/beta/report-bug", "destination": "/beta/report-bug.html" },
+        { "source": "/beta", "destination": "/beta/index.html" },
         { "source": "/admin/login", "destination": "/admin/login.html" },
         { "source": "/admin/forgot-password", "destination": "/admin/forgot-password.html" },
         { "source": "/admin/reset-password", "destination": "/reset-password.html" },

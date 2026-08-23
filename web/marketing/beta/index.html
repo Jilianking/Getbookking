@@ -3,18 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Beta portal — Get Bookking</title>
+  <title>Beta — Get Bookking</title>
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/brand/favicon-32.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/assets/admin.css?v=3" />
   <style>
-    .beta-page { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
+    .beta-page { max-width: 640px; margin: 0 auto; padding: 32px 20px 48px; }
     .beta-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
     .beta-header h1 { font-family: 'Instrument Serif', Georgia, serif; font-size: 34px; font-weight: 400; }
-    .beta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 800px) { .beta-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body class="admin-body">
@@ -24,7 +22,7 @@
     }
   </script>
   <div class="beta-page" id="betaApp">
-    <div class="admin-loading">Loading beta portal…</div>
+    <div class="admin-loading">Loading…</div>
   </div>
 
   <script src="/js/firebase-config.js"></script>
@@ -41,11 +39,12 @@
     });
 
     function renderPortal(ctx) {
-      var data = ctx.portal || {};
-      var settings = data.settings || {};
-      var reports = data.reports || [];
+      var settings = (ctx.portal && ctx.portal.settings) || {};
       var user = ctx.user;
       var tf = settings.testflightPublicJoinUrl || window.testflightPublicJoinUrl || '';
+      var signupUrl = (window.PortalOrigins && window.PortalOrigins.absoluteUrl)
+        ? window.PortalOrigins.absoluteUrl('marketing', '/signup?beta=1')
+        : '/signup?beta=1';
 
       document.getElementById('betaApp').innerHTML =
         '<div class="beta-header">' +
@@ -55,35 +54,24 @@
               '<div class="admin-brand-text">Get Bookking</div>' +
               '<span class="admin-pill">Beta</span>' +
             '</div>' +
-            '<h1>Beta portal</h1>' +
+            '<h1>You&rsquo;re in the beta</h1>' +
             '<p class="admin-subtitle">Signed in as ' + BetaPortal.escapeHtml(user.email) + '</p>' +
           '</div>' +
           '<button type="button" class="admin-btn" id="betaSignOut">Sign out</button>' +
         '</div>' +
-        '<div class="beta-grid">' +
-          '<section class="admin-panel">' +
-            '<h2 style="font-size:16px;margin-bottom:10px">Install the app</h2>' +
-            (tf
-              ? '<p class="admin-list-meta"><a href="' + BetaPortal.escapeHtml(tf) + '" target="_blank" rel="noopener">Open TestFlight invite</a></p>'
-              : '<p class="admin-list-meta">TestFlight link will appear here once available.</p>') +
-            '<p class="admin-list-meta">Questions? Email <a href="mailto:' + BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '">' +
-              BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '</a></p>' +
-          '</section>' +
-          '<section class="admin-panel">' +
-            '<h2 style="font-size:16px;margin-bottom:10px">Report a bug</h2>' +
-            '<p class="admin-list-meta">Found something broken? Tell us what happened and we\'ll triage it.</p>' +
-            '<p style="margin-top:14px"><a class="admin-btn admin-btn--primary" href="/beta/report-bug">Report a bug</a></p>' +
-          '</section>' +
-        '</div>' +
-        '<section class="admin-panel" style="margin-top:16px">' +
-          '<h2 style="font-size:16px;margin-bottom:12px">Weekly reports</h2>' +
-          (reports.length
-            ? reports.map(function (r) {
-                return '<div style="padding:12px 0;border-bottom:1px solid var(--admin-border)">' +
-                  '<strong>' + BetaPortal.escapeHtml(r.weekLabel || r.title) + '</strong>' +
-                  '<div class="admin-list-meta" style="margin-top:6px">' + BetaPortal.escapeHtml(r.body || '') + '</div></div>';
-              }).join('')
-            : '<div class="admin-empty">No reports yet.</div>') +
+        '<section class="admin-panel">' +
+          '<h2 style="font-size:16px;margin-bottom:10px">Next steps</h2>' +
+          '<ol class="admin-list-meta" style="line-height:1.7;padding-left:18px;margin:0 0 16px">' +
+            '<li>Install the app from TestFlight</li>' +
+            '<li>Finish business setup at signup (same email)</li>' +
+            '<li>Send feedback through TestFlight or email us</li>' +
+          '</ol>' +
+          (tf
+            ? '<p style="margin-bottom:12px"><a class="admin-btn admin-btn--primary" href="' + BetaPortal.escapeHtml(tf) + '" target="_blank" rel="noopener">Open TestFlight</a></p>'
+            : '<p class="admin-list-meta" style="margin-bottom:12px">TestFlight link will appear here once available.</p>') +
+          '<p style="margin-bottom:12px"><a class="admin-btn" href="' + BetaPortal.escapeHtml(signupUrl) + '">Finish business setup</a></p>' +
+          '<p class="admin-list-meta">Questions or feedback? Email <a href="mailto:' + BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '">' +
+            BetaPortal.escapeHtml(settings.contactEmail || 'support@getbookking.com') + '</a></p>' +
         '</section>';
 
       document.getElementById('betaSignOut').addEventListener('click', function () {

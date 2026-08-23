@@ -29,8 +29,9 @@ struct DesignView: View {
     @StateObject private var quickEditHistory = QuickEditHistoryStore()
     @State private var quickEditInlineFocus: QuickEditInlineFocus?
     @State private var previewColorsDirty = false
-    @State private var selectedColorSurface: PreviewColorSurface?
+    @State private var selectedSurfacePaint: PreviewSurfacePaintRequest?
     @State private var selectedChromeColorTarget: PreviewQuickEditColorTarget?
+    @State private var selectedChromeCtaKey: String?
     @State private var isQuickEditChromeCollapsed = false
     @State private var quickEditSheet: QuickEditSheetPayload?
     @State private var quickEditHeroImageSheet = false
@@ -38,7 +39,9 @@ struct DesignView: View {
     @State private var quickEditGallerySlot: QuickEditGallerySlotPayload?
     @State private var quickEditStudio12PhilosophySheet = false
     @State private var quickEditStudio12BookCtaSheet = false
+    @State private var quickEditCharterQuoteSheet = false
     @State private var quickEditClassicAboutImageSheet = false
+    @State private var quickEditTeamMemberPhoto: QuickEditTeamMemberPhotoPayload?
     @State private var formFieldToEdit: FormField?
     @State private var manageGalleryBatchCrop: MultiImageCropSheetItem?
     @State private var showGalleryPickerLoadError = false
@@ -212,6 +215,39 @@ struct DesignView: View {
                     }
                 }
             }
+            .sheet(item: $quickEditTeamMemberPhoto) { payload in
+                NavigationStack {
+                    Form {
+                        Studio12AuxImageUploadSection(
+                            label: "Profile photo",
+                            advice: "",
+                            allowedCropChoices: [.square, .portrait4_5],
+                            defaultCropChoice: .square,
+                            imageUrl: Binding(
+                                get: {
+                                    viewModel.teamMemberVisibility.first(where: { $0.uid == payload.memberUid })?.profilePhotoUrl ?? ""
+                                },
+                                set: { newValue in
+                                    if let idx = viewModel.teamMemberVisibility.firstIndex(where: { $0.uid == payload.memberUid }) {
+                                        viewModel.teamMemberVisibility[idx].profilePhotoUrl = newValue
+                                    }
+                                }
+                            ),
+                            isUploading: viewModel.uploadingTeamMemberPhotoUid == payload.memberUid,
+                            upload: { data in
+                                _ = await viewModel.uploadTeamMemberProfilePhoto(memberUid: payload.memberUid, imageData: data)
+                            }
+                        )
+                    }
+                    .navigationTitle("Profile photo")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { quickEditTeamMemberPhoto = nil }
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $quickEditStudio12PhilosophySheet) {
                 NavigationStack {
                     Form {
@@ -283,6 +319,12 @@ struct DesignView: View {
                     }
                 }
             }
+            .sheet(isPresented: $quickEditCharterQuoteSheet) {
+                QuickEditCharterQuoteSheet(
+                    viewModel: viewModel,
+                    onDismiss: { quickEditCharterQuoteSheet = false }
+                )
+            }
             .sheet(item: $formFieldToEdit) { field in
                 EditFormFieldSheet(
                     field: field,
@@ -340,6 +382,11 @@ struct DesignView: View {
         var id: Int { slotIndex }
     }
 
+    private struct QuickEditTeamMemberPhotoPayload: Identifiable {
+        let memberUid: String
+        var id: String { memberUid }
+    }
+
     private struct QuickEditGallerySlotSheet: View {
         let slotIndex: Int
         @ObservedObject var viewModel: DesignViewModel
@@ -367,11 +414,15 @@ struct DesignView: View {
             lockedCropChoice.aspectWidthOverHeight ?? 1
         }
 
+        private var slotPhotoLabel: String {
+            slotIndex == 0 && viewModel.subscriptionPlan.isCharterPlan ? "Quote photo" : "Gallery photo"
+        }
+
         var body: some View {
             NavigationStack {
                 Form {
                     Section {
-                        Text("Gallery photo")
+                        Text(slotPhotoLabel)
                             .font(.subheadline.weight(.medium))
                         VStack(alignment: .leading, spacing: 12) {
                             Group {
@@ -444,7 +495,7 @@ struct DesignView: View {
                         }
                     }
                 }
-                .navigationTitle("Photo")
+                .navigationTitle(slotPhotoLabel)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
@@ -455,7 +506,7 @@ struct DesignView: View {
                     UploadImagePreparationSheet(
                         images: [item.image],
                         advice: "",
-                        navigationTitle: "Photo",
+                        navigationTitle: slotPhotoLabel,
                         allowedChoices: [lockedCropChoice],
                         defaultChoice: lockedCropChoice,
                         showsInstructionalCopy: false,
@@ -693,6 +744,7 @@ struct DesignView: View {
             url: sitePreviewURL,
             height: nil,
             quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
+            pageBackgroundHex: viewModel.backgroundColorHex,
             bridge: quickEditBridge,
             onQuickEdit: { event in
                 switch event {
@@ -712,12 +764,16 @@ struct DesignView: View {
                     quickEditInlineFocus = focus
                 case .inlineBlur:
                     quickEditInlineFocus = nil
-                case let .openColorSurface(surfaceId):
+                case let .openColorSurface(surfaceId, surfaceKey):
                     if let surface = PreviewColorSurface(surfaceId: surfaceId) {
-                        selectedColorSurface = surface
+                        selectedSurfacePaint = PreviewSurfacePaintRequest(
+                            surface: surface,
+                            surfaceKey: surfaceKey
+                        )
                     }
-                case let .openChromeColor(targetId):
+                case let .openChromeColor(targetId, ctaKey):
                     if let target = PreviewQuickEditColorTarget(rawValue: targetId) {
+                        selectedChromeCtaKey = ctaKey
                         selectedChromeColorTarget = target
                     }
                 case let .openSheet(key, text):
@@ -736,12 +792,46 @@ struct DesignView: View {
                         quickEditClassicAboutImageSheet = true
                         return
                     }
+                    if key.hasPrefix("tm:"), key.hasSuffix(":photo") {
+                        let parts = key.split(separator: ":").map(String.init)
+                        if parts.count == 3 {
+                            let slug = parts[1].lowercased()
+                            Task {
+                                if viewModel.teamMemberVisibility.isEmpty {
+                                    await viewModel.loadData(
+                                        isDemoMode: authViewModel.isDemoMode,
+                                        sessionStore: sessionStore
+                                    )
+                                }
+                                await MainActor.run {
+                                    if let member = viewModel.teamMemberVisibility.first(where: {
+                                        $0.memberSlug.lowercased() == slug
+                                    }) {
+                                        quickEditTeamMemberPhoto = QuickEditTeamMemberPhotoPayload(memberUid: member.uid)
+                                    } else {
+                                        viewModel.errorMessage = "Could not open that profile photo. Refresh and try again."
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
                     if key == "studio12PhilosophyImage" {
                         quickEditStudio12PhilosophySheet = true
                         return
                     }
                     if key == "studio12BookCtaImage" {
                         quickEditStudio12BookCtaSheet = true
+                        return
+                    }
+                    if key == "charterQuote:edit" {
+                        quickEditCharterQuoteSheet = true
+                        return
+                    }
+                    if isCharterPlan,
+                       key == DesignViewModel.charterQuoteCopyKey
+                        || key == DesignViewModel.charterQuoteByCopyKey {
+                        quickEditCharterQuoteSheet = true
                         return
                     }
                     if key.hasPrefix("galleryImage:") {
@@ -816,9 +906,24 @@ struct DesignView: View {
                         history: quickEditHistory,
                         inlineFocus: $quickEditInlineFocus,
                         colorsDirty: $previewColorsDirty,
-                        selectedColorSurface: $selectedColorSurface,
+                        selectedSurfacePaint: $selectedSurfacePaint,
                         selectedChromeColorTarget: $selectedChromeColorTarget,
-                        isChromeCollapsed: $isQuickEditChromeCollapsed
+                        selectedChromeCtaKey: $selectedChromeCtaKey,
+                        isChromeCollapsed: $isQuickEditChromeCollapsed,
+                        isBookingCanvasPreview: selectedTab == .book
+                            && (activeTemplateFamily == .blade
+                                || activeTemplateFamily == .luxe
+                                || activeTemplateFamily == .stonecut
+                                || activeTemplateFamily == .studio12),
+                        bookingPageSurfaceKey: {
+                            switch activeTemplateFamily {
+                            case .blade: return "blade.bookingPage"
+                            case .luxe: return "luxe.bookingPage"
+                            case .stonecut: return "stonecut.bookingPage"
+                            case .studio12: return "studio12.bookingPage"
+                            default: return nil
+                            }
+                        }()
                     )
                 }
             }
@@ -826,20 +931,72 @@ struct DesignView: View {
         .appCard()
         .onChange(of: isQuickEditEnabled) { _, enabled in
             if !enabled {
+                // Commit WKWebView text dirty buffer, then persist everything from ViewModel memory.
+                // Chrome is already leaving the tree — do not rely on its debounced Tasks.
+                quickEditBridge.commitDirtyEdits()
+                quickEditBridge.syncStyleMapsFromViewModel(
+                    buttons: viewModel.webButtonColors,
+                    surfaces: viewModel.webSurfaceColors,
+                    textColors: viewModel.webTextColors,
+                    textFontSizes: viewModel.webTextFontSizes
+                )
+                let dirtyPalette = previewColorsDirty
+                Task {
+                    if dirtyPalette {
+                        _ = await viewModel.savePreviewQuickEditColors(invalidatePreview: false)
+                    }
+                    await viewModel.persistAllQuickEditStyleMaps()
+                }
+                // Push maps (including `[:]`) + palette restamp in one WebKit turn.
+                quickEditBridge.flushFullPreviewColorPatch(viewModel.previewColorPatchPayload())
                 quickEditInlineFocus = nil
                 previewColorsDirty = false
-                selectedColorSurface = nil
+                selectedSurfacePaint = nil
                 selectedChromeColorTarget = nil
+                selectedChromeCtaKey = nil
                 isQuickEditChromeCollapsed = false
                 quickEditBridge.setBackgroundPaintMode(false)
                 quickEditHistory.clear()
+            } else {
+                quickEditBridge.syncStyleMapsFromViewModel(
+                    buttons: viewModel.webButtonColors,
+                    surfaces: viewModel.webSurfaceColors,
+                    textColors: viewModel.webTextColors,
+                    textFontSizes: viewModel.webTextFontSizes
+                )
+                quickEditBridge.flushFullPreviewColorPatch(viewModel.previewColorPatchPayload())
             }
         }
-        .onChange(of: viewModel.webPreviewColorPatchToken) { _, _ in
-            quickEditBridge.schedulePreviewColorPatch(
-                viewModel.previewColorPatchPayload(),
-                full: true
+        .onChange(of: viewModel.webSurfaceColors) { _, surfaces in
+            // Push into the WebView (including `[:]`) so palette resets clear `__bkNativeSurfaceColors`.
+            quickEditBridge.applySurfaceColors(surfaces)
+        }
+        .onChange(of: viewModel.webButtonColors) { _, buttons in
+            quickEditBridge.applyButtonColors(buttons)
+        }
+        .onChange(of: viewModel.webTextColors) { _, texts in
+            // Always push (including `[:]`) so palette resets clear per-field text paints.
+            quickEditBridge.applyFieldColors(texts)
+        }
+        .onChange(of: viewModel.webTextFontSizes) { _, sizes in
+            quickEditBridge.applyFontSizes(sizes.compactMapValues { Int($0) })
+        }
+        .onAppear {
+            quickEditBridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
             )
+        }
+        .onChange(of: viewModel.webPreviewColorPatchToken) { _, _ in
+            quickEditBridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
+            )
+            quickEditBridge.flushFullPreviewColorPatch(viewModel.previewColorPatchPayload())
         }
     }
 
@@ -1311,7 +1468,46 @@ struct DesignView: View {
             .textFieldStyle(.roundedBorder)
 
             HeroImageUploadSection(viewModel: viewModel, compactPreview: true)
+
+            Text("Client quote")
+                .font(.headline)
+                .padding(.top, 8)
+            Text("Testimonial card on your home page. You can also tap the quote in Edit on the live preview.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            TextField(
+                "Quote",
+                text: $viewModel.charterHomeQuote,
+                prompt: Text("Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys."),
+                axis: .vertical
+            )
+            .lineLimit(3...8)
+            .textFieldStyle(.roundedBorder)
+            TextField(
+                "Attribution",
+                text: $viewModel.charterHomeQuoteBy,
+                prompt: Text("Danielle R. · Half-Day Reef Charter")
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Studio12AuxImageUploadSection(
+                label: "Quote photo",
+                advice: "Photo beside the quote on your home page. Stored as your first gallery image.",
+                allowedCropChoices: [.landscape16_9],
+                defaultCropChoice: .landscape16_9,
+                imageUrl: charterQuotePhotoBinding,
+                isUploading: viewModel.isUploadingGallery,
+                upload: { data in await viewModel.replaceOrAppendGalleryImage(at: 0, imageData: data) },
+                compactPreview: true
+            )
         }
+    }
+
+    private var charterQuotePhotoBinding: Binding<String> {
+        Binding(
+            get: { viewModel.charterQuotePhotoUrl },
+            set: { _ in }
+        )
     }
 
     /// Studio 12 only: home fields editable here; marquee uses services automatically; gallery strip is edited on the Gallery tab.
@@ -1471,7 +1667,7 @@ struct DesignView: View {
 
             Text("Client testimonials")
                 .font(.headline)
-            Text("If you add reviews to your business profile, they can appear below the booking section on the site. Hours, address, and phone are edited on the About tab.")
+            Text("Edit quotes under Manage → Book → Reviews. They appear next to Book on Blade and under Client love on Studio 12.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -3129,6 +3325,69 @@ private struct EditStudio12ProcessStepSheet: View {
             let s = viewModel.studio12ProcessSteps[stepIndex]
             titleText = s.title
             bodyText = s.body
+        }
+    }
+}
+
+private struct QuickEditCharterQuoteSheet: View {
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var quoteText = ""
+    @State private var attributionText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Testimonial card on your home page.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField(
+                        "Quote",
+                        text: $quoteText,
+                        prompt: Text("Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys."),
+                        axis: .vertical
+                    )
+                    .lineLimit(3...8)
+                    TextField(
+                        "Attribution",
+                        text: $attributionText,
+                        prompt: Text("Danielle R. · Half-Day Reef Charter")
+                    )
+                }
+                Studio12AuxImageUploadSection(
+                    label: "Quote photo",
+                    advice: "Photo beside the quote. Stored as your first gallery image.",
+                    allowedCropChoices: [.landscape16_9],
+                    defaultCropChoice: .landscape16_9,
+                    imageUrl: Binding(
+                        get: { viewModel.charterQuotePhotoUrl },
+                        set: { _ in }
+                    ),
+                    isUploading: viewModel.isUploadingGallery,
+                    upload: { data in await viewModel.replaceOrAppendGalleryImage(at: 0, imageData: data) },
+                    compactPreview: true
+                )
+            }
+            .navigationTitle("Client quote")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        viewModel.charterHomeQuote = quoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        viewModel.charterHomeQuoteBy = attributionText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        Task { await viewModel.persistCharterHomeQuote() }
+                        onDismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            quoteText = viewModel.charterHomeQuote
+            attributionText = viewModel.charterHomeQuoteBy
         }
     }
 }

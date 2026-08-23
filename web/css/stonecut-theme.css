@@ -8,7 +8,7 @@
   background: var(--bk-bg, #060604);
   color: var(--bk-fg, #e8e0d0);
   font-family: 'Syne', sans-serif;
-  overflow-x: hidden;
+  overflow-x: clip;
   padding-top: var(--stonecut-nav-h, 92px);
   /* Shared Unbounded display (nav name, SERVICES, HOURS, hero title) */
   --sc-display-font: 'Unbounded', sans-serif;
@@ -16,11 +16,20 @@
   --sc-display-tracking: -0.03em;
   --sc-display-lh: 0.95;
 }
+@supports not (overflow-x: clip) {
+  .stonecut-page { overflow-x: hidden; }
+}
 .stonecut-page > footer {
   margin-top: auto;
   flex-shrink: 0;
 }
 .stonecut-page > main.stonecut-shop-shell {
+  flex: 1 0 auto;
+}
+.stonecut-page > main.stonecut-shop-shell[data-bk-surface-key] {
+  background: transparent;
+}
+.stonecut-page:has(.booking-shell) .booking-page-band {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -246,6 +255,7 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
 .stonecut-page .stonecut-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .stonecut-page .stonecut-info.stonecut-info--no-hours { grid-template-columns: 1fr; }
 .stonecut-page .stonecut-info-card { background: var(--bk-card, #0e0d0a); border: 1px solid rgba(232,224,208,.08); padding: 30px 24px; }
+.stonecut-page .stonecut-info-card[data-bk-surface-key] { background: transparent; }
 .stonecut-page .stonecut-info-card h3 {
   font-family: var(--sc-display-font);
   font-weight: var(--sc-display-weight);
@@ -254,6 +264,12 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   font-size: 24px;
   margin: 8px 0 0;
   text-transform: uppercase;
+}
+.stonecut-page .stonecut-info-card .stonecut-info-hours-body {
+  margin-top: 12px;
+  white-space: pre-line;
+  line-height: 1.8;
+  color: var(--bk-fg-muted, #a09888);
 }
 .stonecut-page .stonecut-address-link { color: inherit; text-decoration: none; display: block; margin-top: 14px; line-height: 1.8; }
 .stonecut-page .stonecut-phone { display: inline-block; margin-top: 16px; color: var(--bk-accent, #c0221a); text-decoration: none; letter-spacing: .08em; }
@@ -264,10 +280,10 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
 .gallery-page.gallery-page--stonecut footer {
   margin-top: auto;
   flex-shrink: 0;
-  border-top: 1px solid rgba(232,224,208,.08);
+  border-top: 1px solid color-mix(in srgb, var(--bk-fg, #e8e0d0) 8%, transparent);
   padding: 36px 40px;
   color: var(--bk-fg-muted, #a09888);
-  background: #060604;
+  background: var(--bk-about-bg, var(--bk-bg, #060604));
 }
 .stonecut-page .tattoo-sidebar-panel {
   left: auto;
@@ -296,7 +312,7 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #e8e0d0;
+  color: var(--bk-fg, #e8e0d0);
 }
 .stonecut-page .booking-page-subtitle {
   color: var(--bk-fg-muted, #a09888);
@@ -313,17 +329,17 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   opacity: 0.92;
 }
 .stonecut-page .booking-card {
-  color: #e8e0d0;
-  border: 1px solid rgba(232, 224, 208, 0.08);
+  color: var(--bk-fg, #e8e0d0);
+  border: 1px solid color-mix(in srgb, var(--bk-fg, #e8e0d0) 8%, transparent);
   box-shadow: none !important;
 }
 .stonecut-page .booking-form label { color: var(--bk-fg-muted, #a09888); font-weight: 500; }
 .stonecut-page .booking-form input,
 .stonecut-page .booking-form textarea,
 .stonecut-page .booking-form select {
-  background: #060604;
-  border-color: rgba(232, 224, 208, 0.15);
-  color: #e8e0d0;
+  background: color-mix(in srgb, var(--bk-fg, #e8e0d0) 5%, transparent);
+  border-color: color-mix(in srgb, var(--bk-fg, #e8e0d0) 15%, transparent);
+  color: var(--bk-fg, #e8e0d0);
 }
 .stonecut-page .booking-form input:focus,
 .stonecut-page .booking-form textarea:focus,
@@ -392,7 +408,24 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   .stonecut-page .stonecut-nav.scrolled .stonecut-nav-trailing { align-self: center; }
   /* Identity lives in nav; hero keeps CTAs + image only (no duplicate name/city). */
   .stonecut-page .stonecut-logo-wordmark { display: none; }
-  .stonecut-page .stonecut-logo-stack { display: flex; }
+  .stonecut-page .stonecut-logo-stack {
+    display: flex;
+    gap: 6px;
+    max-width: calc(100vw - 132px);
+  }
+  .stonecut-page .stonecut-logo-stack .stonecut-nav-industry {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+  .stonecut-page .stonecut-logo-stack .stonecut-nav-name {
+    font-size: clamp(26px, 6.5vw, 36px);
+    line-height: 1.05;
+  }
+  .stonecut-page .stonecut-logo-stack .stonecut-nav-location {
+    font-size: 12px;
+    letter-spacing: .22em;
+    line-height: 1.3;
+  }
   .stonecut-page .stonecut-nav.scrolled .stonecut-logo-stack { display: none; }
   .stonecut-page .stonecut-nav.scrolled .stonecut-logo-wordmark { display: inline; }
   .stonecut-page .stonecut-hero-left .stonecut-title,
@@ -400,14 +433,34 @@ body:has(#bk-quick-edit-style) .stonecut-page .stonecut-nav-industry.stonecut-in
   .stonecut-page .stonecut-hero-left:not(:has(.stonecut-hero-cta)) {
     display: none;
   }
-  .stonecut-page .stonecut-hero-left:has(.stonecut-hero-cta) {
-    padding-top: 16px;
-    padding-bottom: 24px;
+  /* 2b: image directly under nav, full-width CTA below image. */
+  .stonecut-page .stonecut-hero {
+    grid-template-columns: 1fr;
+    padding-top: 24px;
     padding-left: 20px;
     padding-right: 20px;
   }
-  .stonecut-page .stonecut-hero { grid-template-columns: 1fr; }
-  .stonecut-page .stonecut-hero-right { min-height: 0; }
+  .stonecut-page .stonecut-hero-right {
+    order: -1;
+    min-height: 0;
+  }
+  .stonecut-page .stonecut-hero-left:has(.stonecut-hero-cta) {
+    order: 2;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: stretch;
+    padding: 20px 0 24px;
+  }
+  .stonecut-page .stonecut-hero-cta {
+    width: 100%;
+  }
+  .stonecut-page .stonecut-hero-cta .stonecut-btn-primary {
+    display: block;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
   .stonecut-page .stonecut-section { padding: 72px 20px; }
   .stonecut-page .stonecut-about-inner { grid-template-columns: 1fr; gap: 36px; }
   .stonecut-page .stonecut-services { grid-template-columns: 1fr; }

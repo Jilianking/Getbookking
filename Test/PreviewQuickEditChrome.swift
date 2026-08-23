@@ -37,28 +37,43 @@ enum PreviewQuickEditColorTarget: String, Identifiable {
     static let quickEditRow: [PreviewQuickEditColorTarget] = [.background, .text, .button]
 }
 
+/// Touch-friendly color wells + floating control pill while Quick edit is on.
 struct PreviewQuickEditChrome: View {
     @ObservedObject var viewModel: DesignViewModel
     var bridge: WebViewQuickEditBridge
     @ObservedObject var history: QuickEditHistoryStore
     @Binding var inlineFocus: QuickEditInlineFocus?
     @Binding var colorsDirty: Bool
-    @Binding var selectedColorSurface: PreviewColorSurface?
+    /// Band paint tap from the WebView (role + optional `data-bk-surface-key` in one value).
+    @Binding var selectedSurfacePaint: PreviewSurfacePaintRequest?
     @Binding var selectedChromeColorTarget: PreviewQuickEditColorTarget?
+    /// Classic per-button key from the last CTA paint tap (`data-cta-key`).
+    @Binding var selectedChromeCtaKey: String?
     @Binding var isChromeCollapsed: Bool
+    /// `/book` preview — Background well can show the booking canvas fill (`*.bookingPage`).
+    var isBookingCanvasPreview: Bool = false
+    /// Booking canvas key for the active theme (`blade.bookingPage` / `luxe.bookingPage`).
+    var bookingPageSurfaceKey: String? = nil
     @AppStorage("quickEditFabPosX") private var storedFabPosX: Double = -1
     @AppStorage("quickEditFabPosY") private var storedFabPosY: Double = -1
     @State private var activeColorTarget: PreviewQuickEditColorTarget?
     @State private var activeColorSurface: PreviewColorSurface?
+    @State private var activeSurfaceKey: String?
     @State private var focusedColorEdit: QuickEditInlineFocus?
+    @State private var activeButtonColorKey: String?
+    @State private var buttonColorBaseline: (key: String, hex: String)?
+    @State private var surfaceColorBaseline: (key: String, hex: String)?
     @State private var draggingFabPosition: CGPoint?
     @State private var fabDragStartPosition: CGPoint?
     @State private var isSavingColors = false
     /// When true, preview color taps (bands + CTA chrome) work; text/sheet taps are ignored.
     @State private var isBackgroundPaintArmed = false
-    @State private var colorChangeBaseline: (tokens: WebColorPaletteTokens, hero: String)?
+    @State private var isSidebarMenuExpanded = false
+    @State private var colorChangeBaseline: (tokens: WebColorPaletteTokens, hero: String, sidebar: String, sidebarText: String, sidebarIcon: String, sidebarClose: String)?
     @State private var fieldColorBaseline: (key: String, hex: String)?
     @State private var textColorSaveTask: Task<Void, Never>?
+    @State private var buttonColorSaveTask: Task<Void, Never>?
+    @State private var surfaceColorSaveTask: Task<Void, Never>?
 
     private let collapsedFabSize: CGFloat = 52
     private let collapsedFabMargin: CGFloat = 16
@@ -93,7 +108,11 @@ struct PreviewQuickEditChrome: View {
                 onDismiss: {
                     activeColorTarget = nil
                     selectedChromeColorTarget = nil
+                    selectedChromeCtaKey = nil
                     if target == .button {
+                        commitButtonColorBaselineIfNeeded()
+                        flushButtonColorSave()
+                        activeButtonColorKey = nil
                         setBackgroundPaintArmed(false)
                     }
                     finishColorSheetDismiss()
@@ -102,12 +121,16 @@ struct PreviewQuickEditChrome: View {
         }
         .sheet(item: $activeColorSurface) { surface in
             PreviewQuickEditColorSheet(
-                title: surface.label,
-                initialHex: surface.hex(from: viewModel),
+                title: surfaceSheetTitle(surface, key: activeSurfaceKey),
+                initialHex: resolvedSurfaceHex(surface: surface, key: activeSurfaceKey),
                 onChange: { applySurfaceColor(surface: surface, hex: $0) },
                 onDismiss: {
+                    // Flush keyed save before clearing baseline / active key.
+                    flushSurfaceColorSave()
+                    commitSurfaceColorBaselineIfNeeded()
                     activeColorSurface = nil
-                    selectedColorSurface = nil
+                    activeSurfaceKey = nil
+                    selectedSurfacePaint = nil
                     setBackgroundPaintArmed(false)
                     finishColorSheetDismiss()
                 }
@@ -126,22 +149,47 @@ struct PreviewQuickEditChrome: View {
                 }
             )
         }
-        .onChange(of: selectedColorSurface) { _, surface in
-            guard let surface else { return }
-            presentColorSurface(surface)
+        .onChange(of: selectedSurfacePaint) { _, request in
+            guard let request else { return }
+            presentColorSurface(request.surface, surfaceKey: request.surfaceKey)
         }
         .onChange(of: selectedChromeColorTarget) { _, target in
             guard let target else { return }
             presentChromeColor(target)
         }
+        .onChange(of: inlineFocus) { _, focus in
+            if focus != nil {
+                isSidebarMenuExpanded = false
+            }
+        }
         .onChange(of: isChromeCollapsed) { _, collapsed in
             if collapsed {
                 draggingFabPosition = nil
                 fabDragStartPosition = nil
+                isSidebarMenuExpanded = false
             }
         }
         .onDisappear {
             setBackgroundPaintArmed(false)
+            flushSurfaceColorSave()
+            flushButtonColorSave()
+            // Ensure Edit-off teardown still has the latest maps on the bridge.
+            bridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
+            )
+            Task { await viewModel.persistAllQuickEditStyleMaps() }
+        }
+        .onAppear {
+            bridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
+            )
+            bridge.reapplyCachedStyleMaps()
         }
     }
 
@@ -150,6 +198,9 @@ struct PreviewQuickEditChrome: View {
             HStack {
                 Spacer(minLength: 0)
                 chromeCollapseButton
+            }
+            if isSidebarMenuExpanded, !isBackgroundPaintArmed, inlineFocus == nil {
+                sidebarChromeChipRow
             }
             controlPill
         }
@@ -161,6 +212,84 @@ struct PreviewQuickEditChrome: View {
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea(edges: .bottom)
         }
+    }
+
+    private var sidebarChromeChipRow: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            sidebarChromeChip(surface: .sidebarOpen, title: "Open", systemImage: "line.3.horizontal")
+            sidebarChromeChip(surface: .sidebarClose, title: "Close", systemImage: "xmark")
+            sidebarChromeChip(surface: .sidebar, title: "Background")
+            sidebarChromeChip(surface: .sidebarText, title: "Text")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        )
+    }
+
+    private func sidebarChromeChip(surface: PreviewColorSurface, title: String, systemImage: String? = nil) -> some View {
+        Button {
+            presentColorSurface(surface)
+        } label: {
+            VStack(spacing: 4) {
+                ZStack {
+                    PreviewColorWellCircle(hex: surface.hex(from: viewModel), diameter: 36)
+                    if let systemImage {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(sidebarChipGlyphColor(for: surface.hex(from: viewModel)))
+                    }
+                }
+                Text(title)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit \(title.lowercased()) color")
+    }
+
+    private func sidebarChipGlyphColor(for hex: String) -> Color {
+        let c = Color(hex: hex)
+        guard let comps = UIColor(c).cgColor.components, comps.count >= 3 else { return .white }
+        let lum = 0.299 * comps[0] + 0.587 * comps[1] + 0.114 * comps[2]
+        return lum > 0.58 ? Color(white: 0.12) : .white
+    }
+
+    private var sidebarMenuButton: some View {
+        Button {
+            setBackgroundPaintArmed(false)
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isSidebarMenuExpanded.toggle()
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(isSidebarMenuExpanded ? Color.accentColor.opacity(0.15) : Color(.systemGray6))
+                    .clipShape(Circle())
+                    .overlay {
+                        if isSidebarMenuExpanded {
+                            Circle()
+                                .strokeBorder(Color.accentColor, lineWidth: 2)
+                        }
+                    }
+                Text("Sidebar")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(isSidebarMenuExpanded ? Color.accentColor : Color.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isSidebarMenuExpanded ? "Hide sidebar color tools" : "Sidebar color tools")
+        .accessibilityAddTraits(isSidebarMenuExpanded ? .isSelected : [])
+        .opacity(isBackgroundPaintArmed ? 0.45 : 1)
     }
 
     private var chromeCollapseButton: some View {
@@ -323,7 +452,7 @@ struct PreviewQuickEditChrome: View {
             setBackgroundPaintArmed(!isBackgroundPaintArmed)
         } label: {
             VStack(spacing: 4) {
-                PreviewColorWellCircle(hex: viewModel.backgroundColorHex, diameter: 40)
+                PreviewColorWellCircle(hex: backgroundWellHex, diameter: 40)
                     .overlay {
                         if isBackgroundPaintArmed {
                             Circle()
@@ -340,6 +469,16 @@ struct PreviewQuickEditChrome: View {
         .accessibilityAddTraits(isBackgroundPaintArmed ? .isSelected : [])
     }
 
+    private var backgroundWellHex: String {
+        if isBookingCanvasPreview,
+           let key = bookingPageSurfaceKey,
+           let override = viewModel.webSurfaceColors[key],
+           override.hasPrefix("#") {
+            return WebColorPalettes.normalizeHex(override)
+        }
+        return viewModel.backgroundColorHex
+    }
+
     private func setBackgroundPaintArmed(_ armed: Bool) {
         guard isBackgroundPaintArmed != armed else {
             if armed {
@@ -349,6 +488,7 @@ struct PreviewQuickEditChrome: View {
         }
         isBackgroundPaintArmed = armed
         if armed {
+            isSidebarMenuExpanded = false
             if inlineFocus != nil {
                 bridge.commitDirtyEdits()
                 inlineFocus = nil
@@ -366,6 +506,9 @@ struct PreviewQuickEditChrome: View {
             }
             compactTextColorWell
             addTextButton
+            if isBackgroundPaintArmed || inlineFocus == nil {
+                sidebarMenuButton
+            }
 
             if !isBackgroundPaintArmed, let focus = inlineFocus {
                 activeFieldEditor(focus: focus)
@@ -443,7 +586,7 @@ struct PreviewQuickEditChrome: View {
         defer { history.endApplyingHistory() }
 
         switch entry {
-        case .fontSize, .fieldColor:
+        case .fontSize, .fieldColor, .buttonColor, .surfaceColor:
             break
         default:
             bridge.commitDirtyEdits()
@@ -451,12 +594,21 @@ struct PreviewQuickEditChrome: View {
         }
 
         switch entry {
-        case let .colors(before, after, heroBefore, heroAfter):
+        case let .colors(before, after, heroBefore, heroAfter, sidebarBefore, sidebarAfter, sidebarTextBefore, sidebarTextAfter, sidebarIconBefore, sidebarIconAfter, sidebarCloseBefore, sidebarCloseAfter):
             let tokens = direction == .undo ? before : after
             let hero = direction == .undo ? heroBefore : heroAfter
+            let sidebar = direction == .undo ? sidebarBefore : sidebarAfter
+            let sidebarText = direction == .undo ? sidebarTextBefore : sidebarTextAfter
+            let sidebarIcon = direction == .undo ? sidebarIconBefore : sidebarIconAfter
+            let sidebarClose = direction == .undo ? sidebarCloseBefore : sidebarCloseAfter
             await MainActor.run {
                 viewModel.applyColorTokensLocally(tokens)
                 viewModel.previewHeroSlotColorHex = hero
+                viewModel.sidebarBackgroundColorHex = sidebar
+                viewModel.sidebarTextColorHex = sidebarText
+                viewModel.sidebarIconColorHome = sidebarIcon
+                viewModel.sidebarIconColorBooking = sidebarIcon
+                viewModel.sidebarCloseIconColorHex = sidebarClose
                 colorsDirty = true
                 pushPreviewColors(heroSlotOverride: hero, fullBandPass: true)
             }
@@ -488,6 +640,20 @@ struct PreviewQuickEditChrome: View {
                 }
             }
             await viewModel.persistQuickEditTextColor(fieldKey: key, hex: hex)
+        case let .buttonColor(key, before, after):
+            let hex = direction == .undo ? before : after
+            await MainActor.run {
+                viewModel.webButtonColors[key] = hex
+                bridge.applyButtonColors(viewModel.webButtonColors)
+            }
+            await viewModel.persistQuickEditButtonColor(fieldKey: key, hex: hex)
+        case let .surfaceColor(key, before, after):
+            let hex = direction == .undo ? before : after
+            await MainActor.run {
+                viewModel.webSurfaceColors[key] = hex
+                bridge.applySurfaceColors(viewModel.webSurfaceColors)
+            }
+            await viewModel.persistQuickEditSurfaceColor(fieldKey: key, hex: hex)
         }
     }
 
@@ -517,7 +683,11 @@ struct PreviewQuickEditChrome: View {
         if colorChangeBaseline == nil {
             colorChangeBaseline = (
                 tokens: viewModel.currentColorTokens(),
-                hero: viewModel.previewHeroSlotColorHex
+                hero: viewModel.previewHeroSlotColorHex,
+                sidebar: viewModel.sidebarBackgroundColorHex,
+                sidebarText: viewModel.sidebarTextColorHex,
+                sidebarIcon: viewModel.sidebarIconColorHome,
+                sidebarClose: viewModel.sidebarCloseIconColorHex
             )
         }
     }
@@ -529,7 +699,15 @@ struct PreviewQuickEditChrome: View {
             before: baseline.tokens,
             after: viewModel.currentColorTokens(),
             heroBefore: baseline.hero,
-            heroAfter: viewModel.previewHeroSlotColorHex
+            heroAfter: viewModel.previewHeroSlotColorHex,
+            sidebarBefore: baseline.sidebar,
+            sidebarAfter: viewModel.sidebarBackgroundColorHex,
+            sidebarTextBefore: baseline.sidebarText,
+            sidebarTextAfter: viewModel.sidebarTextColorHex,
+            sidebarIconBefore: baseline.sidebarIcon,
+            sidebarIconAfter: viewModel.sidebarIconColorHome,
+            sidebarCloseBefore: baseline.sidebarClose,
+            sidebarCloseAfter: viewModel.sidebarCloseIconColorHex
         )
     }
 
@@ -550,23 +728,122 @@ struct PreviewQuickEditChrome: View {
     private func dismissColorSheets() {
         activeColorTarget = nil
         activeColorSurface = nil
-        selectedColorSurface = nil
+        activeSurfaceKey = nil
+        selectedSurfacePaint = nil
         selectedChromeColorTarget = nil
+        selectedChromeCtaKey = nil
         focusedColorEdit = nil
+        isSidebarMenuExpanded = false
     }
 
-    /// Opens a band color sheet; clears `selectedColorSurface` so the same band can be tapped again after Done.
-    private func presentColorSurface(_ surface: PreviewColorSurface) {
+    /// Opens a band color sheet; clears `selectedSurfacePaint` so the same band can be tapped again after Done.
+    private func presentColorSurface(_ surface: PreviewColorSurface, surfaceKey: String? = nil) {
         beginColorChangeBaseline()
+        let isSidebarChrome = surface == .sidebar || surface == .sidebarOpen
+            || surface == .sidebarClose || surface == .sidebarText
+        let trimmed = (surfaceKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = isSidebarChrome ? "" : trimmed
+        activeSurfaceKey = key.isEmpty ? nil : key
+        if let key = activeSurfaceKey {
+            let before = viewModel.webSurfaceColors[key] ?? surface.hex(from: viewModel)
+            surfaceColorBaseline = (key: key, hex: before)
+        } else {
+            surfaceColorBaseline = nil
+        }
         activeColorSurface = surface
-        selectedColorSurface = nil
+        selectedSurfacePaint = nil
+    }
+
+    private func resolvedSurfaceHex(surface: PreviewColorSurface, key: String?) -> String {
+        if let key, !key.isEmpty,
+           let override = viewModel.webSurfaceColors[key],
+           override.hasPrefix("#") {
+            return WebColorPalettes.normalizeHex(override)
+        }
+        return surface.hex(from: viewModel)
+    }
+
+    private func surfaceSheetTitle(_ surface: PreviewColorSurface, key: String?) -> String {
+        let k = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if k == "luxe.about" || k == "stonecut.about" { return "Home about" }
+        if k == "stonecut.location" { return "Location" }
+        if k == "stonecut.when" { return "Hours" }
+        if k == "stonecut.where" { return "Where" }
+        if k == "studio12.when" { return "Hours" }
+        if k == "studio12.bookCta" { return "Book CTA" }
+        if k == "studio12.where" { return "Find us" }
+        if k == "studio12.map" { return "Map" }
+        if k == "studio12.info" { return "Location" }
+        if k == "studio12.philosophy" { return "Philosophy" }
+        if k == "luxe.contact" { return "Contact" }
+        if k == "luxe.legal" || k.hasSuffix(".footer") { return "Footer" }
+        if k == "luxe.team" || k == "stonecut.team" || k == "studio12.team" { return "Meet the team" }
+        if k == "luxe.featured" { return "Featured work" }
+        if k.hasSuffix(".gallery") && !k.hasSuffix("galleryPage") { return "Gallery preview" }
+        if k == "studio12.process" { return "Process" }
+        if k == "studio12.testimonials" { return "Testimonials" }
+        if k.hasSuffix(".bookingPage") { return "Booking page" }
+        if k.hasSuffix(".bookingCard") { return "Booking card" }
+        if k.hasSuffix(".shopPage") { return "Shop page" }
+        if k.hasSuffix(".galleryPage") { return "Gallery page" }
+        if k.hasSuffix(".teamPage") || k.hasSuffix(".memberPage") { return "Team page" }
+        if k == "charter.chartersPage" { return "Our charters" }
+        if k == "charter.featured" { return "Featured section" }
+        if k.contains(".featCard.") { return "Featured charter" }
+        if k.contains(".homeProduct.") { return "Shop preview card" }
+        if k.contains(".shopProduct.") { return "Product card" }
+        if k == "charter.quoteCard" { return "Quote card" }
+        if k == "charter.stickyBook" { return "Booking card" }
+        if k == "charter.captain" { return "Captain card" }
+        if k.contains(".howStep.") { return "How it works step" }
+        if k == "charter.aboutContact" { return "Contact captain" }
+        if k.contains(".addon.") { return "Add-on" }
+        if k == "charter.orderCard" { return "Order summary" }
+        if k == "charter.confirmCard" { return "Confirmation card" }
+        if k.hasSuffix(".nav") { return "Header" }
+        if k.hasSuffix(".services") { return "Services" }
+        if k.contains(".svcCard.") { return "Service card" }
+        if k.contains(".homeTeamCard.") || k.contains(".teamCard.") { return "Team card" }
+        if k.contains(".testimonialCard.") { return "Testimonial" }
+        if k.contains(".processStep.") { return "Experience step" }
+        if k.hasSuffix(".shop") { return "Shop preview" }
+        if k.hasSuffix(".hero") { return "Hero" }
+        return surface.label
+    }
+
+    private func commitSurfaceColorBaselineIfNeeded() {
+        guard let baseline = surfaceColorBaseline else { return }
+        surfaceColorBaseline = nil
+        let after = viewModel.webSurfaceColors[baseline.key] ?? baseline.hex
+        history.recordSurfaceColor(key: baseline.key, before: baseline.hex, after: after)
     }
 
     /// Opens Background / Text / Button color; clears binding so the same CTA can be tapped again after Done.
     private func presentChromeColor(_ target: PreviewQuickEditColorTarget) {
         beginColorChangeBaseline()
+        if target == .button {
+            let key = (selectedChromeCtaKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            activeButtonColorKey = key.isEmpty ? nil : key
+            if let key = activeButtonColorKey {
+                let before = viewModel.webButtonColors[key] ?? viewModel.primaryColorHex
+                buttonColorBaseline = (key: key, hex: before)
+            } else {
+                buttonColorBaseline = nil
+            }
+        } else {
+            activeButtonColorKey = nil
+            buttonColorBaseline = nil
+        }
         activeColorTarget = target
         selectedChromeColorTarget = nil
+        selectedChromeCtaKey = nil
+    }
+
+    private func commitButtonColorBaselineIfNeeded() {
+        guard let baseline = buttonColorBaseline else { return }
+        buttonColorBaseline = nil
+        let after = viewModel.webButtonColors[baseline.key] ?? baseline.hex
+        history.recordButtonColor(key: baseline.key, before: baseline.hex, after: after)
     }
 
     private func fontSizeStepper(focus: QuickEditInlineFocus) -> some View {
@@ -611,6 +888,7 @@ struct PreviewQuickEditChrome: View {
             colorHex: focus.colorHex,
             colorRole: focus.colorRole
         )
+        viewModel.webTextFontSizes[focus.key] = String(next)
         Task { await viewModel.persistQuickEditFontSize(fieldKey: focus.key, px: next) }
     }
 
@@ -618,7 +896,13 @@ struct PreviewQuickEditChrome: View {
         switch target {
         case .background: return viewModel.backgroundColorHex
         case .text: return viewModel.textColorHex
-        case .button: return viewModel.primaryColorHex
+        case .button:
+            if let key = activeButtonColorKey,
+               let override = viewModel.webButtonColors[key],
+               !override.isEmpty {
+                return override
+            }
+            return viewModel.primaryColorHex
         }
     }
 
@@ -630,6 +914,8 @@ struct PreviewQuickEditChrome: View {
             current.colorHex = normalized
             inlineFocus = current
         }
+        // Keep ViewModel map warm so Edit-off persist cannot miss a cancelled debounce.
+        viewModel.setQuickEditTextColorLocally(fieldKey: focus.key, hex: normalized)
         scheduleFocusedTextColorSave(key: focus.key, hex: normalized)
     }
 
@@ -657,19 +943,68 @@ struct PreviewQuickEditChrome: View {
         case .background:
             viewModel.backgroundColorHex = normalized
             viewModel.syncPreviewHeroSlotColorFromTokens()
+            colorsDirty = true
+            pushPreviewColors()
         case .text:
-            viewModel.textColorHex = normalized
+            if let focus = inlineFocus {
+                applyFocusedElementColor(hex: normalized, focus: focus)
+            } else {
+                viewModel.textColorHex = normalized
+                colorsDirty = true
+                pushPreviewColors()
+            }
         case .button:
-            viewModel.primaryColorHex = normalized
-            viewModel.primaryColorHoverHex = PreviewQuickEditChrome.derivedHoverHex(for: normalized)
-            viewModel.syncPreviewHeroSlotColorFromTokens()
+            // Per-CTA override when a `data-cta-key` is focused; otherwise global primary.
+            if let key = activeButtonColorKey, !key.isEmpty {
+                viewModel.webButtonColors[key] = normalized
+                bridge.applyButtonColors(viewModel.webButtonColors)
+                // Persist promptly — do not rely only on debounce surviving Edit-off.
+                Task { await viewModel.persistQuickEditButtonColor(fieldKey: key, hex: normalized) }
+                scheduleButtonColorSave(key: key, hex: normalized)
+            } else {
+                viewModel.primaryColorHex = normalized
+                viewModel.primaryColorHoverHex = PreviewQuickEditChrome.derivedHoverHex(for: normalized)
+                viewModel.syncPreviewHeroSlotColorFromTokens()
+                colorsDirty = true
+                pushPreviewColors()
+            }
         }
-        colorsDirty = true
-        pushPreviewColors()
+    }
+
+    private func scheduleButtonColorSave(key: String, hex: String) {
+        buttonColorSaveTask?.cancel()
+        buttonColorSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await viewModel.persistQuickEditButtonColor(fieldKey: key, hex: hex)
+        }
+    }
+
+    private func flushButtonColorSave() {
+        buttonColorSaveTask?.cancel()
+        buttonColorSaveTask = nil
+        guard let key = activeButtonColorKey ?? buttonColorBaseline?.key else { return }
+        let hex = viewModel.webButtonColors[key] ?? viewModel.primaryColorHex
+        Task { await viewModel.persistQuickEditButtonColor(fieldKey: key, hex: hex) }
     }
 
     private func applySurfaceColor(surface: PreviewColorSurface, hex: String) {
         let normalized = WebColorPalettes.normalizeHex(hex)
+        // Per-band override when a `data-bk-surface-key` is focused; otherwise shared role tokens.
+        if let key = activeSurfaceKey, !key.isEmpty {
+            viewModel.webSurfaceColors[key] = normalized
+            bridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
+            )
+            bridge.applySurfaceColors(viewModel.webSurfaceColors)
+            // Persist immediately so Edit-off / navigation cannot cancel a debounced write.
+            Task { await viewModel.persistQuickEditSurfaceColor(fieldKey: key, hex: normalized) }
+            scheduleSurfaceColorSave(key: key, hex: normalized)
+            return
+        }
         surface.applyColorHex(normalized, to: viewModel)
         if surface == .page {
             viewModel.syncPreviewHeroSlotColorFromTokens()
@@ -684,9 +1019,28 @@ struct PreviewQuickEditChrome: View {
         pushPreviewColors(heroSlotOverride: heroOverride, fullBandPass: needsFullBandPass(surface))
     }
 
+    private func scheduleSurfaceColorSave(key: String, hex: String) {
+        surfaceColorSaveTask?.cancel()
+        surfaceColorSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await viewModel.persistQuickEditSurfaceColor(fieldKey: key, hex: hex)
+        }
+    }
+
+    private func flushSurfaceColorSave() {
+        surfaceColorSaveTask?.cancel()
+        surfaceColorSaveTask = nil
+        guard let key = activeSurfaceKey ?? surfaceColorBaseline?.key else { return }
+        let hex = viewModel.webSurfaceColors[key]
+            ?? surfaceColorBaseline?.hex
+            ?? viewModel.backgroundColorHex
+        Task { await viewModel.persistQuickEditSurfaceColor(fieldKey: key, hex: hex) }
+    }
+
     private func needsFullBandPass(_ surface: PreviewColorSurface) -> Bool {
         switch surface {
-        case .card, .featured, .gallery, .about: return true
+        case .card, .featured, .gallery, .about, .sidebar, .sidebarOpen, .sidebarClose, .sidebarText: return true
         case .page, .hero: return false
         }
     }
@@ -698,8 +1052,8 @@ struct PreviewQuickEditChrome: View {
         )
     }
 
-    func openColorSurface(_ surface: PreviewColorSurface) {
-        presentColorSurface(surface)
+    func openColorSurface(_ surface: PreviewColorSurface, surfaceKey: String? = nil) {
+        presentColorSurface(surface, surfaceKey: surfaceKey)
     }
 
     /// Simple hover for live button color tweaks (full palette save still uses stored hover on commit).

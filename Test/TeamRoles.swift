@@ -407,8 +407,8 @@ struct TenantTeamMember: Identifiable, Equatable {
 /// Editable per-member website visibility in Design → Manage → Team.
 struct TeamMemberVisibilityDraft: Identifiable, Equatable {
     let uid: String
-    let displayName: String
-    let jobTitle: String
+    var displayName: String
+    var jobTitle: String
     var profilePhotoUrl: String
     let memberSlug: String
     let accessRole: TeamAccessRole

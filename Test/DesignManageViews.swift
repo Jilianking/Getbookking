@@ -919,6 +919,8 @@ struct ManageBookTabContent: View {
     @Binding var serviceToEdit: TenantService?
     @State private var showFormStylePicker = false
     @State private var showFormFieldsSheet = false
+    @State private var reviewEditIndex: Int?
+    @State private var bookSubmitLabelSaveTask: Task<Void, Never>?
 
     private var controlsDisabled: Bool {
         !viewModel.hasTenant || viewModel.isLoading || viewModel.isDemoReadOnly
@@ -962,14 +964,48 @@ struct ManageBookTabContent: View {
                 }
 
                 ManageCardDivider()
-                ManageToggleRow(
-                    title: "Book page enabled",
-                    subtitle: "Visible at /book on your site",
-                    isOn: $viewModel.showBookPage,
-                    disabled: controlsDisabled
-                ) {
-                    Task { await viewModel.savePublicPageVisibility() }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Confirm booking button")
+                        .font(.body.weight(.medium))
+                    TextField("Request booking", text: $viewModel.bookSubmitLabel)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(controlsDisabled)
+                        .onSubmit {
+                            bookSubmitLabelSaveTask?.cancel()
+                            Task { await viewModel.persistBookSubmitLabel() }
+                        }
+                        .onChange(of: viewModel.bookSubmitLabel) { _, _ in
+                            bookSubmitLabelSaveTask?.cancel()
+                            bookSubmitLabelSaveTask = Task {
+                                try? await Task.sleep(nanoseconds: 500_000_000)
+                                guard !Task.isCancelled else { return }
+                                await viewModel.persistBookSubmitLabel()
+                            }
+                        }
+                    HStack {
+                        Text("Button color")
+                            .font(.subheadline)
+                        Spacer()
+                        ColorPicker(
+                            "",
+                            selection: Binding(
+                                get: {
+                                    Color(hex: viewModel.webButtonColors[DesignViewModel.bookSubmitCopyKey]
+                                          ?? viewModel.primaryColorHex)
+                                },
+                                set: { color in
+                                    let hex = color.toHex()
+                                    viewModel.webButtonColors[DesignViewModel.bookSubmitCopyKey] = hex
+                                    Task { await viewModel.persistBookSubmitColor(hex) }
+                                }
+                            )
+                        )
+                        .labelsHidden()
+                        .disabled(controlsDisabled)
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
 
             ManageSectionHeader("Services")
@@ -1024,6 +1060,99 @@ struct ManageBookTabContent: View {
                         .padding(.bottom, 12)
                 }
             }
+
+            if viewModel.showsSiteReviewsEditor {
+                ManageSectionHeader("Reviews")
+                Text("Shown next to Book on the home page (What they say). Up to \(DesignViewModel.siteReviewsLimit) reviews.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ManageCard {
+                    if viewModel.reviews.isEmpty {
+                        Text("No reviews yet—add one to show the testimonials column.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(14)
+                    } else {
+                        ForEach(Array(viewModel.reviews.enumerated()), id: \.element.id) { index, review in
+                            if index > 0 { ManageCardDivider() }
+                            HStack(alignment: .top, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(review.name.isEmpty ? "Client" : review.name)
+                                        .font(.subheadline.weight(.semibold))
+                                    if !review.service.isEmpty {
+                                        Text(review.service)
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(review.quote.isEmpty ? "No quote yet" : "“\(review.quote)”")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 0)
+                                VStack(spacing: 6) {
+                                    Button("Edit") { reviewEditIndex = index }
+                                        .buttonStyle(.bordered)
+                                        .disabled(controlsDisabled)
+                                    HStack(spacing: 4) {
+                                        Button {
+                                            viewModel.moveSiteReview(from: index, direction: -1)
+                                            Task { await viewModel.persistSiteReviews() }
+                                        } label: {
+                                            Image(systemName: "chevron.up")
+                                        }
+                                        .disabled(controlsDisabled || index == 0)
+                                        Button {
+                                            viewModel.moveSiteReview(from: index, direction: 1)
+                                            Task { await viewModel.persistSiteReviews() }
+                                        } label: {
+                                            Image(systemName: "chevron.down")
+                                        }
+                                        .disabled(controlsDisabled || index >= viewModel.reviews.count - 1)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    Button("Delete", role: .destructive) {
+                                        viewModel.deleteSiteReview(at: index)
+                                        Task { await viewModel.persistSiteReviews() }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(controlsDisabled)
+                                }
+                            }
+                            .padding(14)
+                        }
+                    }
+
+                    if viewModel.reviews.count < DesignViewModel.siteReviewsLimit {
+                        if !viewModel.reviews.isEmpty { ManageCardDivider() }
+                        Button {
+                            viewModel.addSiteReview()
+                            reviewEditIndex = max(0, viewModel.reviews.count - 1)
+                        } label: {
+                            Label("Add review", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(controlsDisabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                    }
+                }
+            }
+
+            ManageSectionHeader("Page")
+            ManageCard {
+                ManageToggleRow(
+                    title: "Book page enabled",
+                    subtitle: "Visible at /book on your site",
+                    isOn: $viewModel.showBookPage,
+                    disabled: controlsDisabled
+                ) {
+                    Task { await viewModel.savePublicPageVisibility() }
+                }
+            }
         }
         .sheet(isPresented: $showFormStylePicker) {
             ManageBookingFormStylePickerSheet(viewModel: viewModel)
@@ -1035,6 +1164,14 @@ struct ManageBookTabContent: View {
                 ManageGuidedStepsSheet(viewModel: viewModel, serviceToEdit: $serviceToEdit)
             } else {
                 ManageFormFieldsSheet(viewModel: viewModel)
+            }
+        }
+        .sheet(item: Binding(
+            get: { reviewEditIndex.map { SiteReviewEditItem(id: $0) } },
+            set: { reviewEditIndex = $0?.id }
+        )) { item in
+            EditSiteReviewManageSheet(reviewIndex: item.id, viewModel: viewModel) {
+                reviewEditIndex = nil
             }
         }
     }
@@ -2595,6 +2732,69 @@ private struct EditCharterHowItWorksStepSheet: View {
 
 private struct CharterFaqEditItem: Identifiable {
     let id: Int
+}
+
+private struct SiteReviewEditItem: Identifiable {
+    let id: Int
+}
+
+private struct EditSiteReviewManageSheet: View {
+    let reviewIndex: Int
+    @ObservedObject var viewModel: DesignViewModel
+    let onDismiss: () -> Void
+    @State private var quoteText = ""
+    @State private var nameText = ""
+    @State private var serviceText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Quote", text: $quoteText, axis: .vertical)
+                    .lineLimit(3...8)
+                TextField("Name", text: $nameText)
+                TextField("Service (optional)", text: $serviceText)
+            }
+            .navigationTitle("Edit review")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        if viewModel.reviews.indices.contains(reviewIndex) {
+                            let rev = viewModel.reviews[reviewIndex]
+                            if rev.quote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                && rev.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                && rev.service.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                viewModel.deleteSiteReview(at: reviewIndex)
+                            }
+                        }
+                        onDismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let quote = quoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let name = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let service = serviceText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        viewModel.updateSiteReview(
+                            at: reviewIndex,
+                            quote: quote,
+                            name: name.isEmpty ? "Client" : name,
+                            service: service
+                        )
+                        Task { await viewModel.persistSiteReviews() }
+                        onDismiss()
+                    }
+                    .disabled(quoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear {
+            guard viewModel.reviews.indices.contains(reviewIndex) else { return }
+            quoteText = viewModel.reviews[reviewIndex].quote
+            nameText = viewModel.reviews[reviewIndex].name
+            serviceText = viewModel.reviews[reviewIndex].service
+        }
+    }
 }
 
 private struct EditCharterFaqManageSheet: View {

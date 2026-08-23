@@ -9,15 +9,16 @@
   --bh-cream: var(--bk-fg, #f5f0e8);
   --bh-grey: var(--bk-fg-muted, rgba(245, 240, 232, 0.58));
   --bh-line: var(--bk-accent-22, rgba(201, 168, 76, 0.22));
+  --bh-nav-height: 80px;
   min-height: 100vh;
   background: var(--bh-black);
   color: var(--bh-cream);
   font-family: 'Barlow', sans-serif;
   font-weight: 300;
   overflow-x: hidden;
-  padding-top: 88px;
+  padding-top: var(--bh-nav-height);
 }
-.blade-page--sub { padding-top: 96px; }
+.blade-page--sub { padding-top: var(--bh-nav-height); }
 /* Book / shop / success roots (fixed chrome excluded): footer pins to viewport when content is short. */
 .tattoo-page.blade-page.blade-page--sub,
 .tattoo-page.classic-home,
@@ -37,12 +38,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  min-height: var(--bh-nav-height);
+  box-sizing: border-box;
   padding: 22px 40px;
-  background: transparent;
+  /* Opaque by default so page/home paint does not recolor the header. */
+  background: var(--bh-nav-bg, var(--bh-charcoal, #141410));
   transition: background 0.25s ease, backdrop-filter 0.25s ease;
 }
 .blade-page .blade-topnav.scrolled {
-  background: color-mix(in srgb, var(--bk-bg, #0a0a08) 95%, transparent);
+  background: color-mix(in srgb, var(--bh-nav-bg, var(--bh-charcoal, #141410)) 95%, transparent);
   backdrop-filter: blur(10px);
 }
 .blade-page .blade-topnav::after {
@@ -108,8 +112,8 @@
   line-height: 0;
   cursor: pointer;
   padding: 8px !important;
-  color: var(--bh-gold) !important;
-  -webkit-text-fill-color: var(--bh-gold) !important;
+  color: var(--bk-sidebar-open-icon, var(--bh-gold)) !important;
+  -webkit-text-fill-color: var(--bk-sidebar-open-icon, var(--bh-gold)) !important;
   align-items: center;
   justify-content: center;
   min-width: 44px;
@@ -253,7 +257,7 @@
 .blade-page .blade-hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to right, var(--bh-black) 0%, transparent 42%);
+  background: linear-gradient(to right, var(--bh-charcoal, #141410) 0%, transparent 42%);
   pointer-events: none;
 }
 .blade-page .blade-hero-vertical {
@@ -299,8 +303,9 @@
   color: var(--bh-grey);
 }
 .blade-page .blade-section {
-  padding: 96px 40px;
+  padding: 96px 40px 0;
   position: relative;
+  margin: 0;
 }
 /** Fixed Blade topnav: keep section headings visible when jumping via #services */
 .blade-page #services {
@@ -339,8 +344,8 @@
 .blade-page .blade-services-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--bh-line);
+  gap: 0;
+  background: transparent;
 }
 .blade-page .blade-service-card {
   background: var(--bh-charcoal);
@@ -414,12 +419,17 @@
 .blade-page .blade-gallery-strip {
   padding: 96px 0 96px 40px;
   overflow: hidden;
+  margin: 0;
+}
+.blade-page .blade-shop-preview {
+  padding: 72px 40px 96px;
+  margin: 0;
 }
 .blade-page .blade-gallery-marquee {
   display: flex;
   gap: 14px;
   margin-top: 56px;
-  animation: blade-marquee 32s linear infinite;
+  animation: blade-marquee 12s linear infinite;
   width: max-content;
 }
 .blade-page .blade-gallery-marquee:hover { animation-play-state: paused; }
@@ -495,12 +505,12 @@
 .blade-page .blade-testimonials-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--bh-line);
+  gap: 0;
+  background: transparent;
   margin-top: 56px;
 }
 .blade-page .blade-testimonial-card {
-  background: var(--bh-black);
+  background: var(--bh-charcoal);
   padding: 40px 32px;
 }
 .blade-page .blade-testimonial-stars { color: var(--bh-gold); font-size: 14px; letter-spacing: 4px; margin-bottom: 18px; }
@@ -587,7 +597,7 @@
 .blade-page footer.blade-footer {
   position: relative;
   z-index: 101;
-  background: var(--bk-about-bg, var(--bh-black));
+  background: var(--bk-about-bg, var(--bh-charcoal, #141410));
   color: var(--bk-about-fg, var(--bh-cream));
   border-top: 1px solid var(--bh-line);
   padding: 44px 40px;
@@ -598,16 +608,17 @@
   gap: 24px;
   text-align: center;
 }
+/* Footer ink follows about tokens — not page --bk-fg (Soft Neutral etc. are dark-on-dark otherwise). */
 .blade-page .blade-footer-logo {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 20px;
   letter-spacing: 0.18em;
-  color: var(--bh-gold);
+  color: var(--bk-about-fg, currentColor);
 }
 .blade-page .blade-footer-copy {
   font-size: 11px;
   letter-spacing: 0.12em;
-  color: color-mix(in srgb, var(--bk-about-fg, var(--bh-cream)) 58%, transparent);
+  color: color-mix(in srgb, var(--bk-about-fg, currentColor) 78%, transparent);
   margin: 0;
   width: 100%;
   max-width: 560px;
@@ -628,7 +639,7 @@
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--bh-grey);
+  color: color-mix(in srgb, var(--bk-about-fg, currentColor) 88%, transparent);
   text-decoration: none;
   transition: color 0.3s;
   cursor: pointer;
@@ -638,11 +649,13 @@
   min-height: 44px;
   box-sizing: border-box;
 }
-.blade-page .blade-footer-links a:hover { color: var(--bh-gold); }
+.blade-page .blade-footer-links a:hover {
+  color: var(--bk-about-fg, currentColor);
+}
 .blade-page .blade-footer-links a:focus-visible {
-  outline: 2px solid var(--bh-gold);
+  outline: 2px solid var(--bk-accent, var(--bh-gold));
   outline-offset: 2px;
-  color: var(--bh-gold);
+  color: var(--bk-about-fg, currentColor);
 }
 .blade-page .blade-fade-up {
   opacity: 0;
@@ -652,7 +665,7 @@
 .blade-page .blade-fade-up.blade-visible { opacity: 1; transform: translateY(0); }
 .blade-page .blade-shop-page-shell {
   padding: 32px 40px 72px;
-  background: var(--bh-black);
+  background: var(--bh-charcoal);
   min-height: 50vh;
 }
 
@@ -673,12 +686,55 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.blade-page.blade-page--sub .gallery-grid .gallery-grid-link { border-radius: 4px; }
+.blade-page.blade-page--sub .gallery-grid .gallery-grid-link { border-radius: 0; }
 .blade-page.blade-page--sub .gallery-grid img { border-radius: 0; }
 .blade-page.blade-page--sub .gallery-empty-hint { color: var(--bh-grey); }
+/* /gallery paint fills the whole band down to the footer; images sit flush. */
+.gallery-page.blade-page.blade-page--sub .gallery-page-band {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-page-band > .bk-band-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-shell {
+  flex: 1 1 auto;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-grid {
+  gap: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-alt--masonry {
+  column-gap: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-alt-masonry-cell {
+  margin-bottom: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-alt--cinematic {
+  gap: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-alt--strip {
+  gap: 0;
+}
+.gallery-page.blade-page.blade-page--sub .gallery-alt .gallery-grid-link {
+  border-radius: 0;
+}
+/* Transparent so `blade.bookingPage` / page-band paint shows through (form card stays independent). */
 .blade-page .booking-shell {
-  background: var(--bh-black) !important;
+  background: transparent !important;
   color: var(--bh-cream) !important;
+}
+.blade-page:has(.booking-shell) .booking-page-band {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .tattoo-page.blade-page.blade-page--sub .booking-shell,
 .luxe-page.luxe-page--sub .booking-shell,
@@ -710,10 +766,11 @@
   box-shadow: none !important;
 }
 .blade-page .booking-form label { color: var(--bh-grey); }
+/* Wells track card charcoal — not `--bh-black`/`--bk-bg` — so page paint doesn't swallow field text. */
 .blade-page .booking-form input,
 .blade-page .booking-form textarea,
 .blade-page .booking-form select {
-  background: var(--bh-black) !important;
+  background: color-mix(in srgb, var(--bh-charcoal) 78%, #000 22%) !important;
   border-color: var(--bh-line) !important;
   color: var(--bh-cream) !important;
 }
@@ -778,9 +835,11 @@
   .blade-page .blade-book-panel--with-reviews .blade-book-panel-inner { grid-template-columns: 1fr; }
   .blade-page .blade-info-section { grid-template-columns: 1fr; }
   .blade-page .blade-info-half:first-child { border-right: none; border-bottom: 1px solid var(--bh-line); }
+  .blade-page { --bh-nav-height: 68px; }
   .blade-page .blade-topnav { padding: 18px 20px; }
   .blade-page .blade-topnav::after { left: 20px; right: 20px; }
   .blade-page .blade-section,
+  .blade-page .blade-shop-preview,
   .blade-page .blade-about-block,
   .blade-page .blade-gallery-strip,
   .blade-page .blade-book-panel,

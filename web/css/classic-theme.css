@@ -3,7 +3,9 @@
 .book-legal-footer .classic-footer-copy { text-align: center; }
 
 .bk-team-roster-section--classic {
-  --bk-team-roster-photo-bg: color-mix(in srgb, var(--bk-fg) 5%, var(--bk-card));
+  /* Neutral photo slot — do not track band --bk-fg (light fg on dark bands washed out initials). */
+  --bk-team-roster-photo-bg: #e4e2dd;
+  --bk-team-roster-initials: #1a1a1a;
   padding: 64px 24px 56px;
 }
 .bk-team-roster-section--classic .bk-team-roster-title {
@@ -17,12 +19,24 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--bk-accent);
+  /* Inherit band text (aboutFg / painted color), not global --bk-fg (stays dark on dark bands). */
+  color: color-mix(in srgb, currentColor 55%, transparent);
   font-weight: 600;
   margin: 0 0 10px;
 }
+.bk-team-roster-section--classic .bk-team-roster-initials {
+  color: color-mix(in srgb, var(--bk-team-roster-initials) 72%, transparent);
+}
 .bk-team-roster-section--classic .bk-team-roster-bio {
   font-style: normal;
+}
+
+.bk-team-member-section--classic {
+  --bk-team-roster-photo-bg: #e4e2dd;
+  --bk-team-roster-initials: #1a1a1a;
+}
+.bk-team-member-section--classic .bk-team-member-initials {
+  color: color-mix(in srgb, var(--bk-team-roster-initials, #1a1a1a) 72%, transparent);
 }
 
 .classic-home .tattoo-featured-slot-add { border-radius: 8px; }
@@ -38,6 +52,10 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+/* `/shop` canvas: keyed fill via `classic.shopPage` — not header `--bk-bg`, not footer. */
+.tattoo-page.classic-home .luxe-shop-page-shell[data-bk-surface-key="classic.shopPage"] {
+  background: transparent;
+}
 
 /* ─── Classic redesign (warm cream, split hero, services, stats) ─── */
 .classic-home {
@@ -52,7 +70,7 @@
   justify-content: flex-start;
 }
 .tattoo-page.classic-home .booking-page-eyebrow {
-  color: var(--bk-accent, #8B6F47);
+  color: var(--bk-accent-ink, var(--bk-accent, #8B6F47));
 }
 .tattoo-page.classic-home .booking-page-title {
   color: var(--bk-fg, #1a1a1a);
@@ -96,6 +114,8 @@
      while the text column still has room for the title + CTAs. */
   grid-template-columns: 5fr 7fr;
   position: relative;
+  /* Independent of page `--bk-bg` when `classic.hero` override / `--bk-hero-bg` is set. */
+  background: var(--bk-hero-bg, var(--bk-bg, #ffffff));
   /* Symmetric gutters (matches Stonecut) so the photo is not flush to the viewport. */
   padding-top: 36px;
   padding-left: clamp(20px, 4vw, 48px);
@@ -132,8 +152,10 @@
 }
 .classic-home-page .classic-hero-title-row .classic-hero-name {
   margin: 0;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  width: max-content;
+  max-width: 100%;
   text-align: left;
 }
 .classic-home-page .classic-hero-nav-menu {
@@ -144,6 +166,8 @@
 }
 .classic-home-page .classic-hero-left > .classic-hero-tag {
   margin: 0 0 20px;
+  width: max-content;
+  max-width: 100%;
 }
 @media (min-width: 769px) {
   .classic-home-page .classic-hero-title-row {
@@ -501,7 +525,8 @@
     position: static !important;
   }
   .classic-home-page .classic-hero-title-row .classic-hero-name {
-    padding-right: 96px !important;
+    padding-right: 0 !important;
+    max-width: calc(100% - 96px);
   }
   /* Cart + ☰ grouped top-right on mobile home. */
   .classic-home-page .classic-hero-nav-actions {

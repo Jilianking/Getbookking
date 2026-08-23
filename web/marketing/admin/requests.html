@@ -69,7 +69,7 @@
 
   <script src="/js/firebase-config.js"></script>
   <script src="/assets/portal-origins.js?v=1"></script>
-  <script src="/assets/admin.js?v=6"></script>
+  <script src="/assets/admin.js?v=7"></script>
   <script src="/assets/firebase-loader.js?v=1"></script>
   <script>
     var activePlan = 'all';
@@ -271,12 +271,10 @@
           statCard('Shop signups', stats.shopUsed) +
         '</div>' +
         '<div class="admin-filters" id="planFilters"></div>' +
-        '<div class="admin-card admin-table-wrap" id="tableWrap"></div>' +
-        '<div class="admin-split" id="splitPanels"></div>';
+        '<div class="admin-card admin-table-wrap" id="tableWrap"></div>';
 
       renderFilters();
       renderTable();
-      renderSplitPanels();
 
       document.getElementById('exportBtn').addEventListener('click', exportCsv);
       document.getElementById('inviteBtn').addEventListener('click', openInviteModal);
@@ -385,44 +383,6 @@
           openDetailModal(row.getAttribute('data-request-id'));
         });
       });
-    }
-
-    function renderSplitPanels() {
-      var bugs = dashboardData.recentBugs || [];
-      var reports = dashboardData.recentReports || [];
-      var insight = (reports[0] && reports[0].insight) || dashboardData.settings.weeklyInsight || '';
-
-      document.getElementById('splitPanels').innerHTML =
-        '<section class="admin-panel">' +
-          '<div class="admin-panel-head"><h2>Bug reports</h2><a href="/admin/bugs">View all</a></div>' +
-          '<div class="admin-list">' +
-            (bugs.length ? bugs.map(bugItem).join('') : '<div class="admin-empty">No bug reports yet.</div>') +
-          '</div>' +
-        '</section>' +
-        '<section class="admin-panel">' +
-          '<div class="admin-panel-head"><h2>Weekly reports</h2><a href="/admin/reports">View all</a></div>' +
-          '<div class="admin-list">' +
-            (reports.length ? reports.map(reportItem).join('') : '<div class="admin-empty">No weekly reports yet.</div>') +
-          '</div>' +
-          (insight ? '<div class="admin-insight">✨ Top theme: ' + BetaAdmin.escapeHtml(insight) + '</div>' : '') +
-        '</section>';
-    }
-
-    function bugItem(bug) {
-      return '<div class="admin-list-item">' +
-        '<span class="severity severity--' + BetaAdmin.escapeHtml(bug.severity || 'medium') + '">' +
-          (bug.severity || 'med') + '</span>' +
-        '<div><div class="admin-list-title">' + BetaAdmin.escapeHtml(bug.title) + '</div>' +
-        '<div class="admin-list-meta">' + BetaAdmin.escapeHtml(bug.reporterName || 'Tester') +
-          ' · iOS ' + BetaAdmin.escapeHtml(bug.iosVersion || '—') +
-          ' · ' + BetaAdmin.timeAgo(bug.createdAt) + '</div></div></div>';
-    }
-
-    function reportItem(report) {
-      return '<div class="admin-list-item">' +
-        '<div style="grid-column: span 2"><div class="admin-list-title">' +
-          BetaAdmin.escapeHtml(report.weekLabel || report.title) + '</div>' +
-        '<div class="admin-list-meta">' + (report.submissionCount || 0) + ' submitted</div></div></div>';
     }
 
     function showApproveResult(res) {

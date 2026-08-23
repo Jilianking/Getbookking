@@ -6,9 +6,7 @@
 
   var NAV_ITEMS = {
     beta: [
-      { id: 'requests', href: ADMIN_BASE + '/requests', label: 'Requests', badgeKey: 'pending' },
-      { id: 'bugs', href: ADMIN_BASE + '/bugs', label: 'Bug reports', badgeKey: 'openBugs' },
-      { id: 'reports', href: ADMIN_BASE + '/reports', label: 'Weekly reports' }
+      { id: 'requests', href: ADMIN_BASE + '/requests', label: 'Requests', badgeKey: 'pending' }
     ],
     app: [
       { id: 'testflight', href: ADMIN_BASE + '/testflight', label: 'TestFlight' },

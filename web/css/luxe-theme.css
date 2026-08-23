@@ -6,6 +6,21 @@
   color: var(--bk-fg, #1a1a1a);
   font-family: var(--font-display);
 }
+.luxe-page.luxe-page--sub {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.luxe-page.luxe-page--sub .luxe-shop-page-shell,
+.luxe-page.luxe-page--sub .booking-page-band,
+.luxe-page.luxe-page--sub .bk-team-page-band {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.luxe-page.luxe-page--sub .luxe-shop-page-shell[data-bk-surface-key] {
+  background: transparent;
+}
 .luxe-nav {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -374,10 +389,53 @@
   padding: 8px 22px 18px;
   border-top: 1px solid rgba(26,26,26,0.1);
 }
+/* Home shop preview: full-bleed card band (no cream page gap before promo). */
+.luxe-shop-preview-home {
+  margin: 0;
+  padding: 64px 40px 72px;
+  background: var(--bk-card, #f5f5f5);
+  box-sizing: border-box;
+}
+.luxe-shop-preview-home + .luxe-promo,
+.luxe-shop-preview-home + .luxe-home-services-band,
+.luxe-home-services-band + .luxe-promo {
+  margin-top: 0;
+}
+.luxe-shop-view-all {
+  display: inline-block;
+  padding: 12px 28px;
+  background: var(--bk-accent, #1a1a1a);
+  color: var(--bk-accent-fg, #fff);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: none;
+  transition: background 0.2s;
+}
+.luxe-shop-view-all:hover {
+  background: var(--bk-accent-hover, #333);
+  color: var(--bk-accent-fg, #fff);
+  text-decoration: none;
+}
 .luxe-promo {
   background: var(--bk-card, #E8E0D0);
   padding: 64px 40px;
   text-align: center;
+  margin: 0;
+}
+.luxe-promo + .luxe-team-section,
+.luxe-promo + .bk-team-roster-section--home,
+.luxe-team-section + .bk-team-roster-section--home {
+  margin-top: 0;
+}
+.luxe-team-section {
+  padding: 80px 40px;
+  margin: 0;
+  background: var(--bk-card, #f5f5f5);
+  box-sizing: border-box;
 }
 .luxe-promo-inner {
   max-width: 680px;
@@ -412,10 +470,6 @@
 .luxe-promo-cta:hover { background: var(--bk-accent-hover, #333); }
 .luxe-shop-section { padding: 80px 40px; background: var(--bk-bg, #FFFDF9); }
 .luxe-page .bk-shop-nav-cart { color: var(--bk-fg, #1a1a1a); }
-.luxe-team-section {
-  padding: 80px 40px;
-  background: var(--bk-featured-bg, var(--bk-bg, #F5F0E8));
-}
 .luxe-team-inner {
   max-width: 1200px;
   margin: 0 auto;
@@ -494,16 +548,17 @@
   letter-spacing: 0.12em;
   color: color-mix(in srgb, var(--bk-about-fg, #fff) 42%, transparent);
 }
+/* Transparent so `luxe.bookingPage` / page-band paint shows (form card stays independent). */
 .luxe-page .booking-shell {
-  background: var(--bk-bg, #FFFDF9);
+  background: transparent;
   color: var(--bk-fg, #1a1a1a);
 }
 .luxe-page .booking-page-title {
-  color: #1a1a1a;
+  color: var(--bk-fg, #1a1a1a);
   font-family: var(--font-hero);
 }
 .luxe-page .booking-page-subtitle {
-  color: #555;
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
 }
 .luxe-page .booking-page-eyebrow {
   color: var(--bk-accent, #C9A96E);
@@ -527,7 +582,7 @@
 }
 .luxe-page .booking-page-subtitle--tagline {
   font-family: var(--font-hero);
-  color: #555;
+  color: var(--bk-fg-muted, rgba(26, 26, 26, 0.58));
 }
 .luxe-page .booking-card {
   box-shadow: 0 12px 40px rgba(0,0,0,0.08);
@@ -564,6 +619,7 @@
   .luxe-services-grid { grid-template-columns: repeat(2, 1fr); }
   .luxe-services-section,
   .luxe-home-services-section,
+  .luxe-shop-preview-home,
   .luxe-promo,
   .luxe-team-section,
   .luxe-contact,

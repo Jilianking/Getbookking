@@ -76,6 +76,15 @@ struct CharterFaq: Identifiable, Equatable {
     var answer: String
 }
 
+/// Client testimonials on Blade / Studio 12 home (`reviews` in Firestore).
+struct SiteReview: Identifiable, Equatable {
+    var id: Int
+    var quote: String
+    var name: String
+    /// Optional service label shown after the name (e.g. "Personal training").
+    var service: String
+}
+
 class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var tenantId: String?
     @Published var tenantSlug: String?
@@ -126,6 +135,30 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var textColorHex: String = "#333333"
     @Published var primaryColorHex: String = "#000000"
     @Published var primaryColorHoverHex: String = "#333333"
+    /// Accent text (eyebrows / labels). Independent from CTA fill (`primaryColorHex`).
+    @Published var accentTextColorHex: String = "#000000"
+    /// Per-CTA fill overrides keyed by `data-cta-key` / label `data-edit-key` (Classic first).
+    @Published var webButtonColors: [String: String] = [:]
+    /// Per-band fill overrides keyed by `data-bk-surface-key` (Classic first). Empty → palette role token.
+    @Published var webSurfaceColors: [String: String] = [:]
+    /// Per-field text color overrides (`data-edit-key`). Empty → inherit.
+    @Published var webTextColors: [String: String] = [:]
+    /// Per-field font sizes in px (`data-edit-key`).
+    @Published var webTextFontSizes: [String: String] = [:]
+    static let bookSubmitCopyKey = "wc.book.submit"
+    static let bookSubmitDefaultLabel = "Request booking"
+    static let charterQuoteCopyKey = "wc.charter.quote"
+    static let charterQuoteByCopyKey = "wc.charter.quoteBy"
+    /// Label on `/book` Request booking (non-Charter). Empty → template default.
+    @Published var bookSubmitLabel: String = DesignViewModel.bookSubmitDefaultLabel
+    /// Coalesces style-map Firestore writes so rapid paints cannot overwrite each other.
+    private var styleMapPersistGeneration: Int = 0
+    /// Menu drawer fill. Defaults to `primaryColor` when unset in Firestore.
+    @Published var sidebarBackgroundColorHex: String = "#000000"
+    /// Drawer link / title color. Empty → auto contrast from sidebar background.
+    @Published var sidebarTextColorHex: String = ""
+    /// Close (×) icon inside the drawer. Empty → auto contrast from sidebar background (not text color).
+    @Published var sidebarCloseIconColorHex: String = ""
     @Published var successColorHex: String = "#22C55E"
     @Published var cardBorderRadius: Double = 12
     @Published var tagline: String = ""
@@ -169,8 +202,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var studio12ProcessSteps: [Studio12ProcessStep] = Studio12IndustryCopy.processSteps(for: .custom)
     /// Boat / Fishing charter How it works FAQs (`charterFaqs` in Firestore).
     @Published var charterFaqs: [CharterFaq] = DesignViewModel.defaultCharterFaqs
+    /// Home testimonials for Blade / Studio 12 (`reviews` in Firestore). Max 3 on the public site.
+    @Published var reviews: [SiteReview] = []
     /// Meeting point shown on charter confirmation (`webCopyOverrides.wc.charter.meetingPoint`).
     @Published var charterMeetingPoint: String = "Garrison Bight Marina"
+    /// Home quote card copy (`webCopyOverrides.wc.charter.quote` / `.quoteBy`; photo uses `galleryImages[0]`).
+    @Published var charterHomeQuote: String = ""
+    @Published var charterHomeQuoteBy: String = ""
     /// Two parts separated by ` · `; site renders first line + italic second line.
     @Published var studio12BookCtaHeadline: String = ""
     @Published var studio12BookCtaBody: String = ""
@@ -622,28 +660,44 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     private static let requiredWebCopyCtaDefaults: [String: String] = [
         "wc.luxe.heroCta": "Book Appointment",
         "wc.luxe.promoCta": "Book Now",
+        "wc.luxe.navBook": "Booking",
+        "wc.luxe.shopViewAll": "View full shop →",
         "wc.blade.navBook": "Book now",
         "wc.blade.bookPanelPrimary": "Book now",
         "wc.blade.heroBook": "Book appointment",
         "wc.stonecut.navBook": "Book",
         "wc.stonecut.heroBook": "Book a session",
         "wc.classic.heroBook": "Book now",
+        "wc.classic.navBook": "Book",
+        "wc.classic.heroGallery": "View work",
         "wc.classic.galleryLink": "View full gallery →",
         "wc.s12.navBook": "Book now",
+        "wc.s12.heroReserve": "Reserve your visit",
+        "wc.s12.exploreCta": "Explore services",
         "wc.s12.bookSectionCta": "Request appointment",
+        "wc.s12.shopViewAll": "View full shop",
         "wc.s12.galleryViewLink": "View gallery",
+        "wc.book.submit": "Request booking",
     ]
 
     /// Persists one `wc.*` quick-edit slot into `webCopyOverrides`.
     /// Empty value keeps `""` in the map so the slot stays intentionally blank (does not restore the template default),
     /// except required CTA labels which snap back to their template default.
-    private func persistWebCopyOverride(tenantId: String, key: String, value: String) async throws {
+    /// When `clearWhenEmpty` is true, an empty value removes the key so identity / template fallbacks show again.
+    private func persistWebCopyOverride(
+        tenantId: String,
+        key: String,
+        value: String,
+        clearWhenEmpty: Bool = false
+    ) async throws {
         guard key.hasPrefix("wc.") else { return }
         guard let doc = try await firebaseService.fetchTenant(tenantId: tenantId) else { return }
         var map = Self.coercedStringMap(doc["webCopyOverrides"])
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty, let fallback = Self.requiredWebCopyCtaDefaults[key] {
             map[key] = fallback
+        } else if trimmed.isEmpty, clearWhenEmpty {
+            map.removeValue(forKey: key)
         } else {
             map[key] = value
         }
@@ -659,19 +713,22 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         if key.hasPrefix("svc:"), key.hasSuffix(":edit") { return false }
         if key.hasPrefix("s12Process:"), key.hasSuffix(":edit") { return false }
         if key.hasPrefix("charterFaq:"), key.hasSuffix(":edit") { return false }
+        if key == "charterQuote:edit" { return false }
         return key.range(of: quickEditStyleKeyPattern, options: .regularExpression) != nil
     }
 
     private func persistQuickEditStyleMap(field: String, key: String, value: String) async {
-        guard let tid = tenantId, Self.isPersistableQuickEditStyleKey(key) else { return }
-        do {
-            guard let doc = try await firebaseService.fetchTenant(tenantId: tid) else { return }
-            var map = Self.coercedStringMap(doc[field])
-            map[key] = value
-            try await firebaseService.updateTenant(tenantId: tid, updates: [field: map])
-        } catch {
-            await MainActor.run { errorMessage = error.localizedDescription }
+        guard Self.isPersistableQuickEditStyleKey(key) else { return }
+        await MainActor.run {
+            switch field {
+            case "webButtonColors": webButtonColors[key] = value
+            case "webSurfaceColors": webSurfaceColors[key] = value
+            case "webTextColors": webTextColors[key] = value
+            case "webTextFontSizes": webTextFontSizes[key] = value
+            default: break
+            }
         }
+        await persistAllQuickEditStyleMaps()
     }
 
     /// Per-field text color for Quick Edit (`webTextColors` on the tenant). Does not change site-wide `textColor`.
@@ -679,6 +736,69 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         let normalized = WebColorPalettes.normalizeHex(hex)
         guard normalized.hasPrefix("#") else { return }
         await persistQuickEditStyleMap(field: "webTextColors", key: fieldKey, value: normalized)
+    }
+
+    /// Updates in-memory text color immediately (Edit-off must not rely on a debounced Task).
+    @MainActor
+    func setQuickEditTextColorLocally(fieldKey: String, hex: String) {
+        let normalized = WebColorPalettes.normalizeHex(hex)
+        guard normalized.hasPrefix("#"), Self.isPersistableQuickEditStyleKey(fieldKey) else { return }
+        webTextColors[fieldKey] = normalized
+    }
+
+    /// Manage → Book: persist Request booking label (`webCopyOverrides.wc.book.submit`).
+    func persistBookSubmitLabel() async {
+        let trimmed = bookSubmitLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = trimmed.isEmpty ? Self.bookSubmitDefaultLabel : trimmed
+        await MainActor.run { bookSubmitLabel = value }
+        await saveQuickEdit(fieldKey: Self.bookSubmitCopyKey, value: value, invalidatePreview: true)
+    }
+
+    /// Manage → Book: persist Request booking fill (`webButtonColors.wc.book.submit`).
+    func persistBookSubmitColor(_ hex: String) async {
+        await persistQuickEditButtonColor(fieldKey: Self.bookSubmitCopyKey, hex: hex)
+        await MainActor.run { invalidateWebPreview() }
+    }
+
+    /// Per-CTA button fill for Quick Edit (`webButtonColors` on the tenant). Does not change site-wide `primaryColor`.
+    func persistQuickEditButtonColor(fieldKey: String, hex: String) async {
+        let normalized = WebColorPalettes.normalizeHex(hex)
+        guard normalized.hasPrefix("#") else { return }
+        await persistQuickEditStyleMap(field: "webButtonColors", key: fieldKey, value: normalized)
+    }
+
+    /// Per-band surface fill for Quick Edit (`webSurfaceColors`). Does not change shared role tokens.
+    func persistQuickEditSurfaceColor(fieldKey: String, hex: String) async {
+        let normalized = WebColorPalettes.normalizeHex(hex)
+        guard normalized.hasPrefix("#") else { return }
+        await persistQuickEditStyleMap(field: "webSurfaceColors", key: fieldKey, value: normalized)
+    }
+
+    /// Writes full in-memory style maps (Edit off / chrome teardown safety net).
+    /// Loops until a write matches the latest in-memory generation so rapid paints cannot clobber each other.
+    func persistAllQuickEditStyleMaps() async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { styleMapPersistGeneration += 1 }
+        while !Task.isCancelled {
+            let genAtStart = await MainActor.run { styleMapPersistGeneration }
+            let snapshot = await MainActor.run { () -> (buttons: [String: String], surfaces: [String: String], texts: [String: String], fonts: [String: String]) in
+                (webButtonColors, webSurfaceColors, webTextColors, webTextFontSizes)
+            }
+            do {
+                let updates: [String: Any] = [
+                    "webButtonColors": snapshot.buttons,
+                    "webSurfaceColors": snapshot.surfaces,
+                    "webTextColors": snapshot.texts,
+                    "webTextFontSizes": snapshot.fonts,
+                ]
+                try await firebaseService.updateTenant(tenantId: tid, updates: updates)
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+                return
+            }
+            let genAfter = await MainActor.run { styleMapPersistGeneration }
+            if genAfter == genAtStart { return }
+        }
     }
 
     /// Per-field font size in px (`webTextFontSizes` on the tenant).
@@ -703,18 +823,53 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     }
 
     /// Inline quick edit from the in-app WKWebView preview (`data-edit-key` in `web/index.html`).
+    /// Placement style keys (`displayName.classic.hero`, …) share one website name override (`wc.site.displayName`).
+    private static func canonicalQuickEditTextKey(_ fieldKey: String) -> String {
+        if fieldKey == "displayName" || fieldKey.hasPrefix("displayName.") {
+            return "displayName"
+        }
+        return fieldKey
+    }
+
+    /// Website copy for team member profile (`tm:<slug>:…` legacy keys or `wc.tm.<slug>.*`).
+    /// Name / role / bio / bookLabel / workTitle → `webCopyOverrides` only (never identity user fields).
+    private func persistQuickEditTeamMemberField(fieldKey: String, trimmed: String) async throws {
+        let parts = fieldKey.split(separator: ":").map(String.init)
+        guard parts.count == 3, parts[0] == "tm" else { return }
+        let slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let field = parts[2]
+        guard !slug.isEmpty,
+              ["name", "role", "bio", "bookLabel", "workTitle"].contains(field) else { return }
+        guard let tid = tenantId else { return }
+        let wcKey = "wc.tm.\(slug).\(field)"
+        let clearIdentityFallback = field == "name" || field == "role" || field == "bio"
+        try await persistWebCopyOverride(
+            tenantId: tid,
+            key: wcKey,
+            value: trimmed,
+            clearWhenEmpty: clearIdentityFallback
+        )
+        await MainActor.run { errorMessage = nil }
+    }
+
     /// Set `invalidatePreview` to `false` when applying several edits before a single `invalidateWebPreview()` (see `saveQuickEditBatch`).
     func saveQuickEdit(fieldKey: String, value: String, invalidatePreview: Bool = true) async {
         guard let tid = tenantId else { return }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
+        let textKey = Self.canonicalQuickEditTextKey(fieldKey)
         await MainActor.run { errorMessage = nil }
         do {
-            switch fieldKey {
+            switch textKey {
             case "displayName":
-                try await firebaseService.updateTenant(tenantId: tid, updates: ["displayName": trimmed])
+                // Website public name only — never overwrite identity displayName / businessName.
+                try await persistWebCopyOverride(
+                    tenantId: tid,
+                    key: "wc.site.displayName",
+                    value: trimmed,
+                    clearWhenEmpty: true
+                )
                 await MainActor.run {
-                    displayName = trimmed
                     if invalidatePreview { invalidateWebPreview() }
                 }
             case "luxeHeroTagline":
@@ -987,22 +1142,47 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     if invalidatePreview { invalidateWebPreview() }
                 }
             default:
-                if fieldKey.hasPrefix("svc:") {
-                    try await persistQuickEditServiceField(fieldKey: fieldKey, trimmed: trimmed)
+                if textKey.hasPrefix("svc:") {
+                    try await persistQuickEditServiceField(fieldKey: textKey, trimmed: trimmed)
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
-                } else if fieldKey.hasPrefix("s12Process:") {
-                    try await persistQuickEditStudio12ProcessField(fieldKey: fieldKey, trimmed: trimmed)
+                } else if textKey.hasPrefix("s12Process:") {
+                    try await persistQuickEditStudio12ProcessField(fieldKey: textKey, trimmed: trimmed)
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
-                } else if fieldKey.hasPrefix("charterFaq:") {
-                    try await persistQuickEditCharterFaqField(fieldKey: fieldKey, trimmed: trimmed)
+                } else if textKey.hasPrefix("charterFaq:") {
+                    try await persistQuickEditCharterFaqField(fieldKey: textKey, trimmed: trimmed)
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
-                } else if fieldKey.hasPrefix("wc.") {
-                    let rest = String(fieldKey.dropFirst(3))
+                } else if textKey.hasPrefix("tm:") {
+                    try await persistQuickEditTeamMemberField(fieldKey: textKey, trimmed: trimmed)
+                    await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
+                } else if textKey.hasPrefix("wc.") {
+                    let rest = String(textKey.dropFirst(3))
                     guard !rest.isEmpty,
                           rest.range(of: "^[a-zA-Z0-9_.-]+$", options: .regularExpression) != nil else { break }
-                    try await persistWebCopyOverride(tenantId: tid, key: fieldKey, value: trimmed)
-                    if fieldKey == "wc.charter.meetingPoint" {
+                    let clearWhenEmpty = textKey == "wc.site.displayName"
+                        || (textKey.hasPrefix("wc.tm.") && (
+                            textKey.hasSuffix(".name")
+                                || textKey.hasSuffix(".role")
+                                || textKey.hasSuffix(".bio")
+                        ))
+                    try await persistWebCopyOverride(
+                        tenantId: tid,
+                        key: textKey,
+                        value: trimmed,
+                        clearWhenEmpty: clearWhenEmpty
+                    )
+                    if textKey == "wc.charter.meetingPoint" {
                         await MainActor.run { charterMeetingPoint = trimmed.isEmpty ? "Garrison Bight Marina" : trimmed }
+                    }
+                    if textKey == Self.bookSubmitCopyKey {
+                        await MainActor.run {
+                            bookSubmitLabel = trimmed.isEmpty ? Self.bookSubmitDefaultLabel : trimmed
+                        }
+                    }
+                    if textKey == Self.charterQuoteCopyKey {
+                        await MainActor.run { charterHomeQuote = trimmed }
+                    }
+                    if textKey == Self.charterQuoteByCopyKey {
+                        await MainActor.run { charterHomeQuoteBy = trimmed }
                     }
                     await MainActor.run { if invalidatePreview { invalidateWebPreview() } }
                 }
@@ -1257,6 +1437,16 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 textColorHex = tenant?["textColor"] as? String ?? "#333333"
                 primaryColorHex = tenant?["primaryColor"] as? String ?? "#000000"
                 primaryColorHoverHex = tenant?["primaryColorHover"] as? String ?? "#333333"
+                let storedAccentText = (tenant?["accentTextColor"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                accentTextColorHex = storedAccentText.isEmpty ? primaryColorHex : storedAccentText
+                webButtonColors = Self.coercedStringMap(tenant?["webButtonColors"])
+                webSurfaceColors = Self.coercedStringMap(tenant?["webSurfaceColors"])
+                webTextColors = Self.coercedStringMap(tenant?["webTextColors"])
+                webTextFontSizes = Self.coercedStringMap(tenant?["webTextFontSizes"])
+                let storedSidebarBg = (tenant?["sidebarBackgroundColor"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                sidebarBackgroundColorHex = storedSidebarBg.isEmpty ? primaryColorHex : storedSidebarBg
+                sidebarTextColorHex = (tenant?["sidebarTextColor"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                sidebarCloseIconColorHex = (tenant?["sidebarCloseIconColor"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 syncPreviewHeroSlotColorFromTokens()
                 successColorHex = tenant?["successColor"] as? String ?? "#22C55E"
                 cardBorderRadius = (tenant?["cardBorderRadius"] as? Double) ?? 12
@@ -1448,9 +1638,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                     industry: tenant?["industry"] as? String
                 )
                 charterFaqs = Self.mergedCharterFaqs(from: tenant?["charterFaqs"])
+                reviews = Self.mergedSiteReviews(from: tenant?["reviews"])
                 let copyMap = Self.coercedStringMap(tenant?["webCopyOverrides"])
                 let meet = (copyMap["wc.charter.meetingPoint"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 charterMeetingPoint = meet.isEmpty ? "Garrison Bight Marina" : meet
+                let submitLbl = (copyMap[Self.bookSubmitCopyKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                bookSubmitLabel = submitLbl.isEmpty ? Self.bookSubmitDefaultLabel : submitLbl
+                syncCharterHomeQuoteFromCopyMap(copyMap)
                 let plan = SubscriptionPlan.normalized(fromFirestore: tenant?["subscriptionPlan"] as? String)
                 let resolvedTheme = WebTheme.resolvedThemeId(
                     stored: tenant?["webThemeId"] as? String,
@@ -1520,10 +1714,6 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         }
         let fam = WebTheme(rawValue: webThemeId)?.family ?? .classic
         let isClassicOrStudio12 = fam == .classic || fam == .studio12
-        if isClassicOrStudio12 {
-            sidebarIconColorHome = ""
-            sidebarIconColorBooking = ""
-        }
         let existingDoc = try? await firebaseService.fetchTenant(tenantId: tid)
         var updates: [String: Any] = [
             "displayName": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1540,6 +1730,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             "textColor": textColorHex,
             "primaryColor": primaryColorHex,
             "primaryColorHover": primaryColorHoverHex,
+            "accentTextColor": accentTextColorHex,
+            "sidebarBackgroundColor": sidebarBackgroundColorHex,
+            "sidebarTextColor": sidebarTextColorHex,
+            "sidebarCloseIconColor": sidebarCloseIconColorHex,
             "successColor": successColorHex,
             "cardBorderRadius": cardBorderRadius,
             "tagline": tagline,
@@ -1618,6 +1812,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates["aboutText"] = aboutText
             updates["studio12ProcessSteps"] = studio12ProcessStepsFirestorePayload()
             updates["charterFaqs"] = charterFaqsFirestorePayload()
+            var copyMap = Self.coercedStringMap(existingDoc?["webCopyOverrides"])
+            copyMap[Self.charterQuoteCopyKey] = charterHomeQuote.trimmingCharacters(in: .whitespacesAndNewlines)
+            copyMap[Self.charterQuoteByCopyKey] = charterHomeQuoteBy.trimmingCharacters(in: .whitespacesAndNewlines)
+            updates["webCopyOverrides"] = copyMap
+        }
+        if showsSiteReviewsEditor {
+            updates["reviews"] = reviewsFirestorePayload()
         }
         await saveTenantUpdates(tid, updates)
     }
@@ -2543,12 +2744,53 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         WebTheme(rawValue: webThemeId)?.family ?? .classic
     }
 
+    /// Blade and Studio 12 render `reviews` on the home page.
+    var showsSiteReviewsEditor: Bool {
+        let fam = activeTemplateFamily
+        return fam == .blade || fam == .studio12
+    }
+
+    /// Resolved page Open (hamburger) icon color for Quick Edit.
+    var resolvedSidebarOpenIconColorHex: String {
+        let home = sidebarIconColorHome.trimmingCharacters(in: .whitespacesAndNewlines)
+        if home.hasPrefix("#") { return WebColorPalettes.normalizeHex(home) }
+        let booking = sidebarIconColorBooking.trimmingCharacters(in: .whitespacesAndNewlines)
+        if booking.hasPrefix("#") { return WebColorPalettes.normalizeHex(booking) }
+        return WebColorPalettes.normalizeHex(primaryColorHex)
+    }
+
+    /// Resolved drawer Close icon color (explicit override or contrast on sidebar background).
+    var resolvedSidebarCloseIconColorHex: String {
+        let stored = sidebarCloseIconColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stored.hasPrefix("#") { return WebColorPalettes.normalizeHex(stored) }
+        return Self.contrastingInkHex(on: sidebarBackgroundColorHex)
+    }
+
+    /// Resolved drawer text color (explicit override or contrast on sidebar background).
+    var resolvedSidebarTextColorHex: String {
+        let stored = sidebarTextColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stored.hasPrefix("#") { return WebColorPalettes.normalizeHex(stored) }
+        return Self.contrastingInkHex(on: sidebarBackgroundColorHex)
+    }
+
+    static func contrastingInkHex(on backgroundHex: String) -> String {
+        let c = Color(hex: backgroundHex)
+        guard let comps = UIColor(c).cgColor.components, comps.count >= 3 else { return "#FFFFFF" }
+        let lum = 0.299 * comps[0] + 0.587 * comps[1] + 0.114 * comps[2]
+        return lum > 0.58 ? "#1A1A1A" : "#F7F5F0"
+    }
+
     /// Persists color fields touched from preview quick-edit chrome.
     /// Skips WKWebView reload by default — preview already has live CSS patches.
     func savePreviewQuickEditColors(invalidatePreview: Bool = false) async -> Bool {
         guard let tid = tenantId else { return false }
         await MainActor.run { errorMessage = nil }
-        let updates = WebColorPalettes.firestoreUpdates(paletteId: webColorPaletteId, tokens: currentColorTokens())
+        var updates = WebColorPalettes.firestoreUpdates(paletteId: webColorPaletteId, tokens: currentColorTokens())
+        updates["sidebarBackgroundColor"] = sidebarBackgroundColorHex
+        updates["sidebarTextColor"] = sidebarTextColorHex
+        updates["sidebarCloseIconColor"] = sidebarCloseIconColorHex
+        updates["sidebarIconColorHome"] = sidebarIconColorHome
+        updates["sidebarIconColorBooking"] = sidebarIconColorBooking
         await saveTenantUpdates(tid, updates, invalidatePreview: invalidatePreview)
         return await MainActor.run { errorMessage == nil }
     }
@@ -2559,6 +2801,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         textColorHex = tokens.textColor
         primaryColorHex = tokens.primaryColor
         primaryColorHoverHex = tokens.primaryColorHover
+        accentTextColorHex = tokens.accentTextColor
+        // Palette / accent chips reset drawer to match default CTA fill.
+        sidebarBackgroundColorHex = tokens.primaryColor
+        sidebarTextColorHex = ""
+        sidebarCloseIconColorHex = ""
+        sidebarIconColorHome = ""
+        sidebarIconColorBooking = ""
         featuredWorkBackgroundColorHex = tokens.featuredWorkBackgroundColor
         featuredWorkTextColorHex = tokens.featuredWorkTextColor
         bookingFormCardBackgroundColorHex = tokens.bookingFormCardBackgroundColor
@@ -2616,12 +2865,17 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             "cardSurfaceColor": tokens.cardSurfaceColor,
             "primaryColor": tokens.primaryColor,
             "primaryColorHover": tokens.primaryColorHover,
+            "accentTextColor": tokens.accentTextColor,
             "featuredWorkBackgroundColor": tokens.featuredWorkBackgroundColor,
             "featuredWorkTextColor": tokens.featuredWorkTextColor,
             "galleryPageBackgroundColor": tokens.galleryPageBackgroundColor,
             "galleryPageTextColor": tokens.galleryPageTextColor,
             "aboutSectionBackgroundColor": tokens.aboutSectionBackgroundColor,
             "aboutSectionTextColor": tokens.aboutSectionTextColor,
+            "sidebarBackgroundColor": sidebarBackgroundColorHex,
+            "sidebarTextColor": sidebarTextColorHex,
+            "sidebarCloseIconColor": sidebarCloseIconColorHex,
+            "sidebarIconColorHome": sidebarIconColorHome,
         ]
         let heroSlot = heroSlotOverride ?? previewHeroSlotColorHex
         if !heroSlot.isEmpty {
@@ -2642,6 +2896,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             textColor: textColorHex,
             primaryColor: primaryColorHex,
             primaryColorHover: primaryColorHoverHex,
+            accentTextColor: accentTextColorHex,
             featuredWorkBackgroundColor: featuredWorkBackgroundColorHex,
             featuredWorkTextColor: featuredWorkTextColorHex,
             bookingFormCardBackgroundColor: bookingFormCardBackgroundColorHex,
@@ -2668,10 +2923,22 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         await MainActor.run {
             errorMessage = nil
             applyColorTokensLocally(tokens)
+            webButtonColors = [:]
+            webSurfaceColors = [:]
+            webTextColors = [:]
+            webTextFontSizes = [:]
             bumpWebPreviewColorPatch()
         }
         var updates = WebColorPalettes.firestoreUpdates(paletteId: baseId, tokens: tokens)
         updates["webTextColors"] = [String: String]()
+        updates["webButtonColors"] = [String: String]()
+        updates["webSurfaceColors"] = [String: String]()
+        updates["webTextFontSizes"] = [String: String]()
+        updates["sidebarBackgroundColor"] = tokens.primaryColor
+        updates["sidebarTextColor"] = ""
+        updates["sidebarCloseIconColor"] = ""
+        updates["sidebarIconColorHome"] = ""
+        updates["sidebarIconColorBooking"] = ""
         await saveTenantUpdates(tid, updates)
     }
 
@@ -2688,10 +2955,22 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             errorMessage = nil
             webColorPaletteId = palette.id
             applyColorTokensLocally(palette.tokens)
+            webButtonColors = [:]
+            webSurfaceColors = [:]
+            webTextColors = [:]
+            webTextFontSizes = [:]
             bumpWebPreviewColorPatch()
         }
         var updates = WebColorPalettes.firestoreUpdates(paletteId: palette.id, tokens: palette.tokens)
         updates["webTextColors"] = [String: String]()
+        updates["webButtonColors"] = [String: String]()
+        updates["webSurfaceColors"] = [String: String]()
+        updates["webTextFontSizes"] = [String: String]()
+        updates["sidebarBackgroundColor"] = palette.tokens.primaryColor
+        updates["sidebarTextColor"] = ""
+        updates["sidebarCloseIconColor"] = ""
+        updates["sidebarIconColorHome"] = ""
+        updates["sidebarIconColorBooking"] = ""
         await saveTenantUpdates(
             tid,
             updates,
@@ -2716,12 +2995,24 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             updates[key] = value
         }
         updates["webTextColors"] = [String: String]()
+        updates["webButtonColors"] = [String: String]()
+        updates["webSurfaceColors"] = [String: String]()
+        updates["webTextFontSizes"] = [String: String]()
+        updates["sidebarBackgroundColor"] = defaultPalette.tokens.primaryColor
+        updates["sidebarTextColor"] = ""
+        updates["sidebarCloseIconColor"] = ""
+        updates["sidebarIconColorHome"] = ""
+        updates["sidebarIconColorBooking"] = ""
         do {
             try await firebaseService.updateTenant(tenantId: tid, updates: updates)
             await MainActor.run {
                 webThemeId = theme.rawValue
                 webColorPaletteId = defaultPalette.id
                 applyColorTokensLocally(defaultPalette.tokens)
+                webButtonColors = [:]
+                webSurfaceColors = [:]
+                webTextColors = [:]
+                webTextFontSizes = [:]
                 invalidateWebPreview()
                 saveSuccess = true
             }
@@ -3336,6 +3627,13 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
+    func persistCharterHomeQuote(invalidatePreview: Bool = true) async {
+        await saveQuickEditBatch([
+            (fieldKey: Self.charterQuoteCopyKey, value: charterHomeQuote.trimmingCharacters(in: .whitespacesAndNewlines)),
+            (fieldKey: Self.charterQuoteByCopyKey, value: charterHomeQuoteBy.trimmingCharacters(in: .whitespacesAndNewlines))
+        ], reloadPreview: invalidatePreview)
+    }
+
     private func normalizeCharterFaqIds() {
         charterFaqs = charterFaqs.enumerated().map {
             CharterFaq(id: $0.offset, question: $0.element.question, answer: $0.element.answer)
@@ -3357,6 +3655,126 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 question: q.isEmpty ? fallback.question : q,
                 answer: resolvedAnswer
             )
+        }
+    }
+
+    // MARK: - Charter home quote
+
+    private static func charterQuoteDefault(from reviews: [SiteReview]) -> String {
+        guard let first = reviews.first else {
+            return "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys."
+        }
+        let quote = first.quote.trimmingCharacters(in: .whitespacesAndNewlines)
+        return quote.isEmpty
+            ? "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys."
+            : quote
+    }
+
+    private static func charterQuoteByDefault(from reviews: [SiteReview]) -> String {
+        guard let first = reviews.first else { return "Danielle R. · Half-Day Reef Charter" }
+        let name = first.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Danielle R. · Half-Day Reef Charter" : name
+    }
+
+    private static func resolvedWebCopyOverride(
+        _ map: [String: String],
+        key: String,
+        fallback: String
+    ) -> String {
+        guard map.keys.contains(key) else { return fallback }
+        return map[key] ?? ""
+    }
+
+    private func syncCharterHomeQuoteFromCopyMap(_ map: [String: String]) {
+        let quoteFallback = Self.charterQuoteDefault(from: reviews)
+        let quoteByFallback = Self.charterQuoteByDefault(from: reviews)
+        charterHomeQuote = Self.resolvedWebCopyOverride(map, key: Self.charterQuoteCopyKey, fallback: quoteFallback)
+        charterHomeQuoteBy = Self.resolvedWebCopyOverride(map, key: Self.charterQuoteByCopyKey, fallback: quoteByFallback)
+    }
+
+    var charterQuotePhotoUrl: String {
+        galleryImages.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    // MARK: - Site reviews (Blade / Studio 12)
+
+    static let siteReviewsLimit = 3
+
+    private func reviewsFirestorePayload() -> [[String: String]] {
+        reviews
+            .sorted { $0.id < $1.id }
+            .map { rev in
+                var row: [String: String] = [
+                    "quote": rev.quote,
+                    "name": rev.name
+                ]
+                let svc = rev.service.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !svc.isEmpty { row["service"] = svc }
+                return row
+            }
+    }
+
+    func updateSiteReview(at index: Int, quote: String, name: String, service: String) {
+        guard reviews.indices.contains(index) else { return }
+        var list = reviews
+        list[index].quote = quote
+        list[index].name = name
+        list[index].service = service
+        reviews = list
+    }
+
+    func addSiteReview() {
+        guard reviews.count < Self.siteReviewsLimit else { return }
+        reviews.append(SiteReview(id: reviews.count, quote: "", name: "", service: ""))
+        normalizeSiteReviewIds()
+    }
+
+    func deleteSiteReview(at index: Int) {
+        guard reviews.indices.contains(index) else { return }
+        reviews.remove(at: index)
+        normalizeSiteReviewIds()
+    }
+
+    func moveSiteReview(from index: Int, direction: Int) {
+        let j = index + direction
+        guard reviews.indices.contains(index), reviews.indices.contains(j) else { return }
+        reviews.swapAt(index, j)
+        normalizeSiteReviewIds()
+    }
+
+    func persistSiteReviews(invalidatePreview: Bool = true) async {
+        guard let tid = tenantId else { return }
+        await MainActor.run { errorMessage = nil }
+        do {
+            try await firebaseService.updateTenant(
+                tenantId: tid,
+                updates: ["reviews": reviewsFirestorePayload()]
+            )
+            await MainActor.run {
+                if invalidatePreview { invalidateWebPreview() }
+            }
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func normalizeSiteReviewIds() {
+        reviews = reviews.enumerated().map {
+            SiteReview(id: $0.offset, quote: $0.element.quote, name: $0.element.name, service: $0.element.service)
+        }
+    }
+
+    private static func mergedSiteReviews(from raw: Any?) -> [SiteReview] {
+        guard let arr = raw as? [[String: Any]], !arr.isEmpty else { return [] }
+        return Array(arr.prefix(siteReviewsLimit)).enumerated().compactMap { i, d in
+            let quote = (d["quote"] as? String ?? d["text"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = (d["name"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let service = (d["service"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if quote.isEmpty && name.isEmpty && service.isEmpty { return nil }
+            return SiteReview(id: i, quote: quote, name: name.isEmpty ? "Client" : name, service: service)
         }
     }
 }

@@ -10,8 +10,11 @@ struct WebColorPaletteTokens: Equatable, Hashable {
     var backgroundColor: String
     var cardSurfaceColor: String
     var textColor: String
+    /// Default filled CTA / primary control fill (`--bk-accent`).
     var primaryColor: String
     var primaryColorHover: String
+    /// Accent *text* (eyebrows, team subtitle). Independent from CTA fill (`--bk-accent-ink`).
+    var accentTextColor: String
     var featuredWorkBackgroundColor: String
     var featuredWorkTextColor: String
     var bookingFormCardBackgroundColor: String
@@ -572,6 +575,8 @@ enum WebColorPalettes {
         var next = tokens
         next.primaryColor = accent.primaryColor
         next.primaryColorHover = accent.primaryColorHover
+        // Palette / accent chips update CTA default and accent text together; Quick Edit button paint does not.
+        next.accentTextColor = accent.primaryColor
         if next.stripColors.count >= 3 {
             next.stripColors[2] = accent.primaryColor
         }
@@ -678,6 +683,7 @@ enum WebColorPalettes {
             "textColor": tokens.textColor,
             "primaryColor": tokens.primaryColor,
             "primaryColorHover": tokens.primaryColorHover,
+            "accentTextColor": tokens.accentTextColor,
             "featuredWorkBackgroundColor": tokens.featuredWorkBackgroundColor,
             "featuredWorkTextColor": tokens.featuredWorkTextColor,
             "bookingFormCardBackgroundColor": tokens.bookingFormCardBackgroundColor,
@@ -707,6 +713,7 @@ enum WebColorPalettes {
             textColor: text,
             primaryColor: accent,
             primaryColorHover: accentHover,
+            accentTextColor: accent,
             featuredWorkBackgroundColor: featuredBg,
             featuredWorkTextColor: featuredText,
             bookingFormCardBackgroundColor: bookCard,

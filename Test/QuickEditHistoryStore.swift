@@ -13,11 +13,21 @@ enum QuickEditHistoryEntry: Equatable {
         before: WebColorPaletteTokens,
         after: WebColorPaletteTokens,
         heroBefore: String,
-        heroAfter: String
+        heroAfter: String,
+        sidebarBefore: String,
+        sidebarAfter: String,
+        sidebarTextBefore: String,
+        sidebarTextAfter: String,
+        sidebarIconBefore: String,
+        sidebarIconAfter: String,
+        sidebarCloseBefore: String,
+        sidebarCloseAfter: String
     )
     case text(before: [String: String], after: [String: String])
     case fontSize(key: String, before: Int, after: Int)
     case fieldColor(key: String, before: String, after: String)
+    case buttonColor(key: String, before: String, after: String)
+    case surfaceColor(key: String, before: String, after: String)
 }
 
 @MainActor
@@ -40,12 +50,39 @@ final class QuickEditHistoryStore: ObservableObject {
         before: WebColorPaletteTokens,
         after: WebColorPaletteTokens,
         heroBefore: String,
-        heroAfter: String
+        heroAfter: String,
+        sidebarBefore: String,
+        sidebarAfter: String,
+        sidebarTextBefore: String,
+        sidebarTextAfter: String,
+        sidebarIconBefore: String,
+        sidebarIconAfter: String,
+        sidebarCloseBefore: String,
+        sidebarCloseAfter: String
     ) {
         guard !isApplyingHistory else { return }
-        guard before != after || heroBefore != heroAfter else { return }
+        guard before != after
+            || heroBefore != heroAfter
+            || sidebarBefore != sidebarAfter
+            || sidebarTextBefore != sidebarTextAfter
+            || sidebarIconBefore != sidebarIconAfter
+            || sidebarCloseBefore != sidebarCloseAfter
+        else { return }
         pushUndo(
-            .colors(before: before, after: after, heroBefore: heroBefore, heroAfter: heroAfter)
+            .colors(
+                before: before,
+                after: after,
+                heroBefore: heroBefore,
+                heroAfter: heroAfter,
+                sidebarBefore: sidebarBefore,
+                sidebarAfter: sidebarAfter,
+                sidebarTextBefore: sidebarTextBefore,
+                sidebarTextAfter: sidebarTextAfter,
+                sidebarIconBefore: sidebarIconBefore,
+                sidebarIconAfter: sidebarIconAfter,
+                sidebarCloseBefore: sidebarCloseBefore,
+                sidebarCloseAfter: sidebarCloseAfter
+            )
         )
     }
 
@@ -76,6 +113,22 @@ final class QuickEditHistoryStore: ObservableObject {
         let newHex = after.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !key.isEmpty, oldHex != newHex else { return }
         pushUndo(.fieldColor(key: key, before: before, after: after))
+    }
+
+    func recordButtonColor(key: String, before: String, after: String) {
+        guard !isApplyingHistory else { return }
+        let oldHex = before.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let newHex = after.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty, oldHex != newHex else { return }
+        pushUndo(.buttonColor(key: key, before: before, after: after))
+    }
+
+    func recordSurfaceColor(key: String, before: String, after: String) {
+        guard !isApplyingHistory else { return }
+        let oldHex = before.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let newHex = after.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty, oldHex != newHex else { return }
+        pushUndo(.surfaceColor(key: key, before: before, after: after))
     }
 
     func popUndo() -> QuickEditHistoryEntry? {

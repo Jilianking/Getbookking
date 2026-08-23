@@ -8,8 +8,37 @@ import Foundation
 
 enum QuickEditFieldTitles {
     static func title(for key: String) -> String {
+        if key == "displayName" || key.hasPrefix("displayName.") {
+            return "Name on website"
+        }
+        if key.hasPrefix("wc.tm.") {
+            let parts = key.split(separator: ".").map(String.init)
+            if let field = parts.last {
+                switch field {
+                case "name": return "Name on website"
+                case "role": return "Title on website"
+                case "bio": return "Bio on website"
+                case "bookLabel": return "Book with CTA"
+                case "workTitle": return "Portfolio heading"
+                default: break
+                }
+            }
+        }
+        if key.hasPrefix("tm:") {
+            let parts = key.split(separator: ":").map(String.init)
+            if parts.count == 3 {
+                switch parts[2] {
+                case "name": return "Name on website"
+                case "role": return "Title on website"
+                case "bio": return "Bio on website"
+                case "bookLabel": return "Book with CTA"
+                case "workTitle": return "Portfolio heading"
+                case "photo": return "Profile photo"
+                default: break
+                }
+            }
+        }
         switch key {
-        case "displayName": return "Name on website"
         case "luxeHeroTagline": return "Hero line"
         case "bladeHeroTagline": return "Hero headline"
         case "bladeHeroDescription": return "Hero description"
@@ -71,6 +100,7 @@ enum QuickEditFieldTitles {
                 if parts.count == 3, parts[2] == "answer" { return "FAQ answer" }
                 return "FAQ"
             }
+            if key == "charterQuote:edit" { return "Client quote" }
             if key.hasPrefix("svc:") {
                 let parts = key.split(separator: ":").map(String.init)
                 if parts.count == 3, parts[2] == "edit" { return "Edit service" }
@@ -107,7 +137,21 @@ enum QuickEditFieldTitles {
             if key == "wc.luxe.teamBio" { return "Team bio (website only)" }
             if key == "wc.s12.heroLead" || key == "wc.s12.navSub" { return "Hero intro (website only)" }
             if key == "wc.charter.heroEyebrow" { return "Hero location line" }
+            if key == "wc.charter.featuredLabel" { return "Featured section label" }
+            if key == "wc.charter.featuredHeading" { return "Featured section heading" }
+            if key == "wc.charter.viewAll" { return "Featured view all link" }
+            if key == "wc.charter.browseMonth" { return "Month picker button" }
+            if key == "wc.charter.browseChipDate" { return "Browse date chip" }
+            if key == "wc.charter.browseChipType" { return "Browse trip type chip" }
+            if key == "wc.charter.browseChipDuration" { return "Browse duration chip" }
+            if key == "wc.charter.browseChipPeople" { return "Browse party size chip" }
+            if key == "wc.charter.browseChipBoat" { return "Browse boat chip" }
+            if key == "wc.charter.browsePartyTooLarge" { return "Browse party too large message" }
+            if key == "wc.charter.browseShowCharters" { return "Month sheet apply button" }
+            if key == "wc.charter.browseBookTrip" { return "Browse book CTA" }
             if key == "wc.charter.captainName" { return "Captain name (website only)" }
+            if key == "wc.charter.quote" { return "Quote" }
+            if key == "wc.charter.quoteBy" { return "Quote attribution" }
             if key.hasPrefix("wc.") {
                 let tail = String(key.dropFirst(3)).replacingOccurrences(of: ".", with: " → ")
                 return "Site text: \(tail)"

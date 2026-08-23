@@ -14,6 +14,7 @@
   --s12-taupe-light: var(--bk-fg-muted-light, #b0a090);
   --s12-line: var(--bk-accent-18, rgba(176, 128, 96, 0.18));
   --s12-line-soft: var(--bk-accent-10, rgba(176, 128, 96, 0.1));
+  --s12-about-line: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 20%, transparent);
   background: var(--s12-ivory);
   color: var(--s12-espresso);
   font-family: "Jost", system-ui, sans-serif;
@@ -365,11 +366,11 @@
 }
 
 .studio12-page .s12-marquee {
-  background: var(--s12-espresso);
+  background: var(--bk-about-bg, var(--s12-espresso-mid));
   padding: 16px 0;
   overflow: hidden;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid color-mix(in srgb, var(--bk-about-fg, #faf7f2) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--bk-about-fg, #faf7f2) 8%, transparent);
 }
 
 .studio12-page .s12-marquee-inner {
@@ -394,7 +395,7 @@
   font-style: italic;
   font-weight: 300;
   letter-spacing: 0.08em;
-  color: rgba(250, 247, 242, 0.45);
+  color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 55%, transparent);
   white-space: nowrap;
   display: flex;
   align-items: center;
@@ -919,8 +920,8 @@
 
 .studio12-page .s12-testimonials {
   padding: 100px 40px;
-  background: var(--bk-about-bg, var(--s12-espresso));
-  color: var(--bk-about-fg, var(--s12-ivory));
+  background: var(--bk-card, var(--s12-blush));
+  color: var(--bk-fg, var(--s12-espresso));
   position: relative;
 }
 
@@ -928,7 +929,7 @@
   font-family: "Cormorant Garamond", serif;
   font-size: clamp(32px, 3.5vw, 48px);
   font-weight: 300;
-  color: var(--bk-about-fg, var(--s12-ivory));
+  color: var(--bk-fg, var(--s12-espresso));
   margin: 0 0 48px;
   line-height: 1.05;
 }
@@ -946,7 +947,7 @@
 
 .studio12-page .s12-test-card {
   padding: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--s12-line);
 }
 
 .studio12-page .s12-test-text {
@@ -960,7 +961,7 @@
 }
 
 .studio12-page .s12-testimonials .s12-test-text {
-  color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 82%, transparent);
+  color: color-mix(in srgb, var(--bk-fg, #2a1f18) 85%, transparent);
 }
 
 .studio12-page .s12-test-author {
@@ -971,11 +972,58 @@
 }
 
 .studio12-page .s12-testimonials .s12-test-author {
-  color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 55%, transparent);
+  color: color-mix(in srgb, var(--bk-fg, #2a1f18) 60%, transparent);
+}
+
+.studio12-page.studio12-sub {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.studio12-page.studio12-sub > main.s12-shop-shell {
+  flex: 1 0 auto;
+}
+.studio12-page.studio12-sub > main.s12-shop-shell[data-bk-surface-key] {
+  background: transparent;
+}
+.studio12-page.studio12-sub > footer.s12-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+.studio12-page .s12-info-half[data-bk-surface-key],
+.studio12-page .s12-svc-cell[data-bk-surface-key],
+.studio12-page .s12-process-cell[data-bk-surface-key],
+.studio12-page .s12-test-card[data-bk-surface-key] {
+  background: transparent;
+}
+.studio12-page.studio12-sub:has(.booking-shell) .booking-shell {
+  background: transparent;
+}
+.studio12-page.studio12-sub .booking-card {
+  color: var(--bk-fg, var(--s12-espresso));
+}
+.studio12-page.studio12-sub .booking-card[data-bk-surface-key] {
+  background: transparent !important;
+}
+.studio12-page.studio12-sub .booking-form label { color: var(--bk-fg-muted, var(--s12-taupe)); }
+.studio12-page.studio12-sub .booking-card .booking-form label {
+  color: var(--bk-fg-muted, var(--s12-taupe));
+}
+.studio12-page.studio12-sub .booking-card .booking-form input,
+.studio12-page.studio12-sub .booking-card .booking-form textarea,
+.studio12-page.studio12-sub .booking-card .booking-form select,
+.studio12-page.studio12-sub .booking-card .field-input {
+  background: var(--bk-input-bg, color-mix(in srgb, var(--bk-fg, var(--s12-espresso)) 7%, transparent));
+  border-color: color-mix(in srgb, var(--bk-fg, var(--s12-espresso)) 15%, transparent);
+  color: var(--bk-fg, var(--s12-espresso));
 }
 
 .studio12-page .s12-info {
-  border-top: 1px solid var(--s12-line);
+  background: var(--bk-about-bg, var(--s12-espresso-mid));
+  color: var(--bk-about-fg, var(--s12-ivory));
+  padding-top: 24px;
+  padding-bottom: 48px;
 }
 
 .studio12-page .s12-info .bk-band-content {
@@ -1237,19 +1285,44 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
   height: 100%;
 }
 
+.studio12-page [data-bk-color-surface="about"] .s12-info-title,
+.studio12-page [data-bk-color-surface="about"] .s12-info .s12-phil-label {
+  color: var(--bk-about-fg, inherit);
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-info-title em {
+  color: var(--bk-accent, var(--s12-clay));
+}
+
+.studio12-page [data-bk-color-surface="about"] .s12-address,
+.studio12-page [data-bk-color-surface="about"] a.s12-address-link,
+.studio12-page [data-bk-color-surface="about"] .s12-phone {
+  color: color-mix(in srgb, var(--bk-about-fg, inherit) 88%, transparent);
+}
+
+.studio12-page [data-bk-color-surface="about"] a.s12-address-link {
+  border-bottom-color: color-mix(in srgb, var(--bk-about-fg, inherit) 28%, transparent);
+}
+
+.studio12-page [data-bk-color-surface="about"] a.s12-address-link:hover {
+  border-bottom-color: color-mix(in srgb, var(--bk-about-fg, inherit) 48%, transparent);
+}
+
 .studio12-page [data-bk-color-surface="about"] .s12-map-embed {
   border-color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 18%, transparent);
 }
 
 .studio12-page .s12-footer {
-  background: var(--s12-espresso);
-  padding: 40px;
+  background: var(--bk-about-bg, var(--s12-espresso-mid));
+  color: var(--bk-about-fg, var(--s12-ivory));
+  padding: 24px 40px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 0;
+  border-top: 1px solid var(--s12-about-line);
 }
 
 .studio12-page .s12-footer-brand {
@@ -1257,7 +1330,7 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
   font-size: 18px;
   font-weight: 300;
   letter-spacing: 0.22em;
-  color: var(--s12-blush);
+  color: var(--bk-about-fg, var(--s12-ivory));
 }
 
 .studio12-page .s12-footer-links {
@@ -1268,20 +1341,20 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
 }
 
 .studio12-page .s12-footer-links a {
-  color: var(--s12-clay);
+  color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 78%, transparent);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-decoration: none;
 }
 
 .studio12-page .s12-footer-links a:hover {
-  color: var(--s12-blush);
+  color: var(--bk-about-fg, var(--s12-ivory));
 }
 
 .studio12-page .s12-footer-copy {
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: rgba(176, 152, 130, 0.45);
+  color: color-mix(in srgb, var(--bk-about-fg, #faf7f2) 62%, transparent);
   text-align: center;
   margin: 0;
   max-width: 560px;
@@ -1337,30 +1410,27 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
   min-height: 0;
 }
 
-.studio12-page.studio12-sub .booking-card {
+.studio12-page.studio12-sub .booking-card:not([data-bk-surface-key]) {
   background: var(--s12-warm-white) !important;
   border: 1px solid var(--s12-line) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 
-.studio12-page.studio12-sub .booking-form label {
+.studio12-page.studio12-sub .booking-card .booking-form label {
   font-size: 9px !important;
   letter-spacing: 0.22em !important;
   text-transform: uppercase !important;
-  color: var(--s12-taupe) !important;
   font-weight: 400 !important;
 }
 
-.studio12-page.studio12-sub .booking-form input,
-.studio12-page.studio12-sub .booking-form select,
-.studio12-page.studio12-sub .booking-form textarea {
-  background: var(--s12-ivory) !important;
-  border: 1px solid var(--bk-accent-22, rgba(176, 128, 96, 0.22)) !important;
+.studio12-page.studio12-sub .booking-card .booking-form input,
+.studio12-page.studio12-sub .booking-card .booking-form select,
+.studio12-page.studio12-sub .booking-card .booking-form textarea,
+.studio12-page.studio12-sub .booking-card .field-input {
   border-radius: 0 !important;
   font-family: "Jost", system-ui, sans-serif !important;
   font-weight: 300 !important;
-  color: var(--s12-espresso) !important;
 }
 
 .studio12-page.studio12-sub .booking-submit {
@@ -1422,8 +1492,9 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
     grid-template-columns: 1fr;
   }
   /* Option A mobile nav: ☰ | centered logo | cart — single row. */
+  /* Image first on mobile; no section padding-top — fixed nav overlays the photo. */
   .studio12-page:not(.studio12-sub) .s12-hero {
-    padding-top: calc(clamp(88px, 14vh, 120px) + env(safe-area-inset-top, 0px));
+    padding-top: 0;
   }
   .studio12-page.studio12-sub {
     padding-top: calc(clamp(88px, 14vh, 120px) + env(safe-area-inset-top, 0px));
@@ -1480,8 +1551,12 @@ body:has(#bk-quick-edit-style) .studio12-page .s12-info-book-img-fallback--empty
   .studio12-page .s12-info-half {
     padding: 28px 20px;
   }
+  .studio12-page .s12-info {
+    padding-top: 20px;
+    padding-bottom: 40px;
+  }
   .studio12-page .s12-footer {
-    padding: 32px 24px;
+    padding: 20px 24px 32px;
   }
   .studio12-page .s12-nav-links {
     display: none;

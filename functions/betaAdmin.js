@@ -34,11 +34,11 @@ const DEFAULT_BETA_SETTINGS = {
   contactEmail: DEFAULT_SUPPORT_EMAIL,
   approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
   approvalEmailIntro:
-    "Good news — you've been approved for the Get Bookking iOS beta.\n\nOne quick step before anything works: your account isn't fully active until you finish setup.",
+    "Good news — you've been approved for the Get Bookking iOS beta.\n\nFollow the steps below to set your password, install the app, and finish business setup.",
   approvalEmailPortalNote:
-    "Once you're in, your beta portal is where you'll submit quick weekly reports and flag any bugs — it takes about two minutes a week, and it's how you keep your beta spot active.",
+    "Send feedback anytime through TestFlight (shake your iPhone or tap Send Beta Feedback in the app), or reply to this email.",
   approvalEmailClosing:
-    "Your temporary password expires in 7 days, so it's worth doing now.\n\nQuestions? Just reply to this email.\n\nWelcome aboard,",
+    "Your temporary password expires in 7 days, so it's worth finishing setup soon.\n\nWelcome aboard,",
   declineEmailSubject: "Get Bookking beta — update on your request",
   declineEmailBody:
     "Thank you for applying to the Get Bookking iOS beta — we really appreciate you taking the time.\n\nThis round filled up quickly and spots were limited, so we weren't able to include everyone. We've kept you on the waitlist: if a spot opens up, or when we expand the beta, you'll be one of the first to hear.\n\nYou don't need to do anything — we'll email you the moment there's room.\n\nThanks again for wanting to be part of this early. It means a lot.",
@@ -316,26 +316,31 @@ function buildApprovalEmailHtml({
   email,
   tempPassword,
   welcomeUrl,
+  signupUrl,
   testflightUrl,
   settings,
 }) {
   const cfg = normalizeBetaSettings(settings || {});
   const intro = textToEmailParagraphs(cfg.approvalEmailIntro);
-  const portalNote = textToEmailParagraphs(cfg.approvalEmailPortalNote);
+  const afterNote = textToEmailParagraphs(cfg.approvalEmailPortalNote);
   const closing = textToEmailParagraphs(cfg.approvalEmailClosing);
   const tfStep = testflightUrl
-    ? `Accept your TestFlight invite and install the app: <a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a>`
-    : "Accept your TestFlight invite (arriving separately from Apple) to install the app";
+    ? `Install the app from TestFlight: <a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a>`
+    : "Install the app from TestFlight (Apple will send a separate invite if needed)";
+  const signupStep = signupUrl
+    ? `Finish business setup at <a href="${escapeEmailHtml(signupUrl)}">Get Bookking signup</a> using the same email (<strong>${escapeEmailHtml(email)}</strong>).`
+    : `Finish business setup at ${escapeEmailHtml(marketingOrigin())}/signup using the same email (<strong>${escapeEmailHtml(email)}</strong>).`;
 
   return (
     `<p>Hi ${escapeEmailHtml(firstName || "there")},</p>` +
     intro +
     `<ol>` +
     `<li>Open <a href="${escapeEmailHtml(welcomeUrl)}">your setup link</a> and sign in with <strong>${escapeEmailHtml(email)}</strong> and your temporary password: <strong>${escapeEmailHtml(tempPassword)}</strong></li>` +
-    `<li>You&rsquo;ll be prompted to choose your own password — your account isn&rsquo;t fully active until you do</li>` +
+    `<li>Choose your own password when prompted</li>` +
     `<li>${tfStep}</li>` +
+    `<li>${signupStep}</li>` +
     `</ol>` +
-    portalNote +
+    afterNote +
     closing +
     `<p>Get Bookking</p>`
   );
@@ -430,6 +435,7 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
   );
 
   const welcomeUrl = `${betaOrigin()}/beta/welcome?t=${encodeURIComponent(token)}`;
+  const signupUrl = `${marketingOrigin()}/signup?beta=1&plan=${encodeURIComponent(plan)}`;
   const testflightUrl = (
     options.testflightUrl ||
     settings.testflightPublicJoinUrl ||
@@ -452,6 +458,7 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
       email,
       tempPassword,
       welcomeUrl,
+      signupUrl,
       testflightUrl,
       settings,
     }),

@@ -24,6 +24,7 @@ const COLLECTIONS = [
   "betaBugReports",
   "betaReports",
   "betaOnboardingTokens",
+  "betaSignupInviteTokens",
 ];
 
 function firebaseToolsRefreshToken() {

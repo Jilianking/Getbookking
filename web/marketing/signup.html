@@ -1316,6 +1316,7 @@
       email: '',
       password: '',
       plan: null,
+      betaInviteToken: null,
     };
 
     /* Pre-fill plan / industry from query string (from pricing CTA); legacy slugs map to canonical. */
@@ -1751,6 +1752,9 @@
         if (state.industry === 'custom') {
           payload.industryCustomLabel = industryCustomLabel;
         }
+        if (state.betaInviteToken) {
+          payload.betaInviteToken = state.betaInviteToken;
+        }
 
         var checkout = await startCheckout(payload);
         var clientSecret = checkout.data && checkout.data.clientSecret;
@@ -1799,6 +1803,74 @@
         errEl.textContent = formatFirebaseHttpsError(e);
         errEl.style.display = 'block';
       }
+    }
+
+    function applyBetaInvitePrefill(data) {
+      if (!data) return;
+      if (data.firstName) {
+        state.firstName = data.firstName;
+        var fn = document.getElementById('firstName');
+        if (fn) fn.value = data.firstName;
+      }
+      if (data.lastName) {
+        state.lastName = data.lastName;
+        var ln = document.getElementById('lastName');
+        if (ln) ln.value = data.lastName;
+      }
+      if (data.email) {
+        state.email = data.email;
+        var em = document.getElementById('email');
+        if (em) {
+          em.value = data.email;
+          em.readOnly = true;
+        }
+      }
+      if (data.businessName) {
+        state.bizName = data.businessName;
+        var bn = document.getElementById('bizName');
+        if (bn) bn.value = data.businessName;
+      }
+      if (data.plan) {
+        state.plan = data.plan;
+        if (data.plan === 'charter') {
+          state.signupPath = 'charters';
+          state.industry = 'charters';
+          state.skipPathStep = true;
+        } else if (['solo', 'studio', 'shop'].indexOf(data.plan) !== -1) {
+          state.signupPath = 'studios';
+          state.skipPathStep = true;
+        }
+      }
+      if (data.industry) {
+        state.industry = data.industry;
+        if (data.industry === 'custom' && data.industryCustomLabel) {
+          var custom = document.getElementById('industryCustom');
+          if (custom) custom.value = data.industryCustomLabel;
+        }
+      }
+      applySignupPathUI();
+      if (state.plan) {
+        document.querySelectorAll('.plan-pick').forEach(function(p) {
+          p.classList.toggle('selected', p.dataset.value === state.plan);
+        });
+        refreshCheckoutSummary();
+      }
+      validateBusinessStep();
+      validateAboutYou();
+    }
+
+    function loadBetaSignupInvite() {
+      var params = new URLSearchParams(location.search);
+      var token = (params.get('t') || '').trim();
+      if (!token) return Promise.resolve();
+      state.betaInviteToken = token;
+      return fns.httpsCallable('validateBetaSignupInvite')({ token: token })
+        .then(function(res) {
+          applyBetaInvitePrefill(res.data || {});
+        })
+        .catch(function(err) {
+          alert(formatFirebaseHttpsError(err));
+        });
     }
 
     function configurePublicTestFlightLink() {
@@ -2031,6 +2103,7 @@
 
     /* Stripe return: success completes provisioning; cancel returns to step 3 */
     document.addEventListener('DOMContentLoaded', function() {
+      loadBetaSignupInvite().finally(function() {
       populateBizStateSelect();
       configurePublicTestFlightLink();
       applySignupPathUI();
@@ -2111,6 +2184,7 @@
         try { unsubCheckout(); } catch (x) {}
         checkoutResumeFail('Still waiting for sign-in. Use the same email and password you entered at signup, then reload this page.');
       }, 12000);
+      });
     });
   </script>
   <script src="assets/nav.js?v=3"></script>

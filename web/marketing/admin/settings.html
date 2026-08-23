@@ -48,9 +48,9 @@
 
     var EMAIL_DEFAULTS = {
       approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
-      approvalEmailIntro: "Good news — you've been approved for the Get Bookking iOS beta.\n\nFollow the steps below to set your password, install the app, and finish business setup.",
+      approvalEmailIntro: "Good news — you've been approved for the Get Bookking iOS beta.\n\nUse your personal signup link below to create your account and finish business setup.",
       approvalEmailPortalNote: "Send feedback anytime through TestFlight (shake your iPhone or tap Send Beta Feedback in the app), or reply to this email.",
-      approvalEmailClosing: "Your temporary password expires in 7 days, so it's worth finishing setup soon.\n\nWelcome aboard,",
+      approvalEmailClosing: "Welcome aboard,",
       declineEmailSubject: "Get Bookking beta — update on your request",
       declineEmailBody: "Thank you for applying to the Get Bookking iOS beta — we really appreciate you taking the time.\n\nThis round filled up quickly and spots were limited, so we weren't able to include everyone. We've kept you on the waitlist: if a spot opens up, or when we expand the beta, you'll be one of the first to hear.\n\nYou don't need to do anything — we'll email you the moment there's room.\n\nThanks again for wanting to be part of this early. It means a lot."
     };
@@ -67,12 +67,9 @@
       document.getElementById('approvalPreview').innerHTML =
         '<p><strong>Hi Jordan,</strong></p>' +
         intro.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
-        '<ol>' +
-          '<li>Open <strong>your setup link</strong> and sign in with <strong>jordan@example.com</strong> and temporary password: <strong>••••••••</strong></li>' +
-          '<li>Choose your own password when prompted</li>' +
-          '<li>Install the app from TestFlight</li>' +
-          '<li>Finish business setup at <strong>Get Bookking signup</strong> using the same email</li>' +
-        '</ol>' +
+        '<p style="margin:16px 0"><strong>Create your account</strong> (personal signup link)</p>' +
+        '<p>Use the same email you applied with: <strong>jordan@example.com</strong></p>' +
+        '<p><strong>Install the app:</strong> TestFlight link</p>' +
         portal.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
         closing.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
         '<p><strong>Get Bookking</strong></p>';
@@ -119,22 +116,21 @@
               '<input id="approvalEmailSubject" /></div>' +
             '<div class="admin-field"><label for="approvalEmailIntro">Opening message</label>' +
               '<textarea id="approvalEmailIntro" rows="4"></textarea>' +
-              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — before the setup steps.</p></div>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — before the signup button.</p></div>' +
             '<div class="settings-preview">' +
               '<strong>Always included automatically:</strong>' +
-              '<ol>' +
-                '<li>Setup link + email + temporary password</li>' +
-                '<li>Prompt to choose a new password</li>' +
-                '<li>TestFlight install step</li>' +
-                '<li>Signup link to finish business setup</li>' +
-              '</ol>' +
+              '<ul>' +
+                '<li>Personal signup link button</li>' +
+                '<li>Reminder to use the same applied email</li>' +
+                '<li>TestFlight install link</li>' +
+              '</ul>' +
             '</div>' +
             '<div class="admin-field"><label for="approvalEmailPortalNote">Feedback note</label>' +
               '<textarea id="approvalEmailPortalNote" rows="3"></textarea>' +
-              '<p class="admin-list-meta" style="margin-top:6px">Shown after the setup steps — e.g. how to send TestFlight feedback.</p></div>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Shown after the signup and TestFlight links — e.g. how to send TestFlight feedback.</p></div>' +
             '<div class="admin-field"><label for="approvalEmailClosing">Closing</label>' +
               '<textarea id="approvalEmailClosing" rows="4"></textarea>' +
-              '<p class="admin-list-meta" style="margin-top:6px">Signature is always <strong>Get Bookking</strong>. Temp password expires in 7 days.</p></div>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Signature is always <strong>Get Bookking</strong>. Signup links expire in 7 days.</p></div>' +
             '<div class="admin-field"><label>Preview</label><div class="settings-preview" id="approvalPreview"></div></div>' +
 
             '<div class="settings-section-title" style="margin-top:24px">Decline email</div>' +

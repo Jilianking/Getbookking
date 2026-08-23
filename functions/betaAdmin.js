@@ -16,6 +16,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 
 const BETA_ONBOARDING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const BETA_SIGNUP_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const BUSINESS_TYPE_LABELS = {
   barber: "Barber shop",
@@ -34,11 +35,10 @@ const DEFAULT_BETA_SETTINGS = {
   contactEmail: DEFAULT_SUPPORT_EMAIL,
   approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
   approvalEmailIntro:
-    "Good news — you've been approved for the Get Bookking iOS beta.\n\nFollow the steps below to set your password, install the app, and finish business setup.",
+    "Good news — you've been approved for the Get Bookking iOS beta.\n\nUse your personal signup link below to create your account and finish business setup.",
   approvalEmailPortalNote:
     "Send feedback anytime through TestFlight (shake your iPhone or tap Send Beta Feedback in the app), or reply to this email.",
-  approvalEmailClosing:
-    "Your temporary password expires in 7 days, so it's worth finishing setup soon.\n\nWelcome aboard,",
+  approvalEmailClosing: "Welcome aboard,",
   declineEmailSubject: "Get Bookking beta — update on your request",
   declineEmailBody:
     "Thank you for applying to the Get Bookking iOS beta — we really appreciate you taking the time.\n\nThis round filled up quickly and spots were limited, so we weren't able to include everyone. We've kept you on the waitlist: if a spot opens up, or when we expand the beta, you'll be one of the first to hear.\n\nYou don't need to do anything — we'll email you the moment there's room.\n\nThanks again for wanting to be part of this early. It means a lot.",
@@ -130,7 +130,7 @@ async function assertActiveBetaTester(context) {
     if (status === "invited") {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "Finish setup from your invite email before using the beta portal."
+        "Complete signup using the link in your approval email."
       );
     }
   }
@@ -188,6 +188,74 @@ function normalizeBugAttachments(raw) {
 
 function onboardingToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function signupInviteToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function mapWaitlistBusinessTypeToSignupIndustry(businessType, businessTypeCustom) {
+  const key = (businessType || "").toString().trim().toLowerCase();
+  const custom = (businessTypeCustom || "").toString().trim();
+  if (key === "charters") {
+    return { industry: "charters", industryCustomLabel: "" };
+  }
+  if (key === "fitness") {
+    return { industry: "custom", industryCustomLabel: custom || "Fitness / gym" };
+  }
+  if (key === "other") {
+    return { industry: "custom", industryCustomLabel: custom || "Other" };
+  }
+  const signupIndustries = new Set(["barber", "hair", "tattoos", "nails"]);
+  if (signupIndustries.has(key)) {
+    return { industry: key, industryCustomLabel: "" };
+  }
+  return { industry: "custom", industryCustomLabel: custom || businessTypeLabel(key, custom) };
+}
+
+async function readBetaSignupInviteToken(token) {
+  const trimmed = (token || "").toString().trim();
+  if (!trimmed) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Invalid invite link."
+    );
+  }
+  const snap = await db().collection("betaSignupInviteTokens").doc(trimmed).get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError("not-found", "This invite link is not valid.");
+  }
+  const tok = snap.data() || {};
+  const now = admin.firestore.Timestamp.now();
+  if (tok.usedAt) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This invite link was already used."
+    );
+  }
+  if (tok.expiresAt && tok.expiresAt.toMillis() < now.toMillis()) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This invite link has expired."
+    );
+  }
+  return { id: snap.id, ...tok };
+}
+
+async function loadWaitlistInviteEntry(waitlistId) {
+  const snap = await db().collection("betaWaitlist").doc(waitlistId).get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError("not-found", "Beta request not found.");
+  }
+  return { id: snap.id, ...(snap.data() || {}) };
+}
+
+function buildBetaSignupInviteUrl(token, plan) {
+  const params = new URLSearchParams();
+  params.set("beta", "1");
+  if (plan) params.set("plan", plan);
+  params.set("t", token);
+  return `${marketingOrigin()}/signup?${params.toString()}`;
 }
 
 async function loadBetaSettings() {
@@ -314,8 +382,6 @@ function buildDeclineEmailHtml({ firstName, body }) {
 function buildApprovalEmailHtml({
   firstName,
   email,
-  tempPassword,
-  welcomeUrl,
   signupUrl,
   testflightUrl,
   settings,
@@ -324,22 +390,19 @@ function buildApprovalEmailHtml({
   const intro = textToEmailParagraphs(cfg.approvalEmailIntro);
   const afterNote = textToEmailParagraphs(cfg.approvalEmailPortalNote);
   const closing = textToEmailParagraphs(cfg.approvalEmailClosing);
-  const tfStep = testflightUrl
-    ? `Install the app from TestFlight: <a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a>`
-    : "Install the app from TestFlight (Apple will send a separate invite if needed)";
-  const signupStep = signupUrl
-    ? `Finish business setup at <a href="${escapeEmailHtml(signupUrl)}">Get Bookking signup</a> using the same email (<strong>${escapeEmailHtml(email)}</strong>).`
-    : `Finish business setup at ${escapeEmailHtml(marketingOrigin())}/signup using the same email (<strong>${escapeEmailHtml(email)}</strong>).`;
+  const signupBlock = signupUrl
+    ? `<p style="margin:24px 0"><a href="${escapeEmailHtml(signupUrl)}" style="display:inline-block;padding:12px 22px;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Create your account</a></p>` +
+      `<p>Use the same email you applied with: <strong>${escapeEmailHtml(email)}</strong></p>`
+    : `<p>Finish signup at ${escapeEmailHtml(marketingOrigin())}/signup using <strong>${escapeEmailHtml(email)}</strong>.</p>`;
+  const tfBlock = testflightUrl
+    ? `<p><strong>Install the app:</strong> <a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a></p>`
+    : `<p><strong>Install the app:</strong> use the TestFlight invite from Apple when it arrives.</p>`;
 
   return (
     `<p>Hi ${escapeEmailHtml(firstName || "there")},</p>` +
     intro +
-    `<ol>` +
-    `<li>Open <a href="${escapeEmailHtml(welcomeUrl)}">your setup link</a> and sign in with <strong>${escapeEmailHtml(email)}</strong> and your temporary password: <strong>${escapeEmailHtml(tempPassword)}</strong></li>` +
-    `<li>Choose your own password when prompted</li>` +
-    `<li>${tfStep}</li>` +
-    `<li>${signupStep}</li>` +
-    `</ol>` +
+    signupBlock +
+    tfBlock +
     afterNote +
     closing +
     `<p>Get Bookking</p>`
@@ -371,71 +434,22 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
   const email = (entry.email || "").toString().trim().toLowerCase();
   const plan = (entry.plan || "solo").toString();
 
-  const tempPassword = generateTempPassword();
-  let authUid = entry.authUid || null;
-  try {
-    if (authUid) {
-      await admin.auth().updateUser(authUid, { password: tempPassword });
-    } else {
-      let userRecord;
-      try {
-        userRecord = await admin.auth().getUserByEmail(email);
-        authUid = userRecord.uid;
-        await admin.auth().updateUser(authUid, { password: tempPassword });
-      } catch (err) {
-        if (err.code !== "auth/user-not-found") throw err;
-        userRecord = await admin.auth().createUser({
-          email,
-          password: tempPassword,
-          displayName: `${entry.firstName || ""} ${entry.lastName || ""}`.trim(),
-          emailVerified: false,
-        });
-        authUid = userRecord.uid;
-      }
-    }
-  } catch (err) {
-    console.error("approveWaitlistEntry auth", err);
-    throw new functions.https.HttpsError(
-      "internal",
-      "Could not create beta account. Try again."
-    );
-  }
-
-  const token = onboardingToken();
+  const token = signupInviteToken();
   const now = admin.firestore.Timestamp.now();
   const expiresAt = admin.firestore.Timestamp.fromMillis(
-    now.toMillis() + BETA_ONBOARDING_TTL_MS
+    now.toMillis() + BETA_SIGNUP_INVITE_TTL_MS
   );
-  await db().collection("betaOnboardingTokens").doc(token).set({
+  await db().collection("betaSignupInviteTokens").doc(token).set({
     waitlistId,
     email,
-    authUid,
+    plan,
     createdAt: now,
     expiresAt,
     usedAt: null,
+    authUid: null,
   });
 
-  const memberRef = db().collection("betaMembers").doc(authUid);
-  await memberRef.set(
-    {
-      email,
-      firstName: entry.firstName || "",
-      lastName: entry.lastName || "",
-      plan,
-      teamSize: entry.teamSize || 1,
-      businessName: entry.businessName || "",
-      businessType: entry.businessType || "",
-      waitlistId,
-      status: "invited",
-      invitedAt: now,
-      onboardedAt: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  const welcomeUrl = `${betaOrigin()}/beta/welcome?t=${encodeURIComponent(token)}`;
-  const signupUrl = `${marketingOrigin()}/signup?beta=1&plan=${encodeURIComponent(plan)}`;
+  const signupUrl = buildBetaSignupInviteUrl(token, plan);
   const testflightUrl = (
     options.testflightUrl ||
     settings.testflightPublicJoinUrl ||
@@ -456,8 +470,6 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
     html: buildApprovalEmailHtml({
       firstName: entry.firstName,
       email,
-      tempPassword,
-      welcomeUrl,
       signupUrl,
       testflightUrl,
       settings,
@@ -467,7 +479,7 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
   await waitlistRef.set(
     {
       status: "invite_sent",
-      authUid,
+      inviteToken: token,
       approvedAt: now,
       inviteSentAt: now,
       approvedByUid: adminUid,
@@ -478,11 +490,9 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
 
   return {
     ok: true,
-    authUid,
-    welcomeUrl,
+    signupUrl,
     emailSent: !emailResult.skipped,
     emailSkipped: !!emailResult.skipped,
-    tempPassword: emailResult.skipped ? tempPassword : undefined,
   };
 }
 
@@ -696,6 +706,7 @@ function registerBetaAdminFunctions(functionsModule) {
         status: "pending",
         approvedAt: del,
         inviteSentAt: del,
+        inviteToken: del,
         approvedByUid: del,
         declinedAt: del,
         declinedByUid: del,
@@ -877,6 +888,34 @@ function registerBetaAdminFunctions(functionsModule) {
       createdAt: now,
     });
     return { ok: true, id: ref.id };
+  });
+
+  fns.validateBetaSignupInvite = functions.https.onCall(async (data) => {
+    const token = (data?.token || "").toString().trim();
+    try {
+      const tok = await readBetaSignupInviteToken(token);
+      const entry = await loadWaitlistInviteEntry(tok.waitlistId);
+      const mapped = mapWaitlistBusinessTypeToSignupIndustry(
+        entry.businessType,
+        entry.businessTypeCustom
+      );
+      return {
+        email: tok.email || entry.email || "",
+        plan: tok.plan || entry.plan || "solo",
+        firstName: entry.firstName || "",
+        lastName: entry.lastName || "",
+        businessName: entry.businessName || "",
+        businessType: entry.businessType || "",
+        businessTypeCustom: entry.businessTypeCustom || "",
+        teamSize: entry.teamSize || 1,
+        industry: mapped.industry,
+        industryCustomLabel: mapped.industryCustomLabel,
+        waitlistId: tok.waitlistId || entry.id || "",
+      };
+    } catch (err) {
+      if (err instanceof functions.https.HttpsError) throw err;
+      throw new functions.https.HttpsError("internal", "Could not validate invite link.");
+    }
   });
 
   fns.validateBetaOnboardingToken = functions.https.onCall(async (data) => {
@@ -1122,4 +1161,86 @@ function registerBetaAdminFunctions(functionsModule) {
   });
 }
 
-module.exports = { registerBetaAdminFunctions };
+async function assertBetaSignupInviteForCheckout(token, email) {
+  const tok = await readBetaSignupInviteToken(token);
+  const inviteEmail = (tok.email || "").toString().trim().toLowerCase();
+  const signupEmail = (email || "").toString().trim().toLowerCase();
+  if (!inviteEmail || inviteEmail !== signupEmail) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Sign up with the same email address that received the beta approval."
+    );
+  }
+  return tok;
+}
+
+async function activateBetaTesterFromSignup({ uid, email, betaInviteToken }) {
+  const token = (betaInviteToken || "").toString().trim();
+  if (!token || !uid) {
+    return { activated: false };
+  }
+
+  const tok = await readBetaSignupInviteToken(token);
+  const inviteEmail = (tok.email || "").toString().trim().toLowerCase();
+  const signupEmail = (email || "").toString().trim().toLowerCase();
+  if (!inviteEmail || inviteEmail !== signupEmail) {
+    console.warn("activateBetaTesterFromSignup email mismatch", inviteEmail, signupEmail);
+    return { activated: false };
+  }
+
+  const entry = await loadWaitlistInviteEntry(tok.waitlistId);
+  const now = admin.firestore.Timestamp.now();
+  const existingClaims =
+    (await admin.auth().getUser(uid)).customClaims || {};
+  await admin.auth().setCustomUserClaims(uid, {
+    ...existingClaims,
+    betaTester: true,
+  });
+
+  await db().collection("betaMembers").doc(uid).set(
+    {
+      email: inviteEmail,
+      firstName: entry.firstName || "",
+      lastName: entry.lastName || "",
+      plan: tok.plan || entry.plan || "solo",
+      teamSize: entry.teamSize || 1,
+      businessName: entry.businessName || "",
+      businessType: entry.businessType || "",
+      businessTypeCustom: entry.businessTypeCustom || "",
+      waitlistId: tok.waitlistId || entry.id || "",
+      status: "active",
+      invitedAt: entry.inviteSentAt || entry.approvedAt || now,
+      onboardedAt: now,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await db().collection("betaSignupInviteTokens").doc(token).set(
+    {
+      usedAt: now,
+      authUid: uid,
+    },
+    { merge: true }
+  );
+
+  if (tok.waitlistId) {
+    await db().collection("betaWaitlist").doc(tok.waitlistId).set(
+      {
+        status: "active",
+        authUid: uid,
+        activatedAt: now,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  return { activated: true };
+}
+
+module.exports = {
+  registerBetaAdminFunctions,
+  assertBetaSignupInviteForCheckout,
+  activateBetaTesterFromSignup,
+};

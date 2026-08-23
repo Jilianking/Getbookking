@@ -1179,6 +1179,18 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     console.error("scheduleTapToPayLaunchEmailAfterSignup", err);
   }
 
+  if (pending.betaInviteToken) {
+    try {
+      await activateBetaTesterFromSignup({
+        uid,
+        email,
+        betaInviteToken: pending.betaInviteToken,
+      });
+    } catch (err) {
+      console.error("activateBetaTesterFromSignup", err);
+    }
+  }
+
   return { tenantId, slug, subscriptionPlan };
 }
 
@@ -7612,6 +7624,11 @@ exports.createProviderSubscriptionCheckout = functions
     const normalized = normalizeSignupWizardPayload(data);
     const priceId = stripePriceIdForPlan(normalized.plan);
 
+    const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
+    if (betaInviteToken) {
+      await assertBetaSignupInviteForCheckout(betaInviteToken, email);
+    }
+
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError(
@@ -7622,14 +7639,15 @@ exports.createProviderSubscriptionCheckout = functions
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
 
     const pendingRef = db.collection("pendingProviderSignups").doc(uid);
-    await pendingRef.set(
-      {
-        ...normalized,
-        email,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const pendingPayload = {
+      ...normalized,
+      email,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (betaInviteToken) {
+      pendingPayload.betaInviteToken = betaInviteToken;
+    }
+    await pendingRef.set(pendingPayload, { merge: true });
 
     const origin = (data.marketingOrigin || "")
       .toString()
@@ -13740,7 +13758,7 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   return { ok: true };
 });
 
-const { registerBetaAdminFunctions } = require("./betaAdmin");
+const { registerBetaAdminFunctions, assertBetaSignupInviteForCheckout, activateBetaTesterFromSignup } = require("./betaAdmin");
 registerBetaAdminFunctions(exports);
 
 const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");

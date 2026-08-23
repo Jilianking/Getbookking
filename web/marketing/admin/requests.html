@@ -392,9 +392,8 @@
         return;
       }
       var lines = ['Approved. Account created but email was NOT sent (Resend not configured).'];
-      if (data.welcomeUrl) lines.push('Welcome link: ' + data.welcomeUrl);
-      if (data.tempPassword) lines.push('Temporary password: ' + data.tempPassword);
-      lines.push('Share these with the tester manually, or configure Resend in Settings.');
+      if (data.signupUrl) lines.push('Signup link: ' + data.signupUrl);
+      lines.push('Share the signup link with the tester manually if email delivery is off, or configure Resend in Settings.');
       alert(lines.join('\n\n'));
     }
 

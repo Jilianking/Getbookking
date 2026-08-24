@@ -124,23 +124,6 @@ struct LoginView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(AppDesign.chipBorder, lineWidth: 1)
             )
-
-            NavigationLink {
-                DemoPersonaPickerView()
-                    .environmentObject(authViewModel)
-            } label: {
-                Text("Try a live demo")
-                    .font(.subheadline.weight(.medium))
-                    .frame(maxWidth: .infinity)
-            }
-            .foregroundStyle(AppDesign.textPrimary)
-            .padding(.vertical, 14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(AppDesign.chipBorder, lineWidth: 1)
-            )
-            .disabled(isLoading)
-            .padding(.top, 4)
         }
         .padding(24)
         .appCard()

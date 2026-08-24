@@ -806,7 +806,27 @@ const DEMO_ACTIVITY_BY_SLUG = {
         ],
         sms: [
           { dir: "inbound", dayOffset: -1, body: "Sunset still going out if it’s breezy?" },
-          { dir: "outbound", dayOffset: -1, body: "If we can leave the bight safely, we’re on. I’ll text if we need to move it." },
+          {
+            dir: "outbound",
+            dayOffset: -1,
+            body: "If we can leave Palm Key Marina safely, we’re on. I’ll text if we need to move it.",
+          },
+          {
+            dir: "inbound",
+            dayOffset: 0,
+            body: "Looks like storms tomorrow — can we reschedule the sunset cruise?",
+          },
+          {
+            dir: "outbound",
+            dayOffset: 0,
+            body: "Yeah, better safe. Want Saturday same time, or Sunday?",
+          },
+          { dir: "inbound", dayOffset: 0, body: "Saturday works for us" },
+          {
+            dir: "outbound",
+            dayOffset: 0,
+            body: "Locked in for Saturday — same time at the Palm Key Marina dock. I’ll text if anything shifts.",
+          },
         ],
       },
       {
@@ -854,6 +874,32 @@ const DEMO_ACTIVITY_BY_SLUG = {
           { service: "Full-Day Offshore Charter", status: "completed", dayOffset: -48, price: 950 },
         ],
         sms: [],
+      },
+      {
+        name: "Jordan Hale",
+        email: "jordan.hale.kw@gmail.com",
+        phone: "+13055551755",
+        bookings: [
+          { service: "Half-Day Reef Charter", status: "NEW", dayOffset: 4, price: 450 },
+        ],
+        sms: [
+          {
+            dir: "inbound",
+            dayOffset: 0,
+            body: "Hey — can we book a half-day reef trip for 4 next week?",
+          },
+          {
+            dir: "outbound",
+            dayOffset: 0,
+            body: "We’ve got Thursday or Friday morning open. Which works better?",
+          },
+          { dir: "inbound", dayOffset: 0, body: "Thursday morning is perfect" },
+          {
+            dir: "outbound",
+            dayOffset: 0,
+            body: "Great — I’ll send a deposit link to confirm the spot. Once that’s paid, you’re locked in.",
+          },
+        ],
       },
       {
         name: "Drew Coleman",

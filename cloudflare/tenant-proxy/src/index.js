@@ -6,6 +6,7 @@
  *
  * Custom domains (Bookking-managed via Namecheap):
  *   Resolve host → slug from Cloud Function resolveTenantDomain (domainMappings).
+ *   Response: { ok, host, slug, status } — no tenantId.
  *   Only status=active domains are served. No hardcoded domain map.
  *
  * Team invites:

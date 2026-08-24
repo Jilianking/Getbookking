@@ -48,7 +48,7 @@
 
     var EMAIL_DEFAULTS = {
       approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
-      approvalEmailIntro: "Good news — you've been approved for the Get Bookking iOS beta.\n\nUse your personal signup link below to create your account and finish business setup.",
+      approvalEmailIntro: "Good news — you've been approved for the Get Bookking iOS beta.\n\nFollow these steps to get started:",
       approvalEmailPortalNote: "Send feedback anytime through TestFlight (shake your iPhone or tap Send Beta Feedback in the app), or reply to this email.",
       approvalEmailClosing: "Welcome aboard,",
       declineEmailSubject: "Get Bookking beta — update on your request",
@@ -64,12 +64,19 @@
       var intro = document.getElementById('approvalEmailIntro').value.trim() || EMAIL_DEFAULTS.approvalEmailIntro;
       var portal = document.getElementById('approvalEmailPortalNote').value.trim() || EMAIL_DEFAULTS.approvalEmailPortalNote;
       var closing = document.getElementById('approvalEmailClosing').value.trim() || EMAIL_DEFAULTS.approvalEmailClosing;
+      var tfUrl = ((loadedSettings.testflightPublicJoinUrl || window.testflightPublicJoinUrl || '').trim());
       document.getElementById('approvalPreview').innerHTML =
         '<p><strong>Hi Jordan,</strong></p>' +
         intro.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
-        '<p style="margin:16px 0"><strong>Create your account</strong> (personal signup link)</p>' +
-        '<p>Use the same email you applied with: <strong>jordan@example.com</strong></p>' +
-        '<p><strong>Install the app:</strong> TestFlight link</p>' +
+        '<ol>' +
+          '<li><strong>Create your account</strong><br/>Personal signup link button<br/>Use the same email you applied with: <strong>jordan@example.com</strong></li>' +
+          '<li><strong>Install the app on TestFlight</strong><br/>' +
+            (tfUrl
+              ? ('Join TestFlight button + <a href="' + BetaAdmin.escapeHtml(tfUrl) + '">' + BetaAdmin.escapeHtml(tfUrl) + '</a>')
+              : 'TestFlight link (set in Admin → TestFlight)') +
+          '</li>' +
+          '<li><strong>Sign in to the app</strong><br/>Use the same email and password you just created.</li>' +
+        '</ol>' +
         portal.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
         closing.split(/\n\s*\n/).map(function (p) { return '<p>' + BetaAdmin.escapeHtml(p.trim()).replace(/\n/g, '<br/>') + '</p>'; }).join('') +
         '<p><strong>Get Bookking</strong></p>';
@@ -116,18 +123,18 @@
               '<input id="approvalEmailSubject" /></div>' +
             '<div class="admin-field"><label for="approvalEmailIntro">Opening message</label>' +
               '<textarea id="approvalEmailIntro" rows="4"></textarea>' +
-              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — before the signup button.</p></div>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Appears after &ldquo;Hi {first name},&rdquo; — before the numbered steps.</p></div>' +
             '<div class="settings-preview">' +
               '<strong>Always included automatically:</strong>' +
-              '<ul>' +
-                '<li>Personal signup link button</li>' +
-                '<li>Reminder to use the same applied email</li>' +
-                '<li>TestFlight install link</li>' +
-              '</ul>' +
+              '<ol>' +
+                '<li>Create your account — personal signup link + applied email reminder</li>' +
+                '<li>Install on TestFlight — public join link from Admin → TestFlight</li>' +
+                '<li>Sign in to the app — same email and password as signup</li>' +
+              '</ol>' +
             '</div>' +
             '<div class="admin-field"><label for="approvalEmailPortalNote">Feedback note</label>' +
               '<textarea id="approvalEmailPortalNote" rows="3"></textarea>' +
-              '<p class="admin-list-meta" style="margin-top:6px">Shown after the signup and TestFlight links — e.g. how to send TestFlight feedback.</p></div>' +
+              '<p class="admin-list-meta" style="margin-top:6px">Shown after the three steps — e.g. how to send TestFlight feedback.</p></div>' +
             '<div class="admin-field"><label for="approvalEmailClosing">Closing</label>' +
               '<textarea id="approvalEmailClosing" rows="4"></textarea>' +
               '<p class="admin-list-meta" style="margin-top:6px">Signature is always <strong>Get Bookking</strong>. Signup links expire in 7 days.</p></div>' +
@@ -148,7 +155,7 @@
 
           '<div class="admin-card" style="padding:20px">' +
             '<div class="settings-section-title">Enrollment</div>' +
-            '<p class="admin-list-meta" style="line-height:1.6">Waitlist signups are unlimited. Approve pending requests from the Requests tab. Testers set a password, install TestFlight, then finish setup at signup.</p>' +
+            '<p class="admin-list-meta" style="line-height:1.6">Waitlist signups are unlimited. Approve pending requests from the Requests tab. Testers create an account, install TestFlight, then sign in to the app with the same credentials.</p>' +
           '</div>' +
 
           '<div class="admin-card" style="padding:20px">' +

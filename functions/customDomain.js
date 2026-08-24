@@ -2012,7 +2012,8 @@ function registerCustomDomainFunctions(exportsObj) {
       res.status(404).json({ ok: false, host, slug: null, status: status || null });
       return;
     }
-    res.status(200).json({ ok: true, host, slug, tenantId: data.tenantId || null, status });
+    // Public resolver: slug + status only (no tenantId enumeration).
+    res.status(200).json({ ok: true, host, slug, status });
   });
 }
 

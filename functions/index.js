@@ -4786,6 +4786,18 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
       "tenantSlug, customerName, and customerEmail are required"
     );
   }
+  if (customerName.length > 200 || customerEmail.length > 320) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Name or email is too long"
+    );
+  }
+  if (customerEmail.indexOf("@") <= 0) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "A valid customerEmail is required"
+    );
+  }
 
   const tenantSnap = await db
     .collection("tenants")
@@ -4847,7 +4859,7 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     }
     return null;
   })();
-  const notes = data?.notes ? data.notes.toString().trim() : null;
+  const notes = data?.notes ? data.notes.toString().trim().slice(0, 4000) : null;
 
   const bookingData = {
     status: "NEW",
@@ -6119,6 +6131,18 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError(
       "invalid-argument",
       "tenantSlug, customerName, and customerEmail are required"
+    );
+  }
+  if (customerName.length > 200 || customerEmail.length > 320) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Name or email is too long"
+    );
+  }
+  if (customerEmail.indexOf("@") <= 0) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "A valid customerEmail is required"
     );
   }
 
@@ -13457,19 +13481,23 @@ exports.twilioInboundSms = functions
       res.status(405).send("Method Not Allowed");
       return;
     }
-    const authToken = sms.twilioAuthToken.value();
-    const sig = req.headers["x-twilio-signature"];
-    const url = sms.inboundWebhookUrl();
+    const authToken = (sms.twilioAuthToken.value() || "").toString().trim();
+    const sig = (req.headers["x-twilio-signature"] || "").toString().trim();
+    const url = (sms.inboundWebhookUrl() || "").toString().trim();
     const params = req.body || {};
-    if (authToken && sig && url) {
-      // eslint-disable-next-line global-require
-      const twilio = require("twilio");
-      const valid = twilio.validateRequest(authToken, sig, url, params);
-      if (!valid) {
-        console.warn("twilioInboundSms: invalid signature");
-        res.status(403).send("Forbidden");
-        return;
-      }
+    // Fail closed: never process inbound SMS without a verified Twilio signature.
+    if (!authToken || !sig || !url) {
+      console.warn("twilioInboundSms: missing auth token, signature, or webhook URL");
+      res.status(403).send("Forbidden");
+      return;
+    }
+    // eslint-disable-next-line global-require
+    const twilio = require("twilio");
+    const valid = twilio.validateRequest(authToken, sig, url, params);
+    if (!valid) {
+      console.warn("twilioInboundSms: invalid signature");
+      res.status(403).send("Forbidden");
+      return;
     }
 
     const from = (params.From || "").toString();

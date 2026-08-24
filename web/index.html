@@ -15823,18 +15823,22 @@
               }
               function uploadFileFields(fm, tenantId, formResponses) {
                 function runUploads(storage) {
+                  var authUid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
+                  if (!authUid) {
+                    return Promise.reject(new Error('Sign in required for file uploads.'));
+                  }
                   var fileInputs = fm.querySelectorAll('input[data-type="file"]');
                   var fieldPromises = [];
                   for (var fi = 0; fi < fileInputs.length; fi++) {
                     var inp = fileInputs[fi];
                     var key = inp.getAttribute('data-key');
                     if (!key || !inp.files || inp.files.length === 0) continue;
-                    var uid = uploadId();
-                    var pathBase = 'tenantRefImages/' + tenantId + '/' + uid + '/';
+                    // Storage rules require folder == auth uid (anonymous session).
+                    var pathBase = 'tenantRefImages/' + tenantId + '/' + authUid + '/';
                     var uploads = [];
                     for (var j = 0; j < inp.files.length; j++) {
                       var file = inp.files[j];
-                      var safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+                      var safeName = (uploadId() + '_' + (file.name || 'image')).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
                       var ref = storage.ref(pathBase + safeName);
                       uploads.push(ref.put(file).then(function(snapshot) { return snapshot.ref.getDownloadURL(); }));
                     }

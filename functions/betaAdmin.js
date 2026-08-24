@@ -10,6 +10,8 @@
  */
 
 const DEFAULT_SUPPORT_EMAIL = "support@getbookking.com";
+const DEFAULT_TESTFLIGHT_PUBLIC_JOIN_URL =
+  "https://testflight.apple.com/join/GD8AUjpS";
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -31,11 +33,11 @@ const DEFAULT_BETA_SETTINGS = {
   signupsCloseLabel: "Jul 24",
   studioSlotCap: 20,
   shopSlotCap: 10,
-  testflightPublicJoinUrl: "",
+  testflightPublicJoinUrl: DEFAULT_TESTFLIGHT_PUBLIC_JOIN_URL,
   contactEmail: DEFAULT_SUPPORT_EMAIL,
   approvalEmailSubject: "You're in — welcome to the Get Bookking beta",
   approvalEmailIntro:
-    "Good news — you've been approved for the Get Bookking iOS beta.\n\nUse your personal signup link below to create your account and finish business setup.",
+    "Good news — you've been approved for the Get Bookking iOS beta.\n\nFollow these steps to get started:",
   approvalEmailPortalNote:
     "Send feedback anytime through TestFlight (shake your iPhone or tap Send Beta Feedback in the app), or reply to this email.",
   approvalEmailClosing: "Welcome aboard,",
@@ -269,7 +271,22 @@ function normalizeBetaSettings(raw) {
   if (!contact || contact === "beta@getbookking.com") {
     settings.contactEmail = DEFAULT_SUPPORT_EMAIL;
   }
+  if (!(settings.testflightPublicJoinUrl || "").toString().trim()) {
+    settings.testflightPublicJoinUrl = DEFAULT_TESTFLIGHT_PUBLIC_JOIN_URL;
+  }
   return settings;
+}
+
+function resolveTestflightPublicJoinUrl(settings, override) {
+  const url = (
+    override ||
+    settings?.testflightPublicJoinUrl ||
+    DEFAULT_TESTFLIGHT_PUBLIC_JOIN_URL ||
+    ""
+  )
+    .toString()
+    .trim();
+  return url;
 }
 
 function resolveSupportEmail(settings) {
@@ -390,19 +407,26 @@ function buildApprovalEmailHtml({
   const intro = textToEmailParagraphs(cfg.approvalEmailIntro);
   const afterNote = textToEmailParagraphs(cfg.approvalEmailPortalNote);
   const closing = textToEmailParagraphs(cfg.approvalEmailClosing);
-  const signupBlock = signupUrl
-    ? `<p style="margin:24px 0"><a href="${escapeEmailHtml(signupUrl)}" style="display:inline-block;padding:12px 22px;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Create your account</a></p>` +
-      `<p>Use the same email you applied with: <strong>${escapeEmailHtml(email)}</strong></p>`
-    : `<p>Finish signup at ${escapeEmailHtml(marketingOrigin())}/signup using <strong>${escapeEmailHtml(email)}</strong>.</p>`;
-  const tfBlock = testflightUrl
-    ? `<p><strong>Install the app:</strong> <a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a></p>`
-    : `<p><strong>Install the app:</strong> use the TestFlight invite from Apple when it arrives.</p>`;
+  const signupStep = signupUrl
+    ? `<p style="margin:12px 0 0"><a href="${escapeEmailHtml(signupUrl)}" style="display:inline-block;padding:12px 22px;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Create your account</a></p>` +
+      `<p style="margin:8px 0 0">Use the same email you applied with: <strong>${escapeEmailHtml(email)}</strong></p>`
+    : `<p style="margin:8px 0 0">Finish signup at ${escapeEmailHtml(marketingOrigin())}/signup using <strong>${escapeEmailHtml(email)}</strong>.</p>`;
+  const testflightStep = testflightUrl
+    ? `<p style="margin:8px 0 0"><a href="${escapeEmailHtml(testflightUrl)}" style="display:inline-block;padding:12px 22px;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Join TestFlight</a></p>` +
+      `<p style="margin:8px 0 0"><a href="${escapeEmailHtml(testflightUrl)}">${escapeEmailHtml(testflightUrl)}</a></p>`
+    : `<p style="margin:8px 0 0">Use the TestFlight invite from Apple when it arrives.</p>`;
+  const stepsBlock =
+    `<ol style="margin:20px 0;padding-left:22px;line-height:1.55">` +
+    `<li style="margin-bottom:18px"><strong>Create your account</strong>${signupStep}</li>` +
+    `<li style="margin-bottom:18px"><strong>Install the app on TestFlight</strong>${testflightStep}</li>` +
+    `<li style="margin-bottom:0"><strong>Sign in to the app</strong>` +
+    `<p style="margin:8px 0 0">Open Get Bookking and sign in with the same email and password you just created.</p></li>` +
+    `</ol>`;
 
   return (
     `<p>Hi ${escapeEmailHtml(firstName || "there")},</p>` +
     intro +
-    signupBlock +
-    tfBlock +
+    stepsBlock +
     afterNote +
     closing +
     `<p>Get Bookking</p>`
@@ -450,13 +474,10 @@ async function approveWaitlistEntry(waitlistId, adminUid, options = {}) {
   });
 
   const signupUrl = buildBetaSignupInviteUrl(token, plan);
-  const testflightUrl = (
-    options.testflightUrl ||
-    settings.testflightPublicJoinUrl ||
-    ""
-  )
-    .toString()
-    .trim();
+  const testflightUrl = resolveTestflightPublicJoinUrl(
+    settings,
+    options.testflightUrl
+  );
 
   const supportEmail = resolveSupportEmail(settings);
 

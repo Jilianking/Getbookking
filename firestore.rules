@@ -145,16 +145,30 @@ service cloud.firestore {
     }
 
     // Public host → tenant slug for custom domains (written only by Cloud Functions).
+    // Clients should treat this as slug/status lookup only; prefer resolveTenantDomain for CF proxy.
     match /domainMappings/{host} {
       allow read: if true;
       allow write: if false;
     }
 
+    // Public website reads the tenant doc by slug (booking SPA). Firestore cannot mask
+    // fields on read — keep money/SMS keys write-protected (tenantMoneyKeysUnchanged /
+    // Admin SDK only). Prefer not to store new secrets on this document.
     match /tenants/{tenantId} {
       allow read: if true;
 
       allow create: if isSignedIn()
-        && request.resource.data.ownerUid == request.auth.uid;
+        && request.resource.data.ownerUid == request.auth.uid
+        && !request.resource.data.keys().hasAny([
+          'stripeAccountId',
+          'stripeTerminalLocationId',
+          'stripeCustomerId',
+          'stripeSubscriptionId',
+          'smsPhoneNumber',
+          'smsPhoneNumberSid',
+          'twilioMessagingServiceSid',
+          'twilioSubaccountSid'
+        ]);
 
       // Owners may update any non-ownerUid field; teammates may update non-money fields only.
       allow update: if canManageTenant(tenantId)

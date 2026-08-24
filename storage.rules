@@ -12,41 +12,52 @@ service firebase.storage {
         && userTenantId() == tenantId;
     }
 
-    // Web booking intake: tenantRefImages/{tenantId}/{uploadId}/{filename}
-    // Requires Anonymous Auth (Firebase Console) so request.auth is set.
+    function isSafeImageUpload() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function isSafeAttachmentUpload() {
+      return request.resource.size < 25 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType.matches('video/.*')
+            || request.resource.contentType == 'application/pdf');
+    }
+
+    // Web booking intake: tenantRefImages/{tenantId}/{authUid}/{filename}
+    // Requires Anonymous Auth. uploadId must equal the signed-in uid so callers
+    // cannot write into another session's folder (or arbitrary paths).
     match /tenantRefImages/{tenantId}/{uploadId}/{filename} {
       allow read: if true;
       allow write: if request.auth != null
-                  && request.resource.size < 5 * 1024 * 1024
-                  && request.resource.contentType.matches('image/.*');
+                  && uploadId == request.auth.uid
+                  && firestore.exists(/databases/(default)/documents/tenants/$(tenantId))
+                  && isSafeImageUpload()
+                  && filename.matches('[a-zA-Z0-9._-]{1,200}');
     }
 
     match /users/{uid}/profile.jpg {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null
                   && request.auth.uid == uid
-                  && request.resource.size < 5 * 1024 * 1024
-                  && request.resource.contentType.matches('image/.*');
+                  && isSafeImageUpload();
     }
 
     // Writes require image/* on the object (set StorageMetadata.contentType in app SDKs; nil metadata → permission denied).
     match /tenants/{tenantId}/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null
-                  && request.resource.size < 5 * 1024 * 1024
-                  && request.resource.contentType.matches('image/.*')
+                  && isSafeImageUpload()
                   && canWriteTenantTree(tenantId);
     }
 
-    // Beta bug report attachments (tester uploads to own uid folder).
+    // Beta bug report attachments — uploaders may read/write only their own uid folder.
+    // Admins load attachments via download URLs / Admin SDK (not broad Storage list access).
     match /betaBugAttachments/{uid}/{uploadId}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null
                   && request.auth.uid == uid
-                  && request.resource.size < 25 * 1024 * 1024
-                  && (request.resource.contentType.matches('image/.*')
-                      || request.resource.contentType.matches('video/.*')
-                      || request.resource.contentType == 'application/pdf');
+                  && isSafeAttachmentUpload();
     }
   }
 }

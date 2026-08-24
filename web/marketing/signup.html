@@ -1260,7 +1260,6 @@
             <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payments →</button>
             <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
           </div>
-          <a href="#" class="btn-appstore" id="appStoreLink" hidden>Join the beta</a>
           <a href="#" class="success-site-link" id="siteLink" target="_blank">Visit your booking site &rarr;</a>
         </div>
       </div>
@@ -1873,28 +1872,6 @@
         });
     }
 
-    function configurePublicTestFlightLink() {
-      var joinUrl = (window.testflightPublicJoinUrl || '').trim();
-      var successBeta = document.getElementById('appStoreLink');
-      var successCopy = document.getElementById('signupSuccessAppCopy');
-
-      if (!successBeta) return;
-      successBeta.hidden = !joinUrl;
-      if (!joinUrl) {
-        successBeta.removeAttribute('href');
-        successBeta.removeAttribute('target');
-        successBeta.removeAttribute('rel');
-        return;
-      }
-
-      successBeta.href = joinUrl;
-      successBeta.target = '_blank';
-      successBeta.rel = 'noopener noreferrer';
-      if (successCopy) {
-        successCopy.textContent = 'Your booking site is live. Join the iOS beta on TestFlight, then sign in with this same email.';
-      }
-    }
-
     function showSuccess() {
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
@@ -2105,7 +2082,6 @@
     document.addEventListener('DOMContentLoaded', function() {
       loadBetaSignupInvite().finally(function() {
       populateBizStateSelect();
-      configurePublicTestFlightLink();
       applySignupPathUI();
       if (state.skipPathStep) {
         var pathPanel = document.getElementById('step0');

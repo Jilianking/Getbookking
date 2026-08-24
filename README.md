@@ -1,93 +1,140 @@
-# Get Bookking
+<p align="center">
+  <img
+    src="web/marketing/assets/brand/logo-dark-128.png"
+    alt="Get Bookking logo"
+    width="96"
+  >
+</p>
 
-Native iOS app and web stack for **Get Bookking** — business owners manage branding, booking pages, clients, and site design; clients book via the public site at [getbookking.com](https://getbookking.com).
+<h1 align="center">Get Bookking</h1>
 
-| Area | Path | Notes |
-|------|------|--------|
-| iOS app | `Test/` (target **Get Bookking**) | SwiftUI, Firebase, WKWebView site preview |
-| Public site | `web/` | Single-page tenant sites (`index.html`) |
-| Cloud Functions | `functions/` | Booking, Stripe, Twilio, etc. |
-| Tenant proxy | `cloudflare/tenant-proxy/` | Optional edge routing |
+Get Bookking is a native iOS application and web platform for managing
+business websites, bookings, schedules, clients, payments, team members,
+and client communication.
 
-Open **`Test.xcodeproj`** in Xcode and run the **Get Bookking** scheme.
+## Project Status
 
----
+Get Bookking is currently being tested through Apple TestFlight and remains
+under active development.
 
-## Design → Builder & Quick Edit
+Most application and backend systems are implemented. Feature availability
+and billing behavior may differ from the eventual production release.
 
-**Design** loads the live site in a `WKWebView`. With **Builder** on, **Quick Edit** overlays touch-friendly editing on the preview.
+During TestFlight:
 
-### Bottom chrome (slim toolbar)
+- SMS phone-number purchasing, provisioning, and refresh are disabled.
+- Domain purchase and transfer are disabled.
+- Demo accounts use seeded customers, bookings, messages, and payment activity.
 
-- Collapse chevron → floating save FAB when collapsed
-- **Text** color well (shows computed color of focused text when editing)
-- Font stepper (− / size / +) when the field supports size — no field title label
-- **Save** (checkmark) — commits inline text and dirty colors
+## Repository Structure
 
-Section chips, “Editing: …”, and separate Hero/Button wells were removed; colors are chosen by **tapping the preview**.
+| Path | Purpose |
+|---|---|
+| `Test/` | SwiftUI iOS application |
+| `web/` | Public tenant websites and booking forms |
+| `web/marketing/` | Signup, beta, account, and administrative pages |
+| `functions/` | Firebase Functions and third-party integrations |
+| `cloudflare/tenant-proxy/` | Tenant subdomain and custom-domain routing |
+| `scripts/` | Development, migration, and demo-data utilities |
+| `docs/` | Integration and implementation documentation |
 
-### Tap rules (preview)
+## Implemented Systems
 
-| Tap target | Result |
-|------------|--------|
-| Blue dashed box on **words** | Inline **text** edit + **Text** swatch |
-| Blue box on **button labels** | Text/button color (role-aware) |
-| **Open grey** inside hero (not on copy) | **Hero** color sheet |
-| **Hero photo column** (right on Blade/Classic/etc.) | Image picker; **long-press** photo for Hero color |
-| Other `data-bk-color-surface` bands | Band color (page, card, featured, about) |
+- Firebase Authentication and tenant-based accounts
+- Firestore-backed bookings, clients, services, products, and teams
+- Booking requests, approvals, calendar scheduling, and appointment history
+- Charter scheduling and boat occupancy
+- Customizable public websites and booking forms
+- In-app website preview, Builder, and Quick Edit
+- Stripe Connect payments, deposits, refunds, subscriptions, and reporting
+- Stripe Terminal and Tap to Pay on iPhone
+- Twilio client-messaging infrastructure
+- Team roles, permissions, invitations, and payment workflows
+- Firebase Hosting for tenant and account websites
+- Cloudflare tenant and custom-domain routing
+- TestFlight onboarding and beta administration
+- Seeded demo accounts and activity
 
-**Blade / Classic / Stonecut:** Hero band color = **page background** (`backgroundColorHex`).  
-**Luxe / Studio 12:** Hero band color = **hero image slot** tint (`previewHeroSlotColorHex`).
+## Website Builder
 
-**Rule of thumb:** boxed copy = text; open hero grey = background (with photo-column exception above).
+The Design area loads the tenant website in a `WKWebView`. Builder mode
+connects the SwiftUI editing interface to the website preview through an
+injected JavaScript bridge.
 
-### Key iOS files
+Quick Edit supports:
 
-| File | Role |
-|------|------|
-| `Test/DesignView.swift` | Builder toggle, preview URL, Quick Edit bridge |
-| `Test/PreviewQuickEditChrome.swift` | Bottom toolbar, color sheets, throttled patches |
-| `Test/WebViewPreview.swift` | Injected Quick Edit JS/CSS, touch routing |
-| `Test/PreviewColorSurface.swift` | Hero/page/card/featured/about → tenant color fields |
-| `Test/QuickEditFieldTitles.swift` | Field labels (chrome no longer shows title row) |
+- Inline website-copy editing
+- Independent text, button, card, and section colors
+- Font-size adjustments
+- Image selection
+- Template and palette changes
+- Persisted tenant-specific overrides
 
-### Key web files
+Changes to Builder behavior commonly involve both the Swift files under
+`Test/` and the template implementation in `web/index.html`.
 
-| File | Role |
-|------|------|
-| `web/index.html` | Templates, `data-edit-key`, `data-bk-color-surface`, `bk-hero-band-hit`, `applyPreviewColorPatch` |
-| `web/README.md` | Hosting deploy & Firestore tenant setup |
+## Technology
 
-Preview color updates use `window.__bkApplyPreviewColorPatch` (fast CSS-vars path while dragging; full band pass on sheet **Done** or save).
+- **iOS:** Swift, SwiftUI, WebKit
+- **Backend:** Firebase Authentication, Firestore, Cloud Functions, Storage
+- **Web:** HTML, CSS, JavaScript, Firebase Hosting
+- **Payments:** Stripe Connect, Stripe Terminal, Tap to Pay on iPhone
+- **Messaging:** Twilio
+- **Routing:** Cloudflare Workers
+- **Domain integration:** Namecheap API
+- **Shipping:** Shippo
 
----
+## Local Development
 
-## Web preview in the app
+### Requirements
 
-- Preview URL: tenant `bookingUrl` + `_cb` reload token (`DesignViewModel.webPreviewReloadToken`).
-- After editing **`web/index.html`**, rebuild the iOS app **and** deploy hosting if you test against production CDN HTML.
+- macOS with Xcode
+- Node.js 22
+- Firebase CLI
+- Access to a configured Firebase project
 
-```bash
-firebase deploy --only hosting
-```
+### iOS
 
-See `web/README.md` for Firebase config and tenant fields.
+Open `Test.xcodeproj` and run the **Get Bookking** scheme.
 
----
+The application requires:
 
-## Cloud Functions
+- A valid `GoogleService-Info.plist`
+- Local `Secrets.plist` configuration
+- Access to the configured Firebase backend
+
+### Cloud Functions
 
 ```bash
 cd functions
 npm install
-firebase deploy --only functions
+npm run serve
 ```
 
-See `functions/README.md` for secrets (Stripe, Twilio, etc.).
+See [`functions/README.md`](functions/README.md) for backend configuration
+and service-specific setup.
 
----
+### Web
 
-## Git / contributions
+The public booking experience is located in `web/`. Use Firebase Emulator
+Suite or a static server that supports single-page application routing.
 
-- Do not commit secrets (`.env`, API keys, `js/firebase-config.js` with real keys).
-- Quick Edit changes often touch **both** `Test/Test/*.swift` and `web/index.html` — include both in the same PR when behavior depends on injected JS.
+See [`web/README.md`](web/README.md) for web and Firestore setup.
+
+## Documentation
+
+- [Cloud Functions](functions/README.md)
+- [Web booking](web/README.md)
+- [Demo accounts](scripts/README-demo-accounts.md)
+- [Cloudflare tenant proxy](cloudflare/tenant-proxy/README.md)
+- [Tap to Pay](docs/TAP_TO_PAY.md)
+- [Client texting](docs/TWILIO-CLIENT-TEXTING.md)
+- [Push notifications](docs/PUSH_NOTIFICATIONS.md)
+- [Shippo setup](docs/SHIPPO_SETUP.md)
+
+## Development Notes
+
+- Keep iOS and web changes together when behavior depends on the WebKit bridge.
+- Deploy Firebase Hosting after changing production web templates.
+- Deploy Firestore and Storage rules when their local definitions change.
+- Do not commit credentials, environment files, or customer data.

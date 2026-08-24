@@ -1,8 +1,8 @@
 <p align="center">
   <img
-    src="web/marketing/assets/brand/logo-dark-128.png"
+    src="docs/get-bookking-logo.jpg"
     alt="Get Bookking logo"
-    width="96"
+    width="120"
   >
 </p>
 

@@ -13786,8 +13786,11 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   return { ok: true };
 });
 
-const { registerBetaAdminFunctions, assertBetaSignupInviteForCheckout, activateBetaTesterFromSignup } = require("./betaAdmin");
+const { registerBetaAdminFunctions, assertPlatformAdmin, assertBetaSignupInviteForCheckout, activateBetaTesterFromSignup } = require("./betaAdmin");
 registerBetaAdminFunctions(exports);
+
+const { registerPublicSiteFunctions } = require("./publicSite");
+registerPublicSiteFunctions(exports, { assertPlatformAdmin });
 
 const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");
 registerTapToPayLaunchEmailFunctions(exports);

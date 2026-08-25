@@ -11981,13 +11981,8 @@
         return list[0];
       }
 
-      function loadTenant(slug) {
-        return db.collection('tenants').where('slug','==',slug.toLowerCase()).limit(1).get()
-          .then(function(snap){
-            if (snap.empty) return null;
-            var d = snap.docs[0];
-            var data = d.data();
-            var row = { id: d.id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
+      function mapLoadedTenant(id, data, slug) {
+            var row = { id: id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
               smsEnabled: data.smsEnabled === true,
               smsStatus: (data.smsStatus || '').toString(),
               smsPhoneNumber: (data.smsPhoneNumber || '').toString(),
@@ -12128,6 +12123,26 @@
             }
             row.resolvedWebThemeId = resolvedWebThemeId(row);
             return row;
+      }
+      function loadTenant(slug) {
+        slug = (slug || '').toString().trim().toLowerCase();
+        if (!slug) return Promise.resolve(null);
+        return db.collection('publicSites').doc(slug).get()
+          .then(function(doc) {
+            if (doc.exists) {
+              var data = doc.data() || {};
+              var tid = (data.tenantId || '').toString();
+              if (!tid) return null;
+              return mapLoadedTenant(tid, data, slug);
+            }
+            // Fallback until publicSites is backfilled. Fails closed once tenant reads are locked.
+            return db.collection('tenants').where('slug','==',slug).limit(1).get()
+              .then(function(snap) {
+                if (snap.empty) return null;
+                var d = snap.docs[0];
+                return mapLoadedTenant(d.id, d.data() || {}, slug);
+              })
+              .catch(function() { return null; });
           });
       }
       /** Light portfolio themes: accent drawer matches primary CTA (BOOK NOW). */

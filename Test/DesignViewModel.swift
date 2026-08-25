@@ -1390,6 +1390,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 return
             }
             let tenant = try await firebaseService.fetchTenant(tenantId: tid)
+            let heroOnTenant = (tenant?["heroImageUrl"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !heroOnTenant.isEmpty {
+                try? await firebaseService.syncMyPublicSite()
+            }
             let svc = try await firebaseService.fetchTenantServices(tenantId: tid)
             var persistSplit: (featured: [String], gallery: [String])?
             await MainActor.run {
@@ -1992,6 +1997,11 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 "heroImagePixelWidth": dims.w,
                 "heroImagePixelHeight": dims.h
             ])
+            do {
+                try await firebaseService.syncMyPublicSite()
+            } catch {
+                // Public projection is Admin-only; preview still reloads and native inject can stamp.
+            }
             await MainActor.run {
                 heroImageUrl = url
                 heroImagePixelWidth = dims.w

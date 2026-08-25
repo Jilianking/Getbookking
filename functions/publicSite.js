@@ -191,7 +191,7 @@ async function syncPublicSiteForTenant(firestore, tenantId, data) {
   const slug = normalizeSlug(data && data.slug);
   if (!slug) return { ok: false, reason: "missing-slug" };
   const payload = buildPublicSitePayload(tenantId, data);
-  await firestore.collection(PUBLIC_SITES).doc(slug).set(payload);
+  await firestore.collection(PUBLIC_SITES).doc(slug).set(payload, { merge: true });
   return { ok: true, slug };
 }
 
@@ -236,6 +236,34 @@ function registerPublicSiteFunctions(exportsObj, opts) {
     .onWrite((change, context) =>
       handleTenantPublicSiteWrite(change, context.params.tenantId)
     );
+
+  exportsObj.syncMyPublicSite = functions.https.onCall(async (_data, context) => {
+    if (!context.auth || !context.auth.uid) {
+      throw new functions.https.HttpsError("unauthenticated", "Sign in required.");
+    }
+    const userSnap = await db().collection("users").doc(context.auth.uid).get();
+    const tenantId = userSnap.exists
+      ? String((userSnap.data() || {}).tenantId || "").trim()
+      : "";
+    if (!tenantId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "No business linked to this account."
+      );
+    }
+    const tenantSnap = await db().collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Business not found.");
+    }
+    const result = await syncPublicSiteForTenant(db(), tenantId, tenantSnap.data() || {});
+    if (!result.ok) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        result.reason || "Could not publish the public site."
+      );
+    }
+    return { ok: true, slug: result.slug };
+  });
 
   if (typeof assertPlatformAdmin === "function") {
     exportsObj.backfillPublicSites = functions

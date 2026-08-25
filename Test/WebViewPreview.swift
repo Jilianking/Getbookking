@@ -163,6 +163,8 @@ struct WebViewPreview: View {
     var quickEditEnabled: Bool = false
     /// Page background hex — fills WKWebView underlay so Edit chrome never shows a black gap.
     var pageBackgroundHex: String = "#FFFFFF"
+    /// Tenant hero photo — stamped into the preview when `publicSites` is missing `heroImageUrl`.
+    var heroImageUrl: String = ""
     var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
@@ -175,6 +177,7 @@ struct WebViewPreview: View {
                         containerWidth: geo.size.width,
                         quickEditEnabled: quickEditEnabled,
                         pageBackgroundHex: pageBackgroundHex,
+                        heroImageUrl: heroImageUrl,
                         bridge: bridge,
                         onQuickEdit: onQuickEdit
                     )
@@ -201,6 +204,7 @@ struct WebViewRepresentable: UIViewRepresentable {
     var containerWidth: CGFloat = 0
     var quickEditEnabled: Bool = false
     var pageBackgroundHex: String = "#FFFFFF"
+    var heroImageUrl: String = ""
     var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
@@ -227,6 +231,7 @@ struct WebViewRepresentable: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
+        context.coordinator.heroImageUrl = heroImageUrl
         context.coordinator.onQuickEdit = onQuickEdit
         context.coordinator.quickEditEnabled = quickEditEnabled
         Self.applyPageChrome(to: webView, pageBackgroundHex: pageBackgroundHex)
@@ -241,6 +246,7 @@ struct WebViewRepresentable: UIViewRepresentable {
             return
         }
         context.coordinator.applyQuickEditIfNeeded(webView: webView)
+        context.coordinator.injectNativeHeroImage(webView: webView)
     }
 
     /// Match underlay to page color. Do not change contentInset on Edit — that shifts the preview.
@@ -256,14 +262,17 @@ struct WebViewRepresentable: UIViewRepresentable {
 
     /// Charter mobile layout + viewport width — always on in app preview (Edit on or off).
     private static let previewLayoutCSS = """
-    .charter-hero>.bk-band-content,.charter-nav>.bk-band-content,.charter-route-canvas>.bk-band-content{position:static!important;display:contents!important;}
+    .charter-nav>.bk-band-content,.charter-route-canvas>.bk-band-content{position:static!important;display:contents!important;}
+    .charter-hero>.bk-band-content{position:relative!important;z-index:0!important;display:flex!important;align-items:center!important;flex:1 1 auto!important;align-self:stretch!important;width:100%!important;min-height:100%!important;background:none!important;pointer-events:none!important;}
+    .charter-hero-inner{pointer-events:auto!important;}
     .charter-search>.bk-band-content{position:static!important;display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;}
     .charter-search,.charter-search>.bk-band-content,.charter-search-grid,.charter-search .field,.charter-route-canvas[data-bk-surface-key="charter.chartersPage"],.charter-route-canvas[data-bk-surface-key="charter.chartersPage"]>.bk-band-content,.charter-browse-layout,.charter-browse-filters,.charter-browse-filter-chips,.charter-browse-date-section,.charter-browse-date-strip,.charter-browse-list,.charter-browse-row,.charter-feat-card,.charter-feat-card>.bk-band-content,.charter-blueprint.charter-quote,.charter-blueprint.charter-quote>.bk-band-content,.charter-quote-media,.charter-quote-media [data-edit-key],a.charter-blueprint[data-bk-band-tappable],a.charter-blueprint[data-bk-band-tappable]>.bk-band-content{pointer-events:auto!important;}
     .charter-search input,.charter-search select,.charter-search a.charter-search-go,[data-charter-home-date],.charter-browse-cal-card button,.charter-cal button,.charter-browse-dropdowns select,.charter-cal-nav,.charter-clear-filters,.charter-browse-month-btn,.charter-date-strip-day,.charter-filter-chip{pointer-events:auto!important;}
     .charter-section>.bk-band-content .charter-sec-label,.charter-section>.bk-band-content .charter-sec-heading,.charter-section>.bk-band-content .charter-shop-lead,.charter-section>.bk-band-content .charter-about-title,.charter-section>.bk-band-content a[href],.charter-section>.bk-band-content [data-edit-key]{pointer-events:auto!important;}
     @media (max-width:960px){
-    .charter-hero{flex-direction:column!important;justify-content:flex-end!important;align-items:stretch!important;}
-    .charter-hero>.bk-band-content,.charter-hero-inner,.charter-search{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+    .charter-hero{flex-direction:column!important;justify-content:flex-end!important;align-items:stretch!important;min-height:480px!important;height:auto!important;overflow:hidden!important;}
+    .charter-hero>.bk-band-content{flex-direction:column!important;justify-content:flex-end!important;align-items:stretch!important;min-height:480px!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;}
+    .charter-hero-inner,.charter-search{width:100%!important;min-width:0!important;box-sizing:border-box!important;}
     .charter-search-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;width:100%!important;min-width:0!important;}
     .charter-search .field{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;}
     .charter-search .charter-search-field--full{grid-column:1/-1!important;}
@@ -344,6 +353,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         private var inlineColorWorkItem: DispatchWorkItem?
         /// Last viewport width applied — re-run when the preview frame resizes.
         var lastPreviewViewportWidth: Int = 0
+        var heroImageUrl: String = ""
 
         init(messageHandlerName: String) {
             self.messageHandlerName = messageHandlerName
@@ -354,7 +364,57 @@ struct WebViewRepresentable: UIViewRepresentable {
             quickEditInstallInFlight = false
         }
 
-        /// Viewport + charter mobile layout — persists when Edit toggles off (unlike quick-edit styles).
+        /// Stamp the in-app hero URL onto `.charter-hero-media` (publicSites often omits heroImageUrl).
+        fileprivate func injectNativeHeroImage(webView: WKWebView) {
+            let raw = heroImageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty,
+                  let encoded = try? JSONEncoder().encode(raw),
+                  let json = String(data: encoded, encoding: .utf8) else { return }
+            webView.evaluateJavaScript(
+                """
+                (function(){
+                  var url = \(json);
+                  if (!url) return;
+                  window.__bkNativeHeroImageUrl = url;
+                  function apply(){
+                    var media = document.querySelector('.charter-hero-media');
+                    var hero = document.querySelector('.charter-hero');
+                    if (!media) return false;
+                    var img = media.querySelector('img[data-edit-key="heroImage"]');
+                    if (!img) {
+                      var slot = media.querySelector('.charter-hero-slot');
+                      img = document.createElement('img');
+                      img.setAttribute('data-edit-key', 'heroImage');
+                      img.alt = '';
+                      if (slot && slot.parentNode) slot.parentNode.replaceChild(img, slot);
+                      else media.insertBefore(img, media.firstChild);
+                    }
+                    img.src = url;
+                    img.style.setProperty('opacity', '1', 'important');
+                    img.style.setProperty('object-fit', 'cover', 'important');
+                    var cssUrl = 'url(' + JSON.stringify(url) + ')';
+                    media.style.setProperty('background-image', cssUrl, 'important');
+                    media.style.setProperty('background-size', 'cover', 'important');
+                    media.style.setProperty('background-position', 'center', 'important');
+                    if (hero) {
+                      try { hero.style.removeProperty('background'); } catch (e0) {}
+                      try { hero.style.removeProperty('background-image'); } catch (e1) {}
+                    }
+                    if (window.__bkApplyCharterHeroPhoto) window.__bkApplyCharterHeroPhoto();
+                    return true;
+                  }
+                  var n = 0;
+                  (function tick(){
+                    apply();
+                    n += 1;
+                    if (n < 40) setTimeout(tick, 150);
+                  })();
+                })();
+                """,
+                completionHandler: nil
+            )
+        }
+
         func applyPreviewChromeIfNeeded(webView: WKWebView, width: CGFloat) {
             let w = max(320, Int(round(width)))
             if w != lastPreviewViewportWidth {
@@ -363,6 +423,8 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
             WebViewRepresentable.applyPreviewLayoutStyles(webView: webView)
         }
+
+        /// Viewport + charter mobile layout — persists when Edit toggles off (unlike quick-edit styles).
 
         func evaluateQuickEdit(_ javascript: String) {
             webView?.evaluateJavaScript(javascript, completionHandler: nil)
@@ -581,6 +643,7 @@ struct WebViewRepresentable: UIViewRepresentable {
             let width = webView.bounds.width > 100 ? webView.bounds.width : (webView.superview?.bounds.width ?? UIScreen.main.bounds.width)
             applyPreviewChromeIfNeeded(webView: webView, width: width)
             applyQuickEditIfNeeded(webView: webView)
+            injectNativeHeroImage(webView: webView)
             // Always re-apply in-memory style maps after navigation (Edit on or off).
             DispatchQueue.main.async { [weak self] in
                 self?.bridge?.reapplyCachedStyleMaps()
@@ -746,7 +809,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-bk-band-tappable]:not(.blade-topnav):not(.stonecut-nav):not(.s12-topnav){position:relative!important;}' +
                 '.bk-band-content,.blade-band-content{position:relative!important;z-index:1!important;pointer-events:none!important;}' +
                 /* Charter layout wrappers stay static + contents — full rules live in bk-preview-layout-style. */
-                '.charter-hero>.bk-band-content,.charter-nav>.bk-band-content,.charter-route-canvas>.bk-band-content{position:static!important;display:contents!important;}' +
+                '.charter-nav>.bk-band-content,.charter-route-canvas>.bk-band-content{position:static!important;display:contents!important;}' +
+                '.charter-hero>.bk-band-content{position:relative!important;z-index:0!important;display:flex!important;align-items:center!important;flex:1 1 auto!important;align-self:stretch!important;width:100%!important;min-height:100%!important;background:none!important;pointer-events:none!important;}' +
+                '.charter-hero-inner{pointer-events:auto!important;}' +
                 '.charter-search>.bk-band-content{position:static!important;display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;}' +
                 '.charter-search,.charter-search>.bk-band-content,.charter-search-grid,.charter-search .field,.charter-route-canvas[data-bk-surface-key="charter.chartersPage"],.charter-route-canvas[data-bk-surface-key="charter.chartersPage"]>.bk-band-content,.charter-browse-layout,.charter-browse-filters,.charter-browse-filter-chips,.charter-browse-date-section,.charter-browse-date-strip,.charter-browse-list,.charter-browse-row,.charter-feat-card,.charter-feat-card>.bk-band-content,.charter-blueprint.charter-quote,.charter-blueprint.charter-quote>.bk-band-content,.charter-quote-media,.charter-quote-media [data-edit-key],a.charter-blueprint[data-bk-band-tappable],a.charter-blueprint[data-bk-band-tappable]>.bk-band-content{pointer-events:auto!important;}' +
                 '.charter-search input,.charter-search select,.charter-search a.charter-search-go,[data-charter-home-date],.charter-browse-cal-card button,.charter-cal button,.charter-browse-dropdowns select,.charter-cal-nav,.charter-clear-filters,.charter-browse-month-btn,.charter-date-strip-day,.charter-filter-chip{pointer-events:auto!important;}' +

@@ -13,8 +13,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <script src="/js/site-perf.js?v=20260818b"></script>
-  <link rel="stylesheet" href="/css/charter-theme.css?v=20260823x" id="bk-theme-css-charter-preload">
-  <link rel="stylesheet" href="/css/shared.css?v=20260823x">
+  <link rel="stylesheet" href="/css/charter-theme.css?v=20260825e" id="bk-theme-css-charter-preload">
+  <link rel="stylesheet" href="/css/shared.css?v=20260825e">
   <style>
     @font-face {
       font-family: 'Foglihten No06';
@@ -4074,7 +4074,7 @@
         } else if (/stonecut/i.test(String(themeId || ''))) {
           css = loadThemeStylesheet('/css/stonecut-theme.css?v=20260822h', 'bk-theme-css-stonecut');
         } else if (/charter/i.test(String(themeId || ''))) {
-          css = loadThemeStylesheet('/css/charter-theme.css?v=20260823x', 'bk-theme-css-charter');
+          css = loadThemeStylesheet('/css/charter-theme.css?v=20260825e', 'bk-theme-css-charter');
         } else {
           css = loadThemeStylesheet('/css/classic-theme.css?v=20260812m', 'bk-theme-css-classic');
         }
@@ -4317,6 +4317,102 @@
         root.style.setProperty('--bk-slot-border-light', slotLight.border);
       }
 
+      function charterHeroHasPhoto(el) {
+        return !!(el && el.querySelector && el.querySelector('img[data-edit-key="heroImage"]'));
+      }
+
+      function resolvedHeroImageUrl(tenant) {
+        var fromTenant = tenant && tenant.heroImageUrl ? String(tenant.heroImageUrl).trim() : '';
+        if (fromTenant) return fromTenant;
+        var native = window.__bkNativeHeroImageUrl;
+        return native ? String(native).trim() : '';
+      }
+
+      function charterHeroPhotoUrl(el, tenant) {
+        var u = resolvedHeroImageUrl(tenant);
+        if (u) return u;
+        var img = el && el.querySelector && el.querySelector('img[data-edit-key="heroImage"]');
+        return (img && img.getAttribute('src')) ? String(img.getAttribute('src')).trim() : '';
+      }
+
+      /** Photo lives only on `.charter-hero-media`. Never stamp `background` on the keyed section. */
+      function stampCharterHeroPhotoFill(el, url) {
+        if (!url) return;
+        var hero = el && el.classList && el.classList.contains('charter-hero')
+          ? el
+          : (el && el.closest ? el.closest('.charter-hero') : null);
+        if (!hero) hero = document.querySelector('.charter-hero');
+        var media = (hero && hero.querySelector) ? hero.querySelector('.charter-hero-media') : null;
+        if (!media && el && el.classList && el.classList.contains('charter-hero-media')) media = el;
+        if (hero) {
+          try { hero.style.removeProperty('background'); } catch (e0) {}
+          try { hero.style.removeProperty('background-image'); } catch (e1) {}
+        }
+        if (!media) return;
+        var safe = String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        var cssUrl = 'url("' + safe + '")';
+        try { media.style.removeProperty('background'); } catch (e2) {}
+        media.style.setProperty('background-image', cssUrl, 'important');
+        media.style.setProperty('background-size', 'cover', 'important');
+        media.style.setProperty('background-position', 'center', 'important');
+        media.style.setProperty('background-repeat', 'no-repeat', 'important');
+      }
+
+      function paintCharterHeroSurface(el, tenant, col, tc) {
+        if (!el) return;
+        try { el.style.removeProperty('background'); } catch (e0) {}
+        try { el.style.removeProperty('background-image'); } catch (e1) {}
+        var url = charterHeroPhotoUrl(el, tenant);
+        if (url) {
+          stampCharterHeroPhotoFill(el, url);
+          try { el.style.setProperty('color', '#fff', 'important'); } catch (e2) {}
+          el.style.setProperty('--bk-about-fg', '#fff');
+          return;
+        }
+        var sid = el.getAttribute('data-bk-color-surface') || 'hero';
+        var fill = (col && col.charAt(0) === '#') ? col : null;
+        if (!fill && tc) fill = roleBgForColorSurface(sid, tc);
+        if (!fill) fill = roleBgFromLiveCss(sid);
+        if (fill) {
+          try { el.style.setProperty('background-color', fill, 'important'); }
+          catch (e3) { el.style.backgroundColor = fill; }
+          applyKeyedCharterSurfaceInk(el, 'charter.hero', fill);
+        } else {
+          el.style.removeProperty('background-color');
+          clearKeyedCharterSurfaceInk(el, 'charter.hero');
+        }
+      }
+
+      /** Mount the selected hero photo on the section (behind search). */
+      function applyCharterHeroPhoto(tenant) {
+        var hero = document.querySelector('.charter-hero');
+        var media = document.querySelector('.charter-hero-media');
+        var url = resolvedHeroImageUrl(tenant) || charterHeroPhotoUrl(hero, tenant);
+        if (!url) return;
+        if (hero) stampCharterHeroPhotoFill(hero, url);
+        if (media) {
+          var img = media.querySelector('img[data-edit-key="heroImage"]');
+          if (!img) {
+            var slot = media.querySelector('.charter-hero-slot');
+            img = document.createElement('img');
+            img.setAttribute('data-edit-key', 'heroImage');
+            img.alt = '';
+            if (slot && slot.parentNode) slot.parentNode.replaceChild(img, slot);
+            else media.insertBefore(img, media.firstChild);
+          }
+          img.src = url;
+        }
+      }
+      window.__bkApplyCharterHeroPhoto = function() {
+        var url = window.__bkNativeHeroImageUrl || '';
+        applyCharterHeroPhoto({ heroImageUrl: url });
+        var hero = document.querySelector('.charter-hero');
+        if (hero && typeof paintCharterHeroSurface === 'function') {
+          var col = (window.__bkCachedWebSurfaceColors || {})['charter.hero'];
+          paintCharterHeroSurface(hero, { heroImageUrl: url }, col, null);
+        }
+      };
+
       /** Applies accent-tinted fills to all empty hero / featured image slots (builder preview + live site). */
       function applyEmptyImageSlotColors(tenant) {
         if (!tenant) return;
@@ -4331,7 +4427,7 @@
           '.studio12-page .s12-hero-img-fallback',
           '.studio12-page .s12-hero-img-col:not(:has(img))',
           '.luxe-hero--empty',
-          '.charter-hero-media [data-edit-key="heroImage"]:not(img)',
+          '.charter-hero-media [data-edit-key="heroImage"]:not(img):not(.bk-hero-image-hit)',
           '.charter-hero-slot'
         ];
         heroSelectors.forEach(function(sel) {
@@ -4821,6 +4917,10 @@
           var key = (el.getAttribute('data-bk-surface-key') || '').trim();
           if (!key) return;
           var col = colors[key];
+          if (key === 'charter.hero') {
+            paintCharterHeroSurface(el, tenant, col, tc);
+            return;
+          }
           if (col && col.charAt(0) === '#') {
             try { el.style.setProperty('background', col, 'important'); }
             catch (e) { el.style.background = col; }
@@ -5219,6 +5319,7 @@
         applyColorSurfaceBands(t);
         applyCharterHomeBandColors(t);
         applyWebSurfaceColors(t);
+        applyCharterHeroPhoto(t);
         [].forEach.call(document.querySelectorAll('.card'), function(el) {
           if ((el.getAttribute('data-bk-surface-key') || '').trim()) return;
           el.style.background = c.card;
@@ -7013,7 +7114,7 @@
         var heroLeadRaw = tenantSiteTextOrCompute(tenant, 'heroSubtitle', function() {
           return 'Licensed captains, our own boats, transparent pricing. Half-day to full-day trips out of Key West.';
         });
-        var heroImg = tenant.heroImageUrl || '';
+        var heroImg = resolvedHeroImageUrl(tenant);
         var quoteFallback = (tenant.reviews && tenant.reviews[0] && (tenant.reviews[0].text || tenant.reviews[0].quote))
           ? (tenant.reviews[0].text || tenant.reviews[0].quote)
           : "Capt. Mike put us on yellowtail before the first cold drink was gone. Best half-day we’ve done in the Keys.";
@@ -7024,7 +7125,9 @@
         return '<div class="charter-page">' +
           charterNavHtml(tenant, 'home') +
           charterHeroSectionHtml(tenant,
-            '<div class="charter-hero-media">' +
+            '<div class="charter-hero-media"' + (heroImg
+              ? ' style="background-image:url(' + esc(heroImg) + ');background-size:cover;background-position:center"'
+              : '') + '>' +
               (heroImg
                 ? '<img data-edit-key="heroImage" src="' + esc(heroImg) + '" alt="">'
                 : '<div data-edit-key="heroImage" class="charter-hero-slot"></div>') +
@@ -12127,20 +12230,27 @@
       function loadTenant(slug) {
         slug = (slug || '').toString().trim().toLowerCase();
         if (!slug) return Promise.resolve(null);
+        function withNativeHero(row) {
+          if (!row) return row;
+          if (!(row.heroImageUrl || '').trim() && window.__bkNativeHeroImageUrl) {
+            row.heroImageUrl = String(window.__bkNativeHeroImageUrl).trim();
+          }
+          return row;
+        }
         return db.collection('publicSites').doc(slug).get()
           .then(function(doc) {
             if (doc.exists) {
               var data = doc.data() || {};
               var tid = (data.tenantId || '').toString();
               if (!tid) return null;
-              return mapLoadedTenant(tid, data, slug);
+              return withNativeHero(mapLoadedTenant(tid, data, slug));
             }
             // Fallback until publicSites is backfilled. Fails closed once tenant reads are locked.
             return db.collection('tenants').where('slug','==',slug).limit(1).get()
               .then(function(snap) {
                 if (snap.empty) return null;
                 var d = snap.docs[0];
-                return mapLoadedTenant(d.id, d.data() || {}, slug);
+                return withNativeHero(mapLoadedTenant(d.id, d.data() || {}, slug));
               })
               .catch(function() { return null; });
           });

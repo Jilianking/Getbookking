@@ -12,7 +12,7 @@
   max-height: 560px;
   display: flex;
   align-items: center;
-  background: #1d1f20;
+  background-color: #1d1f20;
   color: #fff;
   overflow: hidden;
 }
@@ -48,7 +48,19 @@
 }
 @media (max-width: 960px) {
   .charter-hero {
+    flex-direction: column;
+    justify-content: flex-end;
     align-items: stretch;
+    height: auto;
+    min-height: 480px;
+    max-height: none;
+    overflow: hidden;
+  }
+  .charter-hero > .bk-band-content {
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    min-height: 480px;
   }
   .charter-hero-inner {
     width: 100%;
@@ -107,8 +119,20 @@
   z-index: 1;
   pointer-events: none;
 }
-/* Charter layout shells — relative positioning breaks display:contents / inner grids in Edit preview. */
-.charter-hero > .bk-band-content,
+/* Hero wrap must be a real stacking context — display:contents drops the photo in WKWebView. */
+.charter-hero > .bk-band-content {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 100%;
+  background: none !important;
+  pointer-events: none;
+}
+/* Other Charter layout shells — relative positioning breaks inner grids in Edit preview. */
 .charter-search > .bk-band-content,
 .charter-route-canvas > .bk-band-content {
   position: static;
@@ -125,6 +149,7 @@
  * Charter hero search / browse page untappable even when controls opt back in.
  * Restore hit testing for interactive shells while the live band hit stays off.
  */
+.charter-hero-inner,
 .charter-search,
 .charter-search > .bk-band-content,
 .charter-search-grid,

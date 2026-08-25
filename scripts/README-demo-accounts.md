@@ -83,8 +83,9 @@ Full image upload (hero + 6 gallery + philosophy + book CTA): see `upload-tenant
 
 `web/marketing/templates.html` shows desktop screenshots from `web/marketing/assets/template-previews/`.
 
-- **Classic** — exported from Figma ([Template Demos](https://www.figma.com/design/m3YpRrGJCUMrZukpCcnvFk/Get-Bookking-%E2%80%94-Template-Demos), node `26:2`).
-- **Blade, Luxe, Studio 12, Stonecut** — captured from live demo tenants:
+- **Classic** — exported from Figma ([Template Demos](https://www.figma.com/design/m3YpRrGJCUMrZukpCcnvFk/Get-Bookking-%E2%80%94-Template-Demos), page Template / Classic).
+- **Charter** — full-page Harbor Charters capture in Figma ([Harbor Charters — Charter](https://www.figma.com/design/m3YpRrGJCUMrZukpCcnvFk/Get-Bookking-%E2%80%94-Template-Demos?node-id=95-2)) and `charter-desktop.png`.
+- **Blade, Luxe, Studio 12, Stonecut, Charter** — captured from live demo tenants:
 
 ```bash
 node scripts/capture-marketing-desktop-previews.mjs

@@ -1398,6 +1398,11 @@ class FirebaseService: ObservableObject {
         return data?["providerGalleryImages"] as? [String] ?? imageURLs
     }
 
+    /// Project `tenants/{id}` website fields onto `publicSites/{slug}` (hero photo, gallery, etc.).
+    func syncMyPublicSite() async throws {
+        _ = try await functions.httpsCallable("syncMyPublicSite").call([:])
+    }
+
     private func createTenant(
         displayName: String,
         slug: String,

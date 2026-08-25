@@ -745,6 +745,7 @@ struct DesignView: View {
             height: nil,
             quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
             pageBackgroundHex: viewModel.backgroundColorHex,
+            heroImageUrl: viewModel.heroImageUrl,
             bridge: quickEditBridge,
             onQuickEdit: { event in
                 switch event {

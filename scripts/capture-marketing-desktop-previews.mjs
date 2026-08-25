@@ -26,6 +26,7 @@ const CAPTURES = [
   { name: "studio12", slug: "studio-amara", file: "studio12-desktop.png" },
   { name: "stonecut", slug: "stone-cut-barbers", file: "stonecut-desktop.png" },
   { name: "luxe", slug: "gilded-palm", file: "luxe-desktop.png" },
+  { name: "charter", slug: "harbor-charters", file: "charter-desktop.png" },
 ];
 
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));

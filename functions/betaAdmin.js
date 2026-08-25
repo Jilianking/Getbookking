@@ -1262,6 +1262,7 @@ async function activateBetaTesterFromSignup({ uid, email, betaInviteToken }) {
 
 module.exports = {
   registerBetaAdminFunctions,
+  assertPlatformAdmin,
   assertBetaSignupInviteForCheckout,
   activateBetaTesterFromSignup,
 };

@@ -151,11 +151,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Public website reads the tenant doc by slug (booking SPA). Firestore cannot mask
-    // fields on read — keep money/SMS keys write-protected (tenantMoneyKeysUnchanged /
-    // Admin SDK only). Prefer not to store new secrets on this document.
+    // Booking SPA reads website fields from publicSites/{slug} (Admin SDK projection).
+    // Tenant docs stay member/owner-only — Firestore cannot mask Stripe/Twilio fields.
+    match /publicSites/{slug} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
     match /tenants/{tenantId} {
-      allow read: if true;
+      allow read: if userTenantIdMatches(tenantId)
+        || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
 
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid

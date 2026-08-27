@@ -212,7 +212,7 @@
       </div>
       <div class="bill-kv"><span class="bill-kv-label">Status</span><span class="bill-kv-value" id="smsDetailStatus">—</span></div>
       <div class="bill-kv" style="margin-top:8px;"><span class="bill-kv-label">Used this month</span><span class="bill-kv-value" id="smsDetailUsage">—</span></div>
-      <p class="bill-note" style="margin-top:8px;">Each number has 1,000 texts per month (sent + received). Resets monthly (UTC). Tap the number to copy.</p>
+      <p class="bill-note" style="margin-top:8px;" id="smsDetailLimitNote">Each number has its own monthly text limit (sent + received). Resets monthly (UTC). Tap the number to copy.</p>
       <p class="bill-success hidden" id="smsDetailCopied" style="margin-top:8px;">Copied</p>
       <p class="bill-error hidden" id="smsDetailError" style="margin-top:12px;"></p>
       <div id="smsDetailRemoving" class="bill-sms-status-panel hidden">
@@ -1200,6 +1200,12 @@
       var used = row.smsMonthlyUsageCount != null ? row.smsMonthlyUsageCount : 0;
       var limit = row.smsMonthlyLimit != null ? row.smsMonthlyLimit : 1000;
       document.getElementById('smsDetailUsage').textContent = used + ' of ' + limit;
+      var limitNote = document.getElementById('smsDetailLimitNote');
+      if (limitNote) {
+        limitNote.textContent =
+          'Each number has ' + limit.toLocaleString('en-US') +
+          ' texts per month (sent + received). Resets monthly (UTC). Tap the number to copy.';
+      }
       var removeBtn = document.getElementById('smsDetailRemoveBtn');
       if (row.kind === 'studio' || row.kind === 'personal') {
         removeBtn.classList.remove('hidden');

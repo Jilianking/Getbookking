@@ -2,11 +2,17 @@
 
 ## Product rules
 
-- **Monthly cap**: 1,000 SMS per tenant per calendar month (**UTC**), **inbound + outbound** combined (`smsUsagePeriod`, `smsUsageCount` on tenant). STOP/HELP/START auto-replies are not logged toward the cap.
-- **14-day website builder trial**: no client SMS, payment processing, or phone number provisioning.
+- **Monthly cap (per texting line)**: Each business texting number has its own calendar-month pool (**UTC**), **inbound + outbound** combined.
+  - **Solo, Studio, Shop:** 1,000 messages per line per month
+  - **Charter:** 750 messages per line per month
+- **Usage storage:** Studio/business line usage is on the tenant doc (`smsUsagePeriod`, `smsUsageCount` on `tenants/{id}`). Personal line usage is on each team member doc (`users/{uid}`).
+- STOP/HELP/START auto-replies are not logged toward the cap.
+- **14-day website builder trial:** no client SMS, payment processing, or phone number provisioning.
 - **Paid subscription** (`active` in Stripe): owner may enable client texting (opt-in).
-- **Mid-trial upgrade**: Account settings or Notifications → **Start subscription today** ends trial and charges the card.
+- **Mid-trial upgrade:** Account settings or Notifications → **Start subscription today** ends trial and charges the card.
 - Each business gets a **US local number on the master Twilio account**, added to the **shared 10DLC messaging service** (not a subaccount per tenant).
+
+Plan caps are enforced in `functions/sms.js` (`maxSmsMessagesForPlan`, `consumeSmsMonthlySlot`). Personal lines inherit the tenant subscription plan cap.
 
 ## Setup
 

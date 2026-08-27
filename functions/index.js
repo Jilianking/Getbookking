@@ -8795,9 +8795,9 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     smsStatus: (d.smsStatus || "off").toString(),
     smsPhoneNumber: (d.smsPhoneNumber || "").toString(),
     smsLineRequestPending: d.smsLineRequestPending === true,
-    smsMonthlyUsageCount: sms.smsMonthlyUsageForMember(d).count,
-    smsMonthlyLimit: sms.smsMonthlyUsageForMember(d).limit,
-    smsMonthlyUsageRemaining: sms.smsMonthlyUsageForMember(d).remaining,
+    smsMonthlyUsageCount: sms.smsMonthlyUsageForMember(d, tenant).count,
+    smsMonthlyLimit: sms.smsMonthlyUsageForMember(d, tenant).limit,
+    smsMonthlyUsageRemaining: sms.smsMonthlyUsageForMember(d, tenant).remaining,
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
@@ -11401,7 +11401,7 @@ function listSmsLineAssignmentsForBillingFromDocs(tenant, lineSummary, userDocs)
     const name =
       (d.displayName || d.name || `${fn} ${ln}`.trim() || "Team member").toString().trim() ||
       "Team member";
-    const usage = sms.smsMonthlyUsageForMember(d);
+    const usage = sms.smsMonthlyUsageForMember(d, tenant);
     out.push({
       kind: "personal",
       name,
@@ -11422,6 +11422,7 @@ function listSmsLineAssignmentsForBillingFromDocs(tenant, lineSummary, userDocs)
       : 0;
   const nextIsFree = !!(lineSummary && lineSummary.nextIsFree);
   const open = nextIsFree ? Math.max(0, freeIncluded - used) : 0;
+  const openSlotLimit = sms.maxSmsMessagesForPlan(tenant && tenant.subscriptionPlan);
   for (let i = 0; i < open; i++) {
     out.push({
       kind: "open",
@@ -11430,8 +11431,8 @@ function listSmsLineAssignmentsForBillingFromDocs(tenant, lineSummary, userDocs)
       phone: "",
       status: "open",
       smsMonthlyUsageCount: 0,
-      smsMonthlyLimit: sms.MAX_SMS_PER_LINE_PER_MONTH || 1000,
-      smsMonthlyUsageRemaining: sms.MAX_SMS_PER_LINE_PER_MONTH || 1000,
+      smsMonthlyLimit: openSlotLimit,
+      smsMonthlyUsageRemaining: openSlotLimit,
     });
   }
   return out;
@@ -12863,7 +12864,7 @@ exports.releaseSmsPhoneNumber = functions
         "This member does not have a texting number."
       );
     }
-    const usage = sms.smsMonthlyUsageForMember(memberData);
+    const usage = sms.smsMonthlyUsageForMember(memberData, ctx.tenant);
     const release = await sms.releaseMemberSms(memberData);
     await memberRef.set(sms.personalSmsClearedFields(), { merge: true });
     const paidExtras = await maybeReduceSmsExtraAfterReleasingOccupiedLine(

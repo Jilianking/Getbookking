@@ -547,6 +547,11 @@ function registerBetaAdminFunctions(functionsModule) {
       "active",
       "approved",
     ]);
+    const charterUsed = await countWaitlistByPlanAndStatus("charter", [
+      "invite_sent",
+      "active",
+      "approved",
+    ]);
     const openBugsSnap = await db()
       .collection("betaBugReports")
       .where("status", "in", ["open", "triaged"])
@@ -575,6 +580,7 @@ function registerBetaAdminFunctions(functionsModule) {
         studioCap: settings.studioSlotCap || 20,
         shopUsed,
         shopCap: settings.shopSlotCap || 10,
+        charterUsed,
         openBugs: openBugsCount,
       },
       recentBugs: recentBugsSnap.docs.map((doc) => {
@@ -758,7 +764,10 @@ function registerBetaAdminFunctions(functionsModule) {
     const businessName = (data?.businessName || "Beta tester")
       .toString()
       .trim();
-    const businessType = (data?.businessType || "other").toString().trim();
+    const businessType =
+      plan === "charter"
+        ? "charters"
+        : (data?.businessType || "other").toString().trim();
 
     if (!firstName || !lastName || !email) {
       throw new functions.https.HttpsError(

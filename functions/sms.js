@@ -13,12 +13,46 @@ const masterTwilioMessagingServiceSid = defineString("MASTER_TWILIO_MESSAGING_SE
   default: "",
   description: "Twilio Messaging Service SID for the approved US A2P 10DLC campaign",
 });
-/** Per texting line (studio or personal): 1,000 inbound+outbound / calendar month UTC. */
+/** Default per-line cap for Solo, Studio, and Shop (inbound + outbound / calendar month UTC). */
 const MAX_SMS_PER_LINE_PER_MONTH = 1000;
+/** Per-line cap for Charter (fishing) plans. */
+const MAX_SMS_CHARTER_PER_LINE_PER_MONTH = 750;
 /** @deprecated alias — kept for existing imports */
 const MAX_TENANT_SMS_PER_MONTH = MAX_SMS_PER_LINE_PER_MONTH;
-const SMS_MONTHLY_LIMIT_MESSAGE =
-  "Monthly SMS limit reached for this texting number (1,000 messages including sent and received). Resets next calendar month (UTC).";
+
+function normalizeSmsPlan(plan) {
+  const p = (plan || "solo").toString().trim().toLowerCase();
+  if (p === "studio" || p === "shop") return p;
+  if (
+    p === "charter" ||
+    p === "charters" ||
+    p === "boat" ||
+    p === "fishing" ||
+    p === "boating"
+  ) {
+    return "charter";
+  }
+  if (p === "solo") return "solo";
+  return "solo";
+}
+
+/** Monthly SMS cap per texting line (each number gets its own pool). */
+function maxSmsMessagesForPlan(planNorm) {
+  const p = normalizeSmsPlan(planNorm);
+  if (p === "charter") return MAX_SMS_CHARTER_PER_LINE_PER_MONTH;
+  return MAX_SMS_PER_LINE_PER_MONTH;
+}
+
+function smsMonthlyLimitMessage(limit) {
+  const n = Number(limit);
+  const cap = Number.isFinite(n) && n > 0 ? Math.floor(n) : MAX_SMS_PER_LINE_PER_MONTH;
+  return (
+    `Monthly SMS limit reached for this texting number (${cap.toLocaleString("en-US")} messages including sent and received). ` +
+    "Resets next calendar month (UTC)."
+  );
+}
+
+const SMS_MONTHLY_LIMIT_MESSAGE = smsMonthlyLimitMessage(MAX_SMS_PER_LINE_PER_MONTH);
 
 function currentSmsUsagePeriodUtc() {
   const d = new Date();
@@ -28,7 +62,11 @@ function currentSmsUsagePeriodUtc() {
 }
 
 /** Usage snapshot for a document that stores smsUsageCount / smsUsagePeriod. */
-function smsMonthlyUsageFromDoc(docData) {
+function smsMonthlyUsageFromDoc(docData, limit) {
+  const cap =
+    Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : MAX_SMS_PER_LINE_PER_MONTH;
   const period = currentSmsUsagePeriodUtc();
   const storedPeriod = (docData && docData.smsUsagePeriod) || "";
   if (storedPeriod === period) {
@@ -36,26 +74,32 @@ function smsMonthlyUsageFromDoc(docData) {
     return {
       period,
       count,
-      limit: MAX_SMS_PER_LINE_PER_MONTH,
-      remaining: Math.max(0, MAX_SMS_PER_LINE_PER_MONTH - count),
+      limit: cap,
+      remaining: Math.max(0, cap - count),
     };
   }
   return {
     period,
     count: 0,
-    limit: MAX_SMS_PER_LINE_PER_MONTH,
-    remaining: MAX_SMS_PER_LINE_PER_MONTH,
+    limit: cap,
+    remaining: cap,
   };
 }
 
 /** Studio line monthly usage (tenant fields). */
 function smsMonthlyUsageForTenant(tenant) {
-  return smsMonthlyUsageFromDoc(tenant);
+  const limit = maxSmsMessagesForPlan(tenant && tenant.subscriptionPlan);
+  return smsMonthlyUsageFromDoc(tenant, limit);
 }
 
-/** Personal line monthly usage (user fields). */
-function smsMonthlyUsageForMember(memberData) {
-  return smsMonthlyUsageFromDoc(memberData);
+/** Personal line monthly usage (user fields). Team lines inherit the tenant plan cap. */
+function smsMonthlyUsageForMember(memberData, tenantOrPlan) {
+  const plan =
+    tenantOrPlan && typeof tenantOrPlan === "object"
+      ? tenantOrPlan.subscriptionPlan
+      : tenantOrPlan;
+  const limit = maxSmsMessagesForPlan(plan);
+  return smsMonthlyUsageFromDoc(memberData, limit);
 }
 
 /**
@@ -67,19 +111,23 @@ async function consumeSmsMonthlySlot(tenantId, opts) {
   const memberUid = (opts && opts.memberUid) || "";
   const period = currentSmsUsagePeriodUtc();
   const isPersonal = !!(memberUid && String(memberUid).trim());
+  const tenantRef = getDb().collection("tenants").doc(tenantId);
   const ref = isPersonal
     ? getDb().collection("users").doc(String(memberUid).trim())
-    : getDb().collection("tenants").doc(tenantId);
+    : tenantRef;
 
   await getDb().runTransaction(async (tx) => {
+    const tenantSnap = await tx.get(tenantRef);
+    const tenant = tenantSnap.exists ? tenantSnap.data() : {};
+    const limit = maxSmsMessagesForPlan(tenant.subscriptionPlan);
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() : {};
     let count = 0;
     if ((data.smsUsagePeriod || "").toString() === period) {
       count = Number(data.smsUsageCount || 0);
     }
-    if (count >= MAX_SMS_PER_LINE_PER_MONTH) {
-      throw new Error(SMS_MONTHLY_LIMIT_MESSAGE);
+    if (count >= limit) {
+      throw new Error(smsMonthlyLimitMessage(limit));
     }
     tx.set(
       ref,
@@ -2353,6 +2401,10 @@ module.exports = {
   isStudioSmsThread,
   MAX_TENANT_SMS_PER_MONTH,
   MAX_SMS_PER_LINE_PER_MONTH,
+  MAX_SMS_CHARTER_PER_LINE_PER_MONTH,
+  normalizeSmsPlan,
+  maxSmsMessagesForPlan,
+  smsMonthlyLimitMessage,
   SMS_MONTHLY_LIMIT_MESSAGE,
   smsMonthlyUsageForTenant,
   smsMonthlyUsageForMember,

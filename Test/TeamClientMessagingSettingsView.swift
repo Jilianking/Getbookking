@@ -169,6 +169,18 @@ struct TeamClientMessagingSettingsView: View {
         "Ends your free trial now and charges your card on file for \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel). Client texting and payments unlock when the plan is active."
     }
 
+    private var smsMonthlyLimitFooter: String {
+        let limit = viewModel.smsMonthlyLimit > 0
+            ? viewModel.smsMonthlyLimit
+            : (viewModel.tenantSubscriptionPlan.isCharterPlan ? 750 : 1000)
+        return "Each texting number has its own \(limit.formatted()) messages/month (inbound + outbound). Tap a person under Texting lines for their usage. Resets each calendar month (UTC)."
+    }
+
+    private func smsLineLimitFooter(for limit: Int) -> String {
+        let cap = limit > 0 ? limit : (viewModel.tenantSubscriptionPlan.isCharterPlan ? 750 : 1000)
+        return "Each number has \(cap.formatted()) texts per month (sent + received). Resets monthly (UTC)."
+    }
+
     private func syncPresetDraftsFromViewModel() {
         draftConfirmed = viewModel.smsPresetConfirmed
         draftDeclined = viewModel.smsPresetDeclined
@@ -191,7 +203,7 @@ struct TeamClientMessagingSettingsView: View {
         } header: {
             Text("Monthly limit")
         } footer: {
-            Text("Each texting number has its own 1,000 messages/month (inbound + outbound). Tap a person under Texting lines for their usage. Resets each calendar month (UTC).")
+            Text(smsMonthlyLimitFooter)
                 .font(.caption2)
         }
     }
@@ -698,7 +710,7 @@ struct TeamClientMessagingSettingsView: View {
                 } header: {
                     Text("Message usage")
                 } footer: {
-                    Text("Each number has 1,000 texts per month (sent + received). Resets monthly (UTC).")
+                    Text(smsLineLimitFooter(for: row.usageLimit))
                         .font(.caption2)
                 }
 

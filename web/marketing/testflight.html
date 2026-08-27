@@ -110,6 +110,9 @@
             <button type="button" class="testflight-plan" data-plan="shop" aria-pressed="false">
               <span class="testflight-plan-name">Shop</span>
             </button>
+            <button type="button" class="testflight-plan" data-plan="charter" aria-pressed="false">
+              <span class="testflight-plan-name">Charter</span>
+            </button>
           </div>
         </div>
       </div>
@@ -232,17 +235,31 @@
     var teamSizeInput = document.getElementById('teamSize');
     var teamSizeHint = document.getElementById('teamSizeHint');
     var planButtons = document.querySelectorAll('.testflight-plan');
+    var businessTypeSelect = document.getElementById('businessType');
+    var businessTypeCustomWrap = document.getElementById('businessTypeCustomWrap');
+    var businessTypeCustomInput = document.getElementById('businessTypeCustom');
 
     var planTeamConfig = {
       solo: { value: 1, min: 1, max: 1, hint: 'Solo is for one person running the business.' },
       studio: { value: 3, min: 2, max: 5, hint: 'Studio supports 2–5 team members.' },
-      shop: { value: 8, min: 6, max: 10, hint: 'Shop supports 6–10 team members.' }
+      shop: { value: 8, min: 6, max: 10, hint: 'Shop supports 6–10 team members.' },
+      charter: { value: 1, min: 1, max: 1, hint: 'Charter is for one captain running the business.' }
     };
 
     function planForTeamSize(n) {
       if (!Number.isFinite(n) || n <= 1) return 'solo';
       if (n <= 5) return 'studio';
       return 'shop';
+    }
+
+    function syncBusinessTypeCustomField() {
+      var isOther = businessTypeSelect.value === 'other';
+      businessTypeCustomWrap.hidden = !isOther;
+      if (!isOther) {
+        businessTypeCustomInput.value = '';
+      } else {
+        businessTypeCustomInput.focus();
+      }
     }
 
     function applyPlanSelection(plan, teamSizeOverride) {
@@ -253,6 +270,13 @@
         btn.classList.toggle('is-selected', selected);
         btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
+      if (plan === 'charter' && businessTypeSelect) {
+        businessTypeSelect.value = 'charters';
+        syncBusinessTypeCustomField();
+      } else if (plan !== 'charter' && businessTypeSelect && businessTypeSelect.value === 'charters') {
+        businessTypeSelect.value = '';
+        syncBusinessTypeCustomField();
+      }
       var pick = teamSizeOverride != null ? teamSizeOverride : parseInt(teamSizeInput.value, 10);
       if (!Number.isFinite(pick) || pick < cfg.min || pick > cfg.max) {
         pick = cfg.value;
@@ -274,21 +298,12 @@
 
     applyPlanSelection('solo');
 
-    var businessTypeSelect = document.getElementById('businessType');
-    var businessTypeCustomWrap = document.getElementById('businessTypeCustomWrap');
-    var businessTypeCustomInput = document.getElementById('businessTypeCustom');
-
-    function syncBusinessTypeCustomField() {
-      var isOther = businessTypeSelect.value === 'other';
-      businessTypeCustomWrap.hidden = !isOther;
-      if (!isOther) {
-        businessTypeCustomInput.value = '';
-      } else {
-        businessTypeCustomInput.focus();
+    businessTypeSelect.addEventListener('change', function () {
+      syncBusinessTypeCustomField();
+      if (businessTypeSelect.value === 'charters') {
+        applyPlanSelection('charter');
       }
-    }
-
-    businessTypeSelect.addEventListener('change', syncBusinessTypeCustomField);
+    });
 
     var joinUrl = (window.testflightPublicJoinUrl || '').trim();
     if (joinUrl) {
@@ -341,8 +356,15 @@
         return;
       }
 
-      plan = planForTeamSize(teamSize);
-      planInput.value = plan;
+      if (plan === 'charter' || businessType === 'charters') {
+        plan = 'charter';
+        businessType = 'charters';
+        teamSize = 1;
+        planInput.value = plan;
+      } else {
+        plan = planForTeamSize(teamSize);
+        planInput.value = plan;
+      }
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting…';

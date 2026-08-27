@@ -40,6 +40,7 @@
             <option value="solo">Solo</option>
             <option value="studio">Studio</option>
             <option value="shop">Shop</option>
+            <option value="charter">Charter</option>
           </select>
         </div>
         <div class="admin-field">
@@ -269,6 +270,7 @@
           statCard('Active testers', stats.activeTesters) +
           statCard('Studio signups', stats.studioUsed) +
           statCard('Shop signups', stats.shopUsed) +
+          statCard('Charter signups', stats.charterUsed || 0) +
         '</div>' +
         '<div class="admin-filters" id="planFilters"></div>' +
         '<div class="admin-card admin-table-wrap" id="tableWrap"></div>';
@@ -290,7 +292,8 @@
         { id: 'all', label: 'All ' + waitlistItems.length },
         { id: 'solo', label: 'Solo' },
         { id: 'studio', label: 'Studio' },
-        { id: 'shop', label: 'Shop' }
+        { id: 'shop', label: 'Shop' },
+        { id: 'charter', label: 'Charter' }
       ];
       document.getElementById('planFilters').innerHTML = chips.map(function (chip) {
         return '<button type="button" class="admin-chip' + (activePlan === chip.id ? ' is-active' : '') +

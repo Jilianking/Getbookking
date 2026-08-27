@@ -482,12 +482,12 @@ html { scroll-behavior: smooth; width: 100%; }
     }
 
     .how-inner {
-      max-width: 1180px;
+      max-width: 1240px;
       width: 100%;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 760px);
-      gap: 36px 40px;
+      grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.22fr);
+      gap: 36px 48px;
       align-items: center;
       min-width: 0;
     }
@@ -507,9 +507,9 @@ html { scroll-behavior: smooth; width: 100%; }
     }
 
     .how-media {
-      justify-self: end;
+      justify-self: stretch;
       width: 100%;
-      max-width: 760px;
+      max-width: none;
       min-width: 0;
     }
 
@@ -518,6 +518,8 @@ html { scroll-behavior: smooth; width: 100%; }
       width: 100%;
       max-width: 100%;
       line-height: 0;
+      border-radius: 16px;
+      overflow: hidden;
     }
 
     .how-phone-frame video {
@@ -861,9 +863,13 @@ html { scroll-behavior: smooth; width: 100%; }
       }
       .how-media {
         width: 100%;
-        max-width: min(520px, 90vw);
+        max-width: min(640px, 100%);
         margin: 0 auto;
         justify-self: center;
+      }
+
+      .how-phone-frame {
+        border-radius: 12px;
       }
 
       .how-phone-frame video {
@@ -1125,9 +1131,9 @@ html { scroll-behavior: smooth; width: 100%; }
             loop
             playsinline
             preload="metadata"
-            aria-label="Get Bookking website preview spinning on iPhone"
+            aria-label="Get Bookking app demo on iPhone"
           >
-            <source src="assets/phone-wobble.mp4?v=3" type="video/mp4" />
+            <source src="assets/how-it-works-reel.mp4?v=2" type="video/mp4" />
           </video>
         </div>
       </div>
@@ -1157,7 +1163,7 @@ html { scroll-behavior: smooth; width: 100%; }
             <li>Professional website &amp; customizable templates</li>
             <li>Online booking your way — instant, request &amp; approve, deposit to confirm, or calendar slots</li>
             <li>Tap to Pay on iPhone &amp; card checkout</li>
-            <li>Client texting (1 business number)</li>
+            <li>Client texting — 1 number · 1,000 SMS/mo per number</li>
             <li>Appointment reminders &amp; deposit requests</li>
             <li>Free subdomain · connect your own domain</li>
           </ul>
@@ -1176,7 +1182,7 @@ html { scroll-behavior: smooth; width: 100%; }
             <li>Team scheduling &amp; invites</li>
             <li>Roles, permissions &amp; payouts</li>
             <li>Each member’s own login &amp; calendar</li>
-            <li>2 free texting numbers included · purchase more anytime</li>
+            <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
           </ul>
           <a href="signup.html?plan=studio" class="plan-cta dark">Start free trial</a>
         </div>
@@ -1191,6 +1197,7 @@ html { scroll-behavior: smooth; width: 100%; }
             <li>Up to 10 team members</li>
             <li>Built for multi-chair / multi-station teams</li>
             <li>Scale your whole floor on one platform</li>
+            <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
           </ul>
           <a href="signup.html?plan=shop" class="plan-cta outline">Start free trial</a>
         </div>
@@ -1215,7 +1222,7 @@ html { scroll-behavior: smooth; width: 100%; }
               <li>Professional website &amp; customizable templates</li>
               <li>Trip booking your way — instant, request &amp; approve, deposit to hold, or open calendar slots</li>
               <li>Tap to Pay on iPhone &amp; card checkout</li>
-              <li>Guest texting (1 business number)</li>
+              <li>Client texting — 1 number · 750 SMS/mo per number</li>
               <li>Trip reminders &amp; deposit requests</li>
               <li>Free subdomain · connect your own domain</li>
             </ul>
@@ -1253,7 +1260,7 @@ html { scroll-behavior: smooth; width: 100%; }
         </div>
         <div class="faq-item" onclick="this.classList.toggle('open')">
           <div class="faq-q">How does booking work for my clients? <span class="faq-toggle">+</span></div>
-          <div class="faq-a">Clients visit your site, choose a service, and book based on how you've set things up. Depending on your booking style — instant book, request and approve, deposit to confirm, or consultation first — they'll either be confirmed right away or you'll review and approve.</div>
+          <div class="faq-a">Clients visit your site, choose a service, and book based on how you've set things up. Depending on your booking style — instant book, request and approve, deposit to confirm, calendar slots, or consultation first — they'll either be confirmed right away or you'll review and approve.</div>
         </div>
         <div class="faq-item" onclick="this.classList.toggle('open')">
           <div class="faq-q">Who pays card processing fees? <span class="faq-toggle">+</span></div>
@@ -1269,8 +1276,8 @@ html { scroll-behavior: smooth; width: 100%; }
 
   <!-- FOOTER CTA -->
   <section class="footer-cta">
-    <h2>Your first month is on us.</h2>
-    <p>Join thousands of service pros who run their whole business with Get Bookking.</p>
+    <h2>Your first 14 days are on us.</h2>
+    <p>Help shape Get Bookking while we&rsquo;re in early access — bookings, messages, your site, and Tap to Pay on iPhone in one app.</p>
     <a href="testflight.html" class="btn-light">Get early access &rarr;</a>
   </section>
 

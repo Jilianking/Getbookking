@@ -75,7 +75,7 @@ A **1%** Connect application fee (`PLATFORM_FEE_BPS = 100` in `index.js`) is col
 - **createDepositLink** — customer deposit payment links
 - **createPaymentIntentForTapToPay** — in-person Tap to Pay
 
-It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). The customer pays the listed amount; the fee is deducted from the provider’s side (minimum 1¢ per charge). Refunds return the application fee (`refund_application_fee: true`).
+It is **not** applied to provider subscription Checkout (`createProviderSubscriptionCheckout`). Checkout is grossed up so the customer pays the quoted amount plus Stripe’s processing fee and the 1% platform fee; the business receives the full quoted amount (platform fee minimum 1¢ per charge). Refunds return the application fee (`refund_application_fee: true`).
 
 ### Beta program
 

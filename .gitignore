@@ -76,3 +76,6 @@ signingtest/
 .claude/
 skills-lock.json
 
+# Local Stripe phase-1 test run output (may include account ids)
+scripts/payment-test-reports/
+

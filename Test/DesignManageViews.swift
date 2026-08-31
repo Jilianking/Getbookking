@@ -46,26 +46,118 @@ struct ManageSegmentTabs<Tab: Hashable>: View {
     @Binding var selectedTab: Tab
     let title: (Tab) -> String
 
+    @State private var contentWidth: CGFloat = 0
+    @State private var viewportWidth: CGFloat = 0
+    @State private var scrollOffsetX: CGFloat = 0
+
+    private var canScroll: Bool {
+        contentWidth > viewportWidth + 1 && viewportWidth > 0
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs, id: \.self) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(title(tab))
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(selectedTab == tab ? Color.accentColor : Color.clear)
-                        .foregroundColor(selectedTab == tab ? .white : .primary)
+        VStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(tabs, id: \.self) { tab in
+                        Button {
+                            selectedTab = tab
+                        } label: {
+                            Text(title(tab))
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(selectedTab == tab ? AppDesign.accentBlue : Color.clear)
+                                )
+                                .foregroundStyle(selectedTab == tab ? Color.white : AppDesign.textPrimary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding(4)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ManageTabBarContentWidthKey.self,
+                            value: geo.size.width
+                        )
+                        .preference(
+                            key: ManageTabBarScrollXKey.self,
+                            value: -geo.frame(in: .named("manageSegmentTabs")).minX
+                        )
+                    }
+                )
+            }
+            .coordinateSpace(name: "manageSegmentTabs")
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.onAppear { viewportWidth = geo.size.width }
+                        .onChange(of: geo.size.width) { _, width in
+                            viewportWidth = width
+                        }
+                }
+            )
+            .background(Color(.systemGray5))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .onPreferenceChange(ManageTabBarContentWidthKey.self) { contentWidth = $0 }
+            .onPreferenceChange(ManageTabBarScrollXKey.self) { scrollOffsetX = $0 }
+
+            if canScroll {
+                ManageTabBarScrollHint(
+                    contentWidth: contentWidth,
+                    viewportWidth: viewportWidth,
+                    scrollOffsetX: scrollOffsetX
+                )
             }
         }
-        .background(Color(.systemGray5))
-        .cornerRadius(8)
-        .padding()
-        .appCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+}
+
+private struct ManageTabBarScrollHint: View {
+    let contentWidth: CGFloat
+    let viewportWidth: CGFloat
+    let scrollOffsetX: CGFloat
+
+    var body: some View {
+        GeometryReader { track in
+            let fraction = min(max(viewportWidth / max(contentWidth, 1), 0.18), 1)
+            let thumbWidth = max(24, track.size.width * fraction)
+            let maxScroll = max(contentWidth - viewportWidth, 1)
+            let progress = min(max(scrollOffsetX / maxScroll, 0), 1)
+            let thumbX = (track.size.width - thumbWidth) * progress
+
+            Capsule()
+                .fill(Color(.systemGray4))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.55))
+                        .frame(width: thumbWidth)
+                        .offset(x: thumbX)
+                }
+        }
+        .frame(height: 3)
+        .padding(.horizontal, 8)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ManageTabBarContentWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ManageTabBarScrollXKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -753,21 +845,17 @@ struct ManageAboutTabContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             if isCharterPlan {
-                ManageSectionHeader("About photo")
-                ManageCard {
-                    Studio12AuxImageUploadSection(
-                        label: "Photo under your story",
-                        advice: "Shown on /about next to your bio. Portrait works best.",
-                        allowedCropChoices: [.portrait4_5],
-                        defaultCropChoice: .portrait4_5,
-                        imageUrl: $viewModel.classicAboutImageUrl,
-                        isUploading: viewModel.isUploadingClassicAboutImage,
-                        upload: { data in await viewModel.uploadClassicAboutImage(imageData: data) },
-                        compactPreview: true
-                    )
-                    .padding(14)
-                    .disabled(controlsDisabled)
-                }
+                Studio12AuxImageUploadSection(
+                    label: "About photo",
+                    advice: "Shown on /about next to your bio. Portrait works best.",
+                    allowedCropChoices: [.portrait4_5],
+                    defaultCropChoice: .portrait4_5,
+                    imageUrl: $viewModel.classicAboutImageUrl,
+                    isUploading: viewModel.isUploadingClassicAboutImage,
+                    upload: { data in await viewModel.uploadClassicAboutImage(imageData: data) },
+                    stackedManageChrome: true
+                )
+                .disabled(controlsDisabled)
             }
 
             if isClassicTemplate && !isCharterPlan {

@@ -83,6 +83,18 @@ enum UploadCropAspectChoice: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Short overlay label for stacked Manage previews.
+    var ratioBadge: String? {
+        switch self {
+        case .original: return nil
+        case .square: return "1:1"
+        case .portrait4_5: return "4:5"
+        case .portrait3_4: return "3:4"
+        case .landscape4_3: return "4:3"
+        case .landscape16_9: return "16:9"
+        }
+    }
+
     /// `nil` means do not aspect-crop.
     var aspectWidthOverHeight: CGFloat? {
         switch self {

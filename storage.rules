@@ -59,5 +59,20 @@ service firebase.storage {
                   && request.auth.uid == uid
                   && isSafeAttachmentUpload();
     }
+
+    // Expense receipts (tax-deduction tracking) may contain PII (card last4, home
+    // addresses on utility bills) — tenant-private read, unlike the public tenant
+    // asset tree above. Deliberately kept OUTSIDE tenants/{tenantId}/... because
+    // Storage rules OR together every matching block: a narrower rule nested under
+    // the public `tenants/{tenantId}/{allPaths=**}` block would NOT restrict reads,
+    // since that block's `allow read: if true` already grants access to any path
+    // beneath it.
+    match /tenantPrivate/{tenantId}/expenseReceipts/{fileName} {
+      allow read: if request.auth != null && canWriteTenantTree(tenantId);
+      allow write: if request.auth != null
+                  && canWriteTenantTree(tenantId)
+                  && isSafeImageUpload()
+                  && fileName.matches('[a-zA-Z0-9._-]{1,200}');
+    }
   }
 }

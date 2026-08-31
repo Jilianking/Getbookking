@@ -722,6 +722,52 @@ class FirebaseService: ObservableObject {
         try await db.collection("tenants").document(tenantId).collection("customers").document(customerId).setData(data, merge: true)
     }
 
+    // MARK: - Expenses (tax-deduction tracking)
+
+    private func expenseFromFirestoreData(documentId: String, data: [String: Any]) -> Expense? {
+        guard let amountCents = data["amountCents"] as? Int,
+              let categoryRaw = data["category"] as? String,
+              let category = ExpenseCategory(rawValue: categoryRaw),
+              let date = (data["date"] as? Timestamp)?.dateValue() else { return nil }
+        return Expense(
+            id: documentId,
+            amountCents: amountCents,
+            currency: data["currency"] as? String ?? "usd",
+            category: category,
+            vendor: data["vendor"] as? String ?? "",
+            date: date,
+            note: data["note"] as? String,
+            receiptImageUrl: data["receiptImageUrl"] as? String,
+            receiptStoragePath: data["receiptStoragePath"] as? String,
+            source: data["source"] as? String ?? "manual",
+            createdByUid: data["createdByUid"] as? String,
+            createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? date,
+            updatedAt: (data["updatedAt"] as? Timestamp)?.dateValue()
+        )
+    }
+
+    func fetchTenantExpenses(tenantId: String, from: Date, to: Date) async throws -> [Expense] {
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("expenses")
+            .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: from))
+            .whereField("date", isLessThanOrEqualTo: Timestamp(date: to))
+            .getDocuments()
+        return snapshot.documents.compactMap { expenseFromFirestoreData(documentId: $0.documentID, data: $0.data()) }
+    }
+
+    /// `data` should include `createdAt` (Timestamp) only when creating a new expense —
+    /// callers editing an existing expense omit it so the original is preserved (merge: true).
+    func upsertTenantExpense(tenantId: String, expenseId: String, data: [String: Any]) async throws {
+        var d = data
+        d["updatedAt"] = Timestamp(date: Date())
+        try await db.collection("tenants").document(tenantId).collection("expenses").document(expenseId)
+            .setData(d, merge: true)
+    }
+
+    func deleteTenantExpense(tenantId: String, expenseId: String) async throws {
+        try await db.collection("tenants").document(tenantId).collection("expenses").document(expenseId).delete()
+    }
+
     /// Patches `clientName` on SMS threads that match the customer's phone (inbox + thread titles).
     func updateSmsThreadsClientName(phone: String?, name: String) async throws {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1313,6 +1359,21 @@ class FirebaseService: ObservableObject {
         _ = try await ref.putDataAsync(payload, metadata: metadata)
         let url = try await ref.downloadURL()
         return url.absoluteString
+    }
+
+    /// Receipt photos live under tenantPrivate/ (not tenants/), so they stay tenant-only —
+    /// see storage.rules for why they can't just be nested under the public tenant asset tree.
+    /// Returns (downloadUrl, storagePath).
+    func uploadExpenseReceiptImage(tenantId: String, expenseId: String, imageData: Data) async throws -> (url: String, path: String) {
+        let storage = Storage.storage()
+        let path = "tenantPrivate/\(tenantId)/expenseReceipts/\(expenseId).jpg"
+        let ref = storage.reference().child(path)
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        let payload = ImageUploadPreprocessor.prepareJPEGForUpload(imageData, maxLongEdge: 2000, compressionQuality: 0.85)
+        _ = try await ref.putDataAsync(payload, metadata: metadata)
+        let url = try await ref.downloadURL()
+        return (url.absoluteString, path)
     }
 
     /// MMS attachment for Messages (public read under tenants/… per Storage rules).

@@ -13798,3 +13798,6 @@ registerTapToPayLaunchEmailFunctions(exports);
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports);
+
+const { registerReceiptOcrFunctions } = require("./receiptOcr");
+registerReceiptOcrFunctions(exports, { openaiApiKey });

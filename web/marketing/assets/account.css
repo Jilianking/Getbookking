@@ -694,3 +694,99 @@ body.acct-modal-open { overflow: hidden; }
   .acct-invoice-number,
   .acct-invoice-status { text-align: left; }
 }
+
+/* Expenses & tax deductions */
+.acct-expenses-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.acct-expenses-range label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.acct-expenses-summary {
+  padding: 16px 20px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+#expensesCategoryTotals {
+  padding: 8px 20px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+#expensesCategoryTotals .acct-expenses-category-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.acct-expenses-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.acct-expenses-row-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.acct-expenses-empty {
+  padding: 16px 20px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.acct-expenses-actions {
+  display: flex;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.acct-expenses-actions .acct-stripe-btn {
+  width: auto;
+  flex: 1;
+}
+
+#expenseFormDialog {
+  border: none;
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90vw;
+}
+
+#expenseFormDialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+#expenseFormDialog input,
+#expenseFormDialog select,
+#expenseFormDialog textarea {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

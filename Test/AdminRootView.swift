@@ -19,6 +19,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     case shop
     case insights
     case payments
+    case expenses
     case settings
 
     var id: String { rawValue }
@@ -27,7 +28,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     static var drawerOrder: [AdminSection] {
         [
             .dashboard, .requests, .calendar, .messages, .clients,
-            .team, .design, .websiteProfile, .shop, .insights, .payments, .settings,
+            .team, .design, .websiteProfile, .shop, .insights, .payments, .expenses, .settings,
         ]
     }
 
@@ -45,6 +46,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .shop: return "Shop"
         case .insights: return "Insights"
         case .payments: return "Payments"
+        case .expenses: return "Expenses"
         case .settings: return "Settings"
         }
     }
@@ -60,7 +62,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
     var drawerGroup: DrawerGroup {
         switch self {
         case .dashboard, .requests, .calendar, .messages: return .main
-        case .clients, .team, .design, .websiteProfile, .insights, .payments: return .business
+        case .clients, .team, .design, .websiteProfile, .insights, .payments, .expenses: return .business
         case .shop, .settings: return .more
         }
     }
@@ -80,6 +82,7 @@ enum AdminSection: String, CaseIterable, Identifiable {
         case .shop: return "bag.fill"
         case .insights: return "chart.bar.fill"
         case .payments: return "dollarsign.circle.fill"
+        case .expenses: return "receipt"
         case .settings: return "gear"
         }
     }
@@ -398,6 +401,10 @@ struct AdminRootView: View {
             if visitedSections.contains(.payments) {
                 PaymentsView(drawerState: drawerState, sectionTitle: AdminSection.payments.title)
                     .sectionVisible(drawerState.selectedSection == .payments)
+            }
+            if visitedSections.contains(.expenses) {
+                ExpensesView(drawerState: drawerState, sectionTitle: AdminSection.expenses.title)
+                    .sectionVisible(drawerState.selectedSection == .expenses)
             }
             if visitedSections.contains(.settings) {
                 SettingsView(drawerState: drawerState, sectionTitle: AdminSection.settings.title)

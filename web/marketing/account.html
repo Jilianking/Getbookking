@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/nav.css?v=19" />
-  <link rel="stylesheet" href="assets/account.css?v=6" />
+  <link rel="stylesheet" href="assets/account.css?v=7" />
 </head>
 <body class="acct-layout">
 
@@ -122,6 +122,51 @@
         </div>
       </section>
 
+      <section class="acct-section" id="expensesBox">
+        <div class="acct-section-label">Expenses &amp; tax deductions</div>
+        <div class="acct-card" id="expensesCard">
+          <div class="acct-expenses-range">
+            <label>From <input type="date" id="expensesRangeStart"></label>
+            <label>To <input type="date" id="expensesRangeEnd"></label>
+            <button type="button" class="acct-stripe-btn acct-stripe-btn--secondary" id="expensesApplyRange">Apply</button>
+          </div>
+          <div class="acct-expenses-summary" id="expensesSummary">
+            <span id="expensesTotalLabel">Total deductible: $0.00</span>
+          </div>
+          <div id="expensesCategoryTotals"></div>
+          <div id="expensesList">
+            <p class="acct-expenses-empty" id="expensesEmptyState">Loading…</p>
+          </div>
+          <div class="acct-expenses-actions">
+            <button type="button" class="acct-stripe-btn acct-stripe-btn--primary" id="expensesAddBtn">Add expense</button>
+            <button type="button" class="acct-stripe-btn acct-stripe-btn--secondary" id="expensesExportBtn">Export CSV</button>
+          </div>
+          <p class="acct-error hidden" id="expensesError"></p>
+        </div>
+      </section>
+
+      <!-- Add/edit expense dialog -->
+      <dialog id="expenseFormDialog">
+        <form method="dialog" id="expenseForm">
+          <h2 id="expenseFormTitle">Add expense</h2>
+          <label>Amount ($)<input type="number" step="0.01" min="0" id="expenseAmount" required></label>
+          <label>Category
+            <select id="expenseCategory"></select>
+          </label>
+          <label>Vendor<input type="text" id="expenseVendor"></label>
+          <label>Date<input type="date" id="expenseDate" required></label>
+          <label>Note<textarea id="expenseNote"></textarea></label>
+          <label>Receipt photo<input type="file" accept="image/*" id="expenseReceiptFile"></label>
+          <button type="button" class="acct-stripe-btn acct-stripe-btn--secondary hidden" id="expenseAutoFillBtn">Auto-fill from photo</button>
+          <p id="expenseOcrStatus" class="acct-expenses-empty hidden">Reading receipt…</p>
+          <div class="acct-expenses-actions">
+            <button type="button" id="expenseFormCancel">Cancel</button>
+            <button type="submit" id="expenseFormSave">Save</button>
+          </div>
+          <p class="acct-error hidden" id="expenseFormError"></p>
+        </form>
+      </dialog>
+
       <section class="acct-section">
         <div class="acct-section-label">Help</div>
         <div class="acct-card">
@@ -213,6 +258,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script>
     firebase.initializeApp(firebaseConfig);
@@ -685,9 +732,11 @@
       if (stripeParam !== 'refresh') {
         loadBillingSummary();
         loadAccountLifecycle();
+        if (window.Expenses) window.Expenses.init(firebase, auth, fns, user);
       }
     });
   </script>
+  <script src="js/expenses.js"></script>
   <script src="assets/nav.js?v=6"></script>
   <script src="assets/nav-auth.js?v=4"></script>
 </body>

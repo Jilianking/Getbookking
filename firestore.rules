@@ -205,6 +205,11 @@ service cloud.firestore {
         allow read, write: if canManageTenant(tenantId);
       }
 
+      // Tenant's own bookkeeping for tax-deduction tracking (not platform money movement).
+      match /expenses/{expenseId} {
+        allow read, write: if canManageTenant(tenantId);
+      }
+
       // Client texting (log is CF-only; threads allow clientName patches when a customer is saved)
       match /smsThreads/{threadId} {
         allow read: if canManageTenant(tenantId);

@@ -165,9 +165,13 @@ struct DesignView: View {
             }
             .sheet(isPresented: $quickEditHeroImageSheet) {
                 NavigationStack {
-                    Form {
+                    ScrollView {
                         HeroImageUploadSection(viewModel: viewModel)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .background(Color(.systemGroupedBackground))
                     .navigationTitle("Hero image")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -1468,14 +1472,13 @@ struct DesignView: View {
             )
             .textFieldStyle(.roundedBorder)
 
-            HeroImageUploadSection(viewModel: viewModel, compactPreview: true)
+            HeroImageUploadSection(viewModel: viewModel, stackedManageChrome: true)
 
-            Text("Client quote")
-                .font(.headline)
+            Text("Testimonial")
+                .font(.title3.weight(.bold))
                 .padding(.top, 8)
-            Text("Testimonial card on your home page. You can also tap the quote in Edit on the live preview.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text("Quote")
+                .font(.subheadline.weight(.semibold))
             TextField(
                 "Quote",
                 text: $viewModel.charterHomeQuote,
@@ -1483,13 +1486,23 @@ struct DesignView: View {
                 axis: .vertical
             )
             .lineLimit(3...8)
-            .textFieldStyle(.roundedBorder)
-            TextField(
-                "Attribution",
-                text: $viewModel.charterHomeQuoteBy,
-                prompt: Text("Danielle R. · Half-Day Reef Charter")
-            )
-            .textFieldStyle(.roundedBorder)
+            .padding(12)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text("Customer")
+                .font(.subheadline.weight(.semibold))
+            TextField("Customer", text: charterQuoteCustomerBinding, prompt: Text("Danielle R."))
+                .padding(12)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text("Service / subtitle")
+                .font(.subheadline.weight(.semibold))
+            TextField("Service / subtitle", text: charterQuoteServiceBinding, prompt: Text("Half-Day Reef Charter"))
+                .padding(12)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Studio12AuxImageUploadSection(
                 label: "Quote photo",
@@ -1499,7 +1512,7 @@ struct DesignView: View {
                 imageUrl: charterQuotePhotoBinding,
                 isUploading: viewModel.isUploadingGallery,
                 upload: { data in await viewModel.replaceOrAppendGalleryImage(at: 0, imageData: data) },
-                compactPreview: true
+                stackedManageChrome: true
             )
         }
     }
@@ -1509,6 +1522,42 @@ struct DesignView: View {
             get: { viewModel.charterQuotePhotoUrl },
             set: { _ in }
         )
+    }
+
+    private var charterQuoteCustomerBinding: Binding<String> {
+        Binding(
+            get: { Self.splitCharterQuoteBy(viewModel.charterHomeQuoteBy).customer },
+            set: { newValue in
+                let parts = Self.splitCharterQuoteBy(viewModel.charterHomeQuoteBy)
+                viewModel.charterHomeQuoteBy = Self.joinCharterQuoteBy(customer: newValue, service: parts.service)
+            }
+        )
+    }
+
+    private var charterQuoteServiceBinding: Binding<String> {
+        Binding(
+            get: { Self.splitCharterQuoteBy(viewModel.charterHomeQuoteBy).service },
+            set: { newValue in
+                let parts = Self.splitCharterQuoteBy(viewModel.charterHomeQuoteBy)
+                viewModel.charterHomeQuoteBy = Self.joinCharterQuoteBy(customer: parts.customer, service: newValue)
+            }
+        )
+    }
+
+    private static func splitCharterQuoteBy(_ raw: String) -> (customer: String, service: String) {
+        let parts = raw.split(separator: "·", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if parts.count == 2 { return (parts[0], parts[1]) }
+        return (raw, "")
+    }
+
+    private static func joinCharterQuoteBy(customer: String, service: String) -> String {
+        let c = customer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let s = service.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return c }
+        if c.isEmpty { return s }
+        return "\(c) · \(s)"
     }
 
     /// Studio 12 only: home fields editable here; marquee uses services automatically; gallery strip is edited on the Gallery tab.
@@ -2027,10 +2076,99 @@ private enum CompactImageUploadMetrics {
     static let previewMaxHeight: CGFloat = 63
 }
 
+/// Charter stacked Change / Reposition row. PhotosPicker is width-capped so it cannot steal Reposition taps.
+private struct StackedManagePhotoActions: View {
+    let hasImage: Bool
+    let isUploading: Bool
+    @Binding var pickerItem: PhotosPickerItem?
+    let openFraming: @MainActor () async -> Void
+
+    @State private var isOpeningFraming = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            PhotosPicker(
+                selection: $pickerItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                stackedFillLabel(
+                    title: hasImage ? "Change image" : "Choose image",
+                    systemImage: "photo"
+                )
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+
+            if hasImage {
+                Button {
+                    guard !isOpeningFraming else { return }
+                    Task { @MainActor in
+                        isOpeningFraming = true
+                        await openFraming()
+                        isOpeningFraming = false
+                    }
+                } label: {
+                    ZStack {
+                        stackedOutlineLabel(title: "Reposition", systemImage: "crop")
+                            .opacity(isOpeningFraming ? 0.45 : 1)
+                        if isOpeningFraming {
+                            ProgressView()
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isOpeningFraming)
+                .frame(maxWidth: .infinity)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            if isUploading {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func stackedFillLabel(title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(AppDesign.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func stackedOutlineLabel(title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(AppDesign.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color(.systemGray4), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
 // MARK: - Hero image upload
 struct HeroImageUploadSection: View {
     @ObservedObject var viewModel: DesignViewModel
     var compactPreview: Bool = false
+    /// Charter Manage → Home only. Full-width preview + gray Change / Reposition buttons.
+    var stackedManageChrome: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
 
@@ -2055,89 +2193,123 @@ struct HeroImageUploadSection: View {
         isLuxeTemplate ? UploadImageAdvice.heroLuxe : UploadImageAdvice.hero
     }
 
+    private var usesCompactHeroLayout: Bool {
+        compactPreview && !stackedManageChrome
+    }
+
     @ViewBuilder
     private var heroPreview: some View {
         let aspect = heroLockedCropChoice.aspectWidthOverHeight ?? (16 / 9)
-        Group {
-            if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
-               let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
+        let corner: CGFloat = stackedManageChrome ? 16 : 8
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        Color.clear
+            .aspectRatio(aspect, contentMode: .fit)
+            .frame(
+                maxWidth: usesCompactHeroLayout ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+                maxHeight: usesCompactHeroLayout ? CompactImageUploadMetrics.previewMaxHeight : nil
+            )
+            .overlay {
+                if let urlString = viewModel.heroImageUrl.isEmpty ? nil : viewModel.heroImageUrl,
+                   let url = URL(string: urlString) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        AppDesign.searchBackground
+                    }
+                } else {
                     AppDesign.searchBackground
+                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 }
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(AppDesign.searchBackground)
-                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
             }
-        }
-        .aspectRatio(aspect, contentMode: .fit)
-        .frame(
-            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
-            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
-        )
-        .clipped()
-        .cornerRadius(8)
+            .clipped()
+            .clipShape(shape)
+            .overlay(alignment: .topLeading) {
+                if stackedManageChrome, let badge = heroLockedCropChoice.ratioBadge {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(10)
+                }
+            }
     }
 
     @ViewBuilder
     private var heroControls: some View {
-        HStack(spacing: 16) {
-            PhotosPicker(
-                selection: $selectedItem,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                HStack {
-                    Image(systemName: "photo.badge.plus")
-                    Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
-                }
-                .font(.subheadline)
-            }
+        if stackedManageChrome {
+            StackedManagePhotoActions(
+                hasImage: !viewModel.heroImageUrl.isEmpty,
+                isUploading: viewModel.isUploadingHero,
+                pickerItem: $selectedItem,
+                openFraming: { await openHeroFraming() }
+            )
             .onChange(of: selectedItem) { _, newItem in
-                Task {
-                    guard let newItem else {
-                        return
-                    }
-                    if let data = try? await newItem.loadTransferable(type: Data.self),
-                       !data.isEmpty,
-                       let uiImage = UIImage(data: data) {
-                        await MainActor.run {
-                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                            selectedItem = nil
-                        }
-                    } else {
-                        await MainActor.run { selectedItem = nil }
-                    }
-                }
+                performHeroPickChange(newItem)
             }
-            if !viewModel.heroImageUrl.isEmpty {
-                Button("Adjust framing") {
-                    Task {
-                        guard let image = await UploadRemoteImageLoader.image(from: viewModel.heroImageUrl) else {
-                            return
-                        }
-                        cropSheetItem = SingleImageCropSheetItem(image: image)
+        } else {
+            HStack(spacing: 16) {
+                PhotosPicker(
+                    selection: $selectedItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    HStack {
+                        Image(systemName: "photo.badge.plus")
+                        Text(viewModel.heroImageUrl.isEmpty ? "Choose image" : "Change image")
                     }
+                    .font(.subheadline)
                 }
-                .font(.subheadline)
-            }
-            if viewModel.isUploadingHero {
-                ProgressView()
-                    .scaleEffect(0.8)
+                .onChange(of: selectedItem) { _, newItem in
+                    performHeroPickChange(newItem)
+                }
+                if !viewModel.heroImageUrl.isEmpty {
+                    Button("Adjust framing") {
+                        Task { await openHeroFraming() }
+                    }
+                    .font(.subheadline)
+                }
+                if viewModel.isUploadingHero {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
             }
         }
     }
 
+    private func performHeroPickChange(_ newItem: PhotosPickerItem?) {
+        Task {
+            guard let newItem else { return }
+            if let data = try? await newItem.loadTransferable(type: Data.self),
+               !data.isEmpty,
+               let uiImage = UIImage(data: data) {
+                await MainActor.run {
+                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                    selectedItem = nil
+                }
+            } else {
+                await MainActor.run { selectedItem = nil }
+            }
+        }
+    }
+
+    private func openHeroFraming() async {
+        guard let image = await UploadRemoteImageLoader.image(from: viewModel.heroImageUrl) else {
+            return
+        }
+        cropSheetItem = SingleImageCropSheetItem(image: image)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Hero background image")
-                .font(.subheadline.weight(.medium))
-            Text(heroAdvice)
+            Text(stackedManageChrome ? "Hero image" : "Hero background image")
+                .font(stackedManageChrome ? .title3.weight(.bold) : .subheadline.weight(.medium))
+            Text(stackedManageChrome ? "Drag to reposition or pinch to zoom." : heroAdvice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            if compactPreview {
+                .fixedSize(horizontal: false, vertical: true)
+            if usesCompactHeroLayout {
                 HStack(alignment: .center, spacing: 12) {
                     heroPreview
                     heroControls
@@ -2176,87 +2348,124 @@ struct Studio12AuxImageUploadSection: View {
     let isUploading: Bool
     let upload: (Data) async -> Void
     var compactPreview: Bool = false
+    /// Charter Manage stacked picker (Home quote photo, About photo).
+    var stackedManageChrome: Bool = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var cropSheetItem: SingleImageCropSheetItem?
+
+    private var usesCompactAuxLayout: Bool {
+        compactPreview && !stackedManageChrome
+    }
 
     @ViewBuilder
     private var auxPreview: some View {
         let aspect = defaultCropChoice.aspectWidthOverHeight ?? 1
-        Group {
-            if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
+        let corner: CGFloat = stackedManageChrome ? 16 : 8
+        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
+        Color.clear
+            .aspectRatio(aspect, contentMode: .fit)
+            .frame(
+                maxWidth: usesCompactAuxLayout ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
+                maxHeight: usesCompactAuxLayout ? CompactImageUploadMetrics.previewMaxHeight : nil
+            )
+            .overlay {
+                if let urlString = imageUrl.isEmpty ? nil : imageUrl, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        AppDesign.searchBackground
+                    }
+                } else {
                     AppDesign.searchBackground
+                        .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 }
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(AppDesign.searchBackground)
-                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
             }
-        }
-        .aspectRatio(aspect, contentMode: .fit)
-        .frame(
-            maxWidth: compactPreview ? CompactImageUploadMetrics.previewMaxWidth : .infinity,
-            maxHeight: compactPreview ? CompactImageUploadMetrics.previewMaxHeight : nil
-        )
-        .clipped()
-        .cornerRadius(8)
+            .clipped()
+            .clipShape(shape)
+            .overlay(alignment: .topLeading) {
+                if stackedManageChrome, let badge = defaultCropChoice.ratioBadge {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(10)
+                }
+            }
     }
 
     @ViewBuilder
     private var auxControls: some View {
-        HStack(spacing: 16) {
-            PhotosPicker(
-                selection: $selectedItem,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                HStack {
-                    Image(systemName: "photo.badge.plus")
-                    Text(imageUrl.isEmpty ? "Choose image" : "Change image")
-                }
-                .font(.subheadline)
-            }
+        if stackedManageChrome {
+            StackedManagePhotoActions(
+                hasImage: !imageUrl.isEmpty,
+                isUploading: isUploading,
+                pickerItem: $selectedItem,
+                openFraming: { await openAuxFraming() }
+            )
             .onChange(of: selectedItem) { _, newItem in
-                Task {
-                    guard let newItem else { return }
-                    if let data = try? await newItem.loadTransferable(type: Data.self),
-                       !data.isEmpty,
-                       let uiImage = UIImage(data: data) {
-                        await MainActor.run {
-                            cropSheetItem = SingleImageCropSheetItem(image: uiImage)
-                            selectedItem = nil
-                        }
-                    } else {
-                        await MainActor.run { selectedItem = nil }
-                    }
-                }
+                performAuxPickChange(newItem)
             }
-            if !imageUrl.isEmpty {
-                Button("Adjust framing") {
-                    Task {
-                        guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
-                        cropSheetItem = SingleImageCropSheetItem(image: image)
+        } else {
+            HStack(spacing: 16) {
+                PhotosPicker(
+                    selection: $selectedItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    HStack {
+                        Image(systemName: "photo.badge.plus")
+                        Text(imageUrl.isEmpty ? "Choose image" : "Change image")
                     }
+                    .font(.subheadline)
                 }
-                .font(.subheadline)
-            }
-            if isUploading {
-                ProgressView()
-                    .scaleEffect(0.8)
+                .onChange(of: selectedItem) { _, newItem in
+                    performAuxPickChange(newItem)
+                }
+                if !imageUrl.isEmpty {
+                    Button("Adjust framing") {
+                        Task { await openAuxFraming() }
+                    }
+                    .font(.subheadline)
+                }
+                if isUploading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
             }
         }
+    }
+
+    private func performAuxPickChange(_ newItem: PhotosPickerItem?) {
+        Task {
+            guard let newItem else { return }
+            if let data = try? await newItem.loadTransferable(type: Data.self),
+               !data.isEmpty,
+               let uiImage = UIImage(data: data) {
+                await MainActor.run {
+                    cropSheetItem = SingleImageCropSheetItem(image: uiImage)
+                    selectedItem = nil
+                }
+            } else {
+                await MainActor.run { selectedItem = nil }
+            }
+        }
+    }
+
+    private func openAuxFraming() async {
+        guard let image = await UploadRemoteImageLoader.image(from: imageUrl) else { return }
+        cropSheetItem = SingleImageCropSheetItem(image: image)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(label)
-                .font(.subheadline.weight(.medium))
+                .font(stackedManageChrome ? .title3.weight(.bold) : .subheadline.weight(.medium))
             Text(advice)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            if compactPreview {
+            if usesCompactAuxLayout {
                 HStack(alignment: .center, spacing: 12) {
                     auxPreview
                     auxControls

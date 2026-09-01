@@ -274,6 +274,58 @@ struct TapToPayPaymentIntent {
 }
 #endif
 
+/// Shared Stripe Connect onboarding URL cache (Dashboard + setup checklist share one prewarm).
+@MainActor
+enum StripeConnectLinkCache {
+    private static var prefetchedURL: URL?
+    private static var prefetchedAt: Date?
+    private static var inFlightPrefetch: Task<URL?, Never>?
+    static let ttl: TimeInterval = 120
+
+    static func cachedURL() -> URL? {
+        guard let url = prefetchedURL,
+              let fetchedAt = prefetchedAt,
+              Date().timeIntervalSince(fetchedAt) < ttl else {
+            return nil
+        }
+        return url
+    }
+
+    static func store(_ url: URL) {
+        prefetchedURL = url
+        prefetchedAt = Date()
+    }
+
+    static func invalidate() {
+        prefetchedURL = nil
+        prefetchedAt = nil
+        inFlightPrefetch?.cancel()
+        inFlightPrefetch = nil
+    }
+
+    static func prefetchIfNeeded(fetch: @escaping () async -> URL?) async -> URL? {
+        if let cached = cachedURL() { return cached }
+        if let inFlightPrefetch {
+            return await inFlightPrefetch.value
+        }
+        let task = Task { await fetch() }
+        inFlightPrefetch = task
+        let url = await task.value
+        inFlightPrefetch = nil
+        return url
+    }
+
+    /// Returns a cached URL or waits for an in-flight prewarm (tap must not start a duplicate fetch).
+    static func awaitReadyURL() async -> URL? {
+        if let cached = cachedURL() { return cached }
+        if let inFlightPrefetch {
+            _ = await inFlightPrefetch.value
+            return cachedURL()
+        }
+        return nil
+    }
+}
+
 @MainActor
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
@@ -470,9 +522,6 @@ class PaymentsViewModel: ObservableObject {
 
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
-    private var prefetchedConnectURL: URL?
-    private var prefetchedConnectFetchedAt: Date?
-    private let connectLinkPrefetchTTL: TimeInterval = 120
 
     /// Settings row / banner title for current Connect state.
     var stripeConnectStatusLabel: String {
@@ -566,6 +615,28 @@ class PaymentsViewModel: ObservableObject {
         }
     }
 
+    /// Stripe Connect + subscription flags for setup checklist (no balance, transactions, or Tap to Pay prep).
+    func refreshSetupStripeSnapshot(
+        sessionStore: TenantSessionStore?,
+        teamAccess: EffectiveTeamAccess
+    ) async {
+        guard Auth.auth().currentUser != nil else {
+            hasLoadedStripeStatus = true
+            return
+        }
+        canTakePayments = teamAccess.canTakePayments
+        usesOwnPayments = teamAccess.usesOwnPayments
+        isTenantOwner = teamAccess.isOwner
+        if let tid = sessionStore?.tenantId {
+            tenantId = tid
+        } else if tenantId == nil,
+                  let uid = Auth.auth().currentUser?.uid,
+                  let profile = try? await firebaseService.fetchProviderProfile(uid: uid) {
+            tenantId = profile.tenantId
+        }
+        await refreshStripeStatus()
+    }
+
     enum ConnectAccountLinkOutcome {
         case alreadyConnected
         case pendingReview
@@ -579,17 +650,16 @@ class PaymentsViewModel: ObservableObject {
         guard Auth.auth().currentUser != nil else { return }
         guard canTakePayments, !stripeConnected, needsStripeConnect else { return }
         guard !(stripeHasAccount && stripeDetailsSubmitted) else { return }
-        if let fetchedAt = prefetchedConnectFetchedAt,
-           prefetchedConnectURL != nil,
-           Date().timeIntervalSince(fetchedAt) < connectLinkPrefetchTTL {
-            return
+        if StripeConnectLinkCache.cachedURL() != nil { return }
+        _ = await StripeConnectLinkCache.prefetchIfNeeded { [weak self] in
+            guard let self else { return nil }
+            _ = await self.fetchConnectAccountLink(openInSafari: false, isDemoMode: isDemoMode)
+            return StripeConnectLinkCache.cachedURL()
         }
-        _ = await fetchConnectAccountLink(openInSafari: false, isDemoMode: isDemoMode)
     }
 
     func invalidateConnectLinkPrefetch() {
-        prefetchedConnectURL = nil
-        prefetchedConnectFetchedAt = nil
+        StripeConnectLinkCache.invalidate()
     }
 
     #if TAP_TO_PAY_ENABLED
@@ -1008,8 +1078,10 @@ class PaymentsViewModel: ObservableObject {
                 subscriptionTrialing = false
             }
             await refreshStripeStatus()
-            await reloadTapToPayLocationFromTenant()
-            await loadTapToPaySettings(uid: uid)
+            async let locationReload: () = reloadTapToPayLocationFromTenant()
+            async let tapToPaySettingsLoad: () = loadTapToPaySettings(uid: uid)
+            async let connectPrewarm: () = prewarmConnectLinkIfNeeded(isDemoMode: isDemoMode)
+            _ = await (locationReload, tapToPaySettingsLoad, connectPrewarm)
             if stripeConnected {
                 await loadBalance()
                 await loadTransactions()
@@ -1236,13 +1308,23 @@ class PaymentsViewModel: ObservableObject {
             return .alreadyConnected
         }
 
-        if let fetchedAt = prefetchedConnectFetchedAt,
-           let cached = prefetchedConnectURL,
-           Date().timeIntervalSince(fetchedAt) < connectLinkPrefetchTTL {
-            invalidateConnectLinkPrefetch()
+        if let cached = StripeConnectLinkCache.cachedURL() {
+            StripeConnectLinkCache.invalidate()
             isConnectingStripe = true
             defer { isConnectingStripe = false }
             let opened = await UIApplication.shared.open(cached)
+            if !opened {
+                errorMessage = "Could not open Stripe. Check that Safari is available."
+                return .noAction
+            }
+            return .openedInSafari
+        }
+
+        if let ready = await StripeConnectLinkCache.awaitReadyURL() {
+            StripeConnectLinkCache.invalidate()
+            isConnectingStripe = true
+            defer { isConnectingStripe = false }
+            let opened = await UIApplication.shared.open(ready)
             if !opened {
                 errorMessage = "Could not open Stripe. Check that Safari is available."
                 return .noAction
@@ -1331,8 +1413,7 @@ class PaymentsViewModel: ObservableObject {
                 return .openedInSafari
             }
 
-            prefetchedConnectURL = url
-            prefetchedConnectFetchedAt = Date()
+            StripeConnectLinkCache.store(url)
             stripeHasAccount = true
             hasLoadedStripeStatus = true
             return .noAction

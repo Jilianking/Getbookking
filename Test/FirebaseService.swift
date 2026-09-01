@@ -269,7 +269,9 @@ class FirebaseService: ObservableObject {
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
-            clientName: displayName.isEmpty ? PhoneFormatting.displayUS(counterpartyPhone) : displayName,
+            clientName: displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
+                ? PhoneFormatting.displayUS(counterpartyPhone)
+                : displayName,
             content: body,
             sender: direction == "outbound" ? .admin : .client,
             createdAt: createdAt,

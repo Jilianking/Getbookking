@@ -10,6 +10,7 @@ struct PaymentsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
     @EnvironmentObject var appTour: AppTourCoordinator
+    @EnvironmentObject var stripeConnectLaunch: StripeConnectLaunchCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = PaymentsViewModel()
     @State private var showDepositLinkSheet = false
@@ -33,7 +34,8 @@ struct PaymentsView: View {
                     if viewModel.hasLoadedStripeStatus && viewModel.needsStripeConnect {
                         StripeConnectBanner(
                             viewModel: viewModel,
-                            isDemoMode: authViewModel.isDemoMode
+                            isDemoMode: authViewModel.isDemoMode,
+                            stripeConnectLaunch: stripeConnectLaunch
                         )
                     } else if let err = viewModel.errorMessage {
                         Text(err)
@@ -79,7 +81,9 @@ struct PaymentsView: View {
                 #endif
             }
             .refreshable {
-                await viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
+                async let refresh: () = viewModel.refresh(isDemoMode: authViewModel.isDemoMode)
+                async let connect: () = viewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                _ = await (refresh, connect)
             }
             .task {
                 await viewModel.loadData(
@@ -87,7 +91,11 @@ struct PaymentsView: View {
                     sessionStore: sessionStore
                 )
                 #if TAP_TO_PAY_ENABLED
-                await viewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                async let tapToPay: () = viewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                async let connect: () = viewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                _ = await (tapToPay, connect)
+                #else
+                await viewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 #endif
             }
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
@@ -382,27 +390,26 @@ struct PaymentsView: View {
         }
     }
 
-    /// Opens Manual/Deposit when Connect is ready; otherwise starts Stripe setup (same path as Tap to Pay).
+    /// Opens Manual/Deposit when Connect is ready; otherwise starts Stripe setup (same path as Activity checklist).
     private func handleManualOrDepositTapped(open: @escaping () -> Void) {
         if viewModel.stripeConnected {
             open()
             return
         }
+        if viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected {
+            #if TAP_TO_PAY_ENABLED
+            tapToPayAlertMessage = viewModel.stripePaymentsBlockedMessage
+            #else
+            viewModel.errorMessage = viewModel.stripePaymentsBlockedMessage
+            #endif
+            return
+        }
         Task {
-            await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode)
-            if viewModel.stripeConnected {
-                open()
-                return
-            }
-            if viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected {
-                #if TAP_TO_PAY_ENABLED
-                tapToPayAlertMessage = viewModel.stripePaymentsBlockedMessage
-                #else
-                viewModel.errorMessage = viewModel.stripePaymentsBlockedMessage
-                #endif
-                return
-            }
-            let outcome = await viewModel.createConnectAccountLink(isDemoMode: authViewModel.isDemoMode)
+            stripeConnectLaunch.prepareOpening()
+            let outcome = await stripeConnectLaunch.openConnect(
+                from: viewModel,
+                isDemoMode: authViewModel.isDemoMode
+            )
             switch outcome {
             case .alreadyConnected:
                 open()
@@ -475,6 +482,7 @@ struct PaymentsView: View {
 private struct StripeConnectBanner: View {
     @ObservedObject var viewModel: PaymentsViewModel
     let isDemoMode: Bool
+    @ObservedObject var stripeConnectLaunch: StripeConnectLaunchCoordinator
 
     private var isPendingReview: Bool {
         viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted && !viewModel.stripeConnected
@@ -487,12 +495,15 @@ private struct StripeConnectBanner: View {
                     if isPendingReview {
                         await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
                     } else {
-                        await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
                         guard !viewModel.stripeConnected else { return }
                         if viewModel.stripeHasAccount && viewModel.stripeDetailsSubmitted {
                             return
                         }
-                        _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode)
+                        stripeConnectLaunch.prepareOpening()
+                        _ = await stripeConnectLaunch.openConnect(
+                            from: viewModel,
+                            isDemoMode: isDemoMode
+                        )
                     }
                 }
             }) {
@@ -526,7 +537,7 @@ private struct StripeConnectBanner: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.isConnectingStripe)
+            .disabled(viewModel.isConnectingStripe || stripeConnectLaunch.isOpening)
 
             if let err = viewModel.errorMessage {
                 Text(err)
@@ -535,6 +546,11 @@ private struct StripeConnectBanner: View {
             }
         }
         .padding(.horizontal)
+        .onAppear {
+            Task {
+                await viewModel.prewarmConnectLinkIfNeeded(isDemoMode: isDemoMode)
+            }
+        }
     }
 }
 

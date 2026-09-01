@@ -8,6 +8,7 @@ import SwiftUI
 struct PaymentsSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
     @EnvironmentObject private var authViewModel: AuthViewModel
+    @EnvironmentObject private var stripeConnectLaunch: StripeConnectLaunchCoordinator
 
     var body: some View {
         ScrollView {
@@ -49,7 +50,11 @@ struct PaymentsSettingsView: View {
                         if viewModel.stripeConnected {
                             await viewModel.openExpressDashboard(isDemoMode: authViewModel.isDemoMode)
                         } else {
-                            _ = await viewModel.createConnectAccountLink(isDemoMode: authViewModel.isDemoMode)
+                            stripeConnectLaunch.prepareOpening()
+                            _ = await stripeConnectLaunch.openConnect(
+                                from: viewModel,
+                                isDemoMode: authViewModel.isDemoMode
+                            )
                         }
                     }
                 } label: {
@@ -80,6 +85,7 @@ struct PaymentsSettingsView: View {
                     authViewModel.isDemoMode
                         || viewModel.isOpeningStripeDashboard
                         || viewModel.isConnectingStripe
+                        || stripeConnectLaunch.isOpening
                 )
             }
             .appCard()

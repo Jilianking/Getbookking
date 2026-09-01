@@ -352,7 +352,7 @@ struct MessageThreadView: View {
     @State private var messages: [Message] = []
     @State private var newMessage = ""
     @State private var isLoading = false
-    @State private var clientName = "Customer"
+    @State private var clientName = ""
     @State private var clientPhone = ""
     @State private var linkedBookingRequestId: String?
     @State private var showThreadError = false
@@ -384,7 +384,7 @@ struct MessageThreadView: View {
                         Text(clientName)
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(AppDesign.textPrimary)
-                        if !clientPhone.isEmpty {
+                        if !clientPhone.isEmpty, clientPhone != clientName {
                             Text(clientPhone)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -756,8 +756,11 @@ struct MessageBubble: View {
                             )
                         }
                         let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !text.isEmpty {
-                            MessageBubbleText(content: message.content, isAdmin: isAdmin)
+                        if !message.content.isEmpty {
+                            MessageBubbleText(
+                                content: text.isEmpty ? " " : message.content,
+                                isAdmin: isAdmin
+                            )
                                 .padding()
                                 .background(isAdmin ? AppDesign.messageSentBackground : AppDesign.searchBackground)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))

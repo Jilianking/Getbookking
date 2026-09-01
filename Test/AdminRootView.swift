@@ -93,6 +93,8 @@ enum RequestsDeepLinkFilter: String, Equatable {
 @Observable
 final class DrawerState {
     var isOpen = false
+    /// Right-side activity panel (notification center). Mutually exclusive with `isOpen`.
+    var isActivityOpen = false
     var selectedSection: AdminSection = .dashboard
     /// Opens a specific customer profile in Clients (Firestore doc id).
     var customersDetailClientId: String?
@@ -110,6 +112,10 @@ final class DrawerState {
     var calendarShouldOpenNewBooking = false
     /// Dashboard New requests / Confirmed cards → Requests with matching filter chip.
     var requestsInitialFilter: RequestsDeepLinkFilter?
+    /// Activity bell → Requests with one booking request opened (Firestore doc id).
+    var requestsOpenRequestId: String?
+    /// Activity bell → Shop with one order opened.
+    var shopOpenOrderId: String?
     /// Incremented when the app tour advances — child views dismiss sheets / inline panels.
     var appTourDismissModalsToken: Int = 0
 
@@ -147,6 +153,16 @@ final class DrawerState {
 
         selectedSection = .messages
         isOpen = false
+        isActivityOpen = false
+    }
+
+    func openActivityDrawer() {
+        isOpen = false
+        isActivityOpen = true
+    }
+
+    func closeActivityDrawer() {
+        isActivityOpen = false
     }
 }
 
@@ -243,6 +259,35 @@ struct AdminRootView: View {
                     .transition(.move(edge: .leading))
             }
 
+            // Activity drawer (right)
+            if drawerState.isActivityOpen {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            drawerState.closeActivityDrawer()
+                        }
+                    }
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+                            .onEnded { value in
+                                // Right swipe => close.
+                                let dx = value.translation.width
+                                let dy = abs(value.translation.height)
+                                guard dx > 56, dx > dy * 1.15 else { return }
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    drawerState.closeActivityDrawer()
+                                }
+                            }
+                    )
+
+                ActivityDrawerPanel(drawerState: drawerState)
+                    .frame(width: AppDesign.drawerWidth)
+                    .shadow(color: .black.opacity(0.12), radius: 12, x: -4, y: 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .transition(.move(edge: .trailing))
+            }
+
         }
         .overlay(alignment: .leading) {
             drawerEdgeOpenHitArea
@@ -252,6 +297,13 @@ struct AdminRootView: View {
             appTour.updateFrames(frames)
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
+        .animation(.easeInOut(duration: 0.2), value: drawerState.isActivityOpen)
+        .onChange(of: drawerState.isOpen) { _, open in
+            if open { drawerState.isActivityOpen = false }
+        }
+        .onChange(of: drawerState.isActivityOpen) { _, open in
+            if open { drawerState.isOpen = false }
+        }
         .onChange(of: drawerState.selectedSection) { _, section in
             visitedSections.insert(section)
             // Leaving Messages clears thread edge ownership even if the view stays mounted.
@@ -305,6 +357,7 @@ struct AdminRootView: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !threadId.isEmpty else { return }
             drawerState.isOpen = false
+            drawerState.isActivityOpen = false
             drawerState.messagesShouldOpenCompose = false
             drawerState.messagesOpenThreadId = threadId
             drawerState.selectedSection = .messages

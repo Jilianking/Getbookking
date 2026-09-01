@@ -1673,7 +1673,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             await MainActor.run { products = fetchedProducts }
             do {
                 let fetchedShopOrders = try await firebaseService.fetchTenantShopOrders(tenantId: tid)
-                await MainActor.run { shopOrders = fetchedShopOrders }
+                await MainActor.run {
+                    shopOrders = fetchedShopOrders
+                    sessionStore?.replaceShopOrders(fetchedShopOrders)
+                }
             } catch {
                 await MainActor.run { errorMessage = error.localizedDescription }
             }
@@ -3488,7 +3491,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         }
     }
 
-    func markShopOrderRead(_ order: ShopOrder) async {
+    func markShopOrderRead(_ order: ShopOrder, sessionStore: TenantSessionStore? = nil) async {
         guard order.readAt == nil, let tid = tenantId else { return }
         let readAt = Date()
         do {
@@ -3501,6 +3504,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 if let idx = shopOrders.firstIndex(where: { $0.id == order.id }) {
                     shopOrders[idx].readAt = readAt
                 }
+                sessionStore?.markShopOrderReadLocally(orderId: order.id, readAt: readAt)
             }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }

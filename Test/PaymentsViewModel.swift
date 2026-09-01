@@ -49,6 +49,19 @@ struct PaymentTransaction: Identifiable, Hashable {
 
     var showsInActivityFeed: Bool { !isApplicationFeeRefundLine }
 
+    /// Notification center: client money that arrived without you standing there.
+    /// Deposit + remote/card payment. Excludes Tap to Pay, payouts, studio share, refunds.
+    var showsInNotificationActivity: Bool {
+        guard showsInActivityFeed, isCredit else { return false }
+        if isPayoutLine || isStudioShareLine { return false }
+        switch channelLabel {
+        case "Deposit", "Payment":
+            return true
+        default:
+            return false
+        }
+    }
+
     var isStudioShareLine: Bool {
         if type == "studio_share" { return true }
         let desc = (customerName ?? "").lowercased()

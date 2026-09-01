@@ -126,6 +126,9 @@ struct DashboardView: View {
                             .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NotificationCenterBell(drawerState: drawerState)
+                }
             }
             .refreshable {
                 await viewModel.refresh(

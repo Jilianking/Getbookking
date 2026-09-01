@@ -58,6 +58,7 @@ struct RequestsView: View {
     @State private var teamFilterKey: String = BookingAssigneeFilter.allKey
     @State private var selectedRequest: Request?
     @State private var selectedBookingRequest: BookingRequest?
+    @State private var pendingOpenRequestId: String?
     @State private var openConfirmWhenDetailAppears = false
     @State private var searchText = ""
     @State private var showSeedConfirm = false
@@ -116,6 +117,7 @@ struct RequestsView: View {
                 .onAppear {
                     viewModel.sessionStore = sessionStore
                     applyRequestsDeepLinkFilterIfNeeded()
+                    applyRequestsOpenRequestIdIfNeeded()
                 }
                 .task {
                     viewModel.sessionStore = sessionStore
@@ -126,6 +128,7 @@ struct RequestsView: View {
                     if !usedDeepLinkFilter {
                         requestFilter = .all
                     }
+                    applyRequestsOpenRequestIdIfNeeded()
                 }
                 .onChange(of: drawerState.selectedSection) { _, section in
                     guard section == .requests else { return }
@@ -135,6 +138,14 @@ struct RequestsView: View {
                     if filter != nil {
                         applyRequestsDeepLinkFilterIfNeeded()
                     }
+                }
+                .onChange(of: drawerState.requestsOpenRequestId) { _, requestId in
+                    if requestId != nil {
+                        applyRequestsOpenRequestIdIfNeeded()
+                    }
+                }
+                .onChange(of: viewModel.bookingRequests.count) { _, _ in
+                    applyRequestsOpenRequestIdIfNeeded()
                 }
                 .onChange(of: drawerState.appTourDismissModalsToken) { _, _ in
                     selectedBookingRequest = nil
@@ -153,6 +164,20 @@ struct RequestsView: View {
         case .confirmed:
             requestFilter = .confirmed
         }
+    }
+
+    /// Activity bell deep link. The id is held until the list loads, since the
+    /// request usually is not in memory yet when the section switches.
+    private func applyRequestsOpenRequestIdIfNeeded() {
+        if let incoming = drawerState.requestsOpenRequestId {
+            drawerState.requestsOpenRequestId = nil
+            pendingOpenRequestId = incoming
+        }
+        guard let target = pendingOpenRequestId,
+              let match = viewModel.bookingRequests.first(where: { $0.documentId == target })
+        else { return }
+        pendingOpenRequestId = nil
+        selectedBookingRequest = match
     }
 
     private var requestsScreenContent: some View {

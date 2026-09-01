@@ -47,8 +47,14 @@ struct DesignView: View {
     @State private var showGalleryPickerLoadError = false
     @State private var isColorPickerPresented = false
     @State private var isTemplatePickerPresented = false
+    @State private var showDesignHelpSheet = false
+    @AppStorage(DesignWebsiteHelpStore.seenKey) private var hasSeenDesignHelpSheet = false
     var drawerState: DrawerState
     let sectionTitle: String
+
+    private var canShowDesignHelp: Bool {
+        (authViewModel.teamAccess.isOwner || authViewModel.isDemoMode) && !isShowingManage
+    }
 
     var body: some View {
         NavigationView {
@@ -85,41 +91,59 @@ struct DesignView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Group {
-                        if !isShowingManage {
-                            HStack(spacing: 12) {
-                                if viewModel.hasTenant, !authViewModel.isDemoMode {
-                                    Text("Edit")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(
-                                            isQuickEditEnabled ? AppDesign.textSecondary : AppDesign.textPrimary
-                                        )
-                                        .padding(.leading, 4)
-                                    Toggle("", isOn: $isQuickEditEnabled)
-                                        .labelsHidden()
-                                        .toggleStyle(AppTwoToneSwitchToggleStyle())
-                                        .accessibilityLabel("Edit")
+                if !isShowingManage {
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 12) {
+                            if viewModel.hasTenant, !authViewModel.isDemoMode {
+                                Text("Edit")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(
+                                        isQuickEditEnabled ? AppDesign.textSecondary : AppDesign.textPrimary
+                                    )
+                                Toggle("", isOn: $isQuickEditEnabled)
+                                    .labelsHidden()
+                                    .toggleStyle(AppTwoToneSwitchToggleStyle())
+                                    .accessibilityLabel("Edit")
+                            }
+                            Button("Manage") {
+                                isQuickEditEnabled = false
+                                selectedTab = isCharterPlan ? .charters : .gallery
+                                isShowingManage = true
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppDesign.textPrimary)
+                            .appTourAnchor(
+                                .designWebsite,
+                                isActive: appTour.isStepActive(.designWebsite)
+                            )
+                            if viewModel.hasTenant, URL(string: viewModel.safariSiteUrl) != nil {
+                                Button(action: openInSafari) {
+                                    Image(systemName: "safari")
+                                        .foregroundStyle(AppDesign.textPrimary)
                                 }
-                                Button("Manage") {
-                                    isQuickEditEnabled = false
-                                    selectedTab = isCharterPlan ? .charters : .gallery
-                                    isShowingManage = true
-                                }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppDesign.textPrimary)
-                                .appTourAnchor(
-                                    .designWebsite,
-                                    isActive: appTour.isStepActive(.designWebsite) && !isShowingManage
-                                )
-                                if viewModel.hasTenant, URL(string: viewModel.safariSiteUrl) != nil {
-                                    Button(action: openInSafari) {
-                                        Image(systemName: "safari")
-                                    }
-                                }
+                                .accessibilityLabel("Open site in Safari")
                             }
                         }
                     }
+                    if authViewModel.teamAccess.isOwner || authViewModel.isDemoMode {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                showDesignHelpSheet = true
+                            } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .foregroundStyle(AppDesign.textPrimary)
+                            }
+                            .accessibilityLabel("Edit your site")
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                presentDesignHelpIfNeeded()
+            }
+            .onChange(of: isShowingManage) { _, showingManage in
+                if !showingManage {
+                    presentDesignHelpIfNeeded()
                 }
             }
             .task {
@@ -152,6 +176,13 @@ struct DesignView: View {
                         sessionStore: sessionStore
                     )
                     viewModel.invalidateWebPreview()
+                }
+            }
+            .sheet(isPresented: $showDesignHelpSheet, onDismiss: {
+                hasSeenDesignHelpSheet = true
+            }) {
+                DesignWebsiteHelpSheet {
+                    showDesignHelpSheet = false
                 }
             }
             .sheet(item: $quickEditSheet) { payload in
@@ -2032,6 +2063,11 @@ struct DesignView: View {
     private func openInSafari() {
         guard let url = URL(string: viewModel.safariSiteUrl) else { return }
         UIApplication.shared.open(url)
+    }
+
+    private func presentDesignHelpIfNeeded() {
+        guard canShowDesignHelp, !hasSeenDesignHelpSheet, !showDesignHelpSheet else { return }
+        showDesignHelpSheet = true
     }
 
 }

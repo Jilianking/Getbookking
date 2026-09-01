@@ -13,6 +13,7 @@ class MessagesViewModel: ObservableObject {
     private let firebaseService = FirebaseService()
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
     private var activeMessageThreadId: String?
+    private var smsThreadsCancellable: AnyCancellable?
 
     var threads: [String] {
         threadSummaries.map(\.threadId)
@@ -22,13 +23,21 @@ class MessagesViewModel: ObservableObject {
         if isDemoMode {
             if let sessionStore, sessionStore.isDemoSession {
                 await MainActor.run {
-                    threadSummaries = sessionStore.demoSmsThreads
+                    threadSummaries = sessionStore.smsThreads
                     lastError = nil
                 }
                 return
             }
             await MainActor.run {
                 threadSummaries = []
+            }
+            return
+        }
+        if let sessionStore {
+            await sessionStore.refreshSmsThreads(isDemoMode: false)
+            await MainActor.run {
+                threadSummaries = sessionStore.smsThreads
+                lastError = nil
             }
             return
         }
@@ -46,32 +55,57 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
+    /// Binds to `TenantSessionStore.smsThreads` — session owns the Firestore listener.
     func startThreadsListening(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) {
+        smsThreadsCancellable?.cancel()
+        smsThreadsCancellable = nil
+
         if isDemoMode {
             if let sessionStore, sessionStore.isDemoSession {
-                threadSummaries = sessionStore.demoSmsThreads
+                threadSummaries = sessionStore.smsThreads
+                smsThreadsCancellable = sessionStore.$smsThreads
+                    .receive(on: RunLoop.main)
+                    .sink { [weak self] summaries in
+                        self?.threadSummaries = summaries
+                    }
                 return
             }
             threadSummaries = []
             return
         }
-        firebaseService.startThreadsListener(
-            onUpdate: { [weak self] summaries in
-                Task { @MainActor in
-                    self?.threadSummaries = summaries
+
+        guard let sessionStore else {
+            // Fallback for callers that omit the store — keep prior behavior.
+            firebaseService.startThreadsListener(
+                onUpdate: { [weak self] summaries in
+                    Task { @MainActor in
+                        self?.threadSummaries = summaries
+                    }
+                },
+                onError: { [weak self] errorMessage in
+                    print("Threads listener error: \(errorMessage)")
+                    Task { @MainActor in
+                        self?.lastError = errorMessage
+                    }
                 }
-            },
-            onError: { [weak self] errorMessage in
-                print("Threads listener error: \(errorMessage)")
-                Task { @MainActor in
-                    self?.lastError = errorMessage
-                }
+            )
+            return
+        }
+
+        sessionStore.startSmsThreadsListening(isDemoMode: false)
+        threadSummaries = sessionStore.smsThreads
+        smsThreadsCancellable = sessionStore.$smsThreads
+            .receive(on: RunLoop.main)
+            .sink { [weak self] summaries in
+                self?.threadSummaries = summaries
             }
-        )
     }
 
+    /// Stops observing the session store. Does **not** tear down the session listener
+    /// (Activity / Dashboard still need live SMS for the bell).
     func stopThreadsListening() {
-        firebaseService.stopThreadsListener()
+        smsThreadsCancellable?.cancel()
+        smsThreadsCancellable = nil
     }
 
     func loadSmsQuickPresets(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {

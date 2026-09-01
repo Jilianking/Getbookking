@@ -1504,6 +1504,21 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
 /**
  * Log inbound client SMS and count toward monthly usage. Returns false if monthly cap reached.
  */
+function inboundMessageShouldRecord(rawBody, mediaUrls) {
+  const body = (rawBody || "").toString();
+  if (body.length > 0) return true;
+  return Array.isArray(mediaUrls) && mediaUrls.length > 0;
+}
+
+function inboundMessagePreviewBody(rawBody, mediaUrls) {
+  const body = (rawBody || "").toString();
+  const trimmed = body.trim();
+  if (trimmed.length > 0) return trimmed.slice(0, 500);
+  if (body.length > 0) return body.slice(0, 500);
+  if (Array.isArray(mediaUrls) && mediaUrls.length) return "Photo";
+  return "";
+}
+
 async function recordInboundTenantSms(tenantId, inbound) {
   const from = (inbound && inbound.from) || "";
   const to = (inbound && inbound.to) || "";
@@ -1525,7 +1540,7 @@ async function recordInboundTenantSms(tenantId, inbound) {
       memberUid: assignedMemberUid,
     });
   if (!tenantId || !from || !to) return false;
-  if (!body && !mediaUrls.length) return false;
+  if (!inboundMessageShouldRecord(body, mediaUrls)) return false;
 
   try {
     await consumeSmsMonthlySlot(tenantId, {
@@ -1539,7 +1554,7 @@ async function recordInboundTenantSms(tenantId, inbound) {
     throw e;
   }
 
-  const previewBody = body || (mediaUrls.length ? "Photo" : "");
+  const previewBody = inboundMessagePreviewBody(body, mediaUrls);
   const logPayload = {
     direction: "inbound",
     from,
@@ -1595,7 +1610,8 @@ async function recordInboundTenantSms(tenantId, inbound) {
 async function notifyInboundClientSms(tenantId, opts) {
   const threadId = ((opts && opts.threadId) || "").toString().trim();
   const counterpartPhone = ((opts && opts.counterpartPhone) || "").toString().trim();
-  const bodyPreview = ((opts && opts.bodyPreview) || "").toString().trim();
+  const rawBodyPreview = ((opts && opts.bodyPreview) || "").toString();
+  const trimmedBodyPreview = rawBodyPreview.trim();
   const assignedMemberUid = ((opts && opts.assignedMemberUid) || "").toString().trim();
   const smsLineScope = ((opts && opts.smsLineScope) || "tenant").toString().trim();
   if (!tenantId || !threadId) return;
@@ -1619,7 +1635,7 @@ async function notifyInboundClientSms(tenantId, opts) {
     }
   }
 
-  if (!displayName || looksLikePhoneLabel(displayName)) {
+  if (!displayName || looksLikePhoneLabel(displayName) || isPlaceholderContactName(displayName)) {
     const last10 = phoneLast10(counterpartPhone);
     if (last10) {
       try {
@@ -1639,13 +1655,19 @@ async function notifyInboundClientSms(tenantId, opts) {
     }
   }
 
-  if (!displayName || looksLikePhoneLabel(displayName)) {
+  if (!displayName || looksLikePhoneLabel(displayName) || isPlaceholderContactName(displayName)) {
     displayName = formatPhoneForPush(counterpartPhone) || "New message";
   }
 
   // iMessage-style: title = name, body = message (renders as name↵text).
   const alertTitle = displayName.slice(0, 100);
-  const alertBody = (bodyPreview || "Photo").slice(0, 200);
+  const alertBody = (
+    trimmedBodyPreview.length > 0
+      ? trimmedBodyPreview
+      : rawBodyPreview.length > 0
+        ? rawBodyPreview
+        : "Photo"
+  ).slice(0, 200);
 
   let recipientUids = [];
   if (smsLineScope === "member" && assignedMemberUid) {
@@ -1727,6 +1749,11 @@ async function notifyInboundClientSms(tenantId, opts) {
 function looksLikePhoneLabel(raw) {
   const digits = (raw || "").toString().replace(/\D/g, "");
   return digits.length >= 10;
+}
+
+function isPlaceholderContactName(raw) {
+  const key = (raw || "").toString().trim().toLowerCase();
+  return key === "customer" || key === "client" || key === "guest";
 }
 
 function formatPhoneForPush(phone) {

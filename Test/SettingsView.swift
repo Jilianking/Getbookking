@@ -93,6 +93,7 @@ struct SettingsView: View {
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
                 )
+                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)

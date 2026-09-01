@@ -176,7 +176,7 @@ enum DemoSnapshotParser {
         let storedName = (dict["clientName"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let counterpart = (dict["counterpartPhone"] as? String) ?? threadId
-        let clientName = storedName.isEmpty
+        let clientName = storedName.isEmpty || ClientsViewModel.isPlaceholderContactName(storedName)
             ? PhoneFormatting.displayUS(counterpart)
             : storedName
         let assignedRaw = (dict["assignedMemberUid"] as? String)?
@@ -231,7 +231,7 @@ enum DemoSnapshotParser {
         return Message(
             id: docId,
             clientId: counterpartyPhone,
-            clientName: displayName.isEmpty
+            clientName: displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
                 ? PhoneFormatting.displayUS(counterpartyPhone)
                 : displayName,
             content: body,

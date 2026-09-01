@@ -122,21 +122,36 @@ class ClientsViewModel: ObservableObject {
         }
     }
 
+    /// Generic labels that are not real contact names — show the phone until a name is saved.
+    static func isPlaceholderContactName(_ raw: String) -> Bool {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "customer", "client", "guest":
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Prefer a saved customer's name over a phone-only SMS thread title.
     static func displayName(stored: String, phone: String, clients: [Client]) -> String {
         if let match = clientMatchingPhone(in: clients, phone: phone) {
             let name = match.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !name.isEmpty { return name }
+            if !name.isEmpty, !isPlaceholderContactName(name) { return name }
         }
         let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return trimmed }
+        if !trimmed.isEmpty, !isPlaceholderContactName(trimmed) { return trimmed }
         return PhoneFormatting.displayUS(phone)
     }
 
     /// Best matching saved customer, or a lightweight client for message/request phone contacts.
     func resolveClient(name: String, phone: String) -> Client {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayName = trimmedName.isEmpty ? "Customer" : trimmedName
+        let displayName: String = {
+            if !trimmedName.isEmpty, !Self.isPlaceholderContactName(trimmedName) {
+                return trimmedName
+            }
+            return PhoneFormatting.displayUS(phone)
+        }()
         let dig = PhoneFormatting.digits(from: phone)
         if dig.count >= 10 {
             let suffix = String(dig.suffix(10))

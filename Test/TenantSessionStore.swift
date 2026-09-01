@@ -23,6 +23,12 @@ final class TenantSessionStore: ObservableObject {
     @Published private(set) var customers: [Client] = []
     @Published private(set) var smsQuickPresets: [String] = []
     @Published private(set) var ownerUid: String?
+    /// Live SMS inbox summaries (session owns the Firestore listener).
+    @Published private(set) var smsThreads: [SmsThreadSummary] = []
+    /// Shop orders for Activity + shared cache (one-shot fetch, not a live listener).
+    @Published private(set) var shopOrders: [ShopOrder] = []
+    /// Recent Stripe Connect credits for Activity (deposit / remote pay only).
+    @Published private(set) var recentPayments: [PaymentTransaction] = []
 
     /// Active marketing sandbox persona (read-only; local mutations only).
     @Published private(set) var demoPersona: DemoPersona?
@@ -44,6 +50,9 @@ final class TenantSessionStore: ObservableObject {
     private var customersLoadedAt: Date?
     private var teamMembersLoadedAt: Date?
     private var newBookingsLoadedAt: Date?
+    private var shopOrdersLoadedAt: Date?
+    private var recentPaymentsLoadedAt: Date?
+    private var smsThreadsListening = false
     private var customerCountCache: Int?
     private var loadedUid: String?
 
@@ -96,6 +105,7 @@ final class TenantSessionStore: ObservableObject {
     }
 
     func reset() {
+        stopSmsThreadsListening()
         profile = nil
         tenantId = nil
         tenant = nil
@@ -104,11 +114,16 @@ final class TenantSessionStore: ObservableObject {
         customers = []
         smsQuickPresets = []
         ownerUid = nil
+        smsThreads = []
+        shopOrders = []
+        recentPayments = []
         sessionLoaded = false
         bookingsLoadedAt = nil
         customersLoadedAt = nil
         teamMembersLoadedAt = nil
         newBookingsLoadedAt = nil
+        shopOrdersLoadedAt = nil
+        recentPaymentsLoadedAt = nil
         newBookingRequests = []
         unreadRequestsCount = 0
         customerCountCache = nil
@@ -162,7 +177,10 @@ final class TenantSessionStore: ObservableObject {
         async let bookings: () = loadBookingsIfNeeded(force: false, isDemoMode: false)
         async let newBookings: () = loadNewBookingsIfNeeded(force: false, isDemoMode: false)
         async let members: () = loadTeamMembersIfNeeded(force: false, isDemoMode: false)
-        _ = await (bookings, newBookings, members)
+        async let shop: () = loadShopOrdersIfNeeded(force: false, isDemoMode: false)
+        async let payments: () = loadRecentPaymentsIfNeeded(force: false, isDemoMode: false)
+        _ = await (bookings, newBookings, members, shop, payments)
+        startSmsThreadsListening(isDemoMode: false)
     }
 
     func loadDemoSession(persona: DemoPersona, forceRefresh: Bool = false) async {
@@ -224,6 +242,7 @@ final class TenantSessionStore: ObservableObject {
 
         let threadRaw = payload["smsThreads"] as? [[String: Any]] ?? []
         demoSmsThreads = threadRaw.compactMap { DemoSnapshotParser.smsThread(from: $0) }
+        smsThreads = demoSmsThreads
 
         var messagesByThread: [String: [Message]] = [:]
         let messageRaw = payload["smsMessages"] as? [[String: Any]] ?? []
@@ -239,6 +258,10 @@ final class TenantSessionStore: ObservableObject {
 
         demoServices = payload["services"] as? [[String: Any]] ?? []
         demoPayments = DemoSnapshotParser.payments(from: payload["payments"] as? [String: Any])
+        recentPayments = (demoPayments?.transactions ?? []).compactMap { PaymentTransaction.fromFirestoreDict($0) }
+        shopOrders = []
+        shopOrdersLoadedAt = Date()
+        recentPaymentsLoadedAt = Date()
 
         smsQuickPresets = ManagerSettingsViewModel.defaultQuickReplyPresets
         teamMembers = []
@@ -279,6 +302,7 @@ final class TenantSessionStore: ObservableObject {
                 smsLineScope: thread.smsLineScope,
                 counterpartPhone: thread.counterpartPhone
             )
+            smsThreads = demoSmsThreads
         }
     }
 
@@ -608,6 +632,122 @@ final class TenantSessionStore: ObservableObject {
     func refreshProfileAndTenant() async {
         sessionLoaded = false
         await ensureSessionLoaded(isDemoMode: false)
+    }
+
+    // MARK: - SMS threads (session owns the listener)
+
+    func startSmsThreadsListening(isDemoMode: Bool) {
+        if isDemoMode || isDemoSession {
+            smsThreads = demoSmsThreads
+            smsThreadsListening = false
+            firebaseService.stopThreadsListener()
+            return
+        }
+        guard !smsThreadsListening else { return }
+        smsThreadsListening = true
+        firebaseService.startThreadsListener(
+            onUpdate: { [weak self] summaries in
+                Task { @MainActor in
+                    self?.smsThreads = summaries
+                }
+            },
+            onError: { message in
+                print("TenantSessionStore SMS threads listener error: \(message)")
+            }
+        )
+    }
+
+    func stopSmsThreadsListening() {
+        smsThreadsListening = false
+        firebaseService.stopThreadsListener()
+    }
+
+    func refreshSmsThreads(isDemoMode: Bool) async {
+        if isDemoMode || isDemoSession {
+            smsThreads = demoSmsThreads
+            return
+        }
+        do {
+            smsThreads = try await firebaseService.fetchAllThreads()
+        } catch {
+            print("TenantSessionStore refreshSmsThreads error: \(error)")
+        }
+    }
+
+    /// Same visibility rules as Messages inbox (studio line vs personal line).
+    func visibleSmsThreads(
+        teamAccess: EffectiveTeamAccess,
+        currentUserUid: String?
+    ) -> [SmsThreadSummary] {
+        if teamAccess.isOwner || teamAccess.accessRole == .manager {
+            return smsThreads.filter(\.isStudioLine)
+        }
+        if teamAccess.usesOwnSms, let uid = currentUserUid {
+            return smsThreads.filter { summary in
+                guard let assigned = summary.assignedMemberUid else { return false }
+                return assigned == uid
+            }
+        }
+        return []
+    }
+
+    // MARK: - Shop orders
+
+    func loadShopOrdersIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode || isDemoSession {
+            return
+        }
+        if !force, let loadedAt = shopOrdersLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+            return
+        }
+        guard let tid = tenantId ?? profile?.tenantId else { return }
+        do {
+            let fetched = try await firebaseService.fetchTenantShopOrders(tenantId: tid)
+            shopOrders = fetched
+            shopOrdersLoadedAt = Date()
+        } catch {
+            print("TenantSessionStore loadShopOrders error: \(error)")
+        }
+    }
+
+    func replaceShopOrders(_ orders: [ShopOrder]) {
+        shopOrders = orders
+        shopOrdersLoadedAt = Date()
+    }
+
+    func markShopOrderReadLocally(orderId: String, readAt: Date) {
+        guard let idx = shopOrders.firstIndex(where: { $0.id == orderId }) else { return }
+        shopOrders[idx].readAt = readAt
+    }
+
+    var isShopEnabled: Bool {
+        tenant?["shopEnabled"] as? Bool == true
+    }
+
+    // MARK: - Payments (Activity credits)
+
+    func loadRecentPaymentsIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode || isDemoSession {
+            recentPayments = (demoPayments?.transactions ?? []).compactMap { PaymentTransaction.fromFirestoreDict($0) }
+            recentPaymentsLoadedAt = Date()
+            return
+        }
+        if !force, let loadedAt = recentPaymentsLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+            return
+        }
+        do {
+            let result = try await functions.httpsCallable("getConnectBalanceTransactions").call()
+            let data = result.data as? [String: Any]
+            let list = data?["transactions"] as? [[String: Any]] ?? []
+            recentPayments = list.compactMap { PaymentTransaction.fromFirestoreDict($0) }
+            recentPaymentsLoadedAt = Date()
+        } catch {
+            // Not connected / no permission — leave empty; Activity simply omits payments.
+            if force { recentPayments = [] }
+            print("TenantSessionStore loadRecentPayments error: \(error)")
+        }
     }
 
     static func parseTeamMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {

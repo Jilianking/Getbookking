@@ -30,6 +30,7 @@ private enum ShopManagerTab: String, CaseIterable, Identifiable {
 
 struct ShopManagerView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel = DesignViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -37,6 +38,8 @@ struct ShopManagerView: View {
     @State private var selectedTab: ShopManagerTab = .catalog
     @State private var ordersFilter: ShopOrderFilter = .all
     @State private var showSettings = false
+    @State private var selectedOrder: ShopOrder?
+    @State private var pendingOpenOrderId: String?
 
     var body: some View {
         NavigationStack {
@@ -78,15 +81,39 @@ struct ShopManagerView: View {
                 }
             }
             .refreshable {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
             }
             .task {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
+                await viewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+                applyShopOpenOrderIdIfNeeded()
             }
             .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
                 if let url = note.userInfo?["logoUrl"] as? String {
                     viewModel.syncLogoUrlFromExternal(url)
                 }
+            }
+            .onChange(of: drawerState.shopOpenOrderId) { _, orderId in
+                if orderId != nil {
+                    applyShopOpenOrderIdIfNeeded()
+                }
+            }
+            .onChange(of: viewModel.shopOrders.count) { _, _ in
+                applyShopOpenOrderIdIfNeeded()
+            }
+            .sheet(item: $selectedOrder) { order in
+                ShopOrderDetailSheet(
+                    viewModel: viewModel,
+                    order: order,
+                    drawerState: drawerState
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showSettings) {
                 ShopSettingsSheet(viewModel: viewModel, drawerState: drawerState)
@@ -94,6 +121,21 @@ struct ShopManagerView: View {
                     .presentationDragIndicator(.visible)
             }
         }
+    }
+
+    /// Activity bell deep link — switch to Orders and open the matching sheet.
+    private func applyShopOpenOrderIdIfNeeded() {
+        if let incoming = drawerState.shopOpenOrderId {
+            drawerState.shopOpenOrderId = nil
+            pendingOpenOrderId = incoming
+            ordersFilter = .all
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .orders }
+        }
+        guard let target = pendingOpenOrderId,
+              let match = viewModel.shopOrders.first(where: { $0.id == target })
+        else { return }
+        pendingOpenOrderId = nil
+        selectedOrder = match
     }
 
     private var shopHeader: some View {
@@ -179,7 +221,12 @@ struct ShopManagerView: View {
         case .catalog:
             ShopProductCatalogContent(viewModel: viewModel, style: .hub)
         case .orders:
-            ShopOrdersTabContent(viewModel: viewModel, drawerState: drawerState, filter: $ordersFilter)
+            ShopOrdersTabContent(
+                viewModel: viewModel,
+                drawerState: drawerState,
+                filter: $ordersFilter,
+                selectedOrder: $selectedOrder
+            )
         case .analytics:
             ShopAnalyticsTabContent(viewModel: viewModel, onShowOrders: showOrders)
         }
@@ -498,8 +545,8 @@ private struct ShopOrdersTabContent: View {
     @ObservedObject var viewModel: DesignViewModel
     var drawerState: DrawerState
     @Binding var filter: ShopOrderFilter
+    @Binding var selectedOrder: ShopOrder?
     @State private var searchText = ""
-    @State private var selectedOrder: ShopOrder?
 
     private var filteredOrders: [ShopOrder] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -579,11 +626,6 @@ private struct ShopOrdersTabContent: View {
                     .padding(.top, 4)
             }
         }
-        .sheet(item: $selectedOrder) { order in
-            ShopOrderDetailSheet(viewModel: viewModel, order: order, drawerState: drawerState)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
     }
 }
 
@@ -662,6 +704,7 @@ private struct ShopOrderDetailSheet: View {
     @ObservedObject var viewModel: DesignViewModel
     let order: ShopOrder
     var drawerState: DrawerState
+    @EnvironmentObject var sessionStore: TenantSessionStore
     @Environment(\.dismiss) private var dismiss
     @State private var contactInAddressBook = false
     @State private var contactCheckDone = false
@@ -807,7 +850,7 @@ private struct ShopOrderDetailSheet: View {
                 }
             }
             .task {
-                await viewModel.markShopOrderRead(currentOrder)
+                await viewModel.markShopOrderRead(currentOrder, sessionStore: sessionStore)
                 if currentOrder.hasCustomerContact {
                     contactInAddressBook = await viewModel.isShopOrderCustomerInContacts(currentOrder)
                     contactCheckDone = true

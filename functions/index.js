@@ -1570,38 +1570,8 @@ function connectAccountPriority(account) {
 }
 
 /**
- * Find the best Standard Connect account for an email (handles duplicate onboardings).
- * Express accounts are ignored so we never re-attach the older pricing-owner model.
+ * Create a Standard Connect account (Stripe is pricing owner for these users).
  */
-async function findBestConnectAccountForEmail(stripe, email) {
-  const normalized = (email || "").toString().trim().toLowerCase();
-  if (!normalized) return null;
-
-  let best = null;
-  let bestScore = -1;
-  let startingAfter = undefined;
-
-  for (let pageNum = 0; pageNum < 10; pageNum++) {
-    const params = { limit: 100 };
-    if (startingAfter) params.starting_after = startingAfter;
-    const page = await stripe.accounts.list(params);
-    for (const acct of page.data) {
-      if ((acct.type || "").toString() === "express") continue;
-      const acctEmail = (acct.email || "").toString().trim().toLowerCase();
-      if (acctEmail !== normalized) continue;
-      const score = connectAccountPriority(acct);
-      if (score > bestScore) {
-        bestScore = score;
-        best = acct;
-      }
-    }
-    if (!page.has_more || page.data.length === 0) break;
-    startingAfter = page.data[page.data.length - 1].id;
-  }
-  return best;
-}
-
-/** Create a Standard Connect account (Stripe is pricing owner for these users). */
 async function createStandardConnectAccount(stripe, email) {
   // Do not set settings.payouts.debit_negative_balances here: on Standard accounts
   // Stripe owns loss liability and rejects debit_negative_balances: false
@@ -1617,76 +1587,31 @@ async function createStandardConnectAccount(stripe, email) {
 }
 
 /**
- * Prefer the best Connect account for this email and persist stripeAccountId on accountRef.
- * Always considers platform accounts matching the email so we don't stick to incomplete shells
- * when a completed Standard account exists.
+ * Validate and retrieve the stored Connect account directly.
+ * Skips full-platform account listing scans to prevent severe latency / timeouts.
  */
 async function reconcileConnectAccountId(stripe, accountRef, storedId, email) {
   const storedIdTrimmed = (storedId || "").toString().trim();
-
-  let storedAccount = null;
-  if (storedIdTrimmed) {
-    try {
-      storedAccount = await stripe.accounts.retrieve(storedIdTrimmed);
-    } catch (err) {
-      console.warn(
-        "reconcileConnectAccountId retrieve failed",
-        storedIdTrimmed,
-        err.message || err
-      );
-      storedAccount = null;
-    }
-  }
-
-  // Stored account already usable or in Stripe review — keep it (no email scan).
-  if (
-    storedAccount &&
-    (storedAccount.charges_enabled || storedAccount.details_submitted)
-  ) {
-    return { stripeAccountId: storedIdTrimmed, account: storedAccount };
-  }
-
-  // No stored id: skip listing every Connect account (that scan times out on
-  // large platforms). Caller creates a fresh Standard account instead.
   if (!storedIdTrimmed) return null;
 
-  // Incomplete stored account: pick a better matching Standard account by email.
-  const storedScore = connectAccountPriority(storedAccount);
-  const bestByEmail = await findBestConnectAccountForEmail(stripe, email);
-  const emailScore = connectAccountPriority(bestByEmail);
-
-  let chosenId = storedIdTrimmed;
-  let chosenAccount = storedAccount;
-
-  if (bestByEmail && emailScore > storedScore) {
-    chosenId = bestByEmail.id;
-    chosenAccount = bestByEmail;
-  } else if (!storedAccount && bestByEmail) {
-    chosenId = bestByEmail.id;
-    chosenAccount = bestByEmail;
+  try {
+    const storedAccount = await stripe.accounts.retrieve(storedIdTrimmed);
+    if (storedAccount) {
+      return { stripeAccountId: storedIdTrimmed, account: storedAccount };
+    }
+  } catch (err) {
+    console.warn(
+      "reconcileConnectAccountId retrieve failed",
+      storedIdTrimmed,
+      err.message || err
+    );
   }
-
-  if (chosenId && chosenId !== storedIdTrimmed) {
-    await accountRef.set({ stripeAccountId: chosenId }, { merge: true });
-    console.log("reconcileConnectAccountId linked account", {
-      from: storedIdTrimmed || null,
-      to: chosenId,
-      email: (email || "").toString().trim(),
-    });
-  }
-
-  if (!chosenAccount && chosenId) {
-    chosenAccount = await stripe.accounts.retrieve(chosenId);
-  }
-
-  if (!chosenId || !chosenAccount) return null;
-  return { stripeAccountId: chosenId, account: chosenAccount };
+  return null;
 }
 
 /**
  * If Firestore still points at a legacy Express account, replace with Standard
  * so pricing owner is Stripe (per Connect account type).
- * Reuses an existing Standard account for the email when possible (avoids duplicates).
  */
 async function replaceExpressWithStandardConnectAccount(
   stripe,
@@ -1696,16 +1621,6 @@ async function replaceExpressWithStandardConnectAccount(
 ) {
   if (!account || (account.type || "").toString() !== "express") {
     return null;
-  }
-  const existingStandard = await findBestConnectAccountForEmail(stripe, email);
-  if (existingStandard && (existingStandard.type || "").toString() === "standard") {
-    console.log("ensureConnectAccountId Express → reuse existing Standard", {
-      from: account.id,
-      to: existingStandard.id,
-      email: (email || "").toString().trim(),
-    });
-    await accountRef.set({ stripeAccountId: existingStandard.id }, { merge: true });
-    return { stripeAccountId: existingStandard.id, account: existingStandard };
   }
   console.log("ensureConnectAccountId replacing Express with Standard", {
     from: account.id,
@@ -2114,12 +2029,9 @@ exports.getConnectAccountStatus = functions
         ? db.collection("users").doc(uid)
         : db.collection("tenants").doc(payCtx.tenantId);
 
+    let account = null;
     let stripeAccountId = payCtx.stripeAccountId;
-    // Billing page passes skipEmailReconcile to avoid paging Stripe accounts.list by email.
-    const skipEmailReconcile =
-      data && (data.skipEmailReconcile === true || data.fast === true);
-    if (!isDemoShowcaseStripeAccountId(stripeAccountId) && !skipEmailReconcile) {
-      // Reuse best Standard account for this email when possible (fixes multi-shell linking).
+    if (!isDemoShowcaseStripeAccountId(stripeAccountId)) {
       const reconciled = await reconcileConnectAccountId(
         stripe,
         accountRef,
@@ -2128,6 +2040,7 @@ exports.getConnectAccountStatus = functions
       );
       if (reconciled) {
         stripeAccountId = reconciled.stripeAccountId;
+        account = reconciled.account;
       }
     }
 
@@ -2149,7 +2062,9 @@ exports.getConnectAccountStatus = functions
       return demoConnectAccountStatusResponse(payCtx);
     }
 
-    let account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account) {
+      account = await stripe.accounts.retrieve(stripeAccountId);
+    }
     account = await ensureNoNegativeBalanceBankDebits(stripe, account);
 
     const terminalLocationId = payCtx.terminalLocationId || null;

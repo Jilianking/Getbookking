@@ -93,6 +93,8 @@ enum RequestsDeepLinkFilter: String, Equatable {
 @Observable
 final class DrawerState {
     var isOpen = false
+    /// Right-side activity panel (notification center). Mutually exclusive with `isOpen`.
+    var isActivityOpen = false
     var selectedSection: AdminSection = .dashboard
     /// Opens a specific customer profile in Clients (Firestore doc id).
     var customersDetailClientId: String?
@@ -110,6 +112,14 @@ final class DrawerState {
     var calendarShouldOpenNewBooking = false
     /// Dashboard New requests / Confirmed cards → Requests with matching filter chip.
     var requestsInitialFilter: RequestsDeepLinkFilter?
+    /// Activity bell → Requests with one booking request opened (Firestore doc id).
+    var requestsOpenRequestId: String?
+    /// Activity bell → Shop with one order opened.
+    var shopOpenOrderId: String?
+    /// Setup checklist → present a business-settings drill-down from the root shell.
+    var setupSettingsDestination: SetupSettingsDestination?
+    /// Setup checklist → start the optional app tour (never auto on launch).
+    var shouldStartAppTour = false
     /// Incremented when the app tour advances — child views dismiss sheets / inline panels.
     var appTourDismissModalsToken: Int = 0
 
@@ -147,6 +157,16 @@ final class DrawerState {
 
         selectedSection = .messages
         isOpen = false
+        isActivityOpen = false
+    }
+
+    func openActivityDrawer() {
+        isOpen = false
+        isActivityOpen = true
+    }
+
+    func closeActivityDrawer() {
+        isActivityOpen = false
     }
 }
 
@@ -154,6 +174,8 @@ struct AdminRootView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var appTour = AppTourCoordinator()
+    @StateObject private var setupChecklistViewModel = SetupChecklistViewModel()
+    @StateObject private var stripeConnectLaunch = StripeConnectLaunchCoordinator()
     @State private var drawerState = DrawerState()
     @StateObject private var dashboardMetrics = DashboardViewModel()
     @State private var visitedSections: Set<AdminSection> = [.dashboard]
@@ -243,31 +265,103 @@ struct AdminRootView: View {
                     .transition(.move(edge: .leading))
             }
 
+            // Activity drawer (right) — dim layer is full-screen; panel is drawer-width only so taps reach the dim.
+            if drawerState.isActivityOpen {
+                ZStack(alignment: .trailing) {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: closeActivityDrawerAnimated)
+                        .gesture(activityDrawerDismissDragGesture)
+
+                    ActivityDrawerPanel(drawerState: drawerState)
+                        .frame(width: AppDesign.drawerWidth)
+                        .shadow(color: .black.opacity(0.12), radius: 12, x: -4, y: 0)
+                        .gesture(activityDrawerDismissDragGesture)
+                        .transition(.move(edge: .trailing))
+                }
+            }
+
         }
         .overlay(alignment: .leading) {
             drawerEdgeOpenHitArea
         }
         .environmentObject(appTour)
+        .environmentObject(setupChecklistViewModel)
+        .environmentObject(stripeConnectLaunch)
+        .appTourSpotlightOverlay(
+            isPresented: appTour.isActive,
+            holeGlobal: appTour.currentHoleGlobal,
+            message: appTour.activeStep?.message ?? "",
+            stepLabel: appTour.activeStep?.stepLabel ?? "",
+            primaryButtonTitle: appTour.activeStep?.nextButtonTitle ?? "Next",
+            onPrimary: {
+                appTour.advance(
+                    drawerState: drawerState,
+                    visitedSections: &visitedSections,
+                    onComplete: {
+                        SetupChecklistStore.markTourCompleted()
+                        setupChecklistViewModel.noteExternalChange()
+                    }
+                )
+            },
+            onSkipTour: {
+                appTour.skipTour(onComplete: {
+                    SetupChecklistStore.markTourCompleted()
+                    setupChecklistViewModel.noteExternalChange()
+                })
+            }
+        )
+        .sheet(item: $drawerState.setupSettingsDestination, onDismiss: {
+            Task {
+                await setupChecklistViewModel.refresh(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore,
+                    teamAccess: authViewModel.teamAccess,
+                    subscriptionPlan: authViewModel.tenantSubscriptionPlan,
+                    force: true
+                )
+            }
+        }) { destination in
+            SetupSettingsDestinationSheet(destination: destination)
+                .environmentObject(authViewModel)
+                .environmentObject(sessionStore)
+        }
         .onPreferenceChange(AppTourFramePreferenceKey.self) { frames in
             appTour.updateFrames(frames)
         }
         .animation(.easeInOut(duration: 0.2), value: drawerState.isOpen)
-        .onChange(of: drawerState.selectedSection) { _, section in
-            visitedSections.insert(section)
-            // Leaving Messages clears thread edge ownership even if the view stays mounted.
-            if section != .messages {
-                drawerState.suppressDrawerEdgeOpen = false
+        .animation(.easeInOut(duration: 0.2), value: drawerState.isActivityOpen)
+        .onChange(of: drawerState.isOpen) { _, open in
+            if open { drawerState.isActivityOpen = false }
+        }
+        .onChange(of: drawerState.isActivityOpen) { _, open in
+            if open { drawerState.isOpen = false }
+            if open {
+                Task {
+                    async let stripePrewarm: () = setupChecklistViewModel.refreshStripeAndPrewarmOnly(
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore,
+                        teamAccess: authViewModel.teamAccess
+                    )
+                    async let checklist: () = setupChecklistViewModel.refresh(
+                        isDemoMode: authViewModel.isDemoMode,
+                        sessionStore: sessionStore,
+                        teamAccess: authViewModel.teamAccess,
+                        subscriptionPlan: authViewModel.tenantSubscriptionPlan
+                    )
+                    _ = await (stripePrewarm, checklist)
+                }
             }
         }
-        .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
-            if !drawerSections.contains(drawerState.selectedSection) {
-                drawerState.selectedSection = .dashboard
-            }
-        }
-        .onChange(of: authViewModel.teamAccess) { _, _ in
-            if !drawerSections.contains(drawerState.selectedSection) {
-                drawerState.selectedSection = drawerSections.first ?? .dashboard
-            }
+        .onChange(of: drawerState.shouldStartAppTour) { _, shouldStart in
+            guard shouldStart else { return }
+            drawerState.shouldStartAppTour = false
+            drawerState.isActivityOpen = false
+            drawerState.isOpen = false
+            visitedSections.insert(.dashboard)
+            drawerState.selectedSection = .dashboard
+            appTour.start()
         }
         .task(id: sessionTaskId) {
             if authViewModel.isAuthenticated, authViewModel.currentUserUid != nil {
@@ -289,10 +383,64 @@ struct AdminRootView: View {
                     teamAccess: authViewModel.teamAccess,
                     currentUserUid: authViewModel.currentUserUid
                 )
-                _ = await (bootstrap, metrics)
+                async let stripePrewarm: () = setupChecklistViewModel.refreshStripeAndPrewarmOnly(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore,
+                    teamAccess: authViewModel.teamAccess
+                )
+                async let setup: () = setupChecklistViewModel.refresh(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore,
+                    teamAccess: authViewModel.teamAccess,
+                    subscriptionPlan: authViewModel.tenantSubscriptionPlan
+                )
+                _ = await (bootstrap, metrics, stripePrewarm, setup)
             } else if !authViewModel.isAuthenticated {
                 sessionStore.reset()
                 appTour.skipTour(onComplete: {})
+            }
+        }
+        .onChange(of: drawerState.selectedSection) { _, section in
+            visitedSections.insert(section)
+            // Leaving Messages clears thread edge ownership even if the view stays mounted.
+            if section != .messages {
+                drawerState.suppressDrawerEdgeOpen = false
+            }
+        }
+        .onChange(of: authViewModel.tenantSubscriptionPlan) { _, _ in
+            if !drawerSections.contains(drawerState.selectedSection) {
+                drawerState.selectedSection = .dashboard
+            }
+        }
+        .onChange(of: authViewModel.teamAccess) { _, _ in
+            if !drawerSections.contains(drawerState.selectedSection) {
+                drawerState.selectedSection = drawerSections.first ?? .dashboard
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
+            Task {
+                await setupChecklistViewModel.refresh(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore,
+                    teamAccess: authViewModel.teamAccess,
+                    subscriptionPlan: authViewModel.tenantSubscriptionPlan,
+                    force: true
+                )
+            }
+        }
+        .alert("Stripe setup", isPresented: Binding(
+            get: { setupChecklistViewModel.stripeSetupAlertMessage != nil },
+            set: { if !$0 { setupChecklistViewModel.stripeSetupAlertMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                setupChecklistViewModel.stripeSetupAlertMessage = nil
+            }
+        } message: {
+            Text(setupChecklistViewModel.stripeSetupAlertMessage ?? "")
+        }
+        .overlay {
+            if stripeConnectLaunch.isOpening {
+                StripeConnectLaunchOverlay(message: "Opening Stripe…")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tenantLogoDidChange)) { note in
@@ -305,6 +453,7 @@ struct AdminRootView: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !threadId.isEmpty else { return }
             drawerState.isOpen = false
+            drawerState.isActivityOpen = false
             drawerState.messagesShouldOpenCompose = false
             drawerState.messagesOpenThreadId = threadId
             drawerState.selectedSection = .messages
@@ -321,6 +470,23 @@ struct AdminRootView: View {
                 )
             }
         }
+    }
+
+    private func closeActivityDrawerAnimated() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            drawerState.closeActivityDrawer()
+        }
+    }
+
+    /// Swipe right on the dim overlay or activity panel to dismiss.
+    private var activityDrawerDismissDragGesture: some Gesture {
+        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = abs(value.translation.height)
+                guard dx > 56, dx > dy * 1.15 else { return }
+                closeActivityDrawerAnimated()
+            }
     }
 
     /// Thin left-edge strip: swipe right opens the drawer without stealing scroll/keyboard elsewhere.

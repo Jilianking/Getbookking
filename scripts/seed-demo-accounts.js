@@ -839,6 +839,30 @@ const DEMO_ACCOUNTS = [
       },
     ],
   },
+  {
+    slug: "testing-9000",
+    email: "testing9000@example.com",
+    firstName: "Testing",
+    lastName: "Nine Thousand",
+    business: "Testing 9000",
+    displayName: "Testing 9000",
+    industry: "hair",
+    webThemeId: "barber-v1",
+    webColorPaletteId: "original",
+    paletteKey: "blade:original",
+    subscriptionPlan: "solo",
+    tagline: "Internal test tenant.",
+    serviceCity: "Austin",
+    serviceStateAbbr: "TX",
+    businessHours: "Tue–Sat · 9am–6pm",
+    aboutText: "Test account for app QA and setup checklist.",
+    instagramHandle: "",
+    services: [
+      { name: "Consultation", description: "Quick consult.", durationMinutes: 30, price: 0 },
+      { name: "Haircut", description: "Standard cut.", durationMinutes: 45, price: 45 },
+      { name: "Color", description: "Full color service.", durationMinutes: 120, price: 120 },
+    ],
+  },
 ];
 
 /** Industry booking fields; demos can override with `formSchema` on the demo object. */

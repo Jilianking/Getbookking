@@ -41,7 +41,7 @@ struct SmsThreadSummary: Identifiable, Equatable {
         let storedName = (data["clientName"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let counterpart = (data["counterpartPhone"] as? String) ?? threadId
-        let clientName = storedName.isEmpty
+        let clientName = storedName.isEmpty || ClientsViewModel.isPlaceholderContactName(storedName)
             ? PhoneFormatting.displayUS(counterpart)
             : storedName
         let lastMessageBody = (data["lastMessageBody"] as? String) ?? ""

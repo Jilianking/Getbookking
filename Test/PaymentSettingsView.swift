@@ -8,6 +8,7 @@ import SwiftUI
 
 struct PaymentSettingsView: View {
     @ObservedObject var viewModel: PaymentsViewModel
+    @EnvironmentObject private var stripeConnectLaunch: StripeConnectLaunchCoordinator
     let isDemoMode: Bool
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPayEducation = false
@@ -54,6 +55,9 @@ struct PaymentSettingsView: View {
             await viewModel.refreshStripeConnectStatus(isDemoMode: isDemoMode)
             await viewModel.reloadShopTaxSetting(isDemoMode: isDemoMode)
         }
+        .task {
+            await viewModel.prewarmConnectLinkIfNeeded(isDemoMode: isDemoMode)
+        }
         #if TAP_TO_PAY_ENABLED
         .sheet(isPresented: $showTapToPayEducation) {
             TapToPayMerchantEducationView {
@@ -91,7 +95,13 @@ struct PaymentSettingsView: View {
                 if !viewModel.stripeConnected {
                     Divider().padding(.leading, 14)
                     Button {
-                        Task { _ = await viewModel.createConnectAccountLink(isDemoMode: isDemoMode) }
+                        Task {
+                            stripeConnectLaunch.prepareOpening()
+                            _ = await stripeConnectLaunch.openConnect(
+                                from: viewModel,
+                                isDemoMode: isDemoMode
+                            )
+                        }
                     } label: {
                         HStack {
                             Text(connectActionTitle)
@@ -109,7 +119,7 @@ struct PaymentSettingsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(viewModel.isConnectingStripe || isDemoMode)
+                    .disabled(viewModel.isConnectingStripe || isDemoMode || stripeConnectLaunch.isOpening)
                 }
             }
             .appCard()

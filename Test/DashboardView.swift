@@ -126,6 +126,10 @@ struct DashboardView: View {
                             .foregroundStyle(AppDesign.textPrimary)
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NotificationCenterBell(drawerState: drawerState)
+                        .padding(.trailing, 2)
+                }
             }
             .refreshable {
                 await viewModel.refresh(
@@ -139,9 +143,12 @@ struct DashboardView: View {
                     sessionStore: sessionStore
                 )
                 #if TAP_TO_PAY_ENABLED
-                await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
-                #endif
+                async let tapToPay: () = paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                async let connect: () = paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                _ = await (tapToPay, connect)
+                #else
                 await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                #endif
                 await requestsViewModel.refreshRequests(
                     isDemoMode: authViewModel.isDemoMode,
                     sessionStore: sessionStore
@@ -179,9 +186,12 @@ struct DashboardView: View {
                 sessionStore: sessionStore
             )
             #if TAP_TO_PAY_ENABLED
-            await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
-            #endif
+            async let tapToPay: () = paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+            async let connect: () = paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+            _ = await (tapToPay, connect)
+            #else
             await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+            #endif
             await requestsViewModel.loadRequests(
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
@@ -191,9 +201,12 @@ struct DashboardView: View {
             Task {
                 paymentsViewModel.invalidateConnectLinkPrefetch()
                 await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode)
-                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 #if TAP_TO_PAY_ENABLED
-                await paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                async let tapToPay: () = paymentsViewModel.prewarmTapToPayOnLaunch(isDemoMode: authViewModel.isDemoMode)
+                async let connect: () = paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                _ = await (tapToPay, connect)
+                #else
+                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
                 #endif
             }
         }

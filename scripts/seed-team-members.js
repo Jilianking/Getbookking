@@ -144,18 +144,13 @@ const DEFAULT_PASSWORD = "1Abcdefg!";
 const MEMBER_PRESETS = {
   barber: [
     {
-      email: "marc.barber1@example.com",
-      firstName: "Marc",
-      lastName: "Reyes",
-      phone: "5552010001",
-      jobTitle: "Barber",
-    },
-    {
       email: "diego.barber2@example.com",
       firstName: "Diego",
       lastName: "Cole",
       phone: "5552010002",
       jobTitle: "Barber",
+      payoutMode: "shop_split",
+      paymentSplitPercent: 25,
     },
     {
       email: "james.barber3@example.com",
@@ -163,6 +158,8 @@ const MEMBER_PRESETS = {
       lastName: "Ortiz",
       phone: "5552010003",
       jobTitle: "Barber",
+      payoutMode: "shop_split",
+      paymentSplitPercent: 25,
     },
   ],
   tattoos: [
@@ -245,9 +242,29 @@ function maxSeats(plan) {
   return 10;
 }
 
+function memberSlugFromName(firstName, lastName) {
+  const parts = [firstName, lastName]
+    .map((s) => (s || "").toString().trim())
+    .filter(Boolean);
+  const base = parts.join(" ") || "member";
+  return base
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join("-")
+    .slice(0, 48);
+}
+
 function buildUserPatch(tenant, member) {
   const name = `${member.firstName} ${member.lastName}`.trim();
   const plan = normalizePlan(tenant.data.subscriptionPlan);
+  const payoutMode = member.payoutMode || "shop_split";
+  const paymentSplitEnabled =
+    member.paymentSplitEnabled != null
+      ? member.paymentSplitEnabled
+      : payoutMode === "shop_split";
+  const paymentSplitPercent =
+    member.paymentSplitPercent != null ? member.paymentSplitPercent : 25;
   return {
     tenantId: tenant.id,
     tenantSlug: tenant.data.slug || "",
@@ -264,6 +281,10 @@ function buildUserPatch(tenant, member) {
     displayName: name,
     name,
     phone: member.phone,
+    memberSlug: memberSlugFromName(member.firstName, member.lastName),
+    isBookable: true,
+    showOnTeamPage: true,
+    showOnTeamHome: true,
     profilePhotoUrl: "",
     availability: {
       timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
@@ -276,8 +297,9 @@ function buildUserPatch(tenant, member) {
     },
     memberSettings: {
       useStudioBookingPolicy: true,
-      paymentSplitEnabled: false,
-      paymentSplitPercent: 0,
+      payoutMode,
+      paymentSplitEnabled,
+      paymentSplitPercent,
       paymentSplitAppliesTo: "service",
     },
     updatedAt: FieldValue.serverTimestamp(),
@@ -352,6 +374,35 @@ Default password: ${DEFAULT_PASSWORD}
     const prev = existing ? existing.data() : null;
     patch.createdAt = (prev && prev.createdAt) || FieldValue.serverTimestamp();
     await db.collection("users").doc(uid).set(patch, { merge: true });
+  }
+
+  const ownerUid = (tenant.data.ownerUid || "").toString();
+  if (ownerUid) {
+    const ownerDoc = await db.collection("users").doc(ownerUid).get();
+    const ownerData = ownerDoc.exists ? ownerDoc.data() : {};
+    const ownerSlug =
+      ownerData.memberSlug ||
+      memberSlugFromName(ownerData.firstName, ownerData.lastName);
+    await db.collection("users").doc(ownerUid).set(
+      {
+        subscriptionPlan: plan,
+        memberSlug: ownerSlug,
+        isBookable: true,
+        showOnTeamPage: true,
+        showOnTeamHome: true,
+        jobTitle: ownerData.jobTitle || "Owner · Barber",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  const rosterSnap = await db.collection("users").where("tenantId", "==", tenant.id).get();
+  for (const doc of rosterSnap.docs) {
+    await doc.ref.set(
+      { subscriptionPlan: plan, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
   }
 
   const after = await db.collection("users").where("tenantId", "==", tenant.id).get();

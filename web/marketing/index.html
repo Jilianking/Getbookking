@@ -4,6 +4,118 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Get Bookking — Your business, fully booked.</title>
+  <meta name="description" content="Get Bookking is the all-in-one booking platform with Tap to Pay on iPhone, automated 2-way client texting, custom websites, and instant deposits for independent businesses." />
+  <meta name="keywords" content="booking app, tap to pay on iphone, client texting, salon booking, barber software, charter booking, tattoo booking, appointment scheduling" />
+  <link rel="canonical" href="https://getbookking.com/" />
+
+  <!-- Open Graph / Social Sharing -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Get Bookking" />
+  <meta property="og:title" content="Get Bookking — Your business, fully booked." />
+  <meta property="og:description" content="All-in-one booking platform with Tap to Pay on iPhone, custom websites, client texting, and instant deposits." />
+  <meta property="og:url" content="https://getbookking.com/" />
+  <meta property="og:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Get Bookking — Your business, fully booked." />
+  <meta name="twitter:description" content="All-in-one booking platform with Tap to Pay on iPhone, custom websites, client texting, and instant deposits." />
+  <meta name="twitter:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "Get Bookking",
+        "operatingSystem": "iOS",
+        "applicationCategory": "BusinessApplication",
+        "url": "https://getbookking.com/",
+        "description": "Booking software and iOS app with Tap to Pay on iPhone, client texting, and customizable website templates for independent businesses.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      },
+      {
+        "@type": "Organization",
+        "name": "Get Bookking",
+        "url": "https://getbookking.com/",
+        "logo": "https://getbookking.com/assets/brand/logo-dark-512.png"
+      },
+      {
+        "@type": "WebSite",
+        "name": "Get Bookking",
+        "url": "https://getbookking.com/"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Do I need to know how to code or design?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Not at all. Get Bookking handles everything — design, hosting, and setup. You just fill in your info and your site is ready to go."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I use my own domain name?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Every plan includes a free yourname.getbookking.com subdomain. You can connect a domain you already own or purchase one from account settings — available on any plan."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What happens after the 14-day trial?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Your paid plan starts automatically and unlocks client texting and payments. Cancel before the trial ends to avoid being charged."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I switch plans later?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, upgrade or downgrade anytime. Changes take effect at the start of your next billing cycle."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does booking work for my clients?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Clients visit your site, choose a service, and book based on how you've set things up. Depending on your booking style — instant book, request and approve, deposit to confirm, calendar slots, or consultation first — they'll either be confirmed right away or you'll review and approve."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Who pays card processing fees?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Card payments are processed by Stripe. Your clients pay your quoted price plus a 1% platform fee and Stripe's standard processing fee (2.9% + 30¢). You receive your full quoted amount — no deductions on your end."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I add my own photos and branding?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "In the app, open Design to see your live site and edit it visually — upload photos, change colors, update text, and pick a template."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
   <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
@@ -385,6 +497,43 @@ html { scroll-behavior: smooth; width: 100%; }
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 20px;
+    }
+
+    .industry-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .industry-card {
+      display: block;
+      padding: 22px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    }
+
+    .industry-card:hover {
+      border-color: var(--brand-muted);
+      box-shadow: 0 14px 32px rgba(26, 20, 16, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .industry-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .industry-card p {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      margin: 0;
     }
 
     .feat-card {
@@ -954,6 +1103,7 @@ html { scroll-behavior: smooth; width: 100%; }
     @media (max-width: 768px) {
       section { padding: 60px 24px; }
       .feat-grid { grid-template-columns: 1fr; }
+      .industry-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
       .pricing-band h3 { white-space: normal; }
       .footer-cta { padding: 72px 24px; }
@@ -1140,6 +1290,43 @@ html { scroll-behavior: smooth; width: 100%; }
     </div>
   </section>
 
+  <!-- INDUSTRIES -->
+  <section id="industries" class="features-bg">
+    <div class="sec-inner">
+      <div class="sec-header">
+        <div class="sec-label">Industries</div>
+        <h2>Software built for your business</h2>
+        <p>Industry-specific booking websites, payments, and client texting — with templates made for how you work.</p>
+      </div>
+      <div class="industry-grid">
+        <a class="industry-card" href="/barbershop-software">
+          <h3>Barbershop software</h3>
+          <p>Team roster, per-barber profiles, Tap to Pay, and studio splits.</p>
+        </a>
+        <a class="industry-card" href="/nail-salon-software">
+          <h3>Nail salon software</h3>
+          <p>Service menus, inspo uploads, booking flow, and chairside payments.</p>
+        </a>
+        <a class="industry-card" href="/tattoo-studio-software">
+          <h3>Tattoo studio software</h3>
+          <p>Portfolio gallery, consult forms, deposits, and session payments.</p>
+        </a>
+        <a class="industry-card" href="/hair-salon-software">
+          <h3>Hair salon software</h3>
+          <p>Editorial salon sites, stylist booking, texting, and retail.</p>
+        </a>
+        <a class="industry-card" href="/fishing-charter-software">
+          <h3>Fishing charter software</h3>
+          <p>Multi-boat scheduling, trip itineraries, and dockside payments.</p>
+        </a>
+        <a class="industry-card" href="/personal-trainer-software">
+          <h3>Personal trainer software</h3>
+          <p>Session packages, recurring clients, and on-the-go payments.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <!-- PRICING -->
   <section id="pricing" class="pricing-bg">
     <div class="sec-inner sec-inner--pricing">
@@ -1302,40 +1489,42 @@ html { scroll-behavior: smooth; width: 100%; }
         <div class="footer-col">
           <h3>Product</h3>
           <ul>
-            <li><a href="index.html#features">Features</a></li>
-            <li><a href="templates.html">Templates</a></li>
-            <li><a href="index.html#pricing">Pricing</a></li>
-            <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
-            <li><a href="messaging.html">Client messaging</a></li>
+            <li><a href="/#features">Features</a></li>
+            <li><a href="/templates">Templates</a></li>
+            <li><a href="/tap-to-pay">Tap to Pay on iPhone</a></li>
+            <li><a href="/messaging">Client messaging</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h3>Resources</h3>
+          <h3>Industries</h3>
           <ul>
-            <li><a href="index.html#faq">FAQ</a></li>
-            <li><a href="login.html">Log in</a></li>
-            <li><a href="signup.html">Sign up</a></li>
+            <li><a href="/fishing-charter-software">Boat & Fishing Charters</a></li>
+            <li><a href="/barbershop-software">Barbershops</a></li>
+            <li><a href="/hair-salon-software">Hair Salons</a></li>
+            <li><a href="/nail-salon-software">Nail Salons</a></li>
+            <li><a href="/tattoo-studio-software">Tattoo Studios</a></li>
+            <li><a href="/personal-trainer-software">Personal Trainers</a></li>
           </ul>
         </div>
         <div class="footer-col">
           <h3>Company</h3>
           <ul>
-            <li><a href="contact.html">Contact</a></li>
+            <li><a href="/contact">Contact</a></li>
             <li><a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a></li>
           </ul>
         </div>
         <div class="footer-col">
           <h3>Legal</h3>
           <ul>
-            <li><a href="privacy.html">Privacy</a></li>
-            <li><a href="terms.html">Terms</a></li>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
           </ul>
         </div>
         <div class="footer-col">
           <h3>Support</h3>
           <ul>
             <li><a href="contact.html">Get help</a></li>
-            <li><a href="index.html#faq">FAQ</a></li>
+            <li><a href="/#faq">FAQ</a></li>
           </ul>
         </div>
       </nav>

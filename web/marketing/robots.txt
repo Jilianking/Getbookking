@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Prevent indexing of internal portals, auth flows, and admin tools
+Disallow: /admin/
+Disallow: /admin
+Disallow: /beta/
+Disallow: /beta
+Disallow: /account.html
+Disallow: /billing.html
+Disallow: /reset-password.html
+Disallow: /forgot-password.html
+
+# Sitemap location
+Sitemap: https://getbookking.com/sitemap.xml

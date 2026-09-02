@@ -151,6 +151,19 @@ function slugify(name) {
     .replace(/^-|-$/g, "");
 }
 
+function memberSlugFromName(firstName, lastName) {
+  const parts = [firstName, lastName]
+    .map((s) => (s || "").toString().trim())
+    .filter(Boolean);
+  const base = parts.join(" ") || "member";
+  return base
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join("-")
+    .slice(0, 48);
+}
+
 /** Unsplash — crop params for consistent hero/gallery aspect. */
 function u(photoId, w, h) {
   var base = "https://images.unsplash.com/photo-" + photoId;
@@ -394,7 +407,7 @@ const DEMO_ACCOUNTS = [
     displayName: "Stone Cut",
     industry: "barber",
     webThemeId: "stonecut-v1",
-    subscriptionPlan: "solo",
+    subscriptionPlan: "studio",
     tagline: "Sharp lines. Warm welcome.",
     serviceCity: "Nashville",
     serviceStateAbbr: "TN",
@@ -1247,6 +1260,8 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
     industry: demo.industry,
     subscriptionPlan: demo.subscriptionPlan,
     subscriptionStatus: "active",
+    memberSlug: memberSlugFromName(demo.firstName, demo.lastName),
+    isBookable: true,
     profilePhotoUrl: "",
     availability: {
       timeSlots: [

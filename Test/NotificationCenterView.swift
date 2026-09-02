@@ -1008,7 +1008,7 @@ struct ActivityDrawerPanel: View {
     }
 
     private var showsSetupFooter: Bool {
-        !authViewModel.isDemoMode && setupProgress.total > 0 && !setupProgress.isComplete
+        !authViewModel.isDemoMode && setupProgress.total > 0 && !setupProgress.isComplete && !incompleteSetupTasks.isEmpty
     }
 
     var body: some View {

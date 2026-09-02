@@ -3,8 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Website templates — Get Bookking</title>
+  <title>Website Templates &amp; Booking Website Builder — Get Bookking</title>
+  <meta name="description" content="Designer booking website templates for charters, salons, barbers, studios, and trainers. Customize colors, copy, and services live on your iPhone — no coding required." />
+  <meta name="keywords" content="booking website builder, website templates, appointment website design, salon website builder, service business website maker" />
+  <link rel="canonical" href="https://getbookking.com/templates" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Get Bookking" />
+  <meta property="og:title" content="Website Templates &amp; Booking Website Builder — Get Bookking" />
+  <meta property="og:description" content="Industry-ready website templates you customize live on your iPhone. Domains, palettes, booking, and Tap to Pay in one app." />
+  <meta property="og:url" content="https://getbookking.com/templates" />
+  <meta property="og:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Website Templates &amp; Booking Website Builder — Get Bookking" />
+  <meta name="twitter:description" content="Industry-ready website templates you customize live on your iPhone. Domains, palettes, booking, and Tap to Pay in one app." />
+  <meta name="twitter:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
@@ -226,17 +246,6 @@
       margin-bottom: 16px;
     }
 
-    .tpl-quote {
-      font-family: 'Instrument Serif', serif;
-      font-style: italic;
-      font-size: 20px;
-      line-height: 1.45;
-      color: var(--text-secondary);
-      border-left: 2px solid var(--brand-warm);
-      padding-left: 20px;
-      margin: 28px 0 32px;
-    }
-
     .tpl-swatches {
       display: flex;
       flex-wrap: wrap;
@@ -319,6 +328,76 @@
 
     .btn-light:hover { opacity: 0.88; }
 
+    /* ── TPL INTRO & INDUSTRY LINK ── */
+    .tpl-intro {
+      background: var(--brand-offwhite);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 24px;
+      text-align: center;
+    }
+
+    .tpl-intro-inner {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .tpl-intro-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--brand-warm);
+      margin-bottom: 12px;
+    }
+
+    .tpl-intro h1 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: clamp(34px, 4vw, 46px);
+      font-weight: 400;
+      line-height: 1.15;
+      margin-bottom: 14px;
+      color: var(--text-primary);
+    }
+
+    .tpl-intro h1 em {
+      font-style: italic;
+      color: var(--brand-warm);
+    }
+
+    .tpl-intro p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .tpl-intro-link {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--brand-dark);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      transition: color 0.15s;
+    }
+
+    .tpl-intro-link:hover {
+      color: var(--brand-warm);
+    }
+
+    .tpl-industry-link {
+      display: inline-block;
+      margin-top: 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--brand-warm);
+      text-decoration: none;
+      transition: color 0.15s, transform 0.15s;
+    }
+
+    .tpl-industry-link:hover {
+      color: var(--brand-dark);
+      text-decoration: underline;
+    }
 
     @media (max-width: 900px) {
       .tpl-showcase-grid {
@@ -329,10 +408,12 @@
       .tpl-showcase--flip .tpl-browser-wrap,
       .tpl-showcase--flip .tpl-detail { order: unset; }
       .footer-cta { padding: 72px 24px; }
+      .tpl-intro { padding: 40px 20px; }
     }
   </style>
     <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/nav.css?v=19" />
+  <link rel="stylesheet" href="assets/industry.css?v=10" />
 </head>
 <body>
 
@@ -387,6 +468,17 @@
   </aside>
   <div class="nav-backdrop" hidden aria-hidden="true"></div>
 
+  <header class="tpl-intro">
+    <div class="tpl-intro-inner">
+      <div class="tpl-intro-label">Website Templates</div>
+      <h1>Every template is built for <em>your specific trade</em>.</h1>
+      <p>Designer booking sites for charters, salons, barbers, studios, and trainers — pick a template, then customize colors, copy, and services live on your iPhone.</p>
+      <div class="tpl-intro-links">
+        <a href="#how-it-works" class="tpl-intro-link">How it works &darr;</a>
+      </div>
+    </div>
+  </header>
+
   <!-- 01 Charter -->
   <section class="tpl-showcase" id="charter">
     <div class="tpl-showcase-grid">
@@ -400,7 +492,6 @@
         <span class="tpl-industry">Fishing charter</span>
         <h2>Charter</h2>
         <p>Harbor Charters needed a site that books trips as easily as it sells the Keys lifestyle — search by day and boat, featured charters up front, dock-side shop, and a captain story that feels like Garrison Bight at sunrise.</p>
-        <blockquote class="tpl-quote">Fish the Keys. Soak the sandbar.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#1D1F20"></span><span class="tpl-swatch-label">Ink</span></div>
@@ -417,6 +508,7 @@
           <a href="signup.html?industry=charters" class="btn-primary">Use this template</a>
           <a href="https://harbor-charters.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="fishing-charter-software.html" class="tpl-industry-link">How Bookking works for boat & fishing charters &rarr;</a>
       </div>
     </div>
   </section>
@@ -434,7 +526,6 @@
         <span class="tpl-industry">Personal trainer</span>
         <h2>Blade</h2>
         <p>Jordan needed a site that felt as serious as his training philosophy. Blade gives trainers like Jordan a premium, no-nonsense platform—dark aesthetics, commanding visuals, and conversion-optimized booking.</p>
-        <blockquote class="tpl-quote">Strength. Form. Results.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#0F0F0E"></span><span class="tpl-swatch-label">Onyx</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#C9A96E"></span><span class="tpl-swatch-label">Gold</span></div>
@@ -451,6 +542,7 @@
           <a href="signup.html" class="btn-primary">Use this template</a>
           <a href="https://iron-district-gym.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="personal-trainer-software.html" class="tpl-industry-link">How Bookking works for personal trainers & coaches &rarr;</a>
       </div>
     </div>
   </section>
@@ -468,7 +560,6 @@
         <span class="tpl-industry">Hair salon</span>
         <h2>Luxe</h2>
         <p>High-end salons deserve high-end websites. Luxe pairs premium aesthetics with function: clean layouts, editorial sophistication, integrated booking and retail, all with a warmth that elevates the brand.</p>
-        <blockquote class="tpl-quote">Elevated hair, tailored to you.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F9F4EE"></span><span class="tpl-swatch-label">Linen</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#1A1410"></span><span class="tpl-swatch-label">Espresso</span></div>
@@ -486,6 +577,7 @@
           <a href="signup.html" class="btn-primary">Use this template</a>
           <a href="https://gilded-palm.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="hair-salon-software.html" class="tpl-industry-link">How Bookking works for hair salons & stylists &rarr;</a>
       </div>
     </div>
   </section>
@@ -503,7 +595,6 @@
         <span class="tpl-industry">Tattoo studio</span>
         <h2>Classic</h2>
         <p>Northline Tattoo lives by a simple belief: the work speaks for itself. The Classic template gets out of the way and lets the portfolio do the talking — clean structure, generous whitespace, every piece front and center.</p>
-        <blockquote class="tpl-quote">The art leads. Everything else follows.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FFFFFF"></span><span class="tpl-swatch-label">White</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#111111"></span><span class="tpl-swatch-label">Ink</span></div>
@@ -520,6 +611,7 @@
           <a href="signup.html" class="btn-primary">Use this template</a>
           <a href="https://northline-tattoo.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="tattoo-studio-software.html" class="tpl-industry-link">How Bookking works for tattoo studios & artists &rarr;</a>
       </div>
     </div>
   </section>
@@ -537,7 +629,6 @@
         <span class="tpl-industry">Barber</span>
         <h2>Stonecut</h2>
         <p>Stone Cut Barbers wanted heritage without feeling dated — sharp lines, warm welcome, and a site that reads like a proper shop sign. Stonecut pairs serif headlines with stone-toned neutrals so the craft feels grounded and premium.</p>
-        <blockquote class="tpl-quote">Sharp lines. Warm welcome.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#F5F0E8"></span><span class="tpl-swatch-label">Parchment</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#2C2018"></span><span class="tpl-swatch-label">Umber</span></div>
@@ -554,6 +645,7 @@
           <a href="signup.html" class="btn-primary">Use this template</a>
           <a href="https://stone-cut-barbers.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="barbershop-software.html" class="tpl-industry-link">How Bookking works for barbershops & barbers &rarr;</a>
       </div>
     </div>
   </section>
@@ -571,7 +663,6 @@
         <span class="tpl-industry">Nail salon</span>
         <h2>Studio 12</h2>
         <p>Studio Amara needed a site as polished as their manicures — structured, modern, and easy to browse on a phone between appointments. Studio 12 balances clean grids with warm accents so services and gallery work feel inviting, not clinical.</p>
-        <blockquote class="tpl-quote">Clean, polished, and done right.</blockquote>
         <div class="tpl-swatches">
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#FAF6F7"></span><span class="tpl-swatch-label">Blush</span></div>
           <div class="tpl-swatch-item"><span class="tpl-swatch" style="background:#3C2E32"></span><span class="tpl-swatch-label">Espresso</span></div>
@@ -588,7 +679,65 @@
           <a href="signup.html" class="btn-primary">Use this template</a>
           <a href="https://studio-amara.getbookking.com/home" class="btn-demo" target="_blank" rel="noopener noreferrer">View live demo</a>
         </div>
+        <a href="nail-salon-software.html" class="tpl-industry-link">How Bookking works for nail salons & artists &rarr;</a>
       </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="how-it-works" class="ind-section ind-section--white">
+    <div class="ind-section-head">
+      <h2>How it works</h2>
+      <p>No coding, no plugins, and no complicated setup. Change copy, swap photos, and manage appointments in one place.</p>
+    </div>
+    <div class="ind-grid-3">
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" fill="none" stroke-width="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2"/></svg>
+        </div>
+        <h3>Live iPhone Visual Editor</h3>
+        <p>Tap on any headline, bio, or button directly in the Get Bookking iOS app to edit copy, update hours, or swap photos in seconds.</p>
+      </article>
+
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke-width="2"/><line x1="2" y1="12" x2="22" y2="12" stroke-width="2"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke-width="2"/></svg>
+        </div>
+        <h3>Custom Domains</h3>
+        <p>Connect your existing .com domain with automatic SSL certificates, or use your complimentary yourname.getbookking.com address.</p>
+      </article>
+
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" fill="none" stroke-width="2"/></svg>
+        </div>
+        <h3>Curated Designer Palettes</h3>
+        <p>Switch between luxury palettes (Linen, Berry Noir, Warm Coral, Rose Quartz, Onyx &amp; Gold) with one tap to match your aesthetic.</p>
+      </article>
+
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke-width="2"/><line x1="3" y1="6" x2="21" y2="6" stroke-width="2"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke-width="2"/></svg>
+        </div>
+        <h3>Integrated Retail &amp; Products</h3>
+        <p>Sell physical goods, haircare products, merch, or dock tackle directly on your booking website with instant Stripe card checkout.</p>
+      </article>
+
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="none" stroke-width="2"/><circle cx="12" cy="10" r="3" fill="none" stroke-width="2"/></svg>
+        </div>
+        <h3>Location Maps &amp; Hours</h3>
+        <p>Showcase Google Maps pins, studio parking directions, weekly business hours, and social media handles seamlessly on every page.</p>
+      </article>
+
+      <article class="ind-card">
+        <div class="ind-card-icon">
+          <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke-width="2"/></svg>
+        </div>
+        <h3>Direct Booking &amp; Tap to Pay</h3>
+        <p>Convert website visitors into paying clients with seamless appointment intake, card deposits, and Tap to Pay on iPhone integration.</p>
+      </article>
     </div>
   </section>
 
@@ -621,17 +770,19 @@
           <ul>
             <li><a href="index.html#features">Features</a></li>
             <li><a href="templates.html">Templates</a></li>
-            <li><a href="index.html#pricing">Pricing</a></li>
             <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
             <li><a href="messaging.html">Client messaging</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h3>Resources</h3>
+          <h3>Industries</h3>
           <ul>
-            <li><a href="index.html#faq">FAQ</a></li>
-            <li><a href="login.html">Log in</a></li>
-            <li><a href="signup.html">Sign up</a></li>
+            <li><a href="fishing-charter-software.html">Boat & Fishing Charters</a></li>
+            <li><a href="barbershop-software.html">Barbershops</a></li>
+            <li><a href="hair-salon-software.html">Hair Salons</a></li>
+            <li><a href="nail-salon-software.html">Nail Salons</a></li>
+            <li><a href="tattoo-studio-software.html">Tattoo Studios</a></li>
+            <li><a href="personal-trainer-software.html">Personal Trainers</a></li>
           </ul>
         </div>
         <div class="footer-col">

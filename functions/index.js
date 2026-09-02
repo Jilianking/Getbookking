@@ -9029,7 +9029,7 @@ exports.listPublicProviders = functions.https.onCall(async (data) => {
   if (isSingleOperatorPlan(plan)) {
     return { providers: [], subscriptionPlan: plan, tenantSlug };
   }
-  if (tenant.isActive === false || tenant.isDemoAccount === true) {
+  if (tenant.isActive === false) {
     return { providers: [], subscriptionPlan: plan, tenantSlug };
   }
   const snap = await db.collection("users").where("tenantId", "==", tenantId).get();
@@ -9069,7 +9069,7 @@ exports.listTeamRoster = functions.https.onCall(async (data) => {
   if (isSingleOperatorPlan(plan)) {
     return { members: [], subscriptionPlan: plan, tenantSlug };
   }
-  if (tenant.isActive === false || tenant.isDemoAccount === true) {
+  if (tenant.isActive === false) {
     return { members: [], subscriptionPlan: plan, tenantSlug };
   }
   const snap = await db.collection("users").where("tenantId", "==", tenantId).get();

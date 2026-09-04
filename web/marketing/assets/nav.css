@@ -2,6 +2,8 @@
 
 html {
   width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -10,21 +12,89 @@ body {
   max-width: 100%;
 }
 
-/* Header: logo | center links (wide only) | auth + menu */
+/* Header chrome — same bar as homepage (sticky frost, crown, outlined Log in, filled Sign up) */
+:root {
+  --brand-dark: #2c2018;
+  --brand-cream: #f5edd8;
+  --brand-offwhite: #fdfaf6;
+  --text-primary: #1a1410;
+  --text-secondary: #6b5e4a;
+  --border: #e8e0d4;
+  --brand-wordmark-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --brand-wordmark-weight: 200;
+  --brand-wordmark-tracking: 0.22em;
+}
+
 body > nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
   max-width: 100%;
-  padding: 0 24px;
+  padding: 0 24px 0 32px;
   height: 80px;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
 }
 
 body > nav .nav-logo {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--brand-wordmark-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-weight: var(--brand-wordmark-weight, 200);
+  font-size: 22px;
+  letter-spacing: var(--brand-wordmark-tracking, 0.22em);
+  text-transform: uppercase;
+  color: var(--text-primary, #1a1410);
+  text-decoration: none;
+  line-height: 1;
+}
+
+body > nav .nav-logo:hover,
+body > nav .nav-logo:focus,
+body > nav .nav-logo:visited {
+  color: var(--text-primary, #1a1410);
+  text-decoration: none;
+}
+
+body > nav .nav-logo-mark {
+  width: 56px;
+  height: 56px;
+  display: block;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+body > nav .nav-links li {
+  display: flex;
+  align-items: center;
+}
+
+body > nav .nav-links a {
+  font-size: 14px;
+  color: var(--text-secondary, #6b5e4a);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+body > nav .nav-links a:visited {
+  color: var(--text-secondary, #6b5e4a);
+  text-decoration: none;
+}
+
+body > nav .nav-links a:hover,
+body > nav .nav-links a[aria-current="page"] {
+  color: var(--text-primary, #1a1410);
+  text-decoration: none;
 }
 
 body > nav .nav-links {
@@ -48,8 +118,45 @@ body > nav .nav-actions {
 }
 
 body > nav .nav-cta {
-  padding: 9px 16px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-size: 14px;
+  padding: 9px 20px;
+  border: 1px solid var(--brand-dark, #2c2018);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, #1a1410);
+  cursor: pointer;
+  font-family: "DM Sans", sans-serif;
+  text-decoration: none;
   white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+body > nav .nav-cta:visited {
+  color: var(--text-primary, #1a1410);
+  text-decoration: none;
+}
+
+body > nav .nav-cta:hover {
+  background: var(--brand-dark, #2c2018);
+  color: var(--brand-cream, #f5edd8);
+  text-decoration: none;
+}
+
+body > nav .nav-cta--filled,
+body > nav .nav-cta--filled:visited {
+  background: var(--brand-dark, #2c2018);
+  color: var(--brand-cream, #f5edd8);
+  border-color: var(--brand-dark, #2c2018);
+  text-decoration: none;
+}
+
+body > nav .nav-cta--filled:hover {
+  opacity: 0.92;
+  background: var(--brand-dark, #2c2018);
+  color: var(--brand-cream, #f5edd8);
 }
 
 /* Tighter header — hide wordmark only while center links are visible */

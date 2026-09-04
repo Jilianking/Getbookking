@@ -99,15 +99,7 @@
             "name": "Who pays card processing fees?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Card payments are processed by Stripe. Your clients pay your quoted price plus a 1% platform fee and Stripe's standard processing fee (2.9% + 30¢). You receive your full quoted amount — no deductions on your end."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can I add my own photos and branding?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "In the app, open Design to see your live site and edit it visually — upload photos, change colors, update text, and pick a template."
+              "text": "Card payments run through Stripe. Your client pays the quoted price plus processing and platform fees. You receive the full quoted amount — those fees are not taken out of what you charge. Current rates: https://getbookking.com/pricing#details"
             }
           }
         ]
@@ -245,6 +237,7 @@ html { scroll-behavior: smooth; width: 100%; }
       padding: 56px 40px 80px;
       background: linear-gradient(180deg, var(--brand-offwhite) 0%, #ffffff 100%);
       border-bottom: 1px solid var(--border);
+      overflow-x: clip;
     }
 
     .hero-inner {
@@ -262,18 +255,21 @@ html { scroll-behavior: smooth; width: 100%; }
       border-radius: 0;
       padding: 0;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       min-height: 500px;
+      overflow: visible;
+      margin-top: -12px;
     }
 
     .hero-phones {
       display: flex;
-      align-items: flex-end;
+      align-items: flex-start;
       justify-content: center;
       width: 100%;
-      min-height: clamp(360px, 40vw, 480px);
+      min-height: 0;
       margin: 0;
+      padding-bottom: 4px;
     }
 
     .hero-phone-wrap {
@@ -293,13 +289,13 @@ html { scroll-behavior: smooth; width: 100%; }
 
     .hero-phone-wrap--messages {
       z-index: 1;
-      transform: rotate(-8deg) translateX(28px) translateY(24px);
+      transform: rotate(-8deg) translateX(28px) translateY(8px);
       filter: brightness(0.98);
       margin-right: -56px;
     }
 
     .hero-phone-wrap--messages:hover {
-      transform: rotate(-8deg) translateX(28px) translateY(14px);
+      transform: rotate(-8deg) translateX(28px) translateY(0);
     }
 
     .hero-phone-wrap--dashboard {
@@ -313,18 +309,18 @@ html { scroll-behavior: smooth; width: 100%; }
 
     .hero-phone-wrap--design {
       z-index: 2;
-      transform: rotate(8deg) translateX(-28px) translateY(24px);
+      transform: rotate(8deg) translateX(-28px) translateY(8px);
       filter: brightness(0.98);
       margin-left: -56px;
     }
 
     .hero-phone-wrap--design:hover {
-      transform: rotate(8deg) translateX(-28px) translateY(14px);
+      transform: rotate(8deg) translateX(-28px) translateY(0);
     }
 
     .hero-phone {
       display: block;
-      width: min(250px, 22vw);
+      width: min(232px, 20vw);
       height: auto;
       border: none;
       box-shadow: none;
@@ -497,43 +493,6 @@ html { scroll-behavior: smooth; width: 100%; }
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 20px;
-    }
-
-    .industry-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
-
-    .industry-card {
-      display: block;
-      padding: 22px 20px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #fff;
-      text-decoration: none;
-      color: inherit;
-      transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.25s ease;
-    }
-
-    .industry-card:hover {
-      border-color: var(--brand-muted);
-      box-shadow: 0 14px 32px rgba(26, 20, 16, 0.08);
-      transform: translateY(-2px);
-    }
-
-    .industry-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: var(--text-primary);
-    }
-
-    .industry-card p {
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--text-secondary);
-      margin: 0;
     }
 
     .feat-card {
@@ -765,6 +724,11 @@ html { scroll-behavior: smooth; width: 100%; }
       line-height: 1.7;
     }
 
+    .pricing-intro a {
+      color: var(--brand-dark);
+      font-weight: 500;
+    }
+
     .pricing-band {
       display: flex;
       align-items: center;
@@ -898,6 +862,15 @@ html { scroll-behavior: smooth; width: 100%; }
       margin-top: 2px;
     }
 
+    .plan-hit {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      text-decoration: none;
+      color: inherit;
+    }
+
     .plan-cta {
       display: inline-block;
       width: 100%;
@@ -909,6 +882,8 @@ html { scroll-behavior: smooth; width: 100%; }
       text-align: center;
       text-decoration: none;
       transition: opacity 0.15s;
+      position: relative;
+      z-index: 1;
     }
 
     .plan-cta:hover { opacity: 0.85; }
@@ -962,6 +937,11 @@ html { scroll-behavior: smooth; width: 100%; }
 
     .faq-item.open .faq-a { display: block; }
 
+    .faq-a a {
+      color: var(--brand-dark);
+      font-weight: 500;
+    }
+
     /* ── FOOTER CTA ── */
     .footer-cta {
       padding: 100px 40px;
@@ -1005,7 +985,7 @@ html { scroll-behavior: smooth; width: 100%; }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
-      .hero { padding: 32px 16px 48px; overflow-x: hidden; }
+      .hero { padding: 32px 16px 48px; overflow-x: clip; }
       .how-inner {
         grid-template-columns: 1fr;
         gap: 32px;
@@ -1033,7 +1013,7 @@ html { scroll-behavior: smooth; width: 100%; }
       }
       .hero-inner {
         grid-template-columns: 1fr;
-        gap: 32px;
+        gap: 10px;
       }
       .hero-content {
         text-align: center;
@@ -1042,31 +1022,30 @@ html { scroll-behavior: smooth; width: 100%; }
       .hero h1 { font-size: clamp(36px, 9vw, 44px); }
       .hero-sub { font-size: 18px; margin-left: auto; margin-right: auto; }
       .hero-ctas { align-items: center; margin: 0 auto; }
-      .hero-trust { margin-left: auto; margin-right: auto; }
+      .hero-trust { margin-left: auto; margin-right: auto; margin-bottom: 0; }
       .hero-phones-panel {
         min-height: 0;
-        padding: 14px 0 8px;
+        margin-top: 0;
+        padding: 0 0 8px;
         width: 100%;
         max-width: 100%;
-        overflow-x: hidden;
-        overflow-y: visible;
+        overflow: visible;
       }
       .hero-phones {
-        transform: scale(0.95);
-        transform-origin: top center;
-        min-height: 300px;
-        padding-top: 12px;
+        min-height: 0;
+        padding-top: 0;
         margin: 0 auto;
+        padding-bottom: 12px;
       }
       .hero-phone-wrap { border-radius: 24px; }
-      .hero-phone { width: min(130px, 30vw); }
+      .hero-phone { width: min(142px, 32vw); }
       .hero-phone-wrap--messages {
         margin-right: -32px;
-        transform: rotate(-6deg) translateX(10px) translateY(14px);
+        transform: rotate(-6deg) translateX(10px) translateY(6px);
       }
       .hero-phone-wrap--messages:hover,
       .hero-phone-wrap--messages:active {
-        transform: rotate(-6deg) translateX(10px) translateY(6px);
+        transform: rotate(-6deg) translateX(10px) translateY(0);
       }
       .hero-phone-wrap--dashboard:hover,
       .hero-phone-wrap--dashboard:active {
@@ -1074,20 +1053,19 @@ html { scroll-behavior: smooth; width: 100%; }
       }
       .hero-phone-wrap--design {
         margin-left: -32px;
-        transform: rotate(6deg) translateX(-10px) translateY(14px);
+        transform: rotate(6deg) translateX(-10px) translateY(6px);
       }
       .hero-phone-wrap--design:hover,
       .hero-phone-wrap--design:active {
-        transform: rotate(6deg) translateX(-10px) translateY(6px);
+        transform: rotate(6deg) translateX(-10px) translateY(0);
       }
     }
 
     @media (max-width: 480px) {
       .hero-phones {
-        transform: scale(0.92);
-        min-height: 280px;
+        min-height: 0;
       }
-      .hero-phone { width: min(118px, 29vw); }
+      .hero-phone { width: min(128px, 31vw); }
       .hero-phone-wrap--messages { margin-right: -28px; }
       .hero-phone-wrap--design { margin-left: -28px; }
       .hero-ctas {
@@ -1103,14 +1081,13 @@ html { scroll-behavior: smooth; width: 100%; }
     @media (max-width: 768px) {
       section { padding: 60px 24px; }
       .feat-grid { grid-template-columns: 1fr; }
-      .industry-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
       .pricing-band h3 { white-space: normal; }
       .footer-cta { padding: 72px 24px; }
     }
   </style>
     <link rel="stylesheet" href="assets/footer.css?v=2" />
-  <link rel="stylesheet" href="assets/nav.css?v=19" />
+  <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
 
@@ -1123,7 +1100,7 @@ html { scroll-behavior: smooth; width: 100%; }
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
       <li><a href="templates.html">Templates</a></li>
-      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
       <li><a href="#faq">FAQ</a></li>
     </ul>
     <div class="nav-actions">
@@ -1155,7 +1132,7 @@ html { scroll-behavior: smooth; width: 100%; }
       <ul class="nav-drawer-links">
         <li><a href="#features">Features</a></li>
         <li><a href="templates.html">Templates</a></li>
-        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
         <li><a href="#faq">FAQ</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
         <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
@@ -1173,13 +1150,13 @@ html { scroll-behavior: smooth; width: 100%; }
       <div class="hero-phones-panel">
         <div class="hero-phones">
           <div class="hero-phone-wrap hero-phone-wrap--messages">
-            <img src="assets/hero-phones/northline-messages.png" alt="Get Bookking Messages inbox" class="hero-phone" width="470" height="1024" decoding="async" />
+            <img src="assets/hero-phones/home-messages.png?v=2" alt="Get Bookking Messages inbox" class="hero-phone" width="428" height="868" decoding="async" />
           </div>
           <div class="hero-phone-wrap hero-phone-wrap--dashboard">
-            <img src="assets/hero-phones/northline-dashboard.png" alt="Get Bookking business dashboard" class="hero-phone" width="470" height="1024" decoding="async" />
+            <img src="assets/hero-phones/home-dashboard.png?v=2" alt="Get Bookking home" class="hero-phone" width="428" height="868" decoding="async" fetchpriority="high" />
           </div>
           <div class="hero-phone-wrap hero-phone-wrap--design">
-            <img src="assets/hero-phones/northline-design.png" alt="Get Bookking website builder" class="hero-phone" width="470" height="1024" decoding="async" />
+            <img src="assets/hero-phones/home-design.png?v=2" alt="Get Bookking website builder" class="hero-phone" width="428" height="868" decoding="async" />
           </div>
         </div>
       </div>
@@ -1290,50 +1267,13 @@ html { scroll-behavior: smooth; width: 100%; }
     </div>
   </section>
 
-  <!-- INDUSTRIES -->
-  <section id="industries" class="features-bg">
-    <div class="sec-inner">
-      <div class="sec-header">
-        <div class="sec-label">Industries</div>
-        <h2>Software built for your business</h2>
-        <p>Industry-specific booking websites, payments, and client texting — with templates made for how you work.</p>
-      </div>
-      <div class="industry-grid">
-        <a class="industry-card" href="/barbershop-software">
-          <h3>Barbershop software</h3>
-          <p>Team roster, per-barber profiles, Tap to Pay, and studio splits.</p>
-        </a>
-        <a class="industry-card" href="/nail-salon-software">
-          <h3>Nail salon software</h3>
-          <p>Service menus, inspo uploads, booking flow, and chairside payments.</p>
-        </a>
-        <a class="industry-card" href="/tattoo-studio-software">
-          <h3>Tattoo studio software</h3>
-          <p>Portfolio gallery, consult forms, deposits, and session payments.</p>
-        </a>
-        <a class="industry-card" href="/hair-salon-software">
-          <h3>Hair salon software</h3>
-          <p>Editorial salon sites, stylist booking, texting, and retail.</p>
-        </a>
-        <a class="industry-card" href="/fishing-charter-software">
-          <h3>Fishing charter software</h3>
-          <p>Multi-boat scheduling, trip itineraries, and dockside payments.</p>
-        </a>
-        <a class="industry-card" href="/personal-trainer-software">
-          <h3>Personal trainer software</h3>
-          <p>Session packages, recurring clients, and on-the-go payments.</p>
-        </a>
-      </div>
-    </div>
-  </section>
-
   <!-- PRICING -->
   <section id="pricing" class="pricing-bg">
     <div class="sec-inner sec-inner--pricing">
       <div class="pricing-intro">
         <div class="sec-label">Pricing</div>
         <h2>Simple, honest pricing</h2>
-        <p>Start with a 14-day trial. Upgrade as your business grows.</p>
+        <p>Start with a 14-day trial. Hover a plan for fees &amp; limits.</p>
       </div>
       <div class="pricing-band">
         <h3>For Studios and Shops</h3>
@@ -1342,50 +1282,56 @@ html { scroll-behavior: smooth; width: 100%; }
       <div class="pricing-grid">
 
         <div class="plan">
-          <div class="plan-name">Solo</div>
-          <div class="plan-price">$39 <span>/ mo</span></div>
-          <div class="plan-desc">Just you</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-feats">
-            <li>Professional website &amp; customizable templates</li>
-            <li>Online booking your way — instant, request &amp; approve, deposit to confirm, or calendar slots</li>
-            <li>Tap to Pay on iPhone &amp; card checkout</li>
-            <li>Client texting — 1 number · 1,000 SMS/mo per number</li>
-            <li>Appointment reminders &amp; deposit requests</li>
-            <li>Free subdomain · connect your own domain</li>
-          </ul>
+          <a class="plan-hit" href="pricing.html?plan=solo#details">
+            <div class="plan-name">Solo</div>
+            <div class="plan-price">$39 <span>/ mo</span></div>
+            <div class="plan-desc">Just you</div>
+            <div class="plan-divider"></div>
+            <ul class="plan-feats">
+              <li>Professional website &amp; customizable templates</li>
+              <li>Online booking your way — instant, request &amp; approve, deposit to confirm, or calendar slots</li>
+              <li>Tap to Pay on iPhone &amp; card checkout</li>
+              <li>Client texting — 1 number · 1,000 SMS/mo per number</li>
+              <li>Appointment reminders &amp; deposit requests</li>
+              <li>Free subdomain · connect your own domain</li>
+            </ul>
+          </a>
           <a href="signup.html?plan=solo" class="plan-cta outline">Start free trial</a>
         </div>
 
         <div class="plan featured">
-          <div class="plan-badge">Most popular</div>
-          <div class="plan-name">Studio</div>
-          <div class="plan-price">$79 <span>/ mo</span></div>
-          <div class="plan-desc">2–5 people</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-feats">
-            <li>Everything in Solo</li>
-            <li>Up to 5 team members</li>
-            <li>Team scheduling &amp; invites</li>
-            <li>Roles, permissions &amp; payouts</li>
-            <li>Each member’s own login &amp; calendar</li>
-            <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
-          </ul>
+          <a class="plan-hit" href="pricing.html?plan=studio#details">
+            <div class="plan-badge">Most popular</div>
+            <div class="plan-name">Studio</div>
+            <div class="plan-price">$79 <span>/ mo</span></div>
+            <div class="plan-desc">2–5 people</div>
+            <div class="plan-divider"></div>
+            <ul class="plan-feats">
+              <li>Everything in Solo</li>
+              <li>Up to 5 team members</li>
+              <li>Team scheduling &amp; invites</li>
+              <li>Roles, permissions &amp; payouts</li>
+              <li>Each member’s own login &amp; calendar</li>
+              <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
+            </ul>
+          </a>
           <a href="signup.html?plan=studio" class="plan-cta dark">Start free trial</a>
         </div>
 
         <div class="plan">
-          <div class="plan-name">Shop</div>
-          <div class="plan-price">$149 <span>/ mo</span></div>
-          <div class="plan-desc">6–10 people</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-feats">
-            <li>Everything in Studio</li>
-            <li>Up to 10 team members</li>
-            <li>Built for multi-chair / multi-station teams</li>
-            <li>Scale your whole floor on one platform</li>
-            <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
-          </ul>
+          <a class="plan-hit" href="pricing.html?plan=shop#details">
+            <div class="plan-name">Shop</div>
+            <div class="plan-price">$149 <span>/ mo</span></div>
+            <div class="plan-desc">6–10 people</div>
+            <div class="plan-divider"></div>
+            <ul class="plan-feats">
+              <li>Everything in Studio</li>
+              <li>Up to 10 team members</li>
+              <li>Built for multi-chair / multi-station teams</li>
+              <li>Scale your whole floor on one platform</li>
+              <li>2 texting numbers included · $12/mo per additional · 1,000 SMS/mo per number</li>
+            </ul>
+          </a>
           <a href="signup.html?plan=shop" class="plan-cta outline">Start free trial</a>
         </div>
 
@@ -1401,18 +1347,20 @@ html { scroll-behavior: smooth; width: 100%; }
         </div>
         <div class="pricing-grid pricing-grid--charter">
           <div class="plan">
-            <div class="plan-name">Charter</div>
-            <div class="plan-price">$24 <span>/ mo</span></div>
-            <div class="plan-desc">Everything included</div>
-            <div class="plan-divider"></div>
-            <ul class="plan-feats">
-              <li>Professional website &amp; customizable templates</li>
-              <li>Trip booking your way — instant, request &amp; approve, deposit to hold, or open calendar slots</li>
-              <li>Tap to Pay on iPhone &amp; card checkout</li>
-              <li>Client texting — 1 number · 750 SMS/mo per number</li>
-              <li>Trip reminders &amp; deposit requests</li>
-              <li>Free subdomain · connect your own domain</li>
-            </ul>
+            <a class="plan-hit" href="pricing.html?plan=charter#details">
+              <div class="plan-name">Charter</div>
+              <div class="plan-price">$24 <span>/ mo</span></div>
+              <div class="plan-desc">Everything included</div>
+              <div class="plan-divider"></div>
+              <ul class="plan-feats">
+                <li>Professional website &amp; customizable templates</li>
+                <li>Trip booking your way — instant, request &amp; approve, deposit to hold, or open calendar slots</li>
+                <li>Tap to Pay on iPhone &amp; card checkout</li>
+                <li>Client texting — 1 number · 750 SMS/mo per number</li>
+                <li>Trip reminders &amp; deposit requests</li>
+                <li>Free subdomain · connect your own domain</li>
+              </ul>
+            </a>
             <a href="signup.html?plan=charter&amp;industry=charters" class="plan-cta outline">Start free trial</a>
           </div>
         </div>
@@ -1451,11 +1399,7 @@ html { scroll-behavior: smooth; width: 100%; }
         </div>
         <div class="faq-item" onclick="this.classList.toggle('open')">
           <div class="faq-q">Who pays card processing fees? <span class="faq-toggle">+</span></div>
-          <div class="faq-a">Card payments are processed by Stripe. Your clients pay your quoted price plus a 1% platform fee and Stripe's standard processing fee (2.9% + 30¢). You receive your full quoted amount — no deductions on your end.</div>
-        </div>
-        <div class="faq-item" onclick="this.classList.toggle('open')">
-          <div class="faq-q">Can I add my own photos and branding? <span class="faq-toggle">+</span></div>
-          <div class="faq-a">In the app, open Design to see your live site and edit it visually — upload photos, change colors, update text, and pick a template.</div>
+          <div class="faq-a">Card payments run through Stripe. Your client pays the quoted price plus processing and platform fees. You receive the full quoted amount — those fees are not taken out of what you charge. Current rates are on the <a href="pricing.html#details" onclick="event.stopPropagation()">fees and limits</a> table.</div>
         </div>
       </div>
     </div>
@@ -1491,6 +1435,7 @@ html { scroll-behavior: smooth; width: 100%; }
           <ul>
             <li><a href="/#features">Features</a></li>
             <li><a href="/templates">Templates</a></li>
+            <li><a href="/pricing">Pricing</a></li>
             <li><a href="/tap-to-pay">Tap to Pay on iPhone</a></li>
             <li><a href="/messaging">Client messaging</a></li>
           </ul>

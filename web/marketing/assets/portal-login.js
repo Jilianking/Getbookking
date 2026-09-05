@@ -164,6 +164,14 @@
       auth
         .signInWithEmailAndPassword(email, password)
         .then(function (cred) {
+          var path = (global.location.pathname || "").toLowerCase();
+          if (
+            typeof global.bkTrack === "function" &&
+            path.indexOf("/admin") === -1 &&
+            path.indexOf("/beta") === -1
+          ) {
+            global.bkTrack("login", { method: "email" });
+          }
           return verifyAndGo(cred.user, false);
         })
         .catch(function (err) {

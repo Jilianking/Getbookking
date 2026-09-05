@@ -3,6 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
+  <!-- End Google Tag Manager -->
+  <script src="assets/gtm-events.js"></script>
   <title>Get early access — 6 months free — Get Bookking iOS beta</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
@@ -15,6 +23,11 @@
   <link rel="stylesheet" href="assets/testflight.css?v=4" />
 </head>
 <body class="testflight-layout">
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+
 
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
@@ -231,6 +244,13 @@
     var submitBtn = document.getElementById('submitBtn');
     var successLead = document.getElementById('successLead');
     var joinBetaBtn = document.getElementById('joinBetaBtn');
+    if (joinBetaBtn) {
+      joinBetaBtn.addEventListener('click', function () {
+        if (typeof window.bkTrack === 'function') {
+          window.bkTrack('select_content', { content_type: 'cta', content_id: 'testflight_join' });
+        }
+      });
+    }
     var planInput = document.getElementById('plan');
     var teamSizeInput = document.getElementById('teamSize');
     var teamSizeHint = document.getElementById('teamSizeHint');
@@ -384,6 +404,13 @@
         formCard.hidden = true;
         success.classList.add('is-visible');
         successLead.textContent = 'We\u2019ll email ' + email + ' when your beta invite is ready.';
+        if (typeof window.bkTrack === 'function') {
+          window.bkTrack('generate_lead', {
+            method: 'waitlist',
+            plan: plan,
+            business_type: businessType
+          });
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }).catch(function (err) {
         showError(callableMessage(err));

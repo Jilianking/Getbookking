@@ -3,6 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
+  <!-- End Google Tag Manager -->
+  <script src="assets/gtm-events.js"></script>
   <title>Sign Up — Get Bookking</title>
   <meta name="description" content="Start your 14-day free trial on Get Bookking. All-in-one booking platform with custom websites, Tap to Pay on iPhone, and client texting." />
   <link rel="canonical" href="https://getbookking.com/signup" />
@@ -1004,6 +1012,11 @@
   <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+
 
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
@@ -1507,6 +1520,14 @@
         updatePasswordReqIndicators();
         validateAboutYou();
       }
+      if (typeof window.bkTrack === 'function') {
+        window.bkTrack('signup_step', {
+          step: step,
+          plan: state.plan || undefined,
+          industry: state.industry || undefined,
+          signup_path: state.signupPath || undefined
+        });
+      }
       if (step === 3) {
         applySignupPathUI();
         refreshCheckoutSummary();
@@ -1543,6 +1564,9 @@
         if (state.industry === 'charters') state.industry = null;
       }
       applySignupPathUI();
+      if (typeof window.bkTrack === 'function') {
+        window.bkTrack('select_content', { content_type: 'signup_path', content_id: path });
+      }
       goTo(1);
     }
 
@@ -1551,6 +1575,9 @@
       btn.parentElement.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.industry = btn.dataset.value;
+      if (typeof window.bkTrack === 'function') {
+        window.bkTrack('select_content', { content_type: 'industry', content_id: state.industry });
+      }
       var wrap = document.getElementById('industryCustomWrap');
       var input = document.getElementById('industryCustom');
       if (state.industry === 'custom') {
@@ -1569,6 +1596,9 @@
       document.querySelectorAll('.plan-pick').forEach(p => p.classList.remove('selected'));
       el.classList.add('selected');
       state.plan = val;
+      if (typeof window.bkTrack === 'function') {
+        window.bkTrack('select_content', { content_type: 'plan', content_id: val });
+      }
       refreshCheckoutSummary();
       if (currentStep === 3) {
         scheduleEmbeddedCheckoutIfReady();
@@ -1807,6 +1837,14 @@
         embedded.mount('#checkoutEmbedded');
         embeddedCheckoutInst = embedded;
         embeddedCheckoutLoading = false;
+        if (typeof window.bkTrackOnce === 'function') {
+          window.bkTrackOnce('begin_checkout', 'begin_checkout', {
+            currency: 'USD',
+            item_id: state.plan || undefined,
+            plan: state.plan || undefined,
+            industry: state.industry || undefined
+          });
+        }
         if (wrap) {
           wrap.classList.add('visible');
           wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1892,6 +1930,13 @@
     function showSuccess() {
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
+      if (typeof window.bkTrackOnce === 'function') {
+        window.bkTrackOnce('sign_up', 'sign_up', {
+          method: 'web',
+          plan: state.plan || undefined,
+          industry: state.industry || undefined
+        });
+      }
       var ind = document.getElementById('stepIndicator');
       if (ind) {
         ind.textContent = 'Done!';
@@ -1908,6 +1953,9 @@
       btn.dataset.bound = '1';
       // Connect payouts only — do not open “Start subscription today” charge modal.
       btn.addEventListener('click', function() {
+        if (typeof window.bkTrack === 'function') {
+          window.bkTrack('select_content', { content_type: 'cta', content_id: 'stripe_connect' });
+        }
         if (!auth.currentUser) {
           setStripeSetupStatus(statusEl, 'Sign in again, then retry Stripe setup.', true);
           return;

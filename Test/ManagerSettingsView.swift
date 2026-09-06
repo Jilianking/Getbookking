@@ -158,7 +158,7 @@ struct TeamMemberRow: View {
     private var badgeColor: Color {
         switch member.accessRole {
         case .owner: return .primary
-        case .manager: return .blue
+        case .manager: return AppDesign.brandWarm
         case .member: return .secondary
         }
     }

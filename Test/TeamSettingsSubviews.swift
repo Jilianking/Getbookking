@@ -35,7 +35,7 @@ struct TeamManagerPolicySaveSection: View {
 
             if viewModel.saveSuccess {
                 Label("Saved", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppDesign.accentGreen)
                     .font(.subheadline)
             }
         }

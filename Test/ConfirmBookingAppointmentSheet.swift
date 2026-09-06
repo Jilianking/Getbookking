@@ -219,7 +219,7 @@ struct ConfirmBookingAppointmentSheet: View {
                             if viewModel.charterBoats.isEmpty {
                                 Label("Add a boat in Business settings before confirming.", systemImage: "exclamationmark.triangle")
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(AppDesign.statusPending)
                             } else {
                                 Picker("Boat", selection: $selectedBoatId) {
                                     ForEach(viewModel.charterBoats) { boat in
@@ -271,7 +271,7 @@ struct ConfirmBookingAppointmentSheet: View {
                             systemImage: "message.fill"
                         )
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppDesign.statusPending)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 

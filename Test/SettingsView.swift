@@ -204,7 +204,7 @@ struct SettingsView: View {
                         } label: {
                             AppSettingsRow(
                                 icon: "storefront.fill",
-                                iconColor: .purple,
+                                iconColor: AppDesign.brandWarm,
                                 title: "Business settings"
                             )
                         }
@@ -220,7 +220,7 @@ struct SettingsView: View {
                         } label: {
                             AppSettingsRow(
                                 icon: "person.3.fill",
-                                iconColor: .purple,
+                                iconColor: AppDesign.brandWarm,
                                 title: "Team settings"
                             )
                         }
@@ -234,7 +234,7 @@ struct SettingsView: View {
                         } label: {
                             AppSettingsRow(
                                 icon: "message.fill",
-                                iconColor: .orange,
+                                iconColor: AppDesign.brandWarm,
                                 title: "Messaging",
                                 value: PhoneFormatting.displayUS(teamPolicyViewModel.smsPhoneNumber)
                             )
@@ -516,7 +516,7 @@ struct PersonalSchedulingSettingsView: View {
                 .disabled(viewModel.isLoading)
                 if viewModel.saveSuccess {
                     Label("Saved", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppDesign.accentGreen)
                 }
             }
         }
@@ -742,9 +742,9 @@ private struct AccountSettingsDetailView: View {
                         if viewModel.businessNameSaveSuccess {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(AppDesign.accentGreen)
                                 Text("Business name saved")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(AppDesign.accentGreen)
                             }
                         }
                     }
@@ -798,9 +798,9 @@ private struct AccountSettingsDetailView: View {
                         if viewModel.saveSuccess {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(AppDesign.accentGreen)
                                 Text("Saved — booking form and services applied")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(AppDesign.accentGreen)
                             }
                         }
                     }
@@ -972,9 +972,9 @@ private struct AccountSettingsDetailView: View {
     }
 
     private var billingStatusColor: Color {
-        if billingViewModel.subscriptionPaid { return .green }
+        if billingViewModel.subscriptionPaid { return AppDesign.accentGreen }
         if billingViewModel.subscriptionTrialing { return .secondary }
-        return .orange
+        return AppDesign.statusPending
     }
 
     private var industryChangeAlertTitle: String {
@@ -1101,7 +1101,7 @@ struct DaysOpenCalendarSheet: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         legendRow(color: Color.red.opacity(0.3), text: "Full day off")
-                        legendRow(color: Color.orange.opacity(0.35), text: "Part of day blocked")
+                        legendRow(color: AppDesign.statusPending.opacity(0.35), text: "Part of day blocked")
                     }
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
@@ -1297,8 +1297,8 @@ struct CalendarDateCell: View {
 
     private var backgroundColor: Color {
         if isBlocked { return Color.red.opacity(0.3) }
-        if isPartialBlock { return Color.orange.opacity(0.35) }
-        if isAvailable { return Color.green.opacity(0.4) }
+        if isPartialBlock { return AppDesign.statusPending.opacity(0.35) }
+        if isAvailable { return AppDesign.accentGreen.opacity(0.4) }
         if isToday { return AppDesign.searchBackground }
         return Color.clear
     }

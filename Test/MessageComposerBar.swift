@@ -402,7 +402,7 @@ struct MessageComposerBar: View {
                     .lineLimit(1...4)
                     .disabled(actionsExpanded)
                 sendButton(
-                    activeColor: .blue,
+                    activeColor: AppDesign.brandWarm,
                     idleColor: .white.opacity(0.55)
                 )
             }
@@ -865,7 +865,7 @@ struct MessageInsertPaymentLinkSheet: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(canCreate ? Color.green : Color.gray)
+                        .background(canCreate ? AppDesign.brandDark : Color.gray)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                     }

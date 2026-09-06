@@ -221,7 +221,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                             if viewModel.charterBoats.isEmpty {
                                 Label("Add a boat in Business settings before confirming.", systemImage: "exclamationmark.triangle")
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(AppDesign.statusPending)
                             } else {
                                 Picker("Boat", selection: $selectedBoatId) {
                                     ForEach(viewModel.charterBoats) { boat in
@@ -259,7 +259,7 @@ struct StaffScheduleClientAppointmentSheet: View {
                     if willSendDeposit {
                         Label("Deposit link will be sent on confirm", systemImage: "message.fill")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppDesign.statusPending)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 

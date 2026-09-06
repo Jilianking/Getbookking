@@ -311,7 +311,7 @@ struct TeamBookingSettingsView: View {
                         : "Saved — public /book uses form",
                     systemImage: "checkmark.circle.fill"
                 )
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppDesign.accentGreen)
                     .font(.subheadline)
             }
         }

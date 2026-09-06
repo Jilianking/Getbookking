@@ -88,10 +88,10 @@ struct BookingFormView: View {
                     if let validated = promoCodeValidated {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(AppDesign.accentGreen)
                             Text("Valid! \(validated.discount, specifier: "%.0f")% off")
                                 .font(.caption)
-                                .foregroundColor(.green)
+                                .foregroundColor(AppDesign.accentGreen)
                         }
                     }
                 }

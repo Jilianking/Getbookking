@@ -34,14 +34,6 @@ enum ClientScheduleAction {
     case confirm(BookingRequest)
     case reschedule(BookingRequest)
     case scheduleNew
-
-    var toolbarLabel: String {
-        switch self {
-        case .confirm: return "Confirm"
-        case .reschedule: return "Reschedule"
-        case .scheduleNew: return "Schedule"
-        }
-    }
 }
 
 enum NotesSaveState: Equatable {
@@ -120,10 +112,6 @@ final class ClientProfileViewModel: ObservableObject {
             }
             .sorted { ($0.departureStart ?? .distantFuture) < ($1.departureStart ?? .distantFuture) }
             .first
-    }
-
-    func scheduleToolbarLabel(canManageAssignment: Bool) -> String {
-        scheduleAction(using: bookings, canManageAssignment: canManageAssignment).toolbarLabel
     }
 
     func scheduleAction(using tenantBookings: [BookingRequest], canManageAssignment: Bool) -> ClientScheduleAction {

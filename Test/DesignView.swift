@@ -1078,10 +1078,10 @@ struct DesignView: View {
                     if viewModel.saveSuccess {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(AppDesign.accentGreen)
                             Text("Saved")
                                 .font(.subheadline)
-                                .foregroundColor(.green)
+                                .foregroundColor(AppDesign.accentGreen)
                         }
                         .padding()
                     }
@@ -3141,7 +3141,7 @@ struct EditFormFieldSheet: View {
             Text(title)
                 .font(.body.weight(.medium))
         }
-        .tint(.green)
+        .tint(AppDesign.accentGreen)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
     }

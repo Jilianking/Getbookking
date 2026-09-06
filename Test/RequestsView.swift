@@ -311,7 +311,7 @@ struct RequestsView: View {
         if let seedMessage = viewModel.seedMessage {
             Text(seedMessage)
                 .font(.caption)
-                .foregroundColor(.green)
+                .foregroundColor(AppDesign.accentGreen)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
         }
@@ -1053,7 +1053,7 @@ struct BookingRequestDetailView: View {
            !phone.filter(\.isNumber).isEmpty {
             contactRow(
                 icon: "phone.fill",
-                iconColor: .green,
+                iconColor: AppDesign.accentGreen,
                 title: PhoneFormatting.displayUS(phone),
                 trailing: nil
             )
@@ -1061,7 +1061,7 @@ struct BookingRequestDetailView: View {
             Button(action: openMessagesForClient) {
                 contactRow(
                     icon: "message.fill",
-                    iconColor: .blue,
+                    iconColor: AppDesign.brandWarm,
                     title: "Message client",
                     trailing: "chevron.right"
                 )
@@ -1077,7 +1077,7 @@ struct BookingRequestDetailView: View {
             Link(destination: mailURL) {
                 contactRow(
                     icon: "envelope.fill",
-                    iconColor: .blue,
+                    iconColor: AppDesign.brandWarm,
                     title: email,
                     trailing: "arrow.up.right",
                     titleLineLimit: 2
@@ -1092,7 +1092,7 @@ struct BookingRequestDetailView: View {
             Button(action: openCustomerInCustomersList) {
                 contactRow(
                     icon: "person.2.fill",
-                    iconColor: .blue,
+                    iconColor: AppDesign.brandWarm,
                     title: "View in Customers",
                     trailing: "chevron.right",
                     titleSemibold: true
@@ -1109,7 +1109,7 @@ struct BookingRequestDetailView: View {
             } label: {
                 contactRow(
                     icon: "person.crop.circle.badge.plus",
-                    iconColor: .green,
+                    iconColor: AppDesign.accentGreen,
                     title: "Add to contacts",
                     titleSemibold: true
                 )

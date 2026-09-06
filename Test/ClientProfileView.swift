@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FirebaseAuth
 
 private enum ClientScheduleSheetMode: Identifiable {
@@ -29,6 +30,7 @@ struct ClientProfileView: View {
     @State private var showingEditSheet = false
     @State private var scheduleSheetMode: ClientScheduleSheetMode?
     @State private var selectedBookingDetail: BookingRequest?
+    @State private var copiedHeaderContact: String?
 
     init(client: Client, clientsViewModel: ClientsViewModel, drawerState: DrawerState) {
         _viewModel = StateObject(wrappedValue: ClientProfileViewModel(client: client))
@@ -53,13 +55,6 @@ struct ClientProfileView: View {
         .appScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(viewModel.scheduleToolbarLabel(canManageAssignment: canManageAssignment)) {
-                    Task { await openScheduleSheet() }
-                }
-                .font(.subheadline.weight(.semibold))
-                .disabled(authViewModel.isDemoMode)
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Edit") { showingEditSheet = true }
             }
@@ -205,37 +200,112 @@ struct ClientProfileView: View {
     }
 
     private var profileHeader: some View {
-        VStack(spacing: 12) {
-            AppAvatarView(
-                tenantLogoURL: nil,
-                accountPhotoURL: nil,
-                displayNameFallback: viewModel.client.name,
-                size: 64
-            )
-
+        VStack(alignment: .leading, spacing: 14) {
             Text(viewModel.client.name)
                 .font(.title2.weight(.semibold))
-                .foregroundStyle(AppDesign.textPrimary)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("Client since \(viewModel.client.createdAt.formatted(date: .abbreviated, time: .omitted))")
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
+            if hasHeaderContact {
+                headerContactRow
+            }
 
             HStack(spacing: 8) {
-                if viewModel.client.vip {
-                    ProfileBadge(text: "VIP", color: .orange)
+                headerActionButton(
+                    title: "Book",
+                    systemImage: "calendar",
+                    disabled: authViewModel.isDemoMode
+                ) {
+                    Task { await openScheduleSheet() }
                 }
-                if viewModel.smsOptedIn {
-                    ProfileBadge(text: "SMS opted in", color: .green)
+                headerActionButton(
+                    title: "Payment",
+                    systemImage: "creditcard"
+                ) {
+                    drawerState.selectedSection = .payments
+                    drawerState.isOpen = false
                 }
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 22)
         .padding(.horizontal, 16)
-        .appCard()
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppDesign.brandDark)
+        )
         .padding(.horizontal, 16)
         .padding(.top, 12)
+    }
+
+    private var hasHeaderContact: Bool {
+        !viewModel.client.email.isEmpty || !(viewModel.client.phone ?? "").isEmpty
+    }
+
+    private var headerContactRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !viewModel.client.email.isEmpty {
+                headerContactItem(systemImage: "envelope", text: viewModel.client.email)
+            }
+            if let phone = viewModel.client.phone, !phone.isEmpty {
+                headerContactItem(systemImage: "phone", text: PhoneFormatting.displayUS(phone))
+            }
+        }
+    }
+
+    private func headerContactItem(systemImage: String, text: String) -> some View {
+        let copied = copiedHeaderContact == text
+        return Button {
+            copyHeaderContact(text)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: copied ? "checkmark" : systemImage)
+                    .font(.caption)
+                Text(copied ? "Copied" : text)
+                    .font(.subheadline)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color.white.opacity(0.7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "Copied" : "Copy \(text)")
+    }
+
+    private func copyHeaderContact(_ value: String) {
+        UIPasteboard.general.string = value
+        copiedHeaderContact = value
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                if copiedHeaderContact == value { copiedHeaderContact = nil }
+            }
+        }
+    }
+
+    private func headerActionButton(
+        title: String,
+        systemImage: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .foregroundStyle(AppDesign.brandDark)
+            .background(AppDesign.brandCream)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
     }
 
     private var tabPicker: some View {
@@ -303,8 +373,10 @@ struct ClientProfileView: View {
                 .buttonStyle(.plain)
             }
 
-            ProfileDetailCard(sectionTitle: "Contact information") {
-                contactInformationContent
+            if hasExtraProfileDetails {
+                ProfileDetailCard(sectionTitle: "Details") {
+                    extraProfileDetailsContent
+                }
             }
 
             ProfileDetailCard(sectionTitle: "Messaging consent") {
@@ -431,48 +503,28 @@ struct ClientProfileView: View {
     }
 
     @ViewBuilder
-    private var contactInformationContent: some View {
+    private var extraProfileDetailsContent: some View {
         VStack(spacing: 0) {
-            if let phone = viewModel.client.phone, !phone.isEmpty {
-                contactLinkRow(
-                    systemImage: "phone.fill",
-                    iconColor: .green,
-                    text: PhoneFormatting.displayUS(phone)
-                )
-                if !viewModel.client.email.isEmpty { Divider() }
+            let birthday = viewModel.client.birthday
+            let referral = viewModel.client.referralSource
+            let extras = (viewModel.client.profileExtras ?? []).filter {
+                !$0.label.isEmpty || !$0.value.isEmpty
             }
-
-            if !viewModel.client.email.isEmpty,
-               let mailURL = URL(string: "mailto:\(viewModel.client.email)") {
-                Link(destination: mailURL) {
-                    contactLinkRow(
-                        systemImage: "envelope.fill",
-                        iconColor: .blue,
-                        text: viewModel.client.email
-                    )
-                }
-            }
-
-            if let birthday = viewModel.client.birthday, !birthday.isEmpty {
-                Divider()
+            if let birthday, !birthday.isEmpty {
                 ProfileKeyValueRow(label: "Birthday", value: birthday)
             }
-
-            if let referral = viewModel.client.referralSource, !referral.isEmpty {
-                Divider()
+            if let referral, !referral.isEmpty {
+                if birthday != nil, !(birthday ?? "").isEmpty { Divider() }
                 ProfileKeyValueRow(label: "Referral", value: referral)
             }
-
-            if let extras = viewModel.client.profileExtras {
-                ForEach(extras) { extra in
-                    if !extra.label.isEmpty || !extra.value.isEmpty {
-                        Divider()
-                        ProfileKeyValueRow(
-                            label: extra.label.isEmpty ? "Detail" : extra.label,
-                            value: extra.value.isEmpty ? "—" : extra.value
-                        )
-                    }
+            ForEach(Array(extras.enumerated()), id: \.element.id) { index, extra in
+                if index > 0 || !(birthday ?? "").isEmpty || !(referral ?? "").isEmpty {
+                    Divider()
                 }
+                ProfileKeyValueRow(
+                    label: extra.label.isEmpty ? "Detail" : extra.label,
+                    value: extra.value.isEmpty ? "—" : extra.value
+                )
             }
         }
     }
@@ -483,7 +535,7 @@ struct ClientProfileView: View {
                 label: "SMS opt-in",
                 value: viewModel.smsOptedIn ? "Opted in" : "Not opted in",
                 showsStatusDot: true,
-                statusColor: viewModel.smsOptedIn ? .green : .secondary
+                statusColor: viewModel.smsOptedIn ? AppDesign.accentGreen : .secondary
             )
             if let consentDate = viewModel.smsConsentDate {
                 ProfileKeyValueRow(
@@ -517,25 +569,6 @@ struct ClientProfileView: View {
                 ProfileKeyValueRow(label: "Allergies", value: allergies.joined(separator: ", "))
             }
         }
-    }
-
-    private func contactLinkRow(systemImage: String, iconColor: Color, text: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.body)
-                .foregroundColor(iconColor)
-                .frame(width: 24, alignment: .center)
-            Text(text)
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(.primary)
-                .lineLimit(2)
-            Spacer()
-            Image(systemName: "arrow.up.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 14)
-        .contentShape(Rectangle())
     }
 
     private var historyTab: some View {
@@ -694,7 +727,7 @@ struct ClientProfileView: View {
         case .saved:
             Text("Saved")
                 .font(.caption)
-                .foregroundStyle(.green)
+                .foregroundStyle(AppDesign.accentGreen)
         case .failed(let message):
             Text(message)
                 .font(.caption)
@@ -724,6 +757,13 @@ struct ClientProfileView: View {
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
+    }
+
+    private var hasExtraProfileDetails: Bool {
+        let birthday = (viewModel.client.birthday ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let referral = (viewModel.client.referralSource ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let extras = viewModel.client.profileExtras ?? []
+        return !birthday.isEmpty || !referral.isEmpty || extras.contains { !$0.label.isEmpty || !$0.value.isEmpty }
     }
 
     private var hasPreferences: Bool {
@@ -809,21 +849,6 @@ private struct ProfileKeyValueRow: View {
             }
         }
         .padding(.vertical, 8)
-    }
-}
-
-private struct ProfileBadge: View {
-    let text: String
-    let color: Color
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.15))
-            .foregroundColor(color)
-            .clipShape(Capsule())
     }
 }
 

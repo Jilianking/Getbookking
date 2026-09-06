@@ -52,6 +52,8 @@ struct PaymentTransactionDetailSheet: View {
         return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: .online)
     }
 
+    private var creditColor: Color { AppDesign.accentGreen }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -59,22 +61,22 @@ struct PaymentTransactionDetailSheet: View {
                     VStack(spacing: 12) {
                         Text("\(transaction.isCredit ? "+" : "-")\(PaymentsViewModel.formatUSD(transaction.amount))")
                             .font(.system(size: 40, weight: .bold, design: .rounded))
-                            .foregroundStyle(transaction.isCredit ? Color.green : AppDesign.textPrimary)
+                            .foregroundStyle(transaction.isCredit ? creditColor : AppDesign.textPrimary)
                         if transaction.isPaid {
                             Label("Paid", systemImage: "checkmark.circle.fill")
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.green)
+                                .foregroundStyle(creditColor)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
-                                .background(Color.green.opacity(0.12))
+                                .background(AppDesign.brandCream)
                                 .clipShape(Capsule())
                         } else if transaction.status == "pending" {
                             Text(transaction.type == "refund" ? "Refund pending" : "Pending")
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppDesign.statusPending)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
-                                .background(Color.orange.opacity(0.12))
+                                .background(AppDesign.pendingBackground)
                                 .clipShape(Capsule())
                         }
                     }
@@ -84,12 +86,12 @@ struct PaymentTransactionDetailSheet: View {
                     detailCard(title: transaction.isStudioShareLine ? "Team member" : "Client") {
                         HStack(spacing: 14) {
                             Circle()
-                                .fill(Color.orange.opacity(0.18))
+                                .fill(AppDesign.brandCream)
                                 .frame(width: 48, height: 48)
                                 .overlay(
                                     Text(transaction.initials)
                                         .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(AppDesign.brandWarm)
                                 )
                             VStack(alignment: .leading, spacing: 4) {
                                 if transaction.isStudioShareLine {
@@ -127,6 +129,7 @@ struct PaymentTransactionDetailSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+                            .tint(AppDesign.brandWarm)
                             .disabled(isLoadingReceipt)
 
                             Menu {
@@ -145,6 +148,7 @@ struct PaymentTransactionDetailSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+                            .tint(AppDesign.brandWarm)
                             .disabled(isPreparingShare || isLoadingReceipt)
                         }
 
@@ -153,7 +157,7 @@ struct PaymentTransactionDetailSheet: View {
                                 showRefundSheet = true
                             }
                             .font(.subheadline)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppDesign.brandWarm)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .disabled(viewModel.isRefunding)
                         } else if transaction.isCredit, let reason = viewModel.refundBlockReason(for: transaction) {
@@ -233,7 +237,7 @@ struct PaymentTransactionDetailSheet: View {
             Spacer()
             Text(PaymentsViewModel.formatUSD(transaction.amount))
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(transaction.isCredit ? .green : AppDesign.textPrimary)
+                .foregroundStyle(transaction.isCredit ? creditColor : AppDesign.textPrimary)
         }
     }
 
@@ -257,7 +261,7 @@ struct PaymentTransactionDetailSheet: View {
                 Spacer()
                 Text(PaymentsViewModel.formatUSD(transaction.amount))
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(creditColor)
             }
         }
     }
@@ -291,7 +295,7 @@ struct PaymentTransactionDetailSheet: View {
             Spacer()
             Text(PaymentsViewModel.formatUSD(transaction.amount))
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(transaction.isCredit ? .green : AppDesign.textPrimary)
+                .foregroundStyle(transaction.isCredit ? creditColor : AppDesign.textPrimary)
         }
     }
 

@@ -190,12 +190,12 @@ struct PaymentReceiptOutcomeBannerView: View {
     let banner: PaymentReceiptOutcomeBanner
 
     private var accentColor: Color {
-        banner.style == .success ? .green : .red
+        banner.style == .success ? AppDesign.accentGreen : .red
     }
 
     private var backgroundColor: Color {
         banner.style == .success
-            ? Color.green.opacity(0.12)
+            ? AppDesign.accentGreen.opacity(0.12)
             : Color.red.opacity(0.12)
     }
 

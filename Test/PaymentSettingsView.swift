@@ -255,7 +255,7 @@ struct PaymentSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .tint(.green)
+                .tint(AppDesign.accentGreen)
                 .disabled(isDemoMode || viewModel.isSavingShopTax)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -271,7 +271,7 @@ struct PaymentSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .tint(.green)
+                .tint(AppDesign.accentGreen)
                 .disabled(isDemoMode || viewModel.isSavingInPersonTax)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)

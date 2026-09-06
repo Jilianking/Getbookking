@@ -53,11 +53,13 @@ enum AppDesign {
     )
 
     /// Legacy iOS accents — prefer brandWarm / brandDark in new UI.
-    static let calendarAppointmentFill = Color(hex: 0xE8F5F3)
-    static let calendarAppointmentAccent = Color(hex: 0x3D9B8F)
+    static let calendarAppointmentFill = Color(hex: 0xF5EDD8)
+    static let calendarAppointmentAccent = brandWarm
 
-    static let accentGreen = Color(red: 0.30, green: 0.69, blue: 0.31)
-    static let accentBlue = Color(red: 0.23, green: 0.48, blue: 0.95)
+    /// Sage — money in, paid, connected, success.
+    static let accentGreen = Color(hex: 0x6F8F72)
+    /// Bronze — links, icon tiles, tints (same as brandWarm).
+    static let accentBlue = brandWarm
     static let accentRed = Color(red: 0.85, green: 0.22, blue: 0.22)
     static let statusPending = adaptive(
         light: UIColor(red: 0.55, green: 0.38, blue: 0.12, alpha: 1),
@@ -215,6 +217,11 @@ enum AppNavigationAppearance {
         navBar.scrollEdgeAppearance = appearance
         navBar.compactAppearance = appearance
         navBar.compactScrollEdgeAppearance = appearance
+        navBar.tintColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.79, green: 0.65, blue: 0.47, alpha: 1)
+                : UIColor(hex: 0x8B6F47)
+        }
     }
 }
 

@@ -437,7 +437,7 @@ struct TeamClientMessagingSettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Active", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.green)
+                .foregroundStyle(AppDesign.accentGreen)
             if let studioRow = viewModel.smsLineAssignments.first(where: { $0.kind == .studio }) {
                 Button {
                     selectedSmsLine = studioRow
@@ -642,7 +642,7 @@ struct TeamClientMessagingSettingsView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(row.statusLabel)
                     .font(.caption)
-                    .foregroundStyle(row.status == "active" ? Color.green : Color.secondary)
+                    .foregroundStyle(row.status == "active" ? AppDesign.accentGreen : Color.secondary)
                     .multilineTextAlignment(.trailing)
                 if row.canRelease {
                     Image(systemName: "chevron.right")
@@ -808,7 +808,7 @@ struct TeamClientMessagingSettingsView: View {
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppDesign.accentGreen)
             }
             Text(title)
                 .font(.headline)

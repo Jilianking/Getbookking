@@ -967,7 +967,7 @@ private struct ShopSettingsSheet: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .tint(.green)
+                        .tint(AppDesign.accentGreen)
                         .disabled(!viewModel.hasTenant || viewModel.isLoading)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
@@ -1018,7 +1018,7 @@ private struct ShopSettingsSheet: View {
                             HStack(alignment: .center, spacing: 12) {
                                 Image(systemName: "creditcard.fill")
                                     .font(.body)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(AppDesign.brandWarm)
                                     .frame(width: 28, alignment: .center)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Payment settings")
@@ -1941,7 +1941,7 @@ private struct ShopProductFormSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .tint(.green)
+                    .tint(AppDesign.accentGreen)
 
                     if isEditing {
                         Button(role: .destructive) {

@@ -351,7 +351,7 @@ struct TapToPaySheet: View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 52))
-                .foregroundStyle(.green)
+                .foregroundStyle(AppDesign.accentGreen)
             Text("Payment approved")
                 .font(.headline)
             if case .approved(let cents) = phase {

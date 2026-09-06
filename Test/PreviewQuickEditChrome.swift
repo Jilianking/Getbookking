@@ -374,7 +374,7 @@ struct PreviewQuickEditChrome: View {
 
                 if colorsDirty {
                     Circle()
-                        .fill(Color.orange)
+                        .fill(AppDesign.statusPending)
                         .frame(width: 10, height: 10)
                         .overlay(Circle().strokeBorder(Color.white, lineWidth: 1.5))
                         .offset(x: 4, y: -4)

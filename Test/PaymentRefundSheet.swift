@@ -192,7 +192,7 @@ struct PaymentRefundSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .foregroundStyle(.white)
-                    .background(canSubmit ? Color.orange : Color.gray)
+                    .background(canSubmit ? AppDesign.brandWarm : Color.gray)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)

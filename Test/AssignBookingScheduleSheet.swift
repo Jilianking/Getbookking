@@ -129,7 +129,7 @@ struct AssignBookingScheduleSheet: View {
             if let preferredLabel {
                 Label(preferredLabel, systemImage: "star.fill")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(AppDesign.statusPending)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -173,7 +173,7 @@ struct AssignBookingScheduleSheet: View {
                     Spacer()
                     Text(row.statusText)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(row.statusText == "Available" ? .green : .secondary)
+                        .foregroundStyle(row.statusText == "Available" ? AppDesign.accentGreen : .secondary)
                 }
             }
             if row.slots.isEmpty {
@@ -229,7 +229,7 @@ struct AssignBookingScheduleSheet: View {
         switch state {
         case .available: return AppDesign.cardBackground
         case .taken: return Color(.tertiarySystemFill)
-        case .matchesPreferred: return Color.orange.opacity(0.2)
+        case .matchesPreferred: return AppDesign.brandWarm.opacity(0.2)
         case .selected: return Color.accentColor.opacity(0.15)
         }
     }
@@ -258,7 +258,7 @@ struct AssignBookingScheduleSheet: View {
 
     private var legend: some View {
         HStack(spacing: 16) {
-            legendChip(fill: Color.orange.opacity(0.2), border: .black, label: "Matches preferred")
+            legendChip(fill: AppDesign.brandWarm.opacity(0.2), border: .black, label: "Matches preferred")
             legendChip(fill: Color(.tertiarySystemFill), border: Color(.separator), label: "Taken")
             legendChip(fill: Color.accentColor.opacity(0.15), border: .black, borderWidth: 2, label: "Selected")
         }

@@ -293,7 +293,7 @@ struct ManageToggleRow: View {
                 }
             }
         }
-        .tint(.green)
+        .tint(AppDesign.accentGreen)
         .disabled(disabled)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -2416,9 +2416,9 @@ private struct TeamMemberRoleBadge: View {
 
     private var tint: Color {
         switch accessRole {
-        case .owner: return .blue
-        case .manager: return .orange
-        case .member: return .purple
+        case .owner: return AppDesign.brandDark
+        case .manager: return AppDesign.brandWarm
+        case .member: return AppDesign.accentGreen
         }
     }
 
@@ -2467,9 +2467,9 @@ private struct ManageTeamMemberAvatar: View {
 
     private var placeholderTint: Color {
         switch member.accessRole {
-        case .owner: return .blue
-        case .manager: return .orange
-        case .member: return .purple
+        case .owner: return AppDesign.brandDark
+        case .manager: return AppDesign.brandWarm
+        case .member: return AppDesign.accentGreen
         }
     }
 }

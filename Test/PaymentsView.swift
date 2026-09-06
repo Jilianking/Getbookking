@@ -23,6 +23,7 @@ struct PaymentsView: View {
     #endif
     @State private var showWithdrawSheet = false
     @State private var showAllTransactions = false
+    @State private var transactionFilter: PaymentsTransactionFilter = .all
     @State private var balanceDetailsExpanded = false
     var drawerState: DrawerState
     let sectionTitle: String
@@ -236,7 +237,7 @@ struct PaymentsView: View {
                     if authViewModel.isDemoMode {
                         Text("Demo — not real money")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.orange.opacity(0.9))
+                            .foregroundStyle(AppDesign.statusPending.opacity(0.9))
                     }
                     Text("Available to pay out \(PaymentsViewModel.formatUSD(viewModel.readyToWithdrawDisplay)) · Available soon \(PaymentsViewModel.formatUSD(viewModel.settlingDisplay))")
                         .font(.caption)
@@ -281,7 +282,7 @@ struct PaymentsView: View {
                         balanceStatItem(
                             title: "This month",
                             value: "+\(PaymentsViewModel.formatUSD(viewModel.monthEarnings))",
-                            valueColor: .green
+                            valueColor: AppDesign.accentGreen
                         )
                     }
 
@@ -295,8 +296,8 @@ struct PaymentsView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.14))
-                        .foregroundStyle(.white)
+                        .background(AppDesign.brandCream)
+                        .foregroundStyle(AppDesign.brandDark)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -309,13 +310,7 @@ struct PaymentsView: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color(red: 0.12, green: 0.12, blue: 0.14), Color(red: 0.08, green: 0.08, blue: 0.10)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(AppDesign.brandDark)
         )
         .padding(.horizontal)
     }
@@ -356,36 +351,29 @@ struct PaymentsView: View {
             .padding(.horizontal)
             #endif
 
-            VStack(spacing: 0) {
-                PaymentCompactActionRow(
+            HStack(alignment: .top, spacing: 12) {
+                PaymentAcceptOptionCard(
                     icon: "creditcard.fill",
-                    iconColor: .purple,
+                    iconFill: AppDesign.brandWarm,
                     title: "Manual payment",
                     subtitle: viewModel.stripeConnected
-                        ? ""
-                        : "Set up Stripe to accept card payments",
-                    action: {
-                        handleManualOrDepositTapped(open: { showManualPaymentSheet = true })
-                    },
-                    disabled: false,
-                    showsDivider: true
-                )
+                        ? "Enter card details"
+                        : "Set up Stripe to accept card payments"
+                ) {
+                    handleManualOrDepositTapped(open: { showManualPaymentSheet = true })
+                }
 
-                PaymentCompactActionRow(
+                PaymentAcceptOptionCard(
                     icon: "link",
-                    iconColor: .green,
+                    iconFill: AppDesign.accentGreen,
                     title: "Deposit link",
                     subtitle: viewModel.stripeConnected
                         ? "Request a deposit via text"
-                        : "Set up Stripe to send deposit links",
-                    action: {
-                        handleManualOrDepositTapped(open: { showDepositLinkSheet = true })
-                    },
-                    disabled: false,
-                    showsDivider: false
-                )
+                        : "Set up Stripe to send deposit links"
+                ) {
+                    handleManualOrDepositTapped(open: { showDepositLinkSheet = true })
+                }
             }
-            .appCard()
             .padding(.horizontal)
         }
     }
@@ -426,7 +414,10 @@ struct PaymentsView: View {
     }
 
     private var paymentsRecentTransactions: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let filtered = viewModel.filteredDisplayTransactions(for: transactionFilter)
+        let recent = viewModel.recentDisplayTransactions(for: transactionFilter)
+
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Recent transactions")
                     .font(.title3.weight(.bold))
@@ -434,9 +425,15 @@ struct PaymentsView: View {
                 if viewModel.displayTransactions.count > 5 {
                     Button("See all") { showAllTransactions = true }
                         .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppDesign.brandWarm)
                 }
             }
             .padding(.horizontal)
+
+            AppFilterChipBar(
+                filters: PaymentsTransactionFilter.allCases.map { ($0, $0.title) },
+                selection: $transactionFilter
+            )
 
             if viewModel.isLoading {
                 ProgressView()
@@ -444,14 +441,14 @@ struct PaymentsView: View {
                     .padding(24)
                     .appCard()
                     .padding(.horizontal)
-            } else if viewModel.displayTransactions.isEmpty {
+            } else if filtered.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "clock.arrow.circlepath")
+                    Image(systemName: transactionFilter == .payouts ? "building.columns" : "clock.arrow.circlepath")
                         .font(.largeTitle)
                         .foregroundColor(.secondary)
-                    Text("No transactions yet")
+                    Text(recentEmptyTitle)
                         .font(.subheadline.weight(.medium))
-                    Text("When customers pay deposits or for services, they'll appear here")
+                    Text(recentEmptySubtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -462,11 +459,11 @@ struct PaymentsView: View {
                 .padding(.horizontal)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(viewModel.recentDisplayTransactions.enumerated()), id: \.element.id) { index, txn in
+                    ForEach(Array(recent.enumerated()), id: \.element.id) { index, txn in
                         PaymentTransactionRow(transaction: txn) {
                             viewModel.selectedTransaction = txn
                         }
-                        if index < viewModel.recentDisplayTransactions.count - 1 {
+                        if index < recent.count - 1 {
                             Divider().padding(.leading, 68)
                         }
                     }
@@ -476,6 +473,23 @@ struct PaymentsView: View {
             }
         }
         .appTourAnchor(.paymentsHistory, isActive: appTour.isStepActive(.paymentsHistory))
+    }
+
+    private var recentEmptyTitle: String {
+        switch transactionFilter {
+        case .all: return "No transactions yet"
+        case .payments: return "No payments yet"
+        case .payouts: return "No payouts yet"
+        }
+    }
+
+    private var recentEmptySubtitle: String {
+        switch transactionFilter {
+        case .all, .payments:
+            return "When customers pay deposits or for services, they'll appear here"
+        case .payouts:
+            return "Withdrawals to your bank will appear here"
+        }
     }
 }
 
@@ -510,7 +524,7 @@ private struct StripeConnectBanner: View {
                 HStack(spacing: 12) {
                     Image(systemName: isPendingReview ? "clock.fill" : "link.circle.fill")
                         .font(.title2)
-                        .foregroundColor(isPendingReview ? .orange : .purple)
+                        .foregroundColor(isPendingReview ? AppDesign.statusPending : AppDesign.brandWarm)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(viewModel.stripeConnectBannerTitle)
                             .font(.subheadline.weight(.semibold))
@@ -529,11 +543,11 @@ private struct StripeConnectBanner: View {
                     }
                 }
                 .padding()
-                .background((isPendingReview ? Color.orange : Color.purple).opacity(0.08))
+                .background((isPendingReview ? AppDesign.statusPending : AppDesign.brandWarm).opacity(0.08))
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke((isPendingReview ? Color.orange : Color.purple).opacity(0.3), lineWidth: 1)
+                        .stroke((isPendingReview ? AppDesign.statusPending : AppDesign.brandWarm).opacity(0.3), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -590,49 +604,47 @@ struct PaymentActionCard: View {
     }
 }
 
-struct PaymentCompactActionRow: View {
+private struct PaymentAcceptOptionCard: View {
     let icon: String
-    let iconColor: Color
+    let iconFill: Color
     let title: String
     let subtitle: String
     let action: () -> Void
-    var disabled: Bool = false
-    var showsDivider: Bool = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            Button(action: action) {
-                HStack(spacing: 14) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(iconColor.opacity(0.15))
-                        .frame(width: 44, height: 44)
-                        .overlay(Image(systemName: icon).foregroundStyle(iconColor))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(iconFill)
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Image(systemName: icon)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppDesign.textPrimary)
-                        if !subtitle.isEmpty {
-                            Text(subtitle)
-                                .font(.caption)
-                                .foregroundStyle(AppDesign.textSecondary)
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                            .foregroundStyle(AppDesign.brandCream)
+                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .disabled(disabled)
-            .opacity(disabled ? 0.55 : 1)
-
-            if showsDivider {
-                Divider().padding(.leading, 74)
-            }
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .padding(16)
+            .background(AppDesign.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppDesign.chipBorder, lineWidth: 1)
+            )
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -640,31 +652,26 @@ struct PaymentTransactionRow: View {
     let transaction: PaymentTransaction
     var onTap: () -> Void
 
-    private var avatarFill: Color {
-        if !transaction.isCredit { return Color.orange.opacity(0.15) }
-        return Color.orange.opacity(0.15)
-    }
-
     private var amountColor: Color {
-        if transaction.isCredit { return .green }
-        return Color.orange
+        if transaction.isCredit { return AppDesign.accentGreen }
+        return AppDesign.brandWarm
     }
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 14) {
                 Circle()
-                    .fill(avatarFill)
+                    .fill(AppDesign.brandCream)
                     .frame(width: 44, height: 44)
                     .overlay {
                         if transaction.type == "refund" || (!transaction.isCredit && transaction.channelLabel == "Refund") {
                             Image(systemName: "arrow.uturn.backward")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppDesign.brandWarm)
                         } else {
                             Text(transaction.initials)
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(AppDesign.brandWarm)
                         }
                     }
                 VStack(alignment: .leading, spacing: 3) {

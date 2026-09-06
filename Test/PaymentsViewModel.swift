@@ -326,6 +326,20 @@ enum StripeConnectLinkCache {
     }
 }
 
+enum PaymentsTransactionFilter: String, CaseIterable, Hashable {
+    case all
+    case payments
+    case payouts
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .payments: return "Payments"
+        case .payouts: return "Payouts"
+        }
+    }
+}
+
 @MainActor
 class PaymentsViewModel: ObservableObject {
     @Published var availableBalance: Double = 0
@@ -454,6 +468,21 @@ class PaymentsViewModel: ObservableObject {
 
     var recentDisplayTransactions: [PaymentTransaction] {
         Array(displayTransactions.prefix(5))
+    }
+
+    func filteredDisplayTransactions(for filter: PaymentsTransactionFilter) -> [PaymentTransaction] {
+        switch filter {
+        case .all:
+            return displayTransactions
+        case .payments:
+            return displayTransactions.filter { !$0.isPayoutLine }
+        case .payouts:
+            return displayTransactions.filter(\.isPayoutLine)
+        }
+    }
+
+    func recentDisplayTransactions(for filter: PaymentsTransactionFilter) -> [PaymentTransaction] {
+        Array(filteredDisplayTransactions(for: filter).prefix(5))
     }
 
     /// Kept for callers that only want inbound payments.

@@ -67,7 +67,7 @@ struct PersonalBookingSettingsView: View {
                     }
                     if viewModel.personalSaveSuccess {
                         Label("Saved", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(AppDesign.accentGreen)
                             .font(.subheadline)
                     }
                 }

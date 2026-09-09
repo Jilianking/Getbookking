@@ -73,6 +73,7 @@ const PUBLIC_SITE_KEYS = [
   "headlineFont",
   "heroFont",
   "webThemeId",
+  "resolvedWebThemeId",
   "webTextColors",
   "webTextFontSizes",
   "webSurfaceColors",

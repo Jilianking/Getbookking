@@ -104,6 +104,18 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
     @Published var showDemoBlockedAlert = false
     @Published private(set) var isApplyingBladeStarters = false
     @Published private(set) var isSavingBladeServices = false
+    /// True while a site template switch is writing + reloading the in-app preview.
+    @Published private(set) var isApplyingWebTheme = false
+    /// Set with `invalidateWebPreview()` on template switch; Design consumes it to hold the color patch until load.
+    private(set) var holdPreviewColorPatchOnReload = false
+    /// Initial fetch or template switch — disable Design pickers so overlapping applies cannot race.
+    var isDesignChromeBusy: Bool { isLoading || isApplyingWebTheme }
+
+    func consumeHoldPreviewColorPatchOnReload() -> Bool {
+        guard holdPreviewColorPatchOnReload else { return false }
+        holdPreviewColorPatchOnReload = false
+        return true
+    }
     /// Bumped when Firestore content affecting the public site changes so the in-app WKWebView reloads (same path would otherwise stay stale).
     @Published private(set) var webPreviewReloadToken: UInt64 = 0
     /// Bumped when site colors change in-app — Design patches WKWebView instead of full reload.
@@ -2866,6 +2878,43 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         )
     }
 
+    /// Full tenant color+theme snapshot for WKUserScript injection (in-app preview).
+    /// The page reads this at document-start so it never waits on publicSites sync.
+    func previewTenantOverrideJSON() -> String {
+        let tokens = currentColorTokens()
+        var dict: [String: Any] = [
+            "webThemeId": webThemeId,
+            "resolvedWebThemeId": webThemeId,
+            "backgroundColor": tokens.backgroundColor,
+            "textColor": tokens.textColor,
+            "cardSurfaceColor": tokens.cardSurfaceColor,
+            "primaryColor": tokens.primaryColor,
+            "primaryColorHover": tokens.primaryColorHover,
+            "accentTextColor": tokens.accentTextColor,
+            "featuredWorkBackgroundColor": tokens.featuredWorkBackgroundColor,
+            "featuredWorkTextColor": tokens.featuredWorkTextColor,
+            "galleryPageBackgroundColor": tokens.galleryPageBackgroundColor,
+            "galleryPageTextColor": tokens.galleryPageTextColor,
+            "aboutSectionBackgroundColor": tokens.aboutSectionBackgroundColor,
+            "aboutSectionTextColor": tokens.aboutSectionTextColor,
+            "sidebarBackgroundColor": sidebarBackgroundColorHex,
+            "sidebarTextColor": sidebarTextColorHex,
+            "sidebarCloseIconColor": sidebarCloseIconColorHex,
+            "sidebarIconColorHome": sidebarIconColorHome,
+            "sidebarIconColorBooking": sidebarIconColorBooking,
+            "webSurfaceColors": webSurfaceColors,
+            "webButtonColors": webButtonColors,
+            "webTextColors": webTextColors,
+            "webTextFontSizes": webTextFontSizes,
+        ]
+        if !previewHeroSlotColorHex.isEmpty {
+            dict["heroSlotBg"] = previewHeroSlotColorHex
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let json = String(data: data, encoding: .utf8) else { return "{}" }
+        return json
+    }
+
     func previewColorPatchPayload(heroSlotOverride: String? = nil) -> [String: String] {
         let tokens = currentColorTokens()
         var payload: [String: String] = [
@@ -3000,10 +3049,19 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
             await MainActor.run { errorMessage = "This layout doesn’t match your business type. Change it in Settings if needed." }
             return
         }
-        await MainActor.run { errorMessage = nil }
+        let began = await MainActor.run { () -> Bool in
+            if isApplyingWebTheme { return false }
+            isApplyingWebTheme = true
+            errorMessage = nil
+            return true
+        }
+        guard began else { return }
         let family = theme.family
         let defaultPalette = WebColorPalettes.defaultPalette(for: family)
-        var updates: [String: Any] = ["webThemeId": theme.rawValue]
+        var updates: [String: Any] = [
+            "webThemeId": theme.rawValue,
+            "resolvedWebThemeId": theme.rawValue,
+        ]
         for (key, value) in WebColorPalettes.firestoreUpdates(paletteId: defaultPalette.id, tokens: defaultPalette.tokens) {
             updates[key] = value
         }
@@ -3026,6 +3084,7 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
                 webSurfaceColors = [:]
                 webTextColors = [:]
                 webTextFontSizes = [:]
+                holdPreviewColorPatchOnReload = true
                 invalidateWebPreview()
                 saveSuccess = true
             }
@@ -3033,6 +3092,8 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
         }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        await MainActor.run { isApplyingWebTheme = false }
     }
 
     // MARK: - Shop / Products

@@ -5812,6 +5812,71 @@
           return false;
         }
       }
+      /** Known `WebTheme` ids. In-app Design may pass `bk_web_theme` so preview does not wait on publicSites. */
+      var BK_PREVIEW_WEB_THEME_IDS = [
+        'luxe-v1', 'blade-v1', 'stonecut-v1', 'studio-12-v1',
+        'hair-salon-v1', 'barber-shop-v1', 'tattoo-studio-v1', 'nail-salon-v1',
+        'custom-standard', 'charter-v1'
+      ];
+      function previewWebThemeOverrideId() {
+        if (!isTemplatePreview()) return '';
+        // Full tenant override (primary) — set by WKUserScript atDocumentStart.
+        try {
+          var ov = window.__bkPreviewTenantOverride;
+          if (ov && ov.webThemeId) {
+            var ovId = String(ov.webThemeId).trim();
+            if (ovId && BK_PREVIEW_WEB_THEME_IDS.indexOf(ovId) >= 0) return ovId;
+          }
+        } catch (e) {}
+        // Legacy: bare theme-only injection (older builds).
+        try {
+          var native = String(window.__bkPreviewThemeId || '').trim();
+          if (native && BK_PREVIEW_WEB_THEME_IDS.indexOf(native) >= 0) return native;
+        } catch (e) {}
+        // Fallback: URL query param (browser testing).
+        try {
+          var id = String(new URLSearchParams(location.search || '').get('bk_web_theme') || '').trim();
+          if (!id || BK_PREVIEW_WEB_THEME_IDS.indexOf(id) < 0) return '';
+          return id;
+        } catch (e) {
+          return '';
+        }
+      }
+      function applyPreviewThemeOverride(tenant) {
+        if (!tenant) return tenant;
+        var id = previewWebThemeOverrideId();
+        if (!id) return tenant;
+        // Apply theme — charter plan always stays on charter-v1.
+        if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
+          tenant.webThemeId = 'charter-v1';
+          tenant.resolvedWebThemeId = 'charter-v1';
+        } else if (id !== 'charter-v1') {
+          tenant.webThemeId = id;
+          tenant.resolvedWebThemeId = resolvedWebThemeId(tenant);
+        }
+        // Apply full color + style-map override from Swift-side state (bypasses publicSites lag).
+        // This ensures the initial render uses the correct palette without waiting on Cloud Function sync.
+        try {
+          var ov = window.__bkPreviewTenantOverride;
+          if (ov) {
+            var colorFields = ['backgroundColor','textColor','cardSurfaceColor','primaryColor',
+              'primaryColorHover','accentTextColor','featuredWorkBackgroundColor','featuredWorkTextColor',
+              'galleryPageBackgroundColor','galleryPageTextColor','aboutSectionBackgroundColor',
+              'aboutSectionTextColor','sidebarBackgroundColor','sidebarTextColor',
+              'sidebarCloseIconColor','sidebarIconColorHome','sidebarIconColorBooking','heroSlotBg'];
+            for (var i = 0; i < colorFields.length; i++) {
+              var k = colorFields[i];
+              if (ov[k] !== undefined && ov[k] !== '') tenant[k] = ov[k];
+            }
+            // Style maps — preserve independence; empty map ({}) clears overrides correctly.
+            if (ov.webSurfaceColors !== undefined) tenant.webSurfaceColors = ov.webSurfaceColors;
+            if (ov.webButtonColors !== undefined) tenant.webButtonColors = ov.webButtonColors;
+            if (ov.webTextColors !== undefined) tenant.webTextColors = ov.webTextColors;
+            if (ov.webTextFontSizes !== undefined) tenant.webTextFontSizes = ov.webTextFontSizes;
+          }
+        } catch (e) {}
+        return tenant;
+      }
       function tenantShowBookPage(tenant) {
         return tenant.showBookPage !== false;
       }
@@ -15538,6 +15603,7 @@
             document.getElementById('root').innerHTML = '<div class="container">'+err('This business is not accepting bookings right now.')+'</div>';
             return;
           }
+          applyPreviewThemeOverride(tenant);
           applyBranding(tenant);
           return Promise.all([
             loadServices(tenant.id),

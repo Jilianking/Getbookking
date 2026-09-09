@@ -150,6 +150,11 @@ final class WebViewQuickEditBridge {
         coordinator?.schedulePreviewColorPatch(payload, full: full)
     }
 
+    /// Queue a full palette restamp for the next document load (template switch). Does not paint the outgoing page.
+    func holdPreviewColorPatchUntilLoad(_ payload: [String: String]) {
+        coordinator?.holdPreviewColorPatchUntilLoad(payload)
+    }
+
     func flushPreviewColorPatch() {
         coordinator?.flushPreviewColorPatch()
     }
@@ -165,6 +170,9 @@ struct WebViewPreview: View {
     var pageBackgroundHex: String = "#FFFFFF"
     /// Tenant hero photo — stamped into the preview when `publicSites` is missing `heroImageUrl`.
     var heroImageUrl: String = ""
+    /// Full tenant color+theme JSON injected via WKUserScript so the page renders with the right
+    /// theme and palette from frame one — bypasses publicSites sync lag entirely.
+    var previewTenantOverride: String = "{}"
     var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
@@ -178,6 +186,7 @@ struct WebViewPreview: View {
                         quickEditEnabled: quickEditEnabled,
                         pageBackgroundHex: pageBackgroundHex,
                         heroImageUrl: heroImageUrl,
+                        previewTenantOverride: previewTenantOverride,
                         bridge: bridge,
                         onQuickEdit: onQuickEdit
                     )
@@ -205,6 +214,8 @@ struct WebViewRepresentable: UIViewRepresentable {
     var quickEditEnabled: Bool = false
     var pageBackgroundHex: String = "#FFFFFF"
     var heroImageUrl: String = ""
+    /// Full tenant color+theme JSON — injected via WKUserScript so the page never waits on publicSites.
+    var previewTenantOverride: String = "{}"
     var bridge: WebViewQuickEditBridge?
     var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
 
@@ -224,6 +235,8 @@ struct WebViewRepresentable: UIViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
+        // New WKWebView must load even if this coordinator previously marked a URL as requested.
+        context.coordinator.resetPreviewLoadState()
         Self.applyPageChrome(to: webView, pageBackgroundHex: pageBackgroundHex)
         return webView
     }
@@ -232,6 +245,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         context.coordinator.bridge = bridge
         bridge?.coordinator = context.coordinator
         context.coordinator.heroImageUrl = heroImageUrl
+        context.coordinator.previewTenantOverride = previewTenantOverride
         context.coordinator.onQuickEdit = onQuickEdit
         context.coordinator.quickEditEnabled = quickEditEnabled
         Self.applyPageChrome(to: webView, pageBackgroundHex: pageBackgroundHex)
@@ -239,10 +253,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         let width = containerWidth > 0 ? containerWidth : webView.bounds.width
         guard width > 100 else { return }
         context.coordinator.applyPreviewChromeIfNeeded(webView: webView, width: width)
-        if context.coordinator.lastLoadedURL != url {
-            context.coordinator.resetQuickEditInstallState()
-            context.coordinator.lastLoadedURL = url
-            webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
+        if context.coordinator.requestPreviewLoad(of: url, in: webView) {
             return
         }
         context.coordinator.applyQuickEditIfNeeded(webView: webView)
@@ -339,9 +350,14 @@ struct WebViewRepresentable: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let messageHandlerName: String
         var lastLoadedURL: URL?
+        /// Set only in `didFinish` so a cancelled first load (popover dismiss) can retry.
+        private var lastFinishedURL: URL?
+        private var isPreviewLoadInFlight = false
+        private var previewLoadRetryCount = 0
         weak var webView: WKWebView?
         weak var bridge: WebViewQuickEditBridge?
         var quickEditEnabled = false
+        var previewTenantOverride: String = "{}"
         var onQuickEdit: ((WebViewQuickEditEvent) -> Void)?
         /// Avoid re-running `installQuickEdit` on every `updateUIView` — reinstall calls JS cleanup, which commits inline edits and triggers a full preview reload.
         private var quickEditInstalledForDocument = false
@@ -362,6 +378,68 @@ struct WebViewRepresentable: UIViewRepresentable {
         fileprivate func resetQuickEditInstallState() {
             quickEditInstalledForDocument = false
             quickEditInstallInFlight = false
+        }
+
+        fileprivate func resetPreviewLoadState() {
+            lastLoadedURL = nil
+            lastFinishedURL = nil
+            isPreviewLoadInFlight = false
+            previewLoadRetryCount = 0
+        }
+
+        /// Returns true when a navigation was started. Does not mark the URL finished until `didFinish`.
+        @discardableResult
+        fileprivate func requestPreviewLoad(of url: URL, in webView: WKWebView) -> Bool {
+            if lastFinishedURL == url { return false }
+            if lastLoadedURL == url, isPreviewLoadInFlight, webView.isLoading { return false }
+            lastLoadedURL = url
+            isPreviewLoadInFlight = true
+            previewLoadRetryCount = 0
+            resetQuickEditInstallState()
+            // Inject theme ID before any page JS runs — immune to WKWebView query-param privacy gates.
+            injectPreviewThemeScript(webView)
+            webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
+            return true
+        }
+
+        /// Injects the full tenant color+theme snapshot at document-start so the web app renders with
+        /// the correct theme and palette without waiting on publicSites Cloud Function sync.
+        private func injectPreviewThemeScript(_ webView: WKWebView) {
+            let json = previewTenantOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+            // json must be a valid JSON object literal — guard against empty/malformed strings.
+            guard !json.isEmpty, json.hasPrefix("{") else { return }
+            // Also set the legacy bare-theme global so older deployed pages still work.
+            let themeId: String = {
+                // Quick extract of webThemeId without full JSON parsing for safety.
+                if let r = json.range(of: "\"webThemeId\"\\s*:\\s*\"([^\"]+)\"",
+                                      options: .regularExpression) {
+                    let raw = String(json[r])
+                    if let start = raw.firstIndex(of: "\""),
+                       let end = raw.lastIndex(of: "\""),
+                       start != end {
+                        return String(raw[raw.index(after: start)..<end])
+                    }
+                }
+                return ""
+            }()
+            let safeId = themeId.unicodeScalars
+                .filter { CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-")).contains($0) }
+            let source = "window.__bkPreviewTenantOverride=\(json);" +
+                         "window.__bkPreviewThemeId='\(String(String.UnicodeScalarView(safeId)))';"
+            let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            // Replace any previously injected override so stale data does not linger.
+            webView.configuration.userContentController.removeAllUserScripts()
+            webView.configuration.userContentController.addUserScript(script)
+        }
+
+        private func retryPreviewLoadIfNeeded(_ webView: WKWebView) {
+            guard let url = lastLoadedURL, lastFinishedURL != url else { return }
+            guard previewLoadRetryCount < 1 else { return }
+            previewLoadRetryCount += 1
+            isPreviewLoadInFlight = true
+            resetQuickEditInstallState()
+            injectPreviewThemeScript(webView)
+            webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         }
 
         /// Stamp the in-app hero URL onto `.charter-hero-media` (publicSites often omits heroImageUrl).
@@ -441,7 +519,21 @@ struct WebViewRepresentable: UIViewRepresentable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.07, execute: work)
         }
 
+        func holdPreviewColorPatchUntilLoad(_ payload: [String: String]) {
+            colorPatchWorkItem?.cancel()
+            pendingColorPatch = payload
+            pendingColorPatchNeedsFull = true
+        }
+
         func flushPreviewColorPatch() {
+            colorPatchWorkItem?.cancel()
+            pendingColorPatchNeedsFull = true
+            emitPendingColorPatch()
+        }
+
+        /// Apply a held patch after navigation without forcing `full` on a nil payload (color-wheel debounce).
+        func flushHeldPreviewColorPatch() {
+            guard pendingColorPatch != nil else { return }
             colorPatchWorkItem?.cancel()
             pendingColorPatchNeedsFull = true
             emitPendingColorPatch()
@@ -637,9 +729,15 @@ struct WebViewRepresentable: UIViewRepresentable {
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             resetQuickEditInstallState()
             lastPreviewViewportWidth = 0
+            isPreviewLoadInFlight = true
+            // Keep a held patch; cancel the debounce so it cannot paint the outgoing document.
+            colorPatchWorkItem?.cancel()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            lastFinishedURL = lastLoadedURL
+            isPreviewLoadInFlight = false
+            previewLoadRetryCount = 0
             let width = webView.bounds.width > 100 ? webView.bounds.width : (webView.superview?.bounds.width ?? UIScreen.main.bounds.width)
             applyPreviewChromeIfNeeded(webView: webView, width: width)
             applyQuickEditIfNeeded(webView: webView)
@@ -647,7 +745,18 @@ struct WebViewRepresentable: UIViewRepresentable {
             // Always re-apply in-memory style maps after navigation (Edit on or off).
             DispatchQueue.main.async { [weak self] in
                 self?.bridge?.reapplyCachedStyleMaps()
+                self?.flushHeldPreviewColorPatch()
             }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            isPreviewLoadInFlight = false
+            retryPreviewLoadIfNeeded(webView)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            isPreviewLoadInFlight = false
+            retryPreviewLoadIfNeeded(webView)
         }
 
         func applyQuickEditIfNeeded(webView: WKWebView) {

@@ -698,10 +698,15 @@ struct DesignView: View {
             }
         }
         var q = components.queryItems ?? []
-        q.removeAll { $0.name == "_cb" || $0.name == "bk_template_preview" }
+        q.removeAll { $0.name == "_cb" || $0.name == "bk_template_preview" || $0.name == "bk_web_theme" }
         q.append(URLQueryItem(name: "_cb", value: String(viewModel.webPreviewReloadToken)))
         // Keep structural template controls visible in the in-app editor even when their public page is disabled.
         q.append(URLQueryItem(name: "bk_template_preview", value: "1"))
+        let themeId = viewModel.webThemeId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !themeId.isEmpty {
+            // In-app preview must not wait on publicSites projection — render this theme immediately.
+            q.append(URLQueryItem(name: "bk_web_theme", value: themeId))
+        }
         components.queryItems = q
         return components.url
     }
@@ -781,6 +786,7 @@ struct DesignView: View {
             quickEditEnabled: isQuickEditEnabled && viewModel.hasTenant && !authViewModel.isDemoMode,
             pageBackgroundHex: viewModel.backgroundColorHex,
             heroImageUrl: viewModel.heroImageUrl,
+            previewTenantOverride: viewModel.previewTenantOverrideJSON(),
             bridge: quickEditBridge,
             onQuickEdit: { event in
                 switch event {
@@ -1004,17 +1010,21 @@ struct DesignView: View {
             }
         }
         .onChange(of: viewModel.webSurfaceColors) { _, surfaces in
+            guard !viewModel.isApplyingWebTheme else { return }
             // Push into the WebView (including `[:]`) so palette resets clear `__bkNativeSurfaceColors`.
             quickEditBridge.applySurfaceColors(surfaces)
         }
         .onChange(of: viewModel.webButtonColors) { _, buttons in
+            guard !viewModel.isApplyingWebTheme else { return }
             quickEditBridge.applyButtonColors(buttons)
         }
         .onChange(of: viewModel.webTextColors) { _, texts in
+            guard !viewModel.isApplyingWebTheme else { return }
             // Always push (including `[:]`) so palette resets clear per-field text paints.
             quickEditBridge.applyFieldColors(texts)
         }
         .onChange(of: viewModel.webTextFontSizes) { _, sizes in
+            guard !viewModel.isApplyingWebTheme else { return }
             quickEditBridge.applyFontSizes(sizes.compactMapValues { Int($0) })
         }
         .onAppear {
@@ -1025,7 +1035,19 @@ struct DesignView: View {
                 textFontSizes: viewModel.webTextFontSizes
             )
         }
+        .onChange(of: viewModel.webPreviewReloadToken) { _, _ in
+            guard viewModel.consumeHoldPreviewColorPatchOnReload() else { return }
+            quickEditBridge.syncStyleMapsFromViewModel(
+                buttons: viewModel.webButtonColors,
+                surfaces: viewModel.webSurfaceColors,
+                textColors: viewModel.webTextColors,
+                textFontSizes: viewModel.webTextFontSizes
+            )
+            // Hold until WKWebView finishes the new URL so we do not paint the outgoing template.
+            quickEditBridge.holdPreviewColorPatchUntilLoad(viewModel.previewColorPatchPayload())
+        }
         .onChange(of: viewModel.webPreviewColorPatchToken) { _, _ in
+            guard !viewModel.isApplyingWebTheme else { return }
             quickEditBridge.syncStyleMapsFromViewModel(
                 buttons: viewModel.webButtonColors,
                 surfaces: viewModel.webSurfaceColors,
@@ -1316,7 +1338,7 @@ struct DesignView: View {
                 TemplateFamilyCard(
                     family: .classic,
                     isActive: true,
-                    isBusy: viewModel.isLoading
+                    isBusy: viewModel.isDesignChromeBusy
                 ) {
                     Task { await viewModel.applyWebTheme(.charterV1) }
                 }
@@ -1325,7 +1347,7 @@ struct DesignView: View {
                     TemplateFamilyCard(
                         family: family,
                         isActive: activeTemplateFamily == family,
-                        isBusy: viewModel.isLoading
+                        isBusy: viewModel.isDesignChromeBusy
                     ) {
                         let theme = WebTheme.theme(for: family, industry: viewModel.industry)
                         Task { await viewModel.applyWebTheme(theme) }
@@ -4176,7 +4198,7 @@ private struct DesignThemePickerBar: View {
             DesignPickerPill(
                 title: paletteName,
                 isPresented: $isColorPickerPresented,
-                isDisabled: viewModel.isLoading
+                isDisabled: viewModel.isDesignChromeBusy
             ) {
                 Circle()
                     .fill(Color(hex: accentHex))
@@ -4201,7 +4223,7 @@ private struct DesignThemePickerBar: View {
                 DesignPickerPill(
                     title: templateFamily.displayName,
                     isPresented: $isTemplatePickerPresented,
-                    isDisabled: viewModel.isLoading
+                    isDisabled: viewModel.isDesignChromeBusy
                 ) {
                     Image(systemName: templateFamily.icon)
                         .font(.caption.weight(.semibold))
@@ -4321,12 +4343,15 @@ private struct DesignTemplatePickerPopover: View {
                         DesignThemeTemplatePickerCell(
                             family: family,
                             isActive: activeFamily == family,
-                            isBusy: viewModel.isLoading
+                            isBusy: viewModel.isDesignChromeBusy
                         ) {
                             let theme = WebTheme.theme(for: family, industry: industry)
+                            // Close the popover first so WKWebView layout does not cancel the preview load.
+                            onDismiss()
                             Task {
+                                await Task.yield()
+                                try? await Task.sleep(nanoseconds: 80_000_000)
                                 await viewModel.applyWebTheme(theme)
-                                onDismiss()
                             }
                         }
                     }
@@ -4392,7 +4417,7 @@ private struct DesignColorPalettePickerSection: View {
                             palette: item.palette,
                             toneSubtitle: item.toneSubtitle,
                             isActive: isActive(item.palette),
-                            isBusy: viewModel.isLoading
+                            isBusy: viewModel.isDesignChromeBusy
                         ) {
                             Task {
                                 await viewModel.applyWebColorPalette(item.palette)
@@ -4404,7 +4429,7 @@ private struct DesignColorPalettePickerSection: View {
                             palette: item.palette,
                             toneSubtitle: item.toneSubtitle,
                             isActive: isActive(item.palette),
-                            isBusy: viewModel.isLoading
+                            isBusy: viewModel.isDesignChromeBusy
                         ) {
                             Task {
                                 await viewModel.applyWebColorPalette(item.palette)
@@ -4419,7 +4444,7 @@ private struct DesignColorPalettePickerSection: View {
                 WebColorAccentChipSection(
                     accents: WebColorPalettes.accentOptions(for: family),
                     activePrimaryHex: viewModel.primaryColorHex,
-                    isBusy: viewModel.isLoading
+                    isBusy: viewModel.isDesignChromeBusy
                 ) { accent in
                     Task {
                         await viewModel.applyWebColorAccent(accent)

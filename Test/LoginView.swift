@@ -1,10 +1,11 @@
 //
 //  LoginView.swift
 //
-//  Business sign-in; new accounts open the marketing sign-up wizard in Safari.
+//  Business sign-in; new accounts open the marketing sign-up wizard in an in-app sheet.
 //
 
 import SwiftUI
+import SafariServices
 import UIKit
 
 struct LoginView: View {
@@ -14,6 +15,7 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var isPasswordVisible = false
+    @State private var safariURL: URL? = nil
 
     var body: some View {
         NavigationStack {
@@ -30,6 +32,10 @@ struct LoginView: View {
                 Spacer()
             }
             .appScreenBackground()
+            .sheet(item: $safariURL) { url in
+                SafariView(url: url)
+                    .ignoresSafeArea()
+            }
         }
     }
 
@@ -39,9 +45,6 @@ struct LoginView: View {
                 .font(AppDesign.screenHeaderFont(size: 28))
                 .tracking(AppDesign.screenHeaderTracking(forSize: 28))
                 .foregroundStyle(AppDesign.textPrimary)
-            Text("Use your account to manage bookings")
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
@@ -51,6 +54,8 @@ struct LoginView: View {
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .onChange(of: email) { email = email.filter { !$0.isWhitespace } }
                     .padding(12)
                     .background(AppDesign.searchBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -67,8 +72,10 @@ struct LoginView: View {
                 HStack {
                     if isPasswordVisible {
                         TextField("Password", text: $password)
+                            .onChange(of: password) { password = password.filter { !$0.isWhitespace } }
                     } else {
                         SecureField("Password", text: $password)
+                            .onChange(of: password) { password = password.filter { !$0.isWhitespace } }
                     }
                     Button(action: { isPasswordVisible.toggle() }) {
                         Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
@@ -132,12 +139,12 @@ struct LoginView: View {
 
     private func openMarketingSignUp() {
         guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
-        UIApplication.shared.open(url)
+        safariURL = url
     }
 
     private func openMarketingForgotPassword() {
         guard let url = Constants.Hosting.marketingForgotPasswordURL(email: email) else { return }
-        UIApplication.shared.open(url)
+        safariURL = url
     }
 
     private func performSignIn() {
@@ -154,4 +161,24 @@ struct LoginView: View {
             }
         }
     }
+}
+
+// MARK: - In-app browser sheet
+
+/// Wraps SFSafariViewController for use in a SwiftUI sheet.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.preferredControlTintColor = UIColor(AppDesign.textPrimary)
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+/// Makes URL usable as a sheet item identifier.
+extension URL: @retroactive Identifiable {
+    public var id: String { absoluteString }
 }

@@ -195,6 +195,11 @@ body > nav > .nav-links {
   body > nav .nav-menu-btn {
     display: inline-flex;
   }
+  body > nav .nav-cta--desktop,
+  body > nav .nav-auth-signup,
+  body > nav .nav-account-wrap {
+    display: none !important;
+  }
 }
 
 .nav-menu-btn {
@@ -359,6 +364,17 @@ body > nav > .nav-links {
 }
 
 .nav-auth-hidden {
+  display: none !important;
+}
+
+/* Signup / auth flows: no redundant Log in or Sign up in the header */
+body.auth-portal > nav .nav-auth-login,
+body.auth-portal > nav .nav-auth-signup {
+  display: none !important;
+}
+
+body.auth-portal .nav-auth-login-item,
+body.auth-portal .nav-auth-signup-item {
   display: none !important;
 }
 

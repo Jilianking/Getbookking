@@ -18,7 +18,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <meta name="billing-copy" content="sms-billing-assign-v3" />
   <link rel="stylesheet" href="assets/account.css?v=5" />
-  <link rel="stylesheet" href="assets/billing.css?v=6" />
+  <link rel="stylesheet" href="assets/billing.css?v=11" />
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -42,6 +42,53 @@
     </div>
 
     <div id="billingContent" class="hidden">
+      <section class="bill-section hidden" id="initialCheckoutSection">
+        <div class="bill-card bill-initial-checkout" id="initialCheckoutBlock">
+          <span class="bill-billing-start-label" id="billingStartLegend">When to start billing</span>
+          <div class="bill-billing-start-shell">
+            <div
+              class="bill-billing-start-desktop"
+              id="billingStartDesktop"
+              role="radiogroup"
+              aria-labelledby="billingStartLegend"
+              aria-describedby="initialCheckoutNote"
+            >
+              <label class="bill-billing-start-radio">
+                <input type="radio" name="billingStartChoice" value="today" checked />
+                <span class="bill-billing-start-radio-body">
+                  <span class="bill-billing-start-radio-title">Start today</span>
+                  <span class="bill-billing-start-radio-sub">Unlock client texting and payments now · charged today</span>
+                </span>
+              </label>
+              <label class="bill-billing-start-radio">
+                <input type="radio" name="billingStartChoice" value="trial_end" />
+                <span class="bill-billing-start-radio-body">
+                  <span class="bill-billing-start-radio-title">Pay at trial end</span>
+                  <span class="bill-billing-start-radio-sub" id="billingStartRadioTrialSub">Card on file · first charge at trial end</span>
+                </span>
+              </label>
+            </div>
+            <div class="bill-billing-start-mobile">
+              <select class="bill-billing-start-select" id="billingStartSelect" aria-describedby="initialCheckoutNote">
+                <option value="today" selected>Start today — unlock client texting and payments now</option>
+                <option value="trial_end" id="billingStartTrialEndOption">Pay at trial end</option>
+              </select>
+            </div>
+            <button type="button" class="btn-upgrade bill-initial-checkout-continue" id="initialCheckoutContinueBtn">
+              Continue to payment
+            </button>
+          </div>
+          <p class="bill-note" id="initialCheckoutNote" style="margin-top:12px;"></p>
+          <div class="bill-checkout-embedded-panel hidden" id="initialCheckoutPaymentPanel">
+            <div class="bill-checkout-embedded-label">Payment details <span>(secured by Stripe)</span></div>
+            <div class="bill-checkout-embedded-wrap" id="billingCheckoutEmbedded" aria-live="polite"></div>
+          </div>
+        </div>
+        <p class="bill-success hidden" id="initialCheckoutSuccess" style="margin-top:14px;font-size:14px;color:var(--text-secondary);line-height:1.5;">
+          Payment method saved. Return to the Get Bookking app to use client texting and payments.
+        </p>
+      </section>
+
       <section class="bill-section">
         <div class="bill-section-label">Current plan</div>
         <div class="bill-card">
@@ -284,6 +331,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js"></script>
+  <script src="https://js.stripe.com/v3/"></script>
   <script>
     firebase.initializeApp(firebaseConfig);
     var auth = firebase.auth();
@@ -291,6 +339,11 @@
     var billingData = null;
     var planLabelCache = 'Solo';
     var connectStatus = null;
+    var billingEmbeddedCheckout = null;
+    var billingEmbeddedLoading = false;
+    var billingEmbeddedBillingStart = null;
+    var billingEmbeddedMountToken = 0;
+    var billingEmbeddedPaymentOpen = false;
 
     var params = new URLSearchParams(window.location.search);
     var billingParam = params.get('billing');
@@ -443,7 +496,7 @@
       });
     }
 
-    function completeResubscribeAfterReturn(sessionId) {
+    function completeCheckoutAfterReturn(sessionId) {
       var errEl = document.getElementById('billingError');
       var loadingEl = document.getElementById('billingLoading');
       var contentEl = document.getElementById('billingContent');
@@ -451,20 +504,245 @@
       loadingEl.classList.remove('hidden');
       contentEl.classList.add('hidden');
       loadingEl.querySelector('p').textContent = 'Confirming your subscription…';
-      return fns.httpsCallable('completeResubscribeCheckout')({
-        sessionId: sessionId
-      }).then(function() {
+      function finishSuccess(kind) {
         history.replaceState({}, '', 'billing.html');
         loadingEl.querySelector('p').textContent = 'Loading billing…';
-        document.getElementById('resubscribeSuccess').classList.remove('hidden');
+        document.getElementById('resubscribeSuccess').classList.add('hidden');
+        document.getElementById('initialCheckoutSuccess').classList.add('hidden');
+        document.getElementById('startSubSuccess').classList.add('hidden');
+        if (kind === 'resubscribe') {
+          document.getElementById('resubscribeSuccess').classList.remove('hidden');
+        } else if (kind === 'initial_active') {
+          document.getElementById('startSubSuccess').classList.remove('hidden');
+        } else {
+          document.getElementById('initialCheckoutSuccess').classList.remove('hidden');
+        }
         return loadBilling();
-      }).catch(function(err) {
-        history.replaceState({}, '', 'billing.html');
-        loadingEl.querySelector('p').textContent = 'Loading billing…';
-        errEl.textContent = (err && err.message) ? err.message : String(err);
-        errEl.classList.remove('hidden');
-        return loadBilling();
+      }
+      return fns
+        .httpsCallable('completeInitialSubscriptionCheckout')({ sessionId: sessionId })
+        .then(function(res) {
+          var status = res.data && res.data.subscriptionStatus;
+          return finishSuccess(status === 'active' ? 'initial_active' : 'initial');
+        })
+        .catch(function(err) {
+          var code = err && err.code;
+          var tryResubscribe =
+            code === 'functions/failed-precondition' ||
+            code === 'failed-precondition';
+          if (!tryResubscribe) throw err;
+          return fns
+            .httpsCallable('completeResubscribeCheckout')({ sessionId: sessionId })
+            .then(function() {
+              return finishSuccess('resubscribe');
+            });
+        })
+        .catch(function(err) {
+          history.replaceState({}, '', 'billing.html');
+          loadingEl.querySelector('p').textContent = 'Loading billing…';
+          errEl.textContent = (err && err.message) ? err.message : String(err);
+          errEl.classList.remove('hidden');
+          return loadBilling();
+        });
+    }
+
+    function teardownBillingEmbeddedCheckout() {
+      billingEmbeddedMountToken += 1;
+      billingEmbeddedLoading = false;
+      billingEmbeddedBillingStart = null;
+      try {
+        if (billingEmbeddedCheckout && typeof billingEmbeddedCheckout.destroy === 'function') {
+          billingEmbeddedCheckout.destroy();
+        }
+      } catch (x) {
+        console.warn('teardownBillingEmbeddedCheckout', x);
+      }
+      billingEmbeddedCheckout = null;
+      var mount = document.getElementById('billingCheckoutEmbedded');
+      if (mount) mount.innerHTML = '';
+    }
+
+    function resetInitialCheckoutPaymentStep() {
+      billingEmbeddedPaymentOpen = false;
+      teardownBillingEmbeddedCheckout();
+      var panel = document.getElementById('initialCheckoutPaymentPanel');
+      var btn = document.getElementById('initialCheckoutContinueBtn');
+      if (panel) panel.classList.add('hidden');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+      }
+    }
+
+    function openInitialCheckoutPaymentPanel() {
+      billingEmbeddedPaymentOpen = true;
+      var panel = document.getElementById('initialCheckoutPaymentPanel');
+      if (panel) panel.classList.remove('hidden');
+    }
+
+    function selectedInitialBillingStart() {
+      var selectEl = document.getElementById('billingStartSelect');
+      return selectEl && selectEl.value === 'trial_end' ? 'trial_end' : 'today';
+    }
+
+    function syncInitialBillingStartControls(from) {
+      var selectEl = document.getElementById('billingStartSelect');
+      var radios = document.querySelectorAll('input[name="billingStartChoice"]');
+      if (!selectEl || !radios.length) return;
+      var val = 'today';
+      if (from === 'select') {
+        val = selectEl.value === 'trial_end' ? 'trial_end' : 'today';
+      } else if (from === 'radio') {
+        radios.forEach(function(r) {
+          if (r.checked) val = r.value === 'trial_end' ? 'trial_end' : 'today';
+        });
+      } else {
+        val = selectedInitialBillingStart();
+      }
+      selectEl.value = val;
+      radios.forEach(function(r) {
+        r.checked = r.value === val;
       });
+    }
+
+    function updateInitialCheckoutCopy(d) {
+      var noteEl = document.getElementById('initialCheckoutNote');
+      var trialOpt = document.getElementById('billingStartTrialEndOption');
+      var trialRadioSub = document.getElementById('billingStartRadioTrialSub');
+      var selectEl = document.getElementById('billingStartSelect');
+      if (!noteEl || !selectEl) return;
+      var cents = d.listPriceCents;
+      var priceText = cents != null ? formatMoney(cents, 'usd') + ' / month' : 'your plan price';
+      var trialEnd = d.trialEndUnix ? formatBillingDate(d.trialEndUnix) : 'trial end';
+      var trialMobileLabel = 'Pay at trial end (' + trialEnd + ')';
+      var trialRadioLabel = 'Card on file · first charge ' + trialEnd;
+      if (trialOpt) trialOpt.textContent = trialMobileLabel;
+      if (trialRadioSub) trialRadioSub.textContent = trialRadioLabel;
+      function refreshNote() {
+        syncInitialBillingStartControls();
+        if (selectedInitialBillingStart() === 'trial_end') {
+          noteEl.textContent =
+            'You will not be charged until ' +
+            trialEnd +
+            '. Client texting unlocks when billing starts unless you start today.';
+        } else {
+          noteEl.textContent =
+            'Your card will be charged ' +
+            priceText +
+            ' today (less any coupon). Client texting and payments unlock right away.';
+        }
+        if (billingEmbeddedPaymentOpen) {
+          void mountBillingEmbeddedCheckout(true);
+        }
+      }
+      refreshNote();
+      if (!selectEl.dataset.bound) {
+        selectEl.dataset.bound = '1';
+        selectEl.addEventListener('change', function() {
+          syncInitialBillingStartControls('select');
+          refreshNote();
+        });
+        document.querySelectorAll('input[name="billingStartChoice"]').forEach(function(radio) {
+          radio.addEventListener('change', function() {
+            syncInitialBillingStartControls('radio');
+            refreshNote();
+          });
+        });
+      }
+    }
+
+    async function mountBillingEmbeddedCheckout(forceRemount) {
+      var errEl = document.getElementById('billingError');
+      var mountEl = document.getElementById('billingCheckoutEmbedded');
+      var section = document.getElementById('initialCheckoutSection');
+      var continueBtn = document.getElementById('initialCheckoutContinueBtn');
+      if (!mountEl || !section || section.classList.contains('hidden')) return;
+      if (!billingEmbeddedPaymentOpen) return;
+      if (billingEmbeddedLoading) return;
+
+      var billingStart = selectedInitialBillingStart();
+      if (!forceRemount && billingEmbeddedCheckout && billingEmbeddedBillingStart === billingStart) return;
+
+      teardownBillingEmbeddedCheckout();
+      billingEmbeddedBillingStart = billingStart;
+      billingEmbeddedLoading = true;
+      var mountToken = billingEmbeddedMountToken;
+      errEl.classList.add('hidden');
+      if (continueBtn) {
+        continueBtn.disabled = true;
+        continueBtn.textContent = 'Loading…';
+      }
+      mountEl.innerHTML =
+        '<div class="bill-checkout-embedded-loading"><span class="spinner"></span>Loading secure checkout…</div>';
+
+      try {
+        var res = await fns.httpsCallable('createInitialSubscriptionCheckout')({
+          marketingOrigin: window.location.origin,
+          billingStart: billingStart,
+          uiMode: 'embedded',
+        });
+        if (mountToken !== billingEmbeddedMountToken) return;
+
+        var clientSecret = res.data && res.data.clientSecret;
+        if (!clientSecret) {
+          throw new Error('Stripe did not return a checkout session.');
+        }
+        var pk =
+          (res.data && res.data.publishableKey && String(res.data.publishableKey).trim()) ||
+          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
+        if (!pk) {
+          throw new Error('Stripe publishable key is missing.');
+        }
+        if (typeof Stripe !== 'function') {
+          throw new Error('Stripe.js did not load.');
+        }
+        var stripe = Stripe(pk);
+        var opts = {
+          fetchClientSecret: function() {
+            return Promise.resolve(clientSecret);
+          },
+        };
+        var embedded;
+        if (typeof stripe.initEmbeddedCheckout === 'function') {
+          embedded = await stripe.initEmbeddedCheckout(opts);
+        } else if (typeof stripe.createEmbeddedCheckoutPage === 'function') {
+          embedded = await stripe.createEmbeddedCheckoutPage(opts);
+        } else {
+          throw new Error('This version of Stripe.js does not support embedded Checkout.');
+        }
+        if (mountToken !== billingEmbeddedMountToken) {
+          if (embedded && typeof embedded.destroy === 'function') embedded.destroy();
+          return;
+        }
+        mountEl.innerHTML = '';
+        embedded.mount('#billingCheckoutEmbedded');
+        billingEmbeddedCheckout = embedded;
+        if (continueBtn) {
+          continueBtn.textContent = 'Continue to payment';
+          continueBtn.disabled = true;
+        }
+      } catch (err) {
+        console.error('mountBillingEmbeddedCheckout', err);
+        if (mountToken === billingEmbeddedMountToken) {
+          errEl.textContent = formatFirebaseHttpsError(err);
+          errEl.classList.remove('hidden');
+          mountEl.innerHTML = '';
+          billingEmbeddedBillingStart = null;
+          if (continueBtn) {
+            continueBtn.disabled = false;
+            continueBtn.textContent = 'Continue to payment';
+          }
+        }
+      } finally {
+        billingEmbeddedLoading = false;
+      }
+    }
+
+    function onInitialCheckoutContinueClick() {
+      var errEl = document.getElementById('billingError');
+      errEl.classList.add('hidden');
+      openInitialCheckoutPaymentPanel();
+      void mountBillingEmbeddedCheckout(true);
     }
 
     function renderBilling(d, user) {
@@ -482,8 +760,14 @@
       var badge = document.getElementById('planStatusBadge');
       var status = sub ? sub.status : 'free';
       if (!d.hasStripeCustomer) {
-        badge.textContent = 'Free';
-        badge.classList.remove('is-active');
+        var fsStatus = (d.firestoreSubscriptionStatus || 'trialing').toString();
+        if (d.needsInitialCheckout && fsStatus === 'trialing') {
+          badge.textContent = 'Trial';
+          badge.classList.add('is-active');
+        } else {
+          badge.textContent = 'Free';
+          badge.classList.remove('is-active');
+        }
       } else if (status === 'active') {
         badge.textContent = 'Active';
         badge.classList.add('is-active');
@@ -504,7 +788,22 @@
       var renewalRow = document.getElementById('planRenewalRow');
       var renewalLabel = document.getElementById('planRenewalLabel');
       var renewalEl = document.getElementById('planRenewal');
-      if (sub && sub.currentPeriodEnd) {
+      var initialSection = document.getElementById('initialCheckoutSection');
+      if (initialSection) initialSection.classList.add('hidden');
+      resetInitialCheckoutPaymentStep();
+      if (!d.hasStripeCustomer && d.needsInitialCheckout && d.trialEndUnix) {
+        renewalLabel.textContent = 'Trial ends';
+        renewalEl.textContent = formatBillingDate(d.trialEndUnix);
+        renewalRow.classList.remove('hidden');
+        if (d.listPriceCents != null) {
+          priceEl.textContent = formatMoney(d.listPriceCents, 'usd') + ' / month';
+          priceEl.classList.remove('hidden');
+        }
+        if (initialSection && !(d.subscriptionPaymentBypass === true)) {
+          initialSection.classList.remove('hidden');
+          updateInitialCheckoutCopy(d);
+        }
+      } else if (sub && sub.currentPeriodEnd) {
         if (sub.cancelAtPeriodEnd) {
           renewalLabel.textContent = 'Ends';
         } else if (sub.status === 'trialing') {
@@ -536,6 +835,7 @@
       cancelPendingNote.classList.add('hidden');
       document.getElementById('startSubSuccess').classList.add('hidden');
       document.getElementById('resubscribeSuccess').classList.add('hidden');
+      document.getElementById('initialCheckoutSuccess').classList.add('hidden');
 
       if (d.hasStripeCustomer && sub && sub.status === 'trialing') {
         // Always offer end-trial so owners can unlock client texting (coupon may make charge $0).
@@ -870,9 +1170,6 @@
           linesNote.textContent =
             'This plan includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
         }
-        note.textContent =
-          'This plan includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
-        note.classList.remove('hidden');
         return;
       }
       if (paidRow) paidRow.classList.remove('hidden');
@@ -1395,6 +1692,7 @@
     document.getElementById('changePlanBtn').addEventListener('click', openBillingPortal);
     document.getElementById('changePaymentBtn').addEventListener('click', openBillingPortal);
     document.getElementById('updateEmailBtn').addEventListener('click', openBillingPortal);
+    document.getElementById('initialCheckoutContinueBtn').addEventListener('click', onInitialCheckoutContinueClick);
     document.getElementById('resubscribeBtn').addEventListener('click', openResubscribeCheckout);
     document.getElementById('keepSubscriptionBtn').addEventListener('click', openBillingPortal);
     document.getElementById('cancelSubBtn').addEventListener('click', openCancelModal);
@@ -1432,7 +1730,7 @@
         return;
       }
       if (checkoutParam === 'success' && checkoutSessionId) {
-        completeResubscribeAfterReturn(checkoutSessionId);
+        completeCheckoutAfterReturn(checkoutSessionId);
         return;
       }
       if (checkoutParam === 'canceled') {

@@ -392,7 +392,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 )
             }
             shouldSyncBillingAfterWeb = true
-            await UIApplication.shared.open(url)
+            await InAppSafari.open(url, context: .billing)
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
@@ -444,7 +444,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await UIApplication.shared.open(url)
+        await InAppSafari.open(url, context: .billing)
     }
 
     /// Opens marketing billing Client texting section to purchase an extra number.
@@ -455,7 +455,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingMessagingURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await UIApplication.shared.open(url)
+        await InAppSafari.open(url, context: .billing)
     }
 
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {

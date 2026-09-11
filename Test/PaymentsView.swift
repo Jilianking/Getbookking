@@ -102,6 +102,9 @@ struct PaymentsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await viewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .inAppSafariBillingDismissed)) { _ in
+                Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }
+            }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 Task { await viewModel.refresh(isDemoMode: authViewModel.isDemoMode) }

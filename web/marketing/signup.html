@@ -55,7 +55,11 @@
       --brand-wordmark-tracking: 0.22em;
     }
 
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+      overflow-x: hidden;
+      max-width: 100%;
+    }
 
     body {
       font-family: 'DM Sans', sans-serif;
@@ -67,6 +71,8 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow-x: hidden;
+      max-width: 100%;
     }
 
     /* ── NAV (matches marketing home) ── */
@@ -178,11 +184,17 @@
       align-items: center;
       justify-content: center;
       padding: 40px 24px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: clip;
     }
 
     .signup-card {
       width: 100%;
       max-width: 480px;
+      min-width: 0;
+      overflow-x: clip;
       background: #fff;
       border-radius: 16px;
       border: 1px solid var(--border);
@@ -203,6 +215,10 @@
       color: var(--brand-warm);
     }
 
+    .signup-card:has(#stepSuccess.active) .signup-step-label {
+      display: none;
+    }
+
     .signup-card h2 {
       font-family: 'Instrument Serif', serif;
       font-size: clamp(32px, 5vw, 44px);
@@ -218,6 +234,12 @@
       color: var(--text-secondary);
       line-height: 1.7;
       margin-bottom: 32px;
+    }
+
+    .signup-card .subtitle a {
+      color: var(--brand-warm);
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
 
     /* ── FORM ELEMENTS ── */
@@ -524,16 +546,30 @@
       font-size: 13px;
       color: var(--text-secondary);
       line-height: 1.55;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .checkout-bullets li { margin-bottom: 8px; }
     .checkout-bullets li:last-child { margin-bottom: 0; }
+
+    .checkout-bullets a {
+      color: var(--brand-warm);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
 
     .checkout-stripe-note {
       font-size: 12px;
       color: var(--text-tertiary);
       margin: -8px 0 16px;
       line-height: 1.45;
+    }
+
+    .checkout-stripe-note a {
+      color: var(--brand-warm);
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
 
     .checkout-checkbox-label {
@@ -545,6 +581,8 @@
       line-height: 1.45;
       cursor: pointer;
       margin-bottom: 12px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .checkout-checkbox-label input {
@@ -679,6 +717,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
       padding: 16px 18px;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -690,7 +730,13 @@
     .plan-pick:hover { border-color: var(--brand-muted); background: var(--brand-offwhite); }
     .plan-pick.selected { border-color: var(--brand-warm); background: #FAF5ED; }
 
-    .plan-pick-left { display: flex; flex-direction: column; gap: 2px; }
+    .plan-pick-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
     .plan-pick-name { font-size: 15px; font-weight: 500; }
     .plan-pick-desc { font-size: 12px; color: var(--text-tertiary); }
     .plan-pick-price { font-family: 'Instrument Serif', serif; font-size: 22px; }
@@ -701,9 +747,12 @@
       flex-wrap: wrap;
       gap: 12px;
       margin-top: 8px;
+      width: 100%;
+      min-width: 0;
     }
 
     .btn-back {
+      flex: 0 0 auto;
       padding: 13px 24px;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -718,7 +767,8 @@
     .btn-back:hover { border-color: var(--brand-dark); }
 
     .btn-next {
-      flex: 1;
+      flex: 1 1 0;
+      min-width: 0;
       padding: 14px 32px;
       border: none;
       border-radius: 8px;
@@ -735,7 +785,12 @@
     .btn-next:disabled { opacity: 0.4; cursor: default; }
 
     /* ── STEP VISIBILITY ── */
-    .step-panel { display: none; }
+    .step-panel {
+      display: none;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: clip;
+    }
     .step-panel.active { display: block; }
 
     /* ── ERROR / LOADING ── */
@@ -1007,11 +1062,14 @@
       .choice-grid { grid-template-columns: 1fr; }
       .tpl-pick-grid { grid-template-columns: 1fr; }
       .city-state-row { grid-template-columns: 1fr; }
+      .btn-row { flex-direction: column; }
+      .btn-back,
+      .btn-next { width: 100%; flex: 1 1 auto; }
     }
   </style>
-  <link rel="stylesheet" href="assets/nav.css?v=22" />
+  <link rel="stylesheet" href="assets/nav.css?v=24" />
 </head>
-<body>
+<body class="auth-portal">
   <!-- Google Tag Manager (noscript) -->
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -1219,7 +1277,7 @@
       <!-- STEP 3 — Plan & pay -->
       <div class="step-panel" id="step3">
         <h2 id="step3Title">Choose your plan</h2>
-        <p class="subtitle" id="step3Subtitle">14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.</p>
+        <p class="subtitle" id="step3Subtitle">14-day free trial — no card required.</p>
         <div class="charter-plan-lock" id="charterPlanLock">
           <div>
             <div class="charter-plan-lock-name">Charter</div>
@@ -1251,19 +1309,13 @@
           </div>
         </div>
         <div class="checkout-summary" id="checkoutSummary">
-          <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — then <strong id="checkoutPlanPrice">$39</strong>/month after your trial ends.</div>
+          <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — <strong id="checkoutPlanPrice">$39</strong>/month when you start billing.</div>
           <ul class="checkout-bullets">
-            <li><strong>No charge today</strong> for the subscription price. Your card is kept on file with Stripe; the first plan charge happens when the 14-day trial ends unless you cancel first.</li>
-            <li>Your free trial includes the website builder. Client texting and payments unlock when your paid plan begins.</li>
-            <li>Cancel anytime before the trial ends from your account or billing portal to avoid the first subscription charge.</li>
-            <li>Billing is monthly in USD. Applicable taxes may be added at checkout or on your invoice where required.</li>
-            <li>Your bank statement may show <strong>GETBOOKKING</strong> or our payment processor’s name.</li>
+            <li><strong>No card required</strong> to create your account. Your 14-day trial starts today.</li>
+            <li>Your trial includes the website builder. Add a payment method on <a href="billing.html">Billing</a> to start your paid plan today or when the trial ends.</li>
+            <li>Client texting and payments unlock when your paid plan begins (or when you choose “Start plan today” on Billing).</li>
+            <li>Billing is monthly in USD. Payments are processed securely by Stripe when you add a card.</li>
           </ul>
-        </div>
-        <p class="checkout-stripe-note">Payments are processed securely by Stripe. Get Bookking does not store your full card number on our servers.</p>
-        <div class="checkout-embedded-wrap" id="checkoutEmbeddedWrap" aria-live="polite">
-          <div class="checkout-embedded-label">Payment details <span>(secured by Stripe)</span></div>
-          <div id="checkoutEmbedded"></div>
         </div>
         <p class="account-signin-email" id="accountSignInEmail" style="display:none">Account email: <strong id="accountSignInEmailValue"></strong></p>
         <label class="checkout-checkbox-label">
@@ -1274,6 +1326,7 @@
         <div class="error-msg" id="errorMsg"></div>
         <div class="btn-row">
           <button class="btn-back" onclick="goTo(2)">Back</button>
+          <button class="btn-next" type="button" id="btnCompleteSignup" disabled onclick="completeSignupFromStep3()">Create my account</button>
         </div>
       </div>
 
@@ -1284,12 +1337,13 @@
             <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <h2>You're all set!</h2>
-          <p id="signupSuccessAppCopy">Your booking site is live. When the iPhone app is available, sign in with this same email.</p>
+          <p id="signupSuccessAppCopy">Your booking site is now live. Download the Get Bookking app and sign in with the email and password you used to create this account.</p>
           <div class="success-stripe">
-            <p>Stripe payments are available on your paid plan. You’ll confirm the price before your card is charged.</p>
+            <p>Stripe Connect is for client deposits and Tap to Pay — set it up after your plan starts.</p>
             <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payments →</button>
             <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
           </div>
+          <a href="billing.html" class="success-site-link" style="margin-top:12px;display:inline-block;">Manage billing →</a>
           <a href="#" class="success-site-link" id="siteLink" target="_blank">Visit your booking site &rarr;</a>
         </div>
       </div>
@@ -1302,17 +1356,13 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js?v=2"></script>
-  <script src="https://js.stripe.com/v3/"></script>
 
   <script>
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const fns  = firebase.app().functions("us-central1");
 
-    /** Stripe Embedded Checkout instance; destroyed when leaving step 3. */
-    var embeddedCheckoutInst = null;
-    var embeddedCheckoutLoading = false;
-    var embeddedCheckoutLoadTimer = null;
+    var signupSubmitting = false;
 
     /** [abbr, name] — filled into #bizState on load */
     var US_STATES_LIST = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
@@ -1424,13 +1474,10 @@
         if (cityEl) cityEl.placeholder = 'e.g. St. Petersburg';
       }
       var title = document.getElementById('step3Title');
-      var sub = document.getElementById('step3Subtitle');
       if (isCharterPath()) {
         if (title) title.textContent = 'Charter · $24/mo';
-        if (sub) sub.textContent = '14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.';
       } else {
         if (title) title.textContent = 'Choose your plan';
-        if (sub) sub.textContent = '14-day trial, then monthly billing. Check the terms box and we’ll load secure payment on this page.';
       }
       var wrap = document.getElementById('industryCustomWrap');
       if (wrap) wrap.style.display = (!isCharterPath() && state.industry === 'custom') ? 'block' : 'none';
@@ -1446,36 +1493,6 @@
       var priceEl = document.getElementById('checkoutPlanPrice');
       if (nameEl) nameEl.textContent = info.name + ' plan';
       if (priceEl) priceEl.textContent = info.price;
-    }
-
-    function teardownEmbeddedCheckout() {
-      if (embeddedCheckoutLoadTimer) {
-        clearTimeout(embeddedCheckoutLoadTimer);
-        embeddedCheckoutLoadTimer = null;
-      }
-      embeddedCheckoutLoading = false;
-      try {
-        if (embeddedCheckoutInst && typeof embeddedCheckoutInst.destroy === 'function') {
-          embeddedCheckoutInst.destroy();
-        }
-      } catch (x) {
-        console.warn('teardownEmbeddedCheckout', x);
-      }
-      embeddedCheckoutInst = null;
-      var wrap = document.getElementById('checkoutEmbeddedWrap');
-      if (wrap) wrap.classList.remove('visible');
-      var mount = document.getElementById('checkoutEmbedded');
-      if (mount) mount.innerHTML = '';
-      validateAccountStep();
-    }
-
-    function scheduleEmbeddedCheckoutIfReady() {
-      if (currentStep !== 3) return;
-      if (embeddedCheckoutLoadTimer) clearTimeout(embeddedCheckoutLoadTimer);
-      embeddedCheckoutLoadTimer = setTimeout(function() {
-        embeddedCheckoutLoadTimer = null;
-        void tryMountEmbeddedCheckoutWhenReady();
-      }, 200);
     }
 
     /** Readable message from Firebase httpsCallable / HttpsError (avoids showing only "internal"). */
@@ -1501,9 +1518,6 @@
     /* ── Navigation ── */
     function goTo(step) {
       if (state.skipPathStep && step === 0) return;
-      if (currentStep === 3 && step !== 3) {
-        teardownEmbeddedCheckout();
-      }
       var prev = document.getElementById('step' + currentStep);
       if (prev) prev.classList.remove('active');
       currentStep = step;
@@ -1600,9 +1614,7 @@
         window.bkTrack('select_content', { content_type: 'plan', content_id: val });
       }
       refreshCheckoutSummary();
-      if (currentStep === 3) {
-        scheduleEmbeddedCheckoutIfReady();
-      }
+      if (currentStep === 3) validateAccountStep();
     }
 
     /** Title-case each whitespace-separated word (matches app `USStateServiceAreaFormatting.titleCaseWords` behavior). */
@@ -1698,35 +1710,59 @@
     }
 
     function validateAccountStep() {
-      scheduleEmbeddedCheckoutIfReady();
+      var agreeEl = document.getElementById('agreeTerms');
+      var agreeOk = agreeEl && agreeEl.checked;
+      var planOk = !!state.plan || isCharterPath();
+      var btn = document.getElementById('btnCompleteSignup');
+      if (btn) btn.disabled = signupSubmitting || !(agreeOk && planOk);
     }
 
-    /**
-     * When step 3 is active and plan + password + terms are satisfied, creates/signs in the user
-     * and mounts Stripe Embedded Checkout (no separate payment button).
-     */
-    async function tryMountEmbeddedCheckoutWhenReady() {
-      if (currentStep !== 3) return;
-      if (embeddedCheckoutInst || embeddedCheckoutLoading) return;
+    function buildSignupProvisionPayload() {
+      var industryCustomLabel = '';
+      if (state.industry === 'custom') {
+        industryCustomLabel = document.getElementById('industryCustom').value.trim();
+      }
+      var payload = {
+        teamSize: teamSizeFromPlan(state.plan),
+        industry: state.industry,
+        businessName: state.bizName,
+        city: state.bizCity,
+        stateAbbr: state.bizState,
+        phone: state.bizPhone,
+        templatePreset: state.templatePreset,
+        firstName: state.firstName,
+        lastName: state.lastName,
+        plan: state.plan,
+      };
+      if (state.industry === 'custom') {
+        payload.industryCustomLabel = industryCustomLabel;
+      }
+      if (state.betaInviteToken) {
+        payload.betaInviteToken = state.betaInviteToken;
+      }
+      return payload;
+    }
 
-      if (!state.plan) return;
-
+    async function completeSignupFromStep3() {
+      if (signupSubmitting || currentStep !== 3) return;
+      var errEl = document.getElementById('errorMsg');
+      var btn = document.getElementById('btnCompleteSignup');
       var pwVal = document.getElementById('password').value;
       var pw2Val = document.getElementById('passwordConfirm').value;
-      if (!passwordMeetsPolicy(pwVal) || pwVal !== pw2Val) return;
-
+      if (!passwordMeetsPolicy(pwVal) || pwVal !== pw2Val) {
+        errEl.textContent = 'Go back and confirm your password meets the requirements.';
+        errEl.style.display = 'block';
+        return;
+      }
       var agreeEl = document.getElementById('agreeTerms');
-      if (!agreeEl || !agreeEl.checked) return;
-
-      var errEl = document.getElementById('errorMsg');
-      var wrap = document.getElementById('checkoutEmbeddedWrap');
-      var mountEl = document.getElementById('checkoutEmbedded');
-
-      embeddedCheckoutLoading = true;
-      errEl.style.display = 'none';
-      if (wrap) wrap.classList.add('visible');
-      if (mountEl) {
-        mountEl.innerHTML = '<div class="checkout-embedded-loading"><span class="spinner"></span>Preparing secure checkout…</div>';
+      if (!agreeEl || !agreeEl.checked) {
+        validateAccountStep();
+        return;
+      }
+      if (!state.plan && !isCharterPath()) {
+        errEl.textContent = 'Choose a plan to continue.';
+        errEl.style.display = 'block';
+        return;
       }
 
       ['firstName', 'lastName', 'bizName', 'bizCity'].forEach(function(id) {
@@ -1737,36 +1773,35 @@
       validateBusinessStep();
 
       state.firstName = document.getElementById('firstName').value.trim();
-      state.lastName  = document.getElementById('lastName').value.trim();
-      state.email    = document.getElementById('email').value.trim();
+      state.lastName = document.getElementById('lastName').value.trim();
+      state.email = document.getElementById('email').value.trim();
       state.password = pwVal;
-      state.bizName  = document.getElementById('bizName').value.trim();
-      state.bizCity  = document.getElementById('bizCity').value.trim();
+      state.bizName = document.getElementById('bizName').value.trim();
+      state.bizCity = document.getElementById('bizCity').value.trim();
       state.bizState = document.getElementById('bizState').value;
       state.bizPhone = document.getElementById('bizPhone').value.trim();
 
-      var industryCustomLabel = '';
-      if (state.industry === 'custom') {
-        industryCustomLabel = document.getElementById('industryCustom').value.trim();
+      signupSubmitting = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Creating your account…';
       }
+      errEl.style.display = 'none';
 
       var displayName = (state.firstName + ' ' + state.lastName).trim();
 
       try {
-        var user;
         var signupEmail = (state.email || '').trim().toLowerCase();
         var signedIn = auth.currentUser;
         if (signedIn && signedIn.email && signedIn.email.toLowerCase() !== signupEmail) {
           await auth.signOut();
         }
+        var user;
         try {
           var cred = await auth.createUserWithEmailAndPassword(state.email, state.password);
           user = cred.user;
         } catch (regErr) {
           if (regErr && regErr.code === 'auth/email-already-in-use') {
-            embeddedCheckoutLoading = false;
-            if (mountEl) mountEl.innerHTML = '';
-            if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
             errEl.innerHTML =
               'This email already has an account. ' +
               '<a href="login.html" style="color:var(--brand-warm);">Log in</a> ' +
@@ -1780,82 +1815,24 @@
           await user.updateProfile({ displayName: displayName });
         }
 
-        var startCheckout = fns.httpsCallable('createProviderSubscriptionCheckout');
-        var marketingOrigin = window.location.origin;
-        var payload = {
-          marketingOrigin: marketingOrigin,
-          teamSize:       teamSizeFromPlan(state.plan),
-          industry:       state.industry,
-          businessName:   state.bizName,
-          city:           state.bizCity,
-          stateAbbr:      state.bizState,
-          phone:          state.bizPhone,
-          templatePreset: state.templatePreset,
-          firstName:      state.firstName,
-          lastName:       state.lastName,
-          plan:           state.plan,
-        };
-        if (state.industry === 'custom') {
-          payload.industryCustomLabel = industryCustomLabel;
-        }
-        if (state.betaInviteToken) {
-          payload.betaInviteToken = state.betaInviteToken;
-        }
-
-        var checkout = await startCheckout(payload);
-        var clientSecret = checkout.data && checkout.data.clientSecret;
-        if (!clientSecret) {
-          throw new Error('No checkout session from server. Configure Stripe subscription prices on the server.');
-        }
-        var pk =
-          (checkout.data && checkout.data.publishableKey && String(checkout.data.publishableKey).trim()) ||
-          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
-        if (!pk) {
-          throw new Error(
-            'Stripe publishable key is missing. Set window.stripePublishableKey in js/firebase-config.js, ' +
-            'or deploy the createProviderSubscriptionCheckout function with STRIPE_PUBLISHABLE_KEY set.'
-          );
-        }
-        if (typeof Stripe !== 'function') {
-          throw new Error('Stripe.js did not load.');
-        }
-        var stripe = Stripe(pk);
-        var opts = {
-          fetchClientSecret: function() {
-            return Promise.resolve(clientSecret);
-          },
-        };
-        var embedded;
-        if (typeof stripe.createEmbeddedCheckoutPage === 'function') {
-          embedded = await stripe.createEmbeddedCheckoutPage(opts);
-        } else if (typeof stripe.initEmbeddedCheckout === 'function') {
-          embedded = await stripe.initEmbeddedCheckout(opts);
-        } else {
-          throw new Error('This version of Stripe.js does not support embedded Checkout.');
-        }
-        if (mountEl) mountEl.innerHTML = '';
-        embedded.mount('#checkoutEmbedded');
-        embeddedCheckoutInst = embedded;
-        embeddedCheckoutLoading = false;
-        if (typeof window.bkTrackOnce === 'function') {
-          window.bkTrackOnce('begin_checkout', 'begin_checkout', {
-            currency: 'USD',
-            item_id: state.plan || undefined,
-            plan: state.plan || undefined,
-            industry: state.industry || undefined
-          });
-        }
-        if (wrap) {
-          wrap.classList.add('visible');
-          wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
+        var provision = fns.httpsCallable('completeProviderSignupWithoutCheckout');
+        var result = await provision(buildSignupProvisionPayload());
+        var slug = (result.data && result.data.slug) || '';
+        var completedPlan = (result.data && result.data.subscriptionPlan) || '';
+        if (PLAN_CHECKOUT_INFO[completedPlan]) state.plan = completedPlan;
+        document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
+        document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
+        showSuccess();
       } catch (e) {
-        console.error('embedded checkout', e);
-        embeddedCheckoutLoading = false;
-        if (mountEl) mountEl.innerHTML = '';
-        if (wrap && !embeddedCheckoutInst) wrap.classList.remove('visible');
+        console.error('completeSignupFromStep3', e);
         errEl.textContent = formatFirebaseHttpsError(e);
         errEl.style.display = 'block';
+      } finally {
+        signupSubmitting = false;
+        if (btn) {
+          btn.textContent = 'Create my account';
+          validateAccountStep();
+        }
       }
     }
 
@@ -1939,8 +1916,8 @@
       }
       var ind = document.getElementById('stepIndicator');
       if (ind) {
-        ind.textContent = 'Done!';
-        ind.classList.add('is-done');
+        ind.textContent = '';
+        ind.style.display = 'none';
       }
       document.getElementById('progressFill').style.width = '100%';
       bindStripeSetupButton();
@@ -2114,36 +2091,6 @@
       }
     }
 
-    function showCheckoutCanceledOnStep3() {
-      teardownEmbeddedCheckout();
-      currentStep = 3;
-      document.querySelectorAll('.step-panel').forEach(function(p) { p.classList.remove('active'); });
-      var s3 = document.getElementById('step3');
-      if (s3) s3.classList.add('active');
-      var ind = document.getElementById('stepIndicator');
-      if (ind) {
-        ind.textContent = 'Step ' + displayStepNumber(3) + ' of ' + stepCount();
-        ind.classList.remove('is-done');
-      }
-      var bar = document.getElementById('progressFill');
-      if (bar) bar.style.width = '100%';
-      var errEl = document.getElementById('errorMsg');
-      if (errEl) {
-        errEl.textContent = 'Checkout was canceled. Try again when you are ready.';
-        errEl.style.display = 'block';
-      }
-      var emInput = document.getElementById('email');
-      var signLine = document.getElementById('accountSignInEmail');
-      var signVal = document.getElementById('accountSignInEmailValue');
-      if (emInput && signLine && signVal) {
-        signVal.textContent = emInput.value.trim() || '—';
-        signLine.style.display = 'block';
-      }
-      refreshCheckoutSummary();
-      validateAccountStep();
-    }
-
-    /* Stripe return: success completes provisioning; cancel returns to step 3 */
     document.addEventListener('DOMContentLoaded', function() {
       loadBetaSignupInvite().finally(function() {
       populateBizStateSelect();
@@ -2167,64 +2114,6 @@
         refreshCheckoutSummary();
       }
 
-      var params = new URLSearchParams(window.location.search);
-      var checkout = params.get('checkout');
-      var sessionId = params.get('session_id');
-
-      if (checkout === 'cancel') {
-        history.replaceState({}, '', 'signup.html');
-        showCheckoutCanceledOnStep3();
-        return;
-      }
-
-      if (checkout !== 'success' || !sessionId) return;
-
-      document.querySelectorAll('.step-panel').forEach(function(p) { p.classList.remove('active'); });
-      var loading = document.createElement('div');
-      loading.id = 'checkoutResumeLoading';
-      loading.style.cssText = 'text-align:center;padding:48px 24px;font-size:15px;color:var(--text-secondary);';
-      loading.textContent = 'Finishing your setup…';
-      var card = document.querySelector('.signup-card');
-      if (card) card.insertBefore(loading, card.firstChild);
-
-      var checkoutResumeFinished = false;
-      function checkoutResumeFail(msg) {
-        if (checkoutResumeFinished) return;
-        checkoutResumeFinished = true;
-        if (loading.parentNode) loading.parentNode.removeChild(loading);
-        history.replaceState({}, '', 'signup.html');
-        alert(msg);
-      }
-      var unsubCheckout = auth.onAuthStateChanged(function(user) {
-        if (checkoutResumeFinished) return;
-        if (!user) return;
-        checkoutResumeFinished = true;
-        unsubCheckout();
-        (async function() {
-          try {
-            var complete = fns.httpsCallable('completeProviderSubscriptionCheckout');
-            var result = await complete({ sessionId: sessionId });
-            history.replaceState({}, '', 'signup.html');
-            if (loading.parentNode) loading.parentNode.removeChild(loading);
-            var slug = (result.data && result.data.slug) || '';
-            var completedPlan = (result.data && result.data.subscriptionPlan) || '';
-            if (PLAN_CHECKOUT_INFO[completedPlan]) state.plan = completedPlan;
-            document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
-            document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
-            showSuccess();
-          } catch (e) {
-            console.error('complete checkout', e);
-            if (loading.parentNode) loading.parentNode.removeChild(loading);
-            alert(formatFirebaseHttpsError(e));
-            history.replaceState({}, '', 'signup.html');
-          }
-        })();
-      });
-      setTimeout(function() {
-        if (checkoutResumeFinished) return;
-        try { unsubCheckout(); } catch (x) {}
-        checkoutResumeFail('Still waiting for sign-in. Use the same email and password you entered at signup, then reload this page.');
-      }, 12000);
       });
     });
   </script>

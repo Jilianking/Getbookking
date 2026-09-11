@@ -692,7 +692,9 @@ struct WebViewRepresentable: UIViewRepresentable {
             let isInstagram = host == "instagram.com" || host.hasSuffix(".instagram.com")
             let isOffsite = !siteHost.isEmpty && host != siteHost && !host.hasSuffix("." + siteHost)
             guard isInstagram || isOffsite else { return false }
-            UIApplication.shared.open(url)
+            Task { @MainActor in
+                InAppSafari.openSync(url, context: .general)
+            }
             return true
         }
 

@@ -5,7 +5,6 @@
 //
 
 import SwiftUI
-import SafariServices
 import UIKit
 
 struct LoginView: View {
@@ -15,7 +14,6 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var isPasswordVisible = false
-    @State private var safariURL: URL? = nil
 
     var body: some View {
         NavigationStack {
@@ -32,10 +30,6 @@ struct LoginView: View {
                 Spacer()
             }
             .appScreenBackground()
-            .sheet(item: $safariURL) { url in
-                SafariView(url: url)
-                    .ignoresSafeArea()
-            }
         }
     }
 
@@ -139,12 +133,12 @@ struct LoginView: View {
 
     private func openMarketingSignUp() {
         guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
-        safariURL = url
+        InAppSafari.openSync(url, context: .general)
     }
 
     private func openMarketingForgotPassword() {
         guard let url = Constants.Hosting.marketingForgotPasswordURL(email: email) else { return }
-        safariURL = url
+        InAppSafari.openSync(url, context: .general)
     }
 
     private func performSignIn() {
@@ -161,24 +155,4 @@ struct LoginView: View {
             }
         }
     }
-}
-
-// MARK: - In-app browser sheet
-
-/// Wraps SFSafariViewController for use in a SwiftUI sheet.
-struct SafariView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let vc = SFSafariViewController(url: url)
-        vc.preferredControlTintColor = UIColor(AppDesign.textPrimary)
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
-}
-
-/// Makes URL usable as a sheet item identifier.
-extension URL: @retroactive Identifiable {
-    public var id: String { absoluteString }
 }

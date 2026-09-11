@@ -130,6 +130,9 @@ struct TeamClientMessagingSettingsView: View {
             guard phase == .active else { return }
             Task { await viewModel.syncBillingAfterWebIfNeeded() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .inAppSafariBillingDismissed)) { _ in
+            Task { await viewModel.syncBillingAfterWebIfNeeded() }
+        }
         .confirmationDialog(
             "Start subscription today?",
             isPresented: $showStartSubscriptionConfirm,

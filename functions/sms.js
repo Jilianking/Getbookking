@@ -173,8 +173,11 @@ const PAID_FEATURE_UPGRADE_MESSAGE =
  * require an active paid subscription (no charge required).
  * UI copy can still show “start subscription” / free trial.
  * Set false and redeploy before real billing enforcement.
+ *
+ * Deploy note (2026-09): BYPASS=false — billing / Stripe Checkout testing (payment block visible on billing.html).
+ * For TestFlight “no charge” testing, set true and redeploy functions.
  */
-const BYPASS_SUBSCRIPTION_PAYMENT_GATE = true;
+const BYPASS_SUBSCRIPTION_PAYMENT_GATE = false;
 
 /**
  * TestFlight: block Twilio number buy/provision/refresh (costs real money on all plans).

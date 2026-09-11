@@ -29,6 +29,7 @@ struct ContentView: View {
         }
         .preferredColorScheme(appAppearance.preferredColorScheme)
         .tint(AppDesign.brandWarm)
+        .inAppSafariSheet()
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
                 TapToPayAppLifecycle.warmUpReaderIfConfigured()

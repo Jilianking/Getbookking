@@ -379,7 +379,11 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Divider().padding(.leading, 52)
-                    Link(destination: URL(string: Constants.Hosting.marketingContactURL)!) {
+                    Button {
+                        if let url = URL(string: Constants.Hosting.marketingContactURL) {
+                            InAppSafari.openSync(url, context: .general)
+                        }
+                    } label: {
                         AppSettingsRow(icon: "info.circle.fill", iconColor: .gray, title: "Support")
                     }
                     .buttonStyle(.plain)
@@ -387,14 +391,22 @@ struct SettingsView: View {
                     Divider().padding(.leading, 52)
                 }
 
-                Link(destination: URL(string: Constants.Hosting.marketingPrivacyURL)!) {
+                Button {
+                    if let url = URL(string: Constants.Hosting.marketingPrivacyURL) {
+                        InAppSafari.openSync(url, context: .general)
+                    }
+                } label: {
                     AppSettingsRow(icon: "hand.raised.fill", iconColor: .gray, title: "Privacy Policy")
                 }
                 .buttonStyle(.plain)
 
                 Divider().padding(.leading, 52)
 
-                Link(destination: URL(string: Constants.Hosting.marketingTermsURL)!) {
+                Button {
+                    if let url = URL(string: Constants.Hosting.marketingTermsURL) {
+                        InAppSafari.openSync(url, context: .general)
+                    }
+                } label: {
                     AppSettingsRow(icon: "doc.text.fill", iconColor: .gray, title: "Terms of Service")
                 }
                 .buttonStyle(.plain)
@@ -916,6 +928,9 @@ private struct AccountSettingsDetailView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .inAppSafariBillingDismissed)) { _ in
             Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
         }
         .onChange(of: profilePhotoPickerItem) { _, newItem in

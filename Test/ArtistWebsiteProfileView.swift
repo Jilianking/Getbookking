@@ -358,7 +358,7 @@ struct ArtistWebsiteProfileView: View {
 
     private func openMemberPageInSafari() {
         guard let url = memberPageURL else { return }
-        UIApplication.shared.open(url)
+        InAppSafari.openSync(url, context: .general)
     }
 
     private func reloadAll() async {

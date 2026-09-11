@@ -2084,7 +2084,7 @@ struct DesignView: View {
 
     private func openInSafari() {
         guard let url = URL(string: viewModel.safariSiteUrl) else { return }
-        UIApplication.shared.open(url)
+        InAppSafari.openSync(url, context: .general)
     }
 
     private func presentDesignHelpIfNeeded() {

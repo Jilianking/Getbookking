@@ -184,6 +184,35 @@ function parseStripeSubscriptionPriceIds() {
   return map;
 }
 
+const PROVIDER_SIGNUP_TRIAL_DAYS = 14;
+
+function readFirestoreTimestampMs(value) {
+  if (!value) return null;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value._seconds === "number") return value._seconds * 1000;
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
+/** Unix seconds when the Firestore-only signup trial ends (trialStartDate + 14 days). */
+function providerTrialEndUnixFromTenant(tenant) {
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const startMs = readFirestoreTimestampMs(tenant && tenant.trialStartDate);
+  const endMs =
+    startMs != null
+      ? startMs + PROVIDER_SIGNUP_TRIAL_DAYS * 86400000
+      : Date.now() + PROVIDER_SIGNUP_TRIAL_DAYS * 86400000;
+  let endUnix = Math.floor(endMs / 1000);
+  if (endUnix <= nowUnix + 60) endUnix = nowUnix + 120;
+  return endUnix;
+}
+
+function planListPriceCents(planNorm) {
+  const plan = normalizeSubscriptionPlan(planNorm);
+  const map = { solo: 3900, studio: 7900, shop: 14900, charter: 2400 };
+  return map[plan] || 3900;
+}
+
 function stripePriceIdForPlan(planNorm) {
   const map = parseStripeSubscriptionPriceIds();
   let id = map[planNorm];
@@ -1218,6 +1247,9 @@ async function finalizeFromCheckoutSession(stripe, session) {
       if (checkoutKind === "resubscribe") {
         return finalizeResubscribeFromCheckoutSession(stripe, session, uid);
       }
+      if (checkoutKind === "initial_today" || checkoutKind === "initial_trial_end") {
+        return finalizeInitialSubscriptionFromCheckoutSession(stripe, session, uid);
+      }
       const tid = u.data().tenantId;
       const tSnap = await db.collection("tenants").doc(tid).get();
       const tenantData = tSnap.exists ? tSnap.data() || {} : {};
@@ -1336,6 +1368,78 @@ async function finalizeResubscribeFromCheckoutSession(stripe, session, uid) {
     tenantId: ctx.tenantId,
     subscriptionStatus: sub.status,
     resubscribed: true,
+  };
+}
+
+/** Owner already provisioned (cardless trial): link Stripe sub from first billing Checkout. */
+async function finalizeInitialSubscriptionFromCheckoutSession(stripe, session, uid) {
+  const sessionUid =
+    (session.metadata && session.metadata.firebaseUid) || session.client_reference_id;
+  if (!sessionUid || sessionUid !== uid) {
+    console.warn("initial checkout uid mismatch", session.id);
+    return null;
+  }
+  const checkoutKind = (session.metadata && session.metadata.checkoutKind) || "";
+  if (checkoutKind !== "initial_today" && checkoutKind !== "initial_trial_end") {
+    return null;
+  }
+
+  const paidOk =
+    session.payment_status === "paid" ||
+    session.payment_status === "no_payment_required";
+  if (!paidOk || session.mode !== "subscription") {
+    console.warn("initial checkout not paid / not subscription", session.id);
+    return null;
+  }
+
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.isOwner) {
+    console.warn("initial checkout non-owner", session.id);
+    return null;
+  }
+  const metaTenantId = ((session.metadata && session.metadata.tenantId) || "").toString().trim();
+  if (metaTenantId && metaTenantId !== ctx.tenantId) {
+    console.warn("initial checkout tenant mismatch", session.id);
+    return null;
+  }
+
+  let sub = session.subscription;
+  if (typeof sub === "string") {
+    sub = await stripe.subscriptions.retrieve(sub, { expand: ["items.data.price"] });
+  } else if (sub && sub.id && (!sub.items || !sub.items.data)) {
+    sub = await stripe.subscriptions.retrieve(sub.id, { expand: ["items.data.price"] });
+  }
+  if (!sub || !sub.id) {
+    console.warn("initial checkout missing subscription", session.id);
+    return null;
+  }
+
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : session.customer && session.customer.id;
+
+  const syncPatch = {
+    stripeSubscriptionId: sub.id,
+  };
+  if (customerId) syncPatch.stripeCustomerId = customerId;
+  const planNorm = subscriptionPlanFromStripe(
+    ctx.tenant && ctx.tenant.subscriptionPlan,
+    planNormFromStripeSubscription(sub),
+    sub
+  );
+  if (planNorm) {
+    syncPatch.subscriptionPlan = planNorm;
+    Object.assign(syncPatch, subscriptionPlanEntitlementPatch(ctx.tenant, planNorm));
+  }
+
+  await sms.syncSubscriptionStatusForTenant(ctx.tenantId, sub.status, syncPatch);
+
+  return {
+    ok: true,
+    tenantId: ctx.tenantId,
+    subscriptionStatus: sub.status,
+    initialCheckout: true,
   };
 }
 
@@ -7640,6 +7744,55 @@ exports.createProviderSubscriptionCheckout = functions
   });
 
 /**
+ * Marketing wizard: cardless 14-day trial — provisions tenant without Stripe (pay on billing.html).
+ */
+exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const uid = context.auth.uid;
+  const email = context.auth.token.email || "";
+  if (!email) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Account must have an email."
+    );
+  }
+
+  const userSnap = await db.collection("users").doc(uid).get();
+  if (userSnap.exists && userSnap.data().tenantId) {
+    throw new functions.https.HttpsError(
+      "already-exists",
+      "This account already has a business. Log in to the app or sign up with a new email."
+    );
+  }
+
+  const normalized = normalizeSignupWizardPayload(data);
+  const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
+  if (betaInviteToken) {
+    await assertBetaSignupInviteForCheckout(betaInviteToken, email);
+  }
+
+  const pendingRef = db.collection("pendingProviderSignups").doc(uid);
+  await pendingRef.set(
+    {
+      ...normalized,
+      email,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const pendingSnap = await pendingRef.get();
+  const pending = pendingSnap.data() || normalized;
+
+  const result = await provisionNewProviderFromWizard(uid, email, pending, {
+    subscriptionStatus: "trialing",
+  });
+  await pendingRef.delete().catch(() => {});
+  return result;
+});
+
+/**
  * After returning from Stripe Checkout, client passes sessionId; verifies payment then provisions tenant.
  */
 exports.completeProviderSubscriptionCheckout = functions
@@ -10809,12 +10962,23 @@ exports.getBillingSummary = functions
         userData.subscriptionPlan || tenantData.subscriptionPlan
       );
       const stripeCustomerId = (tenantData.stripeCustomerId || "").toString().trim();
+      const firestoreSubscriptionStatus = (
+        tenantData.subscriptionStatus || "trialing"
+      ).toString();
+      const trialEndUnix = providerTrialEndUnixFromTenant(tenantData);
       if (!stripeCustomerId) {
+        const needsInitialCheckout = firestoreSubscriptionStatus === "trialing";
         return {
           ok: true,
           hasStripeCustomer: false,
           firestorePlan,
-          message: "Billing is not set up for this business yet.",
+          firestoreSubscriptionStatus,
+          trialEndUnix,
+          listPriceCents: planListPriceCents(firestorePlan),
+          needsInitialCheckout,
+          message: needsInitialCheckout
+            ? "Add a payment method to start or secure your plan."
+            : "Billing is not set up for this business yet.",
           subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
         };
       }
@@ -11569,6 +11733,184 @@ exports.createResubscribeCheckout = functions
     return { url: session.url };
   });
 
+/**
+ * Owner: first hosted Checkout after cardless signup (start today or charge at trial end).
+ */
+exports.createInitialSubscriptionCheckout = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    if (sms.isSubscriptionPaymentGateBypassed()) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Paid checkout is temporarily disabled for testing. Features are unlocked without paying."
+      );
+    }
+    const uid = context.auth.uid;
+    const ctx = await getMemberAccessContext(uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can manage billing."
+      );
+    }
+
+    const stripeCustomerId = (ctx.tenant.stripeCustomerId || "").toString().trim();
+    if (stripeCustomerId) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Billing is already set up. Use billing settings to change your plan or payment method."
+      );
+    }
+
+    const firestoreStatus = sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData);
+    if (firestoreStatus !== "trialing") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Your trial has ended or billing is not available in this state. Contact support."
+      );
+    }
+
+    const billingStartRaw = ((data && data.billingStart) || "today").toString().trim();
+    const billingStart =
+      billingStartRaw === "trial_end" || billingStartRaw === "trialEnd"
+        ? "trial_end"
+        : "today";
+    const checkoutKind = billingStart === "trial_end" ? "initial_trial_end" : "initial_today";
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const ownerEmail =
+      (ctx.ownerUserData && ctx.ownerUserData.email) ||
+      (ctx.userData && ctx.userData.email) ||
+      context.auth.token.email ||
+      "";
+
+    const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+    const priceId = stripePriceIdForPlan(plan);
+    const base = billingPortalReturnBase(data);
+    const returnUrl = `${base}/billing.html?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const successUrl = returnUrl;
+    const cancelUrl = `${base}/billing.html?checkout=canceled`;
+    const uiModeRaw = ((data && data.uiMode) || "embedded").toString().trim().toLowerCase();
+    const useEmbedded = uiModeRaw !== "hosted";
+
+    const subscriptionData = {
+      metadata: {
+        firebaseUid: uid,
+        tenantId: ctx.tenantId,
+        checkoutKind,
+        plan,
+      },
+    };
+    if (billingStart === "trial_end") {
+      subscriptionData.trial_end = providerTrialEndUnixFromTenant(ctx.tenant);
+    }
+
+    const sessionPayload = {
+      mode: "subscription",
+      customer_email: ownerEmail,
+      client_reference_id: uid,
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: {
+        firebaseUid: uid,
+        tenantId: ctx.tenantId,
+        checkoutKind,
+        plan,
+      },
+      subscription_data: subscriptionData,
+    };
+
+    let session;
+    try {
+      if (useEmbedded) {
+        session = await stripe.checkout.sessions.create({
+          ...sessionPayload,
+          ui_mode: "embedded",
+          return_url: returnUrl,
+        });
+      } else {
+        session = await stripe.checkout.sessions.create({
+          ...sessionPayload,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        });
+      }
+    } catch (stripeErr) {
+      console.error("createInitialSubscriptionCheckout Stripe", stripeErr);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not start checkout: ${stripeErrorMessage(stripeErr)}`
+      );
+    }
+
+    if (useEmbedded) {
+      if (!session.client_secret) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe did not return an embedded checkout client secret."
+        );
+      }
+      const pkOut = stripePublishableKeyParam.value().trim();
+      const out = {
+        clientSecret: session.client_secret,
+        billingStart,
+        checkoutKind,
+        uiMode: "embedded",
+      };
+      if (pkOut) out.publishableKey = pkOut;
+      return out;
+    }
+
+    if (!session.url) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Stripe did not return a checkout URL."
+      );
+    }
+
+    return { url: session.url, billingStart, checkoutKind, uiMode: "hosted" };
+  });
+
+/** After initial billing Checkout, verify payment and sync Firestore billing. */
+exports.completeInitialSubscriptionCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const uid = context.auth.uid;
+    const sessionId = ((data && data.sessionId) || "").toString().trim();
+    if (!sessionId) {
+      throw new functions.https.HttpsError("invalid-argument", "sessionId is required.");
+    }
+
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription"],
+    });
+
+    const result = await finalizeInitialSubscriptionFromCheckoutSession(stripe, session, uid);
+    if (!result) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Payment is not complete or this checkout session is invalid."
+      );
+    }
+    return result;
+  });
+
 /** After resubscribe Checkout, verify payment and sync Firestore billing. */
 exports.completeResubscribeCheckout = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -11643,7 +11985,7 @@ exports.startSubscriptionToday = functions
     if (!subId) {
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "No subscription found. Complete sign-up billing at getbookking.com/signup.html."
+        "No subscription found. Add your plan at getbookking.com/billing.html."
       );
     }
     const sub = await stripe.subscriptions.retrieve(subId);

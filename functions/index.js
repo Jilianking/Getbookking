@@ -1934,9 +1934,6 @@ exports.createConnectAccountLink = functions
       }
 
       const tenantRef = db.collection("tenants").doc(tenantId);
-      const tenantDoc = await tenantRef.get();
-      const tenantData = tenantDoc.exists ? tenantDoc.data() : {};
-      await assertPaidFeatureAccessForTenant(tenantId, tenantData);
       const accountRef =
         payCtx.scope === "user"
           ? db.collection("users").doc(uid)
@@ -2650,7 +2647,6 @@ async function assertCanInitiateBookingPayment(uid, payCtx) {
       "No business linked to this account."
     );
   }
-  await assertPaidFeatureAccessForTenant(payCtx.tenantId);
   if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
     const ctx = await getMemberAccessContext(uid);
     const isOwner = ctx.isOwner || ctx.tenant.ownerUid === uid;
@@ -2691,7 +2687,6 @@ async function assertCanTapToPayForBooking(uid, payCtx) {
       "No business linked to this account."
     );
   }
-  await assertPaidFeatureAccessForTenant(payCtx.tenantId);
   if (payCtx.chargeOnBehalfOfMemberUid && payCtx.chargeOnBehalfOfMemberUid !== uid) {
     const name = payCtx.attributedMemberName || "The assigned team member";
     throw new functions.https.HttpsError(
@@ -7211,7 +7206,6 @@ exports.ensureTapToPayTerminalLocation = functions
     const uid = context.auth.uid;
     const payCtx = await assertCanTakePayments(uid);
     const tenantId = payCtx.tenantId;
-    await assertPaidFeatureAccessForTenant(tenantId);
     const tenantDoc = await db.collection("tenants").doc(tenantId).get();
     if (!tenantDoc.exists) {
       throw new functions.https.HttpsError("not-found", "Business not found.");

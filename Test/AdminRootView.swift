@@ -176,6 +176,7 @@ struct AdminRootView: View {
     @StateObject private var appTour = AppTourCoordinator()
     @StateObject private var setupChecklistViewModel = SetupChecklistViewModel()
     @StateObject private var stripeConnectLaunch = StripeConnectLaunchCoordinator()
+    @State private var marketingSafariURL: URL?
     @State private var drawerState = DrawerState()
     @StateObject private var dashboardMetrics = DashboardViewModel()
     @State private var visitedSections: Set<AdminSection> = [.dashboard]
@@ -326,6 +327,17 @@ struct AdminRootView: View {
             SetupSettingsDestinationSheet(destination: destination)
                 .environmentObject(authViewModel)
                 .environmentObject(sessionStore)
+        }
+        .sheet(item: $marketingSafariURL, onDismiss: {
+            NotificationCenter.default.post(name: .marketingInAppSafariDidDismiss, object: nil)
+            StripeConnectRefresh.request()
+        }) { url in
+            SafariView(url: url)
+                .ignoresSafeArea()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openMarketingInAppSafari)) { note in
+            guard let url = note.userInfo?["url"] as? URL else { return }
+            marketingSafariURL = url
         }
         .onPreferenceChange(AppTourFramePreferenceKey.self) { frames in
             appTour.updateFrames(frames)

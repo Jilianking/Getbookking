@@ -918,6 +918,9 @@ private struct AccountSettingsDetailView: View {
             guard phase == .active else { return }
             Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .marketingInAppSafariDidDismiss)) { _ in
+            Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
+        }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {
                 guard let newItem else { return }

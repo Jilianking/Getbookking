@@ -622,7 +622,13 @@ class PaymentsViewModel: ObservableObject {
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         isOpeningBillingWebsite = true
         defer { isOpeningBillingWebsite = false }
-        await UIApplication.shared.open(url)
+        await MainActor.run { MarketingInAppSafari.present(url) }
+    }
+
+    @MainActor
+    private func openStripeOrMarketingURL(_ url: URL) -> Bool {
+        MarketingInAppSafari.present(url)
+        return true
     }
 
     func refresh(isDemoMode: Bool = false) async {
@@ -1341,11 +1347,7 @@ class PaymentsViewModel: ObservableObject {
             StripeConnectLinkCache.invalidate()
             isConnectingStripe = true
             defer { isConnectingStripe = false }
-            let opened = await UIApplication.shared.open(cached)
-            if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
-                return .noAction
-            }
+            await MainActor.run { openStripeOrMarketingURL(cached) }
             return .openedInSafari
         }
 
@@ -1353,11 +1355,7 @@ class PaymentsViewModel: ObservableObject {
             StripeConnectLinkCache.invalidate()
             isConnectingStripe = true
             defer { isConnectingStripe = false }
-            let opened = await UIApplication.shared.open(ready)
-            if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
-                return .noAction
-            }
+            await MainActor.run { openStripeOrMarketingURL(ready) }
             return .openedInSafari
         }
 
@@ -1413,8 +1411,8 @@ class PaymentsViewModel: ObservableObject {
                 if openInSafari,
                    let urlString = data?["url"] as? String,
                    let url = URL(string: urlString) {
-                    let opened = await UIApplication.shared.open(url)
-                    if opened { return .openedInSafari }
+                    await MainActor.run { openStripeOrMarketingURL(url) }
+                    return .openedInSafari
                 }
                 if openInSafari {
                     let openedDashboard = await openStripeDashboardLink(isDemoMode: isDemoMode)
@@ -1434,11 +1432,7 @@ class PaymentsViewModel: ObservableObject {
 
             if openInSafari {
                 invalidateConnectLinkPrefetch()
-                let opened = await UIApplication.shared.open(url)
-                if !opened {
-                    errorMessage = "Could not open Stripe. Check that Safari is available."
-                    return .noAction
-                }
+                await MainActor.run { openStripeOrMarketingURL(url) }
                 return .openedInSafari
             }
 
@@ -1561,11 +1555,7 @@ class PaymentsViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
                 )
             }
-            let opened = await UIApplication.shared.open(url)
-            if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
-                return false
-            }
+            await MainActor.run { openStripeOrMarketingURL(url) }
             return true
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
@@ -1955,7 +1945,7 @@ class PaymentsViewModel: ObservableObject {
     /// Opens Stripe receipt for a charge in Safari.
     func openReceipt(chargeId: String) async {
         guard let url = await fetchReceiptUrl(chargeId: chargeId) else { return }
-        await UIApplication.shared.open(url)
+        await MainActor.run { MarketingInAppSafari.present(url) }
     }
 
     func fetchReceiptDetail(

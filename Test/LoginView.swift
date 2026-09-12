@@ -162,23 +162,3 @@ struct LoginView: View {
         }
     }
 }
-
-// MARK: - In-app browser sheet
-
-/// Wraps SFSafariViewController for use in a SwiftUI sheet.
-struct SafariView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let vc = SFSafariViewController(url: url)
-        vc.preferredControlTintColor = UIColor(AppDesign.textPrimary)
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
-}
-
-/// Makes URL usable as a sheet item identifier.
-extension URL: @retroactive Identifiable {
-    public var id: String { absoluteString }
-}

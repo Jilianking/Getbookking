@@ -425,6 +425,9 @@
             business_type: businessType
           });
         }
+        if (window.oaiq) {
+          oaiq('measure', 'registration_completed', { type: 'customer_action' });
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }).catch(function (err) {
         showError(callableMessage(err));

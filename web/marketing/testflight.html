@@ -429,6 +429,24 @@
         if (window.oaiq) {
           oaiq('measure', 'registration_completed', { type: 'customer_action' });
         }
+        (function fireGoogleAdsSignupConversion() {
+          var sendTo = 'AW-18449516319/7g89CJnE3fYcEJ-OtdlE';
+          var payload = { send_to: sendTo, value: 1.0, currency: 'USD' };
+          if (typeof gtag === 'function') {
+            gtag('event', 'conversion', payload);
+            return;
+          }
+          var tries = 0;
+          var timer = setInterval(function () {
+            tries += 1;
+            if (typeof gtag === 'function') {
+              gtag('event', 'conversion', payload);
+              clearInterval(timer);
+            } else if (tries > 25) {
+              clearInterval(timer);
+            }
+          }, 200);
+        })();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }).catch(function (err) {
         showError(callableMessage(err));

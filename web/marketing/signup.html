@@ -929,6 +929,8 @@
 
     .subscription-start-backdrop[hidden] { display: none !important; }
 
+    body.signup-beta-gate-open { overflow: hidden; }
+
     .subscription-start-card {
       position: relative;
       width: min(100%, 460px);
@@ -1149,6 +1151,19 @@
     </div>
   </div>
 
+  <div class="subscription-start-backdrop" id="betaGateModal" hidden aria-hidden="true">
+    <div class="subscription-start-card" role="dialog" aria-modal="true" aria-labelledby="betaGateTitle" aria-describedby="betaGateCopy">
+      <h2 id="betaGateTitle">Sign up for the beta</h2>
+      <p class="subscription-start-copy" id="betaGateCopy">
+        The Get Bookking app isn&rsquo;t on the App Store yet&mdash;it&rsquo;s coming soon. Join the iOS beta for early access, or continue here if you&rsquo;ve already signed up for the beta.
+      </p>
+      <div class="subscription-start-actions">
+        <button type="button" class="subscription-start-cancel" id="betaGateAlreadyBtn">I already signed up for the beta</button>
+        <button type="button" class="subscription-start-confirm" id="betaGateBetaBtn">Sign up for the beta</button>
+      </div>
+    </div>
+  </div>
+
   <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 25%"></div></div>
 
   <!-- CARD -->
@@ -1363,6 +1378,10 @@
     const fns  = firebase.app().functions("us-central1");
 
     var signupSubmitting = false;
+
+    /** Set false when the App Store app is live to skip the beta gate. */
+    var SIGNUP_BETA_GATE_ENABLED = true;
+    var SIGNUP_BETA_STORAGE_KEY = 'signupBetaAcknowledged';
 
     /** [abbr, name] — filled into #bizState on load */
     var US_STATES_LIST = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
@@ -1904,6 +1923,82 @@
         });
     }
 
+    function shouldShowSignupBetaGate() {
+      if (!SIGNUP_BETA_GATE_ENABLED) return false;
+      try {
+        if (sessionStorage.getItem(SIGNUP_BETA_STORAGE_KEY) === 'existing') return false;
+      } catch (e) { /* private mode */ }
+      var params = new URLSearchParams(location.search);
+      if (params.get('continue') === '1' || params.get('skipBeta') === '1') return false;
+      if ((params.get('t') || '').trim()) return false;
+      if (state.betaInviteToken) return false;
+      return true;
+    }
+
+    function buildTestflightRedirectUrl() {
+      var params = new URLSearchParams(location.search);
+      var out = new URLSearchParams();
+      var plan = (params.get('plan') || state.plan || '').trim().toLowerCase();
+      if (plan) out.set('plan', plan);
+      var industry = (params.get('industry') || '').trim();
+      if (industry) out.set('industry', industry);
+      var q = out.toString();
+      return 'testflight.html' + (q ? '?' + q : '');
+    }
+
+    function closeSignupBetaGate() {
+      var modal = document.getElementById('betaGateModal');
+      if (!modal) return;
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('signup-beta-gate-open');
+    }
+
+    function openSignupBetaGate() {
+      var modal = document.getElementById('betaGateModal');
+      if (!modal) return;
+      modal.hidden = false;
+      modal.removeAttribute('aria-hidden');
+      document.body.classList.add('signup-beta-gate-open');
+      var primary = document.getElementById('betaGateBetaBtn');
+      if (primary) primary.focus();
+    }
+
+    function acknowledgeSignupBetaExisting() {
+      try {
+        sessionStorage.setItem(SIGNUP_BETA_STORAGE_KEY, 'existing');
+      } catch (e) { /* private mode */ }
+      closeSignupBetaGate();
+    }
+
+    function bindSignupBetaGate() {
+      var modal = document.getElementById('betaGateModal');
+      var betaBtn = document.getElementById('betaGateBetaBtn');
+      var alreadyBtn = document.getElementById('betaGateAlreadyBtn');
+      if (!modal || modal.dataset.bound === '1') return;
+      modal.dataset.bound = '1';
+
+      if (betaBtn) {
+        betaBtn.addEventListener('click', function() {
+          window.location.href = buildTestflightRedirectUrl();
+        });
+      }
+      if (alreadyBtn) {
+        alreadyBtn.addEventListener('click', acknowledgeSignupBetaExisting);
+      }
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) acknowledgeSignupBetaExisting();
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && !modal.hidden) acknowledgeSignupBetaExisting();
+      });
+    }
+
+    function maybeOpenSignupBetaGate() {
+      bindSignupBetaGate();
+      if (shouldShowSignupBetaGate()) openSignupBetaGate();
+    }
+
     function showSuccess() {
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
@@ -2114,6 +2209,7 @@
         refreshCheckoutSummary();
       }
 
+      maybeOpenSignupBetaGate();
       });
     });
   </script>

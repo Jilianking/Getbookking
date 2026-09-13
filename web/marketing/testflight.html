@@ -317,6 +317,19 @@
     });
 
     applyPlanSelection('solo');
+    (function applyTestflightQueryPrefill() {
+      var params = new URLSearchParams(location.search);
+      var p = (params.get('plan') || '').trim().toLowerCase();
+      var legacy = { charter: 'charter', charters: 'charter', solo: 'solo', studio: 'studio', shop: 'shop' };
+      var plan = legacy[p] || p;
+      if (planTeamConfig[plan]) applyPlanSelection(plan);
+      var ind = (params.get('industry') || '').trim().toLowerCase();
+      if (ind === 'charters' && businessTypeSelect) {
+        businessTypeSelect.value = 'charters';
+        syncBusinessTypeCustomField();
+        applyPlanSelection('charter');
+      }
+    })();
 
     businessTypeSelect.addEventListener('change', function () {
       syncBusinessTypeCustomField();

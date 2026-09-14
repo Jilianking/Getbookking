@@ -85,9 +85,19 @@ final class TapToPayTerminalManager {
     }
 
     /// Discover + connect reader (launch / foreground / before checkout).
-    func warmUpReader(locationId: String, merchantDisplayName: String? = nil) async {
+    /// - Parameter silent: When true, never presents Apple T&C (`tosAcceptancePermitted = false`)
+    ///   and suppresses failure UI. Used for background prewarm on cold start.
+    func warmUpReader(
+        locationId: String,
+        merchantDisplayName: String? = nil,
+        silent: Bool = false
+    ) async {
         await TapToPayReaderOperationCoordinator.shared.withLock {
-            await warmUpReaderUnlocked(locationId: locationId, merchantDisplayName: merchantDisplayName)
+            await warmUpReaderUnlocked(
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName,
+                silent: silent
+            )
         }
     }
 
@@ -102,7 +112,11 @@ final class TapToPayTerminalManager {
     func reconnectReader(locationId: String, merchantDisplayName: String) async {
         await TapToPayReaderOperationCoordinator.shared.withLock {
             await disconnectReaderIfConnected()
-            await warmUpReaderUnlocked(locationId: locationId, merchantDisplayName: merchantDisplayName)
+            await warmUpReaderUnlocked(
+                locationId: locationId,
+                merchantDisplayName: merchantDisplayName,
+                silent: false
+            )
         }
     }
 
@@ -131,27 +145,39 @@ final class TapToPayTerminalManager {
 
     // MARK: - Unlocked operations (caller must hold TapToPayReaderOperationCoordinator lock)
 
-    private func warmUpReaderUnlocked(locationId: String, merchantDisplayName: String?) async {
+    private func warmUpReaderUnlocked(
+        locationId: String,
+        merchantDisplayName: String?,
+        silent: Bool
+    ) async {
         guard !locationId.isEmpty else {
-            await MainActor.run {
-                TapToPayReaderSession.shared.markFailed("Tap to Pay on iPhone location is not configured.")
+            if !silent {
+                await MainActor.run {
+                    TapToPayReaderSession.shared.markFailed("Tap to Pay on iPhone location is not configured.")
+                }
             }
             return
         }
         if let blocking = TapToPayEligibility.blockingMessage() {
-            await MainActor.run { TapToPayReaderSession.shared.markFailed(blocking) }
+            if !silent {
+                await MainActor.run { TapToPayReaderSession.shared.markFailed(blocking) }
+            }
             return
         }
 
         ensureInitialized()
 
         if let deviceBlock = TapToPayEligibility.deviceSupportsTapToPay() {
-            await MainActor.run { TapToPayReaderSession.shared.markFailed(deviceBlock) }
+            if !silent {
+                await MainActor.run { TapToPayReaderSession.shared.markFailed(deviceBlock) }
+            }
             return
         }
 
         let resolvedName = normalizedMerchantDisplayName(merchantDisplayName)
-        let termsAlreadyAccepted = await MainActor.run {
+        // Silent cold-start warm-up may prove Apple T&C via a successful connect.
+        // Treat an already-connected reader as ready even before the in-memory flag is set.
+        let termsAlreadyAccepted = silent || await MainActor.run {
             TapToPayReaderSession.shared.termsAcceptedOnDevice
         }
 
@@ -160,7 +186,10 @@ final class TapToPayTerminalManager {
             merchantDisplayName: resolvedName,
             termsAlreadyAccepted: termsAlreadyAccepted
         ) {
-            await MainActor.run { TapToPayReaderSession.shared.markReady() }
+            await MainActor.run {
+                TapToPayReaderSession.shared.markTermsConfirmedByPSPConnection()
+                TapToPayReaderSession.shared.markReady()
+            }
             return
         }
 
@@ -168,21 +197,31 @@ final class TapToPayTerminalManager {
             await disconnectReaderIfConnected()
         }
 
-        await MainActor.run { TapToPayReaderSession.shared.resetForWarmUp() }
+        if !silent {
+            await MainActor.run { TapToPayReaderSession.shared.resetForWarmUp() }
+        }
 
         do {
             let reader = try await discoverTapToPayReader()
+            // Background / checkout warm-up never presents Apple T&C. Enablement
+            // flows use `connectReaderForTermsAcceptance` with tos permitted.
             try await connectTapToPayReader(
                 reader: reader,
                 locationId: locationId,
-                merchantDisplayName: resolvedName
+                merchantDisplayName: resolvedName,
+                tosAcceptancePermitted: false
             )
             recordConnectedReader(reader, locationId: locationId, merchantDisplayName: resolvedName)
-            await MainActor.run { TapToPayReaderSession.shared.markReady() }
+            await MainActor.run {
+                TapToPayReaderSession.shared.markTermsConfirmedByPSPConnection()
+                TapToPayReaderSession.shared.markReady()
+            }
         } catch {
             clearConnectedReaderState()
-            await MainActor.run {
-                TapToPayReaderSession.shared.markFailed(TapToPayErrorMapper.userMessage(for: error))
+            if !silent {
+                await MainActor.run {
+                    TapToPayReaderSession.shared.markFailed(TapToPayErrorMapper.userMessage(for: error))
+                }
             }
         }
     }
@@ -211,7 +250,8 @@ final class TapToPayTerminalManager {
         try await connectTapToPayReader(
             reader: reader,
             locationId: locationId,
-            merchantDisplayName: resolvedName
+            merchantDisplayName: resolvedName,
+            tosAcceptancePermitted: true
         )
         recordConnectedReader(reader, locationId: locationId, merchantDisplayName: resolvedName)
         await MainActor.run { TapToPayReaderSession.shared.markReady() }
@@ -259,10 +299,14 @@ final class TapToPayTerminalManager {
         try await connectTapToPayReader(
             reader: reader,
             locationId: locationId,
-            merchantDisplayName: merchantDisplayName
+            merchantDisplayName: merchantDisplayName,
+            tosAcceptancePermitted: false
         )
         recordConnectedReader(reader, locationId: locationId, merchantDisplayName: merchantDisplayName)
-        await MainActor.run { TapToPayReaderSession.shared.markReady() }
+        await MainActor.run {
+            TapToPayReaderSession.shared.markTermsConfirmedByPSPConnection()
+            TapToPayReaderSession.shared.markReady()
+        }
     }
 
     private func normalizedMerchantDisplayName(_ override: String?) -> String {
@@ -437,13 +481,15 @@ final class TapToPayTerminalManager {
     private func connectTapToPayReader(
         reader: Reader,
         locationId: String,
-        merchantDisplayName: String
+        merchantDisplayName: String,
+        tosAcceptancePermitted: Bool
     ) async throws {
         do {
             try await connectTapToPayReaderOnce(
                 reader: reader,
                 locationId: locationId,
-                merchantDisplayName: merchantDisplayName
+                merchantDisplayName: merchantDisplayName,
+                tosAcceptancePermitted: tosAcceptancePermitted
             )
         } catch {
             guard TapToPayErrorMapper.isAlreadyConnectedToReader(error) else { throw error }
@@ -451,7 +497,8 @@ final class TapToPayTerminalManager {
             try await connectTapToPayReaderOnce(
                 reader: reader,
                 locationId: locationId,
-                merchantDisplayName: merchantDisplayName
+                merchantDisplayName: merchantDisplayName,
+                tosAcceptancePermitted: tosAcceptancePermitted
             )
         }
     }
@@ -459,7 +506,8 @@ final class TapToPayTerminalManager {
     private func connectTapToPayReaderOnce(
         reader: Reader,
         locationId: String,
-        merchantDisplayName: String
+        merchantDisplayName: String,
+        tosAcceptancePermitted: Bool
     ) async throws {
         let readerDelegate = TapToPayReaderDelegateAnnouncer()
         activeReaderDelegate = readerDelegate
@@ -467,9 +515,9 @@ final class TapToPayTerminalManager {
             delegate: readerDelegate,
             locationId: locationId
         )
-        // Apple T&C must be presentable during connect when the merchant has not
-        // accepted yet. Never set this false for enablement flows.
-        .setTosAcceptancePermitted(true)
+        // Enablement flows pass true so Apple T&C can appear. Background warm-up
+        // passes false so cold start never pops terms unexpectedly.
+        .setTosAcceptancePermitted(tosAcceptancePermitted)
         .setAutoReconnectOnUnexpectedDisconnect(true)
         if !merchantDisplayName.isEmpty {
             builder = builder.setMerchantDisplayName(merchantDisplayName)

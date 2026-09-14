@@ -11,6 +11,7 @@
   })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
   <!-- End Google Tag Manager -->
   <script src="assets/gtm-events.js"></script>
+  <script src="assets/oaiq-pixel.js?v=1"></script>
   <title>Get early access — 6 months free — Get Bookking iOS beta</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
@@ -202,16 +203,16 @@
           <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <h2>You&rsquo;re on the list</h2>
-        <p class="testflight-success-lead" id="successLead">We&rsquo;ll email you when beta access opens.</p>
+        <p class="testflight-success-lead" id="successLead">You&rsquo;re locked in for 6 months free and founding pricing for life.</p>
         <div class="testflight-steps">
           <h3>What happens next</h3>
           <ol>
-            <li>Install Apple&rsquo;s free <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener noreferrer">TestFlight</a> app on your iPhone so you&rsquo;re ready.</li>
-            <li>We review requests and send invites as builds become available.</li>
-            <li>Open the invite email on your iPhone, tap Join, then install <strong>Get Bookking</strong> in TestFlight.</li>
+            <li>Download the app via TestFlight.</li>
+            <li>Create your account with the same email you used here.</li>
+            <li>Make your website and get booked.</li>
           </ol>
         </div>
-        <a href="#" class="testflight-join-btn" id="joinBetaBtn" target="_blank" rel="noopener noreferrer">Join the beta</a>
+        <a href="#" class="testflight-join-btn" id="joinBetaBtn" target="_blank" rel="noopener noreferrer">Download the beta</a>
         <a href="index.html" class="testflight-back">&larr; Back to home</a>
       </div>
 
@@ -317,6 +318,19 @@
     });
 
     applyPlanSelection('solo');
+    (function applyTestflightQueryPrefill() {
+      var params = new URLSearchParams(location.search);
+      var p = (params.get('plan') || '').trim().toLowerCase();
+      var legacy = { charter: 'charter', charters: 'charter', solo: 'solo', studio: 'studio', shop: 'shop' };
+      var plan = legacy[p] || p;
+      if (planTeamConfig[plan]) applyPlanSelection(plan);
+      var ind = (params.get('industry') || '').trim().toLowerCase();
+      if (ind === 'charters' && businessTypeSelect) {
+        businessTypeSelect.value = 'charters';
+        syncBusinessTypeCustomField();
+        applyPlanSelection('charter');
+      }
+    })();
 
     businessTypeSelect.addEventListener('change', function () {
       syncBusinessTypeCustomField();
@@ -403,7 +417,8 @@
         intro.hidden = true;
         formCard.hidden = true;
         success.classList.add('is-visible');
-        successLead.textContent = 'We\u2019ll email ' + email + ' when your beta invite is ready.';
+        successLead.textContent =
+          'We saved ' + email + '. You\u2019re locked in for 6 months free and founding pricing for life.';
         if (typeof window.bkTrack === 'function') {
           window.bkTrack('generate_lead', {
             method: 'waitlist',
@@ -411,6 +426,27 @@
             business_type: businessType
           });
         }
+        if (window.oaiq) {
+          oaiq('measure', 'registration_completed', { type: 'customer_action' });
+        }
+        (function fireGoogleAdsSignupConversion() {
+          var sendTo = 'AW-18449516319/7g89CJnE3fYcEJ-OtdlE';
+          var payload = { send_to: sendTo, value: 1.0, currency: 'USD' };
+          if (typeof gtag === 'function') {
+            gtag('event', 'conversion', payload);
+            return;
+          }
+          var tries = 0;
+          var timer = setInterval(function () {
+            tries += 1;
+            if (typeof gtag === 'function') {
+              gtag('event', 'conversion', payload);
+              clearInterval(timer);
+            } else if (tries > 25) {
+              clearInterval(timer);
+            }
+          }, 200);
+        })();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }).catch(function (err) {
         showError(callableMessage(err));

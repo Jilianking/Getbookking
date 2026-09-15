@@ -9,7 +9,10 @@
  *     (JSON map solo/studio/shop/charter → price_… and optional smsExtra $12/mo add-on;
  *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
- *     (Signing secret from Stripe webhook endpoint → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
+ *     ("Your account" webhook destination → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
+ *   firebase functions:secrets:set STRIPE_CONNECT_WEBHOOK_SECRET
+ *     ("Connected accounts" destination, same URL — payment_intent.succeeded, refund.updated,
+ *      charge.refunded for ledger + studio-share reversal on Connect customer refunds)
  *
  * Optional: set string param STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…) via Firebase
  * params / functions .env so createProviderSubscriptionCheckout can return it to signup.html.
@@ -71,8 +74,14 @@ const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
 /** JSON map: solo, studio, shop, charter → Stripe Price id; optional smsExtra ($10/mo per extra SMS line). */
 const stripeSubscriptionPriceIds = defineSecret("STRIPE_SUBSCRIPTION_PRICE_IDS");
-/** Stripe Dashboard → Webhooks → Signing secret (whsec_…). */
+/** Stripe Dashboard → Webhooks → "Your account" destination signing secret (whsec_…). */
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+/**
+ * Stripe Dashboard → Webhooks → "Connected accounts" destination signing secret (whsec_…).
+ * Customer Connect charges (payment_intent.succeeded on acct_…) arrive signed with this
+ * secret, not STRIPE_WEBHOOK_SECRET. Optional until the Connect destination exists.
+ */
+const stripeConnectWebhookSecret = defineSecret("STRIPE_CONNECT_WEBHOOK_SECRET");
 /** Publishable key (pk_…) returned to signup.html when set; safe to expose in the browser. */
 const stripePublishableKeyParam = defineString("STRIPE_PUBLISHABLE_KEY", { default: "" });
 const marketingOriginParam = defineString("MARKETING_ORIGIN", { default: "https://getbookking.com" });
@@ -2379,6 +2388,32 @@ function computeCardCheckoutAmounts(serviceCents, channel = "online") {
   };
 }
 
+/**
+ * In-person manual / Tap to Pay: tax is pass-through but Stripe + platform fees apply
+ * to the full charge, so gross-up uses service + tax as the fee base.
+ */
+function computeInPersonCheckoutTotals(serviceCents, taxCents, channel = "online") {
+  const service = Math.max(0, Math.round(Number(serviceCents) || 0));
+  const tax = Math.max(0, Math.round(Number(taxCents) || 0));
+  if (service <= 0 && tax <= 0) {
+    return {
+      serviceCents: 0,
+      taxCents: 0,
+      surchargeCents: 0,
+      totalCents: 0,
+      platformFeeCents: 0,
+    };
+  }
+  const checkout = computeCardCheckoutAmounts(service + tax, channel);
+  return {
+    serviceCents: service,
+    taxCents: tax,
+    surchargeCents: Math.max(0, checkout.totalCents - service - tax),
+    totalCents: checkout.totalCents,
+    platformFeeCents: checkout.platformFeeCents,
+  };
+}
+
 function parseServiceAmountCents(data) {
   if (typeof data?.serviceAmountCents === "number") {
     return Math.round(data.serviceAmountCents);
@@ -3432,21 +3467,25 @@ exports.createDepositLink = functions
       attributedMemberUid,
       chargeStripeAccountId: stripeAccountId,
       chargeStripeScope: payCtx.scope || "tenant",
+      checkoutChannel: "deposit_link",
       ...splitFee.splitMeta,
     };
-    const link = await stripe.paymentLinks.create(
-      {
-        line_items: lineItems,
-        application_fee_amount: feeCents,
+    const linkPayload = {
+      line_items: lineItems,
+      application_fee_amount: feeCents,
+      metadata: paymentMeta,
+      // Payment Link top-level metadata does NOT copy to the PaymentIntent.
+      // Webhook settlement reads PI metadata — must set payment_intent_data.
+      payment_intent_data: {
         metadata: paymentMeta,
-        // Payment Link top-level metadata does NOT copy to the PaymentIntent.
-        // Webhook settlement reads PI metadata — must set payment_intent_data.
-        payment_intent_data: {
-          metadata: paymentMeta,
-        },
       },
-      { stripeAccount: stripeAccountId }
-    );
+    };
+    if (paymentKind === "deposit") {
+      linkPayload.restrictions = { completed_sessions: { limit: 1 } };
+    }
+    const link = await stripe.paymentLinks.create(linkPayload, {
+      stripeAccount: stripeAccountId,
+    });
     return {
       url: link.url,
       platformFeeCents: splitFee.platformFeeCents,
@@ -3483,7 +3522,6 @@ exports.createPaymentIntentForManualCheckout = functions
       uid,
       await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
     );
-    const checkout = computeCardCheckoutAmounts(serviceAmount, "online");
     const paymentKind = (data?.paymentKind || "service").toString().trim() || "service";
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
@@ -3508,16 +3546,17 @@ exports.createPaymentIntentForManualCheckout = functions
       stripe,
       stripeAccountId,
       tenantData,
-      checkout.serviceCents
+      serviceAmount
     );
     const taxCents = tax.taxCents || 0;
-    const totalCents = checkout.totalCents + taxCents;
+    const priced = computeInPersonCheckoutTotals(serviceAmount, taxCents, "online");
+    const totalCents = priced.totalCents;
     const splitFee = await buildTeamSplitFeeAndMetaForCharge({
       tenant: tenantData,
       tenantId,
       payCtx,
       paymentKind,
-      serviceCents: checkout.serviceCents,
+      serviceCents: priced.serviceCents,
       grossCents: totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
@@ -3532,9 +3571,9 @@ exports.createPaymentIntentForManualCheckout = functions
         metadata: {
           tenantId: tenantId || "",
           paymentKind,
-          serviceAmountCents: String(checkout.serviceCents),
-          taxCents: String(taxCents),
-          surchargeCents: String(checkout.surchargeCents),
+          serviceAmountCents: String(priced.serviceCents),
+          taxCents: String(priced.taxCents),
+          surchargeCents: String(priced.surchargeCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
@@ -3553,9 +3592,9 @@ exports.createPaymentIntentForManualCheckout = functions
       stripeAccountId,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
-      serviceCents: checkout.serviceCents,
-      taxCents,
-      surchargeCents: checkout.surchargeCents,
+      serviceCents: priced.serviceCents,
+      taxCents: priced.taxCents,
+      surchargeCents: priced.surchargeCents,
       totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
@@ -4494,19 +4533,48 @@ async function refundConnectCharge({
       typeof charge.payment_intent === "string"
         ? charge.payment_intent
         : charge.payment_intent && charge.payment_intent.id;
-    if (tenantId) {
-      await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
-        db,
+    if (tenantId && refund && refund.id) {
+      let amountRefundedCents = Math.min(
+        capturedCents,
+        (charge.amount_refunded || 0) + refundCents
+      );
+      try {
+        const fresh = await stripe.charges.retrieve(
+          chargeId,
+          {},
+          { stripeAccount: stripeAccountId }
+        );
+        amountRefundedCents = Math.max(0, fresh.amount_refunded || 0);
+      } catch (_) {
+        /* use estimate */
+      }
+      const ledgerOut = await recordConnectRefundOnLedger(stripe, db, {
         tenantId,
-        chargeId,
         paymentIntentId: piId || null,
+        chargeId,
+        refundId: refund.id,
         refundCents,
         chargeCapturedCents: capturedCents,
-        refundId: refund && refund.id,
+        amountRefundedCents,
+        refundStatus: (refund.status || "succeeded").toString(),
+        runStudioReverse: true,
+        source: "createRefund",
       });
+      if (!ledgerOut.duplicate) {
+        await syncShopOrderRefundFromConnectPayment(stripe, db, {
+          tenantId,
+          paymentIntentId: piId || "",
+          stripeAccountId,
+          amountRefundedCents,
+          capturedCents,
+          fullyRefunded: capturedCents > 0 && amountRefundedCents >= capturedCents,
+          refundId: refund.id,
+          shopOrderIdHint: ledgerOut.shopOrderId || "",
+        });
+      }
     }
   } catch (revErr) {
-    console.error("refundConnectCharge studio share reverse", revErr.message || revErr);
+    console.error("refundConnectCharge ledger/refund sync", revErr.message || revErr);
   }
 
   return {
@@ -4526,6 +4594,540 @@ function isUnsettledRefundError(err) {
     msg.includes("insufficient funds") ||
     (msg.includes("available") && msg.includes("settling"))
   );
+}
+
+function stripeObjectId(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (value && value.id) return value.id.toString().trim();
+  return "";
+}
+
+/**
+ * Idempotent refund row on paymentLedger + optional studio-share reversal.
+ * Used by createRefund and Connect refund webhooks (refund.updated).
+ */
+async function recordConnectRefundOnLedger(
+  stripe,
+  db,
+  {
+    tenantId,
+    paymentIntentId,
+    chargeId,
+    refundId,
+    refundCents,
+    chargeCapturedCents,
+    amountRefundedCents,
+    refundStatus,
+    runStudioReverse = true,
+    source = "webhook",
+  }
+) {
+  const tid = (tenantId || "").toString().trim();
+  const piId = (paymentIntentId || "").toString().trim();
+  const rid = (refundId || "").toString().trim();
+  const status = (refundStatus || "succeeded").toString().trim().toLowerCase();
+  const thisRefundCents = Math.max(0, Math.round(Number(refundCents) || 0));
+  if (!tid || !piId || !rid) {
+    return { recorded: false, reason: "missing_ids" };
+  }
+
+  const ledgerRef = db
+    .collection("tenants")
+    .doc(tid)
+    .collection("paymentLedger")
+    .doc(piId);
+  const ledgerSnap = await ledgerRef.get();
+  if (!ledgerSnap.exists) {
+    return { recorded: false, reason: "no_ledger" };
+  }
+  const ledgerData = ledgerSnap.data() || {};
+  const processed = Array.isArray(ledgerData.refundEvents)
+    ? ledgerData.refundEvents
+    : [];
+  if (processed.some((r) => (r && r.refundId) === rid)) {
+    return { recorded: false, duplicate: true, reason: "duplicate_refund_id" };
+  }
+
+  const captured = Math.max(
+    0,
+    Math.round(Number(chargeCapturedCents) || 0) ||
+      Math.round(Number(ledgerData.grossCents) || 0)
+  );
+  let totalRefunded = Math.max(
+    0,
+    Math.round(Number(amountRefundedCents) || 0)
+  );
+  if (totalRefunded <= 0 && status === "succeeded") {
+    totalRefunded = Math.max(
+      0,
+      Math.round(Number(ledgerData.amountRefundedCents) || 0) + thisRefundCents
+    );
+  }
+  const fullyRefunded = captured > 0 && totalRefunded >= captured;
+
+  const refundEvent = {
+    refundId: rid,
+    amountCents: thisRefundCents,
+    status,
+    source: (source || "webhook").toString().slice(0, 40),
+  };
+
+  const patch = {
+    chargeId: (ledgerData.chargeId || chargeId || "").toString() || null,
+    amountRefundedCents: totalRefunded,
+    fullyRefunded,
+    lastRefundId: rid,
+    lastRefundStatus: status,
+    refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    refundEvents: admin.firestore.FieldValue.arrayUnion(refundEvent),
+  };
+  if (status === "failed" || status === "canceled") {
+    patch.lastRefundError = status;
+  } else {
+    patch.lastRefundError = admin.firestore.FieldValue.delete();
+  }
+  await ledgerRef.set(patch, { merge: true });
+
+  let studioReverse = { reversed: false, reason: "skipped" };
+  if (runStudioReverse && status === "succeeded" && thisRefundCents > 0) {
+    try {
+      studioReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+        db,
+        tenantId: tid,
+        chargeId: (chargeId || ledgerData.chargeId || "").toString() || null,
+        paymentIntentId: piId,
+        refundCents: thisRefundCents,
+        chargeCapturedCents: captured || thisRefundCents,
+        refundId: rid,
+      });
+    } catch (err) {
+      console.error("recordConnectRefundOnLedger studio reverse", rid, err.message);
+      studioReverse = { reversed: false, reason: "error", error: err.message };
+    }
+  }
+
+  try {
+    await syncBookingCancelRefundFromWebhook(db, tid, piId, {
+      amountRefundedCents: totalRefunded,
+      capturedCents: captured,
+      fullyRefunded,
+    });
+  } catch (err) {
+    console.error("recordConnectRefundOnLedger booking sync", piId, err.message);
+  }
+
+  return {
+    recorded: true,
+    duplicate: false,
+    amountRefundedCents: totalRefunded,
+    fullyRefunded,
+    studioReverse,
+    paymentKind: (ledgerData.paymentKind || "").toString(),
+    shopOrderId: (ledgerData.shopOrderId || "").toString().trim(),
+  };
+}
+
+/**
+ * Mark shopOrders paid/fulfilled rows refunded when Stripe confirms a Connect refund.
+ */
+async function syncShopOrderRefundFromConnectPayment(
+  stripe,
+  db,
+  {
+    tenantId,
+    paymentIntentId,
+    stripeAccountId,
+    amountRefundedCents,
+    capturedCents,
+    fullyRefunded,
+    refundId,
+    shopOrderIdHint = "",
+  }
+) {
+  const tid = (tenantId || "").toString().trim();
+  const piId = (paymentIntentId || "").toString().trim();
+  const acct = (stripeAccountId || "").toString().trim();
+  if (!tid || !piId || !acct.startsWith("acct_")) {
+    return { updated: false, reason: "missing_context" };
+  }
+
+  let shopOrderId = (shopOrderIdHint || "").toString().trim();
+  let paymentKind = "";
+  let captured = Math.max(0, Math.round(Number(capturedCents) || 0));
+  try {
+    const pi = await stripe.paymentIntents.retrieve(
+      piId,
+      {},
+      { stripeAccount: acct }
+    );
+    const meta = pi.metadata || {};
+    paymentKind = (meta.paymentKind || "").toString().trim().toLowerCase();
+    if (!shopOrderId) shopOrderId = (meta.shopOrderId || "").toString().trim();
+    if (captured <= 0) captured = Math.max(0, Math.round(Number(pi.amount) || 0));
+  } catch (err) {
+    console.warn("syncShopOrderRefund pi", piId, err.message || err);
+  }
+
+  if (!shopOrderId) {
+    const q = await db
+      .collection("tenants")
+      .doc(tid)
+      .collection("shopOrders")
+      .where("stripePaymentIntentId", "==", piId)
+      .limit(1)
+      .get();
+    if (q.empty) return { updated: false, reason: "not_shop" };
+    shopOrderId = q.docs[0].id;
+  } else if (paymentKind && paymentKind !== "shop" && !shopOrderIdHint) {
+    return { updated: false, reason: "not_shop" };
+  }
+
+  if (!shopOrderId) return { updated: false, reason: "no_order_id" };
+
+  const orderRef = db.collection("tenants").doc(tid).collection("shopOrders").doc(shopOrderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) return { updated: false, reason: "no_order" };
+  const order = orderSnap.data() || {};
+  const st = (order.status || "").toString().trim().toLowerCase();
+  if (st === "pending_payment" || st === "cancelled") {
+    return { updated: false, reason: "order_not_refundable_state" };
+  }
+
+  const refunded = Math.max(
+    0,
+    Math.round(Number(amountRefundedCents) || 0)
+  );
+  if (refunded <= 0) return { updated: false, reason: "zero_refund" };
+
+  const orderTotal = Math.max(
+    0,
+    Math.round(Number(order.totalCents) || 0) || captured
+  );
+  const cap = captured > 0 ? captured : orderTotal;
+  const isFull = !!fullyRefunded || (cap > 0 && refunded >= cap);
+
+  const patch = {
+    amountRefundedCents: refunded,
+    lastRefundId: (refundId || "").toString().trim() || null,
+    refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (isFull) {
+    patch.status = "refunded";
+    patch.refundedAt = admin.firestore.FieldValue.serverTimestamp();
+  } else {
+    patch.status = "partially_refunded";
+  }
+
+  await orderRef.set(patch, { merge: true });
+  console.log(
+    "syncShopOrderRefund",
+    JSON.stringify({ tenantId: tid, shopOrderId, piId, status: patch.status, refunded })
+  );
+  return { updated: true, shopOrderId, status: patch.status };
+}
+
+/**
+ * Sync booking refund state when Stripe confirms a Connect refund (cancel queue or Dashboard).
+ */
+async function syncBookingCancelRefundFromWebhook(
+  db,
+  tenantId,
+  paymentIntentId,
+  { amountRefundedCents, capturedCents, fullyRefunded }
+) {
+  const piId = (paymentIntentId || "").toString().trim();
+  if (!piId || !tenantId) return;
+  const snap = await db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("bookingRequests")
+    .where("stripePaymentIntentId", "==", piId)
+    .limit(8)
+    .get();
+  if (snap.empty) return;
+
+  for (const doc of snap.docs) {
+    const d = doc.data() || {};
+    const cancelStatus = (d.cancelRefundStatus || "").toString().trim().toLowerCase();
+    const refundCents = Math.max(0, Math.round(Number(amountRefundedCents) || 0));
+    if (refundCents <= 0) continue;
+
+    const paidCents = Math.max(0, Math.round(Number(d.paidCents) || 0));
+    const cap = Math.max(
+      0,
+      Math.round(Number(capturedCents) || 0) || paidCents
+    );
+    const isFull =
+      !!fullyRefunded || (cap > 0 && refundCents >= cap);
+
+    if (["pending", "failed"].includes(cancelStatus)) {
+      if (
+        cancelStatus === "failed" &&
+        !isUnsettledRefundError({ message: d.cancelRefundError })
+      ) {
+        continue;
+      }
+      const patch = { refundCents };
+      if (isFull) {
+        patch.cancelRefundStatus = "refunded";
+        patch.refundedAt = admin.firestore.FieldValue.serverTimestamp();
+        patch.cancelRefundError = admin.firestore.FieldValue.delete();
+      } else if (cancelStatus === "pending") {
+        patch.cancelRefundStatus = "pending";
+      }
+      await doc.ref.set(patch, { merge: true });
+      continue;
+    }
+
+    if (cancelStatus === "refunded" || cancelStatus === "already_refunded") {
+      continue;
+    }
+
+    const hasPaid =
+      paidCents > 0 ||
+      (d.stripePaymentIntentId || "").toString().trim() === piId;
+    if (!hasPaid) continue;
+
+    const patch = {
+      refundCents,
+      stripeRefundSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (isFull) {
+      patch.cancelRefundStatus = "refunded";
+      patch.refundedAt = admin.firestore.FieldValue.serverTimestamp();
+      patch.cancelRefundError = admin.firestore.FieldValue.delete();
+    } else {
+      patch.cancelRefundStatus = "partially_refunded";
+    }
+    await doc.ref.set(patch, { merge: true });
+  }
+}
+
+async function handleConnectRefundWebhook(stripe, db, event) {
+  const stripeAccountId = (event.account || "").toString().trim();
+  if (!stripeAccountId.startsWith("acct_")) {
+    return { skipped: true, reason: "not_connect_event" };
+  }
+
+  if (event.type === "refund.updated") {
+    const refund = event.data.object || {};
+    const status = (refund.status || "").toString().trim().toLowerCase();
+    const refundId = stripeObjectId(refund.id);
+    const refundCents = Math.max(0, Math.round(Number(refund.amount) || 0));
+    const piId = stripeObjectId(refund.payment_intent);
+    let chargeId = stripeObjectId(refund.charge);
+
+    console.log(
+      "stripeSubscriptionWebhook refund",
+      JSON.stringify({
+        refundId,
+        status,
+        piId,
+        chargeId,
+        refundCents,
+        account: stripeAccountId,
+      })
+    );
+
+    if (status === "pending" || status === "requires_action") {
+      return { skipped: true, reason: "pending" };
+    }
+
+    let tenantId = "";
+    let capturedCents = 0;
+    let amountRefundedCents = 0;
+    try {
+      if (piId) {
+        const pi = await stripe.paymentIntents.retrieve(
+          piId,
+          { expand: ["latest_charge"] },
+          { stripeAccount: stripeAccountId }
+        );
+        tenantId = ((pi.metadata && pi.metadata.tenantId) || "").toString().trim();
+        const latest = pi.latest_charge;
+        if (latest && typeof latest === "object") {
+          capturedCents = latest.amount_captured || latest.amount || 0;
+          amountRefundedCents = latest.amount_refunded || 0;
+          if (!chargeId && latest.id) chargeId = latest.id;
+        }
+      }
+      if (chargeId) {
+        const ch = await stripe.charges.retrieve(
+          chargeId,
+          {},
+          { stripeAccount: stripeAccountId }
+        );
+        capturedCents = capturedCents || ch.amount_captured || ch.amount || 0;
+        amountRefundedCents = Math.max(
+          amountRefundedCents,
+          ch.amount_refunded || 0
+        );
+        if (!tenantId && ch.metadata && ch.metadata.tenantId) {
+          tenantId = ch.metadata.tenantId.toString().trim();
+        }
+      }
+    } catch (err) {
+      console.error("stripeSubscriptionWebhook refund resolve", err.message || err);
+      return { error: err.message || "resolve_failed" };
+    }
+
+    if (!tenantId || !piId) {
+      console.warn(
+        "stripeSubscriptionWebhook refund missing tenantId or pi",
+        JSON.stringify({ refundId, piId, tenantId })
+      );
+      return { skipped: true, reason: "missing_tenant_or_pi" };
+    }
+
+    if (status === "failed" || status === "canceled") {
+      const ledgerRef = db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("paymentLedger")
+        .doc(piId);
+      await ledgerRef.set(
+        {
+          lastRefundId: refundId,
+          lastRefundStatus: status,
+          lastRefundError: (refund.failure_reason || status)
+            .toString()
+            .slice(0, 200),
+          refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return { ok: false, status };
+    }
+
+    if (status !== "succeeded") {
+      return { skipped: true, reason: status || "unknown_status" };
+    }
+
+    const out = await recordConnectRefundOnLedger(stripe, db, {
+      tenantId,
+      paymentIntentId: piId,
+      chargeId,
+      refundId,
+      refundCents,
+      chargeCapturedCents: capturedCents,
+      amountRefundedCents,
+      refundStatus: status,
+      runStudioReverse: true,
+      source: "webhook",
+    });
+
+    if (!out.duplicate) {
+      const full =
+        out.fullyRefunded ??
+        (capturedCents > 0 && amountRefundedCents >= capturedCents);
+      try {
+        await syncShopOrderRefundFromConnectPayment(stripe, db, {
+          tenantId,
+          paymentIntentId: piId,
+          stripeAccountId,
+          amountRefundedCents: out.amountRefundedCents ?? amountRefundedCents,
+          capturedCents,
+          fullyRefunded: full,
+          refundId,
+          shopOrderIdHint: out.shopOrderId || "",
+        });
+      } catch (shopErr) {
+        console.error("stripeSubscriptionWebhook refund shop sync", shopErr.message || shopErr);
+      }
+    }
+
+    console.log(
+      "stripeSubscriptionWebhook refund ledger",
+      JSON.stringify({
+        piId,
+        tenantId,
+        refundId,
+        duplicate: !!out.duplicate,
+        amountRefundedCents: out.amountRefundedCents,
+        fullyRefunded: out.fullyRefunded,
+        studioReverse: out.studioReverse,
+      })
+    );
+    return out;
+  }
+
+  if (event.type === "charge.refunded") {
+    const charge = event.data.object || {};
+    const chId = stripeObjectId(charge.id);
+    const piId = stripeObjectId(charge.payment_intent);
+    const amountRefundedCents = Math.max(
+      0,
+      Math.round(Number(charge.amount_refunded) || 0)
+    );
+    if (!piId || amountRefundedCents <= 0) {
+      return { skipped: true, reason: "no_pi_or_refund" };
+    }
+
+    let tenantId = ((charge.metadata && charge.metadata.tenantId) || "")
+      .toString()
+      .trim();
+    if (!tenantId && piId) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(
+          piId,
+          {},
+          { stripeAccount: stripeAccountId }
+        );
+        tenantId = ((pi.metadata && pi.metadata.tenantId) || "").toString().trim();
+      } catch (err) {
+        console.warn("stripeSubscriptionWebhook charge.refunded pi", err.message);
+      }
+    }
+    if (!tenantId) {
+      return { skipped: true, reason: "missing_tenant" };
+    }
+
+    const ledgerRef = db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("paymentLedger")
+      .doc(piId);
+    const snap = await ledgerRef.get();
+    if (!snap.exists) {
+      return { skipped: true, reason: "no_ledger" };
+    }
+    const captured = Math.max(
+      0,
+      Math.round(Number(charge.amount_captured) || Number(charge.amount) || 0)
+    );
+    const fullyRefunded = captured > 0 && amountRefundedCents >= captured;
+    await ledgerRef.set(
+      {
+        chargeId: chId || null,
+        amountRefundedCents,
+        fullyRefunded,
+        refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    try {
+      await syncShopOrderRefundFromConnectPayment(stripe, db, {
+        tenantId,
+        paymentIntentId: piId,
+        stripeAccountId,
+        amountRefundedCents,
+        capturedCents: captured,
+        fullyRefunded,
+        refundId: "",
+      });
+    } catch (shopErr) {
+      console.error("stripeSubscriptionWebhook charge.refunded shop", shopErr.message || shopErr);
+    }
+    console.log(
+      "stripeSubscriptionWebhook charge.refunded sync",
+      JSON.stringify({ piId, tenantId, amountRefundedCents })
+    );
+    return { ok: true, syncOnly: true, amountRefundedCents };
+  }
+
+  return { skipped: true, reason: "unhandled_type" };
 }
 
 async function refundBookingPaymentIfNeeded({
@@ -6871,6 +7473,7 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
     const notes = data.notes ? data.notes.toString().trim() : "";
     if (notes) bookingData.notes = notes;
     bookingData.chargeStripeAccountId = stripeAccountId;
+    const charterOwnerUid = (tenantData.ownerUid || "").toString().trim();
 
     const boatFilterId = (data.boatId || data.boat || "").toString().trim();
     await reserveCharterSlot(tenantId, tenantData, bookingData, {
@@ -6898,6 +7501,9 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
             surchargeCents: String(checkout.surchargeCents),
             chargeStripeAccountId: stripeAccountId,
             chargeStripeScope: "tenant",
+            checkoutChannel: "charter_web_checkout",
+            initiatedByUid: charterOwnerUid,
+            attributedMemberUid: charterOwnerUid,
           },
         },
         { stripeAccount: stripeAccountId }
@@ -7010,7 +7616,6 @@ exports.createPaymentIntentForTapToPay = functions
       uid,
       await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
     );
-    const checkout = computeCardCheckoutAmounts(serviceAmount, "card_present");
     const stripeAccountId = payCtx.stripeAccountId;
     if (!stripeAccountId) {
       throw new functions.https.HttpsError(
@@ -7034,16 +7639,17 @@ exports.createPaymentIntentForTapToPay = functions
       stripe,
       stripeAccountId,
       tenantData,
-      checkout.serviceCents
+      serviceAmount
     );
     const taxCents = tax.taxCents || 0;
-    const totalCents = checkout.totalCents + taxCents;
+    const priced = computeInPersonCheckoutTotals(serviceAmount, taxCents, "card_present");
+    const totalCents = priced.totalCents;
     const splitFee = await buildTeamSplitFeeAndMetaForCharge({
       tenant: tenantData,
       tenantId,
       payCtx,
       paymentKind: "service",
-      serviceCents: checkout.serviceCents,
+      serviceCents: priced.serviceCents,
       grossCents: totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
@@ -7058,15 +7664,16 @@ exports.createPaymentIntentForTapToPay = functions
         metadata: {
           tenantId: tenantId || "",
           paymentKind: "service",
-          serviceAmountCents: String(checkout.serviceCents),
-          taxCents: String(taxCents),
-          surchargeCents: String(checkout.surchargeCents),
+          serviceAmountCents: String(priced.serviceCents),
+          taxCents: String(priced.taxCents),
+          surchargeCents: String(priced.surchargeCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
           attributedMemberUid,
           chargeStripeAccountId: stripeAccountId,
           chargeStripeScope: payCtx.scope || "tenant",
+          checkoutChannel: "tap_to_pay",
           ...splitFee.splitMeta,
         },
       },
@@ -7077,9 +7684,9 @@ exports.createPaymentIntentForTapToPay = functions
       paymentIntentId: pi.id,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
-      serviceCents: checkout.serviceCents,
-      taxCents,
-      surchargeCents: checkout.surchargeCents,
+      serviceCents: priced.serviceCents,
+      taxCents: priced.taxCents,
+      surchargeCents: priced.surchargeCents,
       totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
@@ -7833,6 +8440,7 @@ exports.stripeSubscriptionWebhook = functions
     secrets: [
       stripeSecretKey,
       stripeWebhookSecret,
+      stripeConnectWebhookSecret,
       stripeSubscriptionPriceIds,
       require("./customDomain").namecheapApiKey,
     ],
@@ -7845,6 +8453,12 @@ exports.stripeSubscriptionWebhook = functions
 
     const secretKey = stripeSecretKey.value();
     const whSecret = stripeWebhookSecret.value();
+    let connectWhSecret = "";
+    try {
+      connectWhSecret = (stripeConnectWebhookSecret.value() || "").trim();
+    } catch (_) {
+      connectWhSecret = "";
+    }
     if (!secretKey || !whSecret) {
       console.error("stripeSubscriptionWebhook: missing secrets");
       res.status(503).send("Not configured");
@@ -7854,6 +8468,7 @@ exports.stripeSubscriptionWebhook = functions
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
     const sig = req.headers["stripe-signature"];
     let event;
+    let verifiedWith = "";
     try {
       const payload = req.rawBody || req.body;
       if (!Buffer.isBuffer(payload)) {
@@ -7861,12 +8476,33 @@ exports.stripeSubscriptionWebhook = functions
         res.status(400).send("Webhook payload error");
         return;
       }
-      event = stripe.webhooks.constructEvent(payload, sig, whSecret);
+      // Two Stripe destinations post to this URL with different signing secrets:
+      // "Your account" (subscriptions / Checkout) and "Connected accounts" (customer charges).
+      // Verify against each; reject only when neither matches.
+      try {
+        event = stripe.webhooks.constructEvent(payload, sig, whSecret);
+        verifiedWith = "account";
+      } catch (accountErr) {
+        if (!connectWhSecret) throw accountErr;
+        event = stripe.webhooks.constructEvent(payload, sig, connectWhSecret);
+        verifiedWith = "connect";
+      }
     } catch (err) {
       console.error("stripe webhook signature", err.message);
       res.status(400).send(`Webhook Error: ${err.message}`);
       return;
     }
+
+    console.log(
+      "stripeSubscriptionWebhook",
+      JSON.stringify({
+        id: event.id,
+        type: event.type,
+        via: verifiedWith,
+        account: event.account || null,
+        livemode: !!event.livemode,
+      })
+    );
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
@@ -7933,7 +8569,7 @@ exports.stripeSubscriptionWebhook = functions
               );
             }
             if (chargeAccountId) {
-              await teamPaymentSplit.recordAndSettleTenantPayment(stripe, {
+              const settled = await teamPaymentSplit.recordAndSettleTenantPayment(stripe, {
                 db,
                 tenantId,
                 tenant: tenantData,
@@ -7951,7 +8587,26 @@ exports.stripeSubscriptionWebhook = functions
                 loadBookingRequestForPayment,
                 confirmBookingAfterDepositPaid,
               });
-            } else if (
+              console.log(
+                "stripeSubscriptionWebhook ledger",
+                JSON.stringify({
+                  pi: pi.id,
+                  tenantId,
+                  account: chargeAccountId,
+                  paymentKind: (meta.paymentKind || "").toString(),
+                  grossCents: settled && settled.grossCents,
+                  alreadyRecorded: !!(settled && settled.alreadyRecorded),
+                  studioShareStatus: (settled && settled.studioShareStatus) || null,
+                })
+              );
+            } else {
+              console.warn(
+                "stripeSubscriptionWebhook ledger skipped: no Connect account id",
+                JSON.stringify({ pi: pi.id, tenantId, paymentKind: (meta.paymentKind || "").toString() })
+              );
+            }
+            if (
+              !chargeAccountId &&
               (meta.paymentKind || "").toString() === "deposit" &&
               meta.bookingRequestId
             ) {
@@ -8037,6 +8692,18 @@ exports.stripeSubscriptionWebhook = functions
         }
       } catch (e) {
         console.error("stripeSubscriptionWebhook invoice sync", e);
+      }
+    }
+
+    if (event.type === "refund.updated" || event.type === "charge.refunded") {
+      try {
+        await handleConnectRefundWebhook(stripe, db, event);
+      } catch (e) {
+        console.error(
+          "stripeSubscriptionWebhook connect refund",
+          event.type,
+          e.message || e
+        );
       }
     }
 

@@ -227,12 +227,11 @@
   position: relative;
   z-index: 1;
 }
-/* Blade hero image slot is a fixed 16:9 frame. `align-self:start` prevents CSS Grid
-   from stretching the cell past 16:9 so the in-app crop renders pixel-for-pixel. */
+/* Fill the desktop hero row so the photo meets the next band. Left-column
+   padding stays put; object-fit:cover crops the extra height. */
 .blade-page .blade-hero-right:has(> .blade-hero-image) {
-  aspect-ratio: 16 / 9;
   min-height: 0;
-  align-self: start;
+  align-self: stretch;
 }
 .blade-page .blade-hero-image {
   width: 100%;
@@ -243,6 +242,8 @@
   transition: transform 8s ease;
 }
 .blade-page .blade-hero-right:has(> .blade-hero-image) .blade-hero-image {
+  position: absolute;
+  inset: 0;
   min-height: 0;
 }
 .blade-page .blade-hero-right:hover .blade-hero-image { transform: scale(1.05); }
@@ -825,6 +826,10 @@
   .blade-page .blade-nav-links { display: none !important; }
   .blade-page .blade-nav-menu-btn { display: flex !important; }
   .blade-page .blade-hero { grid-template-columns: 1fr; }
+  .blade-page .blade-hero-right:has(> .blade-hero-image) {
+    aspect-ratio: 16 / 9;
+    align-self: start;
+  }
   .blade-page .blade-hero-left { padding: 32px 24px 48px; }
   .blade-page .blade-hero-vertical { display: none; }
   .blade-page .blade-stats-bar { grid-template-columns: repeat(2, 1fr); }

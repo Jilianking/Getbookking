@@ -1,6 +1,6 @@
 /**
  * One-off: fully remove a user by email (Auth + Firestore + tenant if owner).
- * Usage: node scripts/delete-user-by-email.js noabpope52@gmail.com
+ * Usage: node scripts/delete-user-by-email.js user@example.com
  *
  * Auth: firebase login OR GOOGLE_APPLICATION_CREDENTIALS
  */

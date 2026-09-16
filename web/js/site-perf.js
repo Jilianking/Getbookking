@@ -66,8 +66,8 @@
   }
 
   var THEME_CSS = {
-    studio12: '/css/studio12-theme.css?v=20260822g',
-    blade: '/css/blade-theme.css?v=20260812m',
+    studio12: '/css/studio12-theme.css?v=20260915a',
+    blade: '/css/blade-theme.css?v=20260915a',
     luxe: '/css/luxe-theme.css?v=20260822a',
     stonecut: '/css/stonecut-theme.css?v=20260822h',
     classic: '/css/classic-theme.css?v=20260812m',

@@ -864,12 +864,12 @@ private struct AccountBillingSetupSheetContent: View {
                         HStack {
                             Text("Start paid plan")
                             Spacer()
-                            if paymentsViewModel.isStartingSubscription {
+                            if paymentsViewModel.isOpeningBillingWebsite {
                                 ProgressView().scaleEffect(0.85)
                             }
                         }
                     }
-                    .disabled(paymentsViewModel.isStartingSubscription)
+                    .disabled(paymentsViewModel.isOpeningBillingWebsite)
                     Button("Manage billing on web") {
                         Task { await paymentsViewModel.openBillingToStartSubscription() }
                     }

@@ -1155,7 +1155,7 @@
       if (m.smsPhonePurchasingBlockedDuringTestFlight) {
         note.textContent =
           (m.smsPhonePurchaseBlockMessage || '').trim() ||
-          'Phone number purchasing is blocked during TestFlight.';
+          'Unavailable.';
         note.classList.remove('hidden');
         return;
       }
@@ -1233,7 +1233,7 @@
         var blockNote = document.getElementById('smsLineActionNote');
         blockNote.textContent =
           (m.smsPhonePurchaseBlockMessage || '').trim() ||
-          'Phone number purchasing is blocked during TestFlight.';
+          'Unavailable.';
         blockNote.classList.remove('hidden');
         return;
       }

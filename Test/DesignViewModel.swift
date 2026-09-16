@@ -3446,7 +3446,10 @@ class DesignViewModel: ObservableObject, BusinessHoursEditing {
         shopOrders
             .filter {
                 let s = $0.statusLower
-                return s != ShopOrderStatus.cancelled && s != ShopOrderStatus.pendingPayment
+                return s != ShopOrderStatus.cancelled
+                    && s != ShopOrderStatus.pendingPayment
+                    && s != ShopOrderStatus.refunded
+                    && s != ShopOrderStatus.partiallyRefunded
             }
             .reduce(0) { $0 + ($1.totalCents ?? $1.subtotalCents) }
     }

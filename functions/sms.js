@@ -185,8 +185,7 @@ const BYPASS_SUBSCRIPTION_PAYMENT_GATE = false;
  * Set false before App Store launch when SMS sales go live.
  */
 const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = true;
-const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE =
-  "Phone number purchasing is blocked during TestFlight.";
+const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
 
 function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;

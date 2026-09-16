@@ -362,7 +362,7 @@ struct DomainSettingsView: View {
             Text("Buy a domain")
                 .font(.subheadline.weight(.semibold))
             if viewModel.domainPurchasingBlockedDuringTestFlight {
-                Label("Unavailable during TestFlight", systemImage: "globe.badge.chevron.backward")
+                Label("Unavailable", systemImage: "globe.badge.chevron.backward")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppDesign.brandWarm)
                 Text(viewModel.domainPurchaseBlockedDisplayMessage)

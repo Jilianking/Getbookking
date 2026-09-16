@@ -57,6 +57,8 @@ enum BookingRequestStatus {
         case declined: return "Declined"
         case cancelled: return "Cancelled"
         case "refund_pending": return "Refund pending"
+        case "refunded": return "Refunded"
+        case "partially_refunded": return "Partially refunded"
         default:
             let raw = status.trimmingCharacters(in: .whitespacesAndNewlines)
             if raw.isEmpty { return "Unknown" }

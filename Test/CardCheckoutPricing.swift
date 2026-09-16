@@ -79,11 +79,11 @@ enum CardCheckoutPricing {
             stripeFixed = stripeCardPresentFixedCents
         }
 
-        // Fees are grossed up on the service amount only (tax is added on top), matching server.
+        // Gross-up fee base is service + tax (tax is pass-through but Stripe/platform fees apply to it).
         let combinedBps = stripeBps + platformFeeBps
-        let servicePlusFees = Int(ceil(Double(service + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
-        let passThrough = servicePlusFees - service
-        let total = servicePlusFees + tax
+        let feeBase = service + tax
+        let total = Int(ceil(Double(feeBase + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
+        let passThrough = max(0, total - service - tax)
         let platformFee = platformFeeCents(totalCents: total)
 
         return CardCheckoutBreakdown(

@@ -452,7 +452,7 @@ async function recordAndSettleTenantPayment(stripe, deps) {
   });
 
   if (bookingRequestId && (paymentKind === "deposit" || paymentKind === "service")) {
-    await confirmBookingAfterDepositPaid(tenantId, bookingRequestId);
+    await confirmBookingAfterDepositPaid(tenantId, bookingRequestId, pi);
   }
 
   return {

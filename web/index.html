@@ -4066,7 +4066,7 @@
         if (window.BKSitePerf && window.BKSitePerf.ensureThemeCss) {
           css = window.BKSitePerf.ensureThemeCss(themeId);
         } else if (/studio-?12/i.test(String(themeId || ''))) {
-          css = loadThemeStylesheet('/css/studio12-theme.css?v=20260822g', 'bk-theme-css-studio12');
+          css = loadThemeStylesheet('/css/studio12-theme.css?v=20260915a', 'bk-theme-css-studio12');
         } else if (/blade/i.test(String(themeId || ''))) {
           css = loadThemeStylesheet('/css/blade-theme.css?v=20260915a', 'bk-theme-css-blade');
         } else if (/luxe/i.test(String(themeId || ''))) {
@@ -5939,12 +5939,12 @@
       function tenantBusinessHoursTrimmed(tenant) {
         return String(tenant.businessHours || '').trim();
       }
-      /** Parse tenant `businessHoursWeekly` into grouped display rows (Mon-first). */
+      /** Parse tenant `businessHoursWeekly` into one display row per day (Mon-first). */
       function businessHoursWeeklyGroupedRows(tenant) {
         var w = tenant && tenant.businessHoursWeekly;
         if (!w || typeof w !== 'object') return null;
         var dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-        var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        var dayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         if (!Object.keys(w).length) return null;
         function intMin(v) {
           if (v == null) return 0;
@@ -5973,28 +5973,16 @@
             })
           };
         }
-        function scheduleKey(day) {
-          if (day.closed || !day.ranges.length) return 'closed';
-          return day.ranges.map(function(r) { return r.openMin + '-' + r.closeMin; }).join(',');
-        }
         function scheduleText(day) {
           if (day.closed || !day.ranges.length) return 'Closed';
           return day.ranges.map(function(r) {
             return formatMin(r.openMin) + ' – ' + formatMin(r.closeMin);
           }).join(', ');
         }
-        var days = dayKeys.map(function(k) { return parseDay(w[k]); });
-        var rows = [];
-        var i = 0;
-        while (i < 7) {
-          var j = i;
-          var keyI = scheduleKey(days[i]);
-          while (j + 1 < 7 && scheduleKey(days[j + 1]) === keyI) j++;
-          var label = i === j ? dayLabels[i] : (dayLabels[i] + ' – ' + dayLabels[j]);
-          rows.push({ label: label, time: scheduleText(days[i]), closed: days[i].closed || !days[i].ranges.length });
-          i = j + 1;
-        }
-        return rows;
+        return dayKeys.map(function(k, i) {
+          var day = parseDay(w[k]);
+          return { label: dayLabels[i], time: scheduleText(day), closed: day.closed || !day.ranges.length };
+        });
       }
       /** Studio 12 hours: structured grid from weekly schedule, else plain text fallback. */
       function studio12HoursBlockHtml(tenant) {

@@ -4970,7 +4970,7 @@ async function handleConnectRefundWebhook(stripe, db, event) {
       }
     } catch (err) {
       console.error("stripeSubscriptionWebhook refund resolve", err.message || err);
-      return { error: err.message || "resolve_failed" };
+      throw err;
     }
 
     if (!tenantId || !piId) {
@@ -5130,6 +5130,30 @@ async function handleConnectRefundWebhook(stripe, db, event) {
   return { skipped: true, reason: "unhandled_type" };
 }
 
+async function connectAccountIdsForBookingRefund(tenant, tenantId, booking) {
+  const ids = [];
+  const tenantAcct = ((tenant && tenant.stripeAccountId) || "").toString().trim();
+  if (tenantAcct.startsWith("acct_")) ids.push(tenantAcct);
+  const uids = [
+    (booking && booking.assignedMemberUid) || "",
+    (booking && booking.attributedMemberUid) || "",
+  ]
+    .map((u) => u.toString().trim())
+    .filter(Boolean);
+  const seenUid = new Set();
+  for (const uid of uids) {
+    if (seenUid.has(uid)) continue;
+    seenUid.add(uid);
+    const snap = await db.collection("users").doc(uid).get();
+    if (!snap.exists) continue;
+    const data = snap.data() || {};
+    if ((data.tenantId || "").toString() !== (tenantId || "").toString()) continue;
+    const acct = (data.stripeAccountId || "").toString().trim();
+    if (acct.startsWith("acct_") && !ids.includes(acct)) ids.push(acct);
+  }
+  return ids;
+}
+
 async function refundBookingPaymentIfNeeded({
   stripe,
   tenant,
@@ -5138,35 +5162,58 @@ async function refundBookingPaymentIfNeeded({
   requestId,
 }) {
   const piId = (booking.stripePaymentIntentId || "").toString().trim();
+  const refundAttempt =
+    Math.max(0, Math.round(Number(booking.cancelRefundAttempts) || 0)) + 1;
   if (!piId.startsWith("pi_")) {
-    return { refunded: false };
+    return { refunded: false, refundAttempt };
   }
-  const stripeAccountId = (
-    booking.chargeStripeAccountId ||
-    (tenant && tenant.stripeAccountId) ||
-    ""
-  )
-    .toString()
-    .trim();
-  if (!stripeAccountId.startsWith("acct_")) {
+  const accountIds = await connectAccountIdsForBookingRefund(tenant, tenantId, booking);
+  if (!accountIds.length) {
     return {
       refunded: false,
+      refundAttempt,
       refundError: "Stripe is not set up for refunds.",
     };
   }
   try {
-    const pi = await stripe.paymentIntents.retrieve(piId, {
-      stripeAccount: stripeAccountId,
-      expand: ["latest_charge"],
-    });
+    const retrieved = await retrievePaymentIntentOnConnectAccounts(
+      stripe,
+      piId,
+      accountIds
+    );
+    if (!retrieved) {
+      return {
+        refunded: false,
+        refundAttempt,
+        refundError: "Payment not found on this business.",
+      };
+    }
+    const stripeAccountId = retrieved.stripeAccountId;
+    const pi = await stripe.paymentIntents.retrieve(
+      piId,
+      { expand: ["latest_charge"] },
+      { stripeAccount: stripeAccountId }
+    );
+    const metaTenant = ((pi.metadata && pi.metadata.tenantId) || "").toString();
+    if (metaTenant !== (tenantId || "").toString()) {
+      return {
+        refunded: false,
+        refundAttempt,
+        refundError: "account_mismatch",
+      };
+    }
     if (pi.status !== "succeeded") {
-      return { refunded: false };
+      return { refunded: false, refundAttempt };
     }
     const latest = pi.latest_charge;
     const chargeId =
       typeof latest === "string" ? latest : latest && latest.id;
     if (!chargeId || !String(chargeId).startsWith("ch_")) {
-      return { refunded: false, refundError: "No charge found for this payment." };
+      return {
+        refunded: false,
+        refundAttempt,
+        refundError: "No charge found for this payment.",
+      };
     }
     const result = await refundConnectCharge({
       stripe,
@@ -5175,29 +5222,35 @@ async function refundBookingPaymentIfNeeded({
       chargeId: String(chargeId),
       amountCents: null,
       reason: "requested_by_customer",
-      idempotencyKey: `cancel_booking_${tenantId}_${requestId}`,
+      idempotencyKey: `cancel_booking_${tenantId}_${requestId}_${refundAttempt}`,
       queueIfUnsettled: true,
     });
     const chargePatch = { chargeId: String(chargeId) };
     if (result.alreadyRefunded) {
-      return { refunded: false, alreadyRefunded: true, ...chargePatch };
+      return { refunded: false, alreadyRefunded: true, refundAttempt, ...chargePatch };
     }
     if (result.pendingSettlement) {
       return {
         refunded: false,
         refundPending: true,
+        refundAttempt,
         refundCents: result.refundCents,
         ...chargePatch,
       };
     }
-    return { refunded: true, refundCents: result.refundCents, ...chargePatch };
+    return {
+      refunded: true,
+      refundAttempt,
+      refundCents: result.refundCents,
+      ...chargePatch,
+    };
   } catch (err) {
     const msg = (err && err.message) || "Refund failed.";
     if (isUnsettledRefundError(err)) {
-      return { refunded: false, refundPending: true };
+      return { refunded: false, refundPending: true, refundAttempt };
     }
     console.error("refundBookingPaymentIfNeeded", requestId, msg);
-    return { refunded: false, refundError: msg };
+    return { refunded: false, refundAttempt, refundError: msg };
   }
 }
 
@@ -5205,9 +5258,12 @@ function cancelRefundPatchFromResult(refundResult) {
   if (!refundResult) return null;
   const chargeId = (refundResult.chargeId || "").toString().trim();
   const chargePatch = chargeId.startsWith("ch_") ? { stripeChargeId: chargeId } : {};
+  const attempt = Math.max(0, Math.round(Number(refundResult.refundAttempt) || 0));
+  const attemptPatch = attempt > 0 ? { cancelRefundAttempts: attempt } : {};
   if (refundResult.refunded) {
     return {
       ...chargePatch,
+      ...attemptPatch,
       refundedAt: admin.firestore.FieldValue.serverTimestamp(),
       refundCents: refundResult.refundCents || 0,
       cancelRefundStatus: "refunded",
@@ -5215,11 +5271,16 @@ function cancelRefundPatchFromResult(refundResult) {
     };
   }
   if (refundResult.alreadyRefunded) {
-    return { ...chargePatch, cancelRefundStatus: "already_refunded" };
+    return {
+      ...chargePatch,
+      ...attemptPatch,
+      cancelRefundStatus: "already_refunded",
+    };
   }
   if (refundResult.refundPending) {
     return {
       ...chargePatch,
+      ...attemptPatch,
       cancelRefundStatus: "pending",
       cancelRefundQueuedAt: admin.firestore.FieldValue.serverTimestamp(),
       cancelRefundError: admin.firestore.FieldValue.delete(),
@@ -5228,11 +5289,12 @@ function cancelRefundPatchFromResult(refundResult) {
   if (refundResult.refundError) {
     return {
       ...chargePatch,
+      ...attemptPatch,
       cancelRefundStatus: "failed",
       cancelRefundError: String(refundResult.refundError).slice(0, 500),
     };
   }
-  return null;
+  return attemptPatch.cancelRefundAttempts ? attemptPatch : null;
 }
 
 /**
@@ -7317,6 +7379,13 @@ async function markCharterBookingPaidFromPaymentIntent(
   if (!pi || pi.status !== "succeeded") {
     throw new HttpsError("failed-precondition", "Payment is not complete yet.");
   }
+  const meta = pi.metadata || {};
+  if ((meta.tenantId || "").toString() !== (tenantId || "").toString()) {
+    throw new HttpsError("permission-denied", "Payment does not belong to this business.");
+  }
+  if ((meta.bookingRequestId || "").toString() !== (requestId || "").toString()) {
+    throw new HttpsError("failed-precondition", "Payment does not match this booking.");
+  }
   let alreadyPaid = false;
   let recoveredAfterExpiry = false;
   await db.runTransaction(async (tx) => {
@@ -7328,6 +7397,16 @@ async function markCharterBookingPaidFromPaymentIntent(
     const storedPi = (booking.stripePaymentIntentId || "").toString().trim();
     if (storedPi && storedPi !== paymentIntentId) {
       throw new HttpsError("failed-precondition", "Payment does not match this booking.");
+    }
+    const chargeCents = Math.max(0, Math.round(Number(booking.chargeCents) || 0));
+    if (chargeCents >= 50) {
+      const expected = computeCardCheckoutAmounts(chargeCents, "online").totalCents;
+      if (Number(pi.amount) !== expected) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Payment amount does not match this booking."
+        );
+      }
     }
     const status = (booking.status || "").toString().trim().toLowerCase();
     const cancelReason = (booking.cancelReason || "").toString().trim().toLowerCase();
@@ -8435,6 +8514,163 @@ exports.completeProviderSubscriptionCheckout = functions
 /**
  * Stripe webhook: completes provisioning when Checkout succeeds (backup if user closes tab before client completes).
  */
+function expectedStripeLivemode(secretKey) {
+  const k = (secretKey || "").toString();
+  return k.startsWith("sk_live_") || k.startsWith("rk_live_");
+}
+
+function isRetryableWebhookError(err) {
+  if (!err) return false;
+  const httpsCode = (err.code || "").toString();
+  if (
+    httpsCode === "unavailable" ||
+    httpsCode === "deadline-exceeded" ||
+    httpsCode === "aborted" ||
+    httpsCode === "resource-exhausted"
+  ) {
+    return true;
+  }
+  const status = Number(err.statusCode || err.status || 0);
+  if (status === 429 || status >= 500) return true;
+  const grpc = Number(err.code);
+  if ([4, 8, 10, 13, 14].includes(grpc)) return true;
+  const msg = `${err.message || ""} ${err.details || ""}`.toLowerCase();
+  return (
+    msg.includes("unavailable") ||
+    msg.includes("deadline exceeded") ||
+    msg.includes("etimedout") ||
+    msg.includes("econnreset") ||
+    msg.includes("econnrefused") ||
+    msg.includes("socket hang up") ||
+    msg.includes("rate limit") ||
+    msg.includes("too many requests")
+  );
+}
+
+async function handleConnectDisputeWebhook(stripe, db, event) {
+  if (event.type !== "charge.dispute.created" && event.type !== "charge.dispute.closed") {
+    return { skipped: true, reason: "not_dispute" };
+  }
+  const stripeAccountId = (event.account || "").toString().trim();
+  if (!stripeAccountId.startsWith("acct_")) {
+    return { skipped: true, reason: "not_connect_event" };
+  }
+  const dispute = event.data.object || {};
+  const disputeId = stripeObjectId(dispute.id);
+  const status = (dispute.status || "").toString().trim().toLowerCase();
+  const reason = (dispute.reason || "").toString().trim().slice(0, 80);
+  const disputeCents = Math.max(0, Math.round(Number(dispute.amount) || 0));
+  let piId = stripeObjectId(dispute.payment_intent);
+  let chargeId = stripeObjectId(dispute.charge);
+  const closed = event.type === "charge.dispute.closed";
+
+  if (!piId && chargeId) {
+    const ch = await stripe.charges.retrieve(chargeId, {}, { stripeAccount: stripeAccountId });
+    piId = stripeObjectId(ch.payment_intent);
+    if (!piId && ch.payment_intent && typeof ch.payment_intent === "object") {
+      piId = stripeObjectId(ch.payment_intent.id);
+    }
+  }
+  if (!piId) {
+    console.warn("stripeSubscriptionWebhook dispute missing pi", disputeId);
+    return { skipped: true, reason: "missing_pi" };
+  }
+
+  const pi = await stripe.paymentIntents.retrieve(piId, {}, { stripeAccount: stripeAccountId });
+  const tenantId = ((pi.metadata && pi.metadata.tenantId) || "").toString().trim();
+  if (!tenantId) {
+    return { skipped: true, reason: "missing_tenant" };
+  }
+
+  const ledgerRef = db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("paymentLedger")
+    .doc(piId);
+  const patch = {
+    disputeId,
+    disputeStatus: status,
+    disputeReason: reason,
+    disputeAmountCents: disputeCents,
+    disputeChargeId: chargeId || null,
+    disputeUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (!closed) {
+    patch.disputeOpenedAt = admin.firestore.FieldValue.serverTimestamp();
+  } else {
+    patch.disputeClosedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.disputeLost = status === "lost";
+    patch.disputeWon = status === "won";
+  }
+  await ledgerRef.set(patch, { merge: true });
+
+  const relatedPatch = {
+    disputeId,
+    disputeStatus: status,
+    disputeAmountCents: disputeCents,
+    disputeUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (closed) {
+    relatedPatch.disputeClosedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  const shopOrderIdHint = ((pi.metadata && pi.metadata.shopOrderId) || "").toString().trim();
+  if (shopOrderIdHint) {
+    await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("shopOrders")
+      .doc(shopOrderIdHint)
+      .set(relatedPatch, { merge: true });
+  } else {
+    const orders = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("shopOrders")
+      .where("stripePaymentIntentId", "==", piId)
+      .limit(4)
+      .get();
+    for (const doc of orders.docs) {
+      await doc.ref.set(relatedPatch, { merge: true });
+    }
+  }
+
+  const bookingRequestIdHint = ((pi.metadata && pi.metadata.bookingRequestId) || "")
+    .toString()
+    .trim();
+  if (bookingRequestIdHint) {
+    await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("bookingRequests")
+      .doc(bookingRequestIdHint)
+      .set(relatedPatch, { merge: true });
+  } else {
+    const books = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("bookingRequests")
+      .where("stripePaymentIntentId", "==", piId)
+      .limit(8)
+      .get();
+    for (const doc of books.docs) {
+      await doc.ref.set(relatedPatch, { merge: true });
+    }
+  }
+
+  console.log(
+    "stripeSubscriptionWebhook dispute",
+    JSON.stringify({
+      disputeId,
+      type: event.type,
+      status,
+      tenantId,
+      piId,
+    })
+  );
+  return { ok: true, disputeId, status };
+}
+
 exports.stripeSubscriptionWebhook = functions
   .runWith({
     secrets: [
@@ -8504,47 +8740,68 @@ exports.stripeSubscriptionWebhook = functions
       })
     );
 
+    if (!!event.livemode !== expectedStripeLivemode(secretKey)) {
+      console.warn(
+        "stripeSubscriptionWebhook livemode mismatch",
+        JSON.stringify({
+          id: event.id,
+          type: event.type,
+          livemode: !!event.livemode,
+        })
+      );
+      res.json({ received: true, skipped: "livemode" });
+      return;
+    }
+
+    const handlerErrors = [];
+    const track = async (name, fn) => {
+      try {
+        await fn();
+      } catch (e) {
+        console.error(
+          "stripeSubscriptionWebhook",
+          name,
+          e && e.message ? e.message : e
+        );
+        handlerErrors.push(e);
+      }
+    };
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      try {
+      await track("checkout.session.completed", async () => {
         const full = await stripe.checkout.sessions.retrieve(session.id, {
           expand: ["subscription"],
         });
         await finalizeFromCheckoutSession(stripe, full);
-      } catch (e) {
-        console.error("stripeSubscriptionWebhook finalize", e);
-      }
+      });
     }
 
     if (event.type === "payment_intent.succeeded") {
       const pi = event.data.object;
       const meta = pi.metadata || {};
       if ((meta.paymentKind || "").toString() === "shop" && meta.shopOrderId && meta.tenantId) {
-        try {
+        await track("shop_order_paid", async () => {
           await markShopOrderPaidFromPaymentIntent(
             stripe,
             meta.tenantId.toString(),
             meta.shopOrderId.toString(),
             pi.id
           );
-        } catch (e) {
-          console.error("stripeSubscriptionWebhook shop order finalize", e.message);
-        }
+        });
       } else if (
         (meta.paymentKind || "").toString() === "domain_purchase" ||
         (meta.paymentKind || "").toString() === "domain_transfer"
       ) {
-        try {
+        await track("domain_fulfill", async () => {
           const { fulfillDomainPaymentIntent } = require("./customDomain");
           await fulfillDomainPaymentIntent(pi.id);
-        } catch (e) {
-          console.error("stripeSubscriptionWebhook domain finalize", e.message || e);
-        }
+        });
       } else if (
         meta.tenantId &&
         ["deposit", "service"].includes((meta.paymentKind || "").toString())
       ) {
-        try {
+        await track("record_and_settle", async () => {
           const tenantId = meta.tenantId.toString();
           const tenantSnap = await db.collection("tenants").doc(tenantId).get();
           if (tenantSnap.exists) {
@@ -8612,19 +8869,14 @@ exports.stripeSubscriptionWebhook = functions
             ) {
               await confirmBookingAfterDepositPaid(
                 tenantId,
-                meta.bookingRequestId.toString()
+                meta.bookingRequestId.toString(),
+                pi
               );
             }
           }
-        } catch (e) {
-          console.error(
-            "stripeSubscriptionWebhook recordAndSettleTenantPayment",
-            e.message || e
-          );
-        }
+        });
       }
 
-      // Record Stripe Tax for service / manual / Tap to Pay when a calculation was created.
       const taxCalculationId = (meta.taxCalculationId || "").toString().trim();
       const taxAccountId = (meta.chargeStripeAccountId || "").toString().trim();
       if (
@@ -8632,16 +8884,14 @@ exports.stripeSubscriptionWebhook = functions
         taxAccountId &&
         (meta.paymentKind || "").toString() !== "shop"
       ) {
-        try {
+        await track("tax_transaction", async () => {
           await recordShopTaxTransactionFromCalculation(
             stripe,
             taxAccountId,
             taxCalculationId,
             pi.id
           );
-        } catch (e) {
-          console.error("stripeSubscriptionWebhook tax transaction", e.message);
-        }
+        });
       }
     }
 
@@ -8650,7 +8900,7 @@ exports.stripeSubscriptionWebhook = functions
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      try {
+      await track("subscription_sync", async () => {
         const sub = event.data.object;
         const customerId =
           typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
@@ -8672,13 +8922,11 @@ exports.stripeSubscriptionWebhook = functions
             fullSub
           );
         }
-      } catch (e) {
-        console.error("stripeSubscriptionWebhook subscription sync", e);
-      }
+      });
     }
 
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
-      try {
+      await track("invoice_sync", async () => {
         const inv = event.data.object;
         const customerId =
           typeof inv.customer === "string" ? inv.customer : inv.customer && inv.customer.id;
@@ -8690,23 +8938,26 @@ exports.stripeSubscriptionWebhook = functions
           });
           await syncStripeSubscriptionStatusToTenant(stripe, customerId, sub.status, sub);
         }
-      } catch (e) {
-        console.error("stripeSubscriptionWebhook invoice sync", e);
-      }
+      });
     }
 
     if (event.type === "refund.updated" || event.type === "charge.refunded") {
-      try {
+      await track("connect_refund", async () => {
         await handleConnectRefundWebhook(stripe, db, event);
-      } catch (e) {
-        console.error(
-          "stripeSubscriptionWebhook connect refund",
-          event.type,
-          e.message || e
-        );
-      }
+      });
     }
 
+    if (event.type === "charge.dispute.created" || event.type === "charge.dispute.closed") {
+      await track("connect_dispute", async () => {
+        await handleConnectDisputeWebhook(stripe, db, event);
+      });
+    }
+
+    const retryable = handlerErrors.find(isRetryableWebhookError);
+    if (retryable) {
+      res.status(500).send("Webhook handler failed");
+      return;
+    }
     res.json({ received: true });
   });
 
@@ -8790,7 +9041,7 @@ function bookingRequiresApproval(confirmationType) {
   );
 }
 
-async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId) {
+async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId, paymentIntent) {
   const tid = (tenantId || "").toString().trim();
   const rid = (bookingRequestId || "").toString().trim();
   if (!tid || !rid) return false;
@@ -8801,16 +9052,27 @@ async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId) {
     .doc(rid);
   const snap = await reqRef.get();
   if (!snap.exists) return false;
-  const status = (snap.data().status || "").toString().trim().toLowerCase();
-  if (status !== "pending_deposit" && status !== "pending_payment") return false;
-  await reqRef.set(
-    {
-      status: "confirmed",
-      depositPaidAt: admin.firestore.FieldValue.serverTimestamp(),
-      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const data = snap.data() || {};
+  const status = (data.status || "").toString().trim().toLowerCase();
+  const patch = {};
+  const pi = paymentIntent && paymentIntent.id ? paymentIntent : null;
+  if (pi) {
+    const storedPi = (data.stripePaymentIntentId || "").toString().trim();
+    if (storedPi && storedPi !== pi.id) {
+      console.warn("confirmBookingAfterDepositPaid pi mismatch", rid, storedPi, pi.id);
+    } else {
+      patch.stripePaymentIntentId = pi.id;
+      patch.paidCents = pi.amount || 0;
+      patch.paidAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+  }
+  if (status === "pending_deposit" || status === "pending_payment") {
+    patch.status = "confirmed";
+    patch.depositPaidAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  if (!Object.keys(patch).length) return false;
+  await reqRef.set(patch, { merge: true });
   return true;
 }
 
@@ -10377,6 +10639,13 @@ exports.retryPendingBookingRefunds = functions
       const status = (d.status || "").toString().trim().toLowerCase();
       if (status !== "cancelled" && status !== "canceled") continue;
       const refundStatus = (d.cancelRefundStatus || "").toString().trim().toLowerCase();
+      if (refundStatus === "pending" && !d.cancelRefundQueuedAt) {
+        console.warn(
+          "retryPendingBookingRefunds skip pending without queue timestamp",
+          doc.ref.path
+        );
+        continue;
+      }
       if (refundStatus === "failed" && !isUnsettledRefundError({ message: d.cancelRefundError })) {
         continue;
       }

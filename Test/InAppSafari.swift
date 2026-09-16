@@ -84,6 +84,13 @@ enum InAppSafari {
     static func open(_ url: URL, context: InAppSafariContext = .general) async -> Bool {
         openSync(url, context: context)
     }
+
+    /// Subscription / portal checkout (Guideline 3.1.1 US): Safari.app, not the in-app sheet.
+    @MainActor
+    @discardableResult
+    static func openInSystemBrowser(_ url: URL) async -> Bool {
+        await UIApplication.shared.open(url)
+    }
 }
 
 struct InAppSafariSheetModifier: ViewModifier {

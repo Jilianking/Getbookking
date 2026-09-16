@@ -95,7 +95,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     var smsPhonePurchaseBlockedDisplayMessage: String {
         let trimmed = smsPhonePurchaseBlockMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "Phone number purchasing is blocked during TestFlight."
+            return "Unavailable."
         }
         return trimmed
     }
@@ -392,7 +392,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 )
             }
             shouldSyncBillingAfterWeb = true
-            await InAppSafari.open(url, context: .billing)
+            await InAppSafari.openInSystemBrowser(url)
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
@@ -405,35 +405,13 @@ final class ManagerSettingsViewModel: ObservableObject {
         await syncBillingFromStripe()
     }
 
-    /// Ends free trial now and activates paid plan via Stripe (card already on file).
-    /// Prefer this over opening the Customer Portal — the portal cannot end a trial early.
+    /// Opens billing in Safari.app (Guideline 3.1.1). Does not charge in-app.
+    /// The website calls `startSubscriptionToday` after the owner confirms.
     @discardableResult
     func startSubscriptionToday() async -> Bool {
         guard isTenantOwner else { return false }
-        if !hasStripeBillingCustomer {
-            await openBillingToStartSubscription()
-            return false
-        }
-        isStartingSubscription = true
-        errorMessage = nil
-        defer { isStartingSubscription = false }
-        do {
-            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
-            let data = result.data as? [String: Any] ?? [:]
-            let status = ((data["subscriptionStatus"] as? String) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            await load(isDemoMode: false)
-            if status == "active" || subscriptionPaid {
-                return true
-            }
-            // Sync once more from Stripe in case Firestore lagged.
-            await syncBillingFromStripe()
-            return subscriptionPaid
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-            return false
-        }
+        await openBillingToStartSubscription()
+        return false
     }
 
     /// Opens getbookking.com billing (fallback when no Stripe customer / web signup).
@@ -444,7 +422,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await InAppSafari.open(url, context: .billing)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
     /// Opens marketing billing Client texting section to purchase an extra number.
@@ -455,7 +433,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingMessagingURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await InAppSafari.open(url, context: .billing)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {

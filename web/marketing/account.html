@@ -241,9 +241,7 @@
     function resolveOpenAppHref() {
       var store = (window.appStoreUrl || '').trim();
       if (store) return store;
-      var tf = (window.testflightPublicJoinUrl || '').trim();
-      if (tf) return tf;
-      return 'testflight.html';
+      return 'signup.html';
     }
 
     function wireStripeReturnLinks() {

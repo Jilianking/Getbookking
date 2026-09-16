@@ -85,8 +85,7 @@ const FALLBACK_TRANSFER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
  * Set false before App Store launch when domain sales go live.
  */
 const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = true;
-const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE =
-  "Buying domains is blocked during TestFlight.";
+const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
 
 function isDomainPurchasingBlockedDuringTestFlight() {
   return BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT === true;

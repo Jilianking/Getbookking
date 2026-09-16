@@ -138,7 +138,7 @@ struct TeamClientMessagingSettingsView: View {
             isPresented: $showStartSubscriptionConfirm,
             titleVisibility: .visible
         ) {
-            Button("Charge card & start") {
+            Button("Continue on the web") {
                 Task { _ = await viewModel.startSubscriptionToday() }
             }
             Button("Cancel", role: .cancel) {}
@@ -169,7 +169,7 @@ struct TeamClientMessagingSettingsView: View {
     }
 
     private var startSubscriptionConfirmMessage: String {
-        "Ends your free trial now and charges your card on file for \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel). Client texting and payments unlock when the plan is active."
+        "Opens billing in Safari to end your free trial and start \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel). Client texting and payments unlock when the plan is active."
     }
 
     private var smsMonthlyLimitFooter: String {
@@ -326,15 +326,11 @@ struct TeamClientMessagingSettingsView: View {
 
     private var testFlightSmsBlockContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Unavailable during TestFlight", systemImage: "phone.badge.waveform.fill")
+            Label("Unavailable", systemImage: "phone.badge.waveform.fill")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppDesign.brandWarm)
             Text(viewModel.smsPhonePurchaseBlockedDisplayMessage)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("You can still explore billing in test mode and build your website in Design.")
-                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -586,31 +586,16 @@ class PaymentsViewModel: ObservableObject {
         Constants.App.paidFeatureUpgradeMessage
     }
 
-    /// Ends free trial now via Stripe (card on file). Portal cannot end a trial early.
+    /// Opens billing in Safari.app (Guideline 3.1.1). Does not charge in-app.
+    /// The website calls `startSubscriptionToday` after the owner confirms.
     @discardableResult
     func startSubscriptionToday() async -> Bool {
         guard isTenantOwner else {
             errorMessage = "Ask your business owner to start the paid Get Bookking plan."
             return false
         }
-        isStartingSubscription = true
-        errorMessage = nil
-        defer { isStartingSubscription = false }
-        do {
-            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
-            let data = result.data as? [String: Any] ?? [:]
-            let status = ((data["subscriptionStatus"] as? String) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            await refresh(isDemoMode: false)
-            if status == "active" || subscriptionPaid {
-                return true
-            }
-            return subscriptionPaid
-        } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-            return false
-        }
+        await openBillingToStartSubscription()
+        return false
     }
 
     /// Opens getbookking.com billing (web fallback / signup).
@@ -622,7 +607,7 @@ class PaymentsViewModel: ObservableObject {
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         isOpeningBillingWebsite = true
         defer { isOpeningBillingWebsite = false }
-        await InAppSafari.open(url, context: .billing)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
     func refresh(isDemoMode: Bool = false) async {

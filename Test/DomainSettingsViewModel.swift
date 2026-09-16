@@ -165,7 +165,7 @@ final class DomainSettingsViewModel: ObservableObject {
     var domainPurchaseBlockedDisplayMessage: String {
         let trimmed = domainPurchaseBlockMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "Buying domains is blocked during TestFlight."
+            return "Unavailable."
         }
         return trimmed
     }

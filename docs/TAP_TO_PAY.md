@@ -42,7 +42,8 @@ Cloud Functions (deploy from `functions/`):
 7. **Checkout** when charges are enabled.
 
 - T&C is presented by Stripe/Apple when needed. `TapToPayReaderSession` keeps acceptance only for the current reader session; it never persists an app-local acceptance flag.
-- Reader warms up when the app becomes active (signed in, terms accepted for this session, location configured).
+- Reader warms up when the app becomes active (signed in, location configured). Cold-start warm-up connects with `tosAcceptancePermitted = false` so returning merchants reconnect silently when Apple already accepted terms; first-time enablement still uses the explicit T&C path.
+- Checkout warms the reader in parallel with customer/booking/tax loads. Charge creates the PaymentIntent while ensuring the reader is connected.
 - Checkout shows processing → approved / declined / timeout and an on-screen receipt sheet (share PDF / Messages).
 
 ## Partner launch email (Apple req 6.1)

@@ -10,7 +10,7 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
   <!-- End Google Tag Manager -->
-  <script src="assets/gtm-events.js"></script>
+  <script src="assets/gtm-events.js?v=2"></script>
   <script src="assets/oaiq-pixel.js?v=1"></script>
   <title>Sign Up — Get Bookking</title>
   <meta name="description" content="Start your 14-day free trial on Get Bookking. All-in-one booking platform with custom websites, Tap to Pay on iPhone, and client texting." />
@@ -1555,8 +1555,10 @@
         validateAboutYou();
       }
       if (typeof window.bkTrack === 'function') {
+        var stepNames = { 0: 'path', 1: 'business', 2: 'you', 3: 'account' };
         window.bkTrack('signup_step', {
           step: step,
+          step_name: stepNames[step] || String(step),
           plan: state.plan || undefined,
           industry: state.industry || undefined,
           signup_path: state.signupPath || undefined
@@ -1632,6 +1634,9 @@
       state.plan = val;
       if (typeof window.bkTrack === 'function') {
         window.bkTrack('select_content', { content_type: 'plan', content_id: val });
+      }
+      if (typeof window.bkTrackViewItem === 'function') {
+        window.bkTrackViewItem(val);
       }
       refreshCheckoutSummary();
       if (currentStep === 3) validateAccountStep();
@@ -1822,6 +1827,12 @@
           user = cred.user;
         } catch (regErr) {
           if (regErr && regErr.code === 'auth/email-already-in-use') {
+            if (typeof window.bkTrack === 'function') {
+              window.bkTrack('exception', {
+                description: 'auth/email-already-in-use',
+                fatal: false,
+              });
+            }
             errEl.innerHTML =
               'This email already has an account. ' +
               '<a href="login.html" style="color:var(--brand-warm);">Log in</a> ' +
@@ -1845,6 +1856,12 @@
         showSuccess();
       } catch (e) {
         console.error('completeSignupFromStep3', e);
+        if (typeof window.bkTrack === 'function') {
+          window.bkTrack('exception', {
+            description: (e && e.code) || 'signup_failed',
+            fatal: false,
+          });
+        }
         errEl.textContent = formatFirebaseHttpsError(e);
         errEl.style.display = 'block';
       } finally {

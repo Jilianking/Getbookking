@@ -10,7 +10,7 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
   <!-- End Google Tag Manager -->
-  <script src="assets/gtm-events.js"></script>
+  <script src="assets/gtm-events.js?v=2"></script>
   <script src="assets/oaiq-pixel.js?v=1"></script>
   <title>Billing — Get Bookking</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
@@ -459,6 +459,23 @@
       });
     }
 
+    function billingPlanId() {
+      var d = billingData || {};
+      return (d.firestorePlan || 'solo').toString().toLowerCase();
+    }
+
+    function trackBillingBeginCheckout() {
+      if (typeof window.bkTrackBeginCheckout === 'function') {
+        window.bkTrackBeginCheckout(billingPlanId());
+      }
+    }
+
+    function trackBillingPurchase(transactionId) {
+      if (typeof window.bkTrackPurchase === 'function') {
+        window.bkTrackPurchase(billingPlanId(), transactionId);
+      }
+    }
+
     function openBillingPortal() {
       var errEl = document.getElementById('billingError');
       errEl.classList.add('hidden');
@@ -480,6 +497,7 @@
       btn.disabled = true;
       var priorLabel = btn.textContent;
       btn.textContent = 'Redirecting to checkout…';
+      trackBillingBeginCheckout();
       return fns.httpsCallable('createResubscribeCheckout')({
         marketingOrigin: window.location.origin
       }).then(function(res) {
@@ -518,6 +536,7 @@
         } else {
           document.getElementById('initialCheckoutSuccess').classList.remove('hidden');
         }
+        trackBillingPurchase(sessionId);
         return loadBilling();
       }
       return fns
@@ -718,6 +737,7 @@
         mountEl.innerHTML = '';
         embedded.mount('#billingCheckoutEmbedded');
         billingEmbeddedCheckout = embedded;
+        trackBillingBeginCheckout();
         if (continueBtn) {
           continueBtn.textContent = 'Continue to payment';
           continueBtn.disabled = true;
@@ -1645,9 +1665,11 @@
       if (confirmBtn) confirmBtn.disabled = true;
       errEl.classList.add('hidden');
       successEl.classList.add('hidden');
+      trackBillingBeginCheckout();
       return fns.httpsCallable('startSubscriptionToday')({}).then(function() {
         closeStartSubModal();
         successEl.classList.remove('hidden');
+        trackBillingPurchase('start_today');
         return loadBilling();
       }).catch(function(err) {
         errEl.textContent = (err && err.message) ? err.message : String(err);

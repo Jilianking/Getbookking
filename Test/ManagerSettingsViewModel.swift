@@ -405,13 +405,56 @@ final class ManagerSettingsViewModel: ObservableObject {
         await syncBillingFromStripe()
     }
 
-    /// Opens billing in Safari.app (Guideline 3.1.1). Does not charge in-app.
-    /// The website calls `startSubscriptionToday` after the owner confirms.
+    /// Opens the App Store payment sheet for this business's plan.
     @discardableResult
     func startSubscriptionToday() async -> Bool {
         guard isTenantOwner else { return false }
-        await openBillingToStartSubscription()
-        return false
+        isOpeningBillingWebsite = true
+        errorMessage = nil
+        defer { isOpeningBillingWebsite = false }
+        do {
+            _ = try await BookkingSubscriptionStore.shared.purchaseAndSync(plan: tenantSubscriptionPlan)
+            await load(isDemoMode: false)
+            return true
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Stripe account that accepts client payments. Always available to the owner.
+    func openClientPaymentsStripeAccount() async {
+        isOpeningBillingPortal = true
+        errorMessage = nil
+        defer { isOpeningBillingPortal = false }
+        do {
+            let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+                return
+            }
+        } catch {
+            // No connected account yet.
+        }
+        do {
+            let base = Constants.Hosting.marketingWebOrigin
+            let result = try await functions.httpsCallable("createConnectAccountLink").call([
+                "returnBaseUrl": base,
+                "returnUrl": "\(base)/account.html?stripe=success",
+                "refreshUrl": "\(base)/account.html?stripe=refresh",
+            ])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
     }
 
     /// Opens getbookking.com billing (fallback when no Stripe customer / web signup).
@@ -434,6 +477,27 @@ final class ManagerSettingsViewModel: ObservableObject {
         guard let url = URL(string: Constants.Hosting.marketingBillingMessagingURL) else { return }
         shouldSyncBillingAfterWeb = true
         await InAppSafari.openInSystemBrowser(url)
+    }
+
+    /// App Store purchase, then studio texting setup.
+    func purchaseSmsExtraThenProvisionStudio() async {
+        guard isTenantOwner else { return }
+        isProvisioningSms = true
+        errorMessage = nil
+        do {
+            _ = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
+        } catch let error as BookkingPurchaseError {
+            isProvisioningSms = false
+            if case .cancelled = error { return }
+            errorMessage = error.localizedDescription
+            return
+        } catch {
+            isProvisioningSms = false
+            errorMessage = error.localizedDescription
+            return
+        }
+        isProvisioningSms = false
+        await requestSmsProvisioning(consentAccepted: true)
     }
 
     func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
@@ -609,13 +673,15 @@ final class ManagerSettingsViewModel: ObservableObject {
             provisioningMemberUid = nil
         }
         do {
-            let purchase = try await functions.httpsCallable("purchaseSmsExtraLine").call([
-                "memberUid": memberUid
+            let transactionID = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
+            let purchase = try await functions.httpsCallable("recordAppleSmsExtraPurchase").call([
+                "memberUid": memberUid,
+                "appleTransactionId": String(transactionID),
             ])
             let data = purchase.data as? [String: Any] ?? [:]
             guard let authorizationId = data["smsPaidLinePurchaseAuthorizationId"] as? String,
                   !authorizationId.isEmpty else {
-                errorMessage = "Stripe did not confirm the texting-number payment. No number was set up."
+                errorMessage = "The App Store did not confirm the texting-number payment. No number was set up."
                 return false
             }
             return await requestSmsPhoneNumber(
@@ -623,6 +689,10 @@ final class ManagerSettingsViewModel: ObservableObject {
                 consentAccepted: true,
                 paidPurchaseAuthorizationId: authorizationId
             )
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
             return false

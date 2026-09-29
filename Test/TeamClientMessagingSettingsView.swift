@@ -134,11 +134,11 @@ struct TeamClientMessagingSettingsView: View {
             Task { await viewModel.syncBillingAfterWebIfNeeded() }
         }
         .confirmationDialog(
-            "Start subscription today?",
+            "Start paid plan?",
             isPresented: $showStartSubscriptionConfirm,
             titleVisibility: .visible
         ) {
-            Button("Continue on the web") {
+            Button("Continue") {
                 Task { _ = await viewModel.startSubscriptionToday() }
             }
             Button("Cancel", role: .cancel) {}
@@ -150,13 +150,13 @@ struct TeamClientMessagingSettingsView: View {
             isPresented: $showSoloEnableChargeConfirm,
             titleVisibility: .visible
         ) {
-            Button("Charge \(viewModel.smsExtraOneTimeReplacementLabel)") {
-                Task { await viewModel.requestSmsProvisioning(consentAccepted: true) }
+            Button("Continue") {
+                Task { await viewModel.purchaseSmsExtraThenProvisionStudio() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "A \(viewModel.smsExtraOneTimeReplacementLabel) fee will be charged to your card on file. This is not added to your monthly subscription."
+                "Apple’s payment sheet will confirm this texting number. This is not added to a Stripe subscription."
             )
         }
     }
@@ -169,7 +169,7 @@ struct TeamClientMessagingSettingsView: View {
     }
 
     private var startSubscriptionConfirmMessage: String {
-        "Opens billing in Safari to end your free trial and start \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel). Client texting and payments unlock when the plan is active."
+        "Opens the App Store payment sheet for \(viewModel.tenantSubscriptionPlan.displayName). Texting stays off until Apple charges at the end of the 14 days."
     }
 
     private var smsMonthlyLimitFooter: String {
@@ -376,9 +376,9 @@ struct TeamClientMessagingSettingsView: View {
                         .scaleEffect(0.9)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Start subscription today")
+                    Text("Start paid plan")
                         .font(.headline)
-                    Text("Skip free trial · \(viewModel.tenantSubscriptionPlan.monthlyPriceLabel) · Unlock texting and payments")
+                    Text(viewModel.tenantSubscriptionPlan.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -397,36 +397,16 @@ struct TeamClientMessagingSettingsView: View {
 
     private var billingSecondaryLinks: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if viewModel.hasStripeBillingCustomer {
-                Button {
-                    Task { await viewModel.openStripeBillingPortal() }
-                } label: {
-                    HStack {
-                        if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
-                        Text("View Stripe account")
-                            .font(.subheadline)
-                    }
+            Button {
+                Task { await viewModel.openClientPaymentsStripeAccount() }
+            } label: {
+                HStack {
+                    if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
+                    Text("View Stripe account")
+                        .font(.subheadline)
                 }
-                .disabled(
-                    viewModel.isOpeningBillingPortal ||
-                    viewModel.isOpeningBillingWebsite ||
-                    viewModel.isStartingSubscription
-                )
-            } else {
-                Button {
-                    Task { await viewModel.openBillingToStartSubscription() }
-                } label: {
-                    HStack {
-                        if viewModel.isOpeningBillingWebsite { ProgressView().scaleEffect(0.9) }
-                        Text("Sign up for Stripe")
-                            .font(.subheadline)
-                    }
-                }
-                .disabled(
-                    viewModel.isOpeningBillingWebsite ||
-                    viewModel.isOpeningBillingPortal
-                )
             }
+            .disabled(viewModel.isOpeningBillingPortal || viewModel.isOpeningBillingWebsite)
         }
         .foregroundStyle(.secondary)
         .padding(.top, 4)
@@ -949,10 +929,7 @@ struct TeamClientMessagingSettingsView: View {
     private var assignConfirmMessage: String {
         let name = pendingAssignMember?.displayName ?? "this teammate"
         if viewModel.smsMustChargeForNextLine {
-            if viewModel.smsMustChargeMonthlyForNextLine {
-                return "Charge \(viewModel.smsExtraOneTimeReplacementLabel) now and add \(viewModel.smsExtraMonthlyPriceLabel) to your subscription, then set up \(name)’s texting number."
-            }
-            return "Charge your saved Stripe payment method \(viewModel.smsExtraOneTimeReplacementLabel), then set up \(name)’s texting number. No monthly extra while you have 2 or fewer lines."
+            return "Apple’s payment sheet charges for this number, then sets up \(name)’s texting number."
         }
         return "Enable a personal texting number for \(name)? No extra charge — you have available capacity."
     }

@@ -1,0 +1,295 @@
+{
+  "identifier" : "GetBookking",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "12.99",
+      "familyShareable" : false,
+      "internalID" : "SMS_EXTRA",
+      "localizations" : [
+        {
+          "description" : "One extra texting number.",
+          "displayName" : "Extra texting number",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.jilianking.getbooking.sms.extra",
+      "referenceName" : "Extra texting number",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "GETBOOKKING",
+    "_developerTeamID" : "PNF83FGG3H",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "GETBOOKKING",
+      "localizations" : [
+
+      ],
+      "name" : "Get Bookking",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 6,
+          "internalID" : "SOLO",
+          "introductoryOffer" : {
+            "displayPrice" : "0",
+            "internalID" : "SOLO_INTRO",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "14 days free, then $39.99 a month.",
+              "displayName" : "Solo",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.solo",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Solo",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "79.99",
+          "familyShareable" : false,
+          "groupNumber" : 4,
+          "internalID" : "STUDIO",
+          "introductoryOffer" : {
+            "displayPrice" : "0",
+            "internalID" : "STUDIO_INTRO",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "14 days free, then $79.99 a month.",
+              "displayName" : "Studio",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.studio",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Studio",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "149.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "SHOP",
+          "introductoryOffer" : {
+            "displayPrice" : "0",
+            "internalID" : "SHOP_INTRO",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "14 days free, then $149.99 a month.",
+              "displayName" : "Shop",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.shop",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Shop",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 8,
+          "internalID" : "CHARTER",
+          "introductoryOffer" : {
+            "displayPrice" : "0",
+            "internalID" : "CHARTER_INTRO",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "14 days free, then $24.99 a month.",
+              "displayName" : "Charter",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.charter",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Charter",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "149.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "SHOP_NOW",
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "$149.99 a month.",
+              "displayName" : "Shop",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.shop.now",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Shop Paid",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "79.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "STUDIO_NOW",
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "$79.99 a month.",
+              "displayName" : "Studio",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.studio.now",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Studio Paid",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 5,
+          "internalID" : "SOLO_NOW",
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "$39.99 a month.",
+              "displayName" : "Solo",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.solo.now",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Solo Paid",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 7,
+          "internalID" : "CHARTER_NOW",
+          "winbackOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "$24.99 a month.",
+              "displayName" : "Charter",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.jilianking.getbooking.charter.now",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Charter Paid",
+          "subscriptionGroupID" : "GETBOOKKING",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

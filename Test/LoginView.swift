@@ -14,6 +14,7 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var isPasswordVisible = false
+    @State private var showingCreateAccount = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,9 @@ struct LoginView: View {
                 Spacer()
             }
             .appScreenBackground()
+            .sheet(isPresented: $showingCreateAccount) {
+                CreateAccountView()
+            }
         }
     }
 
@@ -114,7 +118,9 @@ struct LoginView: View {
             .buttonStyle(AppPrimaryButtonStyle(enabled: !isLoading && !email.isEmpty && !password.isEmpty))
             .disabled(isLoading || email.isEmpty || password.isEmpty)
 
-            Button(action: openMarketingSignUp) {
+            Button {
+                showingCreateAccount = true
+            } label: {
                 Text("Create an account")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -129,11 +135,6 @@ struct LoginView: View {
         .padding(24)
         .appCard()
         .padding(.horizontal, 24)
-    }
-
-    private func openMarketingSignUp() {
-        guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
-        InAppSafari.openSync(url, context: .general)
     }
 
     private func openMarketingForgotPassword() {

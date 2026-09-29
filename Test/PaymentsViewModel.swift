@@ -586,16 +586,42 @@ class PaymentsViewModel: ObservableObject {
         Constants.App.paidFeatureUpgradeMessage
     }
 
-    /// Opens billing in Safari.app (Guideline 3.1.1). Does not charge in-app.
-    /// The website calls `startSubscriptionToday` after the owner confirms.
+    /// Opens the App Store payment sheet for the current plan.
     @discardableResult
-    func startSubscriptionToday() async -> Bool {
+    func startSubscriptionToday(plan: SubscriptionPlan) async -> Bool {
         guard isTenantOwner else {
             errorMessage = "Ask your business owner to start the paid Get Bookking plan."
             return false
         }
-        await openBillingToStartSubscription()
-        return false
+        do {
+            _ = try await BookkingSubscriptionStore.shared.purchaseAndSync(plan: plan)
+            return true
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Stripe account that accepts client payments. Does not start the Get Bookking plan.
+    func openClientPaymentsStripeAccount(isDemoMode: Bool = false) async {
+        isOpeningStripeDashboard = true
+        errorMessage = nil
+        defer { isOpeningStripeDashboard = false }
+        do {
+            let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+                return
+            }
+        } catch {
+            // No connected account yet — fall through to Connect setup.
+        }
+        _ = await createConnectAccountLink(isDemoMode: isDemoMode)
     }
 
     /// Opens getbookking.com billing (web fallback / signup).

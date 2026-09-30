@@ -98,6 +98,8 @@ enum SubscriptionPlan: String, CaseIterable {
 @MainActor
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
+    /// Signup stays on screen after the Firebase user exists, until Apple’s sheet and the business are done.
+    @Published var isCreatingAccount = false
     @Published private(set) var currentUserUid: String?
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
@@ -141,6 +143,7 @@ class AuthViewModel: ObservableObject {
                     }
                     self.currentUserUid = nil
                     self.isAuthenticated = false
+                    self.isCreatingAccount = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
                     self.tenantLogoUrl = nil

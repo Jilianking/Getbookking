@@ -80,6 +80,8 @@ struct BookkingPurchaseRecord: Sendable {
     let originalTransactionID: UInt64
     let isIntroductory: Bool
     let expiresAt: Date?
+    /// Local StoreKit configuration transaction. Never send it to production receipt verification.
+    let isXcodeEnvironment: Bool
     /// Apple's signed transaction. The server verifies this and ignores the other fields.
     let signedTransaction: String
 }
@@ -200,6 +202,7 @@ final class BookkingSubscriptionStore: ObservableObject {
                 originalTransactionID: transaction.originalID,
                 isIntroductory: transaction.offerType == Transaction.OfferType.introductory,
                 expiresAt: transaction.expirationDate,
+                isXcodeEnvironment: transaction.environment == .xcode,
                 signedTransaction: verification.jwsRepresentation
             )
             await transaction.finish()

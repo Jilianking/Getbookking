@@ -12,6 +12,7 @@ import FirebaseFunctions
 
 struct CreateAccountView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authViewModel: AuthViewModel
     @StateObject private var store = BookkingSubscriptionStore.shared
 
     @State private var step = 0
@@ -72,10 +73,11 @@ struct CreateAccountView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button("Close") { closeSignup() }
                         .disabled(isWorking)
                 }
             }
+            .interactiveDismissDisabled(isWorking || authViewModel.isCreatingAccount)
             .task { await store.loadProducts() }
         }
     }
@@ -542,10 +544,25 @@ struct CreateAccountView: View {
         }
     }
 
+    private func closeSignup() {
+        if Auth.auth().currentUser != nil {
+            do {
+                try authViewModel.signOut()
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        } else {
+            authViewModel.isCreatingAccount = false
+        }
+        dismiss()
+    }
+
     private func finish() async {
         guard let plan else { return }
         isWorking = true
         errorMessage = ""
+        authViewModel.isCreatingAccount = true
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         do {
             if Auth.auth().currentUser == nil {
@@ -573,7 +590,13 @@ struct CreateAccountView: View {
                     throw error
                 }
             }
-            try await store.syncPurchase(record)
+            // Xcode's local StoreKit receipt is not Apple-signed. The production server
+            // still verifies every Sandbox, App Review, TestFlight, and production receipt.
+            if !record.isXcodeEnvironment {
+                try await store.syncPurchase(record)
+            }
+            await authViewModel.refreshTeamAccess()
+            authViewModel.isCreatingAccount = false
             dismiss()
         } catch let error as BookkingPurchaseError {
             if case .cancelled = error {

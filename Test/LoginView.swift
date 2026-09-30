@@ -33,6 +33,7 @@ struct LoginView: View {
             .appScreenBackground()
             .sheet(isPresented: $showingCreateAccount) {
                 CreateAccountView()
+                    .environmentObject(authViewModel)
             }
         }
     }

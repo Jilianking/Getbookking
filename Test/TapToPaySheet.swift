@@ -151,20 +151,24 @@ struct TapToPaySheet: View {
                 Task { await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents) }
             }
             .task {
-                await sessionStore.loadCustomersIfNeeded(isDemoMode: false)
-                await sessionStore.loadBookingsIfNeeded(isDemoMode: false)
-                await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents)
                 let displayName = TapToPayLocationStore.shared.merchantDisplayName
-                let skipWarmUp = await TapToPayTerminalManager.shared.shouldSkipWarmUp(
-                    locationId: locationId,
-                    merchantDisplayName: displayName
-                )
-                if !skipWarmUp {
-                    await TapToPayTerminalManager.shared.warmUpReader(
+                // Warm the reader first so checkout is ready while auxiliary data loads.
+                async let warmUp: Void = {
+                    let skipWarmUp = await TapToPayTerminalManager.shared.shouldSkipWarmUp(
                         locationId: locationId,
                         merchantDisplayName: displayName
                     )
-                }
+                    if !skipWarmUp {
+                        await TapToPayTerminalManager.shared.warmUpReader(
+                            locationId: locationId,
+                            merchantDisplayName: displayName
+                        )
+                    }
+                }()
+                async let customers: Void = sessionStore.loadCustomersIfNeeded(isDemoMode: false)
+                async let bookings: Void = sessionStore.loadBookingsIfNeeded(isDemoMode: false)
+                async let tax: Void = viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents)
+                _ = await (warmUp, customers, bookings, tax)
             }
         }
     }
@@ -434,14 +438,22 @@ struct TapToPaySheet: View {
             guard !locationId.isEmpty else {
                 throw TapToPayTerminalManager.TapToPayError.missingLocationId
             }
-            let intent = try await viewModel.createPaymentIntentForTapToPay(
+            let displayName = TapToPayLocationStore.shared.merchantDisplayName
+            // Create the PaymentIntent while ensuring the reader is connected.
+            async let intentTask = viewModel.createPaymentIntentForTapToPay(
                 serviceAmountCents: serviceAmountCents,
                 bookingRequestId: linkedBookingRequestId
             )
+            async let warmUp: Void = TapToPayTerminalManager.shared.warmUpReader(
+                locationId: locationId,
+                merchantDisplayName: displayName
+            )
+            let intent = try await intentTask
+            await warmUp
             try await TapToPayTerminalManager.shared.processPayment(
                 clientSecret: intent.clientSecret,
                 locationId: locationId,
-                merchantDisplayName: TapToPayLocationStore.shared.merchantDisplayName
+                merchantDisplayName: displayName
             )
             if !intent.paymentIntentId.isEmpty {
                 await viewModel.recordTenantPayment(paymentIntentId: intent.paymentIntentId)

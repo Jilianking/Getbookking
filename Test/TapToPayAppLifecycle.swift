@@ -18,7 +18,7 @@ enum TapToPayAppLifecycle {
         #endif
     }
 
-    /// Foreground / launch warm-up: prepare location silently; connect reader only after Apple T&C accepted.
+    /// Foreground / launch warm-up: prepare location silently; connect reader without presenting T&C.
     static func warmUpReaderIfConfigured() {
         #if TAP_TO_PAY_ENABLED
         Task {
@@ -28,7 +28,7 @@ enum TapToPayAppLifecycle {
     }
 
     #if TAP_TO_PAY_ENABLED
-    /// Prepares Terminal location (new merchants). Connects reader only when Apple T&C already accepted.
+    /// Prepares Terminal location (new merchants). Silently reconnects when Apple already accepted T&C.
     /// Returns `prepareTapToPayTermsAcceptance` payload when that call ran successfully.
     static func prewarm() async -> [String: Any]? {
         await TapToPayPrewarmCoordinator.shared.prewarm()
@@ -38,13 +38,29 @@ enum TapToPayAppLifecycle {
         guard Auth.auth().currentUser != nil else { return nil }
         if TapToPayEligibility.blockingMessage() != nil { return nil }
 
-        await syncConnectStatusForTapToPay()
-
         TapToPayTerminalManager.shared.prepareTerminalSDK()
 
         let store = TapToPayLocationStore.shared
-        var prepareData: [String: Any]?
+        let cached = await MainActor.run {
+            (locationId: store.resolvedLocationId, displayName: store.merchantDisplayName)
+        }
 
+        // Status sync and early reader warm-up run together when we already have a location.
+        async let statusSync: Void = syncConnectStatusForTapToPay()
+
+        if !cached.locationId.isEmpty {
+            async let earlyWarm: Void = TapToPayTerminalManager.shared.warmUpReader(
+                locationId: cached.locationId,
+                merchantDisplayName: cached.displayName.isEmpty ? nil : cached.displayName,
+                silent: true
+            )
+            await statusSync
+            await earlyWarm
+        } else {
+            await statusSync
+        }
+
+        var prepareData: [String: Any]?
         if await MainActor.run(body: { store.resolvedLocationId.isEmpty }) {
             prepareData = await callPrepareTapToPayTermsAcceptance()
             if let prepareData {
@@ -52,19 +68,23 @@ enum TapToPayAppLifecycle {
             }
         }
 
-        let termsAccepted = await MainActor.run {
-            TapToPayReaderSession.shared.termsAcceptedOnDevice
-        }
-        guard termsAccepted else { return prepareData }
-
         let locationId = await MainActor.run { store.resolvedLocationId }
         guard !locationId.isEmpty else { return prepareData }
 
         let displayName = await MainActor.run { store.merchantDisplayName }
-        await TapToPayTerminalManager.shared.warmUpReader(
+        let skipWarmUp = await TapToPayTerminalManager.shared.shouldSkipWarmUp(
             locationId: locationId,
-            merchantDisplayName: displayName.isEmpty ? nil : displayName
+            merchantDisplayName: displayName
         )
+        if !skipWarmUp {
+            // Silent: reconnects without T&C UI when Apple already accepted on this device.
+            // First-time merchants still accept terms via the explicit enablement path.
+            await TapToPayTerminalManager.shared.warmUpReader(
+                locationId: locationId,
+                merchantDisplayName: displayName.isEmpty ? nil : displayName,
+                silent: true
+            )
+        }
         return prepareData
     }
 

@@ -917,7 +917,7 @@ struct ManualPaymentSheet: View {
             note: nil,
             paymentIntentId: intent.paymentIntentId,
             includesSignature: false,
-            paymentMethodLabel: "Manual payment"
+            paymentMethodLabel: intent.paymentMethodLabel
         )
         withAnimation(.easeOut(duration: 0.25)) {
             phase = .receipt

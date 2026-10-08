@@ -26,11 +26,10 @@ const { Firestore } = require(path.join(
 ));
 const Stripe = require(path.join(__dirname, "../functions/node_modules/stripe"));
 
+const { computeCardCheckoutAmounts } = require("../functions/checkoutRates");
+
 const DEFAULT_PROJECT = "test-app-96812";
 const STRIPE_API_VERSION = "2024-11-20.acacia";
-const PLATFORM_FEE_BPS = 100;
-const STRIPE_ONLINE_BPS = 290;
-const STRIPE_ONLINE_FIXED_CENTS = 30;
 const SUITE = "phase1-solo-charter";
 
 const FIREBASE_CLI_CLIENT_ID =
@@ -43,29 +42,6 @@ const TENANTS = {
   solo: { businessName: "Test 9000", plan: "solo" },
   charter: { businessName: "Test 9006", plan: "charter" },
 };
-
-function platformFeeCents(amountCents) {
-  const n = Math.round(Number(amountCents));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
-}
-
-function computeCardCheckoutAmounts(serviceCents) {
-  const service = Math.max(0, Math.round(Number(serviceCents)));
-  if (service <= 0) {
-    return { serviceCents: 0, surchargeCents: 0, totalCents: 0, platformFeeCents: 0 };
-  }
-  const combinedBps = STRIPE_ONLINE_BPS + PLATFORM_FEE_BPS;
-  const totalCents = Math.ceil(
-    (service + STRIPE_ONLINE_FIXED_CENTS) / (1 - combinedBps / 10000)
-  );
-  return {
-    serviceCents: service,
-    surchargeCents: totalCents - service,
-    totalCents,
-    platformFeeCents: platformFeeCents(totalCents),
-  };
-}
 
 function usd(cents) {
   return `$${(cents / 100).toFixed(2)}`;

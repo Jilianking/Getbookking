@@ -114,6 +114,11 @@ struct PaymentTransaction: Identifiable, Hashable {
         !isCredit && (type == "refund" || (customerName ?? "").lowercased().contains("refund"))
     }
 
+    /// Pricing row for this charge. Tap to Pay uses the in-person rate; other charges use the card rate.
+    var checkoutChannel: CardCheckoutChannel {
+        channelLabel == "Tap to Pay on iPhone" ? .tapToPay : .online
+    }
+
     var channelLabel: String {
         if isStudioShareLine { return "Studio share" }
         if type == "refund" || isCustomerRefundLine {
@@ -1652,6 +1657,52 @@ class PaymentsViewModel: ObservableObject {
         )
     }
 
+    /// Sets the open in-app PaymentIntent to the card or Link bank total before confirm.
+    func repriceInAppCheckout(
+        paymentIntentId: String,
+        paymentMethodId: String,
+        bookingRequestId: String? = nil
+    ) async throws -> InAppCheckoutPrice {
+        var payload: [String: Any] = [
+            "paymentIntentId": paymentIntentId,
+            "paymentMethodId": paymentMethodId,
+        ]
+        if let bookingRequestId, !bookingRequestId.isEmpty {
+            payload["bookingRequestId"] = bookingRequestId
+        }
+        let result = try await functions.httpsCallable("repriceInAppCheckout").call(payload)
+        let data = result.data as? [String: Any]
+        let service = checkoutCents(data?["serviceCents"])
+        let tax = checkoutCents(data?["taxCents"])
+        let passThrough = checkoutCents(data?["surchargeCents"])
+        let total = checkoutCents(data?["totalCents"])
+        guard service > 0, total > 0 else {
+            throw NSError(
+                domain: "Payments",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "Could not price this payment method."]
+            )
+        }
+        let platformFee = checkoutCents(data?["platformFeeCents"])
+        let method = (data?["method"] as? String) ?? "card"
+        let checkout = CardCheckoutBreakdown(
+            serviceCents: service,
+            taxCents: tax,
+            passThroughFeeCents: passThrough,
+            platformFeeCents: platformFee > 0 ? platformFee : CardCheckoutPricing.platformFeeCents(totalCents: total),
+            totalCents: total,
+            channel: .online
+        )
+        return InAppCheckoutPrice(method: method, checkout: checkout)
+    }
+
+    private func checkoutCents(_ value: Any?) -> Int {
+        if let number = value as? NSNumber { return number.intValue }
+        if let number = value as? Int { return number }
+        if let number = value as? Double { return Int(number) }
+        return 0
+    }
+
     /// Creates PaymentIntent and presents Stripe Payment Sheet in-app.
     @MainActor
     func chargeManualCheckoutInApp(
@@ -1666,15 +1717,28 @@ class PaymentsViewModel: ObservableObject {
             let sheetResult = await ManualPaymentSheetPresenter.present(
                 clientSecret: intent.clientSecret,
                 stripeAccountId: intent.stripeAccountId,
-                merchantDisplayName: effectiveTapToPayDisplayName
+                merchantDisplayName: effectiveTapToPayDisplayName,
+                amountCents: intent.checkout.totalCents,
+                reprice: { paymentMethodId in
+                    try await self.repriceInAppCheckout(
+                        paymentIntentId: intent.paymentIntentId,
+                        paymentMethodId: paymentMethodId,
+                        bookingRequestId: bookingRequestId
+                    )
+                }
             )
             switch sheetResult {
-            case .completed:
+            case .completed(let price):
+                var settled = intent
+                if let price {
+                    settled.checkout = price.checkout
+                    settled.paymentMethodLabel = price.paymentMethodLabel
+                }
                 // Return immediately so UI can show the receipt; settle ledger in background.
-                if !intent.paymentIntentId.isEmpty {
+                if !settled.paymentIntentId.isEmpty {
                     Task {
                         await recordTenantPayment(
-                            paymentIntentId: intent.paymentIntentId,
+                            paymentIntentId: settled.paymentIntentId,
                             bookingRequestId: bookingRequestId
                         )
                         await loadData(isDemoMode: false)
@@ -1682,7 +1746,7 @@ class PaymentsViewModel: ObservableObject {
                 } else {
                     Task { await loadData(isDemoMode: false) }
                 }
-                return .success(intent)
+                return .success(settled)
             case .canceled:
                 return .canceled
             case .failed(let message):

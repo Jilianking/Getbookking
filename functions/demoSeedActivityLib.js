@@ -958,50 +958,96 @@ function grossFromNetCents(netCents) {
 }
 
 /**
- * Deterministic 8-week revenue for dashboard chart (positive WoW / MoM).
- * Replaces booking-scattered charges in demoShowcase.payments.
+ * Split a weekly net into a few client payments that still sum to that net.
+ * @param {number} totalCents
+ * @param {number} parts
+ */
+function splitNetCents(totalCents, parts) {
+  const count = Math.max(1, parts);
+  const weights = [3, 2, 4, 3].slice(0, count);
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+  const slices = [];
+  let used = 0;
+  for (let i = 0; i < count - 1; i++) {
+    const slice = Math.max(1, Math.round((totalCents * weights[i]) / weightSum));
+    slices.push(slice);
+    used += slice;
+  }
+  slices.push(Math.max(1, totalCents - used));
+  const drift = slices.reduce((sum, slice) => sum + slice, 0) - totalCents;
+  slices[slices.length - 1] -= drift;
+  return slices;
+}
+
+function showcaseClientNames(slug) {
+  const customers = (DEMO_ACTIVITY_BY_SLUG[slug] && DEMO_ACTIVITY_BY_SLUG[slug].customers) || [];
+  const names = customers.map((person) => (person.name || "").trim()).filter(Boolean);
+  return names.length ? names : ["Client"];
+}
+
+/** Dates inside the chart week, never after `now`. */
+function showcaseChargeDates(now, weeksAgo, count) {
+  const dates = [];
+  if (weeksAgo === 0) {
+    const weekStart = startOfWeek(now);
+    for (let i = 0; i < count; i++) {
+      const when = new Date(now.getTime() - i * 5 * 60 * 60 * 1000);
+      when.setMinutes(10 + i * 7, 0, 0);
+      if (when < weekStart) when.setTime(weekStart.getTime() + (i + 1) * 60 * 60 * 1000);
+      if (when > now) when.setTime(now.getTime() - i * 60 * 1000);
+      dates.push(when);
+    }
+    return dates;
+  }
+  const { weekStart, weekEnd } = weekRangeForWeeksAgo(now, weeksAgo);
+  for (let i = 0; i < count; i++) {
+    const when = new Date(weekStart);
+    when.setDate(weekStart.getDate() + 1 + (i % 5));
+    when.setHours(10 + i, (i % 2) * 20, 0, 0);
+    if (when >= weekEnd) when.setTime(weekEnd.getTime() - 60 * 60 * 1000);
+    if (when > now) when.setTime(now.getTime() - 60 * 1000);
+    dates.push(when);
+  }
+  return dates;
+}
+
+/**
+ * Deterministic 8-week revenue for the dashboard chart (positive week over week).
+ * Each week is several client charges whose nets add up to that week's total.
+ * The Payments list uses the client name; the subtitle stays "Payment".
  */
 function buildShowcaseWeeklyTransactions(slug, now, Timestamp) {
   const weekly = SHOWCASE_WEEKLY_NET_DOLLARS[slug];
   if (!weekly || weekly.length !== 8) return [];
 
+  const names = showcaseClientNames(slug);
+  const parts = 3;
   const charges = [];
   for (let index = 0; index < 8; index++) {
     const weeksAgo = 7 - index;
-    let when;
-    if (weeksAgo === 0) {
-      // Anchor current-week revenue to today so charts stay positive after re-seed.
-      when = new Date(now);
-      when.setHours(11, 30, 0, 0);
-      if (when > now) {
-        when.setDate(when.getDate() - 1);
-        when.setHours(11, 30, 0, 0);
-      }
-    } else {
-      const { weekStart } = weekRangeForWeeksAgo(now, weeksAgo);
-      when = new Date(weekStart);
-      when.setDate(weekStart.getDate() + 3);
-      when.setHours(11, 30, 0, 0);
-    }
-
     const netCents = Math.round(weekly[index] * 100);
-    const amountCents = grossFromNetCents(netCents);
-    const fee = estimateStripeFeeCents(amountCents);
+    const slices = splitNetCents(netCents, parts);
+    const dates = showcaseChargeDates(now, weeksAgo, slices.length);
     const weekNum = index + 1;
-
-    charges.push({
-      id: `demo_tx_wk${weekNum}`,
-      type: "charge",
-      amountCents,
-      fee,
-      netCents: amountCents - fee,
-      customerName: "Showcase",
-      description: `Week ${weekNum} revenue`,
-      createdAt: Timestamp.fromDate(when),
-      created: Math.floor(when.getTime() / 1000),
-      sourceId: `ch_demo_wk${weekNum}`,
-      reportingCategory: "charge",
-    });
+    for (let part = 0; part < slices.length; part++) {
+      const slice = slices[part];
+      const when = dates[part];
+      const amountCents = grossFromNetCents(slice);
+      const name = names[(index * parts + part) % names.length];
+      charges.push({
+        id: `demo_tx_wk${weekNum}_${part + 1}`,
+        type: "charge",
+        amountCents,
+        fee: Math.max(0, amountCents - slice),
+        netCents: slice,
+        customerName: name,
+        description: name,
+        createdAt: Timestamp.fromDate(when),
+        created: Math.floor(when.getTime() / 1000),
+        sourceId: `ch_demo_wk${weekNum}_${part + 1}`,
+        reportingCategory: "charge",
+      });
+    }
   }
 
   charges.sort((a, b) => b.created - a.created);
@@ -1263,4 +1309,5 @@ module.exports = {
   resolveTenantBySlug,
   deleteDemoSeedDocs,
   seedDemoActivity,
+  buildShowcaseWeeklyTransactions,
 };

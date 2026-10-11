@@ -1,0 +1,16 @@
+[
+  "00-setup.js",
+  "core.js",
+  "styles.js",
+  "sections.js",
+  "booking.js",
+  "shop.js",
+  "gallery.js",
+  "team.js",
+  "templates/classic.js",
+  "templates/luxe.js",
+  "templates/blade.js",
+  "templates/stonecut.js",
+  "templates/studio12.js",
+  "templates/charter.js"
+]

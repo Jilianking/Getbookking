@@ -3083,4 +3083,8 @@
     /* Shared Quick Edit chrome: /css/shared.css (always loaded). */
     /* Theme CSS: /css/{classic,luxe,blade,stonecut,studio12}-theme.css via BKSitePerf.ensureThemeCss. */
 
-
+/* Sections hidden in the web editor. The public page never renders them; this covers the editor's
+   preview when Edit is switched off (the bridge shows a labeled bar for them while editing). */
+[data-bk-section-hidden] {
+  display: none !important;
+}

@@ -39,6 +39,7 @@
   }
 
   var active = false;
+  var editingStartValue = '';
   var browsing = false;
   var designTool = null;
   var cursorEl = null;
@@ -191,6 +192,12 @@
     // Canvas-only: site chrome is inert. Only edit / photo / color targets receive hits.
     styleEl.textContent =
       'html.bk-design-mode{overscroll-behavior:none;}' +
+      // Text you can type in shows a text cursor; clicking it edits in place.
+      'html.bk-design-mode:not(.bk-tool-text):not(.bk-tool-background) [data-edit-key][data-bk-design-editable="1"]{cursor:text!important;}' +
+      // Hidden sections collapse to a labeled bar while editing so they can be selected and shown again.
+      'html.bk-design-mode [data-bk-section-hidden]{display:block!important;position:relative!important;height:48px!important;min-height:0!important;padding:0!important;margin:0!important;overflow:hidden!important;cursor:pointer;}' +
+      'html.bk-design-mode [data-bk-section-hidden]>*{visibility:hidden!important;}' +
+      'html.bk-design-mode [data-bk-section-hidden]::after{content:attr(data-bk-section-label) " \\00B7  hidden";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:600 12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6b5e4a;background:repeating-linear-gradient(135deg,#f4efe6 0 10px,#ebe4d8 10px 20px);}' +
       'html.bk-design-mode a[href],' +
       'html.bk-design-mode button,' +
       'html.bk-design-mode input,' +
@@ -308,30 +315,37 @@
     editingEl.removeAttribute('contenteditable');
     editingEl.removeAttribute('spellcheck');
     editingEl.removeAttribute('data-bk-inline-editing');
-    var el = editingEl;
+    var unchanged = value === editingStartValue;
     editingEl = null;
-    if (!key || !isInlineTextKey(key)) return;
+    // Clicking text and clicking away without typing isn't an edit; don't mark the design unsaved.
+    if (!key || !isInlineTextKey(key) || unchanged) return;
     post('field-edit', { key: key, value: value });
-    el.setAttribute('data-bk-design-selected', '1');
+  }
+
+  function textColorOf(el) {
+    try { return cssColorToHex(window.getComputedStyle(el).color); } catch (e) { return ''; }
   }
 
   function startInlineEdit(el) {
     if (editingEl === el) return;
     commitInlineEdit();
-    clearSelection();
     editingEl = el;
+    editingStartValue = textOf(el);
     el.setAttribute('data-bk-inline-editing', '1');
-    el.setAttribute('data-bk-design-selected', '1');
     el.setAttribute('contenteditable', 'true');
     el.setAttribute('spellcheck', 'true');
     setTimeout(function () {
       if (editingEl !== el) return;
       placeCaretAtEnd(el);
     }, 0);
+    var fontSize = 0;
+    try { fontSize = Math.round(parseFloat(window.getComputedStyle(el).fontSize)) || 0; } catch (e) { fontSize = 0; }
     post('field-select', {
       key: el.getAttribute('data-edit-key'),
       value: textOf(el),
-      kind: 'text'
+      kind: 'text',
+      fontSize: fontSize,
+      color: textColorOf(el)
     });
   }
 
@@ -357,10 +371,15 @@
       stopNavEvent(ev);
       return;
     }
+    // The click that follows a press on text must not re-select the card, or it would end the edit.
+    if (editingEl && t && (t === editingEl || editingEl.contains(t))) {
+      stopNavEvent(ev);
+      return;
+    }
     var card = (t && cardFromPoint(ev.clientX, ev.clientY)) || (t && cardTargetFrom(t));
     if (card) {
       stopNavEvent(ev);
-      selectCard(card);
+      selectCard(card, t);
       return;
     }
     if (active) stopNavEvent(ev);
@@ -633,6 +652,58 @@
     return 'left';
   }
 
+  /** The movable page section this card is the root of: its id, visibility, and the page's current order. */
+  function pageSectionInfo(el) {
+    var sec = el.closest ? el.closest('[data-bk-section]') : null;
+    if (!sec) return null;
+    // Cards nested inside a section (a product, a team member) don't get the section's controls.
+    // The section is this card when it is the labeled root, or — if the root itself isn't a card —
+    // the first card inside it.
+    if (sec !== el) {
+      var rootIsCard = sec.hasAttribute('data-bk-surface-key') || sec.hasAttribute('data-bk-color-surface');
+      if (rootIsCard || sec.querySelector('[data-bk-surface-key], [data-bk-color-surface]') !== el) return null;
+    }
+    return {
+      page: 'home',
+      id: sec.getAttribute('data-bk-section'),
+      label: sec.getAttribute('data-bk-section-label') || '',
+      hidden: sec.hasAttribute('data-bk-section-hidden'),
+      order: [].map.call(document.querySelectorAll('[data-bk-section]'), function (n) {
+        return n.getAttribute('data-bk-section');
+      }),
+      items: [].map.call(document.querySelectorAll('[data-bk-section]'), function (n) {
+        return {
+          id: n.getAttribute('data-bk-section'),
+          label: n.getAttribute('data-bk-section-label') || '',
+          hidden: n.hasAttribute('data-bk-section-hidden')
+        };
+      })
+    };
+  }
+
+  /** Live reorder / hide from the editor; the saved version is rendered by renderPageSections. */
+  function applyPageSections(payload) {
+    var els = [].slice.call(document.querySelectorAll('[data-bk-section]'));
+    if (!els.length) return;
+    var parent = els[0].parentNode;
+    var anchor = els[els.length - 1].nextSibling;
+    var byId = {};
+    els.forEach(function (n) { byId[n.getAttribute('data-bk-section')] = n; });
+    var ordered = [];
+    (payload.order || []).forEach(function (id) {
+      if (!byId[id]) return;
+      ordered.push(byId[id]);
+      delete byId[id];
+    });
+    els.forEach(function (n) { if (byId[n.getAttribute('data-bk-section')]) ordered.push(n); });
+    ordered.forEach(function (n) { parent.insertBefore(n, anchor); });
+    var hidden = payload.hidden || [];
+    ordered.forEach(function (n) {
+      if (hidden.indexOf(n.getAttribute('data-bk-section')) !== -1) n.setAttribute('data-bk-section-hidden', '1');
+      else n.removeAttribute('data-bk-section-hidden');
+    });
+  }
+
   function describeCard(el) {
     var key = keyOnColorTarget(el);
     var surface = (el.getAttribute && el.getAttribute('data-bk-color-surface')) || '';
@@ -644,6 +715,7 @@
     else if (/\.hero$/.test(key) || surface === 'hero') label = 'Hero';
     else if (/\.svcCard\./.test(key)) label = 'Service';
     else if (/\.services$/.test(key) || el.id === 'services') label = 'Services';
+    else if (/Product\./.test(key) || (el.hasAttribute && el.hasAttribute('data-product-id'))) label = 'Product';
     else if (/shopPage$/.test(key)) label = 'Shop page';
     else if (/\.shop$/.test(key)) label = 'Shop';
     else if (/galleryPage$/.test(key) || surface === 'gallery') label = 'Gallery';
@@ -683,6 +755,7 @@
       label: label,
       theme: document.documentElement.getAttribute('data-bk-theme') || '',
       align: headingAlign(el),
+      section: pageSectionInfo(el),
       surface: surface,
       surfaceKey: key,
       texts: texts,
@@ -692,13 +765,96 @@
     };
   }
 
-  function selectCard(card) {
+  /** Which service was clicked: a service card's own key, or the service row under the pointer. */
+  function serviceIdFor(card, target) {
+    var cardKey = /\.svcCard\.(.+)$/.exec(keyOnColorTarget(card) || '');
+    if (cardKey) return cardKey[1];
+    var row = target && target.closest ? target.closest('[data-edit-key^="svc:"]') : null;
+    if (!row || !card.contains(row)) row = card.matches && card.matches('[data-edit-key^="svc:"]') ? card : null;
+    var rowKey = row ? /^svc:(.+):edit$/.exec(row.getAttribute('data-edit-key') || '') : null;
+    return rowKey ? rowKey[1] : '';
+  }
+
+  /**
+   * Shows a service edit from the editor's side panel on its card without a reload. Templates lay
+   * services out differently, so this swaps the old text for the new wherever it appears in the card.
+   */
+  function applyServicePatch(payload) {
+    var id = String(payload.id || '').replace(/"/g, '');
+    var before = payload.before || {};
+    var after = payload.after || {};
+    if (!id) return;
+    var swaps = [];
+    ['name', 'description'].forEach(function (field) {
+      var from = String(before[field] || '').trim();
+      var to = String(after[field] || '').trim();
+      if (from && from !== to) swaps.push({ exact: from, to: to });
+    });
+    ['price', 'durationMinutes'].forEach(function (field) {
+      var from = Number(before[field]) || 0;
+      var to = Number(after[field]) || 0;
+      if (from > 0 && to > 0 && from !== to) swaps.push({ number: String(from), to: String(to) });
+    });
+    if (!swaps.length) return;
+    [].forEach.call(document.querySelectorAll('[data-edit-key="svc:' + id + ':edit"]'), function (card) {
+      var walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+      var node;
+      while ((node = walker.nextNode())) {
+        var text = node.nodeValue;
+        swaps.forEach(function (swap) {
+          if (swap.exact) {
+            if (text.trim() === swap.exact) text = text.replace(swap.exact, swap.to);
+          } else {
+            // A whole number only ("45", not the 45 inside "145" or "4.50").
+            text = text.replace(new RegExp('(^|[^0-9.])' + swap.number + '(?![0-9]|\\.[0-9])'), '$1' + swap.to);
+          }
+        });
+        if (text !== node.nodeValue) node.nodeValue = text;
+      }
+    });
+    syncFrames();
+  }
+
+  /** Which shop product was clicked: the product card itself, or the one under the pointer. */
+  function productIdFor(card, target) {
+    var el = card.hasAttribute && card.hasAttribute('data-product-id') ? card : null;
+    if (!el && target && target.closest) {
+      var hit = target.closest('[data-product-id]');
+      if (hit && card.contains(hit)) el = hit;
+    }
+    return el ? (el.getAttribute('data-product-id') || '') : '';
+  }
+
+  /** Swaps a product card's text (name, category, prices) after an edit in the side panel. */
+  function applyProductPatch(payload) {
+    var id = String(payload.id || '').replace(/"/g, '');
+    var swaps = (payload.swaps || []).filter(function (swap) { return swap.from && swap.from !== swap.to; });
+    if (!id || !swaps.length) return;
+    [].forEach.call(document.querySelectorAll('[data-product-id="' + id + '"]'), function (card) {
+      var walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+      var node;
+      while ((node = walker.nextNode())) {
+        var text = node.nodeValue;
+        for (var i = 0; i < swaps.length; i++) {
+          if (text.trim() === swaps[i].from) {
+            node.nodeValue = text.replace(swaps[i].from, swaps[i].to);
+            break;
+          }
+        }
+      }
+    });
+    syncFrames();
+  }
+
+  function selectCard(card, target) {
     if (!card) return;
     commitInlineEdit();
     clearSelection();
     clearHoverTarget();
     card.setAttribute('data-bk-design-selected', '1');
     var info = describeCard(card);
+    info.serviceId = serviceIdFor(card, target);
+    info.productId = productIdFor(card, target);
     selectFrame = ensureFrame('bk-design-select-frame', true);
     selectFrame.setAttribute('data-label', info.label);
     syncFrames();
@@ -795,11 +951,22 @@
     var card = cardFromPoint(ev.clientX, ev.clientY) || cardTargetFrom(t);
     if (card) {
       stopNavEvent(ev);
-      selectCard(card);
+      selectCard(card, t);
+      // Clicking a piece of text also starts typing in it, right on the page.
+      var text = editableTextFrom(t, card);
+      if (text) startInlineEdit(text);
       return;
     }
 
     stopNavEvent(ev);
+  }
+
+  /** The editable text under the pointer, if it belongs to this card. Photos and unsupported fields don't count. */
+  function editableTextFrom(t, card) {
+    var keyed = resolveEditTarget(t);
+    if (!keyed || !card.contains(keyed)) return null;
+    if (keyed.getAttribute('data-bk-design-editable') !== '1') return null;
+    return isInlineTextKey(keyed.getAttribute('data-edit-key')) ? keyed : null;
   }
 
   function onDblClick(ev) {
@@ -863,6 +1030,8 @@
     active = true;
     document.documentElement.classList.add('bk-design-mode');
     installStyle();
+    // installStyle only stamps the first time; stamp again so text is editable as soon as Edit turns on.
+    stampEditableMarks();
     observeEditableMarks();
     installNavGuards();
     installCardClicks();
@@ -1058,6 +1227,16 @@
         var selectedCard = document.querySelector('[data-bk-design-selected]');
         if (selectedCard) post('section-refresh', describeCard(selectedCard));
         break;
+      case 'page-sections':
+        applyPageSections(data.payload || {});
+        syncFrames();
+        var movedCard = document.querySelector('[data-bk-design-selected]');
+        if (movedCard) {
+          if (movedCard.scrollIntoView) movedCard.scrollIntoView({ block: 'nearest' });
+          syncFrames();
+          post('section-refresh', describeCard(movedCard));
+        }
+        break;
       case 'paint-role':
         paintRoleKeys(data.payload || {});
         break;
@@ -1066,6 +1245,23 @@
         break;
       case 'seo':
         applySeo((data.payload || {}).title || '', (data.payload || {}).description || '');
+        break;
+      case 'measure-text':
+        // The editor asks for a text's rendered size after it changes or resets it.
+        var measured = document.querySelector('[data-edit-key="' + String((data.payload || {}).key || '').replace(/"/g, '') + '"]');
+        if (measured) {
+          post('text-size', {
+            key: measured.getAttribute('data-edit-key'),
+            fontSize: Math.round(parseFloat(window.getComputedStyle(measured).fontSize)) || 0,
+            color: textColorOf(measured)
+          });
+        }
+        break;
+      case 'product-patch':
+        applyProductPatch(data.payload || {});
+        break;
+      case 'service-patch':
+        applyServicePatch(data.payload || {});
         break;
       case 'text-patch':
         applyTextPatch((data.payload || {}).key, (data.payload || {}).value);

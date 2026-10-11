@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/design.css?v=34" />
+  <link rel="stylesheet" href="assets/design.css?v=40" />
 </head>
 <body>
   <div id="gateLoading" class="design-gate">
@@ -357,20 +357,44 @@
             </div>
           </div>
           <div id="editBar" class="design-edit-bar" hidden>
-            <button type="button" class="design-edit-bar-chevron" id="editBarChevron" aria-expanded="true" aria-label="Collapse edit toolbar">^</button>
+            <button type="button" class="design-edit-bar-grip" id="editBarGrip" aria-label="Move toolbar" title="Drag to move">
+              <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="2" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/></g></svg>
+            </button>
             <div class="design-edit-bar-body">
-              <button type="button" class="design-tool" id="editBarTextTool" aria-pressed="false">Text</button>
-              <input type="text" id="editBarText" placeholder="Click text" disabled />
-              <button type="button" class="design-tool" id="editBarColorTool" aria-pressed="false">Background</button>
-              <canvas id="editBarWheel" class="design-edit-bar-wheel" width="120" height="120" hidden aria-label="Color spinner"></canvas>
-              <input type="color" id="editBarColor" class="hidden" value="#ffffff" tabindex="-1" aria-hidden="true" />
-              <input type="text" id="editBarHex" maxlength="7" placeholder="#" aria-label="Color hex" disabled />
-              <span id="editBarSeen" class="design-edit-bar-seen"></span>
+              <span class="design-edit-bar-label" id="editBarLabel">Click text, a section, or a photo to edit it.</span>
+              <span class="design-edit-bar-group" id="editBarTextGroup" hidden>
+                <span class="design-edit-bar-size" id="editBarSize" role="group" aria-label="Text size">
+                  <button type="button" id="editBarSizeDown" aria-label="Smaller text">A−</button>
+                  <output id="editBarSizeValue" aria-live="polite">16</output>
+                  <button type="button" id="editBarSizeUp" aria-label="Larger text">A+</button>
+                </span>
+                <button type="button" class="design-swatch-btn" id="editBarTextColorBtn" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="design-swatch" id="editBarTextSwatch" aria-hidden="true"></span>Text color
+                </button>
+              </span>
+              <span class="design-edit-bar-group" id="editBarSectionGroup" hidden>
+                <button type="button" class="design-swatch-btn" id="editBarBgBtn" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="design-swatch" id="editBarBgSwatch" aria-hidden="true"></span>Background
+                </button>
+              </span>
+              <span class="design-edit-bar-group" id="editBarPhotoGroup" hidden>
+                <button type="button" class="design-swatch-btn" id="editBarPhotoBtn">Replace photo</button>
+              </span>
             </div>
-          </div>
-          <div id="editPointer" class="design-pointer" hidden>
-            <span id="editPointerMark">T</span>
-            <span id="editPointerHex"></span>
+            <button type="button" class="design-edit-bar-chevron" id="editBarChevron" aria-expanded="true" aria-label="Collapse toolbar">⌄</button>
+            <div class="design-color-pop" id="editBarColorPop" role="dialog" aria-labelledby="editBarColorPopTitle" hidden>
+              <p class="design-color-pop-title" id="editBarColorPopTitle">Background</p>
+              <p class="design-color-pop-sub">Your site’s colors</p>
+              <div class="design-color-row" id="editBarSiteColors"></div>
+              <p class="design-color-pop-sub" id="editBarRecentLabel" hidden>Recent</p>
+              <div class="design-color-row" id="editBarRecentColors"></div>
+              <p class="design-color-pop-sub">Custom</p>
+              <div class="design-color-custom">
+                <input type="color" id="editBarColor" value="#ffffff" aria-label="Pick a custom color" />
+                <input type="text" id="editBarHex" maxlength="7" spellcheck="false" placeholder="#000000" aria-label="Color hex code" />
+              </div>
+              <button type="button" class="design-text-btn" id="editBarColorReset">Reset to the template’s color</button>
+            </div>
           </div>
         </div>
 
@@ -452,6 +476,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="assets/design-app.js?v=49"></script>
+  <script src="assets/design-app.js?v=59"></script>
 </body>
 </html>

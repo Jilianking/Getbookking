@@ -117,8 +117,7 @@
     editBarX: null,
     editBarY: null,
     editBarCollapsed: false,
-    editTool: null,
-    paintHex: '#FFFFFF',
+    colorPop: null,
     panel: 'pages',
     dirty: false,
     pending: {},
@@ -144,6 +143,15 @@
       fieldsOpen: false,
       labelTimer: null,
       serviceTimer: null
+    },
+    shop: {
+      products: [],
+      error: '',
+      openId: null,
+      timer: null,
+      draft: null,
+      draftPhoto: null,
+      busy: false
     }
   };
 
@@ -156,9 +164,9 @@
     'sidebarIconColorHome', 'sidebarIconColorBooking',
     'showGalleryPage', 'showBookPage', 'showAboutPage', 'showTeamPage', 'shopEnabled',
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
-    'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors',
+    'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts',
+    'webSectionLayouts', 'webPage',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -468,10 +476,22 @@
     };
   }
 
+  /** Saved order and hidden sections for the home page, sent to the preview (it reads publicSites, which can lag). */
+  function postPageSections() {
+    var home = state.tenant && state.tenant.webPage && state.tenant.webPage.home;
+    if (!home) return;
+    var sections = home.sections || {};
+    postToFrame('page-sections', {
+      order: home.order || [],
+      hidden: Object.keys(sections).filter(function (id) { return sections[id] && sections[id].hidden === true; })
+    });
+  }
+
   function pushLivePreview() {
     postToFrame('color-patch', colorPatchFromTenant(state.tenant));
     // The preview loads layouts from publicSites, which can lag the tenant; send ours so it always matches.
     postToFrame('layouts', (state.tenant && state.tenant.webSectionLayouts) || {});
+    postPageSections();
     postToFrame('announcement', {
       enabled: !!state.tenant.siteAnnouncementEnabled,
       text: state.tenant.siteAnnouncementText || ''
@@ -538,6 +558,8 @@
     if (panel !== 'style' && state.mode === 'templates') setMode('preview');
     // keep top tab strip in sync
     syncTopTabs('editor');
+    // Leaving a section's panel deselects it, so the bottom bar goes back to its hint.
+    syncEditBar();
   }
 
   var LAYOUT_OPTIONS = {
@@ -591,7 +613,7 @@
     if (label === 'Hero') return 'hero';
     if (label === 'Featured' || label === 'Gallery') return 'gallery';
     if (label === 'Services' || label === 'Service') return 'services';
-    if (label === 'Shop' || label === 'Shop page') return 'shop';
+    if (label === 'Shop' || label === 'Shop page' || label === 'Product') return 'shop';
     if (label === 'About') return 'about';
     if (label === 'Team') return 'team';
     if (label === 'Footer') return 'footer';
@@ -607,7 +629,7 @@
     if (/\.hero$/.test(key) || surface === 'hero') return 'hero';
     if (/\.featured$/.test(key) || /gallery/i.test(key) || surface === 'gallery' || surface === 'featured') return 'gallery';
     if (/\.services$/.test(key) || /\.svcCard\./.test(key)) return 'services';
-    if (/shop/i.test(key)) return 'shop';
+    if (/shop/i.test(key) || /Product\./.test(key)) return 'shop';
     if (/\.about$/.test(key)) return 'about';
     if (/team/i.test(key)) return 'team';
     if (/\.footer$/.test(key) || key === 'luxe.legal') return 'footer';
@@ -689,11 +711,135 @@
     ], current);
   }
 
+  var DRAG_ICON = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="2" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/></g></svg>';
+
+  function dragHandleHtml(name) {
+    return '<button type="button" class="design-drag" data-drag-handle aria-label="Reorder ' + escHtml(name) +
+      '. Drag, or use the up and down arrow keys.">' + DRAG_ICON + '</button>';
+  }
+
+  /**
+   * Drag-to-reorder for a list in the side panel. Rows are `[data-sort-row]` inside `host`, each with
+   * a `[data-drag-handle]`. Calls onMove(fromIndex, toIndex) on drop; the caller re-renders. Arrow keys
+   * on a handle move its row one step, so reordering never needs a mouse.
+   */
+  function makeSortable(host, onMove) {
+    var rows = [].slice.call(host.querySelectorAll('[data-sort-row]'));
+    rows.forEach(function (row, from) {
+      var handle = row.querySelector('[data-drag-handle]');
+      if (!handle) return;
+      handle.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      handle.addEventListener('keydown', function (ev) {
+        var step = ev.key === 'ArrowUp' ? -1 : ev.key === 'ArrowDown' ? 1 : 0;
+        if (!step) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var to = from + step;
+        if (to < 0 || to >= rows.length) return;
+        onMove(from, to);
+        var moved = host.querySelectorAll('[data-sort-row]')[to];
+        var movedHandle = moved && moved.querySelector('[data-drag-handle]');
+        if (movedHandle) movedHandle.focus();
+      });
+      handle.addEventListener('pointerdown', function (ev) {
+        if (ev.button != null && ev.button !== 0) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var line = document.createElement('div');
+        line.className = 'design-sort-line';
+        host.appendChild(line);
+        row.classList.add('is-dragging');
+        var slot = from;
+        function place(clientY) {
+          // The slot is the gap the pointer is nearest: 0 = above the first row, rows.length = below the last.
+          slot = 0;
+          rows.forEach(function (other) {
+            var box = other.getBoundingClientRect();
+            if (clientY > box.top + box.height / 2) slot += 1;
+          });
+          var hostBox = host.getBoundingClientRect();
+          var edge = slot < rows.length
+            ? rows[slot].getBoundingClientRect().top
+            : rows[rows.length - 1].getBoundingClientRect().bottom;
+          line.style.top = (edge - hostBox.top + host.scrollTop - 1) + 'px';
+        }
+        function finish(commit) {
+          handle.removeEventListener('pointermove', onPointerMove);
+          handle.removeEventListener('pointerup', onPointerUp);
+          handle.removeEventListener('pointercancel', onPointerCancel);
+          row.classList.remove('is-dragging');
+          if (line.parentNode) line.parentNode.removeChild(line);
+          var to = slot > from ? slot - 1 : slot;
+          if (commit && to !== from) onMove(from, to);
+        }
+        function onPointerMove(moveEv) { place(moveEv.clientY); }
+        function onPointerUp() { finish(true); }
+        function onPointerCancel() { finish(false); }
+        try { handle.setPointerCapture(ev.pointerId); } catch (e) { /* older browsers */ }
+        handle.addEventListener('pointermove', onPointerMove);
+        handle.addEventListener('pointerup', onPointerUp);
+        handle.addEventListener('pointercancel', onPointerCancel);
+        place(ev.clientY);
+      });
+    });
+  }
+
+  function movedTo(list, from, to) {
+    var next = list.slice();
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    return next;
+  }
+
+  function sectionControlsHtml(payload) {
+    var sec = payload.section;
+    if (!sec || !sec.id) return '';
+    var items = sec.items || sec.order.map(function (id) { return { id: id, label: id, hidden: false }; });
+    return '<h2>Page order</h2><p class="design-hint">Drag to reorder the sections on your home page.</p>' +
+      '<div class="design-sort" id="sectionOrderList">' +
+      items.map(function (item) {
+        return '<div class="design-sort-row' + (item.id === sec.id ? ' is-current' : '') + (item.hidden ? ' is-hidden' : '') + '" data-sort-row>' +
+          dragHandleHtml(item.label) +
+          '<span>' + escHtml(item.label) + '</span>' +
+          (item.hidden ? '<em>Hidden</em>' : '') +
+          '</div>';
+      }).join('') +
+      '</div>' +
+      '<div class="design-section-actions">' +
+      '<button type="button" class="design-btn design-btn--ghost" data-section-toggle>' + (sec.hidden ? 'Show section' : 'Hide section') + '</button>' +
+      '</div>' +
+      (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '');
+  }
+
+  /** Saves the home page's section order and visibility. The preview applies it live and reports the new state back. */
+  function savePageSections(sec, order, toggleHiddenId) {
+    var home = (state.tenant.webPage && state.tenant.webPage.home) || {};
+    var sections = cloneValue(home.sections || {});
+    if (toggleHiddenId) {
+      sections[toggleHiddenId] = Object.assign({}, sections[toggleHiddenId], { hidden: !sec.hidden });
+    }
+    var webPage = Object.assign({}, state.tenant.webPage || {});
+    webPage[sec.page || 'home'] = { order: order, sections: sections };
+    queueUpdate({ webPage: webPage });
+    postPageSections();
+  }
+
   function renderSectionBody(payload) {
     var host = $('sectionBody');
     if (!host) return;
     // Text, photos, and colors are edited directly on the preview; this panel only arranges the section.
-    var html = layoutPickerHtml(payload) + alignControlHtml(payload);
+    var showsServices = layoutSlotFor(payload) === 'services';
+    var html = layoutPickerHtml(payload) + alignControlHtml(payload) + sectionControlsHtml(payload);
+    if (showsServices) {
+      html += '<h2>Services</h2><p class="design-hint">Name, price, and length. These save right away.</p>' +
+        '<div id="sectionServices"></div>' +
+        '<button type="button" class="design-text-btn" id="sectionAddServiceBtn">Add service</button>';
+    }
+    var showsProducts = layoutSlotFor(payload) === 'shop';
+    if (showsProducts) {
+      html += '<h2>Products</h2><p class="design-hint">Drag to reorder. Edits save right away.</p>' +
+        '<div id="sectionProducts"></div>' +
+        '<button type="button" class="design-text-btn" id="sectionAddProductBtn">Add product</button>';
+    }
     if (payload.label === 'Booking form' || payload.label === 'Booking page') {
       html += '<button type="button" class="design-btn design-btn--ghost" id="sectionBookingBtn">Form, fields, and services</button>';
     }
@@ -705,6 +851,20 @@
     var bookingBtn = $('sectionBookingBtn');
     if (bookingBtn) {
       bookingBtn.addEventListener('click', function () { setPanel('booking'); });
+    }
+    if (showsProducts) {
+      renderProducts();
+      $('sectionAddProductBtn').addEventListener('click', startProductDraft);
+      // Bring the clicked product's fields into view.
+      var openProduct = payload.productId && $('sectionProducts').querySelector('[data-product-editor]');
+      if (openProduct && openProduct.previousElementSibling) openProduct.previousElementSibling.scrollIntoView({ block: 'start' });
+    }
+    if (showsServices) {
+      renderServices();
+      $('sectionAddServiceBtn').addEventListener('click', addService);
+      // Bring the clicked service's fields into view.
+      var openEditor = payload.serviceId && $('sectionServices').querySelector('[data-service-editor]');
+      if (openEditor && openEditor.previousElementSibling) openEditor.previousElementSibling.scrollIntoView({ block: 'start' });
     }
     host.querySelectorAll('[data-layout-value]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -720,6 +880,22 @@
         });
       });
     });
+    var orderList = $('sectionOrderList');
+    if (orderList) {
+      makeSortable(orderList, function (from, to) {
+        var sec = payload.section;
+        sec.order = movedTo(sec.order, from, to);
+        if (sec.items) sec.items = movedTo(sec.items, from, to);
+        savePageSections(sec, sec.order, '');
+        renderSectionBody(payload);
+      });
+    }
+    var sectionToggle = host.querySelector('[data-section-toggle]');
+    if (sectionToggle) {
+      sectionToggle.addEventListener('click', function () {
+        savePageSections(payload.section, payload.section.order, payload.section.id);
+      });
+    }
     host.querySelectorAll('[data-align-value]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var slot = btn.getAttribute('data-layout-slot');
@@ -738,6 +914,24 @@
   function openSection(payload) {
     if (!payload || !state.tenant) return;
     if (state.panel !== 'section') state.returnPanel = state.panel || 'pages';
+    // Clicking a service on the page opens that service in the panel's editor.
+    if (payload.serviceId && state.booking.services.some(function (s) { return s.id === payload.serviceId; })) {
+      state.booking.serviceOpenId = payload.serviceId;
+    }
+    if (payload.productId && state.shop.products.some(function (p) { return p.id === payload.productId; })) {
+      state.shop.openId = payload.productId;
+    }
+    // Products can change in the app or another tab; pick those up when a shop panel opens, unless
+    // an edit here is still saving.
+    if (layoutSlotFor(payload) === 'shop' && !state.shop.timer && !state.shop.busy) {
+      loadShopProducts().then(function () {
+        if (payload.productId && state.section === payload && !state.shop.openId &&
+            state.shop.products.some(function (p) { return p.id === payload.productId; })) {
+          state.shop.openId = payload.productId;
+          renderProducts();
+        }
+      });
+    }
     state.section = payload;
     state.selected = {
       kind: 'color',
@@ -747,6 +941,8 @@
     };
     setPanel('section');
     renderSectionBody(payload);
+    // The bottom bar follows the selection: show this section's name and background.
+    syncEditBar();
   }
 
   function syncTopTabs(activeTab) {
@@ -851,6 +1047,101 @@
     state.editBarY = parseFloat(bar.style.top) / host.clientHeight;
   }
 
+  // The site applies saved sizes from 10 to 96px (applyWebTextStyles).
+  var TEXT_SIZE_MIN = 10;
+  var TEXT_SIZE_MAX = 96;
+
+  function savedTextSize(key) {
+    var map = (state.tenant && state.tenant.webTextFontSizes) || {};
+    var px = parseInt(map[key], 10);
+    return px >= TEXT_SIZE_MIN && px <= TEXT_SIZE_MAX ? px : 0;
+  }
+
+  /** The selected text's size: the saved one, else the size the preview reported for it. */
+  function currentTextSize(key) {
+    return savedTextSize(key) || (state.textSize && state.textSize.key === key ? state.textSize.px : 0);
+  }
+
+  /** Step the selected text's size one notch smaller (-1) or larger (1). */
+  function changeTextSize(delta) {
+    var sel = state.selected;
+    if (!sel || sel.kind !== 'text' || !sel.key) return;
+    var from = currentTextSize(sel.key);
+    if (!from) return;
+    var map = Object.assign({}, (state.tenant && state.tenant.webTextFontSizes) || {});
+    // Larger text moves in bigger steps so a headline doesn't take a dozen clicks.
+    var step = from >= 40 ? 4 : from >= 20 ? 2 : 1;
+    map[sel.key] = String(Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, from + delta * step)));
+    queueUpdate({ webTextFontSizes: map });
+    pushLivePreview();
+    syncEditBar();
+  }
+
+  function savedTextColor(key) {
+    var map = (state.tenant && state.tenant.webTextColors) || {};
+    var hex = String(map[key] || '');
+    return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.toUpperCase() : '';
+  }
+
+  /** The selected text's color: the saved one, else the color the preview reported for it. */
+  function currentTextColor(key) {
+    return savedTextColor(key) || (state.textSize && state.textSize.key === key ? state.textSize.color : '') || '';
+  }
+
+  function setTextColor(key, hex) {
+    var map = Object.assign({}, (state.tenant && state.tenant.webTextColors) || {});
+    // Empty rather than deleted, so the publicSites sync (which merges maps) clears it too.
+    map[key] = hex || '';
+    queueUpdate({ webTextColors: map });
+    pushLivePreview();
+    if (!hex) postToFrame('measure-text', { key: key });
+  }
+
+  /** The open section's own background can be set when it has its own key or a site-wide color field. */
+  function sectionBackgroundTarget() {
+    var p = state.panel === 'section' ? state.section : null;
+    if (!p) return null;
+    if (p.surfaceKey) return { key: p.surfaceKey, field: SURFACE_TO_FIELD[p.surface] || '', hex: p.hex };
+    if (p.surface === 'card' || !SURFACE_TO_FIELD[p.surface]) return null;
+    return { key: '', field: SURFACE_TO_FIELD[p.surface], hex: p.hex };
+  }
+
+  function sectionBackgroundHex(target) {
+    var keyed = target.key && state.tenant.webSurfaceColors ? state.tenant.webSurfaceColors[target.key] : '';
+    return normalizeHex(keyed || (target.field && state.tenant[target.field]) || target.hex, '#FFFFFF');
+  }
+
+  function setSectionBackground(hex) {
+    var target = sectionBackgroundTarget();
+    if (!target) return;
+    if (target.key) {
+      var map = Object.assign({}, state.tenant.webSurfaceColors || {});
+      map[target.key] = hex || '';
+      queueUpdate({ webSurfaceColors: map });
+    } else if (hex) {
+      var patch = {};
+      patch[target.field] = hex;
+      queueUpdate(patch);
+    }
+    pushLivePreview();
+  }
+
+  function textLabelFor(key) {
+    return FIELD_LABELS[canonicalTextKey(key)] || FIELD_LABELS[key] || 'Text';
+  }
+
+  /** What the bar is acting on, from the current selection. No modes: it follows what was clicked. */
+  function editBarContext() {
+    var sel = state.selected;
+    var section = state.panel === 'section' ? state.section : null;
+    return {
+      text: sel && sel.kind === 'text' && sel.key ? sel : null,
+      photo: sel && sel.kind === 'sheet' && sel.key ? sel : null,
+      section: section,
+      background: sectionBackgroundTarget()
+    };
+  }
+
   function syncEditBar() {
     var bar = $('editBar');
     if (!bar) return;
@@ -859,188 +1150,157 @@
     bar.classList.toggle('is-collapsed', !!state.editBarCollapsed);
     var chev = $('editBarChevron');
     if (chev) {
-      chev.textContent = '^';
+      chev.textContent = state.editBarCollapsed ? '⌃' : '⌄';
       chev.setAttribute('aria-expanded', state.editBarCollapsed ? 'false' : 'true');
-      chev.setAttribute('aria-label', state.editBarCollapsed ? 'Open edit toolbar' : 'Collapse edit toolbar');
+      chev.setAttribute('aria-label', state.editBarCollapsed ? 'Open toolbar' : 'Collapse toolbar');
     }
-    var text = $('editBarText');
-    var color = $('editBarColor');
-    var hex = $('editBarHex');
-    var sel = state.selected;
-    var textOn = !!(sel && sel.kind === 'text');
-    var colorOn = !!(sel && sel.kind === 'color');
-    if (text) {
-      text.disabled = !textOn;
-      text.placeholder = textOn ? 'Text' : 'Click text';
-      if (!textOn) text.value = '';
-      else if (document.activeElement !== text && $('inspectorFieldInput')) text.value = $('inspectorFieldInput').value;
+    var ctx = editBarContext();
+    var label = 'Click text, a section, or a photo to edit it.';
+    if (ctx.text) label = textLabelFor(ctx.text.key) + (ctx.section && ctx.section.label ? ' · ' + ctx.section.label : '');
+    else if (ctx.photo) label = 'Photo' + (ctx.section && ctx.section.label ? ' · ' + ctx.section.label : '');
+    else if (ctx.section) label = ctx.section.label || 'Section';
+    $('editBarLabel').textContent = label;
+    $('editBarLabel').classList.toggle('is-hint', !ctx.text && !ctx.photo && !ctx.section);
+
+    $('editBarTextGroup').hidden = !ctx.text;
+    if (ctx.text) {
+      var px = currentTextSize(ctx.text.key);
+      $('editBarSizeValue').textContent = px ? String(px) : '—';
+      $('editBarSizeDown').disabled = !px || px <= TEXT_SIZE_MIN;
+      $('editBarSizeUp').disabled = !px || px >= TEXT_SIZE_MAX;
+      $('editBarTextSwatch').style.background = currentTextColor(ctx.text.key) || 'transparent';
     }
-    var bgTool = state.editTool === 'background';
-    if (color) color.disabled = !(colorOn || bgTool);
-    if (hex) {
-      hex.disabled = !(colorOn || bgTool);
-      hex.placeholder = '#';
-      if (!colorOn && !bgTool && document.activeElement !== hex) hex.value = '';
-      if (bgTool && !colorOn && document.activeElement !== hex) hex.value = state.paintHex || '#FFFFFF';
+    $('editBarSectionGroup').hidden = !ctx.background;
+    if (ctx.background) $('editBarBgSwatch').style.background = sectionBackgroundHex(ctx.background);
+    $('editBarPhotoGroup').hidden = !ctx.photo;
+
+    // The color popover belongs to one target; close it when that target is no longer selected.
+    if ((state.colorPop === 'text' && !ctx.text) || (state.colorPop === 'bg' && !ctx.background) ||
+        !show || state.editBarCollapsed) {
+      state.colorPop = null;
     }
-    if (colorOn && $('inspectorColorInput') && $('inspectorColorText')) {
-      var shownHex = $('inspectorColorText').value || '';
-      if (shownHex && bgTool) state.paintHex = shownHex;
-      if (color && document.activeElement !== color) color.value = $('inspectorColorInput').value;
-      if (hex && document.activeElement !== hex) hex.value = shownHex || state.paintHex || '';
-    }
-    var textToolBtn = $('editBarTextTool');
-    var colorToolBtn = $('editBarColorTool');
-    if (textToolBtn) {
-      var textArmed = state.editTool === 'text';
-      textToolBtn.classList.toggle('is-on', textArmed);
-      textToolBtn.setAttribute('aria-pressed', textArmed ? 'true' : 'false');
-    }
-    if (colorToolBtn) {
-      colorToolBtn.classList.toggle('is-on', bgTool);
-      colorToolBtn.setAttribute('aria-pressed', bgTool ? 'true' : 'false');
-    }
-    var wheel = $('editBarWheel');
-    if (wheel) {
-      wheel.hidden = !bgTool;
-      if (bgTool) drawEditWheel(wheel);
-    }
-    var seen = $('editBarSeen');
-    if (seen && !bgTool) seen.textContent = '';
-    var pointer = $('editPointer');
-    if (pointer && !state.editTool) pointer.hidden = true;
+    syncColorPop();
     applyEditBarPos();
   }
 
-  var editWheelDrawn = false;
-  function hsvToRgb(h, s, v) {
-    var c = v * s;
-    var hh = ((h % 360) + 360) % 360 / 60;
-    var x = c * (1 - Math.abs(hh % 2 - 1));
-    var m = v - c;
-    var r = 0;
-    var g = 0;
-    var b = 0;
-    if (hh < 1) { r = c; g = x; }
-    else if (hh < 2) { r = x; g = c; }
-    else if (hh < 3) { g = c; b = x; }
-    else if (hh < 4) { g = x; b = c; }
-    else if (hh < 5) { r = x; b = c; }
-    else { r = c; b = x; }
-    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
-  }
+  /* ── Color popover: site colors first, then recent, then custom ── */
 
-  function rgbToHex(r, g, b) {
-    function part(n) {
-      var s = n.toString(16);
-      return s.length < 2 ? '0' + s : s;
+  var RECENT_COLORS_KEY = 'bkDesignRecentColors';
+
+  function recentColors() {
+    try {
+      var list = JSON.parse(localStorage.getItem(RECENT_COLORS_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(function (h) { return /^#[0-9A-F]{6}$/.test(h); }).slice(0, 8) : [];
+    } catch (e) {
+      return [];
     }
-    return ('#' + part(r) + part(g) + part(b)).toUpperCase();
   }
 
-  function drawEditWheel(canvas) {
-    if (!canvas || editWheelDrawn) return;
-    var ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    var w = canvas.width;
-    var h = canvas.height;
-    var cx = w / 2;
-    var cy = h / 2;
-    var radius = w / 2 - 1;
-    var img = ctx.createImageData(w, h);
-    var y;
-    var x;
-    for (y = 0; y < h; y++) {
-      for (x = 0; x < w; x++) {
-        var dx = x - cx;
-        var dy = y - cy;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        var i = (y * w + x) * 4;
-        if (dist > radius) {
-          img.data[i + 3] = 0;
-          continue;
-        }
-        var hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
-        var rgb = hsvToRgb(hue, dist / radius, 1);
-        img.data[i] = rgb[0];
-        img.data[i + 1] = rgb[1];
-        img.data[i + 2] = rgb[2];
-        img.data[i + 3] = 255;
-      }
+  function rememberColor(hex) {
+    try {
+      var list = recentColors().filter(function (h) { return h !== hex; });
+      list.unshift(hex);
+      localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(list.slice(0, 8)));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  /** The shop's own palette, so new colors stay consistent with the rest of the site. */
+  function siteColors() {
+    var t = state.tenant || {};
+    var named = [
+      ['Page', t.backgroundColor], ['Text', t.textColor], ['Accent', t.primaryColor], ['Cards', t.cardSurfaceColor],
+      ['Gallery', t.featuredWorkBackgroundColor], ['About', t.aboutSectionBackgroundColor],
+      ['White', '#FFFFFF'], ['Black', '#111111']
+    ];
+    var seen = {};
+    return named.map(function (pair) { return { name: pair[0], hex: normalizeHex(pair[1], '') }; })
+      .filter(function (c) {
+        if (!c.hex || seen[c.hex]) return false;
+        seen[c.hex] = true;
+        return true;
+      });
+  }
+
+  function colorPopCurrent() {
+    var ctx = editBarContext();
+    if (state.colorPop === 'text' && ctx.text) return currentTextColor(ctx.text.key);
+    if (state.colorPop === 'bg' && ctx.background) return sectionBackgroundHex(ctx.background);
+    return '';
+  }
+
+  function colorPopCanReset() {
+    var ctx = editBarContext();
+    if (state.colorPop === 'text' && ctx.text) return !!savedTextColor(ctx.text.key);
+    if (state.colorPop === 'bg' && ctx.background) {
+      return !!(ctx.background.key && state.tenant.webSurfaceColors && state.tenant.webSurfaceColors[ctx.background.key]);
     }
-    ctx.putImageData(img, 0, 0);
-    editWheelDrawn = true;
+    return false;
   }
 
-  function wheelHexFromEvent(ev) {
-    var canvas = $('editBarWheel');
-    if (!canvas) return '';
-    var rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return '';
-    var x = (ev.clientX - rect.left) * (canvas.width / rect.width);
-    var y = (ev.clientY - rect.top) * (canvas.height / rect.height);
-    var dx = x - canvas.width / 2;
-    var dy = y - canvas.height / 2;
-    var dist = Math.sqrt(dx * dx + dy * dy);
-    var radius = canvas.width / 2 - 1;
-    if (dist > radius) return '';
-    var hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
-    var rgb = hsvToRgb(hue, Math.min(1, dist / radius), 1);
-    return rgbToHex(rgb[0], rgb[1], rgb[2]);
-  }
-
-  var paintSelection = function () {};
-
-  function setPaintHex(hex, live) {
-    hex = normalizeHex(hex, state.paintHex || '#FFFFFF');
-    state.paintHex = hex;
-    if ($('editBarColor')) $('editBarColor').value = hex;
-    if ($('editBarHex') && document.activeElement !== $('editBarHex')) $('editBarHex').value = hex;
-    var pointer = $('editPointer');
-    if (pointer) pointer.style.setProperty('--drop', hex);
-    if (live) paintSelection(hex);
-  }
-
-  function setEditTool(next) {
-    if (!state.editMode) next = null;
-    if (next !== 'text' && next !== 'background') next = null;
-    state.editTool = state.editTool === next ? null : next;
-    postToFrame('tool', { tool: state.editTool || '' });
+  /** Apply a color to whatever the popover is open for. `final` also records it under Recent. */
+  function applyPopColor(hex, final) {
+    hex = normalizeHex(hex, '');
+    var ctx = editBarContext();
+    if (!hex) return;
+    if (state.colorPop === 'text' && ctx.text) setTextColor(ctx.text.key, hex);
+    else if (state.colorPop === 'bg' && ctx.background) setSectionBackground(hex);
+    else return;
+    if (final) rememberColor(hex);
     syncEditBar();
   }
 
-  function moveEditPointer(ev) {
-    var pointer = $('editPointer');
-    if (!pointer) return;
-    if (!state.editMode || (state.editTool !== 'text' && state.editTool !== 'background')) {
-      pointer.hidden = true;
-      return;
+  function swatchButtonsHtml(colors, current) {
+    return colors.map(function (c) {
+      var hex = c.hex || c;
+      return '<button type="button" class="design-color-chip' + (hex === current ? ' is-on' : '') + '" data-color="' + hex + '"' +
+        ' style="background:' + hex + '" aria-label="' + escHtml((c.name ? c.name + ', ' : '') + hex) + '"' +
+        ' title="' + escHtml((c.name ? c.name + ' · ' : '') + hex) + '"></button>';
+    }).join('');
+  }
+
+  function syncColorPop() {
+    var pop = $('editBarColorPop');
+    if (!pop) return;
+    var open = !!state.colorPop;
+    pop.hidden = !open;
+    $('editBarTextColorBtn').setAttribute('aria-expanded', String(state.colorPop === 'text'));
+    $('editBarBgBtn').setAttribute('aria-expanded', String(state.colorPop === 'bg'));
+    if (!open) return;
+    var current = colorPopCurrent();
+    $('editBarColorPopTitle').textContent = state.colorPop === 'text' ? 'Text color' : 'Background';
+    $('editBarSiteColors').innerHTML = swatchButtonsHtml(siteColors(), current);
+    var recent = recentColors();
+    $('editBarRecentLabel').hidden = !recent.length;
+    $('editBarRecentColors').innerHTML = swatchButtonsHtml(recent, current);
+    if (current && document.activeElement !== $('editBarColor')) $('editBarColor').value = current.toLowerCase();
+    if (document.activeElement !== $('editBarHex')) $('editBarHex').value = current;
+    $('editBarColorReset').hidden = !colorPopCanReset();
+    pop.querySelectorAll('[data-color]').forEach(function (chip) {
+      chip.addEventListener('click', function () { applyPopColor(chip.getAttribute('data-color'), true); });
+    });
+    // Sit above the bar, or below it when the bar has been dragged near the top.
+    var host = $('workspacePreview');
+    var bar = $('editBar');
+    var roomAbove = bar && host ? bar.getBoundingClientRect().top - host.getBoundingClientRect().top : 999;
+    pop.classList.toggle('is-below', roomAbove < pop.offsetHeight + 16);
+    var anchor = state.colorPop === 'text' ? $('editBarTextColorBtn') : $('editBarBgBtn');
+    if (anchor && bar) {
+      var left = anchor.getBoundingClientRect().left - bar.getBoundingClientRect().left;
+      pop.style.left = Math.max(0, Math.min(left, bar.offsetWidth - pop.offsetWidth)) + 'px';
     }
-    var frame = $('previewFrame');
-    if (frame && (ev.target === frame || frame.contains(ev.target))) {
-      pointer.hidden = true;
-      return;
+  }
+
+  function toggleColorPop(kind) {
+    state.colorPop = state.colorPop === kind ? null : kind;
+    syncEditBar();
+    if (state.colorPop) {
+      var first = $('editBarColorPop').querySelector('[data-color]');
+      if (first) first.focus();
     }
-    pointer.hidden = false;
-    pointer.setAttribute('data-tool', state.editTool);
-    pointer.style.left = ev.clientX + 'px';
-    pointer.style.top = ev.clientY + 'px';
-    var mark = $('editPointerMark');
-    var label = $('editPointerHex');
-    if (state.editTool === 'text') {
-      if (mark) mark.textContent = 'T';
-      if (label) label.textContent = '';
-      return;
-    }
-    if (mark) mark.textContent = '';
-    if (label) label.textContent = state.paintHex || '';
-    pointer.style.setProperty('--drop', state.paintHex || '#FFFFFF');
   }
 
   function postEditMode() {
-    if (!state.editMode) state.editTool = null;
     postToFrame(state.editMode ? 'enable' : 'disable');
-    postToFrame('tool', { tool: state.editMode ? (state.editTool || '') : '' });
     pushLivePreview();
     syncEditBar();
   }
@@ -1933,12 +2193,6 @@
       pushLivePreview();
       return;
     }
-    if (data.type === 'color-sample') {
-      var seenHex = (data.payload && data.payload.hex) || '';
-      var seen = $('editBarSeen');
-      if (seen) seen.textContent = seenHex ? seenHex : '';
-      return;
-    }
     if (data.type === 'section-open') {
       state.sectionOpenedAt = Date.now();
       openSection(data.payload || null);
@@ -1953,7 +2207,18 @@
       if (panel) panel.scrollTop = keepScroll;
       return;
     }
+    if (data.type === 'text-size') {
+      if (data.payload && data.payload.key && data.payload.fontSize) {
+        state.textSize = { key: data.payload.key, px: data.payload.fontSize, color: data.payload.color || '' };
+        syncEditBar();
+      }
+      return;
+    }
     if (data.type === 'field-select') {
+      if (data.payload && data.payload.kind === 'text' && data.payload.fontSize) {
+        // Size and color as rendered; the starting point when nothing custom is saved.
+        state.textSize = { key: data.payload.key, px: data.payload.fontSize, color: data.payload.color || '' };
+      }
       if (!data.payload && state.panel === 'section') {
         if (state.sectionOpenedAt && Date.now() - state.sectionOpenedAt < 600) return;
         state.section = null;
@@ -2294,10 +2559,17 @@
     }
   }
 
+  /** The services editor renders in the Booking panel and, for a services card, the section panel. */
+  function serviceHosts() {
+    return [$('bookServices'), $('sectionServices')].filter(Boolean);
+  }
+
   function serviceEditorEl(id) {
     var found = null;
     document.querySelectorAll('[data-service-editor]').forEach(function (el) {
-      if (el.getAttribute('data-service-editor') === id) found = el;
+      if (el.getAttribute('data-service-editor') !== id) return;
+      // Both panels can hold this editor; read the one on screen.
+      if (!found || el.offsetParent !== null) found = el;
     });
     return found;
   }
@@ -2320,15 +2592,15 @@
   }
 
   function paintServiceRow(service) {
-    var row = null;
-    document.querySelectorAll('#bookServices [data-service]').forEach(function (el) {
-      if (el.getAttribute('data-service') === service.id) row = el;
+    serviceHosts().forEach(function (host) {
+      host.querySelectorAll('[data-service]').forEach(function (row) {
+        if (row.getAttribute('data-service') !== service.id) return;
+        var nameEl = row.querySelector('strong');
+        var metaEl = row.querySelector('em');
+        if (nameEl) nameEl.textContent = service.name;
+        if (metaEl) metaEl.textContent = serviceSubtitle(service);
+      });
     });
-    if (!row) return;
-    var nameEl = row.querySelector('strong');
-    var metaEl = row.querySelector('em');
-    if (nameEl) nameEl.textContent = service.name;
-    if (metaEl) metaEl.textContent = serviceSubtitle(service);
   }
 
   async function writeServiceDoc(service) {
@@ -2359,26 +2631,32 @@
   async function saveServiceDraft(id, draft) {
     var service = state.booking.services.filter(function (item) { return item.id === id; })[0];
     if (!draft || !service || !state.tenantId) return;
+    var before = { name: service.name, price: service.price, durationMinutes: service.durationMinutes, description: service.description };
     service.name = draft.name;
     service.price = draft.price;
     service.durationMinutes = draft.durationMinutes;
     service.description = draft.description;
     service.slug = uniqueServiceSlug(service.name, service.id);
     paintServiceRow(service);
+    // Show the edit on the service's card in the preview straight away.
+    postToFrame('service-patch', { id: service.id, before: before, after: draft });
+    // Gaining or losing a price, length, or description changes what the card contains, not just
+    // its text (e.g. "Book for pricing" becomes a price), so the preview needs a fresh render.
+    var reshaped = ['price', 'durationMinutes', 'description'].some(function (field) {
+      return !before[field] !== !draft[field];
+    });
     try {
       await writeServiceDoc(service);
+      if (reshaped) loadPreview();
     } catch (err) {
       alert((err && err.message) || 'Could not save service');
     }
   }
 
-  async function moveService(index, dir) {
+  async function moveService(from, to) {
     var list = state.booking.services;
-    var next = index + dir;
-    if (!list[index] || !list[next] || !state.tenantId) return;
-    var swapped = list[index];
-    list[index] = list[next];
-    list[next] = swapped;
+    if (!list[from] || !list[to] || from === to || !state.tenantId) return;
+    list.splice(to, 0, list.splice(from, 1)[0]);
     renderServices();
     try {
       var batch = db.batch();
@@ -2494,9 +2772,380 @@
     });
   }
 
-  function renderServices() {
-    var host = $('bookServices');
+  /* ── Shop products (section panel): edit and reorder. Adding, photos, and shipping details stay in the app. ── */
+
+  function money(n) {
+    return '$' + (Number(n) || 0).toFixed(2);
+  }
+
+  function productSubtitle(product) {
+    var onSale = product.salePrice > 0 && product.salePrice < product.price;
+    var price = onSale ? money(product.salePrice) + ' (was ' + money(product.price) + ')' : money(product.price);
+    return product.category ? product.category + ' · ' + price : price;
+  }
+
+  async function loadShopProducts() {
+    if (!state.tenantId) return;
+    try {
+      var snap = await db.collection('tenants').doc(state.tenantId).collection('products').get();
+      var rows = [];
+      snap.forEach(function (doc) {
+        var data = doc.data() || {};
+        if (data.isActive === false || !data.name) return;
+        rows.push({
+          id: doc.id,
+          name: String(data.name),
+          category: String(data.category || ''),
+          description: String(data.description || ''),
+          price: Number(data.price) > 0 ? Number(data.price) : 0,
+          salePrice: Number(data.salePrice) > 0 ? Number(data.salePrice) : 0,
+          imageUrl: String(data.imageUrl || ''),
+          weightOz: Number(data.weightOz) > 0 ? Number(data.weightOz) : 0,
+          lengthIn: Number(data.lengthIn) > 0 ? Number(data.lengthIn) : 0,
+          widthIn: Number(data.widthIn) > 0 ? Number(data.widthIn) : 0,
+          heightIn: Number(data.heightIn) > 0 ? Number(data.heightIn) : 0,
+          sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 999999
+        });
+      });
+      // Same order the site shows them in.
+      rows.sort(function (a, b) { return a.sortOrder - b.sortOrder; });
+      state.shop.products = rows;
+      state.shop.error = '';
+    } catch (err) {
+      console.error(err);
+      state.shop.error = 'Could not load products.';
+    }
+    if ($('sectionProducts')) renderProducts();
+  }
+
+  function renderProducts() {
+    var host = $('sectionProducts');
     if (!host) return;
+    if (state.shop.error) {
+      host.innerHTML = '<p class="design-hint">' + escHtml(state.shop.error) + '</p>';
+      return;
+    }
+    var draft = state.shop.draft;
+    var list = state.shop.products.map(function (product) {
+      var row = '<div class="design-sec-row design-sec-row--sortable" data-product="' + escHtml(product.id) + '" data-sort-row role="button" tabindex="0">' +
+        dragHandleHtml(product.name) +
+        '<span><strong>' + escHtml(product.name) + '</strong><em>' + escHtml(productSubtitle(product)) + '</em></span>' +
+        '</div>';
+      if (state.shop.openId !== product.id) return row;
+      return row + '<div class="design-book-editor" data-product-editor="' + escHtml(product.id) + '">' +
+        productPhotoHtml(product.imageUrl, product.imageUrl ? 'Replace photo' : 'Add photo') +
+        productFieldsHtml(product) +
+        '</div>';
+    }).join('');
+    if (!list && !draft) list = '<p class="design-hint">No products yet. Add your first one below.</p>';
+    if (draft) {
+      list += '<div class="design-book-editor design-prod-new" data-product-new>' +
+        '<h3>New product</h3>' +
+        productPhotoHtml(draft.photoPreview, draft.photoPreview ? 'Change photo' : 'Choose photo') +
+        productFieldsHtml(draft) +
+        '<p class="design-prod-error hidden" id="productDraftError" role="alert"></p>' +
+        '<div class="design-prod-actions">' +
+          '<button type="button" class="design-btn design-btn--ghost" id="productDraftCancel"' + (state.shop.busy ? ' disabled' : '') + '>Cancel</button>' +
+          '<button type="button" class="design-btn design-btn--save" id="productDraftSave"' + (state.shop.busy ? ' disabled' : '') + '>' + (state.shop.busy ? 'Adding…' : 'Add to shop') + '</button>' +
+        '</div></div>';
+    }
+    host.innerHTML = list;
+
+    function toggle(row) {
+      var id = row.getAttribute('data-product');
+      state.shop.openId = state.shop.openId === id ? null : id;
+      renderProducts();
+    }
+    host.querySelectorAll('[data-product]').forEach(function (row) {
+      row.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-drag-handle]')) return;
+        toggle(row);
+      });
+      row.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        if (ev.target.closest('[data-drag-handle]')) return;
+        ev.preventDefault();
+        toggle(row);
+      });
+    });
+    host.querySelectorAll('[data-product-editor] [data-prod]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        scheduleProductSave(input.closest('[data-product-editor]'));
+      });
+    });
+    host.querySelectorAll('[data-product-editor]').forEach(function (editor) {
+      wireProductPhoto(editor, function (file) {
+        uploadProductPhoto(editor.getAttribute('data-product-editor'), file);
+      });
+    });
+    var newForm = host.querySelector('[data-product-new]');
+    if (newForm) {
+      // Typed values live in the draft so a re-render (opening another product) doesn't lose them.
+      newForm.querySelectorAll('[data-prod]').forEach(function (input) {
+        input.addEventListener('input', function () {
+          state.shop.draft[input.getAttribute('data-prod')] = input.value;
+        });
+      });
+      wireProductPhoto(newForm, function (file) {
+        if (state.shop.draft.photoPreview) URL.revokeObjectURL(state.shop.draft.photoPreview);
+        state.shop.draftPhoto = file;
+        state.shop.draft.photoPreview = URL.createObjectURL(file);
+        renderProducts();
+      });
+      $('productDraftCancel').addEventListener('click', cancelProductDraft);
+      $('productDraftSave').addEventListener('click', createProduct);
+    }
+    makeSortable(host, moveProduct);
+  }
+
+  function productPhotoHtml(url, buttonLabel) {
+    return '<div class="design-prod-photo">' +
+      (url ? '<img src="' + escHtml(url) + '" alt="" />' : '<span class="design-prod-photo-empty" aria-hidden="true"></span>') +
+      '<button type="button" class="design-btn design-btn--ghost" data-prod-photo-btn>' + buttonLabel + '</button>' +
+      '<input type="file" accept="image/*" class="hidden" data-prod-photo-input />' +
+      '</div>';
+  }
+
+  /** The editable fields shared by an existing product and the new-product form. */
+  function productFieldsHtml(p) {
+    var num = function (v) { return Number(v) > 0 || (typeof v === 'string' && v) ? escHtml(String(v)) : ''; };
+    return '<div class="design-field"><label>Name</label><input type="text" data-prod="name" value="' + escHtml(p.name || '') + '" /></div>' +
+      '<div class="design-field"><label>Price</label><input type="text" inputmode="decimal" data-prod="price" value="' + num(p.price) + '" placeholder="0.00" /></div>' +
+      '<div class="design-field"><label>Sale price</label><input type="text" inputmode="decimal" data-prod="salePrice" value="' + num(p.salePrice) + '" placeholder="Optional" /></div>' +
+      '<div class="design-field"><label>Category</label><input type="text" data-prod="category" value="' + escHtml(p.category || '') + '" placeholder="Optional" /></div>' +
+      '<div class="design-field"><label>Description</label><textarea data-prod="description">' + escHtml(p.description || '') + '</textarea></div>' +
+      '<details class="design-prod-shipping"><summary>Shipping details (optional)</summary>' +
+        '<p class="design-hint">Used to quote shipping. Left blank, a product ships as 1 lb in a small box.</p>' +
+        '<div class="design-prod-dims">' +
+          '<div class="design-field"><label>Weight (oz)</label><input type="text" inputmode="decimal" data-prod="weightOz" value="' + num(p.weightOz) + '" /></div>' +
+          '<div class="design-field"><label>Length (in)</label><input type="text" inputmode="decimal" data-prod="lengthIn" value="' + num(p.lengthIn) + '" /></div>' +
+          '<div class="design-field"><label>Width (in)</label><input type="text" inputmode="decimal" data-prod="widthIn" value="' + num(p.widthIn) + '" /></div>' +
+          '<div class="design-field"><label>Height (in)</label><input type="text" inputmode="decimal" data-prod="heightIn" value="' + num(p.heightIn) + '" /></div>' +
+        '</div></details>';
+  }
+
+  function wireProductPhoto(scope, onFile) {
+    var btn = scope.querySelector('[data-prod-photo-btn]');
+    var input = scope.querySelector('[data-prod-photo-input]');
+    if (!btn || !input) return;
+    btn.addEventListener('click', function () { input.value = ''; input.click(); });
+    input.addEventListener('change', function () {
+      if (input.files && input.files[0]) onFile(input.files[0]);
+    });
+  }
+
+  var PRODUCT_NUMBER_FIELDS = ['price', 'salePrice', 'weightOz', 'lengthIn', 'widthIn', 'heightIn'];
+
+  /** Reads a product form (existing or new) into clean values; blank or invalid numbers become 0. */
+  function readProductForm(scope) {
+    var read = function (field) { return ((scope.querySelector('[data-prod="' + field + '"]') || {}).value || '').trim(); };
+    var out = { name: read('name'), category: read('category'), description: read('description') };
+    PRODUCT_NUMBER_FIELDS.forEach(function (field) {
+      var n = parseFloat(read(field).replace(/[^0-9.]/g, ''));
+      out[field] = n > 0 ? n : 0;
+    });
+    return out;
+  }
+
+  /** Downscales a photo to a JPEG no longer than 1680px on its long edge (same as the app). */
+  function productPhotoBlob(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, 1680 / Math.max(img.width, img.height));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function (blob) {
+          if (blob) resolve(blob);
+          else reject(new Error('Could not read that photo.'));
+        }, 'image/jpeg', 0.82);
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('Could not read that photo.'));
+      };
+      img.src = url;
+    });
+  }
+
+  async function storeProductPhoto(file) {
+    var blob = await productPhotoBlob(file);
+    return uploadBlob('tenants/' + state.tenantId + '/products/' + uid() + '.jpg', blob);
+  }
+
+  async function uploadProductPhoto(id, file) {
+    var product = state.shop.products.filter(function (item) { return item.id === id; })[0];
+    if (!product || !state.tenantId) return;
+    setStatus('Uploading…');
+    try {
+      var url = await storeProductPhoto(file);
+      await db.collection('tenants').doc(state.tenantId).collection('products').doc(id).set({ imageUrl: url }, { merge: true });
+      product.imageUrl = url;
+      setStatus('Saved', 'is-ok');
+      renderProducts();
+      loadPreview();
+    } catch (err) {
+      console.error(err);
+      setStatus('Upload failed', 'is-err');
+      alert((err && err.message) || 'Could not upload that photo');
+    }
+  }
+
+  function startProductDraft() {
+    if (!state.shop.draft) state.shop.draft = { name: '', price: '', salePrice: '', category: '', description: '', photoPreview: '' };
+    renderProducts();
+    var name = document.querySelector('[data-product-new] [data-prod="name"]');
+    if (name) {
+      name.scrollIntoView({ block: 'center' });
+      name.focus();
+    }
+  }
+
+  function cancelProductDraft() {
+    if (state.shop.busy) return;
+    if (state.shop.draft && state.shop.draft.photoPreview) URL.revokeObjectURL(state.shop.draft.photoPreview);
+    state.shop.draft = null;
+    state.shop.draftPhoto = null;
+    renderProducts();
+  }
+
+  /** Creates the product only when confirmed, so a half-filled one never appears on the live shop. */
+  async function createProduct() {
+    var form = document.querySelector('[data-product-new]');
+    if (!form || state.shop.busy || !state.tenantId) return;
+    var values = readProductForm(form);
+    var error = $('productDraftError');
+    var problem = !values.name ? 'Give the product a name.'
+      : !(values.price > 0) ? 'Enter a price.'
+      : values.salePrice >= values.price && values.salePrice > 0 ? 'The sale price needs to be lower than the price.'
+      : '';
+    if (problem) {
+      error.textContent = problem;
+      error.classList.remove('hidden');
+      return;
+    }
+    Object.assign(state.shop.draft, values);
+    state.shop.busy = true;
+    renderProducts();
+    try {
+      var imageUrl = state.shop.draftPhoto ? await storeProductPhoto(state.shop.draftPhoto) : '';
+      // Same fields the app writes when it creates a product.
+      var data = {
+        name: values.name,
+        category: values.category,
+        price: values.price,
+        imageUrl: imageUrl,
+        isActive: true,
+        sortOrder: state.shop.products.length
+      };
+      if (values.description) data.description = values.description;
+      ['salePrice', 'weightOz', 'lengthIn', 'widthIn', 'heightIn'].forEach(function (field) {
+        if (values[field] > 0) data[field] = values[field];
+      });
+      var ref = await db.collection('tenants').doc(state.tenantId).collection('products').add(data);
+      state.shop.products.push(Object.assign({ id: ref.id, description: '' }, values, { imageUrl: imageUrl, sortOrder: data.sortOrder }));
+      if (state.shop.draft.photoPreview) URL.revokeObjectURL(state.shop.draft.photoPreview);
+      state.shop.draft = null;
+      state.shop.draftPhoto = null;
+      state.shop.busy = false;
+      renderProducts();
+      loadPreview();
+    } catch (err) {
+      console.error(err);
+      state.shop.busy = false;
+      renderProducts();
+      var failed = $('productDraftError');
+      if (failed) {
+        failed.textContent = (err && err.message) || 'Could not add the product. Try again.';
+        failed.classList.remove('hidden');
+      }
+    }
+  }
+
+  function scheduleProductSave(editor) {
+    if (!editor) return;
+    var id = editor.getAttribute('data-product-editor');
+    var draft = readProductForm(editor);
+    if (!draft.name) draft.name = 'Product';
+    if (state.shop.timer) clearTimeout(state.shop.timer);
+    state.shop.timer = setTimeout(function () {
+      state.shop.timer = null;
+      saveProductDraft(id, draft);
+    }, 400);
+  }
+
+  async function saveProductDraft(id, draft) {
+    var product = state.shop.products.filter(function (item) { return item.id === id; })[0];
+    if (!product || !state.tenantId) return;
+    var before = Object.assign({}, product);
+    Object.assign(product, draft);
+    document.querySelectorAll('#sectionProducts [data-product]').forEach(function (row) {
+      if (row.getAttribute('data-product') !== id) return;
+      row.querySelector('strong').textContent = product.name;
+      row.querySelector('em').textContent = productSubtitle(product);
+    });
+    var onSale = function (p) { return p.salePrice > 0 && p.salePrice < p.price; };
+    // Show the edit on the product's card in the preview straight away.
+    postToFrame('product-patch', {
+      id: id,
+      swaps: [
+        { from: before.name, to: product.name },
+        { from: before.category, to: product.category },
+        { from: money(before.price), to: money(product.price) },
+        { from: onSale(before) ? money(before.salePrice) : '', to: money(product.salePrice) }
+      ]
+    });
+    // A sale starting or ending, or a category appearing or disappearing, changes the card's structure.
+    var reshaped = onSale(before) !== onSale(product) || !before.category !== !product.category;
+    try {
+      var del = firebase.firestore.FieldValue.delete();
+      var update = {
+        name: product.name,
+        price: product.price,
+        category: product.category,
+        description: product.description ? product.description : del
+      };
+      ['salePrice', 'weightOz', 'lengthIn', 'widthIn', 'heightIn'].forEach(function (field) {
+        update[field] = product[field] > 0 ? product[field] : del;
+      });
+      await db.collection('tenants').doc(state.tenantId).collection('products').doc(id).set(update, { merge: true });
+      if (reshaped) loadPreview();
+    } catch (err) {
+      alert((err && err.message) || 'Could not save product');
+    }
+  }
+
+  async function moveProduct(from, to) {
+    var list = state.shop.products;
+    if (!list[from] || !list[to] || from === to || !state.tenantId) return;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    renderProducts();
+    try {
+      var batch = db.batch();
+      list.forEach(function (product, i) {
+        product.sortOrder = i;
+        batch.set(
+          db.collection('tenants').doc(state.tenantId).collection('products').doc(product.id),
+          { sortOrder: i },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+      loadPreview();
+    } catch (err) {
+      alert((err && err.message) || 'Could not reorder products');
+    }
+  }
+
+  function renderServices() {
+    serviceHosts().forEach(renderServicesInto);
+  }
+
+  function renderServicesInto(host) {
     if (state.booking.servicesError) {
       host.innerHTML = '<p class="design-hint">' + escHtml(state.booking.servicesError) + '</p>';
       return;
@@ -2505,14 +3154,12 @@
       host.innerHTML = '<p class="design-hint">No services yet. Add one so clients can book.</p>';
       return;
     }
-    host.innerHTML = state.booking.services.map(function (service, index) {
+    host.innerHTML = state.booking.services.map(function (service) {
       var open = state.booking.serviceOpenId === service.id;
-      var row = '<div class="design-sec-row" data-service="' + escHtml(service.id) + '" role="button" tabindex="0">' +
+      var row = '<div class="design-sec-row design-sec-row--sortable" data-service="' + escHtml(service.id) + '" data-sort-row role="button" tabindex="0">' +
+        dragHandleHtml(service.name) +
         '<span><strong>' + escHtml(service.name) + '</strong><em>' + escHtml(serviceSubtitle(service)) + '</em></span>' +
-        '<span class="design-book-row-actions">' +
-          '<button type="button" class="design-book-icon-btn" data-move="-1" data-index="' + index + '"' + (index === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button>' +
-          '<button type="button" class="design-book-icon-btn" data-move="1" data-index="' + index + '"' + (index === state.booking.services.length - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button>' +
-        '</span></div>';
+        '</div>';
       if (!open) return row;
       return row + '<div class="design-book-editor" data-service-editor="' + escHtml(service.id) + '">' +
         '<div class="design-field"><label>Name</label><input type="text" data-svc="name" value="' + escHtml(service.name) + '" /></div>' +
@@ -2525,26 +3172,21 @@
 
     host.querySelectorAll('[data-service]').forEach(function (row) {
       row.addEventListener('click', function (ev) {
-        if (ev.target.closest('[data-move]')) return;
+        if (ev.target.closest('[data-drag-handle]')) return;
         var id = row.getAttribute('data-service');
         state.booking.serviceOpenId = state.booking.serviceOpenId === id ? null : id;
         renderServices();
       });
       row.addEventListener('keydown', function (ev) {
         if (ev.key !== 'Enter' && ev.key !== ' ') return;
-        if (ev.target.closest('[data-move]')) return;
+        if (ev.target.closest('[data-drag-handle]')) return;
         ev.preventDefault();
         var id = row.getAttribute('data-service');
         state.booking.serviceOpenId = state.booking.serviceOpenId === id ? null : id;
         renderServices();
       });
     });
-    host.querySelectorAll('[data-move]').forEach(function (btn) {
-      btn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        moveService(parseInt(btn.getAttribute('data-index'), 10), parseInt(btn.getAttribute('data-move'), 10));
-      });
-    });
+    makeSortable(host, moveService);
     host.querySelectorAll('[data-service-editor] input, [data-service-editor] textarea').forEach(function (input) {
       input.addEventListener('input', function () {
         var editor = input.closest('[data-service-editor]');
@@ -2761,6 +3403,7 @@
     renderTemplates();
     updateHistoryButtons();
     loadBookingServices();
+    loadShopProducts();
     showGate('designApp');
     requestAnimationFrame(function () { syncEditBar(); });
     loadPreview();
@@ -2833,27 +3476,18 @@
         postEditMode();
       });
     }
-    if ($('editBarChevron')) {
+    if ($('editBarGrip')) {
       var editBarDrag = null;
-      var editBarGrip = $('editBarChevron');
+      var editBarGrip = $('editBarGrip');
       editBarGrip.addEventListener('pointerdown', function (ev) {
         if (ev.button !== 0) return;
         var bar = $('editBar');
         var box = bar ? bar.getBoundingClientRect() : { left: ev.clientX, top: ev.clientY };
-        editBarDrag = {
-          x: ev.clientX,
-          y: ev.clientY,
-          dx: ev.clientX - box.left,
-          dy: ev.clientY - box.top,
-          moved: false,
-          id: ev.pointerId
-        };
+        editBarDrag = { dx: ev.clientX - box.left, dy: ev.clientY - box.top, id: ev.pointerId };
         try { editBarGrip.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
       });
       editBarGrip.addEventListener('pointermove', function (ev) {
         if (!editBarDrag || ev.pointerId !== editBarDrag.id) return;
-        if (Math.abs(ev.clientX - editBarDrag.x) + Math.abs(ev.clientY - editBarDrag.y) > 6) editBarDrag.moved = true;
-        if (!editBarDrag.moved) return;
         var host = $('workspacePreview');
         var bar = $('editBar');
         if (!host || !bar) return;
@@ -2865,12 +3499,32 @@
         bar.style.bottom = 'auto';
         bar.style.transform = 'none';
       });
-      editBarGrip.addEventListener('pointerup', function (ev) {
+      var endEditBarDrag = function (ev) {
         if (!editBarDrag || ev.pointerId !== editBarDrag.id) return;
-        var moved = editBarDrag.moved;
         editBarDrag = null;
-        if (moved) rememberEditBarPos();
-        else state.editBarCollapsed = !state.editBarCollapsed;
+        rememberEditBarPos();
+        persistEditBar();
+        syncEditBar();
+      };
+      editBarGrip.addEventListener('pointerup', endEditBarDrag);
+      editBarGrip.addEventListener('pointercancel', endEditBarDrag);
+      // Arrow keys nudge the bar, so moving it doesn't need a mouse.
+      editBarGrip.addEventListener('keydown', function (ev) {
+        var dx = ev.key === 'ArrowLeft' ? -16 : ev.key === 'ArrowRight' ? 16 : 0;
+        var dy = ev.key === 'ArrowUp' ? -16 : ev.key === 'ArrowDown' ? 16 : 0;
+        var bar = $('editBar');
+        if ((!dx && !dy) || !bar) return;
+        ev.preventDefault();
+        var pos = clampEditBar((parseFloat(bar.style.left) || 0) + dx, (parseFloat(bar.style.top) || 0) + dy);
+        bar.style.left = pos.left + 'px';
+        bar.style.top = pos.top + 'px';
+        rememberEditBarPos();
+        persistEditBar();
+      });
+    }
+    if ($('editBarChevron')) {
+      $('editBarChevron').addEventListener('click', function () {
+        state.editBarCollapsed = !state.editBarCollapsed;
         persistEditBar();
         syncEditBar();
       });
@@ -2880,56 +3534,50 @@
     if (frameCanvas && window.ResizeObserver) {
       new ResizeObserver(function () { syncViewportLabel(); }).observe(frameCanvas);
     }
-    if ($('editBarText')) {
-      $('editBarText').addEventListener('input', function () {
-        if (!state.selected || state.selected.kind !== 'text') return;
-        var key = state.selected.key;
-        var value = $('editBarText').value;
-        state.selected.value = value;
-        $('inspectorFieldInput').value = value;
-        postToFrame('text-patch', { key: canonicalTextKey(key), value: value });
-        if (key.indexOf('displayName') === 0) {
-          postToFrame('text-patch', { key: key, value: value });
+    if ($('editBarSizeDown')) {
+      $('editBarSizeDown').addEventListener('click', function () { changeTextSize(-1); });
+      $('editBarSizeUp').addEventListener('click', function () { changeTextSize(1); });
+      $('editBarTextColorBtn').addEventListener('click', function () { toggleColorPop('text'); });
+      $('editBarBgBtn').addEventListener('click', function () { toggleColorPop('bg'); });
+      $('editBarPhotoBtn').addEventListener('click', function () {
+        var ctx = editBarContext();
+        var target = ctx.photo && uploadTargetFromKey(ctx.photo.key);
+        if (!target) {
+          alert('This photo type isn’t supported in the web editor yet.');
+          return;
         }
+        beginUpload(target);
       });
-      $('editBarText').addEventListener('change', function () {
-        if (!state.selected || state.selected.kind !== 'text') return;
-        var updates = buildFieldUpdates(state.selected.key, $('editBarText').value);
-        if (!updates || updates['__skip_' + state.selected.key] !== undefined) return;
-        queueUpdate(updates);
+      // Dragging in the native picker previews live; letting go records the color under Recent.
+      $('editBarColor').addEventListener('input', function () { applyPopColor($('editBarColor').value, false); });
+      $('editBarColor').addEventListener('change', function () { applyPopColor($('editBarColor').value, true); });
+      $('editBarHex').addEventListener('change', function () {
+        var raw = $('editBarHex').value.trim();
+        if (/^#?[0-9a-fA-F]{6}$/.test(raw)) applyPopColor(raw.charAt(0) === '#' ? raw : '#' + raw, true);
+        else syncColorPop();
+      });
+      $('editBarColorReset').addEventListener('click', function () {
+        var ctx = editBarContext();
+        if (state.colorPop === 'text' && ctx.text) setTextColor(ctx.text.key, '');
+        else if (state.colorPop === 'bg' && ctx.background) setSectionBackground('');
+        syncEditBar();
+      });
+      document.addEventListener('pointerdown', function (ev) {
+        if (!state.colorPop) return;
+        if (ev.target.closest('#editBarColorPop, #editBarTextColorBtn, #editBarBgBtn')) return;
+        state.colorPop = null;
+        syncColorPop();
+      });
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape' || !state.colorPop) return;
+        var opener = state.colorPop === 'text' ? $('editBarTextColorBtn') : $('editBarBgBtn');
+        state.colorPop = null;
+        syncColorPop();
+        if (opener) opener.focus();
       });
     }
     loadEditBarPrefs();
     syncEditBar();
-    if ($('editBarTextTool')) {
-      $('editBarTextTool').addEventListener('click', function () { setEditTool('text'); });
-    }
-    if ($('editBarColorTool')) {
-      $('editBarColorTool').addEventListener('click', function () { setEditTool('background'); });
-    }
-    if ($('editBarWheel')) {
-      function pickFromWheel(ev) {
-        var hex = wheelHexFromEvent(ev);
-        if (!hex) return;
-        setPaintHex(hex, !!(state.selected && state.selected.kind === 'color'));
-      }
-      $('editBarWheel').addEventListener('pointerdown', function (ev) {
-        if (ev.button !== 0) return;
-        pickFromWheel(ev);
-        try { $('editBarWheel').setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
-      });
-      $('editBarWheel').addEventListener('pointermove', function (ev) {
-        if (!(ev.buttons & 1)) return;
-        pickFromWheel(ev);
-      });
-    }
-    document.addEventListener('pointermove', moveEditPointer);
-    if ($('previewFrame')) {
-      $('previewFrame').addEventListener('pointerenter', function () {
-        var pointer = $('editPointer');
-        if (pointer) pointer.hidden = true;
-      });
-    }
 
     document.querySelectorAll('.design-top-tab[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -2968,7 +3616,6 @@
       var key = state.selected.key;
       var value = $('inspectorFieldInput').value;
       state.selected.value = value;
-      if ($('editBarText') && document.activeElement !== $('editBarText')) $('editBarText').value = value;
       postToFrame('text-patch', { key: canonicalTextKey(key), value: value });
       if (key.indexOf('displayName') === 0) {
         postToFrame('text-patch', { key: key, value: value });
@@ -2986,9 +3633,6 @@
       hex = normalizeHex(hex, '#FFFFFF');
       $('inspectorColorInput').value = hex;
       $('inspectorColorText').value = hex;
-      if ($('editBarColor')) $('editBarColor').value = hex;
-      if ($('editBarHex') && document.activeElement !== $('editBarHex')) $('editBarHex').value = hex;
-      state.paintHex = hex;
       if ($('sectionColor') && document.activeElement !== $('sectionColor')) $('sectionColor').value = hex;
       if ($('sectionColorText') && document.activeElement !== $('sectionColorText')) $('sectionColorText').value = hex;
       if (state.selected.surfaceKey) {
@@ -3010,24 +3654,8 @@
       queueUpdate(patch);
       pushLivePreview();
     }
-    paintSelection = function (hex) { applyInspectorColor(hex); };
     $('inspectorColorInput').addEventListener('input', function () { applyInspectorColor($('inspectorColorInput').value); });
     $('inspectorColorText').addEventListener('change', function () { applyInspectorColor($('inspectorColorText').value); });
-    if ($('editBarColor')) {
-      $('editBarColor').addEventListener('input', function () { applyInspectorColor($('editBarColor').value); });
-    }
-    if ($('editBarHex')) {
-      $('editBarHex').addEventListener('input', function () {
-        var raw = $('editBarHex').value.trim();
-        if (/^#[0-9a-fA-F]{6}$/.test(raw)) {
-          setPaintHex(raw, !!(state.selected && state.selected.kind === 'color'));
-        }
-      });
-      $('editBarHex').addEventListener('change', function () {
-        setPaintHex($('editBarHex').value, !!(state.selected && state.selected.kind === 'color'));
-      });
-    }
-
     $('inspectorUploadBtn').addEventListener('click', function () {
       if (!state.selected || state.selected.kind !== 'sheet') return;
       var target = uploadTargetFromKey(state.selected.key);

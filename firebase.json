@@ -3,8 +3,9 @@
     {
       "target": "booking",
       "public": "web",
+      "predeploy": ["node scripts/build-site.js"],
       "cleanUrls": true,
-      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**"],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**", "src/**"],
       "rewrites": [
         { "source": "/join", "destination": "/join.html" },
         { "source": "**", "destination": "/index.html" }
@@ -15,11 +16,20 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=0, must-revalidate"
+              "value": "no-store"
             },
             {
               "key": "Content-Security-Policy",
               "value": "frame-ancestors 'self' https://getbookking.com https://www.getbookking.com https://getbooking.com https://www.getbooking.com https://test-app-96812.web.app https://test-app-96812-marketing.web.app http://localhost:* http://127.0.0.1:*"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(js|css|json|map|txt|xml)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -114,7 +124,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=0, must-revalidate"
+              "value": "no-store"
             }
           ]
         },

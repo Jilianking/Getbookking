@@ -374,42 +374,48 @@ html[data-bk-layout-hero-align="right"] :is(.classic-hero-left, .blade-hero-left
   margin-right: 0 !important;
 }
 
-html[data-bk-layout-gallery-align="left"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-gallery-align="left"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="left"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="left"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="left"] [data-bk-surface-key$=".team"],
-html[data-bk-layout-shop-align="left"] [data-bk-surface-key$=".shop"] {
+html[data-bk-layout-team-align="left"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-shop-align="left"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: left;
   --bk-justify: flex-start;
+  --bk-block-left: 0;
+  --bk-block-right: auto;
 }
-html[data-bk-layout-gallery-align="center"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-gallery-align="center"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="center"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="center"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="center"] [data-bk-surface-key$=".team"],
-html[data-bk-layout-shop-align="center"] [data-bk-surface-key$=".shop"] {
+html[data-bk-layout-team-align="center"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-shop-align="center"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: center;
   --bk-justify: center;
+  --bk-block-left: auto;
+  --bk-block-right: auto;
 }
-html[data-bk-layout-gallery-align="right"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-gallery-align="right"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="right"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="right"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="right"] [data-bk-surface-key$=".team"],
-html[data-bk-layout-shop-align="right"] [data-bk-surface-key$=".shop"] {
+html[data-bk-layout-team-align="right"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-shop-align="right"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: right;
   --bk-justify: flex-end;
+  --bk-block-left: auto;
+  --bk-block-right: 0;
 }
-html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]) :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
-html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
-html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
-html[data-bk-layout-team-align] [data-bk-surface-key$=".team"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
-html[data-bk-layout-shop-align] [data-bk-surface-key$=".shop"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]) {
+html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]) {
   text-align: var(--bk-align) !important;
 }
-html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
-html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
-html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
-html[data-bk-layout-team-align] [data-bk-surface-key$=".team"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
-html[data-bk-layout-shop-align] [data-bk-surface-key$=".shop"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)) {
+html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
+html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
+html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
+html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]) {
   justify-content: var(--bk-justify) !important;
 }
 
@@ -524,4 +530,79 @@ html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
   html[data-bk-layout-gallery="strip"] :is(.tattoo-featured-grid, .luxe-services-grid) > * {
     flex-basis: 72%;
   }
+}
+
+/* ── Gallery "Featured first": the big tile fills both rows exactly ───────────
+   The small tiles set the row height; the big one stretches to match instead of using its own
+   4:5 shape, which left its bottom edge a few pixels off. */
+html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) {
+  grid-template-rows: auto !important;
+}
+html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) > :first-child,
+html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) > :first-child :is(img, .luxe-service-card-img-wrap, .luxe-service-placeholder) {
+  aspect-ratio: auto !important;
+  height: 100% !important;
+}
+html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) > :first-child img {
+  object-fit: cover;
+}
+
+/* Tablet and phone: the big tile sits on its own row, so it needs a shape of its own again. */
+@media (max-width: 900px) {
+  html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) > :first-child {
+    aspect-ratio: 16 / 10 !important;
+    height: auto !important;
+  }
+}
+@media (max-width: 768px) {
+  html[data-bk-layout-gallery="feature"] :is(.tattoo-featured-grid, .luxe-services-grid) > :first-child {
+    aspect-ratio: 4 / 5 !important;
+  }
+}
+
+/* ── Shop: keep fewer-across layouts off the page edges ───────────────────────
+   Two or three large cards across the full content width run edge to edge; a narrower, centered
+   grid gives them room on the sides. Four across keeps the full width. */
+html[data-bk-layout-shop="two"] :is(.luxe-shop-grid, .stonecut-shop-grid),
+html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid),
+html[data-bk-layout-shop="list"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html[data-bk-layout-shop="two"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  max-width: 860px;
+  column-gap: 40px;
+}
+html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  max-width: 1040px;
+  column-gap: 32px;
+}
+@media (max-width: 768px) {
+  html[data-bk-layout-shop="two"] :is(.luxe-shop-grid, .stonecut-shop-grid),
+  html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+    column-gap: 16px;
+  }
+}
+
+/* Shop alignment: a product's price follows its name. */
+html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) .luxe-product-prices {
+  text-align: var(--bk-align) !important;
+  justify-content: var(--bk-justify) !important;
+}
+
+/* Text blocks narrower than their section (a capped-width intro paragraph) move with the alignment
+   instead of staying centered. */
+html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is(h1, h2, h3, p),
+html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p),
+html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is(h1, h2, h3, p),
+html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is(h1, h2, h3, p) {
+  margin-left: var(--bk-block-left) !important;
+  margin-right: var(--bk-block-right) !important;
+}
+
+/* Studio 12 service cells shrink-wrap their text at the left; give it the cell's full width so
+   alignment has room to act. */
+html[data-bk-layout-services-align] .s12-svc-cell > .bk-band-content {
+  flex: 1 1 auto;
 }

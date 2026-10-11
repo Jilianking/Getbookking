@@ -15,6 +15,7 @@
   <script src="/js/site-perf.js?v=20260818b"></script>
   <link rel="stylesheet" href="/css/charter-theme.css?v=20260825e" id="bk-theme-css-charter-preload">
   <link rel="stylesheet" href="/css/shared.css?v=20260825e">
+  <link rel="stylesheet" href="/css/section-layouts.css?v=15">
   <style>
     @font-face {
       font-family: 'Foglihten No06';
@@ -35,6 +36,19 @@
     /* Figma / preview capture (`?bk_capture=1`) — hide drawer only, keep full home */
     html.bk-capture-mode .tattoo-sidebar { display: none !important; }
     html.bk-capture-mode { overflow-x: hidden; }
+    /* Desktop Design editor iframe (`?bk_design=1`) */
+    html.bk-design-mode { overflow-x: hidden; }
+    #bk-site-announcement {
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+      width: 100%;
+      padding: 10px 16px;
+      text-align: center;
+      font: 500 13px/1.4 system-ui, sans-serif;
+      background: #2C2018;
+      color: #F5EDD8;
+    }
     /* Scroll-reveal animations stay opacity:0 until IntersectionObserver fires — force visible for captures */
     html.bk-capture-mode .blade-fade-up,
     html.bk-capture-mode .studio12-page .s12-fade,
@@ -3107,6 +3121,9 @@
       if (/(?:^|[?&])bk_capture=1(?:&|$)/.test(location.search || '')) {
         document.documentElement.classList.add('bk-capture-mode');
       }
+      if (/(?:^|[?&])bk_design=1(?:&|$)/.test(location.search || '')) {
+        document.documentElement.classList.add('bk-design-mode');
+      }
       if (typeof firebase === 'undefined' || typeof firebaseConfig === 'undefined') {
         document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p class="error">Firebase failed to load.</p></div></div>';
         return;
@@ -3530,7 +3547,7 @@
         '</section>';
       }
       function teamHomeSectionHtml(tenant) {
-        if (!isTeamPlan(tenant) || !tenantShowMeetTheTeamOnHome(tenant)) return '';
+        if (!tenantShowTeamPage(tenant) || !tenantShowMeetTheTeamOnHome(tenant)) return '';
         var providers = tenant._teamProviders;
         if (!providers || !providers.length) return '';
         return teamRosterSectionHtml(tenant, providers, { mode: 'home' });
@@ -3990,6 +4007,10 @@
         var protocol = location.protocol || 'https:';
         var platform = tenantBookingPlatformHost(host);
         if (host === slug + '.' + platform) return location.origin;
+        // Local emulator serves tenants at /{slug}/, not on a custom domain.
+        if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+          return location.origin + '/' + slug;
+        }
         // Bookking-managed custom domain (or any non-platform host already serving this tenant).
         if (!isBookkingPlatformHost(host)) return location.origin;
         if (host === platform || host === ('www.' + platform) || host.endsWith('.' + platform)) {
@@ -4921,6 +4942,14 @@
             paintCharterHeroSurface(el, tenant, col, tc);
             return;
           }
+          if (key === 'luxe.hero') {
+            if (col && col.charAt(0) === '#') {
+              el.style.setProperty('background-color', col, 'important');
+            } else {
+              el.style.removeProperty('background-color');
+            }
+            return;
+          }
           if (col && col.charAt(0) === '#') {
             try { el.style.setProperty('background', col, 'important'); }
             catch (e) { el.style.background = col; }
@@ -4950,7 +4979,7 @@
             var sid = el.getAttribute('data-bk-color-surface') || '';
             var fallback = tc ? roleBgForColorSurface(sid, tc) : null;
             if (!fallback) fallback = roleBgFromLiveCss(sid);
-            if (el.tagName === 'NAV') {
+            if (el.tagName === 'NAV' || key === 'classic.footer') {
               el.style.removeProperty('background');
             } else if (fallback) {
               try { el.style.setProperty('background', fallback, 'important'); }
@@ -5016,10 +5045,15 @@
           if (!key) return;
           var col = colors[key];
           if (col && col.charAt(0) === '#') {
-            try { el.style.setProperty('background', col, 'important'); }
+            try {
+              el.style.setProperty('background', col, 'important');
+              // Keep the label readable on light fills (e.g. a white button on a dark section).
+              el.style.setProperty('color', hexIsLight(col) ? '#111111' : '#FFFFFF', 'important');
+            }
             catch (e) { el.style.background = col; }
           } else {
             el.style.removeProperty('background');
+            el.style.removeProperty('color');
           }
         });
       }
@@ -5297,8 +5331,43 @@
           ' data-bk-band-tappable>';
       }
 
+      function applySiteSeo(t) {
+        if (!t) return;
+        var title = (t.seoTitle && String(t.seoTitle).trim()) || (t.displayName && String(t.displayName).trim()) || '';
+        if (title) document.title = title;
+        var desc = (t.seoDescription && String(t.seoDescription).trim()) || '';
+        if (desc) {
+          var meta = document.querySelector('meta[name="description"]');
+          if (!meta) {
+            meta = document.createElement('meta');
+            meta.setAttribute('name', 'description');
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute('content', desc);
+        }
+      }
+
+      function applySiteAnnouncement(t) {
+        var existing = document.getElementById('bk-site-announcement');
+        var enabled = !!(t && t.siteAnnouncementEnabled);
+        var text = t && t.siteAnnouncementText ? String(t.siteAnnouncementText).trim() : '';
+        if (!enabled || !text) {
+          if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+          return;
+        }
+        if (!existing) {
+          existing = document.createElement('div');
+          existing.id = 'bk-site-announcement';
+          existing.setAttribute('role', 'status');
+          document.body.insertBefore(existing, document.body.firstChild);
+        }
+        existing.textContent = text;
+      }
+
       function applyBranding(t) {
         if (!t) return;
+        applySiteSeo(t);
+        applySiteAnnouncement(t);
         applyTenantColorVars(t);
         var c = tenantColors(t);
         var bodySurface = 'page';
@@ -5330,12 +5399,57 @@
           el.style.color = c.accentFg;
         });
         applyWebButtonColors(t);
+        applySectionLayouts(t);
         applyTenantTypography(t);
         applyWebTextStyles(t);
         applySidebarChromeColors(t);
       }
 
       window.__bkApplyWebTextStyles = applyWebTextStyles;
+
+      function hexIsLight(hex) {
+        var h = String(hex || '').replace('#', '');
+        if (h.length === 3) h = h.replace(/(.)/g, '$1$1');
+        if (h.length !== 6) return false;
+        var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 160;
+      }
+
+      var BK_LAYOUT_SLOTS = ['header', 'hero', 'gallery', 'services', 'shop', 'about', 'team', 'footer'];
+      // Extra per-section settings stored in the same map as `<slot>Align`.
+      var BK_LAYOUT_PROPS = ['Align'];
+      function applySectionLayouts(tenant) {
+        // The editor reads this to know which layout the template uses when none is saved.
+        if (tenant && tenant.resolvedWebThemeId) {
+          document.documentElement.setAttribute('data-bk-theme', tenant.resolvedWebThemeId);
+        }
+        var raw = tenant && tenant.webSectionLayouts;
+        var map = (raw && typeof raw === 'object') ? raw : {};
+        // Local dev only: the editor's Preview button passes layouts that haven't reached publicSites.
+        if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+          // Clear copies left by an old local-dev workaround so they can't override publicSites.
+          try { localStorage.removeItem('bk_published_layouts:' + String((tenant && tenant.slug) || '').toLowerCase()); } catch (e) { /* storage blocked */ }
+          try {
+            // Keep them for the tab so clicking to other pages doesn't drop them.
+            var param = new URLSearchParams(location.search).get('bk_layouts');
+            if (param) sessionStorage.setItem('bk_layouts', param);
+            else param = sessionStorage.getItem('bk_layouts');
+            if (param) map = Object.assign({}, map, JSON.parse(param));
+          } catch (e) { /* ignore bad param or blocked storage */ }
+        }
+        BK_LAYOUT_SLOTS.forEach(function (slot) {
+          var value = map[slot] ? String(map[slot]).trim() : '';
+          if (value) document.documentElement.setAttribute('data-bk-layout-' + slot, value);
+          else document.documentElement.removeAttribute('data-bk-layout-' + slot);
+          BK_LAYOUT_PROPS.forEach(function (prop) {
+            var attr = 'data-bk-layout-' + slot + '-' + prop.toLowerCase();
+            var propValue = map[slot + prop] ? String(map[slot + prop]).trim() : '';
+            if (propValue) document.documentElement.setAttribute(attr, propValue);
+            else document.documentElement.removeAttribute(attr);
+          });
+        });
+      }
+      window.__bkApplySectionLayouts = applySectionLayouts;
 
       function coerceStyleMap(raw) {
         if (!raw || typeof raw !== 'object') return {};
@@ -5807,10 +5921,97 @@
       function isTemplatePreview() {
         try {
           if (new URLSearchParams(location.search || '').get('bk_template_preview') === '1') return true;
+          if (new URLSearchParams(location.search || '').get('bk_design') === '1') return true;
           return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bkPreviewEdit);
         } catch (e) {
           return false;
         }
+      }
+      /** Known WebTheme ids. Design editor passes bk_web_theme so the preview does not wait on publicSites. */
+      var BK_PREVIEW_WEB_THEME_IDS = [
+        'luxe-v1', 'blade-v1', 'stonecut-v1', 'studio-12-v1',
+        'hair-salon-v1', 'barber-shop-v1', 'tattoo-studio-v1', 'nail-salon-v1',
+        'custom-standard', 'charter-v1'
+      ];
+      function previewWebThemeOverrideId() {
+        if (!isTemplatePreview()) return '';
+        // Full tenant override injected by Swift WKUserScript (iOS).
+        try {
+          var ov = window.__bkPreviewTenantOverride;
+          if (ov && ov.webThemeId) {
+            var ovId = String(ov.webThemeId).trim();
+            if (ovId && BK_PREVIEW_WEB_THEME_IDS.indexOf(ovId) >= 0) return ovId;
+          }
+        } catch (e) {}
+        // Legacy bare-theme iOS injection.
+        try {
+          var native = String(window.__bkPreviewThemeId || '').trim();
+          if (native && BK_PREVIEW_WEB_THEME_IDS.indexOf(native) >= 0) return native;
+        } catch (e) {}
+        // URL param — web Design editor passes bk_web_theme=<id> on the iframe src.
+        try {
+          var id = String(new URLSearchParams(location.search || '').get('bk_web_theme') || '').trim();
+          if (!id || BK_PREVIEW_WEB_THEME_IDS.indexOf(id) < 0) return '';
+          return id;
+        } catch (e) {
+          return '';
+        }
+      }
+      function applyPreviewThemeOverride(tenant) {
+        if (!tenant) return tenant;
+        applyDesignVisibilityOverride(tenant);
+        var id = previewWebThemeOverrideId();
+        if (!id) return tenant;
+        if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
+          tenant.webThemeId = 'charter-v1';
+          tenant.resolvedWebThemeId = 'charter-v1';
+        } else if (id !== 'charter-v1') {
+          tenant.webThemeId = id;
+          tenant.resolvedWebThemeId = resolvedWebThemeId(tenant);
+        }
+        // Apply full color + style-map override from Swift-side state (iOS only — web editor
+        // sends these via color-patch postMessage after bridge handshake).
+        try {
+          var ov = window.__bkPreviewTenantOverride;
+          if (ov) {
+            var colorFields = ['backgroundColor','textColor','cardSurfaceColor','primaryColor',
+              'primaryColorHover','accentTextColor','featuredWorkBackgroundColor','featuredWorkTextColor',
+              'galleryPageBackgroundColor','galleryPageTextColor','aboutSectionBackgroundColor',
+              'aboutSectionTextColor','sidebarBackgroundColor','sidebarTextColor',
+              'sidebarCloseIconColor','sidebarIconColorHome','sidebarIconColorBooking','heroSlotBg'];
+            for (var i = 0; i < colorFields.length; i++) {
+              var k = colorFields[i];
+              if (ov[k] !== undefined && ov[k] !== '') tenant[k] = ov[k];
+            }
+            if (ov.webSurfaceColors !== undefined) tenant.webSurfaceColors = ov.webSurfaceColors;
+            if (ov.webButtonColors !== undefined) tenant.webButtonColors = ov.webButtonColors;
+            if (ov.webTextColors !== undefined) tenant.webTextColors = ov.webTextColors;
+            if (ov.webTextFontSizes !== undefined) tenant.webTextFontSizes = ov.webTextFontSizes;
+          }
+        } catch (e) {}
+        return tenant;
+      }
+      /** Design canvas draft: `bk_vis` shows page toggles before Publish. */
+      function applyDesignVisibilityOverride(tenant) {
+        if (!tenant || !isTemplatePreview()) return;
+        var raw = '';
+        try {
+          raw = new URLSearchParams(location.search || '').get('bk_vis') || '';
+        } catch (e) { return; }
+        if (!raw) return;
+        raw.split(',').forEach(function (pair) {
+          var bits = pair.split(':');
+          var name = bits[0];
+          var on = bits[1] !== '0';
+          if (name === 'gallery') tenant.showGalleryPage = on;
+          else if (name === 'book') tenant.showBookPage = on;
+          else if (name === 'about') tenant.showAboutPage = on;
+          else if (name === 'team') {
+            tenant.showTeamPage = on;
+            tenant.showMeetTheTeamOnHome = on;
+          }
+          else if (name === 'shop') tenant.shopEnabled = on;
+        });
       }
       function tenantShowBookPage(tenant) {
         return tenant.showBookPage !== false;
@@ -9201,7 +9402,10 @@
         if (tenantShowShopPage(tenant)) inner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
         if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '">Booking</a>';
-        return '<nav class="tattoo-nav">' +
+        var classicNavAttr = (isClassicTheme(tenant) && !isStudio12Theme(tenant))
+          ? (' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.nav'))
+          : '';
+        return '<nav class="tattoo-nav"' + classicNavAttr + '>' +
           '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, 'Welcome') + '</a>' +
           '<div class="tattoo-nav-trailing">' +
             '<div class="tattoo-nav-links">' + inner + '</div>' +
@@ -12126,6 +12330,7 @@
               webTextFontSizes: coerceStyleMap(data.webTextFontSizes),
               webSurfaceColors: coerceStyleMap(data.webSurfaceColors),
               webButtonColors: coerceStyleMap(data.webButtonColors),
+              webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
               bookingFormStyleId: data.bookingFormStyleId || '',
               // Prefer calendar when either field says so (see bookingModeResolved).
               bookingMode: (function() {
@@ -12459,7 +12664,8 @@
         }
         if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) footerLinks += '<a href="' + footAbout + '">Hours</a>';
         var y = new Date().getFullYear();
-        return '<footer class="classic-footer">' +
+        return '<footer class="classic-footer" data-bk-color-surface="page"' +
+          classicBkSurfaceKeyAttr(tenant, 'classic.footer') + '>' +
           '<div class="classic-footer-brand">' + siteNameSpan(tenant, nameFallback || 'Studio') + '</div>' +
           '<div class="classic-footer-links">' + footerLinks + '</div>' +
           '<p class="classic-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
@@ -12670,9 +12876,11 @@
         if (tenantShowGalleryPage(tenant)) navInner += '<a href="' + galleryUrl + '">Gallery</a>';
         navInner += '<a href="#services">Services</a>';
         if (tenantShowAboutPage(tenant)) navInner += '<a href="#about">About</a>';
+        if (tenantShowTeamPage(tenant)) navInner += '<a href="' + base + '/team">Team</a>';
         if (tenantShowShopPage(tenant)) navInner += '<a href="' + base + '/shop">Shop</a>';
         if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book" data-cta-key="wc.classic.navBook">' + wcSpan(tenant, 'wc.classic.navBook', 'Book') + '</a>';
-        var nav = '<nav class="tattoo-nav" data-bk-color-surface="page">' +
+        var nav = '<nav class="tattoo-nav" data-bk-color-surface="page"' +
+          classicBkSurfaceKeyAttr(tenant, 'classic.nav') + '>' +
           '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, opts.defaultName) + '</a>' +
           '<div class="tattoo-nav-trailing">' +
             '<div class="tattoo-nav-links">' + navInner + '</div>' +
@@ -12738,7 +12946,8 @@
         if (tenantShowGalleryPage(tenant)) {
           var gridCols = 3;
           var gridRows = 1;
-          var maxCells = 3;
+          // Five slots so every gallery layout can fill its grid; section-layouts.css hides the extras.
+          var maxCells = 5;
           var gallery = featuredUrlsForHomeStrip(tenant, maxCells);
           var gridStyle = 'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(1,1fr);';
           var featuredGridInner = (function() {
@@ -13699,11 +13908,13 @@
           return defaultLuxeHeroTaglineForIndustry(tenant.industry);
         });
 
-        var luxeHeroCta = (tenantShowBookPage(tenant) || isTemplatePreview())
+        var luxeHeroCta = tenantShowBookPage(tenant)
           ? '<a href="' + bookUrl + '" class="luxe-hero-cta" data-cta-key="wc.luxe.heroCta">' + wcSpan(tenant, 'wc.luxe.heroCta', 'Book Appointment') + '</a>'
           : '';
-        /* Luxe hero is a full-bleed photo slot — no section color band (text/CTA still editable). */
-        var hero = '<section class="' + heroClass + '"' + (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
+        /* Photo slot stays the hero image. The key lets the editor select the card; color never replaces the photo. */
+        var hero = '<section class="' + heroClass + '" data-bk-color-surface="hero"' +
+          luxeBkSurfaceKeyAttr(tenant, 'luxe.hero') + ' data-bk-band-tappable' +
+          (heroStyle ? ' style="' + heroStyle + '"' : '') + '>' +
           '<button type="button" class="bk-hero-image-hit luxe-hero-image-hit" data-edit-key="heroImage" aria-label="Change hero image"></button>' +
           '<div class="luxe-hero-inner">' +
             '<div class="luxe-hero-text bk-fade-up">' +
@@ -13720,8 +13931,9 @@
 
         var servicesSection = '';
         if (showFeaturedStrip) {
-          var maxCards = 4;
-          var featuredImages = featuredUrlsForHomeStrip(tenant, 4);
+          // Five slots so every gallery layout can fill its grid; section-layouts.css hides the extras.
+          var maxCards = 5;
+          var featuredImages = featuredUrlsForHomeStrip(tenant, maxCards);
           var serviceCards = '';
           for (var i = 0; i < maxCards; i++) {
             var fk = 'featuredWork:' + i;
@@ -15538,6 +15750,7 @@
             document.getElementById('root').innerHTML = '<div class="container">'+err('This business is not accepting bookings right now.')+'</div>';
             return;
           }
+          applyPreviewThemeOverride(tenant);
           applyBranding(tenant);
           return Promise.all([
             loadServices(tenant.id),
@@ -15594,7 +15807,7 @@
               return;
             }
             if (isShop) {
-              if (!tenant.shopEnabled && !isTemplatePreview()) {
+              if (!tenant.shopEnabled) {
                 var shopBase = tenantBaseUrl(tenant);
                 document.getElementById('root').innerHTML = '<div class="container"><div class="card"><p>Shop is not enabled.</p><p><a href="' + esc(shopBase + '/home') + '">Back to home</a></p></div></div>';
                 applyBranding(tenant);
@@ -15637,41 +15850,38 @@
               else applySidebarIconColor(tenant, false, true);
               return;
             }
-            if (p.isGalleryPath && !tenantShowGalleryPage(tenant) && !isTemplatePreview()) {
+            if (p.isGalleryPath && !tenantShowGalleryPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
-            if (p.isAboutPath && !tenantShowAboutPage(tenant) && !isTemplatePreview()) {
+            if (p.isAboutPath && !tenantShowAboutPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
-            if (p.isTeamPath && !tenantShowTeamPage(tenant) && !isTemplatePreview()) {
+            if (p.isTeamPath && !tenantShowTeamPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
             if (p.isBookPath &&
                 (!tenantShowBookPage(tenant) ||
-                 (isCharterTheme(tenant) && !tenantShowChartersPage(tenant))) &&
-                !isTemplatePreview()) {
+                 (isCharterTheme(tenant) && !tenantShowChartersPage(tenant)))) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
             if (isCharterTheme(tenant) &&
                 (p.isChartersPath || p.isCharterDetailPath) &&
-                !tenantShowChartersPage(tenant) &&
-                !isTemplatePreview()) {
+                !tenantShowChartersPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
             }
             if (isCharterTheme(tenant) &&
                 p.isHowItWorksPath &&
-                !tenantShowHowItWorksPage(tenant) &&
-                !isTemplatePreview()) {
+                !tenantShowHowItWorksPage(tenant)) {
               document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
               applyBranding(tenant);
               return;
@@ -16358,6 +16568,11 @@
             }
 
             if (p.memberSlug && isTeamPlan(tenant)) {
+              if (!tenantShowTeamPage(tenant)) {
+                document.getElementById('root').innerHTML = publicSitePageUnavailableHtml(tenant);
+                applyBranding(tenant);
+                return;
+              }
               return loadPublicProvider(tenant.slug, p.memberSlug).then(function(provider) {
                 if (!provider) {
                   document.getElementById('root').innerHTML = '<div class="container">' + err('Team member not found') + '</div>';
@@ -16393,5 +16608,6 @@
       else init();
     })();
   </script>
+  <script src="/js/design-bridge.js?v=28"></script>
 </body>
 </html>

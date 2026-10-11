@@ -694,3 +694,13 @@ body.acct-modal-open { overflow: hidden; }
   .acct-invoice-number,
   .acct-invoice-status { text-align: left; }
 }
+
+html.bk-embed body > nav,
+html.bk-embed .nav-drawer,
+html.bk-embed .acct-header,
+html.bk-embed .bill-back,
+html.bk-embed #shopBox,
+html.bk-embed #websiteBox,
+html.bk-embed #billingBox {
+  display: none !important;
+}

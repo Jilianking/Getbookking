@@ -77,6 +77,7 @@ const PUBLIC_SITE_KEYS = [
   "webTextFontSizes",
   "webSurfaceColors",
   "webButtonColors",
+  "webSectionLayouts",
   "bookingFormStyleId",
   "bookingMode",
   "workflow",

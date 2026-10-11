@@ -1,0 +1,527 @@
+/* Web editor section layouts. Default (no attribute) keeps each template's own layout. */
+
+html[data-bk-layout-header="center"] .tattoo-nav,
+html[data-bk-layout-header="center"] .luxe-nav,
+html[data-bk-layout-header="center"] .blade-topnav,
+html[data-bk-layout-header="center"] .stonecut-nav,
+html[data-bk-layout-header="center"] .s12-topnav {
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
+  gap: 10px 24px;
+}
+/* Templates push the links right with margin-left:auto; centered puts the name on its own row above them. */
+html[data-bk-layout-header="center"] :is(.tattoo-nav, .luxe-nav, .blade-topnav, .stonecut-nav, .s12-topnav) > * {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+html[data-bk-layout-header="center"] :is(.tattoo-nav, .luxe-nav, .blade-topnav, .stonecut-nav, .s12-topnav) > :first-child {
+  flex-basis: 100%;
+  text-align: center;
+}
+html[data-bk-layout-header="center"] .tattoo-nav-links,
+html[data-bk-layout-header="center"] .luxe-nav-links,
+html[data-bk-layout-header="center"] .tattoo-nav-trailing,
+html[data-bk-layout-header="center"] .luxe-nav-trailing {
+  justify-content: center;
+}
+
+html[data-bk-layout-header="book"] .tattoo-nav-links a:not(.classic-nav-book),
+html[data-bk-layout-header="book"] .luxe-nav-links a:not(.luxe-nav-book),
+html[data-bk-layout-header="book"] .blade-nav-links,
+html[data-bk-layout-header="book"] .stonecut-links li:not(:has([data-cta-key])),
+html[data-bk-layout-header="book"] .s12-nav-links a:not([data-cta-key]) {
+  display: none !important;
+}
+
+/* Studio 12 is photo-left by default, so its "Text left" is the flipped one. */
+html[data-bk-layout-hero="splitFlip"] .classic-hero,
+html[data-bk-layout-hero="splitFlip"] .blade-hero,
+html[data-bk-layout-hero="splitFlip"] .stonecut-hero,
+html[data-bk-layout-hero="split"] .s12-hero {
+  direction: rtl;
+}
+html[data-bk-layout-hero="splitFlip"] .classic-hero > *,
+html[data-bk-layout-hero="splitFlip"] .blade-hero > *,
+html[data-bk-layout-hero="splitFlip"] .stonecut-hero > *,
+html[data-bk-layout-hero="split"] .s12-hero > * {
+  direction: ltr;
+}
+
+html[data-bk-layout-hero="stack"] .classic-hero,
+html[data-bk-layout-hero="stack"] .blade-hero,
+html[data-bk-layout-hero="stack"] .stonecut-hero,
+html[data-bk-layout-hero="stack"] .s12-hero {
+  grid-template-columns: 1fr !important;
+}
+
+html[data-bk-layout-hero="overlay"] .classic-hero,
+html[data-bk-layout-hero="overlay"] .blade-hero,
+html[data-bk-layout-hero="overlay"] .stonecut-hero,
+html[data-bk-layout-hero="overlay"] .s12-hero {
+  display: block;
+  position: relative;
+  min-height: 460px;
+}
+html[data-bk-layout-hero="overlay"] .classic-hero-right,
+html[data-bk-layout-hero="overlay"] .blade-hero-right,
+html[data-bk-layout-hero="overlay"] .stonecut-hero-right,
+html[data-bk-layout-hero="overlay"] .s12-hero-img-col {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+html[data-bk-layout-hero="overlay"] .classic-hero-left,
+html[data-bk-layout-hero="overlay"] .blade-hero-left,
+html[data-bk-layout-hero="overlay"] .stonecut-hero-left,
+html[data-bk-layout-hero="overlay"] .s12-hero-content {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+/* Eyebrows and taglines carry their own dark colors; over a photo everything reads white. */
+html[data-bk-layout-hero="overlay"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content) :is(h1, h2, h3, p, em, small) {
+  color: #fff !important;
+}
+
+html[data-bk-layout-hero="split"] .luxe-hero,
+html[data-bk-layout-hero="splitFlip"] .luxe-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  background-color: var(--bk-bg, #fffdf9);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  background-position: right center;
+}
+html[data-bk-layout-hero="splitFlip"] .luxe-hero {
+  background-position: left center;
+}
+html[data-bk-layout-hero="splitFlip"] .luxe-hero-inner {
+  grid-column: 2;
+}
+html[data-bk-layout-hero="stack"] .luxe-hero {
+  aspect-ratio: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 520px;
+  padding-top: 240px;
+  background-size: 100% 240px;
+  background-repeat: no-repeat;
+  background-position: top center;
+}
+
+/* Templates render five featured slots. Show only as many as the layout fills:
+   default keeps each template's own count (classic 3, luxe 4), three = 3, four = 4, feature = 1 big + 4. */
+html:not([data-bk-layout-gallery]) .tattoo-featured-grid > :nth-child(n+4),
+html:not([data-bk-layout-gallery]) .luxe-services-grid > :nth-child(n+5),
+html[data-bk-layout-gallery="three"] .tattoo-featured-grid > :nth-child(n+4),
+html[data-bk-layout-gallery="three"] .luxe-services-grid > :nth-child(n+4),
+html[data-bk-layout-gallery="four"] .tattoo-featured-grid > :nth-child(n+5),
+html[data-bk-layout-gallery="four"] .luxe-services-grid > :nth-child(n+5) {
+  display: none !important;
+}
+
+html[data-bk-layout-gallery="three"] .tattoo-featured-grid,
+html[data-bk-layout-gallery="three"] .luxe-services-grid {
+  grid-template-columns: repeat(3, 1fr) !important;
+}
+html[data-bk-layout-gallery="four"] .tattoo-featured-grid,
+html[data-bk-layout-gallery="four"] .luxe-services-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+html[data-bk-layout-gallery="feature"] .tattoo-featured-grid,
+html[data-bk-layout-gallery="feature"] .luxe-services-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+html[data-bk-layout-gallery="feature"] .tattoo-featured-grid > :first-child,
+html[data-bk-layout-gallery="feature"] .luxe-services-grid > :first-child {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+html[data-bk-layout-services="cards"] .classic-service-list,
+html[data-bk-layout-services="cards"] .luxe-home-service-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+}
+html[data-bk-layout-services="cards"] .classic-service-item,
+html[data-bk-layout-services="cards"] .luxe-home-service-row {
+  border: 1px solid rgba(44, 32, 24, 0.14);
+  border-radius: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Blade, Stonecut and Studio 12 show services as cards by default; list puts one per row. */
+html[data-bk-layout-services="list"] :is(.blade-services-grid, .stonecut-services, .s12-svc-grid) {
+  grid-template-columns: 1fr !important;
+  max-width: 760px;
+}
+html[data-bk-layout-services="list"] .s12-svc-grid {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+html[data-bk-layout-shop="list"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  grid-template-columns: 1fr !important;
+  max-width: 640px;
+}
+html[data-bk-layout-shop="list"] .luxe-product-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+html[data-bk-layout-shop="list"] .luxe-product-card img,
+html[data-bk-layout-shop="list"] .luxe-product-placeholder {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  margin-bottom: 0;
+}
+
+html[data-bk-layout-about="stack"] .stonecut-about-inner {
+  grid-template-columns: 1fr !important;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+html[data-bk-layout-about="stack"] .classic-about-inner-v2,
+html[data-bk-layout-about="stack"] .luxe-team-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+html[data-bk-layout-team="list"] .bk-team-roster-grid {
+  grid-template-columns: 1fr !important;
+  max-width: 560px;
+}
+
+html[data-bk-layout-footer="split"] .classic-footer,
+html[data-bk-layout-footer="split"] .blade-footer,
+html[data-bk-layout-footer="split"] .luxe-footer-legal,
+html[data-bk-layout-footer="split"] .s12-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  gap: 16px 24px;
+}
+/* Stonecut's footer is one line (copyright · Privacy), left-aligned by default. */
+html[data-bk-layout-footer="center"] [data-bk-surface-key="stonecut.footer"] {
+  text-align: center;
+}
+html[data-bk-layout-footer="split"] [data-bk-surface-key="stonecut.footer"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+html[data-bk-layout-footer="split"] [data-bk-surface-key="stonecut.footer"] > a:last-of-type {
+  margin-left: auto;
+}
+
+html[data-bk-layout-footer="split"] .classic-footer-links,
+html[data-bk-layout-footer="split"] .blade-footer-links,
+html[data-bk-layout-footer="split"] .s12-footer-links {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Tablet: editor preview is 834px. Four-across is too tight; two columns keeps the feature span. */
+@media (max-width: 900px) {
+  html[data-bk-layout-gallery="four"] .tattoo-featured-grid,
+  html[data-bk-layout-gallery="four"] .luxe-services-grid,
+  html[data-bk-layout-gallery="feature"] .tattoo-featured-grid,
+  html[data-bk-layout-gallery="feature"] .luxe-services-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  html[data-bk-layout-gallery="feature"] .tattoo-featured-grid > :first-child,
+  html[data-bk-layout-gallery="feature"] .luxe-services-grid > :first-child {
+    grid-column: span 2;
+    grid-row: auto;
+  }
+}
+
+/* Phone: editor preview is 390px. Side-by-side layouts become a single column. */
+@media (max-width: 768px) {
+  html[data-bk-layout-header="center"] .tattoo-nav,
+  html[data-bk-layout-header="center"] .luxe-nav,
+  html[data-bk-layout-header="center"] .blade-topnav,
+  html[data-bk-layout-header="center"] .stonecut-nav,
+  html[data-bk-layout-header="center"] .s12-topnav {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    text-align: initial;
+    gap: 8px;
+  }
+  html[data-bk-layout-header="center"] :is(.tattoo-nav, .luxe-nav, .blade-topnav, .stonecut-nav, .s12-topnav) > :first-child {
+    flex-basis: auto;
+    text-align: initial;
+  }
+
+  html[data-bk-layout-hero="split"] .luxe-hero,
+  html[data-bk-layout-hero="splitFlip"] .luxe-hero {
+    aspect-ratio: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    grid-template-columns: none;
+    background-size: 100% 200px;
+    background-position: top center;
+    padding-top: 200px;
+    padding-bottom: 28px;
+    min-height: 0;
+    overflow: visible;
+  }
+  html[data-bk-layout-hero="splitFlip"] .luxe-hero-inner {
+    grid-column: auto;
+  }
+  html[data-bk-layout-hero="stack"] .luxe-hero {
+    aspect-ratio: auto;
+    height: auto;
+    min-height: 0;
+    padding-top: 200px;
+    padding-bottom: 28px;
+    background-size: 100% 200px;
+  }
+
+  html[data-bk-layout-hero="overlay"] .classic-hero,
+  html[data-bk-layout-hero="overlay"] .blade-hero,
+  html[data-bk-layout-hero="overlay"] .stonecut-hero,
+  html[data-bk-layout-hero="overlay"] .s12-hero {
+    min-height: 380px;
+  }
+  html[data-bk-layout-hero="overlay"] .classic-hero-left,
+  html[data-bk-layout-hero="overlay"] .blade-hero-left,
+  html[data-bk-layout-hero="overlay"] .stonecut-hero-left,
+  html[data-bk-layout-hero="overlay"] .s12-hero-content {
+    padding: 24px 20px 32px;
+  }
+
+  html[data-bk-layout-gallery="three"] .tattoo-featured-grid,
+  html[data-bk-layout-gallery="three"] .luxe-services-grid,
+  html[data-bk-layout-gallery="four"] .tattoo-featured-grid,
+  html[data-bk-layout-gallery="four"] .luxe-services-grid,
+  html[data-bk-layout-gallery="feature"] .tattoo-featured-grid,
+  html[data-bk-layout-gallery="feature"] .luxe-services-grid {
+    grid-template-columns: 1fr !important;
+  }
+  html[data-bk-layout-gallery="feature"] .tattoo-featured-grid > :first-child,
+  html[data-bk-layout-gallery="feature"] .luxe-services-grid > :first-child {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  html[data-bk-layout-shop="list"] .luxe-product-card {
+    align-items: flex-start;
+    min-width: 0;
+  }
+  html[data-bk-layout-shop="list"] .luxe-product-card img,
+  html[data-bk-layout-shop="list"] .luxe-product-placeholder {
+    width: 72px;
+    height: 72px;
+  }
+
+  html[data-bk-layout-footer="split"] .classic-footer,
+  html[data-bk-layout-footer="split"] .blade-footer,
+  html[data-bk-layout-footer="split"] .luxe-footer-legal,
+  html[data-bk-layout-footer="split"] .s12-footer {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+  }
+  html[data-bk-layout-footer="split"] .classic-footer-links,
+  html[data-bk-layout-footer="split"] .blade-footer-links,
+  html[data-bk-layout-footer="split"] .s12-footer-links {
+    justify-content: center;
+  }
+}
+
+/* ── Alignment ──────────────────────────────────────────────────────────────
+   Hero: moves the whole text block. Other sections: aligns the section's text. */
+html[data-bk-layout-hero-align="center"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content, .luxe-hero-inner, .luxe-hero-inner > *) {
+  text-align: center !important;
+  align-items: center !important;
+  justify-items: center !important;
+}
+html[data-bk-layout-hero-align="center"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content, .luxe-hero-inner) :is(div, p, h1, h2, h3) {
+  text-align: center !important;
+  justify-content: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html[data-bk-layout-hero-align="right"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content, .luxe-hero-inner, .luxe-hero-inner > *) {
+  text-align: right !important;
+  align-items: flex-end !important;
+  justify-items: end !important;
+}
+html[data-bk-layout-hero-align="right"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content, .luxe-hero-inner) :is(div, p, h1, h2, h3) {
+  text-align: right !important;
+  justify-content: flex-end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+html[data-bk-layout-gallery-align="left"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-services-align="left"] [data-bk-surface-key$=".services"],
+html[data-bk-layout-about-align="left"] [data-bk-surface-key$=".about"],
+html[data-bk-layout-team-align="left"] [data-bk-surface-key$=".team"],
+html[data-bk-layout-shop-align="left"] [data-bk-surface-key$=".shop"] {
+  --bk-align: left;
+  --bk-justify: flex-start;
+}
+html[data-bk-layout-gallery-align="center"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-services-align="center"] [data-bk-surface-key$=".services"],
+html[data-bk-layout-about-align="center"] [data-bk-surface-key$=".about"],
+html[data-bk-layout-team-align="center"] [data-bk-surface-key$=".team"],
+html[data-bk-layout-shop-align="center"] [data-bk-surface-key$=".shop"] {
+  --bk-align: center;
+  --bk-justify: center;
+}
+html[data-bk-layout-gallery-align="right"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]),
+html[data-bk-layout-services-align="right"] [data-bk-surface-key$=".services"],
+html[data-bk-layout-about-align="right"] [data-bk-surface-key$=".about"],
+html[data-bk-layout-team-align="right"] [data-bk-surface-key$=".team"],
+html[data-bk-layout-shop-align="right"] [data-bk-surface-key$=".shop"] {
+  --bk-align: right;
+  --bk-justify: flex-end;
+}
+html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]) :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-team-align] [data-bk-surface-key$=".team"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-shop-align] [data-bk-surface-key$=".shop"] :is(h1, h2, h3, p, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]) {
+  text-align: var(--bk-align) !important;
+}
+html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
+html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
+html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
+html[data-bk-layout-team-align] [data-bk-surface-key$=".team"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)),
+html[data-bk-layout-shop-align] [data-bk-surface-key$=".shop"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3)) {
+  justify-content: var(--bk-justify) !important;
+}
+
+/* ── Gallery: two across, scrolling strip ─────────────────────────────────── */
+html[data-bk-layout-gallery="two"] :is(.tattoo-featured-grid, .luxe-services-grid) {
+  grid-template-columns: repeat(2, 1fr) !important;
+  grid-template-rows: auto !important;
+}
+html[data-bk-layout-gallery="two"] :is(.tattoo-featured-grid, .luxe-services-grid) > :nth-child(n+5) {
+  display: none !important;
+}
+html[data-bk-layout-gallery="strip"] :is(.tattoo-featured-grid, .luxe-services-grid) {
+  display: flex !important;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+}
+html[data-bk-layout-gallery="strip"] :is(.tattoo-featured-grid, .luxe-services-grid) > * {
+  flex: 0 0 clamp(220px, 30%, 380px);
+  scroll-snap-align: start;
+}
+
+/* ── About: photo on the other side ───────────────────────────────────────── */
+html[data-bk-layout-about="splitFlip"] :is(.classic-about-inner-v2, .stonecut-about-inner) {
+  direction: rtl;
+}
+html[data-bk-layout-about="splitFlip"] :is(.classic-about-inner-v2, .stonecut-about-inner) > * {
+  direction: ltr;
+}
+
+/* ── Hero: text only ──────────────────────────────────────────────────────── */
+html[data-bk-layout-hero="text"] :is(.classic-hero, .blade-hero, .stonecut-hero, .s12-hero) {
+  grid-template-columns: 1fr !important;
+}
+html[data-bk-layout-hero="text"] :is(.classic-hero-right, .blade-hero-right, .stonecut-hero-right, .s12-hero-img-col) {
+  display: none !important;
+}
+html[data-bk-layout-hero="text"] .luxe-hero {
+  background-image: none !important;
+  background-color: var(--bk-bg, #fffdf9) !important;
+  aspect-ratio: auto;
+  min-height: 420px;
+}
+html[data-bk-layout-hero="text"] .luxe-hero::before,
+html[data-bk-layout-hero="text"] .luxe-hero::after,
+html[data-bk-layout-hero="text"] .luxe-hero-image-hit {
+  display: none !important;
+}
+html[data-bk-layout-hero="text"] .luxe-hero-text :is(h1, p) {
+  color: var(--bk-text, #1a1a1a) !important;
+  text-shadow: none !important;
+}
+
+/* ── Hero: photo with the text in a card ──────────────────────────────────── */
+html[data-bk-layout-hero="card"] :is(.classic-hero, .blade-hero, .stonecut-hero, .s12-hero) {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-height: 520px;
+}
+html[data-bk-layout-hero="card"] :is(.classic-hero-right, .blade-hero-right, .stonecut-hero-right, .s12-hero-img-col) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+/* The card takes the hero's own background so the template's text colors stay readable on it. */
+html[data-bk-layout-hero="card"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content) {
+  position: relative;
+  z-index: 2;
+  flex: 0 1 480px;
+  margin: 48px;
+  padding: 36px;
+  border-radius: 14px;
+  background-color: inherit;
+  box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.45);
+}
+html[data-bk-layout-hero="card"] .luxe-hero-text {
+  max-width: 480px;
+  padding: 36px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.45);
+}
+html[data-bk-layout-hero="card"] .luxe-hero-text :is(h1, p) {
+  color: #1a1a1a !important;
+  text-shadow: none !important;
+}
+
+/* ── Shop: two and three across (four is the templates' default) ──────────── */
+html[data-bk-layout-shop="two"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+  grid-template-columns: repeat(3, 1fr) !important;
+}
+
+@media (max-width: 768px) {
+  html[data-bk-layout-shop="three"] :is(.luxe-shop-grid, .stonecut-shop-grid) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  html[data-bk-layout-hero="card"] :is(.classic-hero-left, .blade-hero-left, .stonecut-hero-left, .s12-hero-content) {
+    margin: 20px;
+    padding: 24px;
+  }
+  html[data-bk-layout-hero="card"] .luxe-hero-text {
+    padding: 24px;
+  }
+  html[data-bk-layout-gallery="strip"] :is(.tattoo-featured-grid, .luxe-services-grid) > * {
+    flex-basis: 72%;
+  }
+}

@@ -458,6 +458,41 @@ const DEMO_ACCOUNTS = [
     ],
   },
   {
+    slug: "apple-review",
+    email: "appreview@example.com",
+    firstName: "Alex",
+    lastName: "Review",
+    business: "Get Bookking Review",
+    displayName: "Bookking Review",
+    industry: "barber",
+    webThemeId: "stonecut-v1",
+    subscriptionPlan: "solo",
+    omitFromDefaultSeed: true,
+    password: "BookkingDemo1!",
+    tagline: "App Review walkthrough shop.",
+    serviceCity: "Nashville",
+    serviceStateAbbr: "TN",
+    businessHours: "Tue–Sat 9am–6pm",
+    aboutText:
+      "Review shop for testers. Use the iOS app to open Dashboard, calendar, messages, and website design.",
+    webColorPaletteId: "custom",
+    paletteKey: "stonecut:barber-chocolate",
+    services: [
+      {
+        name: "Haircut",
+        description: "Standard cut.",
+        durationMinutes: 30,
+        price: 40,
+      },
+      {
+        name: "Beard trim",
+        description: "Lineup and finish.",
+        durationMinutes: 20,
+        price: 25,
+      },
+    ],
+  },
+  {
     slug: "gilded-palm",
     email: "demo-gilded-palm@getbookking.com",
     firstName: "Lina",
@@ -1291,12 +1326,16 @@ async function seedOne(db, projectId, accessToken, demo, password, opts = {}) {
   }
 
   if (opts.withActivity) {
-    const activity = await seedDemoActivity(db, tenantId, demo.slug, Timestamp, {
-      replace: true,
-    });
-    console.log(
-      `  Activity: ${activity.customers} clients, ${activity.bookings} bookings, ${activity.smsThreads} SMS threads, ${activity.paymentTransactions} payments`
-    );
+    try {
+      const activity = await seedDemoActivity(db, tenantId, demo.slug, Timestamp, {
+        replace: true,
+      });
+      console.log(
+        `  Activity: ${activity.customers} clients, ${activity.bookings} bookings, ${activity.smsThreads} SMS threads, ${activity.paymentTransactions} payments`
+      );
+    } catch (err) {
+      console.log(`  Activity skipped: ${err.message || err}`);
+    }
   }
 
   return {
@@ -1325,19 +1364,20 @@ Password: DEMO_ACCOUNT_PASSWORD env or --password=
   const projectId = process.env.FIREBASE_PROJECT_ID || args.project;
   const { db, accessToken } = await createGoogleClients(projectId);
 
-  let demos = DEMO_ACCOUNTS;
+  let demos = DEMO_ACCOUNTS.filter((d) => !d.omitFromDefaultSeed);
   if (args.only) {
-    demos = demos.filter((d) => d.slug === args.only);
+    demos = DEMO_ACCOUNTS.filter((d) => d.slug === args.only);
     if (!demos.length) throw new Error(`Unknown slug: ${args.only}`);
   }
 
   console.log(`Project: ${projectId}\n`);
   const results = [];
   for (const demo of demos) {
-    const r = await seedOne(db, projectId, accessToken, demo, args.password, {
+    const password = demo.password || args.password;
+    const r = await seedOne(db, projectId, accessToken, demo, password, {
       withActivity: args.withActivity,
     });
-    results.push(r);
+    results.push({ ...r, password });
   }
 
   console.log("\n--- Demo accounts ---\n");
@@ -1346,7 +1386,7 @@ Password: DEMO_ACCOUNT_PASSWORD env or --password=
     console.log(`  Site:  https://${r.slug}.getbookking.com`);
     console.log(`  Alt:   https://test-app-96812.web.app/${r.slug}`);
     console.log(`  Owner: ${r.email}`);
-    console.log(`  Pass:  ${args.password}`);
+    console.log(`  Pass:  ${r.password}`);
     console.log("");
   }
 }

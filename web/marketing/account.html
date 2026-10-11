@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function () {
+      var embed = new URLSearchParams(location.search).get("embed") === "1";
+      try { embed = embed || window.self !== window.top; } catch (e) { embed = true; }
+      if (embed) document.documentElement.classList.add("bk-embed");
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -17,8 +24,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
-  <link rel="stylesheet" href="assets/nav.css?v=22" />
-  <link rel="stylesheet" href="assets/account.css?v=6" />
+  <link rel="stylesheet" href="assets/nav.css?v=23" />
+  <link rel="stylesheet" href="assets/account.css?v=7" />
 </head>
 <body class="acct-layout">
   <!-- Google Tag Manager (noscript) -->
@@ -49,6 +56,9 @@
         </button>
         <div class="nav-account-menu" id="nav-account-menu" hidden>
           <a href="account.html">Your account</a>
+          <a href="settings.html">Settings</a>
+          <a href="app.html">Open shop</a>
+          <a href="design.html">Design your site</a>
           <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
         </div>
       </div>
@@ -121,6 +131,36 @@
             <span class="acct-row-label">Change password</span>
             <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
           </button>
+        </div>
+      </section>
+
+      <section class="acct-section" id="shopBox">
+        <div class="acct-section-label">Shop</div>
+        <div class="acct-card">
+          <a href="app.html" class="acct-row" id="openShopLink">
+            <span class="acct-row-label">Open shop</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="acct-section" id="websiteBox">
+        <div class="acct-section-label">Website</div>
+        <div class="acct-card">
+          <a href="design.html" class="acct-row" id="designSiteLink">
+            <span class="acct-row-label">Design your site</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="acct-section" id="settingsBox">
+        <div class="acct-section-label">Settings</div>
+        <div class="acct-card">
+          <a href="settings.html" class="acct-row" id="openSettingsLink">
+            <span class="acct-row-label">Settings</span>
+            <span class="acct-row-chevron" aria-hidden="true">&rsaquo;</span>
+          </a>
         </div>
       </section>
 
@@ -336,7 +376,14 @@
     document.getElementById('signOutLink').addEventListener('click', function(ev) {
       ev.preventDefault();
       auth.signOut().then(function() {
-        window.location.href = 'login.html';
+        var dest = '/';
+        try {
+          if (window.top && window.top !== window.self) {
+            window.top.location.href = dest;
+            return;
+          }
+        } catch (e) {}
+        window.location.href = dest;
       });
     });
 
@@ -679,6 +726,12 @@
         btn.disabled = false;
       });
     });
+
+    var settingsLink = document.getElementById('openSettingsLink');
+    if (settingsLink && document.documentElement.classList.contains('bk-embed')) {
+      settingsLink.href = '/app?view=settings';
+      settingsLink.target = '_top';
+    }
 
     auth.onAuthStateChanged(function(user) {
       if (!user) {

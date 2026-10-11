@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function () {
+      var embed = new URLSearchParams(location.search).get("embed") === "1";
+      try { embed = embed || window.self !== window.top; } catch (e) { embed = true; }
+      if (embed) document.documentElement.classList.add("bk-embed");
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -17,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <meta name="billing-copy" content="sms-billing-assign-v3" />
-  <link rel="stylesheet" href="assets/account.css?v=5" />
+  <link rel="stylesheet" href="assets/account.css?v=7" />
   <link rel="stylesheet" href="assets/billing.css?v=6" />
 </head>
 <body>

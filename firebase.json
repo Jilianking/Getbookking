@@ -19,7 +19,7 @@
             },
             {
               "key": "Content-Security-Policy",
-              "value": "frame-ancestors 'self' https://getbookking.com https://www.getbookking.com https://getbooking.com https://www.getbooking.com https://test-app-96812.web.app https://test-app-96812-marketing.web.app"
+              "value": "frame-ancestors 'self' https://getbookking.com https://www.getbookking.com https://getbooking.com https://www.getbooking.com https://test-app-96812.web.app https://test-app-96812-marketing.web.app http://localhost:* http://127.0.0.1:*"
             }
           ]
         },
@@ -58,7 +58,8 @@
         { "source": "/hair-salon-software.html", "destination": "/hair-salon-software", "type": 301 },
         { "source": "/nail-salon-software.html", "destination": "/nail-salon-software", "type": 301 },
         { "source": "/tattoo-studio-software.html", "destination": "/tattoo-studio-software", "type": 301 },
-        { "source": "/personal-trainer-software.html", "destination": "/personal-trainer-software", "type": 301 }
+        { "source": "/personal-trainer-software.html", "destination": "/personal-trainer-software", "type": 301 },
+        { "source": "/app/website", "destination": "/design", "type": 302 }
       ],
       "rewrites": [
         { "source": "/testflight", "destination": "/testflight.html" },
@@ -92,6 +93,19 @@
         { "source": "/admin/testflight", "destination": "/admin/testflight.html" },
         { "source": "/admin/settings", "destination": "/admin/settings.html" },
         { "source": "/login", "destination": "/login.html" },
+        { "source": "/design", "destination": "/design.html" },
+        { "source": "/billing", "destination": "/billing.html" },
+        { "source": "/account", "destination": "/account.html" },
+        { "source": "/settings", "destination": "/settings.html" },
+        { "source": "/app", "destination": "/app.html" },
+        { "source": "/app/calendar", "destination": "/app.html" },
+        { "source": "/app/clients", "destination": "/app.html" },
+        { "source": "/app/shop", "destination": "/app.html" },
+        { "source": "/app/payments", "destination": "/app.html" },
+        { "source": "/app/payouts", "destination": "/app.html" },
+        { "source": "/app/billing", "destination": "/app.html" },
+        { "source": "/app/account", "destination": "/app.html" },
+        { "source": "/app/settings", "destination": "/app.html" },
         { "source": "/reset-password", "destination": "/reset-password.html" }
       ],
       "headers": [

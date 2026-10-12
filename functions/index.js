@@ -12693,7 +12693,10 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
   const subscriptionStatus = sms.resolveSubscriptionStatus(tenant, ownerUserData);
   const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
   const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
-  const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
+  // "Can use" here means texting is set up and paid for. The "Send client text notifications"
+  // switch is deliberately left out: the app only shows that switch when this is true, so
+  // counting it would hide the switch for good once it had been turned off.
+  const canUse = sms.tenantCanUseSms(tenant, ownerUserData, null);
   const usage = sms.smsMonthlyUsageForTenant(tenant);
   const stripeCustomerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
   const plan = normalizeSubscriptionPlan(

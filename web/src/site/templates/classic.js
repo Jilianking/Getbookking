@@ -413,8 +413,16 @@ function classicHomePage(tenant, services, opts) {
   var footerHtml = classicSiteFooterHtml(tenant, opts.defaultName);
   var teamHtml = teamHomeSectionHtml(tenant);
 
+  // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+  var sections = renderPageSections(tenant, 'home', [
+    { id: 'featured', label: 'Featured', html: featuredHtml },
+    { id: 'services', label: 'Services', html: servicesHtml },
+    { id: 'shop', label: 'Shop', html: shopPreviewSection },
+    { id: 'about', label: 'About', html: aboutHtml },
+    { id: 'team', label: 'Team', html: teamHtml }
+  ]);
   return '<div class="tattoo-page classic-home classic-home-page">' +
-    nav + heroHtml + featuredHtml + servicesHtml + shopPreviewSection + aboutHtml + teamHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
+    nav + heroHtml + sections + footerHtml + galleryLightboxShellHtml() + sidebar +
     '</div>';
 }
 

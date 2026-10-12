@@ -281,13 +281,15 @@ function stonecutHomePage(tenant, services) {
       ? '<img class="stonecut-hero-photo" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
       : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') +
       bkHeroImageHitButtonHtml() + '</div></section>' +
-    '<section class="stonecut-section" id="services" data-bk-color-surface="page"' +
+    // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+    renderPageSections(tenant, 'home', [
+      { id: 'services', label: 'Services', html: '<section class="stonecut-section" id="services" data-bk-color-surface="page"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.services') + ' data-bk-band-tappable>' +
     bkColorBandInnerWrap('<div class="stonecut-eyebrow bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
-    '<div class="stonecut-services">' + serviceCards + '</div>') + '</section>' +
-    shopPreviewSection +
-    aboutSection +
-    '<section class="stonecut-section" id="location" data-bk-color-surface="about"' +
+    '<div class="stonecut-services">' + serviceCards + '</div>') + '</section>' },
+      { id: 'shop', label: 'Shop', html: shopPreviewSection },
+      { id: 'about', label: 'About', html: aboutSection },
+      { id: 'location', label: 'Hours and location', html: '<section class="stonecut-section" id="location" data-bk-color-surface="about"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.location') + ' data-bk-band-tappable>' + bkColorBandInnerWrap((function() {
       var whenInner = '<div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
         (tenantBusinessHoursTrimmed(tenant)
@@ -300,8 +302,9 @@ function stonecutHomePage(tenant, services) {
         (tenantShowBusinessHours(tenant) ? stonecutInfoCardBandHtml(tenant, 'stonecut.when', whenInner) : '') +
         stonecutInfoCardBandHtml(tenant, 'stonecut.where', whereInner) +
         '</div>';
-    })()) + '</section>' +
-    teamHomeSectionHtml(tenant) +
+    })()) + '</section>' },
+      { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) }
+    ]) +
     stonecutSiteFooterHtml(tenant) +
     sidebar +
     '</div>';

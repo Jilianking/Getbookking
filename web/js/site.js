@@ -54,7 +54,7 @@ window.__bkApplyWebButtonColors = applyWebButtonColors;
 
 window.__bkApplyWebTextStyles = applyWebTextStyles;
 
-var BK_LAYOUT_SLOTS = ['header', 'hero', 'gallery', 'services', 'shop', 'about', 'team', 'footer'];
+var BK_LAYOUT_SLOTS = ['header', 'hero', 'gallery', 'services', 'shop', 'about', 'team', 'promo', 'footer'];
 
 // Extra per-section settings stored in the same map as `<slot>Align`.
 var BK_LAYOUT_PROPS = ['Align'];
@@ -8495,8 +8495,16 @@ function classicHomePage(tenant, services, opts) {
   var footerHtml = classicSiteFooterHtml(tenant, opts.defaultName);
   var teamHtml = teamHomeSectionHtml(tenant);
 
+  // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+  var sections = renderPageSections(tenant, 'home', [
+    { id: 'featured', label: 'Featured', html: featuredHtml },
+    { id: 'services', label: 'Services', html: servicesHtml },
+    { id: 'shop', label: 'Shop', html: shopPreviewSection },
+    { id: 'about', label: 'About', html: aboutHtml },
+    { id: 'team', label: 'Team', html: teamHtml }
+  ]);
   return '<div class="tattoo-page classic-home classic-home-page">' +
-    nav + heroHtml + featuredHtml + servicesHtml + shopPreviewSection + aboutHtml + teamHtml + footerHtml + galleryLightboxShellHtml() + sidebar +
+    nav + heroHtml + sections + footerHtml + galleryLightboxShellHtml() + sidebar +
     '</div>';
 }
 
@@ -9473,7 +9481,17 @@ function bladeHomePage(tenant, services) {
     '</div></div>' +
     '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
     '<div class="blade-hero-vertical">' + siteTextSpan('bladeHeroTagline', vertical) + '</div></section>';
-  return '<div class="blade-page">' + nav + hero + servicesSection + shopPreviewSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
+  // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+  var sections = renderPageSections(tenant, 'home', [
+    { id: 'services', label: 'Services', html: servicesSection },
+    { id: 'shop', label: 'Shop', html: shopPreviewSection },
+    { id: 'gallery', label: 'Gallery', html: gallerySection },
+    { id: 'book', label: 'Booking', html: bookPanel },
+    { id: 'reviews', label: 'Reviews', html: testimonialSection },
+    { id: 'info', label: 'Hours and location', html: infoSection },
+    { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) }
+  ]);
+  return '<div class="blade-page">' + nav + hero + sections + footer + galleryLightboxShellHtml() + sidebar + '</div>';
 }
 
 /** Blade `blade-footer`: wordmark, Instagram / Book / Gallery, then © line. */
@@ -9811,13 +9829,15 @@ function stonecutHomePage(tenant, services) {
       ? '<img class="stonecut-hero-photo" data-edit-key="heroImage" src="' + esc(tenant.heroImageUrl) + '" alt="">'
       : '<div class="stonecut-hero-photo stonecut-hero-photo--empty" data-edit-key="heroImage" role="button" aria-label="Add hero image"></div>') +
       bkHeroImageHitButtonHtml() + '</div></section>' +
-    '<section class="stonecut-section" id="services" data-bk-color-surface="page"' +
+    // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+    renderPageSections(tenant, 'home', [
+      { id: 'services', label: 'Services', html: '<section class="stonecut-section" id="services" data-bk-color-surface="page"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.services') + ' data-bk-band-tappable>' +
     bkColorBandInnerWrap('<div class="stonecut-eyebrow bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesEyebrow', 'What we offer') + '</div><h2 class="stonecut-heading bk-fade-up">' + wcSpan(tenant, 'wc.stonecut.servicesTitle', 'Services') + '</h2>' +
-    '<div class="stonecut-services">' + serviceCards + '</div>') + '</section>' +
-    shopPreviewSection +
-    aboutSection +
-    '<section class="stonecut-section" id="location" data-bk-color-surface="about"' +
+    '<div class="stonecut-services">' + serviceCards + '</div>') + '</section>' },
+      { id: 'shop', label: 'Shop', html: shopPreviewSection },
+      { id: 'about', label: 'About', html: aboutSection },
+      { id: 'location', label: 'Hours and location', html: '<section class="stonecut-section" id="location" data-bk-color-surface="about"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.location') + ' data-bk-band-tappable>' + bkColorBandInnerWrap((function() {
       var whenInner = '<div class="stonecut-eyebrow">When</div><h3>Hours</h3>' +
         (tenantBusinessHoursTrimmed(tenant)
@@ -9830,8 +9850,9 @@ function stonecutHomePage(tenant, services) {
         (tenantShowBusinessHours(tenant) ? stonecutInfoCardBandHtml(tenant, 'stonecut.when', whenInner) : '') +
         stonecutInfoCardBandHtml(tenant, 'stonecut.where', whereInner) +
         '</div>';
-    })()) + '</section>' +
-    teamHomeSectionHtml(tenant) +
+    })()) + '</section>' },
+      { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) }
+    ]) +
     stonecutSiteFooterHtml(tenant) +
     sidebar +
     '</div>';
@@ -10626,22 +10647,25 @@ function studio12HomePage(tenant, services) {
     s12HeroActions +
     '</div></section>' +
     '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
-    '<section class="s12-philosophy" data-bk-color-surface="card"' +
+    // Header, hero (with its marquee), and footer stay fixed; everything between can be reordered or hidden.
+    renderPageSections(tenant, 'home', [
+      { id: 'philosophy', label: 'Philosophy', html: '<section class="s12-philosophy" data-bk-color-surface="card"' +
     studio12BkSurfaceKeyAttr(tenant, 'studio12.philosophy') + ' data-bk-band-tappable>' +
     bkColorBandInnerWrap('<div class="s12-fade s12-phil-media">' + philImgCol + '</div>' +
     '<div class="s12-fade s12-phil-copy"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
     philTitleHtml +
     '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
-    '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>') + '</section>' +
-    servicesSectionHtml +
-    gallerySectionHtml +
-    processSectionHtml +
-    testSection +
-    studio12HomeShopSectionHtml(tenant) +
-    teamHomeSectionHtml(tenant) +
-    '<div class="' + s12InfoClass + '" data-bk-color-surface="about"' +
-    studio12BkSurfaceKeyAttr(tenant, 'studio12.info') + ' data-bk-band-tappable>' +
-    bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' +
+    '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>') + '</section>' },
+      { id: 'services', label: 'Services', html: servicesSectionHtml },
+      { id: 'gallery', label: 'Gallery', html: gallerySectionHtml },
+      { id: 'process', label: 'Process', html: processSectionHtml },
+      { id: 'reviews', label: 'Reviews', html: testSection },
+      { id: 'shop', label: 'Shop', html: studio12HomeShopSectionHtml(tenant) },
+      { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) },
+      { id: 'info', label: 'Hours and location', html: '<div class="' + s12InfoClass + '" data-bk-color-surface="about"' +
+        studio12BkSurfaceKeyAttr(tenant, 'studio12.info') + ' data-bk-band-tappable>' +
+        bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' }
+    ]) +
     studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + galleryLightboxShellHtml() + '</div>';
 }
 

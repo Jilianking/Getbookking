@@ -729,22 +729,25 @@ function studio12HomePage(tenant, services) {
     s12HeroActions +
     '</div></section>' +
     '<div class="s12-marquee"><div class="s12-marquee-inner">' + marqueeHtml + marqueeHtml + '</div></div>' +
-    '<section class="s12-philosophy" data-bk-color-surface="card"' +
+    // Header, hero (with its marquee), and footer stay fixed; everything between can be reordered or hidden.
+    renderPageSections(tenant, 'home', [
+      { id: 'philosophy', label: 'Philosophy', html: '<section class="s12-philosophy" data-bk-color-surface="card"' +
     studio12BkSurfaceKeyAttr(tenant, 'studio12.philosophy') + ' data-bk-band-tappable>' +
     bkColorBandInnerWrap('<div class="s12-fade s12-phil-media">' + philImgCol + '</div>' +
     '<div class="s12-fade s12-phil-copy"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
     philTitleHtml +
     '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
-    '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>') + '</section>' +
-    servicesSectionHtml +
-    gallerySectionHtml +
-    processSectionHtml +
-    testSection +
-    studio12HomeShopSectionHtml(tenant) +
-    teamHomeSectionHtml(tenant) +
-    '<div class="' + s12InfoClass + '" data-bk-color-surface="about"' +
-    studio12BkSurfaceKeyAttr(tenant, 'studio12.info') + ' data-bk-band-tappable>' +
-    bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' +
+    '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody2', philBody2) + '</p></div>') + '</section>' },
+      { id: 'services', label: 'Services', html: servicesSectionHtml },
+      { id: 'gallery', label: 'Gallery', html: gallerySectionHtml },
+      { id: 'process', label: 'Process', html: processSectionHtml },
+      { id: 'reviews', label: 'Reviews', html: testSection },
+      { id: 'shop', label: 'Shop', html: studio12HomeShopSectionHtml(tenant) },
+      { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) },
+      { id: 'info', label: 'Hours and location', html: '<div class="' + s12InfoClass + '" data-bk-color-surface="about"' +
+        studio12BkSurfaceKeyAttr(tenant, 'studio12.info') + ' data-bk-band-tappable>' +
+        bkColorBandInnerWrap(s12InfoInnerHtml) + '</div>' }
+    ]) +
     studio12SiteFooterHtml(tenant) + studio12SidebarHtml(tenant) + galleryLightboxShellHtml() + '</div>';
 }
 

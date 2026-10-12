@@ -375,7 +375,17 @@ function bladeHomePage(tenant, services) {
     '</div></div>' +
     '<div class="blade-hero-right">' + heroRight + '<div class="blade-hero-overlay"></div>' + bkHeroImageHitButtonHtml() + '</div>' +
     '<div class="blade-hero-vertical">' + siteTextSpan('bladeHeroTagline', vertical) + '</div></section>';
-  return '<div class="blade-page">' + nav + hero + servicesSection + shopPreviewSection + gallerySection + bookPanel + testimonialSection + infoSection + teamHomeSectionHtml(tenant) + footer + galleryLightboxShellHtml() + sidebar + '</div>';
+  // Header, hero, and footer stay fixed; everything between can be reordered or hidden.
+  var sections = renderPageSections(tenant, 'home', [
+    { id: 'services', label: 'Services', html: servicesSection },
+    { id: 'shop', label: 'Shop', html: shopPreviewSection },
+    { id: 'gallery', label: 'Gallery', html: gallerySection },
+    { id: 'book', label: 'Booking', html: bookPanel },
+    { id: 'reviews', label: 'Reviews', html: testimonialSection },
+    { id: 'info', label: 'Hours and location', html: infoSection },
+    { id: 'team', label: 'Team', html: teamHomeSectionHtml(tenant) }
+  ]);
+  return '<div class="blade-page">' + nav + hero + sections + footer + galleryLightboxShellHtml() + sidebar + '</div>';
 }
 
 /** Blade `blade-footer`: wordmark, Instagram / Book / Gallery, then © line. */

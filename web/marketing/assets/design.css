@@ -1730,3 +1730,18 @@ button.design-sec-row {
   font-size: 12.5px;
   color: var(--bk-ink);
 }
+
+.design-layout-thumb--promoStack {
+  background:
+    linear-gradient(#2c2018, #2c2018) 50% 8px / 46% 3px no-repeat,
+    linear-gradient(#b9ad9b, #b9ad9b) 50% 15px / 30% 2px no-repeat,
+    linear-gradient(#2c2018, #2c2018) 50% 24px / 22% 8px no-repeat,
+    #f4efe6;
+}
+.design-layout-thumb--promoSplit {
+  background:
+    linear-gradient(#2c2018, #2c2018) 8px 13px / 44% 3px no-repeat,
+    linear-gradient(#b9ad9b, #b9ad9b) 8px 21px / 30% 2px no-repeat,
+    linear-gradient(#2c2018, #2c2018) calc(100% - 8px) 50% / 22% 8px no-repeat,
+    #f4efe6;
+}

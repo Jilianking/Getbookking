@@ -51,7 +51,7 @@ window.__bkApplyWebButtonColors = applyWebButtonColors;
 
 window.__bkApplyWebTextStyles = applyWebTextStyles;
 
-var BK_LAYOUT_SLOTS = ['header', 'hero', 'gallery', 'services', 'shop', 'about', 'team', 'footer'];
+var BK_LAYOUT_SLOTS = ['header', 'hero', 'gallery', 'services', 'shop', 'about', 'team', 'promo', 'footer'];
 
 // Extra per-section settings stored in the same map as `<slot>Align`.
 var BK_LAYOUT_PROPS = ['Align'];

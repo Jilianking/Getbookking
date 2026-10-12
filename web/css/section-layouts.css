@@ -606,3 +606,52 @@ html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-sur
 html[data-bk-layout-services-align] .s12-svc-cell > .bk-band-content {
   flex: 1 1 auto;
 }
+
+/* ── Promo band (the "Ready for your next…" call to book) ─────────────────── */
+html[data-bk-layout-promo-align="left"] [data-bk-surface-key$=".promo"] {
+  --bk-align: left;
+  --bk-block-left: 0;
+  --bk-block-right: auto;
+}
+html[data-bk-layout-promo-align="center"] [data-bk-surface-key$=".promo"] {
+  --bk-align: center;
+  --bk-block-left: auto;
+  --bk-block-right: auto;
+}
+html[data-bk-layout-promo-align="right"] [data-bk-surface-key$=".promo"] {
+  --bk-align: right;
+  --bk-block-left: auto;
+  --bk-block-right: 0;
+}
+html[data-bk-layout-promo-align] [data-bk-surface-key$=".promo"] :is(h2, p, div) {
+  text-align: var(--bk-align) !important;
+}
+html[data-bk-layout-promo-align] [data-bk-surface-key$=".promo"] .luxe-promo-inner {
+  margin-left: var(--bk-block-left) !important;
+  margin-right: var(--bk-block-right) !important;
+}
+/* Button on the side: words on the left, button on the right. Phones keep the stacked band. */
+@media (min-width: 701px) {
+  html[data-bk-layout-promo="split"] .luxe-promo-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 48px;
+    align-items: center;
+    max-width: 1040px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  html[data-bk-layout-promo="split"]:not([data-bk-layout-promo-align]) .luxe-promo-inner :is(h2, p) {
+    text-align: left;
+  }
+  html[data-bk-layout-promo="split"] .luxe-promo-inner > :is(h2, p) {
+    grid-column: 1;
+  }
+  html[data-bk-layout-promo="split"] .luxe-promo-inner > p {
+    margin-bottom: 0;
+  }
+  html[data-bk-layout-promo="split"] .luxe-promo-cta {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}

@@ -720,6 +720,7 @@
     else if (/\.shop$/.test(key)) label = 'Shop';
     else if (/galleryPage$/.test(key) || surface === 'gallery') label = 'Gallery';
     else if (/\.about$/.test(key)) label = 'About';
+    else if (/\.promo$/.test(key)) label = 'Promo';
     else if (/\.featured$/.test(key) || surface === 'featured') label = 'Featured';
     else if (/team/i.test(key)) label = 'Team';
     else if (surface === 'sidebar' || (el.classList && el.classList.contains('tattoo-sidebar-panel'))) label = 'Sidebar';

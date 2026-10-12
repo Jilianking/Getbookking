@@ -651,6 +651,10 @@
       { id: 'cards', label: 'Cards' },
       { id: 'list', label: 'List' }
     ],
+    promo: [
+      { id: 'stack', label: 'Stacked', thumb: 'promoStack' },
+      { id: 'split', label: 'Button on the side', thumb: 'promoSplit' }
+    ],
     footer: [
       { id: 'center', label: 'Centered' },
       { id: 'split', label: 'Name and links' }
@@ -665,6 +669,7 @@
     if (label === 'Shop' || label === 'Shop page' || label === 'Product') return 'shop';
     if (label === 'About') return 'about';
     if (label === 'Team') return 'team';
+    if (label === 'Promo') return 'promo';
     if (label === 'Footer') return 'footer';
     return '';
   }
@@ -681,6 +686,7 @@
     if (/shop/i.test(key) || /Product\./.test(key)) return 'shop';
     if (/\.about$/.test(key)) return 'about';
     if (/team/i.test(key)) return 'team';
+    if (/\.promo$/.test(key)) return 'promo';
     if (/\.footer$/.test(key) || key === 'luxe.legal') return 'footer';
     return '';
   }
@@ -708,6 +714,7 @@
     if (slot === 'shop' || slot === 'team') return 'cards';
     if (slot === 'services') return cardServices ? 'cards' : 'list';
     if (slot === 'about') return 'split';
+    if (slot === 'promo') return 'stack';
     if (slot === 'header') return 'links';
     if (slot === 'footer') return theme === 'stonecut-v1' ? 'split' : 'center';
     return '';
@@ -732,7 +739,7 @@
     return html + '</div>';
   }
 
-  var ALIGN_SLOTS = ['hero', 'gallery', 'services', 'about', 'team', 'shop'];
+  var ALIGN_SLOTS = ['hero', 'gallery', 'services', 'about', 'team', 'shop', 'promo'];
 
   function savedLayouts() {
     return (state.tenant && state.tenant.webSectionLayouts) || {};

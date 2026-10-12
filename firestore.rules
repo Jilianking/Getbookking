@@ -54,7 +54,109 @@ service cloud.firestore {
           'smsPaidLinePurchaseAuthorizedAt',
           'smsPaidLinePurchaseExpiresAt',
           'smsMonthlyUsageCount',
-          'smsMonthlyUsagePeriod'
+          'smsMonthlyUsagePeriod',
+          'billingSource',
+          'appleAppAccountToken',
+          'appleOriginalTransactionId',
+          'appleProductId',
+          'appleStatus',
+          'appleExpiresAt',
+          'appleSignedDateMs',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'stripeCustomerId',
+          'stripeSubscriptionId'
+        ]);
+    }
+
+    // A new profile may only point at a business the signer already owns (the app creates the
+    // business first). Teammates are attached by Cloud Functions when they accept an invite.
+    // Without this, anyone could create a profile naming another business and read its clients.
+    function userCreateIsSafe() {
+      let d = request.resource.data;
+      return !d.keys().hasAny([
+          'memberSettings',
+          'role',
+          'accessRole',
+          'stripeAccountId',
+          'stripeTerminalLocationId',
+          'stripeCustomerId',
+          'billingSource',
+          'appleAppAccountToken',
+          'appleOriginalTransactionId',
+          'appleProductId',
+          'appleStatus',
+          'appleExpiresAt',
+          'appleSignedDateMs',
+          'stripeSubscriptionId',
+          'smsEnabled',
+          'smsStatus',
+          'smsPhoneNumber',
+          'smsPhoneNumberSid',
+          'smsLineIsPaidExtra',
+          'smsPaidLinePurchaseAuthorizationId',
+          'smsPaidLinePurchaseInvoiceId'
+        ])
+        && (!('tenantId' in d) || isTenantOwnerUid(d.tenantId))
+        && (!('subscriptionStatus' in d) || d.subscriptionStatus == 'trialing');
+    }
+
+    // Billing, payout, texting inventory, web address, and domain fields change only through
+    // Cloud Functions — never from an app or browser, not even the owner's.
+    function tenantServerKeysUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny([
+          'ownerUid',
+          'slug',
+          'isDemoAccount',
+          'trialStartDate',
+          'stripeAccountId',
+          'billingSource',
+          'appleAppAccountToken',
+          'appleOriginalTransactionId',
+          'appleProductId',
+          'appleStatus',
+          'appleExpiresAt',
+          'appleSignedDateMs',
+          'stripeTerminalLocationId',
+          'stripeCustomerId',
+          'stripeSubscriptionId',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'smsEnabled',
+          'smsStatus',
+          'smsPhoneNumber',
+          'smsPhoneNumberSid',
+          'smsAreaCode',
+          'twilioMessagingServiceSid',
+          'twilioSubaccountSid',
+          'smsEnabledAt',
+          'smsProvisionError',
+          'smsSuspendedAt',
+          'smsSuspendReason',
+          'smsLifetimeNumbersBought',
+          'smsExtraLineQuantity',
+          'smsLineIsPaidExtra',
+          'smsMonthlyUsageCount',
+          'smsMonthlyUsagePeriod',
+          'smsLastSoloReplacementInvoiceId',
+          'smsLastSoloReplacementAt',
+          'smsSoloReplacementAuthorizationId',
+          'smsSoloReplacementAuthorizationInvoiceId',
+          'smsSoloReplacementAuthorizationState',
+          'smsSoloReplacementAuthorizationExpiresAt',
+          'smsSoloReplacementInFlightAt',
+          'customDomain',
+          'customDomainWww',
+          'customDomainStatus',
+          'customDomainSource',
+          'customDomainProvider',
+          'customDomainOrderId',
+          'customDomainNamecheapId',
+          'customDomainStripePaymentIntentId',
+          'customDomainCustomerPaidUsd',
+          'customDomainWholesaleUsd',
+          'customDomainAutoRenew'
         ]);
     }
 
@@ -99,7 +201,7 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
-      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid && userCreateIsSafe();
       allow update: if isSignedIn()
         && request.auth.uid == uid
         && userProtectedKeysUnchanged();
@@ -173,12 +275,33 @@ service cloud.firestore {
           'smsPhoneNumber',
           'smsPhoneNumberSid',
           'twilioMessagingServiceSid',
-          'twilioSubaccountSid'
-        ]);
+          'twilioSubaccountSid',
+          'billingSource',
+          'appleAppAccountToken',
+          'appleOriginalTransactionId',
+          'appleProductId',
+          'appleStatus',
+          'appleExpiresAt',
+          'appleSignedDateMs',
+          'isDemoAccount',
+          'trialStartDate',
+          'smsEnabled',
+          'smsStatus',
+          'smsLifetimeNumbersBought',
+          'smsExtraLineQuantity',
+          'smsLineIsPaidExtra',
+          'customDomain',
+          'customDomainWww',
+          'customDomainStatus'
+        ])
+        // A new business always starts on a trial; only Stripe (via Cloud Functions) makes it paid.
+        && (!('subscriptionStatus' in request.resource.data)
+          || request.resource.data.subscriptionStatus == 'trialing');
 
-      // Owners may update any non-ownerUid field; teammates may update non-money fields only.
+      // Nobody changes server-managed fields from a client. Owners may change everything else;
+      // teammates everything else except the tax switches.
       allow update: if canManageTenant(tenantId)
-        && (!('ownerUid' in resource.data) || request.resource.data.ownerUid == resource.data.ownerUid)
+        && tenantServerKeysUnchanged()
         && (isTenantOwnerUid(tenantId) || tenantMoneyKeysUnchanged());
 
       allow delete: if isTenantOwnerUid(tenantId);

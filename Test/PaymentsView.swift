@@ -735,6 +735,34 @@ struct PaymentsAllTransactionsSheet: View {
 }
 
 // MARK: - Manual Payment Sheet
+/// One-tap amounts shown under the main button on the manual payment and deposit link sheets.
+struct PaymentQuickAmountRow: View {
+    @Binding var amountText: String
+
+    private static let amounts: [(label: String, cents: Int)] = [
+        ("$25", 2500),
+        ("$50", 5000),
+        ("$100", 10_000),
+        ("$200", 20_000),
+    ]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(Self.amounts, id: \.cents) { item in
+                Button {
+                    amountText = String(format: "%.2f", Double(item.cents) / 100)
+                } label: {
+                    Text(item.label)
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity, minHeight: 22)
+                }
+                .buttonStyle(.bordered)
+                .tint(AppDesign.brandWarm)
+            }
+        }
+    }
+}
+
 struct ManualPaymentSheet: View {
     private enum Phase: Equatable {
         case amount
@@ -850,6 +878,9 @@ struct ManualPaymentSheet: View {
                 }
                 .disabled(!canOpen || viewModel.isCreatingManualCheckoutLink || phase == .checkoutBranding)
                 .padding(.horizontal, 24)
+
+                PaymentQuickAmountRow(amountText: $amountText)
+                    .padding(.horizontal, 24)
 
                 Spacer(minLength: 0)
             }
@@ -1063,6 +1094,9 @@ struct DepositLinkSheet: View {
                         }
                         .disabled(!canCreate || viewModel.isCreatingDepositLink)
                         .padding(.horizontal, 24)
+
+                        PaymentQuickAmountRow(amountText: $amountText)
+                            .padding(.horizontal, 24)
                     }
                 }
                 .padding(.top, 20)

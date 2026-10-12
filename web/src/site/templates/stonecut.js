@@ -324,6 +324,10 @@ function stonecutAboutPhotoHtml(tenant) {
 
 /** Stonecut footer: optional Instagram link + © line. */
 function stonecutSiteFooterHtml(tenant) {
+  var custom = customSiteFooterHtml(tenant, {
+    attrs: ' data-bk-color-surface="about"' + stonecutBkSurfaceKeyAttr(tenant, 'stonecut.footer') + ' data-bk-band-tappable'
+  });
+  if (custom) return custom;
   var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
   var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
   var linksHtml = igUrl

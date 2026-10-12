@@ -1246,6 +1246,21 @@
       case 'seo':
         applySeo((data.payload || {}).title || '', (data.payload || {}).description || '');
         break;
+      case 'footer':
+        // Footer blocks switched on or off in the editor: the site re-renders just the footer.
+        if (typeof window.__bkPreviewFooter === 'function' && window.__bkPreviewFooter(data.payload || {})) {
+          var newFooter = document.querySelector('footer.bk-footer, footer[data-bk-surface-key$=".footer"], footer[data-bk-surface-key="luxe.legal"]');
+          stampEditableMarks();
+          // The old footer element is gone; keep the new one selected if the footer was.
+          if (newFooter && (data.payload || {}).keepSelected) {
+            clearSelection();
+            newFooter.setAttribute('data-bk-design-selected', '1');
+            selectFrame = ensureFrame('bk-design-select-frame', true);
+            selectFrame.setAttribute('data-label', 'Footer');
+          }
+          syncFrames();
+        }
+        break;
       case 'measure-text':
         // The editor asks for a text's rendered size after it changes or resets it.
         var measured = document.querySelector('[data-edit-key="' + String((data.payload || {}).key || '').replace(/"/g, '') + '"]');

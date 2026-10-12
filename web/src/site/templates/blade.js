@@ -380,6 +380,11 @@ function bladeHomePage(tenant, services) {
 
 /** Blade `blade-footer`: wordmark, Instagram / Book / Gallery, then © line. */
 function bladeSiteFooterHtml(tenant) {
+  var custom = customSiteFooterHtml(tenant, {
+    attrs: ' data-bk-color-surface="about"' + bladeBkSurfaceKeyAttr(tenant, 'blade.footer') + ' data-bk-band-tappable',
+    wrap: true
+  });
+  if (custom) return custom;
   var base = tenantBaseUrl(tenant);
   var bookUrl = base + '/book';
   var galleryUrl = base + '/gallery';

@@ -83,13 +83,22 @@ function luxeChromeNavHtml(tenant, variant) {
 }
 
 /** Luxe: contact strip + © legal line — separate paint cards (`luxe.contact` ≠ `luxe.legal`). */
-function luxeContactSectionHtml(tenant) {
-  var y = new Date().getFullYear();
-  var displayName = tenantSiteDisplayName(tenant, 'Studio');
-  var legal = '<footer class="luxe-footer-legal" data-bk-color-surface="about"' +
+function luxeLegalFooterHtml(tenant) {
+  var custom = customSiteFooterHtml(tenant, {
+    attrs: ' data-bk-color-surface="about"' + luxeBkSurfaceKeyAttr(tenant, 'luxe.legal') + ' data-bk-band-tappable',
+    wrap: true
+  });
+  if (custom) return custom;
+  return '<footer class="luxe-footer-legal" data-bk-color-surface="about"' +
     luxeBkSurfaceKeyAttr(tenant, 'luxe.legal') + ' data-bk-band-tappable>' +
     bkColorBandInnerWrap('<p class="luxe-footer-copy">' + footerLegalLineHtml(tenant) + '</p>') +
     '</footer>';
+}
+
+function luxeContactSectionHtml(tenant) {
+  var y = new Date().getFullYear();
+  var displayName = tenantSiteDisplayName(tenant, 'Studio');
+  var legal = luxeLegalFooterHtml(tenant);
   if (tenant.showContactOnPage === false) return legal;
   var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
   var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';

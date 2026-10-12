@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -366,17 +366,52 @@
     }, 700);
   }
 
-  function refreshAfterHistory() {
+  // Settings the preview can redraw in place. Undoing anything else (template, photos, text,
+  // page visibility) needs the preview reloaded.
+  var HISTORY_LIVE_KEYS = {
+    backgroundColor: 1, textColor: 1, cardSurfaceColor: 1, primaryColor: 1, primaryColorHover: 1,
+    featuredWorkBackgroundColor: 1, featuredWorkTextColor: 1, galleryPageBackgroundColor: 1, galleryPageTextColor: 1,
+    aboutSectionBackgroundColor: 1, aboutSectionTextColor: 1,
+    sidebarBackgroundColor: 1, sidebarTextColor: 1, sidebarCloseIconColor: 1,
+    sidebarIconColorHome: 1, sidebarIconColorBooking: 1,
+    webSurfaceColors: 1, webTextColors: 1, webTextFontSizes: 1,
+    webSectionLayouts: 1, webFooter: 1, instagramHandle: 1
+  };
+
+  function refreshAfterHistory(changedKeys) {
     fillBrandKit();
     fillContentForm();
     renderPhotos();
     renderTemplates();
     renderHealth();
     if (state.panel === 'booking') renderBookingPanel();
+    var canRedraw = !!changedKeys && changedKeys.every(function (k) { return HISTORY_LIVE_KEYS[k]; });
     pushLivePreview();
-    // Template / image URL changes need a full reload
-    loadPreview();
+    if (canRedraw) {
+      if (changedKeys.indexOf('webFooter') !== -1 || changedKeys.indexOf('instagramHandle') !== -1) postFooterPreview(true);
+    } else {
+      loadPreview();
+    }
+    // The open section's panel and the bottom bar show these settings too.
+    if (state.panel === 'section' && state.section) renderSectionBody(state.section);
+    syncEditBar();
     updateHistoryButtons();
+  }
+
+  /**
+   * The same shape with every value emptied: '' for text, false for switches, [] for lists.
+   * Emptied rather than deleted because the publicSites sync merges maps and would keep old values.
+   */
+  function blankLike(value) {
+    if (Array.isArray(value)) return [];
+    if (value && typeof value === 'object') {
+      var out = {};
+      Object.keys(value).forEach(function (k) { out[k] = blankLike(value[k]); });
+      return out;
+    }
+    if (typeof value === 'boolean') return false;
+    if (typeof value === 'number') return 0;
+    return '';
   }
 
   async function applySnapshot(snap) {
@@ -386,9 +421,23 @@
     setStatus('Restoring…');
     try {
       var updates = {};
+      var changedKeys = [];
       Object.keys(snap).forEach(function (k) {
+        if (JSON.stringify(state.tenant[k]) !== JSON.stringify(snap[k])) changedKeys.push(k);
         updates[k] = cloneValue(snap[k]);
         state.tenant[k] = cloneValue(snap[k]);
+      });
+      // A setting that didn't exist yet when the snapshot was taken (the first text size, the first
+      // footer change) has nothing to restore to; blank it so undo still reverts it.
+      HISTORY_KEYS.forEach(function (k) {
+        var now = state.tenant[k];
+        if (Object.prototype.hasOwnProperty.call(snap, k) || !now || typeof now !== 'object') return;
+        // The footer's switches default to on, so only the master switch is turned off.
+        var blank = k === 'webFooter' ? { enabled: false } : blankLike(now);
+        if (JSON.stringify(blank) === JSON.stringify(now)) return;
+        changedKeys.push(k);
+        updates[k] = blank;
+        state.tenant[k] = cloneValue(blank);
       });
       // Clear pending — history restore is authoritative
       state.pending = {};
@@ -397,7 +446,7 @@
       }
       markClean();
       setStatus('Restored', 'is-ok');
-      refreshAfterHistory();
+      refreshAfterHistory(changedKeys);
     } catch (err) {
       console.error(err);
       setStatus('Undo failed', 'is-err');
@@ -823,12 +872,151 @@
     postPageSections();
   }
 
+  /* ── Footer content: the shared Get Bookking footer and its switchable blocks ── */
+
+  var FOOTER_BLOCKS = [
+    { key: 'showName', label: 'Shop name', on: true },
+    { key: 'showNav', label: 'Page links', on: true, hint: 'Links to the pages you have turned on.' },
+    { key: 'showSocial', label: 'Social icons', on: true },
+    { key: 'showContact', label: 'Contact details', on: true, hint: 'Address, phone, and email from your business details.' },
+    { key: 'showHours', label: 'Hours', on: false, hint: 'From your business hours.' },
+    { key: 'showBook', label: 'Book button', on: true }
+  ];
+  var FOOTER_MAX_LINKS = 6;
+
+  function footerSettings() {
+    var saved = (state.tenant && state.tenant.webFooter) || {};
+    var f = cloneValue(saved);
+    if (!Array.isArray(f.links)) f.links = [];
+    return f;
+  }
+
+  function footerBlockOn(f, block) {
+    return typeof f[block.key] === 'boolean' ? f[block.key] : block.on;
+  }
+
+  function postFooterPreview(keepSelected) {
+    postToFrame('footer', {
+      webFooter: (state.tenant && state.tenant.webFooter) || {},
+      instagramHandle: (state.tenant && state.tenant.instagramHandle) || '',
+      keepSelected: keepSelected !== false
+    });
+  }
+
+  function saveFooter(f, extra) {
+    var updates = Object.assign({ webFooter: f }, extra || {});
+    queueUpdate(updates);
+    postFooterPreview(true);
+  }
+
+  function footerCheckHtml(key, label, checked, hint) {
+    return '<label class="design-check-row"><input type="checkbox" data-footer-toggle="' + key + '"' + (checked ? ' checked' : '') + ' />' +
+      '<span>' + escHtml(label) + (hint ? '<em>' + escHtml(hint) + '</em>' : '') + '</span></label>';
+  }
+
+  function footerEditorHtml() {
+    var f = footerSettings();
+    var html = '<h2>Footer content</h2>' +
+      footerCheckHtml('enabled', 'Use the Get Bookking footer', f.enabled === true,
+        'Off keeps this template’s own footer.');
+    if (f.enabled !== true) return html;
+    FOOTER_BLOCKS.forEach(function (block) {
+      var on = footerBlockOn(f, block);
+      html += footerCheckHtml(block.key, block.label, on, block.hint);
+      if (block.key === 'showSocial' && on) {
+        html += '<div class="design-footer-sub">' +
+          '<div class="design-field"><label for="footerInstagram">Instagram</label><input type="text" id="footerInstagram" data-footer-social="instagram" value="' + escHtml(state.tenant.instagramHandle || '') + '" placeholder="@yourshop" autocomplete="off" spellcheck="false" /></div>' +
+          '<div class="design-field"><label for="footerFacebook">Facebook</label><input type="text" id="footerFacebook" data-footer-social="facebook" value="' + escHtml(f.facebook || '') + '" placeholder="Page name or link" autocomplete="off" spellcheck="false" /></div>' +
+          '<div class="design-field"><label for="footerTiktok">TikTok</label><input type="text" id="footerTiktok" data-footer-social="tiktok" value="' + escHtml(f.tiktok || '') + '" placeholder="@yourshop" autocomplete="off" spellcheck="false" /></div>' +
+          '<p class="design-hint">Only the ones you fill in show an icon.</p></div>';
+      }
+    });
+    html += '<h2>Extra links</h2><p class="design-hint">Gift cards, policies, a second location. Shown in a “More” column.</p>';
+    f.links.forEach(function (link, index) {
+      html += '<div class="design-footer-link" data-footer-link="' + index + '">' +
+        '<input type="text" data-footer-link-field="label" value="' + escHtml(link.label || '') + '" placeholder="Label" aria-label="Link ' + (index + 1) + ' label" />' +
+        '<input type="text" data-footer-link-field="url" value="' + escHtml(link.url || '') + '" placeholder="example.com/page" aria-label="Link ' + (index + 1) + ' address" autocomplete="off" spellcheck="false" />' +
+        '<button type="button" class="design-book-icon-btn" data-footer-link-remove="' + index + '" aria-label="Remove link ' + (index + 1) + '">×</button>' +
+        '</div>';
+    });
+    if (f.links.length < FOOTER_MAX_LINKS) {
+      html += '<button type="button" class="design-text-btn" id="footerAddLink">Add link</button>';
+    }
+    return html;
+  }
+
+  function wireFooterEditor(host, payload) {
+    var rerender = function () {
+      var panel = $('panelSection');
+      var keep = panel ? panel.scrollTop : 0;
+      renderSectionBody(payload);
+      if (panel) panel.scrollTop = keep;
+    };
+    host.querySelectorAll('[data-footer-toggle]').forEach(function (box) {
+      box.addEventListener('change', function () {
+        var f = footerSettings();
+        f[box.getAttribute('data-footer-toggle')] = !!box.checked;
+        saveFooter(f);
+        rerender();
+      });
+    });
+    // Typing updates the preview without re-rendering the panel, so the field keeps focus.
+    host.querySelectorAll('[data-footer-social]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        var network = input.getAttribute('data-footer-social');
+        var value = input.value.trim();
+        var f = footerSettings();
+        if (network === 'instagram') {
+          saveFooter(f, { instagramHandle: value.replace(/^@/, '') });
+        } else {
+          f[network] = value;
+          saveFooter(f);
+        }
+      });
+    });
+    host.querySelectorAll('[data-footer-link]').forEach(function (row) {
+      var index = parseInt(row.getAttribute('data-footer-link'), 10);
+      row.querySelectorAll('[data-footer-link-field]').forEach(function (input) {
+        input.addEventListener('input', function () {
+          var f = footerSettings();
+          if (!f.links[index]) return;
+          f.links[index][input.getAttribute('data-footer-link-field')] = input.value.trim();
+          saveFooter(f);
+        });
+      });
+    });
+    host.querySelectorAll('[data-footer-link-remove]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var f = footerSettings();
+        f.links.splice(parseInt(btn.getAttribute('data-footer-link-remove'), 10), 1);
+        saveFooter(f);
+        rerender();
+      });
+    });
+    var add = $('footerAddLink');
+    if (add) {
+      add.addEventListener('click', function () {
+        var f = footerSettings();
+        f.links.push({ label: '', url: '' });
+        saveFooter(f);
+        rerender();
+        var rows = $('sectionBody').querySelectorAll('[data-footer-link]');
+        var last = rows[rows.length - 1];
+        if (last) last.querySelector('input').focus();
+      });
+    }
+  }
+
   function renderSectionBody(payload) {
     var host = $('sectionBody');
     if (!host) return;
     // Text, photos, and colors are edited directly on the preview; this panel only arranges the section.
     var showsServices = layoutSlotFor(payload) === 'services';
-    var html = layoutPickerHtml(payload) + alignControlHtml(payload) + sectionControlsHtml(payload);
+    var showsFooter = layoutSlotFor(payload) === 'footer';
+    // The template footer layouts don't apply to the shared footer, which has its own arrangement.
+    var customFooter = showsFooter && footerSettings().enabled === true;
+    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) + sectionControlsHtml(payload);
+    if (showsFooter) html += footerEditorHtml();
     if (showsServices) {
       html += '<h2>Services</h2><p class="design-hint">Name, price, and length. These save right away.</p>' +
         '<div id="sectionServices"></div>' +
@@ -852,6 +1040,7 @@
     if (bookingBtn) {
       bookingBtn.addEventListener('click', function () { setPanel('booking'); });
     }
+    if (showsFooter) wireFooterEditor(host, payload);
     if (showsProducts) {
       renderProducts();
       $('sectionAddProductBtn').addEventListener('click', startProductDraft);
@@ -2174,6 +2363,8 @@
         return;
       }
       postEditMode();
+      // After a preview reload, show the footer as edited (it may not be published yet).
+      if (state.tenant && state.tenant.webFooter && typeof state.tenant.webFooter.enabled === 'boolean') postFooterPreview(false);
       return;
     }
     if (data.type === 'role-keys') {

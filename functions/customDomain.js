@@ -599,6 +599,7 @@ function blankSiteDesignPatch(tenant) {
     webButtonColors: del,
     webSectionLayouts: del,
     webPage: del,
+    webFooter: del,
     webSurfaceColors: del,
     webTextColors: del,
     successColor: del,

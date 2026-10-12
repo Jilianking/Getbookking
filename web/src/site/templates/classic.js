@@ -107,6 +107,10 @@ function tattooSidebarPanelContentHtml(tenant, base, bookUrl) {
 
 /** Classic home-style bottom bar (brand + Instagram / Location / Hours). `nameFallback` when site name empty. */
 function classicSiteFooterHtml(tenant, nameFallback) {
+  var custom = customSiteFooterHtml(tenant, {
+    attrs: ' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.footer')
+  });
+  if (custom) return custom;
   var base = tenantBaseUrl(tenant);
   var igHandle = tenant.instagramHandle ? tenant.instagramHandle.replace(/^@/, '') : '';
   var igUrl = igHandle ? 'https://instagram.com/' + igHandle : '';

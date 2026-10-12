@@ -200,6 +200,11 @@ function studio12SidebarHtml(tenant) {
 
 /** Studio 12: brand, optional Instagram, then © line. */
 function studio12SiteFooterHtml(tenant) {
+  var custom = customSiteFooterHtml(tenant, {
+    attrs: ' data-bk-color-surface="about"' + studio12BkSurfaceKeyAttr(tenant, 'studio12.footer') + ' data-bk-band-tappable',
+    wrap: true
+  });
+  if (custom) return custom;
   var ig = tenant.instagramHandle ? String(tenant.instagramHandle).replace(/^@/, '') : '';
   var igUrl = ig ? ('https://instagram.com/' + encodeURIComponent(ig)) : '';
   var linksHtml = igUrl

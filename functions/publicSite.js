@@ -79,6 +79,7 @@ const PUBLIC_SITE_KEYS = [
   "webButtonColors",
   "webSectionLayouts",
   "webPage",
+  "webFooter",
   "bookingFormStyleId",
   "bookingMode",
   "workflow",

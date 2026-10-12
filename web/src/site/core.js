@@ -1258,6 +1258,7 @@ function mapLoadedTenant(id, data, slug) {
         webButtonColors: coerceStyleMap(data.webButtonColors),
         webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
         webPage: data.webPage && typeof data.webPage === 'object' ? data.webPage : {},
+        webFooter: data.webFooter && typeof data.webFooter === 'object' ? data.webFooter : {},
         bookingFormStyleId: data.bookingFormStyleId || '',
         // Prefer calendar when either field says so (see bookingModeResolved).
         bookingMode: (function() {

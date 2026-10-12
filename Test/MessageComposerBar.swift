@@ -871,6 +871,21 @@ struct MessageInsertPaymentLinkSheet: View {
                     }
                     .disabled(!canCreate || viewModel.isCreatingDepositLink)
                     .padding(.horizontal, 24)
+
+                    HStack(spacing: 10) {
+                        ForEach(Self.suggestionAmounts, id: \.cents) { item in
+                            Button {
+                                amountText = String(format: "%.2f", Double(item.cents) / 100)
+                            } label: {
+                                Text(item.label)
+                                    .font(.subheadline.weight(.medium))
+                                    .frame(maxWidth: .infinity, minHeight: 22)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(AppDesign.brandWarm)
+                        }
+                    }
+                    .padding(.horizontal, 24)
                 }
 
                 Spacer(minLength: 0)
@@ -886,11 +901,6 @@ struct MessageInsertPaymentLinkSheet: View {
                     }
                 }
                 ToolbarItemGroup(placement: .keyboard) {
-                    ForEach(Self.suggestionAmounts, id: \.cents) { item in
-                        Button(item.label) {
-                            amountText = String(format: "%.2f", Double(item.cents) / 100)
-                        }
-                    }
                     Spacer()
                     Button("Done") { isAmountFocused = false }
                 }

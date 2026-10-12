@@ -54,6 +54,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsMonthlyUsageRemaining: Int = 1000
     @Published var smsMonthlyLimit: Int = 1000
     @Published var isOpeningBillingWebsite = false
+    @Published var isRestoringPurchases = false
+    @Published var restorePurchasesMessage: String?
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
     @Published var isStartingSubscription = false
@@ -423,6 +425,28 @@ final class ManagerSettingsViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    /// Re-applies an App Store plan this Apple ID already paid for (new phone, reinstall).
+    func restorePurchases() async {
+        guard isTenantOwner else { return }
+        isRestoringPurchases = true
+        errorMessage = nil
+        restorePurchasesMessage = nil
+        defer { isRestoringPurchases = false }
+        do {
+            if try await BookkingSubscriptionStore.shared.restorePurchases() {
+                await load(isDemoMode: false)
+                restorePurchasesMessage = "Your plan was restored."
+            } else {
+                restorePurchasesMessage = "No Get Bookking plan was found for this Apple ID and account."
+            }
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return }
+            errorMessage = error.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

@@ -137,6 +137,11 @@ class AuthViewModel: ObservableObject {
                     PushNotificationManager.shared.syncTokenAfterSignIn()
                     await self.refreshTenantLogoFromServer()
                     await self.refreshTeamAccess()
+                    // Picks up an App Store plan this device paid for but the server never recorded.
+                    if self.teamAccess.isOwner, !self.isCreatingAccount,
+                       await BookkingSubscriptionStore.shared.syncActiveEntitlements() {
+                        await self.refreshTeamAccess()
+                    }
                 } else if !self.isDemoMode {
                     if self.currentUserUid != nil {
                         NotificationCenter.default.post(name: .authUserDidChange, object: nil)

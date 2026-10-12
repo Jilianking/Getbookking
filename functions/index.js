@@ -1671,8 +1671,8 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   } catch (_) {
     /* optional */
   }
-  await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
-  if (normalized !== "active") {
+  const synced = await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
+  if (normalized !== "active" && !(synced && synced.skipped)) {
     await deactivateTenantPaymentLinks(stripe, tenantId, snap.docs[0].data() || {});
   }
 }
@@ -8671,6 +8671,21 @@ exports.createProviderSubscriptionCheckout = functions
   });
 
 /**
+ * Copies a verified App Store status onto the owner's profile and suspends texting when the plan
+ * is not active — the same follow-through a Stripe status change gets. The paid-feature checks
+ * read the owner's profile first, so without this an Apple subscriber stays "trialing".
+ */
+async function mirrorAppleSubscriptionStatus(tenantId, applied) {
+  if (!applied || applied.applied !== true) return;
+  await sms.syncSubscriptionStatusForTenant(
+    tenantId,
+    applied.subscriptionStatus,
+    { subscriptionPlan: applied.subscriptionPlan },
+    { source: "apple" }
+  );
+}
+
+/**
  * Stable Apple appAccountToken for this login. Created once, then reused.
  * The purchase sheet must use this exact id so the signed receipt matches the account.
  */
@@ -8738,6 +8753,7 @@ exports.syncAppleSubscription = functions
         transaction,
         transaction.signedDate
       );
+      await mirrorAppleSubscriptionStatus(ctx.tenantId, applied);
     } catch (error) {
       console.error("syncAppleSubscription apply", error.message || error);
       throw new functions.https.HttpsError(
@@ -8806,12 +8822,13 @@ exports.appStoreServerNotification = functions.https.onRequest(async (req, res) 
       return;
     }
     const appleStatus = notification.data && notification.data.status;
-    await appleSubscription.applyVerifiedTransaction(
+    const applied = await appleSubscription.applyVerifiedTransaction(
       tenantDoc.id,
       transaction,
       notification.signedDate || transaction.signedDate,
       appleStatus
     );
+    await mirrorAppleSubscriptionStatus(tenantDoc.id, applied);
     res.status(200).send("ok");
   } catch (error) {
     console.error("appStoreServerNotification", error.message || error);

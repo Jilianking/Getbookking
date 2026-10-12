@@ -821,7 +821,7 @@ private struct AccountSettingsDetailView: View {
                 if viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
                         header: Text("Plan & billing"),
-                        footer: Text("Start paid plan opens the App Store payment sheet. View Stripe account is for accepting client payments.")
+                        footer: Text("Start paid plan opens the App Store payment sheet. Restore purchases brings back a plan you already paid for with this Apple ID. View Stripe account is for accepting client payments.")
                             .font(.caption2)
                     ) {
                         HStack {
@@ -856,6 +856,24 @@ private struct AccountSettingsDetailView: View {
                                     }
                                 }
                                 .disabled(billingViewModel.isOpeningBillingWebsite)
+                            }
+                            Button {
+                                Task { await billingViewModel.restorePurchases() }
+                            } label: {
+                                HStack {
+                                    if billingViewModel.isRestoringPurchases {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    }
+                                    Text("Restore purchases")
+                                }
+                            }
+                            .disabled(billingViewModel.isRestoringPurchases)
+                            if let restoreMessage = billingViewModel.restorePurchasesMessage,
+                               !restoreMessage.isEmpty {
+                                Text(restoreMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             Button {
                                 Task { await billingViewModel.openClientPaymentsStripeAccount() }

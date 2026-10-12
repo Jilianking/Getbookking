@@ -139,6 +139,22 @@ async function findTenantForTransaction(transaction) {
       .limit(1)
       .get();
     if (!byToken.empty) return byToken.docs[0];
+    // The token is saved on the owner's profile before the purchase and only copied to the
+    // business once the app's sync call lands. If that call was lost, find the business
+    // through the owner so Apple's notification can still record the purchase.
+    const byOwner = await db()
+      .collection("users")
+      .where("appleAppAccountToken", "==", token)
+      .limit(1)
+      .get();
+    if (!byOwner.empty) {
+      const ownerUid = byOwner.docs[0].id;
+      const tenantId = ((byOwner.docs[0].data() || {}).tenantId || "").toString().trim();
+      if (tenantId) {
+        const tenantDoc = await db().collection("tenants").doc(tenantId).get();
+        if (tenantDoc.exists && (tenantDoc.data() || {}).ownerUid === ownerUid) return tenantDoc;
+      }
+    }
   }
   return null;
 }
@@ -171,6 +187,18 @@ async function applyVerifiedTransaction(tenantId, transaction, signedDate, apple
       };
     }
     const subscriptionStatus = subscriptionStatusFromApple(transaction, appleStatus);
+    // Billing moved to a paid website subscription: an Apple lapse must not lock the business.
+    if (
+      (current.billingSource || "").toString() === "stripe" &&
+      (current.subscriptionStatus || "").toString() === "active" &&
+      subscriptionStatus !== "active"
+    ) {
+      return {
+        applied: false,
+        subscriptionPlan: current.subscriptionPlan || plan,
+        subscriptionStatus: current.subscriptionStatus || "",
+      };
+    }
     const token = normalizeAccountToken(transaction.appAccountToken);
     const patch = {
       subscriptionPlan: plan,

@@ -1782,18 +1782,33 @@ async function suspendTenantSms(tenantId, reason) {
   );
 }
 
-async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch) {
+/**
+ * Writes the plan status to the business and its owner, and suspends texting when it is not active.
+ * `opts.source` is who is reporting: "stripe" (default) or "apple". A business billed through the
+ * App Store keeps its Apple status when Stripe reports anything other than a paid subscription —
+ * for example the website trial we cancel when the Apple plan starts.
+ * Returns { skipped: true } when nothing was written.
+ */
+async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch, opts) {
   const status = (subscriptionStatus || "").toString().trim().toLowerCase();
   const extra = billingPatch && typeof billingPatch === "object" ? billingPatch : {};
+  const source = opts && opts.source === "apple" ? "apple" : "stripe";
   const tenantRef = getDb().collection("tenants").doc(tenantId);
   const tenantSnap = await tenantRef.get();
-  if (!tenantSnap.exists) return;
+  if (!tenantSnap.exists) return { skipped: true, reason: "no_tenant" };
   const tenant = tenantSnap.data();
   const ownerUid = tenant.ownerUid;
+  const appleBilled = (tenant.billingSource || "").toString() === "apple";
+  if (source === "stripe" && appleBilled && status !== "active") {
+    console.log("syncSubscriptionStatusForTenant: kept Apple status", { tenantId, stripeStatus: status });
+    return { skipped: true, reason: "apple_billed" };
+  }
   const tenantFields = {
     subscriptionStatus: status,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+  // A paid Stripe subscription on a business that was on Apple means billing moved to the website.
+  if (source === "stripe" && appleBilled) tenantFields.billingSource = "stripe";
   if (extra.stripeCustomerId) tenantFields.stripeCustomerId = extra.stripeCustomerId;
   if (extra.stripeSubscriptionId) tenantFields.stripeSubscriptionId = extra.stripeSubscriptionId;
   if (extra.subscriptionPlan) tenantFields.subscriptionPlan = extra.subscriptionPlan;
@@ -1809,6 +1824,7 @@ async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, bil
   if (status !== "active" && tenant.smsStatus === "active") {
     await suspendTenantSms(tenantId, `subscription_${status}`);
   }
+  return { skipped: false };
 }
 
 const SMS_PRESET_MAX_LEN = 500;

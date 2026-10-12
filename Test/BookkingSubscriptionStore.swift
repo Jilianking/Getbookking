@@ -94,7 +94,75 @@ final class BookkingSubscriptionStore: ObservableObject {
     private var productsByID: [String: StoreKit.Product] = [:]
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
-    private init() {}
+    private var transactionUpdates: Task<Void, Never>?
+
+    private init() {
+        transactionUpdates = observeTransactionUpdates()
+    }
+
+    /// Purchases that finish outside the payment sheet: Ask to Buy approvals, renewals, and
+    /// purchases interrupted before the app could record them.
+    private func observeTransactionUpdates() -> Task<Void, Never> {
+        Task { [weak self] in
+            for await update in Transaction.updates {
+                guard let self else { return }
+                guard case .verified(let transaction) = update,
+                      BookkingProductID.plan(for: transaction.productID) != nil else { continue }
+                if await self.syncEntitlement(update, transaction: transaction) {
+                    await transaction.finish()
+                }
+            }
+        }
+    }
+
+    /// Sends this Apple ID's active plan to the server so a purchase the app never recorded
+    /// (new phone, reinstall, lost connection) is applied. Quiet: the server only accepts a
+    /// subscription bought by the signed-in account. Returns true when a plan was recorded.
+    @discardableResult
+    func syncActiveEntitlements() async -> Bool {
+        guard Auth.auth().currentUser != nil else { return false }
+        var synced = false
+        for await entitlement in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = entitlement,
+                  transaction.revocationDate == nil,
+                  BookkingProductID.plan(for: transaction.productID) != nil else { continue }
+            if await syncEntitlement(entitlement, transaction: transaction) {
+                synced = true
+            }
+        }
+        return synced
+    }
+
+    /// Restore purchases: asks the App Store for this Apple ID's purchases, then records the plan.
+    /// Returns false when the Apple ID has no plan that belongs to this account.
+    func restorePurchases() async throws -> Bool {
+        guard Auth.auth().currentUser != nil else {
+            throw BookkingPurchaseError.notSignedIn
+        }
+        do {
+            try await AppStore.sync()
+        } catch StoreKitError.userCancelled {
+            // Closing the App Store sign-in sheet is not an error worth showing.
+            throw BookkingPurchaseError.cancelled
+        }
+        return await syncActiveEntitlements()
+    }
+
+    private func syncEntitlement(
+        _ result: VerificationResult<Transaction>,
+        transaction: Transaction
+    ) async -> Bool {
+        // Xcode's local StoreKit receipts are not Apple-signed; the server rejects them.
+        guard transaction.environment != .xcode, Auth.auth().currentUser != nil else { return false }
+        do {
+            _ = try await functions.httpsCallable("syncAppleSubscription").call([
+                "signedTransaction": result.jwsRepresentation,
+            ])
+            return true
+        } catch {
+            return false
+        }
+    }
 
     func loadProducts() async {
         let ids = [

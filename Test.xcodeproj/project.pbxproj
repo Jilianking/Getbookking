@@ -16,6 +16,7 @@
 		35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED282F1B200000BB5E8B /* FirebaseMessaging */; };
 		35C0ED2C2F1B300000BB5E8B /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */; };
 		35CDF9152FFF2C9C001FE834 /* Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 35CDF9142FFF2C9C001FE834 /* Secrets.plist */; };
+		35E26D89306D4EDD00CBF439 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 35E26D88306D4EDD00CBF439 /* StoreKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +41,7 @@
 		35C0ECB52F16A57700BB5E8B /* TestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		35C0ECBF2F16A57700BB5E8B /* TestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		35CDF9142FFF2C9C001FE834 /* Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Secrets.plist; sourceTree = "<group>"; };
+		35E26D88306D4EDD00CBF439 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -65,6 +67,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				35E26D89306D4EDD00CBF439 /* StoreKit.framework in Frameworks */,
 				35C0ED1C2F1ACC7000BB5E8B /* FirebaseCore in Frameworks */,
 				35C0ED202F1ACC7000BB5E8B /* FirebaseStorage in Frameworks */,
 				35C0ED1A2F1ACC7000BB5E8B /* FirebaseAuth in Frameworks */,
@@ -100,6 +103,7 @@
 				35C0ECA82F16A57500BB5E8B /* Test */,
 				35C0ECB82F16A57700BB5E8B /* TestTests */,
 				35C0ECC22F16A57700BB5E8B /* TestUITests */,
+				35E26D87306D4EDD00CBF439 /* Frameworks */,
 				35C0ECA72F16A57500BB5E8B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +116,14 @@
 				35C0ECBF2F16A57700BB5E8B /* TestUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		35E26D87306D4EDD00CBF439 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				35E26D88306D4EDD00CBF439 /* StoreKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -427,7 +439,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Test/Test-Debug.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -485,7 +497,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Test/Test-Release.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 18;
 				DEVELOPMENT_TEAM = PNF83FGG3H;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;

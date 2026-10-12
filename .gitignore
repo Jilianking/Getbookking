@@ -82,4 +82,5 @@ scripts/payment-test-reports/
 # Local payment stress/smoke runners (tenant names, Firebase CLI oauth)
 scripts/run-mass-payment-test.js
 scripts/run-payment-fixes-smoke.js
+scripts/run-dashboard-refund-test.js
 

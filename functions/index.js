@@ -36,6 +36,11 @@
  * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
  * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
  * Buy/transfer only — no DIY DNS connect.
+ *
+ * App Store subscriptions: the iOS app sends Apple's signed transaction.
+ * syncAppleSubscription verifies it. Renewals, cancels, and expirations arrive at
+ * appStoreServerNotification (App Store Server Notifications V2). URL:
+ * https://us-central1-test-app-96812.cloudfunctions.net/appStoreServerNotification
  */
 
 const functions = require("firebase-functions");
@@ -67,6 +72,7 @@ const {
   buildDemoAppSnapshot,
 } = require("./demoAppSnapshot");
 const charterOccupancy = require("./charterOccupancy");
+const appleSubscription = require("./appleSubscription");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -1148,6 +1154,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   }
 
   const ownerMemberSlug = slugFromPersonName(firstName, lastName) || "owner";
+  const appleAppAccountToken = appleSubscription.preservedAccountToken(existingUser);
 
   const userDoc = {
     email: email || "",
@@ -1165,6 +1172,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     profilePhotoUrl: "",
     subscriptionPlan,
     subscriptionStatus,
+    ...(appleAppAccountToken ? { appleAppAccountToken } : {}),
     availability: {
       timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
       daysOpen: [1, 2, 3, 4, 5],
@@ -3385,7 +3393,10 @@ exports.createDepositLink = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -3508,7 +3519,10 @@ exports.createPaymentIntentForManualCheckout = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -4558,6 +4572,7 @@ async function refundConnectCharge({
         amountRefundedCents,
         refundStatus: (refund.status || "succeeded").toString(),
         runStudioReverse: true,
+        stripeAccountId,
         source: "createRefund",
       });
       if (!ledgerOut.duplicate) {
@@ -4603,9 +4618,109 @@ function stripeObjectId(value) {
   return "";
 }
 
+function feeBasisFromLedger(ledgerData, captured, totalRefunded) {
+  const disputeLost = Math.max(
+    0,
+    Math.round(Number(ledgerData && ledgerData.disputeLostCents) || 0)
+  );
+  const refunded = Math.max(0, Math.round(Number(totalRefunded) || 0));
+  const basis = refunded + disputeLost;
+  const cap = Math.max(0, Math.round(Number(captured) || 0));
+  if (cap > 0) return Math.min(cap, basis);
+  return basis;
+}
+
 /**
- * Idempotent refund row on paymentLedger + optional studio-share reversal.
- * Used by createRefund and Connect refund webhooks (refund.updated).
+ * Return the application fee (1% + studio share included in that fee) to the
+ * Connect account that was charged. The slice brings Stripe's refunded fee up
+ * to the cumulative covered charge, so a second webhook for the same refund
+ * returns nothing more. createRefund still sets refund_application_fee itself.
+ */
+async function refundConnectApplicationFeeIfNeeded(
+  stripe,
+  {
+    stripeAccountId,
+    chargeId,
+    refundId,
+    refundCents,
+    chargeCapturedCents,
+    feeBasisCents,
+  }
+) {
+  const acct = (stripeAccountId || "").toString().trim();
+  const chId = (chargeId || "").toString().trim();
+  const rid = (refundId || "").toString().trim();
+  const thisRefund = Math.max(0, Math.round(Number(refundCents) || 0));
+  if (!acct || !chId || !rid || thisRefund <= 0) {
+    return { refunded: false, reason: "missing" };
+  }
+  let charge;
+  try {
+    charge = await stripe.charges.retrieve(chId, {}, { stripeAccount: acct });
+  } catch (err) {
+    console.error("refundConnectApplicationFee retrieve charge", err.message || err);
+    return { refunded: false, reason: "charge_lookup_failed", error: err.message };
+  }
+  const feeId = stripeObjectId(charge.application_fee);
+  if (!feeId) return { refunded: false, reason: "no_application_fee" };
+  let fee;
+  try {
+    fee = await stripe.applicationFees.retrieve(feeId);
+  } catch (err) {
+    console.error("refundConnectApplicationFee retrieve fee", err.message || err);
+    return { refunded: false, reason: "fee_lookup_failed", error: err.message };
+  }
+  const feeAmount = Math.max(0, Math.round(Number(fee.amount) || 0));
+  const already = Math.max(0, Math.round(Number(fee.amount_refunded) || 0));
+  const remaining = Math.max(0, feeAmount - already);
+  if (remaining <= 0 || feeAmount <= 0) {
+    return { refunded: false, reason: "already_refunded" };
+  }
+  const captured = Math.max(
+    1,
+    Math.round(Number(chargeCapturedCents) || 0) ||
+      Math.round(Number(charge.amount_captured) || Number(charge.amount) || 0) ||
+      1
+  );
+  const basis = Math.max(
+    thisRefund,
+    Math.round(Number(feeBasisCents) || 0) || thisRefund
+  );
+  const slice = teamPaymentSplit.applicationFeeRefundSliceCents({
+    feeAmountCents: feeAmount,
+    alreadyRefundedCents: already,
+    capturedCents: captured,
+    basisCents: basis,
+  });
+  if (slice <= 0) return { refunded: false, reason: "already_refunded" };
+  try {
+    const feeRefund = await stripe.applicationFees.createRefund(
+      feeId,
+      { amount: slice },
+      {
+        idempotencyKey: `app-fee-refund-${rid}-${slice}`.slice(0, 255),
+      }
+    );
+    return {
+      refunded: true,
+      amountCents: slice,
+      applicationFeeRefundId: feeRefund.id,
+    };
+  } catch (err) {
+    const msg = (err && err.message) || "application_fee_refund_failed";
+    if (/already been refunded|greater than unrefunded/i.test(msg)) {
+      return { refunded: false, reason: "already_refunded" };
+    }
+    console.error("refundConnectApplicationFee", feeId, msg);
+    return { refunded: false, reason: "stripe_error", error: msg };
+  }
+}
+
+/**
+ * Idempotent refund row on paymentLedger + studio-share reversal.
+ * Used by createRefund and Connect refund webhooks (refund.updated, charge.refunded).
+ * A duplicate refund id still retries a failed studio-share reversal and any
+ * application fee Stripe has not already returned.
  */
 async function recordConnectRefundOnLedger(
   stripe,
@@ -4620,6 +4735,7 @@ async function recordConnectRefundOnLedger(
     amountRefundedCents,
     refundStatus,
     runStudioReverse = true,
+    stripeAccountId = "",
     source = "webhook",
   }
 ) {
@@ -4646,7 +4762,54 @@ async function recordConnectRefundOnLedger(
     ? ledgerData.refundEvents
     : [];
   if (processed.some((r) => (r && r.refundId) === rid)) {
-    return { recorded: false, duplicate: true, reason: "duplicate_refund_id" };
+    let studioReverse = { reversed: false, reason: "skipped" };
+    let applicationFeeRefund = { refunded: false, reason: "skipped" };
+    if (status === "succeeded" && thisRefundCents > 0 && source !== "createRefund") {
+      const dupCaptured =
+        Math.round(Number(chargeCapturedCents) || 0) ||
+        Math.round(Number(ledgerData.grossCents) || 0);
+      const dupRefunded = Math.max(
+        thisRefundCents,
+        Math.round(Number(amountRefundedCents) || 0),
+        Math.round(Number(ledgerData.amountRefundedCents) || 0)
+      );
+      applicationFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+        stripeAccountId,
+        chargeId: (chargeId || ledgerData.chargeId || "").toString(),
+        refundId: rid,
+        refundCents: thisRefundCents,
+        chargeCapturedCents: dupCaptured,
+        feeBasisCents: feeBasisFromLedger(ledgerData, dupCaptured, dupRefunded),
+      });
+      if (runStudioReverse) {
+        try {
+          studioReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+            db,
+            tenantId: tid,
+            chargeId: (chargeId || ledgerData.chargeId || "").toString() || null,
+            paymentIntentId: piId,
+            refundCents: thisRefundCents,
+            chargeCapturedCents:
+              Math.round(Number(chargeCapturedCents) || 0) ||
+              Math.round(Number(ledgerData.grossCents) || 0) ||
+              thisRefundCents,
+            refundId: rid,
+          });
+        } catch (err) {
+          console.error("recordConnectRefundOnLedger studio reverse retry", rid, err.message);
+          studioReverse = { reversed: false, reason: "error", error: err.message };
+        }
+      }
+    }
+    return {
+      recorded: false,
+      duplicate: true,
+      reason: "duplicate_refund_id",
+      studioReverse,
+      applicationFeeRefund,
+      paymentKind: (ledgerData.paymentKind || "").toString(),
+      shopOrderId: (ledgerData.shopOrderId || "").toString().trim(),
+    };
   }
 
   const captured = Math.max(
@@ -4689,7 +4852,26 @@ async function recordConnectRefundOnLedger(
   }
   await ledgerRef.set(patch, { merge: true });
 
+  let applicationFeeRefund = { refunded: false, reason: "skipped" };
   let studioReverse = { reversed: false, reason: "skipped" };
+  if (
+    status === "succeeded" &&
+    thisRefundCents > 0 &&
+    source !== "createRefund"
+  ) {
+    applicationFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+      stripeAccountId,
+      chargeId: (chargeId || ledgerData.chargeId || "").toString(),
+      refundId: rid,
+      refundCents: thisRefundCents,
+      chargeCapturedCents: captured || thisRefundCents,
+      feeBasisCents: feeBasisFromLedger(
+        ledgerData,
+        captured || thisRefundCents,
+        totalRefunded
+      ),
+    });
+  }
   if (runStudioReverse && status === "succeeded" && thisRefundCents > 0) {
     try {
       studioReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
@@ -4723,6 +4905,7 @@ async function recordConnectRefundOnLedger(
     amountRefundedCents: totalRefunded,
     fullyRefunded,
     studioReverse,
+    applicationFeeRefund,
     paymentKind: (ledgerData.paymentKind || "").toString(),
     shopOrderId: (ledgerData.shopOrderId || "").toString().trim(),
   };
@@ -5015,6 +5198,7 @@ async function handleConnectRefundWebhook(stripe, db, event) {
       amountRefundedCents,
       refundStatus: status,
       runStudioReverse: true,
+      stripeAccountId,
       source: "webhook",
     });
 
@@ -5048,6 +5232,7 @@ async function handleConnectRefundWebhook(stripe, db, event) {
         amountRefundedCents: out.amountRefundedCents,
         fullyRefunded: out.fullyRefunded,
         studioReverse: out.studioReverse,
+        applicationFeeRefund: out.applicationFeeRefund,
       })
     );
     return out;
@@ -5098,15 +5283,73 @@ async function handleConnectRefundWebhook(stripe, db, event) {
       Math.round(Number(charge.amount_captured) || Number(charge.amount) || 0)
     );
     const fullyRefunded = captured > 0 && amountRefundedCents >= captured;
-    await ledgerRef.set(
-      {
-        chargeId: chId || null,
-        amountRefundedCents,
-        fullyRefunded,
-        refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    let refunds = [];
+    if (chId) {
+      try {
+        const listed = await stripe.refunds.list(
+          { charge: chId, limit: 100 },
+          { stripeAccount: stripeAccountId }
+        );
+        refunds = (listed && listed.data) || [];
+      } catch (err) {
+        console.error("stripeSubscriptionWebhook charge.refunded list", err.message || err);
+      }
+    }
+    const settled = [];
+    for (const refund of refunds) {
+      const refundStatus = (refund.status || "").toString().trim().toLowerCase();
+      if (refundStatus !== "succeeded") continue;
+      const refundId = stripeObjectId(refund.id);
+      const refundCents = Math.max(0, Math.round(Number(refund.amount) || 0));
+      if (!refundId || refundCents <= 0) continue;
+      try {
+        const out = await recordConnectRefundOnLedger(stripe, db, {
+          tenantId,
+          paymentIntentId: piId,
+          chargeId: chId,
+          refundId,
+          refundCents,
+          chargeCapturedCents: captured,
+          amountRefundedCents,
+          refundStatus,
+          runStudioReverse: true,
+          stripeAccountId,
+          source: "charge.refunded",
+        });
+        settled.push({
+          refundId,
+          duplicate: !!out.duplicate,
+          studioReverse: out.studioReverse,
+          applicationFeeRefund: out.applicationFeeRefund,
+        });
+      } catch (err) {
+        console.error(
+          "stripeSubscriptionWebhook charge.refunded settle",
+          refundId,
+          err.message || err
+        );
+      }
+    }
+    if (!settled.length) {
+      const ledgerRef = db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("paymentLedger")
+        .doc(piId);
+      const snap = await ledgerRef.get();
+      if (!snap.exists) {
+        return { skipped: true, reason: "no_ledger" };
+      }
+      await ledgerRef.set(
+        {
+          chargeId: chId || null,
+          amountRefundedCents,
+          fullyRefunded,
+          refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
     try {
       await syncShopOrderRefundFromConnectPayment(stripe, db, {
         tenantId,
@@ -5115,16 +5358,16 @@ async function handleConnectRefundWebhook(stripe, db, event) {
         amountRefundedCents,
         capturedCents: captured,
         fullyRefunded,
-        refundId: "",
+        refundId: (settled[0] && settled[0].refundId) || "",
       });
     } catch (shopErr) {
       console.error("stripeSubscriptionWebhook charge.refunded shop", shopErr.message || shopErr);
     }
     console.log(
       "stripeSubscriptionWebhook charge.refunded sync",
-      JSON.stringify({ piId, tenantId, amountRefundedCents })
+      JSON.stringify({ piId, tenantId, amountRefundedCents, settled: settled.length })
     );
-    return { ok: true, syncOnly: true, amountRefundedCents };
+    return { ok: true, amountRefundedCents, settled };
   }
 
   return { skipped: true, reason: "unhandled_type" };
@@ -5401,8 +5644,9 @@ exports.createRefund = functions
   });
 
 /**
- * Retries failed studio-share transfers (platform → studio Connect).
- * Runs every hour; also callable by ops if needed later.
+ * Retries failed studio-share transfers and failed studio-share reversals.
+ * A transfer retry will not send a share already covered by a refund or lost dispute.
+ * Runs every hour.
  */
 exports.retryFailedStudioShareSettlements = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -7681,7 +7925,10 @@ exports.createPaymentIntentForTapToPay = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 100;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -8424,8 +8671,154 @@ exports.createProviderSubscriptionCheckout = functions
   });
 
 /**
- * Marketing wizard: cardless 14-day trial — provisions tenant without Stripe (pay on billing.html).
+ * Stable Apple appAccountToken for this login. Created once, then reused.
+ * The purchase sheet must use this exact id so the signed receipt matches the account.
  */
+exports.prepareAppleAccountToken = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const appleAppAccountToken = await appleSubscription.prepareAccountToken(context.auth.uid);
+  return { appleAppAccountToken };
+});
+
+/**
+ * Records an App Store subscription from Apple's signed transaction.
+ * Introductory period stays trialing so texting stays off until Apple charges.
+ * Cancels a Stripe trial so the website card is not also billed.
+ */
+exports.syncAppleSubscription = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can start the plan."
+      );
+    }
+    const signedTransaction = ((data && data.signedTransaction) || "").toString().trim();
+    if (!signedTransaction) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing App Store signature."
+      );
+    }
+    let transaction;
+    try {
+      transaction = await appleSubscription.verifySignedTransaction(signedTransaction);
+    } catch (error) {
+      console.error("syncAppleSubscription verify", error.message || error);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The App Store could not verify this purchase."
+      );
+    }
+    if (!appleSubscription.planForProduct(transaction.productId)) {
+      throw new functions.https.HttpsError("invalid-argument", "Unknown App Store plan.");
+    }
+    const userSnap = await db.collection("users").doc(context.auth.uid).get();
+    const expectedToken = appleSubscription.normalizeAccountToken(
+      userSnap.exists && userSnap.data().appleAppAccountToken
+    );
+    const receiptToken = appleSubscription.normalizeAccountToken(transaction.appAccountToken);
+    if (!expectedToken || receiptToken !== expectedToken) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This App Store purchase does not match this account."
+      );
+    }
+    let applied;
+    try {
+      applied = await appleSubscription.applyVerifiedTransaction(
+        ctx.tenantId,
+        transaction,
+        transaction.signedDate
+      );
+    } catch (error) {
+      console.error("syncAppleSubscription apply", error.message || error);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The App Store purchase could not be saved."
+      );
+    }
+    const tenant = ctx.tenant || {};
+    const stripeSubId = (tenant.stripeSubscriptionId || "").toString().trim();
+    const stripeStatus = (tenant.subscriptionStatus || "").toString();
+    if (stripeSubId && stripeStatus === "trialing") {
+      try {
+        const stripe = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-11-20.acacia" });
+        await stripe.subscriptions.cancel(stripeSubId);
+      } catch (err) {
+        console.warn("syncAppleSubscription cancel stripe trial", err.message || err);
+      }
+    }
+    return {
+      ok: true,
+      subscriptionPlan: applied.subscriptionPlan,
+      subscriptionStatus: applied.subscriptionStatus,
+    };
+  });
+
+/**
+ * App Store Server Notifications V2. Apple posts { signedPayload } when a
+ * subscription renews, cancels, expires, or is refunded.
+ */
+exports.appStoreServerNotification = functions.https.onRequest(async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send("POST required");
+    return;
+  }
+  const signedPayload = ((req.body && req.body.signedPayload) || "").toString().trim();
+  if (!signedPayload) {
+    res.status(400).send("Missing signedPayload");
+    return;
+  }
+  try {
+    const notification = await appleSubscription.verifySignedNotification(signedPayload);
+    if (notification.notificationType === appleSubscription.NotificationTypeV2.TEST) {
+      res.status(200).send("ok");
+      return;
+    }
+    const signedTransaction =
+      notification.data && notification.data.signedTransactionInfo
+        ? notification.data.signedTransactionInfo.toString()
+        : "";
+    if (!signedTransaction) {
+      res.status(200).send("ok");
+      return;
+    }
+    const transaction = await appleSubscription.verifySignedTransaction(signedTransaction);
+    if (!appleSubscription.planForProduct(transaction.productId)) {
+      res.status(200).send("ok");
+      return;
+    }
+    const tenantDoc = await appleSubscription.findTenantForTransaction(transaction);
+    if (!tenantDoc) {
+      console.warn(
+        "appStoreServerNotification tenant not ready",
+        transaction.originalTransactionId || ""
+      );
+      res.status(500).send("tenant not ready");
+      return;
+    }
+    const appleStatus = notification.data && notification.data.status;
+    await appleSubscription.applyVerifiedTransaction(
+      tenantDoc.id,
+      transaction,
+      notification.signedDate || transaction.signedDate,
+      appleStatus
+    );
+    res.status(200).send("ok");
+  } catch (error) {
+    console.error("appStoreServerNotification", error.message || error);
+    res.status(400).send("invalid");
+  }
+});
+
 exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -8604,6 +8997,82 @@ async function handleConnectDisputeWebhook(stripe, db, event) {
   }
   await ledgerRef.set(patch, { merge: true });
 
+  let disputeFeeRefund = null;
+  let disputeShareReverse = null;
+  if (closed && status === "lost" && disputeId && disputeCents > 0) {
+    try {
+      const snap = await ledgerRef.get();
+      const ledgerData = snap.exists ? snap.data() || {} : {};
+      const lostIds = Array.isArray(ledgerData.disputeLostIds)
+        ? ledgerData.disputeLostIds.map((id) => (id || "").toString())
+        : [];
+      let disputeLostCents = Math.max(
+        0,
+        Math.round(Number(ledgerData.disputeLostCents) || 0)
+      );
+      if (!lostIds.includes(disputeId)) {
+        disputeLostCents += disputeCents;
+        await ledgerRef.set(
+          {
+            disputeLostCents,
+            disputeLostIds: admin.firestore.FieldValue.arrayUnion(disputeId),
+          },
+          { merge: true }
+        );
+      }
+      let capturedCents = Math.max(
+        0,
+        Math.round(Number(pi.amount_received) || Number(pi.amount) || 0)
+      );
+      if (chargeId) {
+        try {
+          const ch = await stripe.charges.retrieve(
+            chargeId,
+            {},
+            { stripeAccount: stripeAccountId }
+          );
+          capturedCents = Math.max(
+            capturedCents,
+            Math.round(Number(ch.amount_captured) || Number(ch.amount) || 0)
+          );
+        } catch (chErr) {
+          console.warn("stripeSubscriptionWebhook dispute charge", chErr.message || chErr);
+        }
+      }
+      const amountRefundedCents = Math.max(
+        0,
+        Math.round(Number(ledgerData.amountRefundedCents) || 0)
+      );
+      disputeFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+        stripeAccountId,
+        chargeId,
+        refundId: `dispute-${disputeId}`,
+        refundCents: disputeCents,
+        chargeCapturedCents: capturedCents || disputeCents,
+        feeBasisCents: feeBasisFromLedger(
+          { disputeLostCents },
+          capturedCents || disputeCents,
+          amountRefundedCents
+        ),
+      });
+      disputeShareReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+        db,
+        tenantId,
+        chargeId: chargeId || null,
+        paymentIntentId: piId,
+        refundCents: disputeCents,
+        chargeCapturedCents: capturedCents || disputeCents,
+        refundId: `dispute-${disputeId}`,
+      });
+    } catch (disputeMoneyErr) {
+      console.error(
+        "stripeSubscriptionWebhook dispute settle",
+        disputeId,
+        disputeMoneyErr.message || disputeMoneyErr
+      );
+    }
+  }
+
   const relatedPatch = {
     disputeId,
     disputeStatus: status,
@@ -8666,6 +9135,8 @@ async function handleConnectDisputeWebhook(stripe, db, event) {
       status,
       tenantId,
       piId,
+      disputeFeeRefund,
+      disputeShareReverse,
     })
   );
   return { ok: true, disputeId, status };
@@ -12946,6 +13417,50 @@ exports.startSubscriptionToday = functions
  * with proration_behavior none. Free included slots must be used first.
  * Does not provision a number — returns a short-lived auth for requestSmsPhoneNumber.
  */
+exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+  if (smsPurchaseBlock) {
+    throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can purchase extra texting numbers."
+    );
+  }
+  const memberUid = ((data && data.memberUid) || "").toString().trim();
+  const appleTransactionId = ((data && data.appleTransactionId) || "").toString().trim();
+  if (!memberUid || !appleTransactionId) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing teammate or App Store transaction."
+    );
+  }
+  const memberRef = db.collection("users").doc(memberUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  const authorizationId = crypto.randomBytes(24).toString("hex");
+  await memberRef.set(
+    {
+      smsPaidLinePurchaseAuthorizationId: authorizationId,
+      smsPaidLinePurchaseInvoiceId: `apple:${appleTransactionId}`,
+      smsPaidLinePurchaseAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
+      smsPaidLinePurchaseExpiresAt: admin.firestore.Timestamp.fromMillis(
+        Date.now() + 15 * 60 * 1000
+      ),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return { ok: true, smsPaidLinePurchaseAuthorizationId: authorizationId };
+});
+
 exports.purchaseSmsExtraLine = functions
   .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
   .https.onCall(async (data, context) => {

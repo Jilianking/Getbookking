@@ -212,8 +212,10 @@ function paidSubscriptionBlockReason(tenant, userData) {
   if (isSubscriptionPaymentGateBypassed()) {
     return null;
   }
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) {
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) {
     return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   const status = resolveSubscriptionStatus(tenant, userData);
@@ -227,8 +229,10 @@ function paidSubscriptionBlockReason(tenant, userData) {
 }
 
 function tenantIsTrialing(tenant, userData) {
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) return false;
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) return false;
   return resolveSubscriptionStatus(tenant, userData) === "trialing";
 }
 

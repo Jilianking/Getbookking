@@ -859,7 +859,7 @@ private struct AccountBillingSetupSheetContent: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if authViewModel.teamAccess.isOwner {
                     Button {
-                        Task { _ = await paymentsViewModel.startSubscriptionToday() }
+                        Task { _ = await paymentsViewModel.startSubscriptionToday(plan: authViewModel.tenantSubscriptionPlan) }
                     } label: {
                         HStack {
                             Text("Start paid plan")
@@ -868,10 +868,6 @@ private struct AccountBillingSetupSheetContent: View {
                                 ProgressView().scaleEffect(0.85)
                             }
                         }
-                    }
-                    .disabled(paymentsViewModel.isOpeningBillingWebsite)
-                    Button("Manage billing on web") {
-                        Task { await paymentsViewModel.openBillingToStartSubscription() }
                     }
                     .disabled(paymentsViewModel.isOpeningBillingWebsite)
                 } else {

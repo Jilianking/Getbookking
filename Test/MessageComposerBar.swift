@@ -226,7 +226,7 @@ struct MessageComposerBar: View {
             if actionNotice == Constants.App.paidFeatureUpgradeMessage,
                paymentsViewModel.isTenantOwner {
                 Button("Start paid plan") {
-                    Task { _ = await paymentsViewModel.startSubscriptionToday() }
+                    Task { _ = await paymentsViewModel.startSubscriptionToday(plan: authViewModel.tenantSubscriptionPlan) }
                 }
             }
             Button("OK", role: .cancel) { actionNotice = nil }

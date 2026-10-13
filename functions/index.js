@@ -1365,18 +1365,6 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     console.error("scheduleTapToPayLaunchEmailAfterSignup", err);
   }
 
-  if (pending.betaInviteToken) {
-    try {
-      await activateBetaTesterFromSignup({
-        uid,
-        email,
-        betaInviteToken: pending.betaInviteToken,
-      });
-    } catch (err) {
-      console.error("activateBetaTesterFromSignup", err);
-    }
-  }
-
   return { tenantId, slug, subscriptionPlan };
 }
 
@@ -6582,151 +6570,6 @@ exports.expireCharterBookingRequests = functions.pubsub
   });
 
 
-const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop", "charter"]);
-const BETA_WAITLIST_BUSINESS_TYPES = new Set([
-  "barber",
-  "hair",
-  "tattoos",
-  "nails",
-  "charters",
-  "fitness",
-  "other",
-]);
-
-function parseBetaWaitlistTeamSize(raw) {
-  const n = parseInt(String(raw ?? ""), 10);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function validateBetaWaitlistPlanAndTeamSize(plan, teamSize) {
-  if (!BETA_WAITLIST_PLANS.has(plan)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Select a plan."
-    );
-  }
-  if (!Number.isFinite(teamSize) || teamSize < 1) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Enter the number of users on your team."
-    );
-  }
-  if ((plan === "solo" || plan === "charter") && teamSize !== 1) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      plan === "charter"
-        ? "Charter is for one user."
-        : "Solo is for one user. Choose Studio or Shop for teams."
-    );
-  }
-  if (plan === "studio" && (teamSize < 2 || teamSize > 5)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Studio supports 2–5 users."
-    );
-  }
-  if (plan === "shop" && (teamSize < 6 || teamSize > 10)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Shop supports 6–10 users."
-    );
-  }
-}
-
-/**
- * Public marketing: iOS beta waitlist (TestFlight signup page). No auth required.
- * Params: { firstName, lastName, email, plan, teamSize, businessName, businessType, businessTypeCustom?, website? (honeypot) }
- */
-exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
-  if ((data?.website || "").toString().trim()) {
-    return { ok: true, duplicate: false };
-  }
-
-  const firstName = (data?.firstName || "").toString().trim();
-  const lastName = (data?.lastName || "").toString().trim();
-  const email = (data?.email || "").toString().trim().toLowerCase();
-  const plan = (data?.plan || "").toString().trim().toLowerCase();
-  const teamSize = parseBetaWaitlistTeamSize(data?.teamSize);
-  const businessName = (data?.businessName || "").toString().trim();
-  const businessType = (data?.businessType || "").toString().trim().toLowerCase();
-  const businessTypeCustom = (data?.businessTypeCustom || "")
-    .toString()
-    .trim()
-    .slice(0, 200);
-
-  if (!firstName || !lastName || !email || !plan || !businessName || !businessType) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "First name, last name, email, plan, business name, and business type are required."
-    );
-  }
-
-  if (businessType === "other" && !businessTypeCustom) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Describe your business type."
-    );
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Enter a valid email address."
-    );
-  }
-
-  if (!BETA_WAITLIST_BUSINESS_TYPES.has(businessType)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Select a business type."
-    );
-  }
-
-  validateBetaWaitlistPlanAndTeamSize(plan, teamSize);
-
-  const waitlistBusinessFields = {
-    businessName,
-    businessType,
-    businessTypeCustom: businessType === "other" ? businessTypeCustom : "",
-  };
-
-  const existing = await db
-    .collection("betaWaitlist")
-    .where("email", "==", email)
-    .limit(1)
-    .get();
-
-  if (!existing.empty) {
-    await existing.docs[0].ref.set(
-      {
-        firstName,
-        lastName,
-        plan,
-        teamSize,
-        ...waitlistBusinessFields,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    return { ok: true, duplicate: true };
-  }
-
-  const ref = await db.collection("betaWaitlist").add({
-    firstName,
-    lastName,
-    email,
-    plan,
-    teamSize,
-    ...waitlistBusinessFields,
-    source: "testflight-page",
-    status: "pending",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  return { ok: true, duplicate: false, id: ref.id };
-});
-
 async function fetchTenantProductsById(tenantId) {
   const productSnap = await db
     .collection("tenants")
@@ -8800,11 +8643,6 @@ exports.createProviderSubscriptionCheckout = functions
     const normalized = normalizeSignupWizardPayload(data);
     const priceId = stripePriceIdForPlan(normalized.plan);
 
-    const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
-    if (betaInviteToken) {
-      await assertBetaSignupInviteForCheckout(betaInviteToken, email);
-    }
-
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError(
@@ -8820,9 +8658,6 @@ exports.createProviderSubscriptionCheckout = functions
       email,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (betaInviteToken) {
-      pendingPayload.betaInviteToken = betaInviteToken;
-    }
     await pendingRef.set(pendingPayload, { merge: true });
 
     const origin = (data.marketingOrigin || "")
@@ -9077,11 +8912,6 @@ exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (da
   }
 
   const normalized = normalizeSignupWizardPayload(data);
-  const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
-  if (betaInviteToken) {
-    await assertBetaSignupInviteForCheckout(betaInviteToken, email);
-  }
-
   const pendingRef = db.collection("pendingProviderSignups").doc(uid);
   await pendingRef.set(
     {
@@ -15999,52 +15829,11 @@ function passwordResetMarketingOrigin() {
     || "https://getbookking.com";
 }
 
-function passwordResetPortalOrigin(portal) {
-  const marketing = passwordResetMarketingOrigin();
-  if (portal === "admin") {
-    const explicit = (process.env.ADMIN_ORIGIN || "").toString().trim().replace(/\/+$/, "");
-    if (explicit) return explicit;
-    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
-      return "https://admin.getbookking.com";
-    }
-    return marketing;
-  }
-  if (portal === "beta") {
-    const explicit = (process.env.BETA_ORIGIN || "").toString().trim().replace(/\/+$/, "");
-    if (explicit) return explicit;
-    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
-      return "https://beta.getbookking.com";
-    }
-    return marketing;
-  }
-  return marketing;
-}
-
-function passwordResetPortalPaths(portal) {
-  if (portal === "admin") {
-    return { resetPath: "/admin/reset-password", loginPath: "/admin/login" };
-  }
-  if (portal === "beta") {
-    return { resetPath: "/beta/reset-password", loginPath: "/beta/login" };
-  }
-  return { resetPath: "/reset-password", loginPath: "/login.html" };
-}
-
-function parsePasswordResetOobLink(link) {
-  const parsed = new URL(link);
-  let oobCode = parsed.searchParams.get("oobCode");
-  if (!oobCode && parsed.hash) {
-    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
-    oobCode = hashParams.get("oobCode");
-  }
-  return oobCode;
-}
-
 /**
  * Sends a branded password reset email via Resend, pointing to the custom
  * reset-password handler instead of Firebase's default action page.
  * Public callable — no auth required (user is logged out).
- * Params: { email, portal?: "marketing" | "admin" | "beta" }
+ * Params: { email }
  */
 exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   const email = ((data && data.email) ? data.email : "").toString().trim().toLowerCase();
@@ -16052,10 +15841,8 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
     throw new functions.https.HttpsError("invalid-argument", "A valid email address is required.");
   }
 
-  const portalRaw = ((data && data.portal) ? data.portal : "marketing").toString().trim().toLowerCase();
-  const portal = portalRaw === "admin" || portalRaw === "beta" ? portalRaw : "marketing";
-  const origin = passwordResetPortalOrigin(portal);
-  const paths = passwordResetPortalPaths(portal);
+  const origin = passwordResetMarketingOrigin();
+  const paths = { resetPath: "/reset-password", loginPath: "/login.html" };
   const loginUrl = origin + paths.loginPath;
 
   let resetLink;
@@ -16124,8 +15911,7 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   return { ok: true };
 });
 
-const { registerBetaAdminFunctions, assertPlatformAdmin, assertBetaSignupInviteForCheckout, activateBetaTesterFromSignup } = require("./betaAdmin");
-registerBetaAdminFunctions(exports);
+const { assertPlatformAdmin } = require("./platformAdmin");
 
 const { registerPublicSiteFunctions } = require("./publicSite");
 registerPublicSiteFunctions(exports, { assertPlatformAdmin });

@@ -11,6 +11,24 @@ import SwiftUI
 enum CardCheckoutChannel: Equatable {
     case online
     case tapToPay
+
+    /// Mirror of card and Tap to Pay in `functions/checkoutRates.js`.
+    /// Klarna, Affirm, and Link bank are priced on the web checkout.
+    var rate: CheckoutRate {
+        switch self {
+        case .online:
+            return CheckoutRate(bps: 290, fixedCents: 30, label: "2.9% + 30¢")
+        case .tapToPay:
+            return CheckoutRate(bps: 270, fixedCents: 15, label: "2.7% + 15¢")
+        }
+    }
+}
+
+/// One priced method. Platform fee (1%) is applied on top of `bps` + `fixedCents`.
+struct CheckoutRate: Equatable {
+    let bps: Int
+    let fixedCents: Int
+    let label: String
 }
 
 struct CardCheckoutBreakdown: Equatable {
@@ -34,20 +52,9 @@ struct CardCheckoutBreakdown: Equatable {
 enum CardCheckoutPricing {
     static let platformFeeBps = 100
 
-    private static let stripeOnlineBps = 290
-    private static let stripeOnlineFixedCents = 30
-    private static let stripeCardPresentBps = 270
-    /// In-person 5¢ + Tap to Pay authorization 10¢ (Stripe Terminal US pricing).
-    private static let stripeCardPresentFixedCents = 15
-
     /// User-facing Stripe rate for this channel (e.g. "2.9% + 30¢").
     static func stripeRateLabel(for channel: CardCheckoutChannel) -> String {
-        switch channel {
-        case .online:
-            return "2.9% + 30¢"
-        case .tapToPay:
-            return "2.7% + 15¢"
-        }
+        channel.rate.label
     }
 
     static func breakdown(
@@ -68,21 +75,8 @@ enum CardCheckoutPricing {
             )
         }
 
-        let stripeBps: Int
-        let stripeFixed: Int
-        switch channel {
-        case .online:
-            stripeBps = stripeOnlineBps
-            stripeFixed = stripeOnlineFixedCents
-        case .tapToPay:
-            stripeBps = stripeCardPresentBps
-            stripeFixed = stripeCardPresentFixedCents
-        }
-
-        // Gross-up fee base is service + tax (tax is pass-through but Stripe/platform fees apply to it).
-        let combinedBps = stripeBps + platformFeeBps
         let feeBase = service + tax
-        let total = Int(ceil(Double(feeBase + stripeFixed) / (1.0 - Double(combinedBps) / 10_000.0)))
+        let total = exactTotalCents(feeBase: feeBase, rate: channel.rate)
         let passThrough = max(0, total - service - tax)
         let platformFee = platformFeeCents(totalCents: total)
 
@@ -100,6 +94,25 @@ enum CardCheckoutPricing {
         let total = max(0, totalCents)
         guard total > 0 else { return 0 }
         return max(1, Int(round(Double(total * platformFeeBps) / 10_000.0)))
+    }
+
+    /// Smallest total that leaves `feeBase` after Stripe's nearest-cent fee and the 1% platform fee.
+    /// Mirror of `computeCardCheckoutAmounts` in functions/checkoutRates.js.
+    static func exactTotalCents(feeBase: Int, rate: CheckoutRate) -> Int {
+        let combinedBps = rate.bps + platformFeeBps
+        var total = Int(ceil(Double(feeBase + rate.fixedCents) / (1.0 - Double(combinedBps) / 10_000.0)))
+        while total > feeBase && netAfterFees(total: total - 1, rate: rate) >= feeBase {
+            total -= 1
+        }
+        while netAfterFees(total: total, rate: rate) < feeBase {
+            total += 1
+        }
+        return total
+    }
+
+    private static func netAfterFees(total: Int, rate: CheckoutRate) -> Int {
+        let stripe = Int((Double(total * rate.bps) / 10_000.0).rounded()) + rate.fixedCents
+        return total - stripe - platformFeeCents(totalCents: total)
     }
 
     static func formatUSD(cents: Int) -> String {

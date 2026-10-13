@@ -47,6 +47,12 @@ const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const shippoShop = require("./shippoShop");
+const {
+  platformFeeCents,
+  computeCardCheckoutAmounts,
+  checkoutMethodId,
+  checkoutRateForChannel,
+} = require("./checkoutRates");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const Stripe = require("stripe");
@@ -2534,61 +2540,10 @@ exports.updateStatementDescriptor = functions
   });
 
 /**
- * Platform fee on customer payments (Tap to Pay, deposit links, future checkout).
- * Not applied to provider subscriptions. 100 bps = 1%.
+ * Platform fee on customer payments (Tap to Pay, deposit links, shop, charter).
+ * Rates live in checkoutRates.js. Not applied to provider subscriptions.
  */
-const PLATFORM_FEE_BPS = 100;
-
 const PROCESSING_SERVICE_FEE_LABEL = "Processing & service fees";
-const PROCESSING_SERVICE_FEE_DESCRIPTION =
-  "Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.";
-
-/** Application fee in USD cents (min 1¢). Collected via Connect; grossed up to customer at checkout. */
-function platformFeeCents(amountCents) {
-  const n = Math.round(Number(amountCents));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
-}
-
-/** Estimated Stripe card rates used to gross-up customer checkout (USD). */
-const STRIPE_ONLINE_BPS = 290;
-const STRIPE_ONLINE_FIXED_CENTS = 30;
-const STRIPE_CARD_PRESENT_BPS = 270;
-/** In-person 5¢ + Tap to Pay authorization 10¢ (Stripe Terminal US pricing). */
-const STRIPE_CARD_PRESENT_FIXED_CENTS = 15;
-
-/**
- * Gross-up checkout so provider nets the quoted service/deposit after Stripe + platform fees.
- * @param {number} serviceCents
- * @param {"online"|"card_present"} channel
- */
-function computeCardCheckoutAmounts(serviceCents, channel = "online") {
-  const service = Math.max(0, Math.round(Number(serviceCents)));
-  if (service <= 0) {
-    return {
-      serviceCents: 0,
-      surchargeCents: 0,
-      totalCents: 0,
-      platformFeeCents: 0,
-    };
-  }
-  const isCardPresent = channel === "card_present";
-  const stripeBps = isCardPresent ? STRIPE_CARD_PRESENT_BPS : STRIPE_ONLINE_BPS;
-  const stripeFixed = isCardPresent
-    ? STRIPE_CARD_PRESENT_FIXED_CENTS
-    : STRIPE_ONLINE_FIXED_CENTS;
-  const combinedBps = stripeBps + PLATFORM_FEE_BPS;
-  const totalCents = Math.ceil(
-    (service + stripeFixed) / (1 - combinedBps / 10000)
-  );
-  const surchargeCents = totalCents - service;
-  return {
-    serviceCents: service,
-    surchargeCents,
-    totalCents,
-    platformFeeCents: platformFeeCents(totalCents),
-  };
-}
 
 /**
  * In-person manual / Tap to Pay: tax is pass-through but Stripe + platform fees apply
@@ -2614,6 +2569,84 @@ function computeInPersonCheckoutTotals(serviceCents, taxCents, channel = "online
     totalCents: checkout.totalCents,
     platformFeeCents: checkout.platformFeeCents,
   };
+}
+
+/**
+ * Card, Klarna, Affirm, and Link (the Bank tab) on one PaymentIntent.
+ * Falls back if the connected account cannot offer that full list yet.
+ */
+async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payload) {
+  const methodLists = [
+    ["card", "klarna", "affirm", "link"],
+    ["card", "klarna", "affirm"],
+  ];
+  let lastErr = null;
+  for (let i = 0; i < methodLists.length; i++) {
+    try {
+      return await stripe.paymentIntents.create(
+        {
+          ...payload,
+          payment_method_types: methodLists[i],
+        },
+        { stripeAccount: stripeAccountId }
+      );
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  console.warn(
+    "createCustomerCheckoutPaymentIntent method list failed; using automatic methods",
+    lastErr && lastErr.message ? lastErr.message : lastErr
+  );
+  return stripe.paymentIntents.create(
+    {
+      ...payload,
+      automatic_payment_methods: { enabled: true },
+    },
+    { stripeAccount: stripeAccountId }
+  );
+}
+
+function pricedCustomerCheckoutFromMetadata(meta, method) {
+  const feeBase = parseInt(meta.feeBaseCents, 10);
+  const service = parseInt(meta.serviceAmountCents, 10);
+  const base = Number.isFinite(feeBase) && feeBase > 0 ? feeBase : service;
+  if (!Number.isFinite(base) || base <= 0) return null;
+  const taxOutside = (meta.taxOutsideFeeBase || "") === "1";
+  const tax = taxOutside ? Math.max(0, parseInt(meta.taxCents, 10) || 0) : 0;
+  const priced = computeCardCheckoutAmounts(base, method);
+  const totalCents = priced.totalCents + tax;
+  const splitApplied = (meta.splitApplied || "") === "true";
+  const studioShare = splitApplied ? Math.max(0, parseInt(meta.studioShareCents, 10) || 0) : 0;
+  const platform = platformFeeCents(totalCents);
+  const rate = checkoutRateForChannel(method);
+  return {
+    method: checkoutMethodId(method),
+    rateLabel: rate.label,
+    serviceCents: Number.isFinite(service) ? service : base,
+    surchargeCents: priced.surchargeCents,
+    taxCents: tax,
+    totalCents,
+    platformFeeCents: platform,
+    applicationFeeCents: platform + studioShare,
+  };
+}
+
+async function stripeAccountIdForCheckout(tenantId, tenantData, paymentIntentId) {
+  const docId = (paymentIntentId || "").toString().trim();
+  if (tenantId && docId) {
+    const snap = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("paymentCheckouts")
+      .doc(docId)
+      .get();
+    if (snap.exists) {
+      const id = ((snap.data() || {}).stripeAccountId || "").toString().trim();
+      if (id) return id;
+    }
+  }
+  return ((tenantData && tenantData.stripeAccountId) || "").toString().trim();
 }
 
 function parseServiceAmountCents(data) {
@@ -3638,35 +3671,15 @@ exports.createDepositLink = functions
       grossCents: checkout.totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
-    const lineItems = [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: { name: productName, ...(productDescription ? { description: productDescription } : {}) },
-          unit_amount: checkout.serviceCents,
-        },
-        quantity: 1,
-      },
-    ];
-    if (checkout.surchargeCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: PROCESSING_SERVICE_FEE_LABEL,
-            description: PROCESSING_SERVICE_FEE_DESCRIPTION,
-          },
-          unit_amount: checkout.surchargeCents,
-        },
-        quantity: 1,
-      });
-    }
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const paymentMeta = {
       tenantId: tenantId || "",
       paymentKind,
+      productName,
       serviceAmountCents: String(checkout.serviceCents),
+      feeBaseCents: String(checkout.serviceCents),
       surchargeCents: String(checkout.surchargeCents),
+      checkoutMethod: "card",
       bookingRequestId,
       initiatedByUid: uid,
       attributedMemberUid,
@@ -3675,24 +3688,36 @@ exports.createDepositLink = functions
       checkoutChannel: "deposit_link",
       ...splitFee.splitMeta,
     };
-    const linkPayload = {
-      line_items: lineItems,
+    const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+      amount: checkout.totalCents,
+      currency: "usd",
       application_fee_amount: feeCents,
       metadata: paymentMeta,
-      // Payment Link top-level metadata does NOT copy to the PaymentIntent.
-      // Webhook settlement reads PI metadata — must set payment_intent_data.
-      payment_intent_data: {
-        metadata: paymentMeta,
-      },
-    };
-    if (paymentKind === "deposit") {
-      linkPayload.restrictions = { completed_sessions: { limit: 1 } };
-    }
-    const link = await stripe.paymentLinks.create(linkPayload, {
-      stripeAccount: stripeAccountId,
+      description: productDescription ? `${productName} — ${productDescription}` : productName,
     });
+    if (tenantId) {
+      await db.collection("tenants").doc(tenantId).collection("paymentCheckouts").doc(pi.id).set({
+        stripeAccountId,
+        paymentIntentId: pi.id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    const slug = (tenantData.slug || "").toString().trim().toLowerCase();
+    if (!slug) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This business has no public link yet."
+      );
+    }
+    const customDomain = (tenantData.customDomain || "").toString().trim().toLowerCase();
+    const domainStatus = (tenantData.customDomainStatus || "").toString().trim().toLowerCase();
+    const host =
+      customDomain && (domainStatus === "active" || domainStatus === "connected")
+        ? customDomain
+        : `${slug}.getbookking.com`;
     return {
-      url: link.url,
+      url: `https://${host}/pay?pi=${encodeURIComponent(pi.id)}`,
+      paymentIntentId: pi.id,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
       serviceCents: checkout.serviceCents,
@@ -3700,6 +3725,110 @@ exports.createDepositLink = functions
       totalCents: checkout.totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
+    };
+  });
+
+/**
+ * In-app manual checkout: set the PaymentIntent amount to the method the customer
+ * actually confirmed (card vs Link bank) so the business nets the service amount.
+ * Params: { paymentIntentId, paymentMethodId }
+ */
+exports.repriceInAppCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const paymentIntentId = (data?.paymentIntentId || "").toString().trim();
+    const paymentMethodId = (data?.paymentMethodId || "").toString().trim();
+    if (!paymentIntentId.startsWith("pi_") || !paymentMethodId.startsWith("pm_")) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "paymentIntentId and paymentMethodId are required"
+      );
+    }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const payCtx = await assertCanInitiateBookingPayment(
+      uid,
+      await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
+    );
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+      stripeAccount: stripeAccountId,
+    });
+    const meta = pi.metadata || {};
+    if ((meta.checkoutChannel || "") !== "manual_in_app") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This payment cannot be repriced here."
+      );
+    }
+    if ((meta.tenantId || "") !== (tenantId || "") && (meta.initiatedByUid || "") !== uid) {
+      throw new functions.https.HttpsError("permission-denied", "This payment is not for this account.");
+    }
+    if ((meta.chargeStripeAccountId || "") !== stripeAccountId) {
+      throw new functions.https.HttpsError("permission-denied", "This payment is not for this account.");
+    }
+    if (pi.status === "succeeded" || pi.status === "canceled") {
+      throw new functions.https.HttpsError("failed-precondition", "This payment can no longer be updated.");
+    }
+    const classified = await checkoutMethodFromPaymentMethod(
+      stripe,
+      stripeAccountId,
+      paymentMethodId
+    );
+    if (!classified) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Could not price this payment method."
+      );
+    }
+    let pricingMeta = meta;
+    if (!(parseInt(meta.feeBaseCents, 10) > 0)) {
+      const service = parseInt(meta.serviceAmountCents, 10) || 0;
+      const tax = parseInt(meta.taxCents, 10) || 0;
+      pricingMeta = { ...meta, feeBaseCents: String(service + tax) };
+    }
+    const priced = pricedCustomerCheckoutFromMetadata(pricingMeta, classified);
+    if (!priced) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This payment is missing its service amount."
+      );
+    }
+    await stripe.paymentIntents.update(
+      paymentIntentId,
+      {
+        amount: priced.totalCents,
+        application_fee_amount: priced.applicationFeeCents,
+        metadata: {
+          ...meta,
+          feeBaseCents: pricingMeta.feeBaseCents,
+          surchargeCents: String(priced.surchargeCents),
+          checkoutMethod: priced.method,
+          platformFeeCents: String(priced.platformFeeCents),
+        },
+      },
+      { stripeAccount: stripeAccountId }
+    );
+    return {
+      method: priced.method,
+      rateLabel: priced.rateLabel,
+      serviceCents: priced.serviceCents,
+      taxCents: Math.max(0, parseInt(meta.taxCents, 10) || 0),
+      surchargeCents: priced.surchargeCents,
+      totalCents: priced.totalCents,
+      platformFeeCents: priced.platformFeeCents,
     };
   });
 
@@ -3780,6 +3909,7 @@ exports.createPaymentIntentForManualCheckout = functions
           tenantId: tenantId || "",
           paymentKind,
           serviceAmountCents: String(priced.serviceCents),
+          feeBaseCents: String(priced.serviceCents + priced.taxCents),
           taxCents: String(priced.taxCents),
           surchargeCents: String(priced.surchargeCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
@@ -5915,18 +6045,12 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     );
   }
 
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data();
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data;
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -6339,16 +6463,12 @@ exports.listPublicCharterOccupancy = functions.https.onCall(async (data) => {
   if (!tenantSlug) {
     throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantData = tenantDoc.data() || {};
+  const tenantDocId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
   if (plan !== "charter") return { slots: [], holdMinutes: charterOccupancy.CHARTER_PAYMENT_HOLD_MINUTES };
 
@@ -6361,7 +6481,7 @@ exports.listPublicCharterOccupancy = functions.https.onCall(async (data) => {
   );
   const queryFromIso = charterOccupancy.addDaysToIso(fromIso, -1) || fromIso;
 
-  const col = db.collection("tenants").doc(tenantDoc.id).collection("bookingRequests");
+  const col = db.collection("tenants").doc(tenantDocId).collection("bookingRequests");
   const nowMs = now.getTime();
   const slots = [];
   let lastDoc = null;
@@ -6795,13 +6915,12 @@ async function resolvePublicShopTenant(tenantSlug) {
   if (!slug) {
     throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(slug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -7117,19 +7236,12 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
     );
   }
 
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -7187,6 +7299,158 @@ const publicWebCallableOptions = {
   cors: true,
   region: "us-central1",
 };
+
+/**
+ * Public checkout page for a deposit or manual payment link.
+ * Params: { tenantSlug, paymentIntentId }
+ */
+exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  const paymentIntentId = (data.paymentIntentId || "").toString().trim();
+  if (!tenantSlug || !paymentIntentId.startsWith("pi_")) {
+    throw new HttpsError("invalid-argument", "tenantSlug and paymentIntentId are required");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) throw new HttpsError("not-found", "Business not found");
+  const tenantData = resolved.data || {};
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured");
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  const stripeAccountId = await stripeAccountIdForCheckout(resolved.id, tenantData, paymentIntentId);
+  if (!stripeAccountId) {
+    throw new HttpsError("failed-precondition", "This business is not accepting payments yet.");
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  const meta = pi.metadata || {};
+  if ((meta.tenantId || "") !== resolved.id) {
+    throw new HttpsError("permission-denied", "This payment link is not for this business.");
+  }
+  const priced = pricedCustomerCheckoutFromMetadata(meta, meta.checkoutMethod || "card");
+  const businessName = (tenantData.businessName || tenantData.displayName || "Payment").toString();
+  const pk = stripePublishableKeyParam.value().trim();
+  const paid = pi.status === "succeeded";
+  return {
+    paid,
+    status: pi.status,
+    businessName,
+    productName: (meta.productName || "Payment").toString(),
+    clientSecret: paid ? "" : pi.client_secret,
+    publishableKey: pk,
+    stripeAccountId,
+    paymentIntentId: pi.id,
+    serviceCents: priced ? priced.serviceCents : 0,
+    surchargeCents: priced ? priced.surchargeCents : 0,
+    totalCents: paid ? pi.amount : priced ? priced.totalCents : pi.amount,
+    rateLabel: priced ? priced.rateLabel : "2.9% + 30¢",
+    method: priced ? priced.method : "card",
+  };
+});
+
+/**
+ * Link Instant Bank Payments show up as a card whose brand is `link`.
+ * A saved Visa or Mastercard inside Link stays a normal card.
+ * @returns {"card"|"klarna"|"affirm"|"instant_bank"|""}
+ */
+async function checkoutMethodFromPaymentMethod(stripe, stripeAccountId, paymentMethodId) {
+  const id = (paymentMethodId || "").toString().trim();
+  if (!id.startsWith("pm_")) return "";
+  let pm = null;
+  try {
+    pm = await stripe.paymentMethods.retrieve(id, { stripeAccount: stripeAccountId });
+  } catch (err) {
+    try {
+      pm = await stripe.paymentMethods.retrieve(id);
+    } catch (err2) {
+      return "";
+    }
+  }
+  const type = (pm.type || "").toString();
+  if (type === "klarna" || type === "affirm") return type;
+  if (type === "link") return "instant_bank";
+  const brand = (pm.card && pm.card.brand ? pm.card.brand : "").toString().toLowerCase();
+  if (brand === "link") return "instant_bank";
+  if (type === "card") return "card";
+  return "";
+}
+
+/**
+ * Reprice an open customer PaymentIntent when they pick card, Klarna, Affirm, or a Link bank.
+ * Params: { tenantSlug, paymentIntentId, method, paymentMethodId? }
+ */
+exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  const paymentIntentId = (data.paymentIntentId || "").toString().trim();
+  const requested = checkoutMethodId(data.method);
+  if (!tenantSlug || !paymentIntentId.startsWith("pi_")) {
+    throw new HttpsError("invalid-argument", "tenantSlug and paymentIntentId are required");
+  }
+  if (requested === "card_present") {
+    throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) throw new HttpsError("not-found", "Business not found");
+  const tenantData = resolved.data || {};
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured");
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  const stripeAccountId = await stripeAccountIdForCheckout(resolved.id, tenantData, paymentIntentId);
+  if (!stripeAccountId) {
+    throw new HttpsError("failed-precondition", "This business is not accepting payments yet.");
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  const meta = pi.metadata || {};
+  if ((meta.tenantId || "") !== resolved.id) {
+    throw new HttpsError("permission-denied", "This payment is not for this business.");
+  }
+  if (pi.status === "succeeded" || pi.status === "canceled") {
+    throw new HttpsError("failed-precondition", "This payment can no longer be updated.");
+  }
+  const classified = await checkoutMethodFromPaymentMethod(
+    stripe,
+    stripeAccountId,
+    data.paymentMethodId
+  );
+  const method = classified || requested;
+  const priced = pricedCustomerCheckoutFromMetadata(meta, method);
+  if (!priced) {
+    throw new HttpsError("failed-precondition", "This payment is missing its service amount.");
+  }
+  const nextMeta = {
+    ...meta,
+    surchargeCents: String(priced.surchargeCents),
+    checkoutMethod: priced.method,
+    platformFeeCents: String(priced.platformFeeCents),
+  };
+  await stripe.paymentIntents.update(
+    paymentIntentId,
+    {
+      amount: priced.totalCents,
+      application_fee_amount: priced.applicationFeeCents,
+      metadata: nextMeta,
+    },
+    { stripeAccount: stripeAccountId }
+  );
+  const shopOrderId = (meta.shopOrderId || "").toString().trim();
+  if (shopOrderId && meta.paymentKind === "shop") {
+    await db.collection("tenants").doc(resolved.id).collection("shopOrders").doc(shopOrderId).set(
+      {
+        surchargeCents: priced.surchargeCents,
+        totalCents: priced.totalCents,
+        checkoutMethod: priced.method,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+  return priced;
+});
+
 
 /** Shop checkout + shipping (Stripe Connect + optional Shippo). */
 const publicShopCallableOptions = {
@@ -7400,30 +7664,29 @@ exports.createShopCheckoutPayment = onCall(publicShopCallableOptions, async (req
       `guest+${orderId}@checkout.pending`;
     const isPlaceholderCustomer = customerEmail.endsWith("@checkout.pending");
 
-    const pi = await stripe.paymentIntents.create(
-      {
-        amount: piAmount,
-        currency: "usd",
-        automatic_payment_methods: { enabled: true },
-        application_fee_amount: feeCents,
-        receipt_email: customerEmail,
-        metadata: {
-          tenantId,
-          paymentKind: "shop",
-          shopOrderId: orderId,
-          serviceAmountCents: String(subtotalCents),
-          shippingCents: String(shippingCents),
-          taxCents: String(taxCents),
-          surchargeCents: String(checkout.surchargeCents),
-          fulfillmentMethod,
-          ...(shippoRateId ? { shippoRateId } : {}),
-          ...(taxCalculationId ? { taxCalculationId } : {}),
-          chargeStripeAccountId: stripeAccountId,
-          chargeStripeScope: "tenant",
-        },
+    const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+      amount: piAmount,
+      currency: "usd",
+      application_fee_amount: feeCents,
+      receipt_email: customerEmail,
+      metadata: {
+        tenantId,
+        paymentKind: "shop",
+        shopOrderId: orderId,
+        serviceAmountCents: String(subtotalCents),
+        feeBaseCents: String(merchandiseCents),
+        taxOutsideFeeBase: "1",
+        shippingCents: String(shippingCents),
+        taxCents: String(taxCents),
+        surchargeCents: String(checkout.surchargeCents),
+        checkoutMethod: "card",
+        fulfillmentMethod,
+        ...(shippoRateId ? { shippoRateId } : {}),
+        ...(taxCalculationId ? { taxCalculationId } : {}),
+        chargeStripeAccountId: stripeAccountId,
+        chargeStripeScope: "tenant",
       },
-      { stripeAccount: stripeAccountId }
-    );
+    });
 
     const orderData = {
       status: "pending_payment",
@@ -7579,13 +7842,12 @@ async function resolvePublicCharterTenant(tenantSlug) {
   if (!slug) {
     throw new HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(slug);
+  if (!resolvedTenant) {
     throw new HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new HttpsError("failed-precondition", "This business is not accepting bookings");
   }
@@ -7857,29 +8119,27 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
 
     let pi;
     try {
-      pi = await stripe.paymentIntents.create(
-        {
-          amount: piAmount,
-          currency: "usd",
-          automatic_payment_methods: { enabled: true },
-          application_fee_amount: feeCents,
-          receipt_email: customerEmail,
-          metadata: {
-            tenantId,
-            paymentKind,
-            bookingRequestId: requestId,
-            charterPayMode: payMode,
-            serviceAmountCents: String(chargeCents),
-            surchargeCents: String(checkout.surchargeCents),
-            chargeStripeAccountId: stripeAccountId,
-            chargeStripeScope: "tenant",
-            checkoutChannel: "charter_web_checkout",
-            initiatedByUid: charterOwnerUid,
-            attributedMemberUid: charterOwnerUid,
-          },
+      pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+        amount: piAmount,
+        currency: "usd",
+        application_fee_amount: feeCents,
+        receipt_email: customerEmail,
+        metadata: {
+          tenantId,
+          paymentKind,
+          bookingRequestId: requestId,
+          charterPayMode: payMode,
+          serviceAmountCents: String(chargeCents),
+          feeBaseCents: String(chargeCents),
+          surchargeCents: String(checkout.surchargeCents),
+          checkoutMethod: "card",
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: "tenant",
+          checkoutChannel: "charter_web_checkout",
+          initiatedByUid: charterOwnerUid,
+          attributedMemberUid: charterOwnerUid,
         },
-        { stripeAccount: stripeAccountId }
-      );
+      });
     } catch (piErr) {
       await bookingRef.set(
         {
@@ -10281,9 +10541,21 @@ function serializeTeamRosterMember(doc, tenant) {
 async function resolveTenantBySlug(tenantSlug) {
   const slug = (tenantSlug || "").toString().trim().toLowerCase();
   if (!slug) return null;
-  const snap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, data: snap.docs[0].data() };
+  // The public site is the business guests are looking at. A slug query with
+  // limit(1) can hit an older duplicate and save the booking on the wrong account.
+  const publicSnap = await db.collection("publicSites").doc(slug).get();
+  const publishedTenantId = publicSnap.exists
+    ? (publicSnap.data().tenantId || "").toString().trim()
+    : "";
+  if (publishedTenantId) {
+    const tenantSnap = await db.collection("tenants").doc(publishedTenantId).get();
+    if (tenantSnap.exists) {
+      return { id: tenantSnap.id, data: tenantSnap.data() || {} };
+    }
+  }
+  const snap = await db.collection("tenants").where("slug", "==", slug).limit(2).get();
+  if (snap.size !== 1) return null;
+  return { id: snap.docs[0].id, data: snap.docs[0].data() || {} };
 }
 
 function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {

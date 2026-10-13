@@ -140,6 +140,27 @@ final class BookkingSubscriptionStore: ObservableObject {
         return synced
     }
 
+    /// The active plan this login has already bought, if any. Used to finish an interrupted
+    /// sign-up without opening the payment sheet again.
+    func existingSubscriptionRecord() async -> BookkingPurchaseRecord? {
+        guard let accountToken = try? await prepareAccountToken() else { return nil }
+        for await entitlement in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = entitlement,
+                  transaction.revocationDate == nil,
+                  transaction.appAccountToken == accountToken,
+                  BookkingProductID.plan(for: transaction.productID) != nil else { continue }
+            return BookkingPurchaseRecord(
+                productID: transaction.productID,
+                originalTransactionID: transaction.originalID,
+                isIntroductory: transaction.offerType == Transaction.OfferType.introductory,
+                expiresAt: transaction.expirationDate,
+                isXcodeEnvironment: transaction.environment == .xcode,
+                signedTransaction: entitlement.jwsRepresentation
+            )
+        }
+        return nil
+    }
+
     /// Restore purchases: asks the App Store for this Apple ID's purchases, then records the plan.
     /// Returns false when the Apple ID has no plan that belongs to this account.
     func restorePurchases() async throws -> Bool {

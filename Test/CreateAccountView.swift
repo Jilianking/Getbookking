@@ -15,6 +15,9 @@ struct CreateAccountView: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
     @StateObject private var store = BookkingSubscriptionStore.shared
 
+    /// Finishing a sign-up for a login that already exists: no email or password to collect.
+    var isResuming = false
+
     @State private var step = 0
     @State private var isCharterPath = false
     @State private var industry = ""
@@ -69,11 +72,11 @@ struct CreateAccountView: View {
                 .padding(24)
             }
             .appScreenBackground()
-            .navigationTitle("Create an account")
+            .navigationTitle(isResuming ? "Finish setting up" : "Create an account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { closeSignup() }
+                    Button(isResuming ? "Sign out" : "Close") { closeSignup() }
                         .disabled(isWorking)
                 }
             }
@@ -281,11 +284,13 @@ struct CreateAccountView: View {
         VStack(alignment: .leading, spacing: 16) {
             field("First name", text: $firstName, placeholder: "Brandon", contentType: .givenName)
             field("Last name", text: $lastName, placeholder: "Smith", contentType: .familyName)
+            if !isResuming {
             VStack(alignment: .leading, spacing: 6) {
                 field("Email", text: $email, placeholder: "you@example.com", keyboard: .emailAddress, contentType: .emailAddress)
                 Text("Used to sign in to the app and web, and for receipts.")
                     .font(.caption)
                     .foregroundStyle(AppDesign.brandMuted)
+            }
             }
             field(
                 "Phone number",
@@ -297,6 +302,7 @@ struct CreateAccountView: View {
                 keyboard: .phonePad,
                 contentType: .telephoneNumber
             )
+            if !isResuming {
             passwordField("Password", placeholder: "8+ characters", text: $password, revealed: $showPassword)
             VStack(alignment: .leading, spacing: 6) {
                 passwordField("Confirm password", placeholder: "Re-enter password", text: $passwordConfirm, revealed: $showPasswordConfirm)
@@ -314,6 +320,7 @@ struct CreateAccountView: View {
                 Text("Symbols (!@#…) are optional — add one if you like.")
                     .font(.caption)
                     .foregroundStyle(AppDesign.brandMuted)
+            }
             }
             navRow(back: { step = 1 }, canContinue: youStepValid) {
                 firstName = USStateServiceAreaFormatting.titleCaseWords(firstName)
@@ -473,6 +480,12 @@ struct CreateAccountView: View {
                 && trimmedEmail.index(after: at) != trimmedEmail.endIndex
         }()
         let digits = phone.filter(\.isNumber).count
+        if isResuming {
+            // The login already exists, so there is no email or password to check.
+            return !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && digits >= 10
+        }
         return !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && emailOk
@@ -568,7 +581,16 @@ struct CreateAccountView: View {
             if Auth.auth().currentUser == nil {
                 _ = try await Auth.auth().createUser(withEmail: trimmedEmail, password: password)
             }
-            let record = try await store.purchaseSubscription(plan: plan)
+            // A plan this login already bought (sign-up interrupted after paying) is used as is,
+            // so nobody is shown the payment sheet twice.
+            let existing = await store.existingSubscriptionRecord()
+            let record: BookkingPurchaseRecord
+            if let existing {
+                record = existing
+            } else {
+                record = try await store.purchaseSubscription(plan: plan)
+            }
+            let plan = BookkingProductID.plan(for: record.productID) ?? plan
             let payload: [String: Any] = [
                 "plan": plan.rawValue,
                 "teamSize": plan == .shop ? "shop" : (plan == .studio ? "studio" : "solo"),
@@ -597,6 +619,7 @@ struct CreateAccountView: View {
             }
             await authViewModel.refreshTeamAccess()
             authViewModel.isCreatingAccount = false
+            authViewModel.needsToFinishSignup = false
             dismiss()
         } catch let error as BookkingPurchaseError {
             if case .cancelled = error {

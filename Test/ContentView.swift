@@ -19,7 +19,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authViewModel.isAuthenticated && !authViewModel.isCreatingAccount {
+            if authViewModel.isAuthenticated && authViewModel.needsToFinishSignup {
+                CreateAccountView(isResuming: true)
+                    .environmentObject(authViewModel)
+            } else if authViewModel.isAuthenticated && !authViewModel.isCreatingAccount {
                 AdminTabView()
                     .environmentObject(authViewModel)
             } else {

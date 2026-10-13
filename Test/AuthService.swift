@@ -100,6 +100,10 @@ class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
     /// Signup stays on screen after the Firebase user exists, until Apple’s sheet and the business are done.
     @Published var isCreatingAccount = false
+    /// Signed in to a login whose sign-up stopped before the business was created (the app was
+    /// closed at the payment sheet, or the connection dropped). The app finishes sign-up instead
+    /// of opening onto screens with nothing to load.
+    @Published var needsToFinishSignup = false
     @Published private(set) var currentUserUid: String?
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
@@ -142,7 +146,11 @@ class AuthViewModel: ObservableObject {
                        await BookkingSubscriptionStore.shared.syncActiveEntitlements() {
                         await self.refreshTeamAccess()
                     }
+                    if !self.teamAccess.isOwner, !self.isCreatingAccount {
+                        self.needsToFinishSignup = await self.loginHasNoBusiness()
+                    }
                 } else if !self.isDemoMode {
+                    self.needsToFinishSignup = false
                     if self.currentUserUid != nil {
                         NotificationCenter.default.post(name: .authUserDidChange, object: nil)
                     }
@@ -304,6 +312,20 @@ class AuthViewModel: ObservableObject {
     /// Legacy entry point — prefer `demoLogin(persona:)`.
     func demoLogin() {
         demoLogin(persona: .salon)
+    }
+
+    /// True only when the server says this login has no business yet. A network or other
+    /// failure is never treated as an unfinished sign-up.
+    private func loginHasNoBusiness() async -> Bool {
+        let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+        do {
+            _ = try await functions.httpsCallable("getMyTeamAccess").call([:])
+            return false
+        } catch {
+            let message = FirebaseFunctionsErrorHelper.message(from: error)
+            return message.localizedCaseInsensitiveContains("No tenant linked")
+                || message.localizedCaseInsensitiveContains("User profile not found")
+        }
     }
 
     func refreshTeamAccess() async {

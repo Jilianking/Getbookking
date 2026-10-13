@@ -482,6 +482,121 @@ async function readSmsExtraQuantityOnStripe(stripe, subId, extraPriceIds) {
   return smsExtraQuantityFromSubscription(sub, extraPriceIds);
 }
 
+/** Metadata tag on the Stripe subscription that holds only an App Store subscriber's extra lines. */
+const SMS_ADD_ON_PURPOSE = "sms_extra_lines";
+
+/**
+ * A plan bought in the iOS app is billed by Apple and has no Stripe subscription to add a
+ * monthly texting line to. Those businesses pay for extra lines on a separate Stripe customer
+ * (tenant.smsAddOnStripeCustomerId) whose subscription contains nothing but the lines.
+ */
+function usesSmsAddOnBilling(tenant) {
+  return ((tenant && tenant.billingSource) || "").toString() === "apple";
+}
+
+/** Stripe customer and subscription that pay for this business's extra texting lines. */
+function smsLineBilling(tenant) {
+  const text = (value) => (value || "").toString().trim();
+  if (usesSmsAddOnBilling(tenant)) {
+    return {
+      addOn: true,
+      customerId: text(tenant.smsAddOnStripeCustomerId),
+      subscriptionId: text(tenant.smsAddOnStripeSubscriptionId),
+    };
+  }
+  return {
+    addOn: false,
+    customerId: text(tenant && tenant.stripeCustomerId),
+    subscriptionId: text(tenant && tenant.stripeSubscriptionId),
+  };
+}
+
+const SMS_ADD_ON_LIVE_STATUSES = ["active", "trialing", "past_due"];
+
+/**
+ * Sets how many extra lines an App Store subscriber's add-on subscription bills for.
+ * The first line creates the subscription with its first monthly charge a month out — the
+ * $12 for today is the separate one-time invoice — and removing the last line cancels it.
+ * Reads the ids fresh so back-to-back calls in one purchase never work from a stale copy.
+ */
+async function applySmsAddOnLineQuantity(stripe, tenantId, nextQty) {
+  const q = Math.max(0, Math.floor(Number(nextQty) || 0));
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const fresh = (await tenantRef.get()).data() || {};
+  const billing = smsLineBilling({ ...fresh, billingSource: "apple" });
+  let sub = null;
+  if (billing.subscriptionId) {
+    try {
+      sub = await stripe.subscriptions.retrieve(billing.subscriptionId, {
+        expand: ["items.data.price"],
+      });
+    } catch (e) {
+      console.warn("applySmsAddOnLineQuantity retrieve", billing.subscriptionId, e.message || e);
+    }
+  }
+  const live = !!sub && SMS_ADD_ON_LIVE_STATUSES.includes(sub.status);
+
+  if (q <= 0) {
+    if (live) await stripe.subscriptions.cancel(sub.id);
+    await tenantRef.set(
+      {
+        smsAddOnStripeSubscriptionId: admin.firestore.FieldValue.delete(),
+        smsExtraLineQuantity: 0,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return 0;
+  }
+
+  if (!billing.customerId) {
+    throw new Error("Add a card for extra texting numbers in billing first.");
+  }
+  const priceId = stripeSmsExtraPriceId();
+  if (live) {
+    const item = (sub.items.data || []).find((row) => row.price && row.price.id === priceId);
+    if (item) {
+      if (item.quantity !== q) {
+        await stripe.subscriptionItems.update(item.id, { quantity: q, proration_behavior: "none" });
+      }
+    } else {
+      await stripe.subscriptionItems.create({
+        subscription: sub.id,
+        price: priceId,
+        quantity: q,
+        proration_behavior: "none",
+      });
+    }
+  } else {
+    const firstMonthly = new Date();
+    firstMonthly.setMonth(firstMonthly.getMonth() + 1);
+    sub = await stripe.subscriptions.create({
+      customer: billing.customerId,
+      items: [{ price: priceId, quantity: q }],
+      billing_cycle_anchor: Math.floor(firstMonthly.getTime() / 1000),
+      proration_behavior: "none",
+      metadata: { tenantId, purpose: SMS_ADD_ON_PURPOSE },
+    });
+    if (!SMS_ADD_ON_LIVE_STATUSES.includes(sub.status)) {
+      try {
+        await stripe.subscriptions.cancel(sub.id);
+      } catch (_) {
+        /* best effort */
+      }
+      throw new Error("Stripe could not start billing for the extra texting number.");
+    }
+  }
+  await tenantRef.set(
+    {
+      smsAddOnStripeSubscriptionId: sub.id,
+      smsExtraLineQuantity: q,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return q;
+}
+
 async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts) {
   const q = Math.max(0, Math.floor(Number(nextQty) || 0));
   const prorationBehavior =
@@ -496,6 +611,10 @@ async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts
     }
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
+  }
+
+  if (usesSmsAddOnBilling(tenant)) {
+    return applySmsAddOnLineQuantity(stripe, tenantId, q);
   }
 
   let extraPriceId;
@@ -659,15 +778,18 @@ async function resolveChargeablePaymentMethodId(
  * paid/$0 invoices when pending items are excluded), then pays it.
  */
 async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
-  const customerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
+  const lineBilling = smsLineBilling(tenant);
+  const customerId = lineBilling.customerId;
   if (!customerId) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Billing is not set up. Complete subscription checkout first."
+      lineBilling.addOn
+        ? "Add a card for extra texting numbers in billing first."
+        : "Billing is not set up. Complete subscription checkout first."
     );
   }
   const desc = (description || "Get Bookking extra texting number ($12)").toString();
-  const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
+  const subId = lineBilling.subscriptionId;
 
   let paymentMethodId = "";
   try {
@@ -802,6 +924,24 @@ async function reconcileSmsExtraPaidToUsage(
       return { tenant, paid: paidFs, changed: false };
     }
     await syncSmsExtraLineQuantityToTenant(tenantId, target);
+    return {
+      tenant: { ...tenant, smsExtraLineQuantity: target },
+      paid: target,
+      changed: true,
+    };
+  }
+
+  // App Store subscribers: the add-on subscription is the only thing to bring in line.
+  if (usesSmsAddOnBilling(tenant)) {
+    if (paidFs === target) {
+      return { tenant, paid: paidFs, changed: false };
+    }
+    if (target > 0 && !smsLineBilling(tenant).customerId) {
+      console.warn("reconcileSmsExtraPaidToUsage: add-on lines without a card", tenantId, target);
+      await syncSmsExtraLineQuantityToTenant(tenantId, target);
+    } else {
+      await applySmsAddOnLineQuantity(stripe, tenantId, target);
+    }
     return {
       tenant: { ...tenant, smsExtraLineQuantity: target },
       paid: target,
@@ -1638,7 +1778,73 @@ async function deactivateTenantPaymentLinks(stripe, tenantId, tenantData) {
 }
 
 /** Find tenant by Stripe customer id and sync subscription + plan to Firestore. */
+/**
+ * Keeps an App Store subscriber's extra texting lines in step with their add-on subscription.
+ * While it is live the paid line count mirrors Stripe. Once it ends (cancelled, or unpaid
+ * after Stripe's retries) the paid lines are suspended; the daily job releases them 30 days on.
+ * Events for an older, already-replaced subscription are ignored.
+ */
+async function syncSmsAddOnSubscription(sub) {
+  const tenantId = ((sub.metadata && sub.metadata.tenantId) || "").toString().trim();
+  if (!tenantId) return;
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const tenantSnap = await tenantRef.get();
+  if (!tenantSnap.exists) return;
+  const tenant = tenantSnap.data() || {};
+  const storedSubId = (tenant.smsAddOnStripeSubscriptionId || "").toString().trim();
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
+  if ((tenant.smsAddOnStripeCustomerId || "").toString().trim() !== (customerId || "")) return;
+  if (storedSubId && storedSubId !== sub.id) return;
+
+  if (SMS_ADD_ON_LIVE_STATUSES.includes(sub.status)) {
+    if (!storedSubId) return;
+    const quantity = ((sub.items && sub.items.data) || []).reduce(
+      (sum, item) => sum + Math.max(0, Number(item.quantity) || 0),
+      0
+    );
+    await syncSmsExtraLineQuantityToTenant(tenantId, quantity);
+    return;
+  }
+  if (!storedSubId) return;
+  await tenantRef.set(
+    {
+      smsAddOnStripeSubscriptionId: admin.firestore.FieldValue.delete(),
+      smsExtraLineQuantity: 0,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const members = await db.collection("users").where("tenantId", "==", tenantId).get();
+  for (const doc of members.docs) {
+    const member = doc.data() || {};
+    if (member.smsLineIsPaidExtra !== true || member.smsStatus !== "active") continue;
+    await doc.ref.set(
+      {
+        smsStatus: "suspended",
+        smsSuspendedAt: admin.firestore.FieldValue.serverTimestamp(),
+        smsSuspendReason: "addon_ended",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+}
+
+/** Stops the monthly charge for extra lines, e.g. when the App Store plan itself has ended. */
+async function cancelSmsAddOnSubscription(stripe, tenantId) {
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  const subId = ((tenantSnap.data() || {}).smsAddOnStripeSubscriptionId || "").toString().trim();
+  if (!subId || !stripe) return false;
+  const cancelled = await stripe.subscriptions.cancel(subId);
+  await syncSmsAddOnSubscription(cancelled);
+  return true;
+}
+
 async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status, sub) {
+  if (sub && sub.metadata && sub.metadata.purpose === SMS_ADD_ON_PURPOSE) {
+    await syncSmsAddOnSubscription(sub);
+    return;
+  }
   const cid = (stripeCustomerId || "").toString().trim();
   if (!cid) return;
   const snap = await db
@@ -8683,6 +8889,17 @@ async function mirrorAppleSubscriptionStatus(tenantId, applied) {
     { subscriptionPlan: applied.subscriptionPlan },
     { source: "apple" }
   );
+  if (applied.subscriptionStatus === "canceled") {
+    try {
+      const secretKey = stripeSecretKey.value();
+      if (secretKey) {
+        const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+        await cancelSmsAddOnSubscription(stripe, tenantId);
+      }
+    } catch (e) {
+      console.error("mirrorAppleSubscriptionStatus cancel texting add-on", tenantId, e.message || e);
+    }
+  }
 }
 
 /**
@@ -8783,7 +9000,9 @@ exports.syncAppleSubscription = functions
  * App Store Server Notifications V2. Apple posts { signedPayload } when a
  * subscription renews, cancels, expires, or is refunded.
  */
-exports.appStoreServerNotification = functions.https.onRequest(async (req, res) => {
+exports.appStoreServerNotification = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onRequest(async (req, res) => {
   if (req.method !== "POST") {
     res.status(405).send("POST required");
     return;
@@ -11777,6 +11996,28 @@ exports.releaseLapsedSmsNumbers = functions
       const out = await releaseTenantTextingNumbers(doc.id, tenant);
       released += (out.studioReleased ? 1 : 0) + out.memberLinesReleased;
     }
+    // Paid extra lines whose monthly add-on ended (card failed or cancelled).
+    const lapsedLines = await db.collection("users").where("smsStatus", "==", "suspended").get();
+    for (const doc of lapsedLines.docs) {
+      const member = doc.data() || {};
+      if ((member.smsSuspendReason || "").toString() !== "addon_ended") continue;
+      const suspendedAt = member.smsSuspendedAt;
+      const suspendedMs =
+        suspendedAt && typeof suspendedAt.toMillis === "function" ? suspendedAt.toMillis() : 0;
+      if (!suspendedMs || suspendedMs > cutoffMs) continue;
+      if (!(member.smsPhoneNumberSid || "").toString().trim()) continue;
+      try {
+        const release = await sms.releaseMemberSms(member);
+        if (release.released === true) {
+          await doc.ref.set(sms.personalSmsClearedFields(), { merge: true });
+          released += 1;
+        } else {
+          console.error("releaseLapsedSmsNumbers: member number NOT released", doc.id);
+        }
+      } catch (e) {
+        console.warn("releaseLapsedSmsNumbers member", doc.id, e.message || e);
+      }
+    }
     console.log("releaseLapsedSmsNumbers", JSON.stringify({ suspended: snap.size, released }));
     return null;
   });
@@ -12474,9 +12715,20 @@ exports.getBillingSummary = functions
         // A plan bought in the iOS app is billed by Apple: never ask for it again here.
         const appleBilled = (tenantData.billingSource || "").toString() === "apple";
         const needsInitialCheckout = !appleBilled && firestoreSubscriptionStatus === "trialing";
+        const appleExtras = appleBilled
+          ? {
+              messaging: await messagingFieldsWithLineCount(tenantId, tenantData, userData),
+              smsAddOn: {
+                hasCard: !!(tenantData.smsAddOnCardLabel || "").toString().trim(),
+                cardLabel: (tenantData.smsAddOnCardLabel || "").toString(),
+                monthlyLines: sms.smsExtraPaidQuantity(tenantData),
+              },
+            }
+          : {};
         return {
           ok: true,
           hasStripeCustomer: false,
+          ...appleExtras,
           billingSource: appleBilled ? "apple" : "",
           firestorePlan,
           firestoreSubscriptionStatus,
@@ -13625,6 +13877,159 @@ exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, contex
   return { ok: true, smsPaidLinePurchaseAuthorizationId: authorizationId };
 });
 
+/**
+ * App Store subscribers: start saving a card for extra texting lines ($12 today + $12/mo each).
+ * The card lives on a Stripe customer used only for those lines; the plan stays with Apple.
+ * Returns an embedded Checkout (setup mode) client secret for the billing page.
+ */
+exports.createSmsLinesCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can manage billing."
+      );
+    }
+    if (!usesSmsAddOnBilling(ctx.tenant)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Extra texting numbers are billed with your plan. Use Add a texting number."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const tenantRef = db.collection("tenants").doc(ctx.tenantId);
+    let customerId = smsLineBilling(ctx.tenant).customerId;
+    try {
+      if (!customerId) {
+        const ownerEmail =
+          (ctx.ownerUserData && ctx.ownerUserData.email) ||
+          (ctx.userData && ctx.userData.email) ||
+          context.auth.token.email ||
+          "";
+        const customer = await stripe.customers.create({
+          email: ownerEmail || undefined,
+          name: (ctx.tenant.businessName || ctx.tenant.displayName || "").toString() || undefined,
+          metadata: {
+            tenantId: ctx.tenantId,
+            firebaseUid: context.auth.uid,
+            purpose: SMS_ADD_ON_PURPOSE,
+          },
+        });
+        customerId = customer.id;
+        await tenantRef.set(
+          {
+            smsAddOnStripeCustomerId: customerId,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      const base = billingPortalReturnBase(data);
+      const session = await stripe.checkout.sessions.create({
+        mode: "setup",
+        ui_mode: "embedded",
+        customer: customerId,
+        payment_method_types: ["card"],
+        metadata: { tenantId: ctx.tenantId, purpose: SMS_ADD_ON_PURPOSE },
+        return_url: `${base}/billing.html?sms_card=success&session_id={CHECKOUT_SESSION_ID}`,
+      });
+      if (!session.client_secret) {
+        throw new Error("Stripe did not return a card form.");
+      }
+      const out = { clientSecret: session.client_secret };
+      const pk = stripePublishableKeyParam.value().trim();
+      if (pk) out.publishableKey = pk;
+      return out;
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("createSmsLinesCardSetup", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not start the card form: ${stripeErrorMessage(e)}`
+      );
+    }
+  });
+
+/** Finishes the card setup: makes the saved card the one Stripe charges for extra lines. */
+exports.completeSmsLinesCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can manage billing."
+      );
+    }
+    const sessionId = ((data && data.sessionId) || "").toString().trim();
+    const customerId = smsLineBilling(ctx.tenant).customerId;
+    if (!sessionId || !usesSmsAddOnBilling(ctx.tenant) || !customerId) {
+      throw new functions.https.HttpsError("invalid-argument", "Card setup was not started.");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ["setup_intent.payment_method"],
+      });
+      const sessionCustomer =
+        typeof session.customer === "string" ? session.customer : session.customer && session.customer.id;
+      const intent = session.setup_intent;
+      const paymentMethod = intent && intent.payment_method;
+      if (
+        session.mode !== "setup" ||
+        sessionCustomer !== customerId ||
+        session.status !== "complete" ||
+        !intent ||
+        intent.status !== "succeeded" ||
+        !paymentMethod ||
+        !paymentMethod.id
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "The card was not saved. Try again."
+        );
+      }
+      await stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: paymentMethod.id },
+      });
+      const card = paymentMethod.card || {};
+      const brand = (card.brand || "card").toString();
+      const cardLabel =
+        `${brand.charAt(0).toUpperCase()}${brand.slice(1)} ending ${card.last4 || "----"}`;
+      await db.collection("tenants").doc(ctx.tenantId).set(
+        {
+          smsAddOnCardLabel: cardLabel,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return { ok: true, cardLabel };
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("completeSmsLinesCardSetup", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not confirm the card: ${stripeErrorMessage(e)}`
+      );
+    }
+  });
+
 exports.purchaseSmsExtraLine = functions
   .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
   .https.onCall(async (data, context) => {
@@ -13713,35 +14118,45 @@ exports.purchaseSmsExtraLine = functions
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
 
-    const subId = (tenant.stripeSubscriptionId || "").toString().trim();
-    const customerId = (tenant.stripeCustomerId || "").toString().trim();
-    if (!customerId || !subId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Billing is not set up. Complete subscription checkout first."
-      );
+    const lineBilling = smsLineBilling(tenant);
+    let currentQty;
+    if (lineBilling.addOn) {
+      // Plan is billed by Apple; extra lines bill to the card saved for them on the billing page.
+      if (!lineBilling.customerId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Add a card for extra texting numbers first."
+        );
+      }
+      currentQty = sms.smsExtraPaidQuantity(tenant);
+    } else {
+      const subId = lineBilling.subscriptionId;
+      const customerId = lineBilling.customerId;
+      if (!customerId || !subId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Billing is not set up. Complete subscription checkout first."
+        );
+      }
+      let sub;
+      try {
+        sub = await stripe.subscriptions.retrieve(subId, {
+          expand: ["items.data.price"],
+        });
+      } catch (e) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Could not load subscription: ${stripeErrorMessage(e)}`
+        );
+      }
+      if (!["active", "trialing", "past_due"].includes(sub.status)) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Subscription is ${sub.status}. Update billing before adding a texting number.`
+        );
+      }
+      currentQty = smsExtraQuantityFromSubscription(sub, stripeSmsExtraPriceIds());
     }
-
-    let sub;
-    try {
-      sub = await stripe.subscriptions.retrieve(subId, {
-        expand: ["items.data.price"],
-      });
-    } catch (e) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Could not load subscription: ${stripeErrorMessage(e)}`
-      );
-    }
-    if (!["active", "trialing", "past_due"].includes(sub.status)) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Subscription is ${sub.status}. Update billing before adding a texting number.`
-      );
-    }
-
-    const extraPriceIds = stripeSmsExtraPriceIds();
-    let currentQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
     let paidExtrasAfter = currentQty;
     let chargedInvoice;
     let freshTenant;
@@ -15048,8 +15463,7 @@ exports.onTenantSmsProvisionRequested = functions
           const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
           const invoice = await stripe.invoices.retrieve(invoiceId);
           const customerMatches =
-            (invoice.customer || "").toString() ===
-            (after.stripeCustomerId || "").toString();
+            (invoice.customer || "").toString() === smsLineBilling(after).customerId;
           const paidAmount = Math.max(
             Number(invoice.amount_paid) || 0,
             Number(invoice.total) || 0

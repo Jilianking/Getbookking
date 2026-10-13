@@ -158,6 +158,14 @@
             Number capacity updated. Choose a teammate below to set up their line.
           </p>
           <p class="bill-note hidden" id="smsLineActionNote" style="margin-top:10px;"></p>
+          <div class="hidden" id="smsAddOnCardWrap" style="margin-top:14px;">
+            <p class="bill-note" id="smsAddOnCardNote"></p>
+            <button type="button" class="btn-upgrade" id="smsAddOnCardBtn" style="margin-top:10px;width:100%;">
+              Add a card for extra texting numbers
+            </button>
+            <div id="smsAddOnCardEmbedded" style="margin-top:14px;"></div>
+            <p class="bill-error hidden" id="smsAddOnCardError" style="margin-top:12px;"></p>
+          </div>
         </div>
       </section>
 
@@ -1184,11 +1192,18 @@
         return;
       }
 
-      if (d.billingSource === 'apple') {
-        note.textContent =
-          'Your plan is billed through the App Store. Adding texting numbers here is coming soon for App Store subscribers.';
-        note.classList.remove('hidden');
-        return;
+      // App Store subscribers pay for extra numbers with a card saved here; their plan stays with Apple.
+      var appleBilled = d.billingSource === 'apple';
+      var smsAddOn = (d && d.smsAddOn) || {};
+      var cardWrap = document.getElementById('smsAddOnCardWrap');
+      cardWrap.classList.toggle('hidden', !appleBilled);
+      if (appleBilled) {
+        document.getElementById('smsAddOnCardNote').textContent = smsAddOn.hasCard
+          ? 'Your plan is billed through the App Store. Extra texting numbers are billed to ' + smsAddOn.cardLabel + '.'
+          : 'Your plan is billed through the App Store. Extra texting numbers ($12 today, then $12/mo each) are billed to a card you add here.';
+        document.getElementById('smsAddOnCardBtn').textContent = smsAddOn.hasCard
+          ? 'Change card'
+          : 'Add a card for extra texting numbers';
       }
 
       var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
@@ -1221,6 +1236,11 @@
 
       var eligible = Array.isArray(m.smsEligibleMembers) ? m.smsEligibleMembers : [];
       var needsPayNext = !!m.smsNeedsPurchaseForNextLine;
+      if (appleBilled && needsPayNext && !smsAddOn.hasCard) {
+        note.textContent = 'Add a card below, then you can add another texting number.';
+        note.classList.remove('hidden');
+        return;
+      }
       if (needsPayNext || m.smsCanAddWithoutPurchase) {
         btn.classList.remove('hidden');
         if (needsPayNext) {
@@ -1242,6 +1262,58 @@
         }
         note.classList.remove('hidden');
       }
+    }
+
+    var smsAddOnCardCheckout = null;
+
+    /** Opens Stripe's card form for an App Store subscriber's extra texting numbers. */
+    async function startSmsAddOnCardSetup() {
+      var btn = document.getElementById('smsAddOnCardBtn');
+      var errEl = document.getElementById('smsAddOnCardError');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      try {
+        var res = await fns.httpsCallable('createSmsLinesCardSetup')({
+          returnOrigin: window.location.origin,
+        });
+        var clientSecret = res.data && res.data.clientSecret;
+        if (!clientSecret) throw new Error('Stripe did not return a card form.');
+        var pk =
+          (res.data && res.data.publishableKey && String(res.data.publishableKey).trim()) ||
+          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
+        if (!pk) throw new Error('Stripe publishable key is missing.');
+        if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
+        if (smsAddOnCardCheckout && typeof smsAddOnCardCheckout.destroy === 'function') {
+          smsAddOnCardCheckout.destroy();
+        }
+        smsAddOnCardCheckout = await Stripe(pk).initEmbeddedCheckout({
+          fetchClientSecret: function() {
+            return Promise.resolve(clientSecret);
+          },
+        });
+        smsAddOnCardCheckout.mount('#smsAddOnCardEmbedded');
+        btn.classList.add('hidden');
+      } catch (err) {
+        console.error('startSmsAddOnCardSetup', err);
+        errEl.textContent = formatFirebaseHttpsError(err);
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /** Back from Stripe's card form: make the saved card the one charged for extra numbers. */
+    function completeSmsAddOnCardAfterReturn(sessionId) {
+      return fns.httpsCallable('completeSmsLinesCardSetup')({ sessionId: sessionId })
+        .catch(function(err) {
+          var errEl = document.getElementById('billingError');
+          errEl.textContent = formatFirebaseHttpsError(err);
+          errEl.classList.remove('hidden');
+        })
+        .then(function() {
+          history.replaceState({}, '', 'billing.html#messaging');
+          return loadBilling();
+        });
     }
 
     function smsNeedsPayForNext(m) {
@@ -1704,6 +1776,7 @@
     });
 
     document.getElementById('addSmsLineBtn').addEventListener('click', openAddSmsLineModal);
+    document.getElementById('smsAddOnCardBtn').addEventListener('click', startSmsAddOnCardSetup);
     document.getElementById('addSmsLineModalClose').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalCancel').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalBackdrop').addEventListener('click', closeAddSmsLineModal);
@@ -1765,6 +1838,10 @@
       }
       if (checkoutParam === 'success' && checkoutSessionId) {
         completeCheckoutAfterReturn(checkoutSessionId);
+        return;
+      }
+      if (params.get('sms_card') === 'success' && checkoutSessionId) {
+        completeSmsAddOnCardAfterReturn(checkoutSessionId);
         return;
       }
       if (checkoutParam === 'canceled') {

@@ -19,7 +19,11 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authViewModel.isAuthenticated && authViewModel.needsToFinishSignup {
+            if authViewModel.isAuthenticated && authViewModel.isCheckingSignupState {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .appScreenBackground()
+            } else if authViewModel.isAuthenticated && authViewModel.needsToFinishSignup {
                 CreateAccountView(isResuming: true)
                     .environmentObject(authViewModel)
             } else if authViewModel.isAuthenticated && !authViewModel.isCreatingAccount {

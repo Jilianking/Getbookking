@@ -619,7 +619,7 @@ struct CreateAccountView: View {
             }
             await authViewModel.refreshTeamAccess()
             authViewModel.isCreatingAccount = false
-            authViewModel.needsToFinishSignup = false
+            authViewModel.markSignupFinished()
             dismiss()
         } catch let error as BookkingPurchaseError {
             if case .cancelled = error {

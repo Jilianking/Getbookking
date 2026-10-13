@@ -86,6 +86,13 @@ struct BookkingPurchaseRecord: Sendable {
     let signedTransaction: String
 }
 
+/// A one-time App Store payment for a texting number, held open until the server records it.
+struct BookkingSmsExtraPurchase {
+    /// Apple's signed receipt. The server verifies this before it buys a number.
+    let signedTransaction: String
+    fileprivate let transaction: Transaction
+}
+
 @MainActor
 final class BookkingSubscriptionStore: ObservableObject {
     static let shared = BookkingSubscriptionStore()
@@ -223,8 +230,22 @@ final class BookkingSubscriptionStore: ObservableObject {
         return uuid
     }
 
-    @discardableResult
-    func purchaseSmsExtra() async throws -> UInt64 {
+    /// Pays for a texting number. The payment stays open with Apple until `settleSmsExtra`
+    /// says the server recorded it, so a dropped connection can't lose a payment.
+    func purchaseSmsExtra() async throws -> BookkingSmsExtraPurchase {
+        let accountToken = try await prepareAccountToken()
+        // A payment Apple already took for this account but the server never recorded is
+        // used first instead of charging again.
+        for await pending in Transaction.unfinished {
+            guard case .verified(let transaction) = pending,
+                  transaction.productID == BookkingProductID.smsExtra,
+                  transaction.revocationDate == nil,
+                  transaction.appAccountToken == accountToken else { continue }
+            return BookkingSmsExtraPurchase(
+                signedTransaction: pending.jwsRepresentation,
+                transaction: transaction
+            )
+        }
         if productsByID[BookkingProductID.smsExtra] == nil {
             await loadProducts()
         }
@@ -233,18 +254,36 @@ final class BookkingSubscriptionStore: ObservableObject {
         }
         isPurchasing = true
         defer { isPurchasing = false }
-        let result = try await product.purchase()
+        let result = try await product.purchase(options: [.appAccountToken(accountToken)])
         switch result {
         case .success(let verification):
             let transaction = try verified(verification)
-            await transaction.finish()
-            return transaction.id
+            return BookkingSmsExtraPurchase(
+                signedTransaction: verification.jwsRepresentation,
+                transaction: transaction
+            )
         case .userCancelled:
             throw BookkingPurchaseError.cancelled
         case .pending:
             throw BookkingPurchaseError.pending
         @unknown default:
             throw BookkingPurchaseError.unverified
+        }
+    }
+
+    /// Closes a texting-number payment with Apple once the server has recorded it (`error` nil)
+    /// or says it was already spent. Any other failure leaves it open so the next attempt
+    /// reuses the same payment instead of charging again.
+    func settleSmsExtra(_ purchase: BookkingSmsExtraPurchase, error: Error? = nil) async {
+        var isSpent = false
+        if let error {
+            let ns = error as NSError
+            isSpent = ns.domain == FunctionsErrorDomain
+                && ns.code == FunctionsErrorCode.alreadyExists.rawValue
+        }
+        // Xcode's local StoreKit receipts are never accepted by the server; don't keep them open.
+        if error == nil || isSpent || purchase.transaction.environment == .xcode {
+            await purchase.transaction.finish()
         }
     }
 

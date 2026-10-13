@@ -55,6 +55,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsMonthlyLimit: Int = 1000
     @Published var isOpeningBillingWebsite = false
     @Published var isRestoringPurchases = false
+    /// A 3rd+ number bills monthly, which the one-time App Store purchase can't do; it's added in billing.
+    @Published var showMonthlyNumberBillingPrompt = false
+    static let monthlyNumberBillingMessage =
+        "Additional numbers are $12 today and $12 a month. Add them in billing."
     @Published var restorePurchasesMessage: String?
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
@@ -506,10 +510,16 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// App Store purchase, then studio texting setup.
     func purchaseSmsExtraThenProvisionStudio() async {
         guard isTenantOwner else { return }
+        // Never take the App Store payment when the number can't be set up afterwards.
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
+            return
+        }
         isProvisioningSms = true
         errorMessage = nil
+        let purchase: BookkingSmsExtraPurchase
         do {
-            _ = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
+            purchase = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
         } catch let error as BookkingPurchaseError {
             isProvisioningSms = false
             if case .cancelled = error { return }
@@ -521,10 +531,16 @@ final class ManagerSettingsViewModel: ObservableObject {
             return
         }
         isProvisioningSms = false
-        await requestSmsProvisioning(consentAccepted: true)
+        await requestSmsProvisioning(consentAccepted: true, applePurchase: purchase)
     }
 
-    func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
+    /// `applePurchase` is the App Store payment for this number; the server uses it instead of
+    /// charging the card on file.
+    func requestSmsProvisioning(
+        consentAccepted: Bool,
+        forceReprovision: Bool = false,
+        applePurchase: BookkingSmsExtraPurchase? = nil
+    ) async {
         guard isTenantOwner else { return }
         if smsPhonePurchasingBlockedDuringTestFlight {
             errorMessage = smsPhonePurchaseBlockedDisplayMessage
@@ -543,7 +559,13 @@ final class ManagerSettingsViewModel: ObservableObject {
             if forceReprovision {
                 payload["forceReprovision"] = true
             }
+            if let applePurchase {
+                payload["appleSignedTransaction"] = applePurchase.signedTransaction
+            }
             _ = try await functions.httpsCallable("requestTenantSmsProvisioning").call(payload)
+            if let applePurchase {
+                await BookkingSubscriptionStore.shared.settleSmsExtra(applePurchase)
+            }
             for _ in 0..<12 {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 await load(isDemoMode: false)
@@ -551,6 +573,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 if smsStatus == "failed" { break }
             }
         } catch {
+            if let applePurchase {
+                await BookkingSubscriptionStore.shared.settleSmsExtra(applePurchase, error: error)
+            }
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isProvisioningSms = false
@@ -684,6 +709,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// to provision this teammate's personal number.
     @discardableResult
     func purchaseAndEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async -> Bool {
+        if smsNeedsMonthlyExtraForNextLine {
+            showMonthlyNumberBillingPrompt = true
+            return false
+        }
         guard isTenantOwner, consentAccepted, !memberUid.isEmpty else { return false }
         if smsPhonePurchasingBlockedDuringTestFlight {
             errorMessage = smsPhonePurchaseBlockedDisplayMessage
@@ -697,11 +726,19 @@ final class ManagerSettingsViewModel: ObservableObject {
             provisioningMemberUid = nil
         }
         do {
-            let transactionID = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
-            let purchase = try await functions.httpsCallable("recordAppleSmsExtraPurchase").call([
-                "memberUid": memberUid,
-                "appleTransactionId": String(transactionID),
-            ])
+            let store = BookkingSubscriptionStore.shared
+            let applePurchase = try await store.purchaseSmsExtra()
+            let purchase: HTTPSCallableResult
+            do {
+                purchase = try await functions.httpsCallable("recordAppleSmsExtraPurchase").call([
+                    "memberUid": memberUid,
+                    "signedTransaction": applePurchase.signedTransaction,
+                ])
+            } catch {
+                await store.settleSmsExtra(applePurchase, error: error)
+                throw error
+            }
+            await store.settleSmsExtra(applePurchase)
             let data = purchase.data as? [String: Any] ?? [:]
             guard let authorizationId = data["smsPaidLinePurchaseAuthorizationId"] as? String,
                   !authorizationId.isEmpty else {

@@ -782,7 +782,11 @@
       var status = sub ? sub.status : 'free';
       if (!d.hasStripeCustomer) {
         var fsStatus = (d.firestoreSubscriptionStatus || 'trialing').toString();
-        if (d.needsInitialCheckout && fsStatus === 'trialing') {
+        if (d.billingSource === 'apple') {
+          // Plan bought in the iOS app: Apple bills it, so there is nothing to start here.
+          badge.textContent = fsStatus === 'active' ? 'Active · App Store' : 'App Store';
+          badge.classList.toggle('is-active', fsStatus === 'active' || fsStatus === 'trialing');
+        } else if (d.needsInitialCheckout && fsStatus === 'trialing') {
           badge.textContent = 'Trial';
           badge.classList.add('is-active');
         } else {
@@ -1176,6 +1180,13 @@
         note.textContent =
           (m.smsPhonePurchaseBlockMessage || '').trim() ||
           'Unavailable.';
+        note.classList.remove('hidden');
+        return;
+      }
+
+      if (d.billingSource === 'apple') {
+        note.textContent =
+          'Your plan is billed through the App Store. Adding texting numbers here is coming soon for App Store subscribers.';
         note.classList.remove('hidden');
         return;
       }

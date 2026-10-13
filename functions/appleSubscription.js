@@ -39,6 +39,10 @@ const APPLE_SUBSCRIPTION_PRODUCTS = {
   "com.jilianking.getbooking.charter.now": "charter",
 };
 
+/** One-time App Store purchase that pays for an extra or replacement texting number. */
+const SMS_EXTRA_PRODUCT_ID = "com.jilianking.getbooking.sms.extra";
+const SMS_EXTRA_PURCHASES = "appleSmsExtraPurchases";
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -235,6 +239,90 @@ async function prepareAccountToken(uid) {
   return token;
 }
 
+/**
+ * Verifies an App Store texting-number purchase and reserves it for one use.
+ * The receipt must be Apple-signed, for the texting-number product, bought by this login,
+ * and not already spent. Asking again for the same use returns the same reservation.
+ * `purpose` is "member_number" or "tenant_number".
+ * Throws an Error whose `code` is "unverified", "wrong-account", "refunded", or "already-used".
+ */
+async function claimSmsExtraPurchase({ uid, tenantId, signedTransaction, purpose, memberUid }) {
+  const fail = (code, message) => {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  };
+  let transaction;
+  try {
+    transaction = await verifySignedTransaction(signedTransaction);
+  } catch (error) {
+    throw fail("unverified", "The App Store could not verify this purchase.");
+  }
+  if ((transaction.productId || "").toString() !== SMS_EXTRA_PRODUCT_ID) {
+    throw fail("unverified", "This App Store purchase is not for a texting number.");
+  }
+  if (transaction.revocationDate) {
+    throw fail("refunded", "This App Store purchase was refunded.");
+  }
+  const userSnap = await db().collection("users").doc(uid).get();
+  const expectedToken = normalizeAccountToken(userSnap.exists && userSnap.data().appleAppAccountToken);
+  const receiptToken = normalizeAccountToken(transaction.appAccountToken);
+  if (!expectedToken || receiptToken !== expectedToken) {
+    throw fail("wrong-account", "This App Store purchase does not match this account.");
+  }
+  const transactionId = (transaction.transactionId || "").toString().trim();
+  if (!transactionId) {
+    throw fail("unverified", "The App Store could not verify this purchase.");
+  }
+  const target = (memberUid || "").toString();
+  const ref = db().collection(SMS_EXTRA_PURCHASES).doc(transactionId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists) {
+      const claim = snap.data() || {};
+      const sameUse =
+        claim.uid === uid &&
+        claim.tenantId === tenantId &&
+        claim.purpose === purpose &&
+        (claim.memberUid || "") === target &&
+        !claim.consumedAt;
+      if (!sameUse) {
+        throw fail("already-used", "This App Store purchase was already used for a texting number.");
+      }
+      return { transactionId, alreadyClaimed: true };
+    }
+    tx.set(ref, {
+      transactionId,
+      uid,
+      tenantId,
+      purpose,
+      memberUid: target,
+      claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { transactionId, alreadyClaimed: false };
+  });
+}
+
+/** True while a reserved texting-number purchase is still unspent for this business and use. */
+async function smsExtraPurchaseIsUnspent(transactionId, tenantId, purpose) {
+  const id = (transactionId || "").toString().trim();
+  if (!id) return false;
+  const snap = await db().collection(SMS_EXTRA_PURCHASES).doc(id).get();
+  if (!snap.exists) return false;
+  const claim = snap.data() || {};
+  return claim.tenantId === tenantId && claim.purpose === purpose && !claim.consumedAt;
+}
+
+/** Marks the purchase spent once Twilio has provisioned the number it paid for. */
+async function consumeSmsExtraPurchase(transactionId) {
+  const id = (transactionId || "").toString().trim();
+  if (!id) return;
+  await db().collection(SMS_EXTRA_PURCHASES).doc(id).set(
+    { consumedAt: admin.firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+}
+
 function preservedAccountToken(existingUser) {
   if (!existingUser || !existingUser.exists) return "";
   return normalizeAccountToken(existingUser.data().appleAppAccountToken);
@@ -252,4 +340,7 @@ module.exports = {
   applyVerifiedTransaction,
   prepareAccountToken,
   preservedAccountToken,
+  claimSmsExtraPurchase,
+  smsExtraPurchaseIsUnspent,
+  consumeSmsExtraPurchase,
 };

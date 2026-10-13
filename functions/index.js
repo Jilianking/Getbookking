@@ -11707,6 +11707,80 @@ async function deleteTenantInvitesForTenant(tenantId) {
   await batch.commit();
 }
 
+/**
+ * Gives a business's texting numbers back to Twilio — the studio line and every teammate's
+ * personal line — so we stop paying for numbers nobody is paying us for. Best effort: a Twilio
+ * failure is logged and never blocks the caller. The number fields are cleared only once Twilio
+ * confirms the release, so a failed release is retried instead of forgotten.
+ */
+async function releaseTenantTextingNumbers(tenantId, tenant) {
+  const out = { studioReleased: false, memberLinesReleased: 0 };
+  try {
+    if ((tenant && tenant.smsPhoneNumberSid || "").toString().trim()) {
+      const release = await sms.releaseTenantSms(tenant);
+      out.studioReleased = release.released === true;
+      if (out.studioReleased) {
+        await db.collection("tenants").doc(tenantId).set(sms.tenantSmsClearedFields(), { merge: true });
+      } else {
+        console.error("releaseTenantTextingNumbers: studio number NOT released", tenantId, tenant.smsPhoneNumberSid);
+      }
+    }
+  } catch (e) {
+    console.warn("releaseTenantTextingNumbers studio", tenantId, e.message || e);
+  }
+  try {
+    const members = await db.collection("users").where("tenantId", "==", tenantId).get();
+    for (const doc of members.docs) {
+      const memberData = doc.data() || {};
+      if (!(memberData.smsPhoneNumberSid || "").toString().trim()) continue;
+      try {
+        const release = await sms.releaseMemberSms(memberData);
+        if (release.released === true) {
+          out.memberLinesReleased += 1;
+          await doc.ref.set(sms.personalSmsClearedFields(), { merge: true });
+        } else {
+          console.error("releaseTenantTextingNumbers: member number NOT released", doc.id, memberData.smsPhoneNumberSid);
+        }
+      } catch (e) {
+        console.warn("releaseTenantTextingNumbers member", doc.id, e.message || e);
+      }
+    }
+  } catch (e) {
+    console.warn("releaseTenantTextingNumbers members", tenantId, e.message || e);
+  }
+  return out;
+}
+
+/** How long a number is kept after its plan lapses, so a late payment doesn't cost the number. */
+const SMS_LAPSED_NUMBER_GRACE_DAYS = 30;
+
+/**
+ * Daily: release numbers whose business has been suspended for an unpaid plan for 30 days.
+ * Texting is already off for these (suspended when the plan lapsed); this stops the Twilio rent.
+ */
+exports.releaseLapsedSmsNumbers = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .pubsub.schedule("every 24 hours")
+  .onRun(async () => {
+    const cutoffMs = Date.now() - SMS_LAPSED_NUMBER_GRACE_DAYS * 86400000;
+    const snap = await db.collection("tenants").where("smsStatus", "==", "suspended").get();
+    let released = 0;
+    for (const doc of snap.docs) {
+      const tenant = doc.data() || {};
+      const suspendedAt = tenant.smsSuspendedAt;
+      const suspendedMs =
+        suspendedAt && typeof suspendedAt.toMillis === "function" ? suspendedAt.toMillis() : 0;
+      if (!suspendedMs || suspendedMs > cutoffMs) continue;
+      // Only plan lapses. A number suspended for another reason is left for a person to review.
+      if (!(tenant.smsSuspendReason || "").toString().startsWith("subscription_")) continue;
+      if ((tenant.subscriptionStatus || "").toString().toLowerCase() === "active") continue;
+      const out = await releaseTenantTextingNumbers(doc.id, tenant);
+      released += (out.studioReleased ? 1 : 0) + out.memberLinesReleased;
+    }
+    console.log("releaseLapsedSmsNumbers", JSON.stringify({ suspended: snap.size, released }));
+    return null;
+  });
+
 async function deleteTenantData(tenantId) {
   const tenantRef = db.collection("tenants").doc(tenantId);
   for (const sub of TENANT_SUBCOLLECTIONS) {
@@ -11939,7 +12013,7 @@ exports.transferTenantOwnership = functions
 
 /** Delete the signed-in user's account. Owners with team may shut down the business (SHUTDOWN) or transfer first. */
 exports.deleteMyAccount = functions
-  .runWith({ secrets: [stripeSecretKey] })
+  .runWith({ secrets: [stripeSecretKey, sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -11986,6 +12060,7 @@ exports.deleteMyAccount = functions
         );
       }
       await cancelTenantStripeSubscription(tenant);
+      await releaseTenantTextingNumbers(tenantId, tenant);
       await deleteTenantData(tenantId);
       await deleteUserFirestoreAndAuth(uid);
       return { ok: true, deletedTenant: true, shutDownBusiness: true };
@@ -11993,11 +12068,20 @@ exports.deleteMyAccount = functions
 
     if (isOwner) {
       await cancelTenantStripeSubscription(tenant);
+      await releaseTenantTextingNumbers(tenantId, tenant);
       await deleteTenantData(tenantId);
       await deleteUserFirestoreAndAuth(uid);
       return { ok: true, deletedTenant: true };
     }
 
+    // A teammate leaving: their personal number goes back to Twilio with them.
+    if ((userData.smsPhoneNumberSid || "").toString().trim()) {
+      try {
+        await sms.releaseMemberSms(userData);
+      } catch (e) {
+        console.warn("deleteMyAccount release member number", uid, e.message || e);
+      }
+    }
     await deleteUserFirestoreAndAuth(uid);
     return { ok: true, deletedTenant: false, leftTenant: true };
   });
@@ -12387,16 +12471,21 @@ exports.getBillingSummary = functions
       ).toString();
       const trialEndUnix = providerTrialEndUnixFromTenant(tenantData);
       if (!stripeCustomerId) {
-        const needsInitialCheckout = firestoreSubscriptionStatus === "trialing";
+        // A plan bought in the iOS app is billed by Apple: never ask for it again here.
+        const appleBilled = (tenantData.billingSource || "").toString() === "apple";
+        const needsInitialCheckout = !appleBilled && firestoreSubscriptionStatus === "trialing";
         return {
           ok: true,
           hasStripeCustomer: false,
+          billingSource: appleBilled ? "apple" : "",
           firestorePlan,
           firestoreSubscriptionStatus,
           trialEndUnix,
           listPriceCents: planListPriceCents(firestorePlan),
           needsInitialCheckout,
-          message: needsInitialCheckout
+          message: appleBilled
+            ? "Your plan is billed through the App Store."
+            : needsInitialCheckout
             ? "Add a payment method to start or secure your plan."
             : "Billing is not set up for this business yet.",
           subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
@@ -13439,6 +13528,25 @@ exports.startSubscriptionToday = functions
  * with proration_behavior none. Free included slots must be used first.
  * Does not provision a number — returns a short-lived auth for requestSmsPhoneNumber.
  */
+/** Reserves a verified App Store texting-number purchase, as a callable error when it can't be. */
+async function claimAppleSmsExtraPurchase(params) {
+  try {
+    return await appleSubscription.claimSmsExtraPurchase(params);
+  } catch (error) {
+    const code = (error && error.code) || "";
+    if (code === "already-used") {
+      throw new functions.https.HttpsError("already-exists", error.message);
+    }
+    if (code === "wrong-account") {
+      throw new functions.https.HttpsError("permission-denied", error.message);
+    }
+    if (code === "unverified" || code === "refunded") {
+      throw new functions.https.HttpsError("failed-precondition", error.message);
+    }
+    throw error;
+  }
+}
+
 exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -13455,11 +13563,11 @@ exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, contex
     );
   }
   const memberUid = ((data && data.memberUid) || "").toString().trim();
-  const appleTransactionId = ((data && data.appleTransactionId) || "").toString().trim();
-  if (!memberUid || !appleTransactionId) {
+  const signedTransaction = ((data && data.signedTransaction) || "").toString().trim();
+  if (!memberUid || !signedTransaction) {
     throw new functions.https.HttpsError(
       "invalid-argument",
-      "Missing teammate or App Store transaction."
+      "Missing teammate or App Store purchase."
     );
   }
   const memberRef = db.collection("users").doc(memberUid);
@@ -13467,11 +13575,45 @@ exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, contex
   if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
+  // A 3rd+ number is $12 today plus $12 a month. The App Store purchase is one-time only, so
+  // those are added in billing; refuse before the receipt is reserved so nothing is spent.
+  const planForLine = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+  const linesInUse = await sms.countOccupiedSmsLines(ctx.tenantId, ctx.tenant);
+  if (sms.buildSmsLineSummary(ctx.tenant, planForLine, linesInUse).needsMonthlyExtraForNext) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Additional numbers are $12 today and $12 a month. Add them in billing."
+    );
+  }
+  const claim = await claimAppleSmsExtraPurchase({
+    uid: context.auth.uid,
+    tenantId: ctx.tenantId,
+    signedTransaction,
+    purpose: "member_number",
+    memberUid,
+  });
+  const appleInvoiceId = `apple:${claim.transactionId}`;
+  const memberData = memberSnap.data() || {};
+  const existingExpiresAt = memberData.smsPaidLinePurchaseExpiresAt;
+  const existingExpiresMs =
+    existingExpiresAt && typeof existingExpiresAt.toMillis === "function"
+      ? existingExpiresAt.toMillis()
+      : 0;
+  const existingAuthorizationId = (memberData.smsPaidLinePurchaseAuthorizationId || "").toString();
+  // A retry of the same purchase gets the authorization it was already given.
+  if (
+    claim.alreadyClaimed &&
+    existingAuthorizationId &&
+    (memberData.smsPaidLinePurchaseInvoiceId || "").toString() === appleInvoiceId &&
+    existingExpiresMs > Date.now()
+  ) {
+    return { ok: true, smsPaidLinePurchaseAuthorizationId: existingAuthorizationId };
+  }
   const authorizationId = crypto.randomBytes(24).toString("hex");
   await memberRef.set(
     {
       smsPaidLinePurchaseAuthorizationId: authorizationId,
-      smsPaidLinePurchaseInvoiceId: `apple:${appleTransactionId}`,
+      smsPaidLinePurchaseInvoiceId: appleInvoiceId,
       smsPaidLinePurchaseAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
       smsPaidLinePurchaseExpiresAt: admin.firestore.Timestamp.fromMillis(
         Date.now() + 15 * 60 * 1000
@@ -13855,6 +13997,45 @@ exports.requestTenantSmsProvisioning = functions
         }
         soloReplacementAuthorizationId = authorization.authorizationId;
         soloReplacementInvoiceId = authorization.invoiceId;
+        const appleSignedTransaction = ((data && data.appleSignedTransaction) || "")
+          .toString()
+          .trim();
+        // The iOS app already took this payment through the App Store; charging the Stripe
+        // card as well would bill the number twice.
+        if (!soloReplacementInvoiceId && appleSignedTransaction) {
+          try {
+            const claim = await claimAppleSmsExtraPurchase({
+              uid: context.auth.uid,
+              tenantId: ctx.tenantId,
+              signedTransaction: appleSignedTransaction,
+              purpose: "tenant_number",
+            });
+            soloReplacementInvoiceId = `apple:${claim.transactionId}`;
+            await tenantRef.set(
+              {
+                smsLastSoloReplacementInvoiceId: soloReplacementInvoiceId,
+                smsLastSoloReplacementAt: admin.firestore.FieldValue.serverTimestamp(),
+                smsSoloReplacementAuthorizationInvoiceId: soloReplacementInvoiceId,
+                smsSoloReplacementAuthorizationState: "authorized",
+                smsSoloReplacementAuthorizationExpiresAt:
+                  admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60 * 1000),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          } catch (e) {
+            await tenantRef.set(
+              {
+                smsSoloReplacementAuthorizationState: admin.firestore.FieldValue.delete(),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            throw e;
+          }
+        }
         if (!soloReplacementInvoiceId) {
           try {
             const secretKey = stripeSecretKey.value();
@@ -14852,20 +15033,30 @@ exports.onTenantSmsProvisionRequested = functions
           );
           return null;
         }
-        const secretKey = stripeSecretKey.value();
-        if (!secretKey) {
-          throw new Error("Stripe is not configured.");
+        let paymentVerified = false;
+        if (invoiceId.startsWith("apple:")) {
+          paymentVerified = await appleSubscription.smsExtraPurchaseIsUnspent(
+            invoiceId.slice("apple:".length),
+            tenantId,
+            "tenant_number"
+          );
+        } else {
+          const secretKey = stripeSecretKey.value();
+          if (!secretKey) {
+            throw new Error("Stripe is not configured.");
+          }
+          const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+          const invoice = await stripe.invoices.retrieve(invoiceId);
+          const customerMatches =
+            (invoice.customer || "").toString() ===
+            (after.stripeCustomerId || "").toString();
+          const paidAmount = Math.max(
+            Number(invoice.amount_paid) || 0,
+            Number(invoice.total) || 0
+          );
+          paymentVerified = invoice.status === "paid" && customerMatches && paidAmount >= 1200;
         }
-        const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-        const invoice = await stripe.invoices.retrieve(invoiceId);
-        const customerMatches =
-          (invoice.customer || "").toString() ===
-          (after.stripeCustomerId || "").toString();
-        const paidAmount = Math.max(
-          Number(invoice.amount_paid) || 0,
-          Number(invoice.total) || 0
-        );
-        if (invoice.status !== "paid" || !customerMatches || paidAmount < 1200) {
+        if (!paymentVerified) {
           await db.collection("tenants").doc(tenantId).set(
             {
               smsStatus: "failed",
@@ -14895,6 +15086,10 @@ exports.onTenantSmsProvisionRequested = functions
       }
       await provisionTenantSms(tenantId, after, { isPaidExtra: false });
       if (beforeSummary.canPurchaseSoloReplacement) {
+        const paidInvoiceId = (after.smsSoloReplacementAuthorizationInvoiceId || "").toString();
+        if (paidInvoiceId.startsWith("apple:")) {
+          await appleSubscription.consumeSmsExtraPurchase(paidInvoiceId.slice("apple:".length));
+        }
         await db.collection("tenants").doc(tenantId).set(
           {
             smsSoloReplacementAuthorizationState: "consumed",
@@ -15046,6 +15241,10 @@ exports.onUserMemberSmsProvisionRequested = functions
       });
       // Consume the authorization only after Twilio successfully provisions.
       if (requiresPaidPurchase) {
+        const paidInvoiceId = (after.smsPaidLinePurchaseInvoiceId || "").toString();
+        if (paidInvoiceId.startsWith("apple:")) {
+          await appleSubscription.consumeSmsExtraPurchase(paidInvoiceId.slice("apple:".length));
+        }
         await db.collection("users").doc(memberUid).set(
           {
             smsPaidLinePurchaseAuthorizationId: admin.firestore.FieldValue.delete(),

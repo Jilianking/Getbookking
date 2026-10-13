@@ -50,6 +50,14 @@ struct TeamClientMessagingSettingsView: View {
         .appListSurface()
         .navigationTitle("Messaging")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Add in billing", isPresented: $viewModel.showMonthlyNumberBillingPrompt) {
+            Button("Open billing") {
+                Task { await viewModel.openBillingForExtraSmsLine() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ManagerSettingsViewModel.monthlyNumberBillingMessage)
+        }
         .sheet(isPresented: $showAddNumberSheet, onDismiss: {
             showAssignNumberConfirm = false
             pendingAssignMember = nil
@@ -833,6 +841,18 @@ struct TeamClientMessagingSettingsView: View {
     @ViewBuilder
     private var addNumberSheetContent: some View {
         List {
+            if viewModel.smsNeedsMonthlyExtraForNextLine {
+                // Monthly numbers can't be sold as a one-time App Store purchase.
+                Section {
+                    Text(ManagerSettingsViewModel.monthlyNumberBillingMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Open billing") {
+                        showAddNumberSheet = false
+                        Task { await viewModel.openBillingForExtraSmsLine() }
+                    }
+                }
+            } else {
             Section {
                 Text(
                     viewModel.smsNextLineIsFree
@@ -891,6 +911,7 @@ struct TeamClientMessagingSettingsView: View {
                 }
             } header: {
                 Text("Team members")
+            }
             }
 
             if let msg = viewModel.errorMessage, !msg.isEmpty {

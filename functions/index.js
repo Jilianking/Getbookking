@@ -9461,7 +9461,9 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   manageArtistSchedules: false,
   accessClientList: false,
   viewEarningsReports: false,
-  sendClientNotifications: false,
+  // On for new businesses: this switch also gates the owner's own texts and automatic booking
+  // texts, so starting it off made texting fail right after setup. Owners can turn it off.
+  sendClientNotifications: true,
 };
 
 const DEFAULT_TENANT_WORKFLOW = {

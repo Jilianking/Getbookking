@@ -16149,8 +16149,10 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
     return { ok: true };
   }
 
-  const from = (process.env.BETA_EMAIL_FROM || "Get Bookking <beta@getbookking.com>").trim();
-  const replyTo = (process.env.BETA_SUPPORT_EMAIL || "support@getbookking.com").trim();
+  const from = (
+    process.env.PASSWORD_RESET_EMAIL_FROM || "Get Bookking <noreply@getbookking.com>"
+  ).trim();
+  const replyTo = (process.env.SUPPORT_EMAIL || "support@getbookking.com").trim();
 
   const html = [
     "<p>Hello,</p>",

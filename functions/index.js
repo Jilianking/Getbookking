@@ -9722,9 +9722,13 @@ exports.stripeSubscriptionWebhook = functions
         const inv = event.data.object;
         const customerId =
           typeof inv.customer === "string" ? inv.customer : inv.customer && inv.customer.id;
-        if (customerId && inv.subscription) {
-          const subId =
-            typeof inv.subscription === "string" ? inv.subscription : inv.subscription.id;
+        // Older API versions put the subscription on the invoice; newer ones (2025-03-31 onward,
+        // including the live webhooks' 2026-03-25.dahlia) put it under parent.subscription_details.
+        const invSub =
+          inv.subscription ||
+          (inv.parent && inv.parent.subscription_details && inv.parent.subscription_details.subscription);
+        if (customerId && invSub) {
+          const subId = typeof invSub === "string" ? invSub : invSub.id;
           const sub = await stripe.subscriptions.retrieve(subId, {
             expand: ["items.data.price"],
           });

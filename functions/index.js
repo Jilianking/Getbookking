@@ -16096,6 +16096,16 @@ function passwordResetMarketingOrigin() {
     || "https://getbookking.com";
 }
 
+function parsePasswordResetOobLink(link) {
+  const parsed = new URL(link);
+  let oobCode = parsed.searchParams.get("oobCode");
+  if (!oobCode && parsed.hash) {
+    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    oobCode = hashParams.get("oobCode");
+  }
+  return oobCode;
+}
+
 /**
  * Sends a branded password reset email via Resend, pointing to the custom
  * reset-password handler instead of Firebase's default action page.

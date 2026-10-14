@@ -13211,8 +13211,8 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
       lines.used
     ),
     smsPhonePurchasingBlockedDuringTestFlight:
-      sms.isSmsPhonePurchasingBlockedDuringTestFlight() === true,
-    smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason() || "").toString(),
+      sms.isSmsPhonePurchasingBlockedDuringTestFlight(tenant) === true,
+    smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason(tenant) || "").toString(),
   };
 }
 
@@ -14413,7 +14413,7 @@ exports.requestTenantSmsProvisioning = functions
         alreadyActive: true,
       };
     }
-    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason(tenant);
     if (smsPurchaseBlock) {
       throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
     }
@@ -15501,7 +15501,7 @@ exports.onTenantSmsProvisionRequested = functions
       );
       return null;
     }
-    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason(after);
     if (smsPurchaseBlock) {
       await db.collection("tenants").doc(tenantId).set(
         {

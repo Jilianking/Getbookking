@@ -191,12 +191,17 @@ function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
 }
 
-function isSmsPhonePurchasingBlockedDuringTestFlight() {
+/**
+ * The launch block on buying numbers. A business with `smsPurchaseBlockExempt` set (server-only,
+ * see scripts/set-shop-access.js) is let through so it can get its number before the block lifts.
+ */
+function isSmsPhonePurchasingBlockedDuringTestFlight(tenant) {
+  if (tenant && tenant.smsPurchaseBlockExempt === true) return false;
   return BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT === true;
 }
 
-function smsPhonePurchaseBlockReason() {
-  if (isSmsPhonePurchasingBlockedDuringTestFlight()) {
+function smsPhonePurchaseBlockReason(tenant) {
+  if (isSmsPhonePurchasingBlockedDuringTestFlight(tenant)) {
     return TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE;
   }
   return null;
@@ -210,6 +215,10 @@ function tenantHasPaidSubscription(tenant, userData) {
 /** Billing-only block reason (provisioning / enable texting). */
 function paidSubscriptionBlockReason(tenant, userData) {
   if (isSubscriptionPaymentGateBypassed()) {
+    return null;
+  }
+  // Complimentary access granted by Get Bookking (server-only, see scripts/set-shop-access.js).
+  if (tenant && tenant.complimentaryPaidAccess === true) {
     return null;
   }
   const hasBilling =
@@ -603,12 +612,17 @@ async function ensureMasterIncomingNumber(master, tenant, webhook) {
   return null;
 }
 
-async function buyMasterLocalNumber(master, areaCode) {
+async function buyMasterLocalNumber(master, areaCode, opts) {
   let available = await master.availablePhoneNumbers("US").local.list({
     areaCode,
     smsEnabled: true,
     limit: 5,
   });
+  if ((!available || available.length === 0) && opts && opts.areaCodeRequired) {
+    throw new Error(
+      `No texting numbers are available in area code ${areaCode} right now. Try again later.`
+    );
+  }
   if (!available || available.length === 0) {
     const fallback = await master.availablePhoneNumbers("US").local.list({
       smsEnabled: true,
@@ -633,7 +647,7 @@ async function buyMasterLocalNumber(master, areaCode) {
  * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
  */
 async function provisionTenantSms(tenantId, tenant, opts) {
-  const purchaseBlock = smsPhonePurchaseBlockReason();
+  const purchaseBlock = smsPhonePurchaseBlockReason(tenant);
   if (purchaseBlock) {
     throw new Error(purchaseBlock);
   }
@@ -645,7 +659,10 @@ async function provisionTenantSms(tenantId, tenant, opts) {
   let numberResource = await ensureMasterIncomingNumber(master, tenant, webhook);
   let boughtNew = false;
   if (!numberResource) {
-    numberResource = await buyMasterLocalNumber(master, areaCode);
+    // An area code picked for the business (smsAreaCode) is kept; a guessed one may fall back.
+    const areaCodeRequired =
+      (tenant.smsAreaCode || "").toString().replace(/\D/g, "").slice(0, 3).length === 3;
+    numberResource = await buyMasterLocalNumber(master, areaCode, { areaCodeRequired });
     boughtNew = true;
     if (webhook) {
       await master.incomingPhoneNumbers(numberResource.sid).update({

@@ -224,34 +224,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /betaWaitlist/{entryId} {
-      allow read, write: if false;
-    }
-
-    match /betaMembers/{memberId} {
-      allow read, write: if false;
-    }
-
-    match /betaOnboardingTokens/{tokenId} {
-      allow read, write: if false;
-    }
-
-    match /betaSignupInviteTokens/{tokenId} {
-      allow read, write: if false;
-    }
-
-    match /betaBugReports/{reportId} {
-      allow read, write: if false;
-    }
-
-    match /betaReports/{reportId} {
-      allow read, write: if false;
-    }
-
-    match /platformSettings/{docId} {
-      allow read, write: if false;
-    }
-
     // Public host → tenant slug for custom domains (written only by Cloud Functions).
     // Clients should treat this as slug/status lookup only; prefer resolveTenantDomain for CF proxy.
     match /domainMappings/{host} {

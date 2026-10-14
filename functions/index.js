@@ -2572,13 +2572,14 @@ function computeInPersonCheckoutTotals(serviceCents, taxCents, channel = "online
 }
 
 /**
- * Card, Klarna, Affirm, and Link (the Bank tab) on one PaymentIntent.
- * Falls back if the connected account cannot offer that full list yet.
+ * Card and Link (the Bank tab) on one PaymentIntent. Klarna and Affirm are not offered:
+ * their terms forbid charging customers a processing fee for choosing them.
+ * Falls back to card alone if the connected account cannot offer Link yet.
  */
 async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payload) {
   const methodLists = [
-    ["card", "klarna", "affirm", "link"],
-    ["card", "klarna", "affirm"],
+    ["card", "link"],
+    ["card"],
   ];
   let lastErr = null;
   for (let i = 0; i < methodLists.length; i++) {
@@ -2594,17 +2595,8 @@ async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payl
       lastErr = err;
     }
   }
-  console.warn(
-    "createCustomerCheckoutPaymentIntent method list failed; using automatic methods",
-    lastErr && lastErr.message ? lastErr.message : lastErr
-  );
-  return stripe.paymentIntents.create(
-    {
-      ...payload,
-      automatic_payment_methods: { enabled: true },
-    },
-    { stripeAccount: stripeAccountId }
-  );
+  // Never fall back to every method enabled in Stripe: those would be charged at the card price.
+  throw lastErr;
 }
 
 function pricedCustomerCheckoutFromMetadata(meta, method) {
@@ -7388,7 +7380,7 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
   if (!tenantSlug || !paymentIntentId.startsWith("pi_")) {
     throw new HttpsError("invalid-argument", "tenantSlug and paymentIntentId are required");
   }
-  if (requested === "card_present") {
+  if (requested === "card_present" || requested === "klarna" || requested === "affirm") {
     throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
   }
   const resolved = await resolveTenantBySlug(tenantSlug);
@@ -7417,6 +7409,9 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
     data.paymentMethodId
   );
   const method = classified || requested;
+  if (method === "klarna" || method === "affirm") {
+    throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
+  }
   const priced = pricedCustomerCheckoutFromMetadata(meta, method);
   if (!priced) {
     throw new HttpsError("failed-precondition", "This payment is missing its service amount.");

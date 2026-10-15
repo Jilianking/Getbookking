@@ -448,17 +448,11 @@ struct AdminRootView: View {
                 authViewModel.applyTenantLogoCache(url)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .pushOpenMessagesThread)) { note in
-            let threadId = (note.userInfo?["threadId"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !threadId.isEmpty else { return }
-            drawerState.isOpen = false
-            drawerState.isActivityOpen = false
-            drawerState.messagesShouldOpenCompose = false
-            drawerState.messagesOpenThreadId = threadId
-            drawerState.selectedSection = .messages
-            visitedSections.insert(.messages)
+        .onReceive(NotificationCenter.default.publisher(for: .pushOpenMessagesThread)) { _ in
+            openPendingNotificationThread()
         }
+        // Cold launch from a notification: the tap came in before this screen existed.
+        .onAppear { openPendingNotificationThread() }
         .onReceive(NotificationCenter.default.publisher(for: .tenantBusinessNameDidChange)) { _ in
             Task {
                 await sessionStore.refreshProfileAndTenant()
@@ -470,6 +464,19 @@ struct AdminRootView: View {
                 )
             }
         }
+    }
+
+    /// Opens the conversation a tapped notification asked for, if one is waiting.
+    private func openPendingNotificationThread() {
+        guard let threadId = PushNotificationManager.shared.takePendingOpenThreadId()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !threadId.isEmpty else { return }
+        drawerState.isOpen = false
+        drawerState.isActivityOpen = false
+        drawerState.messagesShouldOpenCompose = false
+        drawerState.messagesOpenThreadId = threadId
+        drawerState.selectedSection = .messages
+        visitedSections.insert(.messages)
     }
 
     private func closeActivityDrawerAnimated() {

@@ -1607,21 +1607,26 @@ async function recordInboundTenantSms(tenantId, inbound) {
     smsLineScope,
   });
 
-  // Fire-and-forget APNs/FCM so Twilio webhook stays fast.
-  notifyInboundClientSms(tenantId, {
-    threadId,
-    counterpartPhone: from,
-    bodyPreview: previewBody,
-    clientName: ((inbound && inbound.clientName) || "").toString(),
-    assignedMemberUid,
-    smsLineScope,
-  }).catch((e) => {
-    console.warn(
-      "notifyInboundClientSms",
-      tenantId,
-      e && e.message ? e.message : e
-    );
-  });
+  // Wait for the push before Twilio gets its reply: a Cloud Function can be frozen once it has
+  // responded, which cut fire-and-forget notifications off part-way. Capped at 5 seconds so a
+  // slow push service never holds up the incoming text (Twilio allows about 15).
+  await Promise.race([
+    notifyInboundClientSms(tenantId, {
+      threadId,
+      counterpartPhone: from,
+      bodyPreview: previewBody,
+      clientName: ((inbound && inbound.clientName) || "").toString(),
+      assignedMemberUid,
+      smsLineScope,
+    }).catch((e) => {
+      console.warn(
+        "notifyInboundClientSms",
+        tenantId,
+        e && e.message ? e.message : e
+      );
+    }),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
 
   return true;
 }

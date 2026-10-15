@@ -15320,6 +15320,79 @@ exports.releaseSmsPhoneNumber = functions
   });
 
 /** Team: send an appointment-related SMS from the tenant number. */
+/**
+ * Permanently deletes text conversations and their messages (and any photos texted in them).
+ * Owners and managers can delete any conversation in the business; a team member only those on
+ * their own personal number. Consent and STOP opt-outs are stored separately and are kept.
+ * Params: { threadIds: string[] } (up to 50)
+ */
+exports.deleteSmsThreads = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const raw = Array.isArray(data && data.threadIds) ? data.threadIds : [];
+  const threadIds = [...new Set(raw.map((id) => (id || "").toString().trim()).filter(Boolean))];
+  if (!threadIds.length || threadIds.length > 50) {
+    throw new functions.https.HttpsError("invalid-argument", "Choose 1 to 50 conversations.");
+  }
+  const uid = context.auth.uid;
+  const ctx = await getMemberAccessContext(uid);
+  const canDeleteAny = ctx.isOwner || ctx.accessRole === "manager";
+  const tenantRef = db.collection("tenants").doc(ctx.tenantId);
+  const bucket = admin.storage().bucket();
+  const mediaPrefix = `tenants/${ctx.tenantId}/smsMedia/`;
+  let deleted = 0;
+  const skipped = [];
+
+  for (const threadId of threadIds) {
+    if (threadId.includes("/")) {
+      skipped.push(threadId);
+      continue;
+    }
+    const threadRef = tenantRef.collection("smsThreads").doc(threadId);
+    const threadSnap = await threadRef.get();
+    if (!threadSnap.exists) {
+      skipped.push(threadId);
+      continue;
+    }
+    const thread = threadSnap.data() || {};
+    const ownLine =
+      (thread.smsLineScope || "").toString() === "member" &&
+      (thread.assignedMemberUid || "").toString() === uid;
+    if (!canDeleteAny && !ownLine) {
+      skipped.push(threadId);
+      continue;
+    }
+
+    const logs = await tenantRef.collection("smsLog").where("threadId", "==", threadId).get();
+    const mediaPaths = new Set();
+    for (const doc of logs.docs) {
+      const urls = Array.isArray((doc.data() || {}).mediaUrls) ? doc.data().mediaUrls : [];
+      for (const url of urls) {
+        const match = /\/o\/([^?]+)/.exec((url || "").toString());
+        const objectPath = match ? decodeURIComponent(match[1]) : "";
+        if (objectPath.startsWith(mediaPrefix)) mediaPaths.add(objectPath);
+      }
+    }
+    for (let i = 0; i < logs.docs.length; i += 400) {
+      const batch = db.batch();
+      logs.docs.slice(i, i + 400).forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+    await threadRef.delete();
+    for (const objectPath of mediaPaths) {
+      try {
+        await bucket.file(objectPath).delete();
+      } catch (e) {
+        console.warn("deleteSmsThreads media", objectPath, e.message || e);
+      }
+    }
+    deleted += 1;
+  }
+
+  return { ok: true, deleted, skipped };
+});
+
 exports.sendClientSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {

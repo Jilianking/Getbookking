@@ -19,6 +19,21 @@ class MessagesViewModel: ObservableObject {
         threadSummaries.map(\.threadId)
     }
 
+    /// Permanently deletes conversations (and their messages) on the server. Returns true on success.
+    func deleteThreads(_ threadIds: [String]) async -> Bool {
+        let ids = Array(Set(threadIds)).filter { !$0.isEmpty }
+        guard !ids.isEmpty else { return true }
+        do {
+            _ = try await functions.httpsCallable("deleteSmsThreads").call(["threadIds": ids])
+            // The live list updates on its own; drop them now so the rows go immediately.
+            threadSummaries.removeAll { ids.contains($0.threadId) }
+            return true
+        } catch {
+            lastError = FirebaseFunctionsErrorHelper.message(from: error)
+            return false
+        }
+    }
+
     func loadThreads(isDemoMode: Bool = false, sessionStore: TenantSessionStore? = nil) async {
         if isDemoMode {
             if let sessionStore, sessionStore.isDemoSession {

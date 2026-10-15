@@ -1844,7 +1844,10 @@ async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, bil
   await batch.commit();
 
   if (status !== "active" && tenant.smsStatus === "active") {
-    await suspendTenantSms(tenantId, `subscription_${status}`);
+    // Complimentary access keeps texting on whatever the plan says (e.g. a new free trial).
+    if (tenant.complimentaryPaidAccess !== true) {
+      await suspendTenantSms(tenantId, `subscription_${status}`);
+    }
   }
   return { skipped: false };
 }
@@ -1919,12 +1922,29 @@ function bookingStatusSmsBody(tenant, status, booking) {
   const service = ((booking && booking.serviceName) || "").toString().trim();
   const ctx = { business, service };
   if (status === "confirmed") {
-    return renderSmsPreset(presets.smsPresetConfirmed, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetConfirmed, ctx), business);
   }
   if (status === "declined") {
-    return renderSmsPreset(presets.smsPresetDeclined, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetDeclined, ctx), business);
   }
   return null;
+}
+
+/**
+ * Automatic texts must say who they're from and how to opt out, even if a business has edited
+ * those parts out of its templates: carriers expect both, and every business shares one registration.
+ */
+function withRequiredSmsWording(body, business) {
+  let text = (body || "").toString().trim();
+  if (!text) return text;
+  const name = (business || "").toString().trim();
+  if (name && !text.toLowerCase().includes(name.toLowerCase())) {
+    text = `${name}: ${text}`;
+  }
+  if (!/\bstop\b/i.test(text)) {
+    text = `${text.replace(/\s+$/, "")}${/[.!?]$/.test(text) ? "" : "."} Reply STOP to opt out.`;
+  }
+  return text.slice(0, 1600);
 }
 
 function wrapClockMin(min) {

@@ -12094,6 +12094,7 @@ exports.releaseLapsedSmsNumbers = functions
       // Only plan lapses. A number suspended for another reason is left for a person to review.
       if (!(tenant.smsSuspendReason || "").toString().startsWith("subscription_")) continue;
       if ((tenant.subscriptionStatus || "").toString().toLowerCase() === "active") continue;
+      if (tenant.complimentaryPaidAccess === true) continue;
       const out = await releaseTenantTextingNumbers(doc.id, tenant);
       released += (out.studioReleased ? 1 : 0) + out.memberLinesReleased;
     }

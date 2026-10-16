@@ -1679,6 +1679,7 @@ class PaymentsViewModel: ObservableObject {
             clientSecret: clientSecret,
             paymentIntentId: paymentIntentId,
             stripeAccountId: stripeAccountId,
+            publishableKey: data?["publishableKey"] as? String,
             checkout: checkout
         )
     }
@@ -1743,6 +1744,7 @@ class PaymentsViewModel: ObservableObject {
             let sheetResult = await ManualPaymentSheetPresenter.present(
                 clientSecret: intent.clientSecret,
                 stripeAccountId: intent.stripeAccountId,
+                publishableKey: intent.publishableKey,
                 merchantDisplayName: effectiveTapToPayDisplayName,
                 amountCents: intent.checkout.totalCents,
                 reprice: { paymentMethodId in

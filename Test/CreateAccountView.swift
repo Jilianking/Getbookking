@@ -81,7 +81,10 @@ struct CreateAccountView: View {
                 }
             }
             .interactiveDismissDisabled(isWorking || authViewModel.isCreatingAccount)
-            .task { await store.loadProducts() }
+            .task {
+                await store.loadProducts()
+                await store.refreshTrialEligibility()
+            }
         }
     }
 
@@ -117,7 +120,9 @@ struct CreateAccountView: View {
         case 2:
             return "Your name and phone appear on your profile and booking site."
         default:
-            return "14 days free. Nothing is charged today. Apple’s sheet confirms the plan, and texting stays off until Apple charges."
+            return store.isEligibleForFreeTrial
+                ? "14 days free. Nothing is charged today. Apple’s sheet confirms the plan, and texting stays off until Apple charges."
+                : "Your plan starts today."
         }
     }
 
@@ -344,14 +349,21 @@ struct CreateAccountView: View {
                 }
             }
             if let plan {
-                Text("\(plan.displayName) plan — \(store.displayPrice(for: plan))/month when the 14 days end.")
+                Text(store.isEligibleForFreeTrial
+                     ? "\(plan.displayName) plan — \(store.displayPrice(for: plan))/month when the 14 days end."
+                     : "\(plan.displayName) plan — \(store.displayPrice(for: plan))/month, starting today.")
                     .font(.subheadline)
                     .foregroundStyle(AppDesign.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 6) {
-                bullet("Your 14-day trial starts today. Nothing is charged today.")
-                bullet("Apple charges this plan when the 14 days end.")
+                if store.isEligibleForFreeTrial {
+                    bullet("Your 14-day trial starts today. Nothing is charged today.")
+                    bullet("Apple charges this plan when the 14 days end.")
+                } else {
+                    bullet("Apple charges this plan today.")
+                }
+                bullet("Renews automatically each month until you cancel in your Apple account settings.")
             }
             HStack(alignment: .top, spacing: 10) {
                 Button {

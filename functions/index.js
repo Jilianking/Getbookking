@@ -3920,6 +3920,9 @@ exports.createPaymentIntentForManualCheckout = functions
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       stripeAccountId,
+      // The app uses this key, not one built into it, so switching Stripe to live mode never
+      // leaves an older app version holding a test key.
+      publishableKey: stripePublishableKeyParam.value().trim() || null,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
       serviceCents: priced.serviceCents,

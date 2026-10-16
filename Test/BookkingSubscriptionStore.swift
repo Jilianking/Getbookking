@@ -98,6 +98,9 @@ final class BookkingSubscriptionStore: ObservableObject {
     static let shared = BookkingSubscriptionStore()
 
     @Published private(set) var isPurchasing = false
+    /// Whether this Apple account can still get the 14-day free trial. Apple gives it once per
+    /// account, so a returning customer is charged from day one. True until Apple says otherwise.
+    @Published private(set) var isEligibleForFreeTrial = true
     private var productsByID: [String: StoreKit.Product] = [:]
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
@@ -210,6 +213,23 @@ final class BookkingSubscriptionStore: ObservableObject {
         } catch {
             productsByID = [:]
         }
+    }
+
+    /// Asks Apple whether the free trial is still available to this Apple account.
+    func refreshTrialEligibility() async {
+        if productsByID[BookkingProductID.solo] == nil {
+            await loadProducts()
+        }
+        let trialProducts = [
+            BookkingProductID.solo,
+            BookkingProductID.studio,
+            BookkingProductID.shop,
+            BookkingProductID.charter,
+        ]
+        guard let subscription = trialProducts.lazy
+            .compactMap({ self.productsByID[$0]?.subscription })
+            .first(where: { $0.introductoryOffer != nil }) else { return }
+        isEligibleForFreeTrial = await subscription.isEligibleForIntroOffer
     }
 
     func displayPrice(for plan: SubscriptionPlan) -> String {

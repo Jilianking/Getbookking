@@ -20,6 +20,8 @@ struct ManualCheckoutPaymentIntent {
     let clientSecret: String
     let paymentIntentId: String
     let stripeAccountId: String
+    /// Stripe key sent by the server for this payment (test or live, matching the server).
+    var publishableKey: String? = nil
     var checkout: CardCheckoutBreakdown
     var paymentMethodLabel: String = "Manual payment"
 }
@@ -49,11 +51,17 @@ enum ManualPaymentSheetPresenter {
     static func present(
         clientSecret: String,
         stripeAccountId: String,
+        publishableKey serverPublishableKey: String? = nil,
         merchantDisplayName: String,
         amountCents: Int,
         reprice: @escaping (String) async throws -> InAppCheckoutPrice
     ) async -> ManualCheckoutPaymentResult {
-        let publishableKey = SecretsManager.shared.stripePublishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Prefer the server's key so the app always matches the server's Stripe mode; the key
+        // built into the app is only a fallback for an older server.
+        let fromServer = (serverPublishableKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let publishableKey = fromServer.isEmpty
+            ? SecretsManager.shared.stripePublishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            : fromServer
         guard !publishableKey.isEmpty else {
             return .failed("Stripe is not configured. Add STRIPE_PUBLISHABLE_KEY to Secrets.plist.")
         }

@@ -7,6 +7,7 @@
  *
  * Options:
  *   --texting-exempt on|off     Let this business get texting numbers while the launch block is on.
+ *   --domain-exempt on|off      Let this business buy or transfer a domain while the launch block is on.
  *   --complimentary on|off      Treat this business as paid (texting and payments) without billing.
  *   --area-code 727             Area code for its next texting number (3 digits).
  *   --text-notifications on|off The "Send client text notifications" switch in Notifications.
@@ -89,6 +90,7 @@ async function findTenant(db, args) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const textingExempt = onOff(args["texting-exempt"], "--texting-exempt");
+  const domainExempt = onOff(args["domain-exempt"], "--domain-exempt");
   const complimentary = onOff(args.complimentary, "--complimentary");
   const textNotifications = onOff(args["text-notifications"], "--text-notifications");
   const areaCode = args["area-code"];
@@ -106,6 +108,10 @@ async function main() {
   if (textingExempt !== undefined) {
     patch.smsPurchaseBlockExempt = textingExempt ? true : FieldValue.delete();
     note("Texting block exception", tenant.smsPurchaseBlockExempt === true ? "on" : "off", textingExempt ? "on" : "off");
+  }
+  if (domainExempt !== undefined) {
+    patch.domainPurchaseBlockExempt = domainExempt ? true : FieldValue.delete();
+    note("Domain block exception", tenant.domainPurchaseBlockExempt === true ? "on" : "off", domainExempt ? "on" : "off");
   }
   if (complimentary !== undefined) {
     patch.complimentaryPaidAccess = complimentary ? true : FieldValue.delete();

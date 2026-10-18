@@ -21,7 +21,6 @@ const admin = require("firebase-admin");
 const functions = require("firebase-functions");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const Stripe = require("stripe");
-const { resolveWebThemeId } = require("./signupPayloads");
 
 const namecheapApiKey = defineSecret("NAMECHEAP_API_KEY");
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
@@ -87,12 +86,14 @@ const FALLBACK_TRANSFER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
 const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = true;
 const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
 
-function isDomainPurchasingBlockedDuringTestFlight() {
-  return BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT === true;
+/** A shop with `domainPurchaseBlockExempt` (set by scripts/set-shop-access.js) may buy while blocked. */
+function isDomainPurchasingBlockedDuringTestFlight(tenant) {
+  if (BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT !== true) return false;
+  return !(tenant && tenant.domainPurchaseBlockExempt === true);
 }
 
-function domainPurchaseBlockReason() {
-  if (isDomainPurchasingBlockedDuringTestFlight()) {
+function domainPurchaseBlockReason(tenant) {
+  if (isDomainPurchasingBlockedDuringTestFlight(tenant)) {
     return TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE;
   }
   return null;
@@ -553,132 +554,14 @@ async function resolveUidTenant(uid) {
  * keeping identity prefills (business name, industry theme, contact, location).
  * Old hand-built sites are never imported — only the Bookking app site remains.
  */
-function blankSiteDesignPatch(tenant) {
-  const del = admin.firestore.FieldValue.delete();
-  const businessName = (tenant.businessName || tenant.displayName || "").toString().trim();
-  const industry = (tenant.industry || "custom").toString().trim();
-  const templatePreset = (tenant.templatePreset || "portfolio").toString().trim() || "portfolio";
-  const webThemeId = resolveWebThemeId(industry, templatePreset);
-
-  return {
-    displayName: businessName || "",
-    webThemeId,
-    resolvedWebThemeId: webThemeId,
-    templatePreset,
-    aboutText: "",
-    heroTagline: "",
-    heroSubtitle: "",
-    tagline: "",
-    contactAddress: (tenant.contactAddress || "").toString(),
-    contactAddressSuite: (tenant.contactAddressSuite || "").toString(),
-    galleryGridLayout: "3x1",
-    galleryLayoutStyle: "classic_grid",
-    galleryImages: [],
-    featuredWorkImages: [],
-
-    logoUrl: del,
-    heroImageUrl: del,
-    heroImagePixelWidth: del,
-    heroImagePixelHeight: del,
-    studio12PhilosophyImageUrl: del,
-    studio12PhilosophyImagePixelWidth: del,
-    studio12PhilosophyImagePixelHeight: del,
-    studio12BookCtaImageUrl: del,
-    studio12BookCtaImagePixelWidth: del,
-    studio12BookCtaImagePixelHeight: del,
-
-    webColorPaletteId: del,
-    webCopyOverrides: del,
-    backgroundColor: del,
-    cardSurfaceColor: del,
-    textColor: del,
-    primaryColor: del,
-    primaryColorHover: del,
-    accentTextColor: del,
-    webButtonColors: del,
-    webSurfaceColors: del,
-    webTextColors: del,
-    successColor: del,
-    cardBorderRadius: del,
-    featuredWorkBackgroundColor: del,
-    featuredWorkTextColor: del,
-    bookingFormCardBackgroundColor: del,
-    galleryPageBackgroundColor: del,
-    galleryPageTextColor: del,
-    aboutSectionBackgroundColor: del,
-    aboutSectionTextColor: del,
-    sidebarIconColorHome: del,
-    sidebarIconColorBooking: del,
-    sidebarBackgroundColor: del,
-    sidebarTextColor: del,
-    sidebarCloseIconColor: del,
-
-    luxeHeroTagline: del,
-    luxePromoHeadline: del,
-    luxeFeaturedWorkEyebrow: del,
-    luxeFeaturedWorkHeading: del,
-    luxeShowFeaturedWorkStrip: del,
-    luxeHomeServicesEyebrow: del,
-    luxeHomeServicesHeading: del,
-    luxeShowHomeServicesSection: del,
-    luxeHomeServicesExpandableCard: del,
-    bladeHeroTagline: del,
-    bladeHeroDescription: del,
-    studio12HeroEyebrow: del,
-    studio12HeroHeadline: del,
-    studio12HeroLine1: del,
-    studio12HeroLine2: del,
-    studio12PhilosophyHeadline: del,
-    studio12PhilosophyHeadLine1: del,
-    studio12PhilosophyHeadLine2: del,
-    studio12PhilosophyHeadItalic: del,
-    studio12BookCtaHeadline: del,
-    studio12BookCtaLine1: del,
-    studio12BookCtaItalic: del,
-    studio12BookCtaBody: del,
-    studio12ShowServicesSection: del,
-    studio12ShowProcessSection: del,
-    studio12ProcessSteps: del,
-    classicShowServiceDuration: del,
-    classicFeaturedWorkEyebrow: del,
-    classicFeaturedWorkHeading: del,
-    classicFeaturedWorkSub: del,
-    classicFeaturedWorkEmpty: del,
-    classicServicesEyebrow: del,
-    classicServicesHeading: del,
-    classicServicesExpandableCard: del,
-    classicShowAboutStats: del,
-    classicStatYearsValue: del,
-    classicStatYearsLabel: del,
-    classicStatClientsValue: del,
-    classicStatClientsLabel: del,
-    classicStatRatedValue: del,
-    classicStatRatedLabel: del,
-    classicAboutEyebrow: del,
-    classicAboutHeading: del,
-    galleryCategories: del,
-    heroFont: del,
-
-    customDomainSiteResetAt: admin.firestore.FieldValue.serverTimestamp(),
-    customDomainSiteResetReason: "custom_domain",
-  };
-}
-
-async function applyBlankSiteDesign(tenantId, tenant) {
-  await getDb()
-    .collection("tenants")
-    .doc(tenantId)
-    .set(blankSiteDesignPatch(tenant || {}), { merge: true });
-}
-
 function statusPayload(tenant, tenantId, extras) {
   const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
   const status = (tenant.customDomainStatus || "").toString().trim() || (domain ? "unknown" : "none");
   const source = (tenant.customDomainSource || "").toString().trim() || null;
   const subdomain = (tenant.slug || "").toString().trim().toLowerCase();
   const configured = namecheapConfigured();
-  const domainBlocked = isDomainPurchasingBlockedDuringTestFlight();
-  const domainBlockMessage = domainPurchaseBlockReason() || "";
+  const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(tenant);
+  const domainBlockMessage = domainPurchaseBlockReason(tenant) || "";
   const sandbox = isSandboxHost();
   const statusLower = status.toLowerCase();
   const hasDomain = !!domain && statusLower !== "none";
@@ -712,7 +595,7 @@ function statusPayload(tenant, tenantId, extras) {
             detail: "Visitors see a secure padlock when DNS is live on Bookking.",
             url: `https://${domain}`,
           };
-    } else if (["transferring", "purchasing", "pending", "pending_dns"].includes(statusLower)) {
+    } else if (["transferring", "connecting", "purchasing", "pending", "pending_dns"].includes(statusLower)) {
       customHttps = {
         status: "pending",
         label: "HTTPS pending",
@@ -1006,10 +889,11 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
   await maybeSetCustomNameservers(domain);
   const wantAutoRenew = autoRenew !== false;
   await maybeSetNamecheapAutoRenew(domain, wantAutoRenew);
-  const status = "active";
+  // "active" is set only once the domain serves the site over HTTPS.
+  const status = "connecting";
   const statusMessage = isSandboxHost()
-    ? "Registered in Namecheap sandbox (test). Open Design to build your blank Get Bookking site."
-    : "Domain registered. Open Design to build your site — we’ll finish DNS next.";
+    ? "Registered in Namecheap sandbox (test). Sandbox domains can’t load a website."
+    : "Domain registered. We’re connecting it to your site — this usually takes a few minutes.";
 
   await getDb()
     .collection("tenants")
@@ -1030,7 +914,6 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
         customDomainAutoRenew: wantAutoRenew,
         customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...blankSiteDesignPatch(tenant),
       },
       { merge: true }
     );
@@ -1048,13 +931,12 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     domain,
     status,
     sandbox: isSandboxHost(),
-    siteReset: true,
     orderId: created.orderId,
     chargedAmount: created.chargedAmount,
     customerPaidUsd: payment && payment.customerPaidUsd,
     message: isSandboxHost()
-      ? `${domain} is yours in sandbox. Design is reset to a blank template — open Design to build.`
-      : `${domain} purchased. Design is reset to a blank template — open Design to build.`,
+      ? `${domain} is yours in sandbox (test).`
+      : `${domain} purchased. We’re connecting it now — this usually takes a few minutes. Your free link keeps working meanwhile.`,
     subdomainUrl: `https://${slug}.getbookking.com`,
     publicUrl: `https://${domain}`,
   };
@@ -1101,14 +983,13 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
         customDomainProvider: "namecheap",
         customDomainTransferId: transferId || null,
         customDomainStatusMessage:
-          "Transfer started. Design is reset to a blank template — build in the app while the transfer completes.",
+          "Transfer started. Approve any email from your old registrar. Once connected, your domain will open your Get Bookking site instead of your old website. Remember to cancel your old website plan so you’re not still paying for it.",
         customDomainStripePaymentIntentId: (payment && payment.paymentIntentId) || null,
         customDomainCustomerPaidUsd: (payment && payment.customerPaidUsd) || null,
         customDomainWholesaleUsd: (payment && payment.wholesaleUsd) || null,
         customDomainAutoRenew: wantAutoRenew,
         customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...blankSiteDesignPatch(tenant),
       },
       { merge: true }
     );
@@ -1126,11 +1007,10 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
     ok: true,
     domain,
     status: "transferring",
-    siteReset: true,
     transferId,
     customerPaidUsd: payment && payment.customerPaidUsd,
     message:
-      "Transfer started. Design is reset to a blank template — open Design to build. Approve any email from your old registrar; we’ll connect the domain when the transfer finishes.",
+      "Transfer started. Approve any email from your old registrar; we’ll connect the domain when the transfer finishes. Once connected, your domain will open your Get Bookking site instead of your old website. Remember to cancel your old website plan so you’re not still paying for it.",
     publicUrl: `https://${domain}`,
   };
 }
@@ -1254,7 +1134,7 @@ async function fulfillDomainPaymentIntent(paymentIntentId, opts) {
   const existingStatus = (tenant.customDomainStatus || "").toString().trim().toLowerCase();
   if (
     existing === domain &&
-    (existingStatus === "active" || existingStatus === "transferring") &&
+    ["active", "connecting", "transferring"].includes(existingStatus) &&
     (tenant.customDomainStripePaymentIntentId || "") === piId
   ) {
     await orderRef.set(
@@ -1311,24 +1191,14 @@ function registerCustomDomainFunctions(exportsObj) {
       throw new functions.https.HttpsError("unauthenticated", "Sign in required");
     }
     const tenantId = await resolveUidTenant(context.auth.uid);
-    let tenantDoc = await assertTenantOwner(context.auth.uid, tenantId);
-    let tenant = tenantDoc.data() || {};
-
-    // Backfill: domains bought before blank-site reset existed.
-    const status = (tenant.customDomainStatus || "").toString().trim().toLowerCase();
-    const hasDomain = !!(tenant.customDomain || "").toString().trim();
-    const alreadyReset = !!tenant.customDomainSiteResetAt;
-    if (hasDomain && ["active", "transferring", "purchasing", "pending"].includes(status) && !alreadyReset) {
-      await applyBlankSiteDesign(tenantId, tenant);
-      tenantDoc = await getDb().collection("tenants").doc(tenantId).get();
-      tenant = tenantDoc.data() || {};
-    }
+    const tenantDoc = await assertTenantOwner(context.auth.uid, tenantId);
+    const tenant = tenantDoc.data() || {};
 
     let extras = {};
     const domainName = (tenant.customDomain || "").toString().trim().toLowerCase();
     if (
       domainName &&
-      ["active", "transferring"].includes((tenant.customDomainStatus || "").toString().toLowerCase())
+      ["active", "connecting", "transferring"].includes((tenant.customDomainStatus || "").toString().toLowerCase())
     ) {
       try {
         extras = await fetchDomainReassuranceExtras(domainName);
@@ -1412,7 +1282,8 @@ function registerCustomDomainFunctions(exportsObj) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
       }
       const tenantId = await resolveUidTenant(context.auth.uid);
-      await assertTenantOwner(context.auth.uid, tenantId);
+      const searchTenantDoc = await assertTenantOwner(context.auth.uid, tenantId);
+      const searchTenant = searchTenantDoc.data() || {};
 
       const query = normalizeSearchQuery(data && data.query);
       if (!query || query.length < 1) {
@@ -1423,8 +1294,8 @@ function registerCustomDomainFunctions(exportsObj) {
       }
 
       const markup = readMarkupConfig();
-      const domainBlocked = isDomainPurchasingBlockedDuringTestFlight();
-      const domainBlockMessage = domainPurchaseBlockReason() || "";
+      const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(searchTenant);
+      const domainBlockMessage = domainPurchaseBlockReason(searchTenant) || "";
       if (!namecheapConfigured() || !(namecheapApiKey.value() || "").trim()) {
         return {
           ok: true,
@@ -1551,14 +1422,14 @@ function registerCustomDomainFunctions(exportsObj) {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
       }
-      const domainBlock = domainPurchaseBlockReason();
-      if (domainBlock) {
-        throw new functions.https.HttpsError("failed-precondition", domainBlock);
-      }
       const uid = context.auth.uid;
       const tenantId = await resolveUidTenant(uid);
       const tenantDoc = await assertTenantOwner(uid, tenantId);
       const tenant = tenantDoc.data() || {};
+      const domainBlock = domainPurchaseBlockReason(tenant);
+      if (domainBlock) {
+        throw new functions.https.HttpsError("failed-precondition", domainBlock);
+      }
       const slug = (tenant.slug || "").toString().trim().toLowerCase();
       if (!slug) {
         throw new functions.https.HttpsError("failed-precondition", "Business slug is missing");
@@ -1580,7 +1451,11 @@ function registerCustomDomainFunctions(exportsObj) {
 
       await assertDomainAvailableForTenant(domain, tenantId);
       const existing = (tenant.customDomain || "").toString().trim().toLowerCase();
-      if (existing && existing !== domain && (tenant.customDomainStatus || "") === "active") {
+      if (
+        existing &&
+        existing !== domain &&
+        ["active", "connecting", "transferring"].includes((tenant.customDomainStatus || "").toString().toLowerCase())
+      ) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Remove your current connected domain before buying another."
@@ -1658,14 +1533,14 @@ function registerCustomDomainFunctions(exportsObj) {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
       }
-      const domainBlock = domainPurchaseBlockReason();
-      if (domainBlock) {
-        throw new functions.https.HttpsError("failed-precondition", domainBlock);
-      }
       const uid = context.auth.uid;
       const tenantId = await resolveUidTenant(uid);
       const tenantDoc = await assertTenantOwner(uid, tenantId);
       const tenant = tenantDoc.data() || {};
+      const domainBlock = domainPurchaseBlockReason(tenant);
+      if (domainBlock) {
+        throw new functions.https.HttpsError("failed-precondition", domainBlock);
+      }
       const slug = (tenant.slug || "").toString().trim().toLowerCase();
       if (!slug) {
         throw new functions.https.HttpsError("failed-precondition", "Business slug is missing");
@@ -1694,7 +1569,11 @@ function registerCustomDomainFunctions(exportsObj) {
 
       await assertDomainAvailableForTenant(domain, tenantId);
       const existing = (tenant.customDomain || "").toString().trim().toLowerCase();
-      if (existing && existing !== domain && (tenant.customDomainStatus || "") === "active") {
+      if (
+        existing &&
+        existing !== domain &&
+        ["active", "connecting", "transferring"].includes((tenant.customDomainStatus || "").toString().toLowerCase())
+      ) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Remove your current connected domain before transferring another."
@@ -1815,7 +1694,7 @@ function registerCustomDomainFunctions(exportsObj) {
           "No Bookking-managed domain to transfer out."
         );
       }
-      if (status !== "active") {
+      if (!["active", "connecting"].includes(status)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Wait until the domain is fully connected before transferring out."
@@ -1899,7 +1778,7 @@ function registerCustomDomainFunctions(exportsObj) {
       const tenant = tenantDoc.data() || {};
       const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
       const status = (tenant.customDomainStatus || "").toString().trim().toLowerCase();
-      if (!domain || !["active", "transferring"].includes(status)) {
+      if (!domain || !["active", "connecting", "transferring"].includes(status)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Connect a domain before changing auto-renew."

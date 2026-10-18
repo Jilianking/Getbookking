@@ -16280,4 +16280,16 @@ const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail"
 registerTapToPayLaunchEmailFunctions(exports);
 
 const { registerCustomDomainFunctions } = require("./customDomain");
-registerCustomDomainFunctions(exports);
+registerCustomDomainFunctions(exports, {
+  notifyDomainLive: async ({ tenant, domain }) => {
+    const ownerUid = (tenant.ownerUid || "").toString().trim();
+    if (!ownerUid) return;
+    const tokens = await collectDeviceTokensForUids([ownerUid]);
+    await sendBookingAlertPush({
+      tokens,
+      title: "Your domain is live",
+      body: `${domain} now opens your Get Bookking site.`,
+      data: { type: "custom_domain_live", domain },
+    });
+  },
+});

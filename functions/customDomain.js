@@ -21,6 +21,7 @@ const admin = require("firebase-admin");
 const functions = require("firebase-functions");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const Stripe = require("stripe");
+const dns = require("dns").promises;
 
 const namecheapApiKey = defineSecret("NAMECHEAP_API_KEY");
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
@@ -44,13 +45,15 @@ const namecheapApiHost = defineString("NAMECHEAP_API_HOST", {
   default: "https://api.sandbox.namecheap.com/xml.response",
   description: "Sandbox or https://api.namecheap.com/xml.response for live",
 });
-const namecheapNameserver1 = defineString("NAMECHEAP_NAMESERVER_1", {
+/** Cloudflare for SaaS: each customer domain is a custom hostname on the getbookking.com zone. */
+const cloudflareApiToken = defineSecret("CLOUDFLARE_API_TOKEN");
+const cloudflareZoneId = defineString("CLOUDFLARE_ZONE_ID", {
   default: "",
-  description: "Cloudflare nameserver 1 for Bookking-managed domains",
+  description: "Zone ID of getbookking.com in Cloudflare",
 });
-const namecheapNameserver2 = defineString("NAMECHEAP_NAMESERVER_2", {
-  default: "",
-  description: "Cloudflare nameserver 2 for Bookking-managed domains",
+const customDomainTarget = defineString("CUSTOM_DOMAIN_TARGET", {
+  default: "domains.getbookking.com",
+  description: "Address customer domains point at (Cloudflare fallback origin)",
 });
 /** Flat USD added on top of Namecheap cost (customer-facing price). */
 const domainMarkupUsd = defineString("DOMAIN_MARKUP_USD", {
@@ -822,21 +825,357 @@ async function assertDomainAvailableForTenant(domain, tenantId) {
   }
 }
 
-async function maybeSetCustomNameservers(domain) {
-  const ns1 = (namecheapNameserver1.value() || "").trim();
-  const ns2 = (namecheapNameserver2.value() || "").trim();
-  if (!ns1 || !ns2) return;
-  const { sld, tld } = splitSldTld(domain);
-  if (!sld || !tld) return;
-  try {
-    await namecheapRequest("namecheap.domains.dns.setCustom", {
-      SLD: sld,
-      TLD: tld,
-      Nameservers: `${ns1},${ns2}`,
-    });
-  } catch (e) {
-    console.warn("setCustom nameservers failed (may apply after transfer completes)", e.message || e);
+/** Days a domain may stay "connecting" before the Domain screen asks the shop to contact us. */
+const CONNECTING_STUCK_DAYS = 3;
+/** Days a transfer may stay pending before the same message. */
+const TRANSFER_STUCK_DAYS = 10;
+const DOMAIN_SUPPORT_EMAIL = "domainsupport@getbookking.com";
+
+function cloudflareConfigured() {
+  return !!((cloudflareApiToken.value() || "").trim() && (cloudflareZoneId.value() || "").trim());
+}
+
+async function cloudflareRequest(method, path, body) {
+  const token = (cloudflareApiToken.value() || "").trim();
+  const zone = (cloudflareZoneId.value() || "").trim();
+  if (!token || !zone) {
+    const err = new Error("Cloudflare is not configured.");
+    err.code = "cloudflare-not-configured";
+    throw err;
   }
+  const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.success === false) {
+    const detail = (json.errors || []).map((e) => `${e.code}: ${e.message}`).join("; ");
+    const err = new Error(`Cloudflare ${method} ${path} failed (${res.status}) ${detail}`);
+    err.status = res.status;
+    throw err;
+  }
+  return json.result;
+}
+
+/** Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate. */
+async function ensureCustomHostname(hostname) {
+  const found = await cloudflareRequest(
+    "GET",
+    `/custom_hostnames?hostname=${encodeURIComponent(hostname)}`
+  );
+  if (Array.isArray(found) && found.length) return found[0];
+  return cloudflareRequest("POST", "/custom_hostnames", {
+    hostname,
+    ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } },
+  });
+}
+
+function customHostnameIsLive(h) {
+  return !!(h && h.status === "active" && h.ssl && h.ssl.status === "active");
+}
+
+async function removeCustomHostnames(ids) {
+  for (const id of ids || []) {
+    if (!id) continue;
+    try {
+      await cloudflareRequest("DELETE", `/custom_hostnames/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if (e.status !== 404) console.warn("removeCustomHostnames", id, e.message || e);
+    }
+  }
+}
+
+/**
+ * Email and verification records a transferred domain already has, read from public DNS before we
+ * switch it to Namecheap DNS. Only names that can be looked up are copied; anything custom the
+ * shop added under another name is not discoverable.
+ */
+const KEPT_CNAME_HOSTS = [
+  "autodiscover", "mail", "webmail", "email", "lyncdiscover", "sip",
+  "enterpriseregistration", "enterpriseenrollment",
+  "selector1._domainkey", "selector2._domainkey", "s1._domainkey", "s2._domainkey",
+  "k1._domainkey", "k2._domainkey", "k3._domainkey", "zoho._domainkey",
+];
+const KEPT_TXT_HOSTS = ["_dmarc", "google._domainkey", "default._domainkey", "zoho._domainkey", "k1._domainkey"];
+const KEPT_A_HOSTS = ["mail", "webmail"];
+
+async function quietLookup(fn) {
+  try {
+    return await fn();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function readExistingEmailRecords(domain) {
+  const out = [];
+  const seen = new Set();
+  const add = (rec) => {
+    const key = `${rec.host}|${rec.type}|${rec.address}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(rec);
+  };
+  const mx = await quietLookup(() => dns.resolveMx(domain));
+  (mx || []).forEach((r) => add({ host: "@", type: "MX", address: r.exchange, mxPref: r.priority }));
+  const apexTxt = await quietLookup(() => dns.resolveTxt(domain));
+  (apexTxt || []).forEach((chunks) => add({ host: "@", type: "TXT", address: chunks.join("") }));
+  for (const host of KEPT_CNAME_HOSTS) {
+    const cname = await quietLookup(() => dns.resolveCname(`${host}.${domain}`));
+    if (cname && cname[0]) add({ host, type: "CNAME", address: cname[0] });
+  }
+  for (const host of KEPT_TXT_HOSTS) {
+    const txt = await quietLookup(() => dns.resolveTxt(`${host}.${domain}`));
+    (txt || []).forEach((chunks) => add({ host, type: "TXT", address: chunks.join("") }));
+  }
+  for (const host of KEPT_A_HOSTS) {
+    if (out.some((r) => r.host === host)) continue;
+    const a = await quietLookup(() => dns.resolve4(`${host}.${domain}`));
+    (a || []).forEach((ip) => add({ host, type: "A", address: ip }));
+  }
+  return out;
+}
+
+/**
+ * Points the bare domain and www at Get Bookking on Namecheap DNS, plus any kept email records.
+ * After a transfer the domain still uses its old DNS host, so it is switched to Namecheap DNS first.
+ */
+async function pointDomainAtBookking(domain, keptRecords, { switchToNamecheapDns } = {}) {
+  const { sld, tld } = splitSldTld(domain);
+  const target = (customDomainTarget.value() || "").trim() || "domains.getbookking.com";
+  if (switchToNamecheapDns) {
+    const raw = await namecheapRequest("namecheap.domains.dns.setDefault", { SLD: sld, TLD: tld });
+    if (!namecheapStatusOk(raw)) {
+      throw new Error(`setDefault failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+    }
+  }
+  const records = [
+    { host: "@", type: "ALIAS", address: target, ttl: 300 },
+    { host: "www", type: "CNAME", address: target },
+    ...(keptRecords || []).filter((r) => !(r.host === "@" && ["A", "AAAA", "CNAME", "ALIAS"].includes(r.type)) && r.host !== "www"),
+  ];
+  const params = { SLD: sld, TLD: tld };
+  records.forEach((r, i) => {
+    const n = i + 1;
+    params[`HostName${n}`] = r.host;
+    params[`RecordType${n}`] = r.type;
+    params[`Address${n}`] = r.address;
+    params[`TTL${n}`] = String(r.ttl || 1800);
+    if (r.type === "MX") params[`MXPref${n}`] = String(r.mxPref != null ? r.mxPref : 10);
+  });
+  if (records.some((r) => r.type === "MX")) params.EmailType = "MX";
+  const raw = await namecheapRequest("namecheap.domains.dns.setHosts", params);
+  if (!namecheapStatusOk(raw)) {
+    throw new Error(`setHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+  }
+  return records.length - 2;
+}
+
+/**
+ * Points the domain at us and registers it with Cloudflare. Safe to repeat: the background job
+ * calls it again until both steps have succeeded. Returns false when Cloudflare isn't set up yet.
+ */
+async function connectDomainToBookking(tenantRef, tenant) {
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  if (!domain) return false;
+  if (!cloudflareConfigured()) {
+    console.warn("connectDomainToBookking: Cloudflare not configured; will retry", domain);
+    return false;
+  }
+  const patch = {};
+  if (!tenant.customDomainDnsPointedAt) {
+    const afterTransfer = (tenant.customDomainSource || "") === "transfer";
+    const kept = afterTransfer ? await readExistingEmailRecords(domain) : [];
+    const keptCount = await pointDomainAtBookking(domain, kept, { switchToNamecheapDns: afterTransfer });
+    patch.customDomainDnsPointedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.customDomainKeptRecordCount = keptCount;
+  }
+  const apex = await ensureCustomHostname(domain);
+  const www = await ensureCustomHostname(wwwOf(domain));
+  patch.customDomainCloudflareIds = [apex.id, www.id];
+  patch.customDomainUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+  await tenantRef.set(patch, { merge: true });
+  return true;
+}
+
+/** Lets Apple Pay show on the domain's booking page (Stripe needs each web address registered). */
+async function registerApplePayDomain(tenantId, tenant, domain) {
+  if (!(stripeSecretKey.value() || "").trim()) return;
+  const stripe = getStripe();
+  const accountIds = new Set();
+  const own = (tenant.stripeAccountId || "").toString().trim();
+  if (own) accountIds.add(own);
+  const members = await getDb().collection("users").where("tenantId", "==", tenantId).get();
+  members.forEach((m) => {
+    const id = ((m.data() || {}).stripeAccountId || "").toString().trim();
+    if (id) accountIds.add(id);
+  });
+  for (const stripeAccount of accountIds) {
+    try {
+      await stripe.paymentMethodDomains.create({ domain_name: domain }, { stripeAccount });
+    } catch (e) {
+      if (!/already/i.test(e.message || "")) {
+        console.warn("registerApplePayDomain", tenantId, stripeAccount, e.message || e);
+      }
+    }
+  }
+}
+
+/** Fields cleared when a shop removes or transfers out its domain. */
+function disconnectedDomainPatch() {
+  const del = admin.firestore.FieldValue.delete();
+  return {
+    customDomain: del,
+    customDomainWww: del,
+    customDomainStatus: "none",
+    customDomainSource: del,
+    customDomainProvider: del,
+    customDomainTransferId: del,
+    customDomainStatusMessage: del,
+    customDomainTransferOutPreparedAt: del,
+    customDomainAutoRenew: del,
+    customDomainAutoRenewUpdatedAt: del,
+    customDomainCloudflareIds: del,
+    customDomainDnsPointedAt: del,
+    customDomainKeptRecordCount: del,
+    customDomainConnectingSince: del,
+    customDomainLiveAt: del,
+    customDomainStuckNotedAt: del,
+    customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function disconnectDomainFromCloudflare(tenant) {
+  const ids = Array.isArray(tenant.customDomainCloudflareIds) ? tenant.customDomainCloudflareIds : [];
+  if (!ids.length || !cloudflareConfigured()) return;
+  await removeCustomHostnames(ids);
+}
+
+function millisOf(ts) {
+  return ts && typeof ts.toMillis === "function" ? ts.toMillis() : 0;
+}
+
+/** True when Namecheap reports the transfer finished; "failed" when it was cancelled or rejected. */
+async function transferOutcome(tenant) {
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  const transferId = (tenant.customDomainTransferId || "").toString().trim();
+  if (transferId) {
+    const raw = await namecheapRequest("namecheap.domains.transfer.getStatus", { TransferID: transferId });
+    if (namecheapStatusOk(raw)) {
+      const status = (/TransferGetStatusResult[^>]*\sStatus="([^"]*)"/i.exec(raw) || [])[1] || "";
+      if (/complet/i.test(status)) return { done: true };
+      if (/cancel|fail|reject|timeout|invalid/i.test(status)) return { failed: true, status };
+    }
+  }
+  const info = await namecheapRequest("namecheap.domains.getInfo", { DomainName: domain });
+  if (namecheapStatusOk(info) && /^(ok|locked)$/i.test(parseDomainGetInfo(info).domainStatus || "")) {
+    return { done: true };
+  }
+  return {};
+}
+
+/**
+ * One step forward for a domain that is transferring or connecting. Called by the background job,
+ * and right after a purchase so a new domain doesn't wait for the next run.
+ */
+async function advanceCustomDomain(tenantRef, notifyDomainLive) {
+  const snap = await tenantRef.get();
+  if (!snap.exists) return "missing";
+  const tenant = snap.data() || {};
+  const tenantId = tenantRef.id;
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  const status = (tenant.customDomainStatus || "").toString().trim().toLowerCase();
+  const slug = (tenant.slug || "").toString().trim().toLowerCase();
+  if (!domain) return "no-domain";
+  const ageDays = (Date.now() - millisOf(tenant.customDomainConnectingSince || tenant.customDomainUpdatedAt)) / 86400000;
+
+  if (status === "transferring") {
+    const outcome = await transferOutcome(tenant);
+    if (outcome.failed) {
+      await tenantRef.set(
+        {
+          customDomainStatus: "failed",
+          customDomainStatusMessage:
+            `The transfer didn’t go through (${outcome.status}). Contact ${DOMAIN_SUPPORT_EMAIL} and we’ll sort it out.`,
+          customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await clearDomainMappings(domain);
+      return "transfer-failed";
+    }
+    if (!outcome.done) {
+      if (ageDays > TRANSFER_STUCK_DAYS && !tenant.customDomainStuckNotedAt) {
+        await tenantRef.set(
+          {
+            customDomainStatusMessage: `The transfer is taking longer than usual. Contact ${DOMAIN_SUPPORT_EMAIL} and we’ll check on it.`,
+            customDomainStuckNotedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        console.warn("custom domain transfer stuck", tenantId, domain);
+      }
+      return "transfer-pending";
+    }
+    await tenantRef.set(
+      {
+        customDomainStatus: "connecting",
+        customDomainConnectingSince: admin.firestore.FieldValue.serverTimestamp(),
+        customDomainStuckNotedAt: admin.firestore.FieldValue.delete(),
+        customDomainStatusMessage: "Transfer complete. We’re connecting it to your site now.",
+        customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await writeDomainMappings({ domain, tenantId, slug, status: "connecting", source: "transfer" });
+    await connectDomainToBookking(tenantRef, { ...tenant, customDomainStatus: "connecting" });
+    return "transfer-done";
+  }
+
+  if (status !== "connecting") return "skip";
+
+  const ids = Array.isArray(tenant.customDomainCloudflareIds) ? tenant.customDomainCloudflareIds : [];
+  if (!tenant.customDomainDnsPointedAt || ids.length < 2) {
+    const connected = await connectDomainToBookking(tenantRef, tenant);
+    return connected ? "connect-started" : "waiting-for-cloudflare";
+  }
+
+  const hosts = await Promise.all(ids.map((id) => cloudflareRequest("GET", `/custom_hostnames/${encodeURIComponent(id)}`)));
+  if (hosts.every(customHostnameIsLive)) {
+    await tenantRef.set(
+      {
+        customDomainStatus: "active",
+        customDomainStatusMessage: `Connected. ${domain} now opens your site.`,
+        customDomainLiveAt: admin.firestore.FieldValue.serverTimestamp(),
+        customDomainStuckNotedAt: admin.firestore.FieldValue.delete(),
+        customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await writeDomainMappings({ domain, tenantId, slug, status: "active", source: tenant.customDomainSource || null });
+    await registerApplePayDomain(tenantId, tenant, domain);
+    if (typeof notifyDomainLive === "function") {
+      try {
+        await notifyDomainLive({ tenantId, tenant, domain });
+      } catch (e) {
+        console.warn("notifyDomainLive", tenantId, e.message || e);
+      }
+    }
+    return "live";
+  }
+  if (ageDays > CONNECTING_STUCK_DAYS && !tenant.customDomainStuckNotedAt) {
+    await tenantRef.set(
+      {
+        customDomainStatusMessage: `Still connecting. Contact ${DOMAIN_SUPPORT_EMAIL} and we’ll finish it for you.`,
+        customDomainStuckNotedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    console.warn("custom domain stuck connecting", tenantId, domain, hosts.map((h) => `${h.hostname}:${h.status}/${h.ssl && h.ssl.status}`).join(", "));
+  }
+  return "connecting";
 }
 
 async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, autoRenew }) {
@@ -886,14 +1225,13 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     );
   }
 
-  await maybeSetCustomNameservers(domain);
   const wantAutoRenew = autoRenew !== false;
   await maybeSetNamecheapAutoRenew(domain, wantAutoRenew);
   // "active" is set only once the domain serves the site over HTTPS.
   const status = "connecting";
   const statusMessage = isSandboxHost()
     ? "Registered in Namecheap sandbox (test). Sandbox domains can’t load a website."
-    : "Domain registered. We’re connecting it to your site — this usually takes a few minutes.";
+    : "Domain registered. We’re connecting it to your site — this usually takes under an hour.";
 
   await getDb()
     .collection("tenants")
@@ -903,6 +1241,7 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
         customDomain: domain,
         customDomainWww: wwwOf(domain),
         customDomainStatus: status,
+        customDomainConnectingSince: admin.firestore.FieldValue.serverTimestamp(),
         customDomainSource: "purchase",
         customDomainProvider: "namecheap",
         customDomainOrderId: created.orderId || null,
@@ -936,7 +1275,7 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     customerPaidUsd: payment && payment.customerPaidUsd,
     message: isSandboxHost()
       ? `${domain} is yours in sandbox (test).`
-      : `${domain} purchased. We’re connecting it now — this usually takes a few minutes. Your free link keeps working meanwhile.`,
+      : `${domain} purchased. We’re connecting it now — this usually takes under an hour. Your free link keeps working meanwhile.`,
     subdomainUrl: `https://${slug}.getbookking.com`,
     publicUrl: `https://${domain}`,
   };
@@ -1001,7 +1340,6 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
     status: "transferring",
     source: "transfer",
   });
-  await maybeSetCustomNameservers(domain);
 
   return {
     ok: true,
@@ -1183,7 +1521,38 @@ async function fulfillDomainPaymentIntent(paymentIntentId, opts) {
   return result;
 }
 
-function registerCustomDomainFunctions(exportsObj) {
+/**
+ * @param {object} [options]
+ * @param {Function} [options.notifyDomainLive] ({ tenantId, tenant, domain }) — tells the owner the domain is live.
+ */
+function registerCustomDomainFunctions(exportsObj, options) {
+  const notifyDomainLive = options && options.notifyDomainLive;
+
+  /** Every 15 minutes: finish transfers and mark domains live once Cloudflare's certificate is active. */
+  exportsObj.advanceCustomDomains = functions
+    .runWith({ secrets: [namecheapApiKey, stripeSecretKey, cloudflareApiToken] })
+    .pubsub.schedule("every 15 minutes")
+    .onRun(async () => {
+      const snap = await getDb()
+        .collection("tenants")
+        .where("customDomainStatus", "in", ["transferring", "connecting"])
+        .get();
+      if (snap.empty) return null;
+      const outcomes = {};
+      for (const doc of snap.docs) {
+        let outcome;
+        try {
+          outcome = await advanceCustomDomain(doc.ref, notifyDomainLive);
+        } catch (e) {
+          outcome = "error";
+          console.error("advanceCustomDomains", doc.id, e.message || e);
+        }
+        outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+      }
+      console.log("advanceCustomDomains", JSON.stringify(outcomes));
+      return null;
+    });
+
   exportsObj.getCustomDomainStatus = functions
     .runWith({ secrets: [namecheapApiKey] })
     .https.onCall(async (data, context) => {
@@ -1503,7 +1872,7 @@ function registerCustomDomainFunctions(exportsObj) {
     });
 
   exportsObj.completeDomainPurchase = functions
-    .runWith({ secrets: [namecheapApiKey, stripeSecretKey] })
+    .runWith({ secrets: [namecheapApiKey, stripeSecretKey, cloudflareApiToken] })
     .https.onCall(async (data, context) => {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -1523,7 +1892,13 @@ function registerCustomDomainFunctions(exportsObj) {
       if (order.kind !== "purchase") {
         throw new functions.https.HttpsError("failed-precondition", "Not a purchase order");
       }
-      return fulfillDomainPaymentIntent(paymentIntentId, { uid: context.auth.uid });
+      const result = await fulfillDomainPaymentIntent(paymentIntentId, { uid: context.auth.uid });
+      try {
+        await advanceCustomDomain(getDb().collection("tenants").doc(order.tenantId), notifyDomainLive);
+      } catch (e) {
+        console.warn("connect after purchase (background job will retry)", order.tenantId, e.message || e);
+      }
+      return result;
     });
 
   /** Create Stripe PaymentIntent for transfer-in fee (marked up). No transfer-out fee. */
@@ -1629,7 +2004,9 @@ function registerCustomDomainFunctions(exportsObj) {
       return fulfillDomainPaymentIntent(paymentIntentId, { uid: context.auth.uid });
     });
 
-  exportsObj.removeCustomDomain = functions.https.onCall(async (data, context) => {
+  exportsObj.removeCustomDomain = functions
+    .runWith({ secrets: [cloudflareApiToken] })
+    .https.onCall(async (data, context) => {
     if (!context.auth || !context.auth.uid) {
       throw new functions.https.HttpsError("unauthenticated", "Sign in required");
     }
@@ -1638,26 +2015,11 @@ function registerCustomDomainFunctions(exportsObj) {
     const tenant = tenantDoc.data() || {};
     const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
 
+    await disconnectDomainFromCloudflare(tenant);
     await getDb()
       .collection("tenants")
       .doc(tenantId)
-      .set(
-        {
-          customDomain: admin.firestore.FieldValue.delete(),
-          customDomainWww: admin.firestore.FieldValue.delete(),
-          customDomainStatus: "none",
-          customDomainSource: admin.firestore.FieldValue.delete(),
-          customDomainProvider: admin.firestore.FieldValue.delete(),
-          customDomainTransferId: admin.firestore.FieldValue.delete(),
-          customDomainStatusMessage: admin.firestore.FieldValue.delete(),
-          customDomainTransferOutPreparedAt: admin.firestore.FieldValue.delete(),
-          customDomainAutoRenew: admin.firestore.FieldValue.delete(),
-          customDomainAutoRenewUpdatedAt: admin.firestore.FieldValue.delete(),
-          customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      .set(disconnectedDomainPatch(), { merge: true });
 
     await clearDomainMappings(domain);
 
@@ -1811,7 +2173,9 @@ function registerCustomDomainFunctions(exportsObj) {
     });
 
   /** After the domain has left Namecheap / Bookking, clear tenant custom domain. */
-  exportsObj.confirmDomainTransferOut = functions.https.onCall(async (data, context) => {
+  exportsObj.confirmDomainTransferOut = functions
+    .runWith({ secrets: [cloudflareApiToken] })
+    .https.onCall(async (data, context) => {
     if (!context.auth || !context.auth.uid) {
       throw new functions.https.HttpsError("unauthenticated", "Sign in required");
     }
@@ -1820,26 +2184,11 @@ function registerCustomDomainFunctions(exportsObj) {
     const tenant = tenantDoc.data() || {};
     const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
 
+    await disconnectDomainFromCloudflare(tenant);
     await getDb()
       .collection("tenants")
       .doc(tenantId)
-      .set(
-        {
-          customDomain: admin.firestore.FieldValue.delete(),
-          customDomainWww: admin.firestore.FieldValue.delete(),
-          customDomainStatus: "none",
-          customDomainSource: admin.firestore.FieldValue.delete(),
-          customDomainProvider: admin.firestore.FieldValue.delete(),
-          customDomainTransferId: admin.firestore.FieldValue.delete(),
-          customDomainStatusMessage: admin.firestore.FieldValue.delete(),
-          customDomainTransferOutPreparedAt: admin.firestore.FieldValue.delete(),
-          customDomainAutoRenew: admin.firestore.FieldValue.delete(),
-          customDomainAutoRenewUpdatedAt: admin.firestore.FieldValue.delete(),
-          customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      .set(disconnectedDomainPatch(), { merge: true });
 
     await clearDomainMappings(domain);
     const slug = (tenant.slug || "").toString().trim().toLowerCase();

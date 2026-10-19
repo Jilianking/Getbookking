@@ -22,6 +22,7 @@ const functions = require("firebase-functions");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const Stripe = require("stripe");
 const dns = require("dns").promises;
+const walletDomains = require("./walletDomains");
 
 const namecheapApiKey = defineSecret("NAMECHEAP_API_KEY");
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
@@ -999,41 +1000,12 @@ async function connectDomainToBookking(tenantRef, tenant) {
   return true;
 }
 
-/** The shop's Stripe account plus any team members paid into their own accounts. */
-async function stripeAccountsForTenant(tenantId, tenant) {
-  const accountIds = new Set();
-  const own = (tenant.stripeAccountId || "").toString().trim();
-  if (own) accountIds.add(own);
-  const members = await getDb().collection("users").where("tenantId", "==", tenantId).get();
-  members.forEach((m) => {
-    const id = ((m.data() || {}).stripeAccountId || "").toString().trim();
-    if (id) accountIds.add(id);
-  });
-  return [...accountIds];
-}
-
-/**
- * Turns Apple Pay / Google Pay on or off for a web address on the shop's Stripe accounts.
- * Stripe keeps registered addresses (no delete), so removal switches the entry off.
- */
+/** Apple Pay / Google Pay for the domain on the shop's Stripe accounts (see walletDomains.js). */
 async function setWalletDomain(tenantId, tenant, domain, enabled) {
   if (!domain || !(stripeSecretKey.value() || "").trim()) return;
-  const stripe = getStripe();
-  for (const stripeAccount of await stripeAccountsForTenant(tenantId, tenant)) {
-    try {
-      const found = await stripe.paymentMethodDomains.list({ domain_name: domain, limit: 1 }, { stripeAccount });
-      const existing = found && found.data && found.data[0];
-      if (existing) {
-        if (existing.enabled !== enabled) {
-          await stripe.paymentMethodDomains.update(existing.id, { enabled }, { stripeAccount });
-        }
-      } else if (enabled) {
-        await stripe.paymentMethodDomains.create({ domain_name: domain }, { stripeAccount });
-      }
-    } catch (e) {
-      console.warn("setWalletDomain", tenantId, stripeAccount, domain, enabled, e.message || e);
-    }
-  }
+  const accounts = await walletDomains.stripeAccountsForShop(getDb(), tenantId, tenant);
+  const results = await walletDomains.setWalletDomain(getStripe(), accounts, domain, enabled);
+  if (results.length) console.log("setWalletDomain", tenantId, domain, results.join("; "));
 }
 
 /** Fields cleared when a shop removes or transfers out its domain. */

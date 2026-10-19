@@ -63,7 +63,37 @@ async function setWalletDomain(stripe, accountIds, domain, enabled) {
   return results;
 }
 
+/** What Stripe reports for `domain` on each account (read-only). */
+async function walletDomainStatus(stripe, accountIds, domain) {
+  const results = [];
+  for (const stripeAccount of accountIds || []) {
+    try {
+      const found = await stripe.paymentMethodDomains.list(
+        { domain_name: domain, limit: 1 },
+        { stripeAccount }
+      );
+      const d = found && found.data && found.data[0];
+      if (!d) {
+        results.push(`${stripeAccount}: not registered`);
+        continue;
+      }
+      const wallet = (name) => {
+        const w = d[name] || {};
+        const why = w.status_details && w.status_details.error_message;
+        return `${name.replace("_", " ")} ${w.status || "unknown"}${why ? ` — ${why}` : ""}`;
+      };
+      results.push(
+        `${stripeAccount}: ${d.enabled ? "on" : "off"}; ${wallet("apple_pay")}; ${wallet("google_pay")}`
+      );
+    } catch (e) {
+      results.push(`${stripeAccount}: could not read (${e.message || e})`);
+    }
+  }
+  return results;
+}
+
 module.exports = {
+  walletDomainStatus,
   BOOKING_PLATFORM_HOST,
   bookingHostForSlug,
   stripeAccountsForShop,

@@ -11,6 +11,7 @@
  *   --slug <slug>  One shop.
  *   --all          Every shop that has connected Stripe.
  *   --off          Switch the address off instead (undo).
+ *   --status       Only show what Stripe reports for Apple Pay / Google Pay (read-only).
  *   --live         Required when the key is a live key (switch day).
  *   --apply        Make the changes. Without it, nothing is changed.
  *
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     else if (arg === "--all") out.all = true;
     else if (arg === "--off") out.off = true;
     else if (arg === "--live") out.live = true;
+    else if (arg === "--status") out.status = true;
     else if (arg === "--slug") out.slug = (argv[++i] || "").toLowerCase();
   }
   return out;
@@ -103,6 +105,11 @@ async function main() {
       continue;
     }
     shops += 1;
+    if (args.status) {
+      const lines = await walletDomains.walletDomainStatus(stripe, accounts, host);
+      console.log(`${host}:\n  ${lines.join("\n  ")}`);
+      continue;
+    }
     if (!args.apply) {
       console.log(`${host}: would switch ${enabled ? "on" : "off"} for ${accounts.join(", ")}`);
       continue;
@@ -110,7 +117,8 @@ async function main() {
     const results = await walletDomains.setWalletDomain(stripe, accounts, host, enabled);
     console.log(`${host}:\n  ${results.join("\n  ")}`);
   }
-  console.log(`\n${shops} shop(s).${args.apply ? "" : " Nothing changed. Run again with --apply to make these changes."}`);
+  const tail = args.status || args.apply ? "" : " Nothing changed. Run again with --apply to make these changes.";
+  console.log(`\n${shops} shop(s).${tail}`);
 }
 
 main().catch((error) => {

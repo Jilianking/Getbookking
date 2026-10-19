@@ -14833,13 +14833,25 @@
         };
         return config;
       }
-      function confirmCheckoutPayment(prepare, stripe, elements, confirmParams) {
-        var ready = (typeof prepare === 'function') ? prepare() : Promise.resolve();
-        return ready.then(function() {
-          return stripe.confirmPayment({
-            elements: elements,
-            redirect: 'if_required',
-            confirmParams: confirmParams
+      /**
+       * Apple Pay / Google Pay must open right after the tap, so elements.submit() runs first and
+       * any server work (repricing, saving contact details) comes after it.
+       */
+      function confirmCheckoutPayment(prepare, stripe, elements, confirmParams, beforeConfirm) {
+        var submitted = (elements && typeof elements.submit === 'function')
+          ? elements.submit()
+          : Promise.resolve({});
+        return submitted.then(function(res) {
+          if (res && res.error) return { error: res.error };
+          var ready = (typeof prepare === 'function') ? prepare() : Promise.resolve();
+          return ready.then(function() {
+            return (typeof beforeConfirm === 'function') ? beforeConfirm() : null;
+          }).then(function() {
+            return stripe.confirmPayment({
+              elements: elements,
+              redirect: 'if_required',
+              confirmParams: confirmParams
+            });
           });
         });
       }
@@ -15798,23 +15810,22 @@
             }
             var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
               encodeURIComponent(stripeState.orderId || '');
-            return syncShopCheckoutContact(contact).then(function() {
-              return confirmCheckoutPayment(
-                stripeState.prepareConfirm,
-                stripeState.stripe,
-                stripeState.elements,
-                {
-                  return_url: returnUrl,
-                  payment_method_data: {
-                    billing_details: {
-                      name: contact.name,
-                      email: contact.email,
-                      phone: contact.phone || undefined,
-                    },
+            return confirmCheckoutPayment(
+              stripeState.prepareConfirm,
+              stripeState.stripe,
+              stripeState.elements,
+              {
+                return_url: returnUrl,
+                payment_method_data: {
+                  billing_details: {
+                    name: contact.name,
+                    email: contact.email,
+                    phone: contact.phone || undefined,
                   },
-                }
-              );
-            }).then(function(result) {
+                },
+              },
+              function() { return syncShopCheckoutContact(contact); }
+            ).then(function(result) {
               if (result.error) throw result.error;
               return finalizeShopCheckoutPayment(
                 tenant,

@@ -999,10 +999,8 @@ async function connectDomainToBookking(tenantRef, tenant) {
   return true;
 }
 
-/** Lets Apple Pay show on the domain's booking page (Stripe needs each web address registered). */
-async function registerApplePayDomain(tenantId, tenant, domain) {
-  if (!(stripeSecretKey.value() || "").trim()) return;
-  const stripe = getStripe();
+/** The shop's Stripe account plus any team members paid into their own accounts. */
+async function stripeAccountsForTenant(tenantId, tenant) {
   const accountIds = new Set();
   const own = (tenant.stripeAccountId || "").toString().trim();
   if (own) accountIds.add(own);
@@ -1011,13 +1009,29 @@ async function registerApplePayDomain(tenantId, tenant, domain) {
     const id = ((m.data() || {}).stripeAccountId || "").toString().trim();
     if (id) accountIds.add(id);
   });
-  for (const stripeAccount of accountIds) {
+  return [...accountIds];
+}
+
+/**
+ * Turns Apple Pay / Google Pay on or off for a web address on the shop's Stripe accounts.
+ * Stripe keeps registered addresses (no delete), so removal switches the entry off.
+ */
+async function setWalletDomain(tenantId, tenant, domain, enabled) {
+  if (!domain || !(stripeSecretKey.value() || "").trim()) return;
+  const stripe = getStripe();
+  for (const stripeAccount of await stripeAccountsForTenant(tenantId, tenant)) {
     try {
-      await stripe.paymentMethodDomains.create({ domain_name: domain }, { stripeAccount });
-    } catch (e) {
-      if (!/already/i.test(e.message || "")) {
-        console.warn("registerApplePayDomain", tenantId, stripeAccount, e.message || e);
+      const found = await stripe.paymentMethodDomains.list({ domain_name: domain, limit: 1 }, { stripeAccount });
+      const existing = found && found.data && found.data[0];
+      if (existing) {
+        if (existing.enabled !== enabled) {
+          await stripe.paymentMethodDomains.update(existing.id, { enabled }, { stripeAccount });
+        }
+      } else if (enabled) {
+        await stripe.paymentMethodDomains.create({ domain_name: domain }, { stripeAccount });
       }
+    } catch (e) {
+      console.warn("setWalletDomain", tenantId, stripeAccount, domain, enabled, e.message || e);
     }
   }
 }
@@ -1155,7 +1169,7 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
       { merge: true }
     );
     await writeDomainMappings({ domain, tenantId, slug, status: "active", source: tenant.customDomainSource || null });
-    await registerApplePayDomain(tenantId, tenant, domain);
+    await setWalletDomain(tenantId, tenant, domain, true);
     if (typeof notifyDomainLive === "function") {
       try {
         await notifyDomainLive({ tenantId, tenant, domain });
@@ -2005,7 +2019,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
     });
 
   exportsObj.removeCustomDomain = functions
-    .runWith({ secrets: [cloudflareApiToken] })
+    .runWith({ secrets: [cloudflareApiToken, stripeSecretKey] })
     .https.onCall(async (data, context) => {
     if (!context.auth || !context.auth.uid) {
       throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -2016,6 +2030,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
     const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
 
     await disconnectDomainFromCloudflare(tenant);
+    await setWalletDomain(tenantId, tenant, domain, false);
     await getDb()
       .collection("tenants")
       .doc(tenantId)
@@ -2174,7 +2189,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
 
   /** After the domain has left Namecheap / Bookking, clear tenant custom domain. */
   exportsObj.confirmDomainTransferOut = functions
-    .runWith({ secrets: [cloudflareApiToken] })
+    .runWith({ secrets: [cloudflareApiToken, stripeSecretKey] })
     .https.onCall(async (data, context) => {
     if (!context.auth || !context.auth.uid) {
       throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -2185,6 +2200,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
     const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
 
     await disconnectDomainFromCloudflare(tenant);
+    await setWalletDomain(tenantId, tenant, domain, false);
     await getDb()
       .collection("tenants")
       .doc(tenantId)

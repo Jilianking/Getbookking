@@ -81,6 +81,7 @@ const charterOccupancy = require("./charterOccupancy");
 const appleSubscription = require("./appleSubscription");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
+const walletDomains = require("./walletDomains");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 /** Shippo API token (shippo_test_… or live). Rates-only at checkout — Bookking never buys labels. */
 const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
@@ -15545,6 +15546,67 @@ exports.sendClientSms = functions
       }
       throw new functions.https.HttpsError("failed-precondition", msg);
     }
+  });
+
+/**
+ * Apple Pay / Google Pay: register the shop's booking address on its Stripe accounts when the
+ * shop connects Stripe or changes its web address. The old address is switched off.
+ */
+exports.syncShopWalletDomains = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .firestore.document("tenants/{tenantId}")
+  .onWrite(async (change, context) => {
+    const before = change.before.exists ? change.before.data() || {} : {};
+    const after = change.after.exists ? change.after.data() || {} : null;
+    if (!after) return null;
+    const beforeSlug = (before.slug || "").toString().trim().toLowerCase();
+    const afterSlug = (after.slug || "").toString().trim().toLowerCase();
+    const beforeAccount = (before.stripeAccountId || "").toString().trim();
+    const afterAccount = (after.stripeAccountId || "").toString().trim();
+    if (beforeSlug === afterSlug && beforeAccount === afterAccount) return null;
+    const newHost = walletDomains.bookingHostForSlug(afterSlug);
+    if (!newHost) return null;
+    const stripe = stripeClientFromSecret();
+    if (!stripe) return null;
+    const tenantId = context.params.tenantId;
+    const accounts = await walletDomains.stripeAccountsForShop(db, tenantId, after);
+    if (!accounts.length) return null;
+    const oldHost = walletDomains.bookingHostForSlug(beforeSlug);
+    if (oldHost && oldHost !== newHost) {
+      await walletDomains.setWalletDomain(stripe, accounts, oldHost, false);
+    }
+    const results = await walletDomains.setWalletDomain(stripe, accounts, newHost, true);
+    console.log("syncShopWalletDomains", tenantId, newHost, results.join("; "));
+    return null;
+  });
+
+/** Apple Pay / Google Pay: a team member who connects their own Stripe gets the shop's address registered. */
+exports.syncMemberWalletDomain = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .firestore.document("users/{memberUid}")
+  .onWrite(async (change, context) => {
+    const before = change.before.exists ? change.before.data() || {} : {};
+    const after = change.after.exists ? change.after.data() || {} : null;
+    if (!after) return null;
+    const account = (after.stripeAccountId || "").toString().trim();
+    const tenantId = (after.tenantId || "").toString().trim();
+    if (!account || !tenantId) return null;
+    if (
+      account === (before.stripeAccountId || "").toString().trim() &&
+      tenantId === (before.tenantId || "").toString().trim()
+    ) {
+      return null;
+    }
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const host = walletDomains.bookingHostForSlug(tenantSnap.exists ? (tenantSnap.data() || {}).slug : "");
+    if (!host) return null;
+    const stripe = stripeClientFromSecret();
+    if (!stripe) return null;
+    const accounts = (await walletDomains.stripeAccountsForShop(db, tenantId, {})).filter((id) => id === account);
+    if (!accounts.length) return null;
+    const results = await walletDomains.setWalletDomain(stripe, accounts, host, true);
+    console.log("syncMemberWalletDomain", context.params.memberUid, host, results.join("; "));
+    return null;
   });
 
 /** Firestore: provision Twilio when smsStatus becomes pending. */

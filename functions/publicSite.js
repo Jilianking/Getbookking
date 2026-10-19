@@ -175,6 +175,10 @@ function buildPublicSitePayload(tenantId, data) {
   if (tz) out.timeZone = String(tz);
   const slug = normalizeSlug(src.slug);
   if (slug) out.slug = slug;
+  // Connected custom domain, used by the site to tell search engines its main address.
+  const domain = (src.customDomain || "").toString().trim().toLowerCase();
+  const domainLive = (src.customDomainStatus || "").toString().trim().toLowerCase() === "active";
+  out.canonicalDomain = domain && domainLive ? domain : admin.firestore.FieldValue.delete();
   return out;
 }
 

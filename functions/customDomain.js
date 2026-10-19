@@ -2207,6 +2207,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
   /**
    * Public resolve for Cloudflare worker / SPA fallback.
    * GET ?host=bleustattoos.com → { slug, status }
+   * GET ?slug=bleustattoos → { slug, domain } when that shop has a connected domain (subdomain forwarding).
    */
   exportsObj.resolveTenantDomain = functions.https.onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
@@ -2220,6 +2221,26 @@ function registerCustomDomainFunctions(exportsObj, options) {
       res.status(405).json({ error: "GET only" });
       return;
     }
+    const slugQuery = ((req.query && req.query.slug) || "").toString().trim().toLowerCase();
+    if (slugQuery) {
+      if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slugQuery)) {
+        res.status(400).json({ error: "invalid slug" });
+        return;
+      }
+      const bySlug = await getDb()
+        .collection("domainMappings")
+        .where("slug", "==", slugQuery)
+        .where("status", "==", "active")
+        .get();
+      const apex = bySlug.docs.map((d) => d.id).find((h) => !h.startsWith("www."));
+      if (!apex) {
+        res.status(404).json({ ok: false, slug: slugQuery, domain: null });
+        return;
+      }
+      res.status(200).json({ ok: true, slug: slugQuery, domain: apex });
+      return;
+    }
+
     let host = ((req.query && req.query.host) || "").toString().trim().toLowerCase();
     host = host.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host || host.length > 253) {

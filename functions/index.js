@@ -2573,15 +2573,13 @@ function computeInPersonCheckoutTotals(serviceCents, taxCents, channel = "online
 }
 
 /**
- * Card and Link (the Bank tab) on one PaymentIntent. Klarna and Affirm are not offered:
- * their terms forbid charging customers a processing fee for choosing them.
- * Falls back to card alone if the connected account cannot offer Link yet.
+ * Card only. Link still appears inside the card option (Bank tab, saved Link details), and a
+ * Link bank payment then shows as card brand "link", which the web checkout prices at the
+ * instant-bank rate. Listing "link" as its own type instead hides card vs bank and lets Stripe
+ * show Klarna through Link; Klarna and Affirm terms forbid a processing fee for choosing them.
  */
 async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payload) {
-  const methodLists = [
-    ["card", "link"],
-    ["card"],
-  ];
+  const methodLists = [["card"]];
   let lastErr = null;
   for (let i = 0; i < methodLists.length; i++) {
     try {

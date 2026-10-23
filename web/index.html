@@ -9141,7 +9141,8 @@
               if (feeTip) feeTip.innerHTML = shopCheckoutFeeTooltipHtml(charterPay);
               if (cardTot && priced.totalCents != null) cardTot.textContent = charterMoney(priced.totalCents);
             },
-            onError: function(err) { showErr(formatFirebaseHttpsError(err)); }
+            onError: function(err) { showErr(formatFirebaseHttpsError(err)); },
+            onNotice: function(msg) { if (msg || errEl) showErr(msg || ''); }
           });
           charterPay.prepareConfirm = charterReprice.prepareConfirm;
           btn.textContent = payMode === 'deposit' ? 'Pay deposit' : 'Pay now';
@@ -14643,6 +14644,11 @@
         if (method === 'instant_bank') return 'Bank';
         return 'Card';
       }
+      /** Stripe can offer Klarna inside Link; it isn't allowed here (no processing fee on pay-later). */
+      var BLOCKED_CHECKOUT_METHOD_MESSAGE = 'Klarna isn\u2019t available for this business. Please pay with Card or Bank.';
+      function isBlockedCheckoutMethod(method) {
+        return method === 'klarna' || method === 'affirm';
+      }
       function isRepricedCheckoutMethod(method) {
         return method === 'card' || method === 'klarna' || method === 'affirm' || method === 'instant_bank';
       }
@@ -14711,6 +14717,12 @@
 
         function reprice(method, paymentMethodId) {
           if (!isRepricedCheckoutMethod(method)) return Promise.resolve(null);
+          if (isBlockedCheckoutMethod(method)) {
+            selected = method;
+            if (config.onNotice) config.onNotice(BLOCKED_CHECKOUT_METHOD_MESSAGE);
+            return Promise.resolve(null);
+          }
+          if (config.onNotice) config.onNotice('');
           selected = method;
           if (priced === method && !paymentMethodId) return Promise.resolve(null);
           if (config.onUpdating) config.onUpdating(method);
@@ -14756,7 +14768,9 @@
             }
             var complete = !!(event && event.complete);
             if (type === 'link' || (complete && (type === 'card' || type === 'link_card_brand'))) {
-              return previewCheckoutMethod(type === 'link' && complete).then(function(previewed) {
+              // Stripe only reveals a Link bank (card brand "link") after elements.submit().
+              // Never for Apple Pay / Google Pay: submit() would open their sheet unprompted.
+              return previewCheckoutMethod(complete).then(function(previewed) {
                 if (gen !== generation) return null;
                 var fromValue = type === 'link' ? methodFromLinkValue(event && event.value) : '';
                 var method = previewed || fromValue;
@@ -14848,6 +14862,9 @@
           return resolveEvent(lastEvent).then(function() {
             if (priced !== selected) return resolveEvent(lastEvent);
           }).then(function() {
+            if (isBlockedCheckoutMethod(selected)) {
+              throw new Error(BLOCKED_CHECKOUT_METHOD_MESSAGE);
+            }
             if (priced !== selected) {
               throw new Error('The total is still updating for this payment method. Try again.');
             }
@@ -14990,7 +15007,8 @@
               paintSummary(priced);
               showPayError('');
             },
-            onError: function(err) { showPayError(formatFirebaseHttpsError(err)); }
+            onError: function(err) { showPayError(formatFirebaseHttpsError(err)); },
+            onNotice: function(msg) { showPayError(msg || ''); }
           });
           if (button) {
             button.addEventListener('click', function() {
@@ -15637,6 +15655,11 @@
                 errorEl.textContent = formatFirebaseHttpsError(err);
                 errorEl.style.display = 'block';
               }
+            },
+            onNotice: function(msg) {
+              if (!errorEl) return;
+              errorEl.textContent = msg || '';
+              errorEl.style.display = msg ? 'block' : 'none';
             }
           });
           window.__bkShopCheckoutStripe.prepareConfirm = shopReprice.prepareConfirm;

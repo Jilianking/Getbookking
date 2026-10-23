@@ -162,7 +162,30 @@ service cloud.firestore {
           'customDomainStripePaymentIntentId',
           'customDomainCustomerPaidUsd',
           'customDomainWholesaleUsd',
-          'customDomainAutoRenew'
+          'customDomainAutoRenew',
+          'customDomainStatusMessage',
+          'customDomainTransferId',
+          'customDomainTransferOutPreparedAt',
+          'customDomainAutoRenewUpdatedAt',
+          'customDomainUpdatedAt',
+          'customDomainCloudflareIds',
+          'customDomainDnsPointedAt',
+          'customDomainKeptRecordCount',
+          'customDomainConnectingSince',
+          'customDomainLiveAt',
+          'customDomainStuckNotedAt',
+          'domainStripeCustomerId',
+          'customDomainExpiresAt',
+          'customDomainRenewalPaymentMethodId',
+          'customDomainCardLabel',
+          'customDomainRenewalCents',
+          'customDomainRenewalWholesaleUsd',
+          'customDomainRenewalQuoteForExpiryMs',
+          'customDomainRenewalFailures',
+          'customDomainRenewalLastAttemptAt',
+          'customDomainEndNoticeAt',
+          'customDomainLastRenewedAt',
+          'customDomainRenewalLastPaymentIntentId'
         ]);
     }
 
@@ -207,7 +230,41 @@ service cloud.firestore {
           'smsSoloReplacementAuthorizationInvoiceId',
           'smsSoloReplacementAuthorizationState',
           'smsSoloReplacementAuthorizationExpiresAt',
-          'smsSoloReplacementInFlightAt'
+          'smsSoloReplacementInFlightAt',
+          'customDomain',
+          'customDomainWww',
+          'customDomainStatus',
+          'customDomainSource',
+          'customDomainProvider',
+          'customDomainOrderId',
+          'customDomainNamecheapId',
+          'customDomainStripePaymentIntentId',
+          'customDomainCustomerPaidUsd',
+          'customDomainWholesaleUsd',
+          'customDomainAutoRenew',
+          'customDomainStatusMessage',
+          'customDomainTransferId',
+          'customDomainTransferOutPreparedAt',
+          'customDomainAutoRenewUpdatedAt',
+          'customDomainUpdatedAt',
+          'customDomainCloudflareIds',
+          'customDomainDnsPointedAt',
+          'customDomainKeptRecordCount',
+          'customDomainConnectingSince',
+          'customDomainLiveAt',
+          'customDomainStuckNotedAt',
+          'domainStripeCustomerId',
+          'customDomainExpiresAt',
+          'customDomainRenewalPaymentMethodId',
+          'customDomainCardLabel',
+          'customDomainRenewalCents',
+          'customDomainRenewalWholesaleUsd',
+          'customDomainRenewalQuoteForExpiryMs',
+          'customDomainRenewalFailures',
+          'customDomainRenewalLastAttemptAt',
+          'customDomainEndNoticeAt',
+          'customDomainLastRenewedAt',
+          'customDomainRenewalLastPaymentIntentId'
         ]);
     }
 
@@ -295,6 +352,12 @@ service cloud.firestore {
         && (isTenantOwnerUid(tenantId) || tenantMoneyKeysUnchanged());
 
       allow delete: if isTenantOwnerUid(tenantId);
+
+      // Account notices (e.g. domain renewals) written by Cloud Functions; the owner reads them in the app.
+      match /accountNotices/{noticeId} {
+        allow read: if isTenantOwnerUid(tenantId);
+        allow write: if false;
+      }
 
       match /services/{serviceId} {
         allow read: if true;

@@ -16343,15 +16343,60 @@ registerTapToPayLaunchEmailFunctions(exports);
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports, {
-  notifyDomainLive: async ({ tenant, domain }) => {
-    const ownerUid = (tenant.ownerUid || "").toString().trim();
-    if (!ownerUid) return;
-    const tokens = await collectDeviceTokensForUids([ownerUid]);
-    await sendBookingAlertPush({
-      tokens,
-      title: "Your domain is live",
-      body: `${domain} now opens your Get Bookking site.`,
-      data: { type: "custom_domain_live", domain },
-    });
-  },
+  notifyOwner: notifyOwnerAboutAccount,
 });
+
+function escapeEmailHtml(text) {
+  return (text || "")
+    .toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Tells the shop owner about something on their account (e.g. their domain): an app notification,
+ * a notice kept in the app's activity center, and an email. Each part is tried on its own.
+ */
+async function notifyOwnerAboutAccount({ tenantId, tenant, title, body, emailSubject }) {
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  if (!ownerUid) return;
+  try {
+    const tokens = await collectDeviceTokensForUids([ownerUid]);
+    await sendBookingAlertPush({ tokens, title, body, data: { type: "account_notice", kind: "domain" } });
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount push", tenantId, e.message || e);
+  }
+  try {
+    await db.collection("tenants").doc(tenantId).collection("accountNotices").add({
+      kind: "domain",
+      title,
+      body,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount notice", tenantId, e.message || e);
+  }
+  try {
+    const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+    const ownerSnap = await db.collection("users").doc(ownerUid).get();
+    const email = ownerSnap.exists ? ((ownerSnap.data() || {}).email || "").toString().trim() : "";
+    if (!resendApiKey || !email) return;
+    const from = (process.env.PASSWORD_RESET_EMAIL_FROM || "Get Bookking <noreply@getbookking.com>").trim();
+    const replyTo = (process.env.SUPPORT_EMAIL || "support@getbookking.com").trim();
+    const html = [
+      "<p>Hello,</p>",
+      "<p>" + escapeEmailHtml(body) + "</p>",
+      "<p>Questions? Just reply to this email.</p>",
+      "<p>Thanks,<br>Your Get Bookking team</p>",
+    ].join("\n");
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + resendApiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: email, subject: emailSubject || title, html, reply_to: replyTo }),
+    });
+    if (!res.ok) console.warn("notifyOwnerAboutAccount email", tenantId, res.status, await res.text());
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount email", tenantId, e.message || e);
+  }
+}

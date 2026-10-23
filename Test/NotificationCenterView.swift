@@ -115,6 +115,7 @@ enum ActivityKind {
     case sms
     case shopOrder
     case payment
+    case accountNotice
 
     var icon: String {
         switch self {
@@ -122,6 +123,7 @@ enum ActivityKind {
         case .sms: return "message.fill"
         case .shopOrder: return "bag.fill"
         case .payment: return "dollarsign.circle.fill"
+        case .accountNotice: return "globe"
         }
     }
 
@@ -131,6 +133,7 @@ enum ActivityKind {
         case .sms: return AppDesign.accentGreen
         case .shopOrder: return AppDesign.brandWarm
         case .payment: return AppDesign.accentBlue
+        case .accountNotice: return AppDesign.accentBlue
         }
     }
 }
@@ -140,6 +143,7 @@ enum ActivityRoute {
     case smsThread(id: String)
     case shopOrder(id: String)
     case payments
+    case domainSettings
 
     func apply(to drawerState: DrawerState) {
         switch self {
@@ -155,6 +159,8 @@ enum ActivityRoute {
             drawerState.selectedSection = .shop
         case .payments:
             drawerState.selectedSection = .payments
+        case .domainSettings:
+            drawerState.setupSettingsDestination = .domain
         }
         drawerState.isOpen = false
         drawerState.isActivityOpen = false
@@ -186,6 +192,18 @@ extension ActivityItem {
             date: request.createdAt,
             isUnread: isUnread,
             route: .bookingRequest(id: documentId)
+        )
+    }
+
+    init(accountNotice notice: AccountNotice, isUnread: Bool) {
+        self.init(
+            id: "accountNotice-\(notice.id)",
+            kind: .accountNotice,
+            title: notice.title.isEmpty ? "Account notice" : notice.title,
+            subtitle: notice.body,
+            date: notice.createdAt,
+            isUnread: isUnread,
+            route: .domainSettings
         )
     }
 
@@ -296,6 +314,19 @@ enum ActivityFeed {
             rows.append(contentsOf: payments)
         }
 
+        if teamAccess.isOwner {
+            // Billing-type notices share the payments "seen" time.
+            let notices = sessionStore.accountNotices
+                .filter { ActivityInboxStore.isWithinRetention($0.createdAt) }
+                .map { notice in
+                    ActivityItem(
+                        accountNotice: notice,
+                        isUnread: (notice.createdAt ?? .distantPast) > paymentsSeenAt
+                    )
+                }
+            rows.append(contentsOf: notices)
+        }
+
         return rows
             .filter { !ActivityInboxStore.isHidden(id: $0.id, activityDate: $0.date) }
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
@@ -321,6 +352,7 @@ enum SetupSettingsDestination: String, Identifiable, Equatable {
     case services
     case boats
     case accountBilling
+    case domain
 
     var id: String { rawValue }
 }
@@ -819,6 +851,9 @@ struct SetupSettingsDestinationSheet: View {
                 case .accountBilling:
                     AccountBillingSetupSheetContent(viewModel: billingViewModel)
                         .environmentObject(authViewModel)
+                case .domain:
+                    DomainSettingsView()
+                        .environmentObject(authViewModel)
                 }
             }
             .toolbar {
@@ -838,6 +873,8 @@ struct SetupSettingsDestinationSheet: View {
                 }
             case .accountBilling:
                 await billingViewModel.load(isDemoMode: authViewModel.isDemoMode)
+            case .domain:
+                break
             }
         }
     }
@@ -1120,8 +1157,12 @@ struct ActivityDrawerPanel: View {
                 force: false,
                 isDemoMode: authViewModel.isDemoMode
             )
+            async let notices: () = sessionStore.loadAccountNoticesIfNeeded(
+                force: false,
+                isDemoMode: authViewModel.isDemoMode
+            )
             sessionStore.startSmsThreadsListening(isDemoMode: authViewModel.isDemoMode)
-            _ = await (shop, payments)
+            _ = await (shop, payments, notices)
         }
     }
 

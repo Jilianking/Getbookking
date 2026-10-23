@@ -30,6 +30,7 @@ const RESOLVE_DOMAIN_URL =
 const RESERVED = new Set([
   "www",
   "join", // team invite host join.getbookking.com — not a tenant slug
+  "domains", // Cloudflare for SaaS fallback origin for customer domains — not a tenant slug
   "app",
   "api",
   "admin",

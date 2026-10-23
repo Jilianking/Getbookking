@@ -258,23 +258,18 @@ function parseDomainCheckAvailable(xmlText, domain) {
 /** Parse all DomainCheckResult rows from a multi-domain check response. */
 function parseAllDomainChecks(xmlText) {
   const out = {};
-  const re =
-    /DomainCheckResult[^>]*Domain="([^"]+)"[^>]*Available="(true|false)"[^>]*(?:IsPremiumName="([^"]*)")?/gi;
-  let m;
-  while ((m = re.exec(xmlText || ""))) {
-    out[m[1].toLowerCase()] = {
-      available: m[2].toLowerCase() === "true",
-      premium: (m[3] || "").toLowerCase() === "true",
+  const tags = (xmlText || "").match(/<DomainCheckResult\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const attr = (name) => {
+      const m = new RegExp(`\\b${name}="([^"]*)"`, "i").exec(tag);
+      return m ? m[1] : "";
     };
-  }
-  // Alternate attribute order: Available before Domain
-  const re2 =
-    /DomainCheckResult[^>]*Available="(true|false)"[^>]*Domain="([^"]+)"/gi;
-  while ((m = re2.exec(xmlText || ""))) {
-    const domain = m[2].toLowerCase();
-    if (!out[domain]) {
-      out[domain] = { available: m[1].toLowerCase() === "true", premium: false };
-    }
+    const domain = attr("Domain").toLowerCase();
+    if (!domain) continue;
+    out[domain] = {
+      available: attr("Available").toLowerCase() === "true",
+      premium: attr("IsPremiumName").toLowerCase() === "true",
+    };
   }
   return out;
 }
@@ -312,7 +307,8 @@ function getStripe() {
 
 async function resolveCustomerDomainPrice(domain, action) {
   const { tld } = splitSldTld(domain);
-  const actionName = (action || "REGISTER").toUpperCase() === "TRANSFER" ? "TRANSFER" : "REGISTER";
+  const requested = (action || "REGISTER").toUpperCase();
+  const actionName = ["TRANSFER", "RENEW"].includes(requested) ? requested : "REGISTER";
   let wholesale = null;
   try {
     const raw = await namecheapRequest("namecheap.users.getPricing", {
@@ -569,6 +565,7 @@ function statusPayload(tenant, tenantId, extras) {
   const sandbox = isSandboxHost();
   const statusLower = status.toLowerCase();
   const hasDomain = !!domain && statusLower !== "none";
+  const renewalLabel = tenant.customDomainRenewalCents ? formatCentsLabel(tenant.customDomainRenewalCents) : "";
 
   const subdomainHttps = {
     status: "active",
@@ -641,7 +638,7 @@ function statusPayload(tenant, tenantId, extras) {
       autoRenewLabel: hasDomain
         ? tenant.customDomainAutoRenew === false
           ? "Off — domain won’t renew automatically"
-          : "On — we’ll renew before it expires"
+          : `On — renews yearly${renewalLabel ? ` at ${renewalLabel}` : ""} on your saved card`
         : "Choose auto-renew when you buy or transfer",
       expiresAt: (extras && extras.expiresAt) || null,
       createdAt: (extras && extras.createdAt) || null,
@@ -655,6 +652,10 @@ function statusPayload(tenant, tenantId, extras) {
       transferOutPrepared: !!(tenant.customDomainTransferOutPreparedAt),
     },
     autoRenew: hasDomain ? tenant.customDomainAutoRenew !== false : true,
+    expiresAt: millisOf(tenant.customDomainExpiresAt) ? new Date(millisOf(tenant.customDomainExpiresAt)).toISOString() : null,
+    renewalPriceLabel: renewalLabel || null,
+    renewalCardLabel: (tenant.customDomainCardLabel || "").toString() || null,
+    buyOnWebUrl: WEB_DOMAIN_PURCHASE_URL,
   };
   return base;
 }
@@ -1028,6 +1029,13 @@ function disconnectedDomainPatch() {
     customDomainConnectingSince: del,
     customDomainLiveAt: del,
     customDomainStuckNotedAt: del,
+    customDomainExpiresAt: del,
+    customDomainRenewalCents: del,
+    customDomainRenewalWholesaleUsd: del,
+    customDomainRenewalQuoteForExpiryMs: del,
+    customDomainRenewalFailures: del,
+    customDomainRenewalLastAttemptAt: del,
+    customDomainEndNoticeAt: del,
     customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
@@ -1090,6 +1098,12 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
         { merge: true }
       );
       await clearDomainMappings(domain);
+      await safeNotify(
+        null, tenantId, tenant, "Domain transfer didn't go through",
+        `Your old registrar cancelled or rejected the transfer of ${domain} (${outcome.status}). ` +
+          `Contact ${DOMAIN_SUPPORT_EMAIL} and we'll sort it out.`,
+        `The transfer of ${domain} didn't go through`
+      );
       return "transfer-failed";
     }
     if (!outcome.done) {
@@ -1116,6 +1130,7 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
       { merge: true }
     );
     await writeDomainMappings({ domain, tenantId, slug, status: "connecting", source: "transfer" });
+    await maybeSetNamecheapAutoRenew(domain, false);
     await connectDomainToBookking(tenantRef, { ...tenant, customDomainStatus: "connecting" });
     return "transfer-done";
   }
@@ -1142,6 +1157,11 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
     );
     await writeDomainMappings({ domain, tenantId, slug, status: "active", source: tenant.customDomainSource || null });
     await setWalletDomain(tenantId, tenant, domain, true);
+    try {
+      await refreshDomainExpiry(tenantRef, domain);
+    } catch (e) {
+      console.warn("refreshDomainExpiry", tenantId, e.message || e);
+    }
     if (typeof notifyDomainLive === "function") {
       try {
         await notifyDomainLive({ tenantId, tenant, domain });
@@ -1164,6 +1184,313 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
   return "connecting";
 }
 
+const WEB_DOMAIN_PURCHASE_URL = "https://getbookking.com/billing.html#domain";
+const WEB_DOMAIN_PURCHASE_MESSAGE =
+  "Domains are bought on the web. Open getbookking.com → Account → Billing → Website domain.";
+/** Days before expiry: reminder with the amount, then the charge. */
+const RENEWAL_REMINDER_DAYS = 37;
+const RENEWAL_CHARGE_DAYS = 30;
+/** After a declined card, try again every few days until the domain expires. */
+const RENEWAL_RETRY_DAYS = 3;
+
+function webReturnOrigin(data) {
+  const raw = ((data && data.returnOrigin) || "").toString().trim().replace(/\/+$/, "");
+  return /^https:\/\/(www\.)?getbookking\.com$/.test(raw) || /^http:\/\/localhost:\d+$/.test(raw)
+    ? raw
+    : "https://getbookking.com";
+}
+
+function formatCentsLabel(cents) {
+  return `$${(Number(cents) / 100).toFixed(2)}`;
+}
+
+/** Platform Stripe customer that holds the card used for domain purchases and renewals. */
+async function ensureDomainBillingCustomer(tenantId, tenant, email) {
+  const existing = (tenant.domainStripeCustomerId || "").toString().trim();
+  if (existing) return existing;
+  const customer = await getStripe().customers.create({
+    email: email || undefined,
+    name: (tenant.businessName || tenant.displayName || "").toString() || undefined,
+    metadata: { tenantId, purpose: "custom_domain" },
+  });
+  await getDb().collection("tenants").doc(tenantId).set({ domainStripeCustomerId: customer.id }, { merge: true });
+  return customer.id;
+}
+
+function cardLabelOf(paymentMethod) {
+  const card = (paymentMethod && paymentMethod.card) || {};
+  const brand = (card.brand || "card").toString();
+  return `${brand.charAt(0).toUpperCase()}${brand.slice(1)} ending ${card.last4 || "----"}`;
+}
+
+/** After a purchase/transfer: the card it was paid with becomes the renewal card. */
+async function saveRenewalCardFromPayment(stripe, tenantId, piId, order) {
+  const pi = await stripe.paymentIntents.retrieve(piId, { expand: ["payment_method"] });
+  const pm = pi.payment_method;
+  if (!pm || !pm.id) return;
+  await getDb().collection("tenants").doc(tenantId).set(
+    {
+      customDomainRenewalPaymentMethodId: pm.id,
+      customDomainCardLabel: cardLabelOf(pm),
+      customDomainRenewalCents: order.renewalCents || null,
+    },
+    { merge: true }
+  );
+}
+
+/** Namecheap's expiry date for the domain, saved on the shop. Returns millis or 0. */
+async function refreshDomainExpiry(tenantRef, domain) {
+  const raw = await namecheapRequest("namecheap.domains.getInfo", { DomainName: domain });
+  if (!namecheapStatusOk(raw)) return 0;
+  const text = parseDomainGetInfo(raw).expiresAt || "";
+  const ms = Date.parse(text);
+  if (!Number.isFinite(ms)) return 0;
+  await tenantRef.set({ customDomainExpiresAt: admin.firestore.Timestamp.fromMillis(ms) }, { merge: true });
+  return ms;
+}
+
+function shopPlanIsCurrent(tenant) {
+  if (tenant.complimentaryPaidAccess === true) return true;
+  const st = (tenant.subscriptionStatus || "").toString().toLowerCase();
+  return ["active", "trialing", "past_due"].includes(st);
+}
+
+function formatDay(ms) {
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+/** Domain reached its expiry without being renewed: disconnect it; the free subdomain takes over. */
+async function expireCustomDomain(tenantRef, tenant, domain, notifyOwner) {
+  await disconnectDomainFromCloudflare(tenant);
+  await setWalletDomain(tenantRef.id, tenant, domain, false);
+  await clearDomainMappings(domain);
+  const slug = (tenant.slug || "").toString().trim().toLowerCase();
+  const message =
+    `${domain} expired and is no longer connected. Your site is back on ${slug}.getbookking.com. ` +
+    `Contact ${DOMAIN_SUPPORT_EMAIL} within 30 days if you want it back.`;
+  await tenantRef.set(
+    {
+      customDomainStatus: "expired",
+      customDomainStatusMessage: message,
+      customDomainCloudflareIds: admin.firestore.FieldValue.delete(),
+      customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await safeNotify(notifyOwner, tenantRef.id, tenant, "Your domain expired", message, `${domain} has expired`);
+}
+
+/** Set by registerCustomDomainFunctions: app notification + activity notice + email to the owner. */
+let ownerNotifier = null;
+
+async function safeNotify(notifyOwner, tenantId, tenant, title, body, emailSubject) {
+  const fn = typeof notifyOwner === "function" ? notifyOwner : ownerNotifier;
+  if (typeof fn !== "function") return;
+  try {
+    await fn({ tenantId, tenant, title, body, emailSubject: emailSubject || title });
+  } catch (e) {
+    console.warn("domain notifyOwner", tenantId, e.message || e);
+  }
+}
+
+async function ownerEmailOf(tenant) {
+  const uid = (tenant.ownerUid || "").toString().trim();
+  if (!uid) return "";
+  const snap = await getDb().collection("users").doc(uid).get();
+  return snap.exists ? ((snap.data() || {}).email || "").toString().trim() : "";
+}
+
+/**
+ * One daily step for a connected domain's yearly renewal:
+ * 37 days before expiry — reminder with the exact amount; 30 days before — charge the saved card,
+ * then renew at Namecheap; declined cards retry every 3 days; at expiry — disconnect.
+ * No plan or auto-renew off — one notice 30 days before, then it expires.
+ */
+async function processDomainRenewal(tenantRef, notifyOwner, nowMs) {
+  const snap = await tenantRef.get();
+  const tenant = snap.data() || {};
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  const status = (tenant.customDomainStatus || "").toString().toLowerCase();
+  if (!domain || !["active", "connecting"].includes(status)) return "skip";
+  const now = nowMs || Date.now();
+  let expiresMs = millisOf(tenant.customDomainExpiresAt);
+  if (!expiresMs) expiresMs = await refreshDomainExpiry(tenantRef, domain);
+  if (!expiresMs) return "no-expiry";
+  const daysLeft = (expiresMs - now) / 86400000;
+  const expiryDay = formatDay(expiresMs);
+
+  if (daysLeft <= 0) {
+    // Renewed elsewhere or late? Re-read Namecheap before disconnecting.
+    const fresh = await refreshDomainExpiry(tenantRef, domain);
+    if (fresh > now) return "renewed-elsewhere";
+    await expireCustomDomain(tenantRef, tenant, domain, notifyOwner);
+    return "expired";
+  }
+
+  const wantsRenewal = tenant.customDomainAutoRenew !== false && shopPlanIsCurrent(tenant);
+  if (!wantsRenewal) {
+    if (daysLeft <= RENEWAL_CHARGE_DAYS && millisOf(tenant.customDomainEndNoticeAt) < expiresMs - 60 * 86400000) {
+      const body = shopPlanIsCurrent(tenant)
+        ? `Auto-renew is off, so ${domain} expires on ${expiryDay}. To keep it, turn auto-renew on in Settings → Domain.`
+        : `Your Get Bookking plan has ended, so ${domain} won't renew and expires on ${expiryDay}. ` +
+          "To keep it, restart your plan or transfer the domain out in Settings → Domain.";
+      await tenantRef.set({ customDomainEndNoticeAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await safeNotify(notifyOwner, tenantRef.id, tenant, "Your domain won't renew", body, `${domain} expires on ${expiryDay}`);
+      return "end-notice";
+    }
+    return "not-renewing";
+  }
+
+  if (daysLeft > RENEWAL_REMINDER_DAYS) return "not-due";
+  const chargeDayMs = expiresMs - RENEWAL_CHARGE_DAYS * 86400000;
+  const quoteForThisYear = Number(tenant.customDomainRenewalQuoteForExpiryMs || 0) === expiresMs;
+
+  if (!quoteForThisYear) {
+    const price = await resolveCustomerDomainPrice(domain, "RENEW");
+    const previous = Number(tenant.customDomainRenewalCents || 0);
+    await tenantRef.set(
+      {
+        customDomainRenewalCents: price.totalCents,
+        customDomainRenewalWholesaleUsd: price.wholesale,
+        customDomainRenewalQuoteForExpiryMs: expiresMs,
+        customDomainRenewalFailures: 0,
+      },
+      { merge: true }
+    );
+    const changed = previous && previous !== price.totalCents ? ` (was ${formatCentsLabel(previous)}; the registry price changed)` : "";
+    const cardNote = tenant.customDomainRenewalPaymentMethodId
+      ? `your ${tenant.customDomainCardLabel || "saved card"}`
+      : "a card — add one on the web: Billing → Website domain";
+    await safeNotify(
+      notifyOwner, tenantRef.id, tenant, "Domain renewal coming up",
+      `${domain} renews on ${formatDay(Math.max(chargeDayMs, now))} for ${formatCentsLabel(price.totalCents)}${changed}, charged to ${cardNote}. Turn off auto-renew in Settings → Domain if you don't want to keep it.`,
+      `${domain} renews on ${formatDay(Math.max(chargeDayMs, now))} for ${formatCentsLabel(price.totalCents)}`
+    );
+    return "reminded";
+  }
+
+  if (now < chargeDayMs) return "waiting-to-charge";
+  const lastAttempt = millisOf(tenant.customDomainRenewalLastAttemptAt);
+  if (lastAttempt && now - lastAttempt < RENEWAL_RETRY_DAYS * 86400000) return "retry-later";
+
+  const customerId = (tenant.domainStripeCustomerId || "").toString().trim();
+  const paymentMethodId = (tenant.customDomainRenewalPaymentMethodId || "").toString().trim();
+  const amount = Number(tenant.customDomainRenewalCents || 0);
+  if (!customerId || !paymentMethodId || amount < 50) {
+    await tenantRef.set({ customDomainRenewalLastAttemptAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await safeNotify(
+      notifyOwner, tenantRef.id, tenant, "Add a card to keep your domain",
+      `${domain} expires on ${expiryDay}. Add a card on the web (Billing → Website domain) so we can renew it.`,
+      `Action needed: add a card to keep ${domain}`
+    );
+    return "no-card";
+  }
+
+  const stripe = getStripe();
+  const attempt = Number(tenant.customDomainRenewalFailures || 0) + 1;
+  let pi;
+  try {
+    pi = await stripe.paymentIntents.create(
+      {
+        amount,
+        currency: "usd",
+        customer: customerId,
+        payment_method: paymentMethodId,
+        payment_method_types: ["card"],
+        off_session: true,
+        confirm: true,
+        receipt_email: (await ownerEmailOf(tenant)) || undefined,
+        description: `Domain renewal: ${domain}`,
+        metadata: { paymentKind: "domain_renewal", tenantId: tenantRef.id, domain, expiresMs: String(expiresMs) },
+      },
+      { idempotencyKey: `domain-renewal-${tenantRef.id}-${expiresMs}-${attempt}` }
+    );
+  } catch (e) {
+    pi = null;
+    console.warn("domain renewal charge declined", tenantRef.id, domain, e.message || e);
+  }
+  if (!pi || pi.status !== "succeeded") {
+    await tenantRef.set(
+      {
+        customDomainRenewalFailures: attempt,
+        customDomainRenewalLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await safeNotify(
+      notifyOwner, tenantRef.id, tenant, "Domain renewal payment failed",
+      `We couldn't charge ${formatCentsLabel(amount)} to your ${tenant.customDomainCardLabel || "saved card"} to renew ${domain}. ` +
+        `Update your card at getbookking.com → Billing → Website domain before ${expiryDay} to keep your domain. We'll try again in ${RENEWAL_RETRY_DAYS} days.`,
+      `Action needed: we couldn't renew ${domain}`
+    );
+    return "charge-failed";
+  }
+
+  const raw = await namecheapRequest("namecheap.domains.renew", { DomainName: domain, Years: "1" });
+  if (!namecheapStatusOk(raw)) {
+    await stripe.refunds.create({ payment_intent: pi.id }, { idempotencyKey: `domain-renewal-refund-${pi.id}` });
+    await tenantRef.set({ customDomainRenewalLastAttemptAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    console.error("domain renewal at Namecheap failed after charging (refunded)", tenantRef.id, domain, namecheapErrorMessage(raw));
+    return "renew-failed-refunded";
+  }
+  const newExpiry = (await refreshDomainExpiry(tenantRef, domain)) || expiresMs + 365 * 86400000;
+  await tenantRef.set(
+    {
+      customDomainLastRenewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      customDomainRenewalFailures: 0,
+      customDomainRenewalLastAttemptAt: admin.firestore.FieldValue.delete(),
+      customDomainRenewalLastPaymentIntentId: pi.id,
+    },
+    { merge: true }
+  );
+  await safeNotify(
+    notifyOwner, tenantRef.id, tenant, "Domain renewed",
+    `We charged ${formatCentsLabel(amount)} to your ${tenant.customDomainCardLabel || "saved card"} on ${formatDay(now)}. ${domain} is renewed until ${formatDay(newExpiry)}.`,
+    `${domain} renewed`
+  );
+  return "renewed";
+}
+
+/** "Purchased" / "transfer started" notice; includes the charge details so it doubles as a receipt. */
+async function notifyDomainPaid(tenantId, order, domain) {
+  const fresh = (await getDb().collection("tenants").doc(tenantId).get()).data() || {};
+  const card = fresh.customDomainCardLabel || "your card";
+  const paid = formatCentsLabel(order.amountCents || 0);
+  const today = formatDay(Date.now());
+  const renewal = order.renewalCents ? formatCentsLabel(order.renewalCents) : "";
+  const renewNote = order.autoRenew === false
+    ? "Auto-renew is off, so it expires after one year unless you turn it on in Settings → Domain."
+    : `It renews yearly at ${renewal || "the current price"} on this card until you turn off auto-renew in Settings → Domain. ` +
+      "Renewal is handled by Get Bookking, so you can ignore renewal reminders from Namecheap.";
+  const confirmNote =
+    "One thing to do: the domain registrar (Namecheap) will email you asking to confirm your email address. " +
+    "Please click the link in that email, or the domain can be paused.";
+  if (order.kind === "transfer") {
+    await safeNotify(
+      null, tenantId, fresh, "Domain transfer started",
+      `Charged ${paid} to ${card} on ${today} for: domain transfer of ${domain} (includes 1 year). ` +
+        "Your current registrar may email you to approve the transfer; approving makes it faster. " +
+        "Once connected, your domain will open your Get Bookking site instead of your old website. " +
+        `Remember to cancel your old website plan. ${renewNote} ${confirmNote}`,
+      `Transfer of ${domain} started`
+    );
+    return;
+  }
+  await safeNotify(
+    null, tenantId, fresh, "Domain purchased",
+    `Charged ${paid} to ${card} on ${today} for: domain registration of ${domain} (1 year). ` +
+      `We're connecting it to your Get Bookking site now — usually under an hour. ${renewNote} ${confirmNote}`,
+    `Your domain ${domain} is set up`
+  );
+}
+
+/** A failure where Namecheap clearly did not register or start the transfer, so the payment is refunded. */
+function refundableDomainError(message) {
+  const err = new Error(message);
+  err.refundable = true;
+  return err;
+}
+
 async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, autoRenew }) {
   const slug = (tenant.slug || "").toString().trim().toLowerCase();
   if (!slug) {
@@ -1180,10 +1507,7 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     );
   }
   if (parseDomainCheckAvailable(checkRaw, domain) === false) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      `${domain} is not available to buy. Transfer it instead if you own it.`
-    );
+    throw refundableDomainError(`${domain} was taken before we could register it.`);
   }
 
   const ownerSnap = await getDb().collection("users").doc(uid).get();
@@ -1197,22 +1521,17 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
     ...contacts,
   });
   if (!namecheapStatusOk(createRaw)) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      namecheapErrorMessage(createRaw) ||
-        "Payment received, but domain registration failed. Contact domainsupport@getbookking.com."
+    throw refundableDomainError(
+      `${domain} couldn't be registered (${namecheapErrorMessage(createRaw) || "registrar error"}).`
     );
   }
   const created = parseDomainCreateSuccess(createRaw);
   if (!created.registered) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "Payment received, but domain was not registered. Contact domainsupport@getbookking.com."
-    );
+    throw refundableDomainError(`${domain} couldn't be registered.`);
   }
 
   const wantAutoRenew = autoRenew !== false;
-  await maybeSetNamecheapAutoRenew(domain, wantAutoRenew);
+  await maybeSetNamecheapAutoRenew(domain, false);
   // "active" is set only once the domain serves the site over HTTPS.
   const status = "connecting";
   const statusMessage = isSandboxHost()
@@ -1282,10 +1601,9 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
   });
 
   if (!namecheapStatusOk(transferRaw)) {
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      namecheapErrorMessage(transferRaw) ||
-        "Payment received, but transfer could not start. Contact domainsupport@getbookking.com."
+    throw refundableDomainError(
+      `The transfer of ${domain} couldn't start (${namecheapErrorMessage(transferRaw) || "registrar error"}). ` +
+        "Check the authorization code and that the domain is unlocked at your current registrar."
     );
   }
 
@@ -1293,8 +1611,8 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
   const transferId = transferIdMatch ? transferIdMatch[1] : null;
 
   const wantAutoRenew = autoRenew !== false;
-  // Transfer may still be pending; preference is stored and applied when active / via settings.
-  await maybeSetNamecheapAutoRenew(domain, wantAutoRenew);
+  // Namecheap never renews on its own (the transfer may still be pending; the daily job retries).
+  await maybeSetNamecheapAutoRenew(domain, false);
 
   await getDb()
     .collection("tenants")
@@ -1342,6 +1660,8 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
 async function createPendingDomainPayment({
   uid,
   tenantId,
+  customerId,
+  receiptEmail,
   kind,
   domain,
   authCode,
@@ -1352,6 +1672,7 @@ async function createPendingDomainPayment({
   feeCents,
   platformFeeCents,
   autoRenew,
+  renewalCents,
 }) {
   const stripe = getStripe();
   const amountCents =
@@ -1362,7 +1683,11 @@ async function createPendingDomainPayment({
   const pi = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: "usd",
-    automatic_payment_methods: { enabled: true },
+    customer: customerId,
+    receipt_email: receiptEmail || undefined,
+    // Card only; saved so the yearly renewal can be charged while the shop isn't on the page.
+    payment_method_types: ["card"],
+    setup_future_usage: "off_session",
     description:
       kind === "transfer"
         ? `Domain transfer-in: ${domain}`
@@ -1398,6 +1723,7 @@ async function createPendingDomainPayment({
       feeCents: feeCents != null ? feeCents : null,
       platformFeeCents: platformFeeCents != null ? platformFeeCents : null,
       amountCents,
+      renewalCents: renewalCents || null,
       autoRenew: wantAutoRenew,
       status: "requires_payment",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1414,6 +1740,8 @@ async function createPendingDomainPayment({
     domain,
     kind: kind === "transfer" ? "transfer" : "purchase",
     autoRenew: wantAutoRenew,
+    renewalCents: renewalCents || null,
+    renewalPriceLabel: renewalCents ? formatCentsLabel(renewalCents) : null,
   };
 }
 
@@ -1430,17 +1758,49 @@ async function fulfillDomainPaymentIntent(paymentIntentId, opts) {
   if (!orderSnap.exists) {
     return null;
   }
-  const order = orderSnap.data() || {};
-  if (order.status === "fulfilled") {
-    return { ok: true, alreadyFulfilled: true, domain: order.domain };
-  }
-
   const stripe = getStripe();
   const pi = await stripe.paymentIntents.retrieve(piId);
   if (pi.status !== "succeeded") {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Payment has not completed yet."
+    );
+  }
+
+  // The app and the Stripe webhook both call this right after payment; only one may register.
+  const claim = await getDb().runTransaction(async (tx) => {
+    const snap = await tx.get(orderRef);
+    const current = snap.data() || {};
+    const startedMs = millisOf(current.processingAt);
+    if (current.status === "fulfilled") return { done: "fulfilled", order: current };
+    if (current.status === "refunded") return { done: "refunded", order: current };
+    if (current.status === "needs_review") return { done: "needs_review", order: current };
+    if (current.status === "processing" && Date.now() - startedMs < 10 * 60 * 1000) {
+      return { done: "processing", order: current };
+    }
+    tx.set(orderRef, { status: "processing", processingAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { order: current };
+  });
+  const order = claim.order;
+  if (claim.done === "fulfilled") {
+    return { ok: true, alreadyFulfilled: true, domain: order.domain, status: "connecting" };
+  }
+  if (claim.done === "processing") {
+    return {
+      ok: true,
+      processing: true,
+      domain: order.domain,
+      status: "connecting",
+      message: "Payment received. We're registering your domain now.",
+    };
+  }
+  if (claim.done === "refunded") {
+    throw new functions.https.HttpsError("failed-precondition", order.failureMessage || "This purchase was refunded.");
+  }
+  if (claim.done === "needs_review") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      `We're looking into this purchase. Contact ${DOMAIN_SUPPORT_EMAIL} if you have questions.`
     );
   }
 
@@ -1476,34 +1836,73 @@ async function fulfillDomainPaymentIntent(paymentIntentId, opts) {
   const autoRenew = parseAutoRenewFlag(order.autoRenew);
 
   let result;
-  if (order.kind === "transfer") {
-    const authCode = (order.authCode || "").toString();
-    result = await fulfillDomainTransfer({
-      tenantId,
-      tenant,
-      domain,
-      authCode,
-      payment,
-      autoRenew,
-    });
-  } else {
-    result = await fulfillDomainPurchase({
-      uid,
-      tenantId,
-      tenant,
-      domain,
-      payment,
-      autoRenew,
-    });
+  try {
+    if (order.kind === "transfer") {
+      const authCode = (order.authCode || "").toString();
+      result = await fulfillDomainTransfer({
+        tenantId,
+        tenant,
+        domain,
+        authCode,
+        payment,
+        autoRenew,
+      });
+    } else {
+      result = await fulfillDomainPurchase({
+        uid,
+        tenantId,
+        tenant,
+        domain,
+        payment,
+        autoRenew,
+      });
+    }
+  } catch (err) {
+    if (err && err.refundable) {
+      await stripe.refunds.create({ payment_intent: piId }, { idempotencyKey: `domain-refund-${piId}` });
+      const failureMessage = `${err.message} Your payment has been refunded.`;
+      await orderRef.set(
+        {
+          status: "refunded",
+          failureMessage,
+          authCode: admin.firestore.FieldValue.delete(),
+          refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      console.warn("domain purchase refunded", piId, domain, err.message);
+      throw new functions.https.HttpsError("failed-precondition", failureMessage);
+    }
+    // Unclear outcome (e.g. registered but saving failed): keep the money, flag for a person to check.
+    await orderRef.set(
+      {
+        status: "needs_review",
+        failureMessage: (err && err.message) || String(err),
+        failedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    console.error("domain purchase needs review", piId, domain, err);
+    throw new functions.https.HttpsError(
+      "internal",
+      `Payment received, but we couldn't finish setting up ${domain}. We'll sort it out — contact ${DOMAIN_SUPPORT_EMAIL}.`
+    );
   }
 
   await orderRef.set(
     {
       status: "fulfilled",
+      authCode: admin.firestore.FieldValue.delete(),
       fulfilledAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
+  try {
+    await saveRenewalCardFromPayment(stripe, tenantId, piId, order);
+  } catch (e) {
+    console.warn("saveRenewalCardFromPayment", tenantId, piId, e.message || e);
+  }
+  await notifyDomainPaid(tenantId, order, domain);
   return result;
 }
 
@@ -1512,7 +1911,124 @@ async function fulfillDomainPaymentIntent(paymentIntentId, opts) {
  * @param {Function} [options.notifyDomainLive] ({ tenantId, tenant, domain }) — tells the owner the domain is live.
  */
 function registerCustomDomainFunctions(exportsObj, options) {
-  const notifyDomainLive = options && options.notifyDomainLive;
+  const notifyOwner = options && options.notifyOwner;
+  ownerNotifier = notifyOwner || null;
+  const notifyDomainLive = ({ tenantId, tenant, domain }) => {
+    const slug = (tenant.slug || "").toString().trim().toLowerCase();
+    return safeNotify(
+      notifyOwner, tenantId, tenant, "Your domain is live",
+      `${domain} now opens your Get Bookking site.` +
+        (slug ? ` Your old link (${slug}.getbookking.com) automatically forwards there.` : ""),
+      `${domain} is live`
+    );
+  };
+
+  /** Daily: yearly renewals — reminder 37 days out, charge 30 days out, expire if unpaid. */
+  exportsObj.renewCustomDomains = functions
+    .runWith({ secrets: [namecheapApiKey, stripeSecretKey, cloudflareApiToken] })
+    .pubsub.schedule("every 24 hours")
+    .onRun(async () => {
+      const snap = await getDb()
+        .collection("tenants")
+        .where("customDomainStatus", "in", ["active", "connecting"])
+        .get();
+      const outcomes = {};
+      for (const doc of snap.docs) {
+        let outcome;
+        try {
+          outcome = await processDomainRenewal(doc.ref, notifyOwner);
+        } catch (e) {
+          outcome = "error";
+          console.error("renewCustomDomains", doc.id, e.message || e);
+        }
+        outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+      }
+      console.log("renewCustomDomains", JSON.stringify(outcomes));
+      return null;
+    });
+
+  /** Web billing: replace the card used for domain renewals (Stripe card form, setup mode). */
+  exportsObj.createDomainCardSetup = functions
+    .runWith({ secrets: [stripeSecretKey] })
+    .https.onCall(async (data, context) => {
+      if (!context.auth || !context.auth.uid) {
+        throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+      }
+      const tenantId = await resolveUidTenant(context.auth.uid);
+      const tenant = (await assertTenantOwner(context.auth.uid, tenantId)).data() || {};
+      const customerId = await ensureDomainBillingCustomer(tenantId, tenant, context.auth.token.email);
+      const session = await getStripe().checkout.sessions.create({
+        mode: "setup",
+        ui_mode: "embedded",
+        customer: customerId,
+        payment_method_types: ["card"],
+        metadata: { tenantId, purpose: "custom_domain" },
+        return_url: `${webReturnOrigin(data)}/billing.html?domain_card=success&session_id={CHECKOUT_SESSION_ID}#domain`,
+      });
+      return {
+        clientSecret: session.client_secret,
+        publishableKey: (stripePublishableKeyParam.value() || "").trim() || null,
+      };
+    });
+
+  exportsObj.getDomainBillingHistory = functions
+    .runWith({ secrets: [stripeSecretKey] })
+    .https.onCall(async (data, context) => {
+      if (!context.auth || !context.auth.uid) {
+        throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+      }
+      const tenantId = await resolveUidTenant(context.auth.uid);
+      const tenant = (await assertTenantOwner(context.auth.uid, tenantId)).data() || {};
+      const customerId = (tenant.domainStripeCustomerId || "").toString().trim();
+      if (!customerId) return { charges: [] };
+      const list = await getStripe().charges.list({ customer: customerId, limit: 24 });
+      return {
+        charges: (list.data || [])
+          .filter((c) => c.status === "succeeded" && /^Domain /.test(c.description || ""))
+          .map((c) => ({
+            id: c.id,
+            description: c.description,
+            amountCents: c.amount,
+            refundedCents: c.amount_refunded || 0,
+            created: c.created * 1000,
+            receiptUrl: c.receipt_url || null,
+          })),
+      };
+    });
+
+  exportsObj.completeDomainCardSetup = functions
+    .runWith({ secrets: [stripeSecretKey] })
+    .https.onCall(async (data, context) => {
+      if (!context.auth || !context.auth.uid) {
+        throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+      }
+      const tenantId = await resolveUidTenant(context.auth.uid);
+      const tenant = (await assertTenantOwner(context.auth.uid, tenantId)).data() || {};
+      const customerId = (tenant.domainStripeCustomerId || "").toString().trim();
+      const sessionId = ((data && data.sessionId) || "").toString().trim();
+      if (!customerId || !sessionId) {
+        throw new functions.https.HttpsError("invalid-argument", "Card setup was not started.");
+      }
+      const session = await getStripe().checkout.sessions.retrieve(sessionId, {
+        expand: ["setup_intent.payment_method"],
+      });
+      const sessionCustomer = typeof session.customer === "string" ? session.customer : session.customer && session.customer.id;
+      const pm = session.setup_intent && session.setup_intent.payment_method;
+      if (session.mode !== "setup" || sessionCustomer !== customerId || session.status !== "complete" || !pm || !pm.id) {
+        throw new functions.https.HttpsError("failed-precondition", "The card was not saved. Try again.");
+      }
+      const cardLabel = cardLabelOf(pm);
+      await getDb().collection("tenants").doc(tenantId).set(
+        {
+          customDomainRenewalPaymentMethodId: pm.id,
+          customDomainCardLabel: cardLabel,
+          // A new card gets a fresh try straight away.
+          customDomainRenewalLastAttemptAt: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+      return { ok: true, cardLabel };
+    });
 
   /** Every 15 minutes: finish transfers and mark domains live once Cloudflare's certificate is active. */
   exportsObj.advanceCustomDomains = functions
@@ -1687,7 +2203,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
         );
       }
 
-      const [checkRaw, registerPricingAttempt, transferPricingAttempt] = await Promise.all([
+      const [checkRaw, registerPricingAttempt, transferPricingAttempt, renewPricingAttempt] = await Promise.all([
         namecheapRequest("namecheap.domains.check", {
           DomainList: domainList.join(","),
         }),
@@ -1703,6 +2219,13 @@ function registerCustomDomainFunctions(exportsObj, options) {
           ActionName: "TRANSFER",
         }).catch((e) => {
           console.warn("getPricing TRANSFER failed", e.message || e);
+          return "";
+        }),
+        namecheapRequest("namecheap.users.getPricing", {
+          ProductType: "DOMAIN",
+          ActionName: "RENEW",
+        }).catch((e) => {
+          console.warn("getPricing RENEW failed", e.message || e);
           return "";
         }),
       ]);
@@ -1721,12 +2244,15 @@ function registerCustomDomainFunctions(exportsObj, options) {
       const transferPricingRaw = namecheapStatusOk(transferPricingAttempt)
         ? transferPricingAttempt
         : "";
+      const renewPricingRaw = namecheapStatusOk(renewPricingAttempt) ? renewPricingAttempt : "";
 
       const checks = parseAllDomainChecks(checkRaw);
       const results = domainList.map((domain) => {
         const { tld } = splitSldTld(domain);
         const check = checks[domain] || {};
-        const available = typeof check.available === "boolean" ? check.available : null;
+        // Premium names cost far more than the normal price; they aren't sold here yet.
+        const available =
+          check.premium === true ? false : typeof check.available === "boolean" ? check.available : null;
         const wholesaleRegister =
           parseTldPriceFromPricingXml(registerPricingRaw, tld, "REGISTER") ??
           FALLBACK_REGISTER_USD[tld] ??
@@ -1735,6 +2261,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
           parseTldPriceFromPricingXml(transferPricingRaw, tld, "TRANSFER") ??
           FALLBACK_TRANSFER_USD[tld] ??
           null;
+        const wholesaleRenew =
+          parseTldPriceFromPricingXml(renewPricingRaw, tld, "RENEW") ?? wholesaleRegister;
+        const customerRenew = applyCustomerMarkup(wholesaleRenew);
         const customerRegister = applyCustomerMarkup(wholesaleRegister);
         const customerTransfer = applyCustomerMarkup(wholesaleTransfer);
         return {
@@ -1747,13 +2276,16 @@ function registerCustomDomainFunctions(exportsObj, options) {
           registerPriceUsd: customerRegister,
           transferPriceUsd: customerTransfer,
           registerPriceLabel: formatMoneyLabel(customerRegister),
+          renewPriceLabel: formatMoneyLabel(customerRenew),
           transferPriceLabel: formatMoneyLabel(customerTransfer),
           statusLabel:
-            available === true
-              ? "Available"
-              : available === false
-                ? "Taken — transfer"
-                : "Unknown",
+            check.premium === true
+              ? "Premium name — not offered"
+              : available === true
+                ? "Available"
+                : available === false
+                  ? "Taken — transfer"
+                  : "Unknown",
         };
       });
 
@@ -1784,6 +2316,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
       const domainBlock = domainPurchaseBlockReason(tenant);
       if (domainBlock) {
         throw new functions.https.HttpsError("failed-precondition", domainBlock);
+      }
+      if ((data && data.source) !== "web") {
+        throw new functions.https.HttpsError("failed-precondition", WEB_DOMAIN_PURCHASE_MESSAGE);
       }
       const slug = (tenant.slug || "").toString().trim().toLowerCase();
       if (!slug) {
@@ -1832,12 +2367,23 @@ function registerCustomDomainFunctions(exportsObj, options) {
           `${domain} is not available to buy. Transfer it instead if you own it.`
         );
       }
+      if ((parseAllDomainChecks(checkRaw)[domain] || {}).premium === true) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `${domain} is a premium name, which we don't offer yet. Try a different name.`
+        );
+      }
 
       const pricing = await resolveCustomerDomainPrice(domain, "REGISTER");
+      const renewal = await resolveCustomerDomainPrice(domain, "RENEW");
       const autoRenew = parseAutoRenewFlag(data && data.autoRenew);
+      const customerId = await ensureDomainBillingCustomer(tenantId, tenant, context.auth.token.email);
       const payment = await createPendingDomainPayment({
         uid,
         tenantId,
+        customerId,
+        receiptEmail: context.auth.token.email || "",
+        renewalCents: renewal.totalCents,
         kind: "purchase",
         domain,
         customerPrice: pricing.customer,
@@ -1902,6 +2448,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
       if (domainBlock) {
         throw new functions.https.HttpsError("failed-precondition", domainBlock);
       }
+      if ((data && data.source) !== "web") {
+        throw new functions.https.HttpsError("failed-precondition", WEB_DOMAIN_PURCHASE_MESSAGE);
+      }
       const slug = (tenant.slug || "").toString().trim().toLowerCase();
       if (!slug) {
         throw new functions.https.HttpsError("failed-precondition", "Business slug is missing");
@@ -1942,10 +2491,15 @@ function registerCustomDomainFunctions(exportsObj, options) {
       }
 
       const pricing = await resolveCustomerDomainPrice(domain, "TRANSFER");
+      const renewal = await resolveCustomerDomainPrice(domain, "RENEW");
       const autoRenew = parseAutoRenewFlag(data && data.autoRenew);
+      const customerId = await ensureDomainBillingCustomer(tenantId, tenant, context.auth.token.email);
       const payment = await createPendingDomainPayment({
         uid,
         tenantId,
+        customerId,
+        receiptEmail: context.auth.token.email || "",
+        renewalCents: renewal.totalCents,
         kind: "transfer",
         domain,
         authCode,
@@ -2116,7 +2670,6 @@ function registerCustomDomainFunctions(exportsObj, options) {
 
   /** Toggle auto-renew preference for the connected domain. */
   exportsObj.setCustomDomainAutoRenew = functions
-    .runWith({ secrets: [namecheapApiKey] })
     .https.onCall(async (data, context) => {
       if (!context.auth || !context.auth.uid) {
         throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -2134,7 +2687,6 @@ function registerCustomDomainFunctions(exportsObj, options) {
         );
       }
       const autoRenew = parseAutoRenewFlag(data && data.autoRenew);
-      const ncOk = await maybeSetNamecheapAutoRenew(domain, autoRenew);
       await getDb()
         .collection("tenants")
         .doc(tenantId)
@@ -2152,10 +2704,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
         ...statusPayload(refreshed, tenantId, { autoRenew }),
         ok: true,
         autoRenew,
-        namecheapSynced: ncOk,
         message: autoRenew
-          ? "Auto-renew is on. We’ll renew before the domain expires."
-          : "Auto-renew is off. Renew manually before expiry or the domain can lapse.",
+          ? "Auto-renew is on. We’ll remind you 7 days before charging your saved card for the next year."
+          : "Auto-renew is off. Your domain will expire at the end of its year unless you turn it back on.",
       };
     });
 

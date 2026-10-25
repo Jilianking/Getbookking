@@ -554,6 +554,49 @@ async function resolveUidTenant(uid) {
  * keeping identity prefills (business name, industry theme, contact, location).
  * Old hand-built sites are never imported — only the Bookking app site remains.
  */
+const TRANSFER_TYPICAL_DAYS = "5–7 days";
+const TRANSFER_EXPECT_WITHIN_DAYS = 7;
+
+function shortDay(ms) {
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** One line under the status, plus a longer explanation behind the ⓘ. */
+function domainStatusHint(tenant, statusLower) {
+  if (statusLower === "transferring") {
+    const startedMs = millisOf(tenant.customDomainTransferStartedAt) || millisOf(tenant.customDomainUpdatedAt);
+    const when = startedMs
+      ? ` Started ${shortDay(startedMs)}, so expect it by about ${shortDay(startedMs + TRANSFER_EXPECT_WITHIN_DAYS * 86400000)}.`
+      : "";
+    return {
+      hint: `Usually takes ${TRANSFER_TYPICAL_DAYS}.${when}`,
+      detail:
+        `Your old registrar has to release the domain. It usually takes ${TRANSFER_TYPICAL_DAYS} and completes on its own; ` +
+        "approving the transfer email from your old registrar can make it faster. Your current website keeps working " +
+        "until then, and we’ll email you when it’s live.",
+    };
+  }
+  if (statusLower === "connecting") {
+    return {
+      hint: "Setting up your secure connection. Usually under an hour.",
+      detail: "We’re pointing your domain at your Get Bookking site and issuing its security certificate (the padlock). " +
+        "Your free Get Bookking link keeps working meanwhile, and we’ll email you when it’s live.",
+    };
+  }
+  if (statusLower === "active") {
+    const expiresMs = millisOf(tenant.customDomainExpiresAt);
+    if (!expiresMs) return { hint: "", detail: "" };
+    const day = new Date(expiresMs).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+    return tenant.customDomainAutoRenew === false
+      ? { hint: `Expires ${day}.`, detail: "Auto-renew is off. Turn it on in the app under Settings → Domain to keep your domain." }
+      : { hint: `Renews ${day}.`, detail: "We’ll remind you 7 days before charging your saved card for the next year." }; 
+  }
+  if (statusLower === "expired" || statusLower === "failed") {
+    return { hint: `Questions? Contact ${DOMAIN_SUPPORT_EMAIL}.`, detail: "" };
+  }
+  return { hint: "", detail: "" };
+}
+
 function statusPayload(tenant, tenantId, extras) {
   const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
   const status = (tenant.customDomainStatus || "").toString().trim() || (domain ? "unknown" : "none");
@@ -566,6 +609,7 @@ function statusPayload(tenant, tenantId, extras) {
   const statusLower = status.toLowerCase();
   const hasDomain = !!domain && statusLower !== "none";
   const renewalLabel = tenant.customDomainRenewalCents ? formatCentsLabel(tenant.customDomainRenewalCents) : "";
+  const statusHint = domainStatusHint(tenant, statusLower);
 
   const subdomainHttps = {
     status: "active",
@@ -615,7 +659,11 @@ function statusPayload(tenant, tenantId, extras) {
     wwwDomain: domain ? wwwOf(domain) : null,
     status,
     source,
-    statusMessage: (tenant.customDomainStatusMessage || "").toString() || null,
+    // The app shows statusMessage as-is, so it carries the hint too; the billing page uses the parts.
+    statusMessage: [(tenant.customDomainStatusMessage || "").toString(), statusHint.hint].filter(Boolean).join(" ") || null,
+    statusMessageBase: (tenant.customDomainStatusMessage || "").toString() || null,
+    statusHint: statusHint.hint || null,
+    statusHintDetail: statusHint.detail || null,
     namecheapConfigured: configured,
     providerConfigured: configured,
     canBuyOrTransfer: configured && !domainBlocked,
@@ -1030,6 +1078,7 @@ function disconnectedDomainPatch() {
     customDomainLiveAt: del,
     customDomainStuckNotedAt: del,
     customDomainExpiresAt: del,
+    customDomainTransferStartedAt: del,
     customDomainRenewalCents: del,
     customDomainRenewalWholesaleUsd: del,
     customDomainRenewalQuoteForExpiryMs: del,
@@ -1622,6 +1671,7 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
         customDomain: domain,
         customDomainWww: wwwOf(domain),
         customDomainStatus: "transferring",
+        customDomainTransferStartedAt: admin.firestore.FieldValue.serverTimestamp(),
         customDomainSource: "transfer",
         customDomainProvider: "namecheap",
         customDomainTransferId: transferId || null,

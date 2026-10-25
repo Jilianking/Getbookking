@@ -177,7 +177,15 @@
 
           <div class="hidden" id="domainCurrent">
             <div class="bill-kv"><span class="bill-kv-label">Domain</span><span class="bill-kv-value" id="domainName">—</span></div>
-            <div class="bill-kv"><span class="bill-kv-label">Status</span><span class="bill-kv-value" id="domainStatus">—</span></div>
+            <div class="bill-kv">
+              <span class="bill-kv-label">Status</span>
+              <span class="bill-kv-value">
+                <span id="domainStatus">—</span>
+                <button type="button" class="bill-btn-text hidden" id="domainStatusInfoBtn" aria-expanded="false" aria-controls="domainStatusDetail" aria-label="What does this status mean?" style="margin-left:6px;font-size:14px;">ⓘ</button>
+              </span>
+            </div>
+            <p class="bill-note hidden" id="domainStatusHint" style="margin:6px 0 0;text-align:right;"></p>
+            <p class="bill-note hidden" id="domainStatusDetail" style="margin:8px 0 0;"></p>
             <div class="bill-kv hidden" id="domainExpiresRow"><span class="bill-kv-label" id="domainExpiresLabel">Renews</span><span class="bill-kv-value" id="domainExpires">—</span></div>
             <div class="bill-kv"><span class="bill-kv-label">Auto-renew</span><span class="bill-kv-value" id="domainAutoRenew">—</span></div>
             <div class="bill-kv"><span class="bill-kv-label">Renewal card</span><span class="bill-kv-value" id="domainCard">None saved</span></div>
@@ -1953,8 +1961,15 @@
       domainShow('domainExpiresRow', !!d.expiresAt);
       domainEl('domainCard').textContent = d.renewalCardLabel || 'None saved';
       domainEl('domainCardBtn').textContent = d.renewalCardLabel ? 'Update renewal card' : 'Add a renewal card';
-      domainEl('domainStatusMessage').textContent = d.statusMessage || '';
-      domainShow('domainStatusMessage', !!d.statusMessage);
+      var baseMessage = d.statusMessageBase != null ? d.statusMessageBase : d.statusMessage;
+      domainEl('domainStatusMessage').textContent = baseMessage || '';
+      domainShow('domainStatusMessage', !!baseMessage);
+      domainEl('domainStatusHint').textContent = d.statusHint || '';
+      domainShow('domainStatusHint', !!d.statusHint);
+      domainEl('domainStatusDetail').textContent = d.statusHintDetail || '';
+      domainShow('domainStatusDetail', false);
+      domainEl('domainStatusInfoBtn').setAttribute('aria-expanded', 'false');
+      domainShow('domainStatusInfoBtn', !!d.statusHintDetail);
     }
 
     function loadDomainHistory() {
@@ -2206,6 +2221,11 @@
     domainEl('domainContinueToPay').addEventListener('click', startDomainPayment);
     domainEl('domainPayBtn').addEventListener('click', payForDomain);
     domainEl('domainCardBtn').addEventListener('click', startDomainCardSetup);
+    domainEl('domainStatusInfoBtn').addEventListener('click', function() {
+      var open = domainEl('domainStatusDetail').classList.contains('hidden');
+      domainShow('domainStatusDetail', open);
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
     setDomainMode('buy');
 
     /** Back from a bank check (3-D Secure) or Stripe's card form: finish, then show the section. */

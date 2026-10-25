@@ -158,6 +158,85 @@
             Number capacity updated. Choose a teammate below to set up their line.
           </p>
           <p class="bill-note hidden" id="smsLineActionNote" style="margin-top:10px;"></p>
+          <div class="hidden" id="smsAddOnCardWrap" style="margin-top:14px;">
+            <p class="bill-note" id="smsAddOnCardNote"></p>
+            <button type="button" class="btn-upgrade" id="smsAddOnCardBtn" style="margin-top:10px;width:100%;">
+              Add a card for extra texting numbers
+            </button>
+            <div id="smsAddOnCardEmbedded" style="margin-top:14px;"></div>
+            <p class="bill-error hidden" id="smsAddOnCardError" style="margin-top:12px;"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="bill-section hidden" id="domainSection">
+        <div class="bill-section-label">Website domain</div>
+        <div class="bill-card">
+          <p class="bill-note" id="domainLoading">Loading…</p>
+          <p class="bill-note hidden" id="domainUnavailable">Custom domains are coming soon. Your site keeps working on your free Get Bookking link.</p>
+
+          <div class="hidden" id="domainCurrent">
+            <div class="bill-kv"><span class="bill-kv-label">Domain</span><span class="bill-kv-value" id="domainName">—</span></div>
+            <div class="bill-kv">
+              <span class="bill-kv-label">Status</span>
+              <span class="bill-kv-value">
+                <span id="domainStatus">—</span>
+                <button type="button" class="bill-btn-text hidden" id="domainStatusInfoBtn" aria-expanded="false" aria-controls="domainStatusDetail" aria-label="What does this status mean?" style="margin-left:6px;font-size:14px;">ⓘ</button>
+              </span>
+            </div>
+            <p class="bill-note hidden" id="domainStatusHint" style="margin:6px 0 0;text-align:right;"></p>
+            <p class="bill-note hidden" id="domainStatusDetail" style="margin:8px 0 0;"></p>
+            <div class="bill-kv hidden" id="domainExpiresRow"><span class="bill-kv-label" id="domainExpiresLabel">Renews</span><span class="bill-kv-value" id="domainExpires">—</span></div>
+            <div class="bill-kv"><span class="bill-kv-label">Auto-renew</span><span class="bill-kv-value" id="domainAutoRenew">—</span></div>
+            <div class="bill-kv"><span class="bill-kv-label">Renewal card</span><span class="bill-kv-value" id="domainCard">None saved</span></div>
+            <p class="bill-note hidden" id="domainStatusMessage" style="margin-top:12px;"></p>
+            <p class="bill-note" style="margin-top:12px;">Turn auto-renew on or off, remove the domain, or transfer it out in the Get Bookking app under Settings → Domain.</p>
+            <button type="button" class="btn-secondary" id="domainCardBtn" style="margin-top:14px;width:100%;">Update renewal card</button>
+            <div id="domainCardEmbedded" style="margin-top:14px;"></div>
+          </div>
+
+          <div class="hidden" id="domainShop">
+            <p class="bill-note" style="margin:0 0 14px;">Give your booking site its own address, like yourshop.com. We connect it for you — no DNS settings to edit.</p>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn-secondary" id="domainModeBuy" style="flex:1;" aria-pressed="true">Buy a new domain</button>
+              <button type="button" class="btn-secondary" id="domainModeTransfer" style="flex:1;" aria-pressed="false">Transfer one you own</button>
+            </div>
+
+            <div id="domainBuyPanel" style="margin-top:14px;">
+              <form id="domainSearchForm" style="display:flex;gap:8px;align-items:flex-end;">
+                <input class="lifecycle-field" id="domainQuery" type="text" placeholder="yourshop or yourshop.com" autocomplete="off" autocapitalize="none" spellcheck="false" style="flex:1;" />
+                <button type="submit" class="btn-upgrade" id="domainSearchBtn" style="width:auto;padding-left:18px;padding-right:18px;">Search</button>
+              </form>
+              <ul class="bill-invoice-list hidden" id="domainResults" style="margin-top:14px;"></ul>
+            </div>
+
+            <div class="hidden" id="domainTransferPanel" style="margin-top:14px;">
+              <p class="bill-note" style="margin:0;">At your current registrar, unlock the domain and copy its transfer (authorization / EPP) code. The transfer price includes one extra year.</p>
+              <input class="lifecycle-field" id="domainTransferName" type="text" placeholder="yourshop.com" autocomplete="off" autocapitalize="none" spellcheck="false" />
+              <input class="lifecycle-field" id="domainTransferCode" type="text" placeholder="Transfer code" autocomplete="off" autocapitalize="none" spellcheck="false" />
+              <button type="button" class="btn-upgrade" id="domainTransferContinue" style="margin-top:12px;width:100%;">Continue</button>
+            </div>
+
+            <div class="hidden" id="domainCheckout" style="margin-top:16px;">
+              <div class="bill-kv"><span class="bill-kv-label" id="domainCheckoutWhat">Domain</span><span class="bill-kv-value" id="domainCheckoutPrice">—</span></div>
+              <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:13px;color:var(--text-secondary);line-height:1.45;">
+                <input type="checkbox" id="domainAutoRenewInput" checked style="margin-top:3px;" />
+                <span id="domainRenewText">Renew automatically each year.</span>
+              </label>
+              <button type="button" class="btn-upgrade" id="domainContinueToPay" style="margin-top:14px;width:100%;">Continue to payment</button>
+              <div id="domainPaymentElement" style="margin-top:14px;"></div>
+              <button type="button" class="btn-upgrade hidden" id="domainPayBtn" style="margin-top:14px;width:100%;">Pay</button>
+              <p class="bill-stripe-note">Payments secured by Stripe</p>
+            </div>
+          </div>
+
+          <p class="bill-success hidden" id="domainSuccess" style="margin-top:14px;"></p>
+          <p class="bill-error hidden" id="domainError" style="margin-top:12px;"></p>
+
+          <div class="hidden" id="domainHistoryWrap" style="margin-top:18px;">
+            <div class="bill-sms-assignments-label">Domain charges</div>
+            <ul class="bill-invoice-list" id="domainHistory" style="margin-top:8px;"></ul>
+          </div>
         </div>
       </section>
 
@@ -782,7 +861,11 @@
       var status = sub ? sub.status : 'free';
       if (!d.hasStripeCustomer) {
         var fsStatus = (d.firestoreSubscriptionStatus || 'trialing').toString();
-        if (d.needsInitialCheckout && fsStatus === 'trialing') {
+        if (d.billingSource === 'apple') {
+          // Plan bought in the iOS app: Apple bills it, so there is nothing to start here.
+          badge.textContent = fsStatus === 'active' ? 'Active · App Store' : 'App Store';
+          badge.classList.toggle('is-active', fsStatus === 'active' || fsStatus === 'trialing');
+        } else if (d.needsInitialCheckout && fsStatus === 'trialing') {
           badge.textContent = 'Trial';
           badge.classList.add('is-active');
         } else {
@@ -1180,6 +1263,20 @@
         return;
       }
 
+      // App Store subscribers pay for extra numbers with a card saved here; their plan stays with Apple.
+      var appleBilled = d.billingSource === 'apple';
+      var smsAddOn = (d && d.smsAddOn) || {};
+      var cardWrap = document.getElementById('smsAddOnCardWrap');
+      cardWrap.classList.toggle('hidden', !appleBilled);
+      if (appleBilled) {
+        document.getElementById('smsAddOnCardNote').textContent = smsAddOn.hasCard
+          ? 'Your plan is billed through the App Store. Extra texting numbers are billed to ' + smsAddOn.cardLabel + '.'
+          : 'Your plan is billed through the App Store. Extra texting numbers ($12 today, then $12/mo each) are billed to a card you add here.';
+        document.getElementById('smsAddOnCardBtn').textContent = smsAddOn.hasCard
+          ? 'Change card'
+          : 'Add a card for extra texting numbers';
+      }
+
       var plan = (d.firestorePlan || m.subscriptionPlan || 'solo').toString();
       var paidRow = document.getElementById('smsLinesPaidRow');
       var freeRow = document.getElementById('smsLinesFreeRow');
@@ -1210,6 +1307,11 @@
 
       var eligible = Array.isArray(m.smsEligibleMembers) ? m.smsEligibleMembers : [];
       var needsPayNext = !!m.smsNeedsPurchaseForNextLine;
+      if (appleBilled && needsPayNext && !smsAddOn.hasCard) {
+        note.textContent = 'Add a card below, then you can add another texting number.';
+        note.classList.remove('hidden');
+        return;
+      }
       if (needsPayNext || m.smsCanAddWithoutPurchase) {
         btn.classList.remove('hidden');
         if (needsPayNext) {
@@ -1231,6 +1333,58 @@
         }
         note.classList.remove('hidden');
       }
+    }
+
+    var smsAddOnCardCheckout = null;
+
+    /** Opens Stripe's card form for an App Store subscriber's extra texting numbers. */
+    async function startSmsAddOnCardSetup() {
+      var btn = document.getElementById('smsAddOnCardBtn');
+      var errEl = document.getElementById('smsAddOnCardError');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      try {
+        var res = await fns.httpsCallable('createSmsLinesCardSetup')({
+          returnOrigin: window.location.origin,
+        });
+        var clientSecret = res.data && res.data.clientSecret;
+        if (!clientSecret) throw new Error('Stripe did not return a card form.');
+        var pk =
+          (res.data && res.data.publishableKey && String(res.data.publishableKey).trim()) ||
+          ((typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '');
+        if (!pk) throw new Error('Stripe publishable key is missing.');
+        if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
+        if (smsAddOnCardCheckout && typeof smsAddOnCardCheckout.destroy === 'function') {
+          smsAddOnCardCheckout.destroy();
+        }
+        smsAddOnCardCheckout = await Stripe(pk).initEmbeddedCheckout({
+          fetchClientSecret: function() {
+            return Promise.resolve(clientSecret);
+          },
+        });
+        smsAddOnCardCheckout.mount('#smsAddOnCardEmbedded');
+        btn.classList.add('hidden');
+      } catch (err) {
+        console.error('startSmsAddOnCardSetup', err);
+        errEl.textContent = formatFirebaseHttpsError(err);
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /** Back from Stripe's card form: make the saved card the one charged for extra numbers. */
+    function completeSmsAddOnCardAfterReturn(sessionId) {
+      return fns.httpsCallable('completeSmsLinesCardSetup')({ sessionId: sessionId })
+        .catch(function(err) {
+          var errEl = document.getElementById('billingError');
+          errEl.textContent = formatFirebaseHttpsError(err);
+          errEl.classList.remove('hidden');
+        })
+        .then(function() {
+          history.replaceState({}, '', 'billing.html#messaging');
+          return loadBilling();
+        });
     }
 
     function smsNeedsPayForNext(m) {
@@ -1693,6 +1847,7 @@
     });
 
     document.getElementById('addSmsLineBtn').addEventListener('click', openAddSmsLineModal);
+    document.getElementById('smsAddOnCardBtn').addEventListener('click', startSmsAddOnCardSetup);
     document.getElementById('addSmsLineModalClose').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalCancel').addEventListener('click', closeAddSmsLineModal);
     document.getElementById('addSmsLineModalBackdrop').addEventListener('click', closeAddSmsLineModal);
@@ -1747,6 +1902,368 @@
       }
     });
 
+    // ---------- Website domain (purchases and transfers happen here, not in the app) ----------
+    var domainState = { kind: 'purchase', domain: '', stripe: null, elements: null, paymentIntentId: '' };
+
+    function domainEl(id) { return document.getElementById(id); }
+    function domainShow(id, on) { domainEl(id).classList.toggle('hidden', !on); }
+    function domainError(msg) {
+      domainEl('domainError').textContent = msg || '';
+      domainShow('domainError', !!msg);
+    }
+    function domainSuccess(msg) {
+      domainEl('domainSuccess').textContent = msg || '';
+      domainShow('domainSuccess', !!msg);
+    }
+    function domainStatusLabel(status) {
+      var s = (status || '').toLowerCase();
+      if (s === 'active') return 'Connected';
+      if (s === 'connecting') return 'Connecting…';
+      if (s === 'transferring') return 'Transferring…';
+      if (s === 'expired') return 'Expired';
+      if (s === 'failed') return 'Needs attention';
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
+    }
+    function domainDay(iso) {
+      var d = new Date(iso);
+      return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function loadDomainSection() {
+      domainShow('domainSection', true);
+      return fns.httpsCallable('getCustomDomainStatus')({}).then(function(res) {
+        renderDomainSection(res.data || {});
+        return loadDomainHistory();
+      }).catch(function(err) {
+        domainShow('domainLoading', false);
+        domainError(formatFirebaseHttpsError(err));
+      });
+    }
+
+    function renderDomainSection(d) {
+      domainShow('domainLoading', false);
+      var status = (d.status || 'none').toLowerCase();
+      var hasDomain = !!d.domain && status !== 'none';
+      domainShow('domainCurrent', hasDomain);
+      domainShow('domainShop', !hasDomain && !!d.canBuyOrTransfer);
+      domainShow('domainUnavailable', !hasDomain && !d.canBuyOrTransfer);
+      if (!hasDomain) return;
+      domainEl('domainName').textContent = d.domain;
+      domainEl('domainStatus').textContent = domainStatusLabel(status);
+      var autoRenew = d.autoRenew !== false;
+      domainEl('domainAutoRenew').textContent = autoRenew
+        ? 'On' + (d.renewalPriceLabel ? ' — ' + d.renewalPriceLabel + '/year' : '')
+        : 'Off';
+      if (d.expiresAt) {
+        domainEl('domainExpiresLabel').textContent = autoRenew ? 'Renews' : 'Expires';
+        domainEl('domainExpires').textContent = domainDay(d.expiresAt);
+      }
+      domainShow('domainExpiresRow', !!d.expiresAt);
+      domainEl('domainCard').textContent = d.renewalCardLabel || 'None saved';
+      domainEl('domainCardBtn').textContent = d.renewalCardLabel ? 'Update renewal card' : 'Add a renewal card';
+      var baseMessage = d.statusMessageBase != null ? d.statusMessageBase : d.statusMessage;
+      domainEl('domainStatusMessage').textContent = baseMessage || '';
+      domainShow('domainStatusMessage', !!baseMessage);
+      domainEl('domainStatusHint').textContent = d.statusHint || '';
+      domainShow('domainStatusHint', !!d.statusHint);
+      domainEl('domainStatusDetail').textContent = d.statusHintDetail || '';
+      domainShow('domainStatusDetail', false);
+      domainEl('domainStatusInfoBtn').setAttribute('aria-expanded', 'false');
+      domainShow('domainStatusInfoBtn', !!d.statusHintDetail);
+    }
+
+    function loadDomainHistory() {
+      return fns.httpsCallable('getDomainBillingHistory')({}).then(function(res) {
+        var charges = (res.data && res.data.charges) || [];
+        var list = domainEl('domainHistory');
+        list.innerHTML = '';
+        charges.forEach(function(c) {
+          var li = document.createElement('li');
+          li.className = 'bill-invoice-item';
+          var left = document.createElement('div');
+          var title = document.createElement('div');
+          title.className = 'bill-invoice-title';
+          title.textContent = new Date(c.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+            ' — ' + c.description;
+          left.appendChild(title);
+          var right = document.createElement('div');
+          right.className = 'bill-invoice-right';
+          var amount = document.createElement('span');
+          amount.className = 'bill-invoice-amount';
+          amount.textContent = formatMoney(c.amountCents, 'usd');
+          right.appendChild(amount);
+          if (c.refundedCents) {
+            var pill = document.createElement('span');
+            pill.className = 'bill-pill';
+            pill.textContent = c.refundedCents >= c.amountCents ? 'Refunded' : 'Partly refunded';
+            right.appendChild(pill);
+          }
+          if (c.receiptUrl) {
+            var a = document.createElement('a');
+            a.className = 'bill-invoice-view';
+            a.href = c.receiptUrl;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = 'Receipt ↗';
+            right.appendChild(a);
+          }
+          li.appendChild(left);
+          li.appendChild(right);
+          list.appendChild(li);
+        });
+        domainShow('domainHistoryWrap', charges.length > 0);
+      }).catch(function() { domainShow('domainHistoryWrap', false); });
+    }
+
+    function setDomainMode(mode) {
+      var buy = mode === 'buy';
+      domainEl('domainModeBuy').setAttribute('aria-pressed', buy ? 'true' : 'false');
+      domainEl('domainModeTransfer').setAttribute('aria-pressed', buy ? 'false' : 'true');
+      domainEl('domainModeBuy').classList.toggle('btn-upgrade', buy);
+      domainEl('domainModeTransfer').classList.toggle('btn-upgrade', !buy);
+      domainShow('domainBuyPanel', buy);
+      domainShow('domainTransferPanel', !buy);
+      resetDomainCheckout();
+      domainError('');
+    }
+
+    function resetDomainCheckout() {
+      domainShow('domainCheckout', false);
+      domainShow('domainPayBtn', false);
+      domainShow('domainContinueToPay', true);
+      domainEl('domainPaymentElement').innerHTML = '';
+      domainState.elements = null;
+      domainState.paymentIntentId = '';
+    }
+
+    function searchDomainNames(ev) {
+      if (ev) ev.preventDefault();
+      var q = domainEl('domainQuery').value.trim();
+      if (!q) return;
+      domainError('');
+      resetDomainCheckout();
+      var btn = domainEl('domainSearchBtn');
+      btn.disabled = true;
+      fns.httpsCallable('searchDomains')({ query: q }).then(function(res) {
+        var d = res.data || {};
+        var list = domainEl('domainResults');
+        list.innerHTML = '';
+        (d.results || []).forEach(function(r) {
+          var li = document.createElement('li');
+          li.className = 'bill-invoice-item';
+          var left = document.createElement('div');
+          var name = document.createElement('div');
+          name.className = 'bill-invoice-title';
+          name.textContent = r.domain;
+          var sub = document.createElement('div');
+          sub.className = 'bill-invoice-id';
+          sub.textContent = r.available === true
+            ? r.registerPriceLabel + ' first year · renews at ' + (r.renewPriceLabel || r.registerPriceLabel) + '/year'
+            : r.statusLabel;
+          left.appendChild(name);
+          left.appendChild(sub);
+          li.appendChild(left);
+          if (r.available === true) {
+            var buy = document.createElement('button');
+            buy.type = 'button';
+            buy.className = 'btn-upgrade';
+            buy.style.width = 'auto';
+            buy.style.padding = '8px 16px';
+            buy.textContent = 'Buy';
+            buy.addEventListener('click', function() {
+              openDomainCheckout('purchase', r.domain, r.registerPriceLabel, r.renewPriceLabel || r.registerPriceLabel);
+            });
+            li.appendChild(buy);
+          }
+          list.appendChild(li);
+        });
+        domainShow('domainResults', (d.results || []).length > 0);
+        if (d.message) domainError(d.message);
+      }).catch(function(err) {
+        domainError(formatFirebaseHttpsError(err));
+      }).then(function() { btn.disabled = false; });
+    }
+
+    function openDomainCheckout(kind, domain, priceLabel, renewLabel) {
+      resetDomainCheckout();
+      domainState.kind = kind;
+      domainState.domain = domain;
+      domainEl('domainCheckoutWhat').textContent = (kind === 'transfer' ? 'Transfer ' : '') + domain;
+      domainEl('domainCheckoutPrice').textContent = priceLabel ? priceLabel + (kind === 'transfer' ? ' (includes 1 year)' : ' first year') : '';
+      domainEl('domainRenewText').textContent = renewLabel
+        ? 'Renew automatically each year at ' + renewLabel + ' on this card until I turn it off. If the price changes, you’ll let me know before charging.'
+        : 'Renew automatically each year on this card until I turn it off. You’ll tell me the exact price 7 days before each renewal.';
+      domainShow('domainCheckout', true);
+      domainEl('domainCheckout').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function continueDomainTransfer() {
+      var domain = domainEl('domainTransferName').value.trim().toLowerCase();
+      if (!domain || !domainEl('domainTransferCode').value.trim()) {
+        domainError('Enter the domain and its transfer code.');
+        return;
+      }
+      domainError('');
+      openDomainCheckout('transfer', domain, '', '');
+    }
+
+    function startDomainPayment() {
+      var btn = domainEl('domainContinueToPay');
+      btn.disabled = true;
+      domainError('');
+      var payload = {
+        domain: domainState.domain,
+        autoRenew: domainEl('domainAutoRenewInput').checked,
+        source: 'web',
+      };
+      var call = 'startDomainPurchase';
+      if (domainState.kind === 'transfer') {
+        call = 'startDomainTransfer';
+        payload.authCode = domainEl('domainTransferCode').value.trim();
+      }
+      fns.httpsCallable(call)(payload).then(function(res) {
+        var d = res.data || {};
+        var pk = (d.publishableKey || window.stripePublishableKey || '').trim();
+        if (!d.clientSecret || !pk) throw new Error('Payment could not be started. Try again.');
+        if (d.amountCents) {
+          domainEl('domainCheckoutPrice').textContent = formatMoney(d.amountCents, 'usd') +
+            (domainState.kind === 'transfer' ? ' (includes 1 year)' : ' first year');
+        }
+        if (d.renewalPriceLabel && domainEl('domainAutoRenewInput').checked) {
+          domainEl('domainRenewText').textContent = 'Renew automatically each year at ' + d.renewalPriceLabel +
+            ' on this card until I turn it off. If the price changes, you’ll let me know before charging.';
+        }
+        domainEl('domainAutoRenewInput').disabled = true;
+        domainState.paymentIntentId = d.paymentIntentId;
+        domainState.stripe = Stripe(pk);
+        domainState.elements = domainState.stripe.elements({ clientSecret: d.clientSecret });
+        domainState.elements.create('payment').mount('#domainPaymentElement');
+        domainShow('domainContinueToPay', false);
+        domainEl('domainPayBtn').textContent = 'Pay ' + (d.amountCents ? formatMoney(d.amountCents, 'usd') : '');
+        domainShow('domainPayBtn', true);
+      }).catch(function(err) {
+        domainError(formatFirebaseHttpsError(err));
+      }).then(function() { btn.disabled = false; });
+    }
+
+    function payForDomain() {
+      if (!domainState.elements) return;
+      var btn = domainEl('domainPayBtn');
+      btn.disabled = true;
+      domainError('');
+      var returnUrl = window.location.origin + '/billing.html?domain_pi=' +
+        encodeURIComponent(domainState.paymentIntentId) + '&domain_kind=' + domainState.kind + '#domain';
+      domainState.elements.submit().then(function(sub) {
+        if (sub && sub.error) throw sub.error;
+        return domainState.stripe.confirmPayment({
+          elements: domainState.elements,
+          redirect: 'if_required',
+          confirmParams: { return_url: returnUrl },
+        });
+      }).then(function(result) {
+        if (result && result.error) throw result.error;
+        return finishDomainPayment(domainState.paymentIntentId, domainState.kind);
+      }).catch(function(err) {
+        domainError((err && err.message) || formatFirebaseHttpsError(err));
+        btn.disabled = false;
+      });
+    }
+
+    function finishDomainPayment(paymentIntentId, kind) {
+      domainSuccess('Payment received. Setting up your domain…');
+      var call = kind === 'transfer' ? 'completeDomainTransfer' : 'completeDomainPurchase';
+      return fns.httpsCallable(call)({ paymentIntentId: paymentIntentId }).then(function(res) {
+        var d = res.data || {};
+        domainSuccess(d.message || 'Done. We’re connecting your domain now.');
+      }).catch(function(err) {
+        domainSuccess('');
+        domainError(formatFirebaseHttpsError(err));
+      }).then(function() {
+        resetDomainCheckout();
+        return loadDomainSection();
+      });
+    }
+
+    var domainCardCheckout = null;
+    function startDomainCardSetup() {
+      var btn = domainEl('domainCardBtn');
+      btn.disabled = true;
+      domainError('');
+      fns.httpsCallable('createDomainCardSetup')({ returnOrigin: window.location.origin }).then(function(res) {
+        var d = res.data || {};
+        var pk = (d.publishableKey || window.stripePublishableKey || '').trim();
+        if (!d.clientSecret || !pk) throw new Error('Stripe did not return a card form.');
+        if (domainCardCheckout && typeof domainCardCheckout.destroy === 'function') domainCardCheckout.destroy();
+        return Stripe(pk).initEmbeddedCheckout({
+          fetchClientSecret: function() { return Promise.resolve(d.clientSecret); },
+        }).then(function(checkout) {
+          domainCardCheckout = checkout;
+          checkout.mount('#domainCardEmbedded');
+          btn.classList.add('hidden');
+        });
+      }).catch(function(err) {
+        domainError(formatFirebaseHttpsError(err));
+      }).then(function() { btn.disabled = false; });
+    }
+
+    function completeDomainCardAfterReturn(sessionId) {
+      return fns.httpsCallable('completeDomainCardSetup')({ sessionId: sessionId }).then(function(res) {
+        domainSuccess('Renewal card saved: ' + ((res.data && res.data.cardLabel) || 'card') + '.');
+      }).catch(function(err) {
+        domainError(formatFirebaseHttpsError(err));
+      });
+    }
+
+    domainEl('domainModeBuy').addEventListener('click', function() { setDomainMode('buy'); });
+    domainEl('domainModeTransfer').addEventListener('click', function() { setDomainMode('transfer'); });
+    domainEl('domainSearchForm').addEventListener('submit', searchDomainNames);
+    domainEl('domainTransferContinue').addEventListener('click', continueDomainTransfer);
+    domainEl('domainContinueToPay').addEventListener('click', startDomainPayment);
+    domainEl('domainPayBtn').addEventListener('click', payForDomain);
+    domainEl('domainCardBtn').addEventListener('click', startDomainCardSetup);
+    domainEl('domainStatusInfoBtn').addEventListener('click', function() {
+      var open = domainEl('domainStatusDetail').classList.contains('hidden');
+      domainShow('domainStatusDetail', open);
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    setDomainMode('buy');
+
+    /** Back from a bank check (3-D Secure) or Stripe's card form: finish, then show the section. */
+    function handleDomainReturn() {
+      var pi = params.get('domain_pi');
+      var redirectStatus = params.get('redirect_status');
+      if (pi) {
+        history.replaceState({}, '', 'billing.html#domain');
+        domainShow('domainSection', true);
+        if (redirectStatus && redirectStatus !== 'succeeded') {
+          domainError('The payment was not completed. Try again.');
+          return loadDomainSection();
+        }
+        return finishDomainPayment(pi, params.get('domain_kind') === 'transfer' ? 'transfer' : 'purchase');
+      }
+      if (params.get('domain_card') === 'success' && checkoutSessionId) {
+        history.replaceState({}, '', 'billing.html#domain');
+        return completeDomainCardAfterReturn(checkoutSessionId).then(loadDomainSection);
+      }
+      return loadDomainSection().then(prefillDomainFromApp);
+    }
+
+    /** The app's Domain screen opens this page with the name the owner picked. */
+    function prefillDomainFromApp() {
+      var buyName = (params.get('domain_q') || '').trim();
+      var transferName = (params.get('domain_transfer') || '').trim();
+      if (domainEl('domainShop').classList.contains('hidden')) return;
+      if (transferName) {
+        setDomainMode('transfer');
+        domainEl('domainTransferName').value = transferName;
+        domainEl('domainTransferCode').focus();
+      } else if (buyName) {
+        setDomainMode('buy');
+        domainEl('domainQuery').value = buyName;
+        searchDomainNames();
+      }
+    }
+
     auth.onAuthStateChanged(function(user) {
       if (!user) {
         window.location.replace(loginRedirectUrl());
@@ -1754,6 +2271,10 @@
       }
       if (checkoutParam === 'success' && checkoutSessionId) {
         completeCheckoutAfterReturn(checkoutSessionId);
+        return;
+      }
+      if (params.get('sms_card') === 'success' && checkoutSessionId) {
+        completeSmsAddOnCardAfterReturn(checkoutSessionId);
         return;
       }
       if (checkoutParam === 'canceled') {
@@ -1788,6 +2309,11 @@
         if (window.location.hash === '#messaging') {
           var el = document.getElementById('messagingSection');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        return handleDomainReturn();
+      }).then(function() {
+        if (window.location.hash === '#domain') {
+          domainEl('domainSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       });
     });

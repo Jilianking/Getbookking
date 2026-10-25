@@ -11,5 +11,7 @@ compatibility_date = "2024-10-22"
 routes = [
   { pattern = "*.getbookking.com/*", zone_name = "getbookking.com" },
   { pattern = "getbookking.com/join*", zone_name = "getbookking.com" },
-  { pattern = "www.getbookking.com/join*", zone_name = "getbookking.com" }
+  { pattern = "www.getbookking.com/join*", zone_name = "getbookking.com" },
+  # Customer domains (Cloudflare custom hostnames). Anything that isn't a shop passes straight through.
+  { pattern = "*/*", zone_name = "getbookking.com" }
 ]

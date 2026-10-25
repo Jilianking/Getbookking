@@ -1264,6 +1264,25 @@ class FirebaseService: ObservableObject {
 
     // MARK: - Tenant Shop Orders
 
+    /// Notices about the owner's account (e.g. domain renewals), written by Cloud Functions.
+    func fetchAccountNotices(tenantId: String, limit: Int = 20) async throws -> [AccountNotice] {
+        let snapshot = try await db.collection("tenants").document(tenantId)
+            .collection("accountNotices")
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        return snapshot.documents.map { doc in
+            let d = doc.data()
+            return AccountNotice(
+                id: doc.documentID,
+                kind: d["kind"] as? String ?? "",
+                title: d["title"] as? String ?? "",
+                body: d["body"] as? String ?? "",
+                createdAt: (d["createdAt"] as? Timestamp)?.dateValue()
+            )
+        }
+    }
+
     func fetchTenantShopOrders(tenantId: String, limit: Int = 200) async throws -> [ShopOrder] {
         let snapshot = try await db.collection("tenants").document(tenantId)
             .collection("shopOrders")

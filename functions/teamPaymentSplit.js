@@ -99,6 +99,98 @@ function connectApplicationFeeCents(grossCents, studioShareCents, platformFeeCen
   return platform + studio;
 }
 
+/**
+ * Bring the refunded application fee up to the cumulative covered charge
+ * (refunds + lost disputes). A second pass for the same total returns 0.
+ */
+function applicationFeeRefundSliceCents({
+  feeAmountCents,
+  alreadyRefundedCents,
+  capturedCents,
+  basisCents,
+}) {
+  const feeAmount = Math.max(0, Math.round(Number(feeAmountCents) || 0));
+  const already = Math.max(0, Math.round(Number(alreadyRefundedCents) || 0));
+  const remaining = Math.max(0, feeAmount - already);
+  if (remaining <= 0 || feeAmount <= 0) return 0;
+  const captured = Math.max(1, Math.round(Number(capturedCents) || 0) || 1);
+  const basis = Math.max(0, Math.round(Number(basisCents) || 0));
+  let target = Math.round((feeAmount * basis) / captured);
+  if (basis >= captured) target = feeAmount;
+  target = Math.min(feeAmount, Math.max(0, target));
+  return Math.min(remaining, Math.max(0, target - already));
+}
+
+/**
+ * This refund's fraction of the original studio share, capped at the share
+ * still out on the transfer. `transferredCents` null means the full share was sent.
+ */
+function studioShareReverseSliceCents({
+  studioShareCents,
+  transferredCents,
+  alreadyReversedCents,
+  capturedCents,
+  refundCents,
+}) {
+  const studioShare = Math.max(0, Math.round(Number(studioShareCents) || 0));
+  const transferred =
+    transferredCents == null
+      ? studioShare
+      : Math.max(0, Math.round(Number(transferredCents) || 0));
+  const alreadyReversed = Math.max(0, Math.round(Number(alreadyReversedCents) || 0));
+  const remaining = Math.max(0, transferred - alreadyReversed);
+  if (remaining <= 0 || studioShare <= 0) return 0;
+  const captured = Math.max(1, Math.round(Number(capturedCents) || 0) || studioShare);
+  const refunded = Math.max(0, Math.round(Number(refundCents) || 0));
+  let reverseCents = Math.round((studioShare * refunded) / captured);
+  if (refunded >= captured) reverseCents = remaining;
+  return Math.min(remaining, Math.max(0, reverseCents));
+}
+
+/** Share still to send after refunds and lost disputes already on the ledger. */
+function studioShareTransferCentsAfterCoverage({
+  studioShareCents,
+  grossCents,
+  coveredCents,
+}) {
+  const studioShare = Math.max(0, Math.round(Number(studioShareCents) || 0));
+  const gross = Math.max(0, Math.round(Number(grossCents) || 0));
+  const covered = Math.max(0, Math.round(Number(coveredCents) || 0));
+  if (studioShare <= 0) return 0;
+  if (gross <= 0 || covered <= 0) return studioShare;
+  if (covered >= gross) return 0;
+  const withheld = Math.round((studioShare * covered) / gross);
+  return Math.max(0, studioShare - withheld);
+}
+
+function coveredShareRefundIds(ledgerData) {
+  const ids = [];
+  const events = Array.isArray(ledgerData && ledgerData.refundEvents)
+    ? ledgerData.refundEvents
+    : [];
+  for (const ev of events) {
+    const id = (ev && ev.refundId ? ev.refundId : "").toString().trim();
+    const status = (ev && ev.status ? ev.status : "succeeded").toString().toLowerCase();
+    if (id && status === "succeeded") ids.push(id);
+  }
+  const disputes = Array.isArray(ledgerData && ledgerData.disputeLostIds)
+    ? ledgerData.disputeLostIds
+    : [];
+  for (const id of disputes) {
+    const clean = (id || "").toString().trim();
+    if (!clean) continue;
+    ids.push(clean.startsWith("dispute-") ? clean : `dispute-${clean}`);
+  }
+  const pendingId = (ledgerData && ledgerData.studioShareReversePendingRefundId
+    ? ledgerData.studioShareReversePendingRefundId
+    : ""
+  )
+    .toString()
+    .trim();
+  if (pendingId) ids.push(pendingId);
+  return [...new Set(ids)];
+}
+
 async function buildTeamSplitFeeAndMeta(deps) {
   const {
     platformFeeCents,
@@ -187,12 +279,16 @@ async function settleStudioPaymentSplit(
     };
   }
 
+  const freshSnap = await ledgerRef.get();
+  if (freshSnap.exists) ledgerData = freshSnap.data() || ledgerData;
+
   const existingTransferId = (ledgerData.studioShareTransferId || "")
     .toString()
     .trim();
-  if (existingTransferId || ledgerData.studioShareStatus === "transferred") {
+  const existingStatus = (ledgerData.studioShareStatus || "").toString();
+  if (existingStatus === "transferred" || existingStatus === "reversed") {
     return {
-      studioShareStatus: "transferred",
+      studioShareStatus: existingStatus,
       studioShareTransferId: existingTransferId || null,
     };
   }
@@ -210,36 +306,134 @@ async function settleStudioPaymentSplit(
     return { studioShareStatus: "failed", studioShareTransferId: null };
   }
 
+  const gross = Math.max(0, Math.round(Number(ledgerData.grossCents) || 0));
+  const covered = Math.max(0, Math.round(Number(ledgerData.amountRefundedCents) || 0)) +
+    Math.max(0, Math.round(Number(ledgerData.disputeLostCents) || 0));
+  const transferAmount = studioShareTransferCentsAfterCoverage({
+    studioShareCents: studioShare,
+    grossCents: gross,
+    coveredCents: gross > 0 ? Math.min(gross, covered) : 0,
+  });
+  const settledIds = transferAmount < studioShare ? coveredShareRefundIds(ledgerData) : [];
+
+  const clearPending = {
+    studioShareReversePending: admin.firestore.FieldValue.delete(),
+    studioShareReversePendingRefundId: admin.firestore.FieldValue.delete(),
+    studioShareReversePendingCents: admin.firestore.FieldValue.delete(),
+    studioShareReversePendingCaptured: admin.firestore.FieldValue.delete(),
+    studioShareReverseError: admin.firestore.FieldValue.delete(),
+    studioShareError: admin.firestore.FieldValue.delete(),
+  };
+
   try {
-    const transfer = await stripe.transfers.create(
-      {
-        amount: studioShare,
-        currency: "usd",
-        destination,
-        description: "Studio share",
+    let transfer = null;
+    if (existingTransferId) {
+      transfer = await stripe.transfers.retrieve(existingTransferId);
+    } else if (
+      paymentIntentId &&
+      (transferAmount < studioShare || existingStatus === "failed")
+    ) {
+      const listed = await stripe.transfers.list({
         transfer_group: paymentIntentId || undefined,
-        metadata: {
-          purpose: "studio_payment_split",
-          tenantId: (tenantId || "").toString(),
-          paymentIntentId: (paymentIntentId || "").toString(),
-          chargeId: (chargeId || "").toString(),
-          attributedMemberUid: (ledgerData.attributedMemberUid || "").toString(),
-          studioServiceShareCents: String(studioShare),
+        limit: 10,
+      });
+      transfer =
+        (listed.data || []).find(
+          (row) => (row.metadata && row.metadata.purpose) === "studio_payment_split"
+        ) || null;
+    }
+
+    if (!transfer && transferAmount <= 0) {
+      const patch = {
+        studioShareStatus: "reversed",
+        studioShareTransferCents: 0,
+        studioShareReversedCents: 0,
+        studioShareSettledAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...clearPending,
+      };
+      if (settledIds.length) {
+        patch.studioShareReversedRefundIds =
+          admin.firestore.FieldValue.arrayUnion(...settledIds);
+      }
+      await ledgerRef.set(patch, { merge: true });
+      return { studioShareStatus: "reversed", studioShareTransferId: null };
+    }
+
+    if (!transfer) {
+      transfer = await stripe.transfers.create(
+        {
+          amount: transferAmount,
+          currency: "usd",
+          destination,
+          description: "Studio share",
+          transfer_group: paymentIntentId || undefined,
+          metadata: {
+            purpose: "studio_payment_split",
+            tenantId: (tenantId || "").toString(),
+            paymentIntentId: (paymentIntentId || "").toString(),
+            chargeId: (chargeId || "").toString(),
+            attributedMemberUid: (ledgerData.attributedMemberUid || "").toString(),
+            studioServiceShareCents: String(studioShare),
+          },
         },
-      },
-      { idempotencyKey: `studio-share-${paymentIntentId}` }
-    );
-    await ledgerRef.set(
-      {
+        {
+          idempotencyKey: (
+            transferAmount < studioShare
+              ? `studio-share-${paymentIntentId}-net-${transferAmount}`
+              : `studio-share-${paymentIntentId}`
+          ).slice(0, 255),
+        }
+      );
+      const patch = {
         studioShareStatus: "transferred",
         studioShareTransferId: transfer.id,
+        studioShareTransferCents: transferAmount,
         studioShareSettledAt: admin.firestore.FieldValue.serverTimestamp(),
-        studioShareError: null,
-      },
-      { merge: true }
-    );
+        ...clearPending,
+      };
+      if (settledIds.length) {
+        patch.studioShareReversedRefundIds =
+          admin.firestore.FieldValue.arrayUnion(...settledIds);
+      }
+      await ledgerRef.set(patch, { merge: true });
+      return {
+        studioShareStatus: "transferred",
+        studioShareTransferId: transfer.id,
+      };
+    }
+
+    const reversedOnTransfer = Math.max(0, Math.round(Number(transfer.amount_reversed) || 0));
+    const netOut = Math.max(0, Math.round(Number(transfer.amount) || 0) - reversedOnTransfer);
+    const extra = Math.max(0, netOut - transferAmount);
+    if (extra > 0) {
+      await stripe.transfers.createReversal(
+        transfer.id,
+        {
+          amount: extra,
+          metadata: {
+            purpose: "studio_payment_split_refund",
+            tenantId: (tenantId || "").toString(),
+            paymentIntentId: (paymentIntentId || "").toString(),
+          },
+        },
+        { idempotencyKey: `studio-share-withhold-${paymentIntentId}-${extra}`.slice(0, 255) }
+      );
+    }
+    const patch = {
+      studioShareStatus: transferAmount <= 0 ? "reversed" : "transferred",
+      studioShareTransferId: transfer.id,
+      studioShareTransferCents: Math.round(Number(transfer.amount) || 0),
+      studioShareReversedCents: reversedOnTransfer + extra,
+      studioShareSettledAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...clearPending,
+    };
+    if (settledIds.length) {
+      patch.studioShareReversedRefundIds =
+        admin.firestore.FieldValue.arrayUnion(...settledIds);
+    }
+    await ledgerRef.set(patch, { merge: true });
     return {
-      studioShareStatus: "transferred",
+      studioShareStatus: patch.studioShareStatus,
       studioShareTransferId: transfer.id,
     };
   } catch (err) {
@@ -247,14 +441,12 @@ async function settleStudioPaymentSplit(
     await ledgerRef.set(
       {
         studioShareStatus: "failed",
-        studioShareError: (err.message || "transfer_failed")
-          .toString()
-          .slice(0, 500),
+        studioShareError: (err.message || "transfer_failed").toString().slice(0, 500),
         studioShareUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-    return { studioShareStatus: "failed", studioShareTransferId: null };
+    return { studioShareStatus: "failed", studioShareTransferId: existingTransferId || null };
   }
 }
 
@@ -412,32 +604,36 @@ async function recordAndSettleTenantPayment(stripe, deps) {
   let ledgerData;
   let alreadyRecorded = false;
 
-  if (existing.exists) {
+  const chargeLedger = {
+    paymentIntentId,
+    chargeId: chargeId || null,
+    bookingRequestId: bookingRequestId || null,
+    attributedMemberUid: attributedMemberUid || ownerUid,
+    paymentKind,
+    serviceCents: resolvedService,
+    taxCents: resolvedTax,
+    surchargeCents: resolvedSurcharge,
+    grossCents,
+    stripeFeeCents,
+    platformFeeCents: platformFee,
+    splitApplied: split.splitApplied,
+    splitPercentApplied: split.splitPercentApplied,
+    artistShareCents: split.artistShareCents,
+    studioServiceShareCents: split.studioServiceShareCents,
+    initiatedByUid: initiatedByUid || null,
+    chargeStripeScope,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (existing.exists && (existing.data() || {}).grossCents) {
     alreadyRecorded = true;
     ledgerData = existing.data() || {};
     // Do not rewrite splitApplied from live settings after the fact.
   } else {
     ledgerData = {
-      paymentIntentId,
-      chargeId: chargeId || null,
-      bookingRequestId: bookingRequestId || null,
-      attributedMemberUid: attributedMemberUid || ownerUid,
-      paymentKind,
-      serviceCents: resolvedService,
-      taxCents: resolvedTax,
-      surchargeCents: resolvedSurcharge,
-      grossCents,
-      stripeFeeCents,
-      platformFeeCents: platformFee,
-      splitApplied: split.splitApplied,
-      splitPercentApplied: split.splitPercentApplied,
-      artistShareCents: split.artistShareCents,
-      studioServiceShareCents: split.studioServiceShareCents,
-      initiatedByUid: initiatedByUid || null,
-      chargeStripeScope,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(existing.exists ? existing.data() || {} : {}),
+      ...chargeLedger,
     };
-    await ledgerRef.set(ledgerData);
+    await ledgerRef.set(chargeLedger, { merge: true });
   }
 
   const settle = await settleStudioPaymentSplit(stripe, {
@@ -847,7 +1043,63 @@ async function reverseStudioShareOnRefund(
   if (!ledgerRef || !ledgerData) {
     return { reversed: false, reason: "no_ledger" };
   }
-  if (ledgerData.studioShareStatus !== "transferred") {
+  const rid = (refundId || "").toString().trim();
+  const settledIds = Array.isArray(ledgerData.studioShareReversedRefundIds)
+    ? ledgerData.studioShareReversedRefundIds.map((id) => (id || "").toString())
+    : [];
+  if (rid && settledIds.includes(rid)) {
+    if ((ledgerData.studioShareReversePendingRefundId || "").toString() === rid) {
+      await ledgerRef.set(
+        {
+          studioShareReverseError: admin.firestore.FieldValue.delete(),
+          studioShareReversePending: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingRefundId: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingCents: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingCaptured: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+    }
+    return { reversed: false, reason: "already_reversed_for_refund" };
+  }
+
+  const studioShare = Math.max(
+    0,
+    Math.round(Number(ledgerData.studioServiceShareCents) || 0)
+  );
+  const shareStatus = (ledgerData.studioShareStatus || "").toString();
+  if (shareStatus === "reversed" || shareStatus === "not_applicable") {
+    if (rid && (ledgerData.studioShareReversePendingRefundId || "").toString() === rid) {
+      await ledgerRef.set(
+        {
+          studioShareReverseError: admin.firestore.FieldValue.delete(),
+          studioShareReversePending: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingRefundId: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingCents: admin.firestore.FieldValue.delete(),
+          studioShareReversePendingCaptured: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+    }
+    return { reversed: false, reason: shareStatus };
+  }
+  if (shareStatus !== "transferred") {
+    if (studioShare <= 0 || ledgerData.splitApplied !== true) {
+      return { reversed: false, reason: "not_transferred" };
+    }
+    await ledgerRef.set(
+      {
+        studioShareReversePending: true,
+        studioShareReversePendingRefundId: rid,
+        studioShareReversePendingCents: Math.max(0, Math.round(Number(refundCents) || 0)),
+        studioShareReversePendingCaptured: Math.max(
+          0,
+          Math.round(Number(chargeCapturedCents) || 0)
+        ),
+        studioShareUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
     return { reversed: false, reason: "not_transferred" };
   }
   const transferId = (ledgerData.studioShareTransferId || "").toString().trim();
@@ -855,29 +1107,45 @@ async function reverseStudioShareOnRefund(
     return { reversed: false, reason: "no_transfer_id" };
   }
 
-  const studioShare = Math.max(
-    0,
-    Math.round(Number(ledgerData.studioServiceShareCents) || 0)
-  );
   const alreadyReversed = Math.max(
     0,
     Math.round(Number(ledgerData.studioShareReversedCents) || 0)
   );
-  const remainingShare = Math.max(0, studioShare - alreadyReversed);
-  if (remainingShare <= 0) {
-    return { reversed: false, reason: "already_fully_reversed" };
-  }
-
+  const hasTransferCents =
+    ledgerData.studioShareTransferCents != null &&
+    ledgerData.studioShareTransferCents !== "";
+  const transferredCents = hasTransferCents
+    ? Math.max(0, Math.round(Number(ledgerData.studioShareTransferCents) || 0))
+    : null;
   const captured = Math.max(
     1,
     Math.round(Number(chargeCapturedCents) || 0) || studioShare
   );
   const refunded = Math.max(0, Math.round(Number(refundCents) || 0));
-  let reverseCents = Math.round((remainingShare * refunded) / captured);
-  if (refunded >= captured) reverseCents = remainingShare;
-  reverseCents = Math.min(remainingShare, Math.max(0, reverseCents));
+  const reverseCents = studioShareReverseSliceCents({
+    studioShareCents: studioShare,
+    transferredCents,
+    alreadyReversedCents: alreadyReversed,
+    capturedCents: captured,
+    refundCents: refunded,
+  });
   if (reverseCents <= 0) {
-    return { reversed: false, reason: "zero_reverse" };
+    await ledgerRef.set(
+      {
+        studioShareReverseError: admin.firestore.FieldValue.delete(),
+        studioShareReversePending: admin.firestore.FieldValue.delete(),
+        studioShareReversePendingRefundId: admin.firestore.FieldValue.delete(),
+        studioShareReversePendingCents: admin.firestore.FieldValue.delete(),
+        studioShareReversePendingCaptured: admin.firestore.FieldValue.delete(),
+        ...(rid
+          ? {
+              studioShareReversedRefundIds: admin.firestore.FieldValue.arrayUnion(rid),
+            }
+          : {}),
+      },
+      { merge: true }
+    );
+    return { reversed: false, reason: "already_fully_reversed" };
   }
 
   const idempotencyKey = (
@@ -900,13 +1168,26 @@ async function reverseStudioShareOnRefund(
       { idempotencyKey }
     );
     const newReversed = alreadyReversed + reverseCents;
+    const reversibleCap = transferredCents == null ? studioShare : transferredCents;
+    const fullyReversed = reversibleCap > 0 && newReversed >= reversibleCap;
     await ledgerRef.set(
       {
         studioShareReversedCents: newReversed,
-        studioShareStatus:
-          newReversed >= studioShare ? "reversed" : "transferred",
+        studioShareStatus: fullyReversed ? "reversed" : "transferred",
         studioShareLastReversalId: reversal.id,
         studioShareReversedAt: admin.firestore.FieldValue.serverTimestamp(),
+        studioShareReverseError: admin.firestore.FieldValue.delete(),
+        studioShareReversePending: fullyReversed
+          ? admin.firestore.FieldValue.delete()
+          : false,
+        studioShareReversePendingRefundId: admin.firestore.FieldValue.delete(),
+        studioShareReversePendingCents: admin.firestore.FieldValue.delete(),
+        studioShareReversePendingCaptured: admin.firestore.FieldValue.delete(),
+        ...(rid
+          ? {
+              studioShareReversedRefundIds: admin.firestore.FieldValue.arrayUnion(rid),
+            }
+          : {}),
       },
       { merge: true }
     );
@@ -922,6 +1203,10 @@ async function reverseStudioShareOnRefund(
         studioShareReverseError: (err.message || "reverse_failed")
           .toString()
           .slice(0, 500),
+        studioShareReversePending: true,
+        studioShareReversePendingRefundId: (refundId || "").toString(),
+        studioShareReversePendingCents: refunded,
+        studioShareReversePendingCaptured: captured,
         studioShareUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -980,6 +1265,49 @@ async function retryFailedStudioShareSettlements(
       });
     }
   }
+  const pendingSnap = await db
+    .collectionGroup("paymentLedger")
+    .where("studioShareReversePending", "==", true)
+    .limit(Math.min(Math.max(limit, 1), 50))
+    .get();
+  for (const doc of pendingSnap.docs) {
+    const ledgerData = doc.data() || {};
+    const tenantId = doc.ref.parent.parent && doc.ref.parent.parent.id;
+    if (!tenantId) continue;
+    const refundId = (ledgerData.studioShareReversePendingRefundId || "")
+      .toString()
+      .trim();
+    const refundCents = Math.round(
+      Number(ledgerData.studioShareReversePendingCents) || 0
+    );
+    const captured = Math.round(
+      Number(ledgerData.studioShareReversePendingCaptured) || 0
+    );
+    if (!refundId || refundCents <= 0) continue;
+    try {
+      const reversed = await reverseStudioShareOnRefund(stripe, {
+        db,
+        tenantId,
+        chargeId: ledgerData.chargeId || null,
+        paymentIntentId: ledgerData.paymentIntentId || doc.id,
+        refundCents,
+        chargeCapturedCents: captured,
+        refundId,
+      });
+      results.push({
+        tenantId,
+        ledgerId: doc.id,
+        status: reversed.reversed ? "reversed" : reversed.reason || "skipped",
+      });
+    } catch (err) {
+      results.push({
+        tenantId,
+        ledgerId: doc.id,
+        status: "error",
+        error: err.message,
+      });
+    }
+  }
   return { attempted: results.length, results };
 }
 
@@ -989,6 +1317,9 @@ module.exports = {
   buildTeamSplitFeeAndMeta,
   settleStudioPaymentSplit,
   recordAndSettleTenantPayment,
+  applicationFeeRefundSliceCents,
+  studioShareReverseSliceCents,
+  studioShareTransferCentsAfterCoverage,
   reverseStudioShareOnRefund,
   retryFailedStudioShareSettlements,
   labelStudioShareBalanceTransaction,

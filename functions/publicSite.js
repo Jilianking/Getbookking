@@ -175,6 +175,10 @@ function buildPublicSitePayload(tenantId, data) {
   if (tz) out.timeZone = String(tz);
   const slug = normalizeSlug(src.slug);
   if (slug) out.slug = slug;
+  // Connected custom domain, used by the site to tell search engines its main address.
+  const domain = (src.customDomain || "").toString().trim().toLowerCase();
+  const domainLive = (src.customDomainStatus || "").toString().trim().toLowerCase() === "active";
+  out.canonicalDomain = domain && domainLive ? domain : admin.firestore.FieldValue.delete();
   return out;
 }
 
@@ -192,7 +196,20 @@ async function syncPublicSiteForTenant(firestore, tenantId, data) {
   const slug = normalizeSlug(data && data.slug);
   if (!slug) return { ok: false, reason: "missing-slug" };
   const payload = buildPublicSitePayload(tenantId, data);
-  await firestore.collection(PUBLIC_SITES).doc(slug).set(payload, { merge: true });
+  const ref = firestore.collection(PUBLIC_SITES).doc(slug);
+  // A web address belongs to the first business that published under it. Without this check a
+  // business could take over another's live site by saving that site's slug on its own record.
+  const taken = await firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const ownerId = snap.exists ? ((snap.data() || {}).tenantId || "").toString() : "";
+    if (ownerId && ownerId !== String(tenantId)) return true;
+    tx.set(ref, payload, { merge: true });
+    return false;
+  });
+  if (taken) {
+    console.warn("publicSites slug belongs to another tenant; not synced", { slug, tenantId });
+    return { ok: false, reason: "slug-taken" };
+  }
   return { ok: true, slug };
 }
 

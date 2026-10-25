@@ -14,6 +14,12 @@ struct MessagesView: View {
     @State private var pendingThreadComposerDraft = ""
     @State private var searchText = ""
     @State private var showErrorAlert = false
+    /// Select mode for deleting several conversations at once.
+    @State private var isSelecting = false
+    @State private var selectedForDelete: Set<String> = []
+    @State private var pendingDeleteIds: [String] = []
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -75,11 +81,22 @@ struct MessagesView: View {
                         } else {
                             List {
                                 ForEach(Array(filteredSummaries.enumerated()), id: \.element.id) { index, summary in
-                                    ThreadRow(
-                                        summary: summary,
-                                        viewModel: viewModel,
-                                        showsDivider: index < filteredSummaries.count - 1
-                                    )
+                                    HStack(spacing: 0) {
+                                        if isSelecting {
+                                            Image(systemName: selectedForDelete.contains(summary.threadId)
+                                                  ? "checkmark.circle.fill" : "circle")
+                                                .font(.title3)
+                                                .foregroundStyle(selectedForDelete.contains(summary.threadId)
+                                                                 ? AppDesign.brandWarm : AppDesign.textSecondary)
+                                                .padding(.leading, 16)
+                                                .accessibilityHidden(true)
+                                        }
+                                        ThreadRow(
+                                            summary: summary,
+                                            viewModel: viewModel,
+                                            showsDivider: index < filteredSummaries.count - 1
+                                        )
+                                    }
                                     .appTourAnchor(
                                         .messagesReply,
                                         isActive: appTour.isStepActive(.messagesReply)
@@ -87,7 +104,24 @@ struct MessagesView: View {
                                     )
                                     .contentShape(Rectangle())
                                     .onTapGesture {
-                                        selectedThreadId = summary.threadId
+                                        if isSelecting {
+                                            toggleSelected(summary.threadId)
+                                        } else {
+                                            selectedThreadId = summary.threadId
+                                        }
+                                    }
+                                    .accessibilityAddTraits(
+                                        isSelecting && selectedForDelete.contains(summary.threadId) ? .isSelected : []
+                                    )
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        if canDeleteConversations && !isSelecting {
+                                            Button(role: .destructive) {
+                                                pendingDeleteIds = [summary.threadId]
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
                                     }
                                     .listRowInsets(EdgeInsets())
                                     .listRowSeparator(.hidden)
@@ -143,8 +177,19 @@ struct MessagesView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if selectedThreadId == nil {
+                    if selectedThreadId == nil, isSelecting {
+                        Button("Done") {
+                            isSelecting = false
+                            selectedForDelete = []
+                        }
+                    } else if selectedThreadId == nil {
                         HStack(spacing: 16) {
+                            if canDeleteConversations, !filteredSummaries.isEmpty {
+                                Button("Select") {
+                                    selectedForDelete = []
+                                    isSelecting = true
+                                }
+                            }
                             NavigationLink {
                                 MessagesSettingsView(viewModel: messagingSettingsViewModel)
                                     .environmentObject(authViewModel)
@@ -183,6 +228,51 @@ struct MessagesView: View {
             }
             .onChange(of: viewModel.lastError) { _, err in
                 showErrorAlert = err != nil
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting, selectedThreadId == nil {
+                    Button(role: .destructive) {
+                        pendingDeleteIds = Array(selectedForDelete)
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            if isDeleting { ProgressView() }
+                            Text(selectedForDelete.isEmpty ? "Delete" : "Delete (\(selectedForDelete.count))")
+                                .font(.body.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(selectedForDelete.isEmpty || isDeleting)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .background(AppDesign.cardBackground)
+                }
+            }
+            .confirmationDialog(
+                pendingDeleteIds.count == 1
+                    ? "Delete this conversation?"
+                    : "Delete \(pendingDeleteIds.count) conversations?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    let ids = pendingDeleteIds
+                    Task {
+                        isDeleting = true
+                        let ok = await viewModel.deleteThreads(ids)
+                        isDeleting = false
+                        if ok {
+                            selectedForDelete.subtract(ids)
+                            if selectedForDelete.isEmpty { isSelecting = false }
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingDeleteIds = [] }
+            } message: {
+                Text("This permanently deletes the messages and any photos in them. It can't be undone.")
             }
             .alert("Message", isPresented: $showErrorAlert) {
                 Button("OK", role: .cancel) {
@@ -288,6 +378,19 @@ struct MessagesView: View {
         composePrefillName = ""
         composePrefillBookingRequestId = nil
         composePrefillMessage = ""
+    }
+}
+
+extension MessagesView {
+    /// Deleting talks to the server, so it's off in demo mode.
+    var canDeleteConversations: Bool { !authViewModel.isDemoMode }
+
+    func toggleSelected(_ threadId: String) {
+        if selectedForDelete.contains(threadId) {
+            selectedForDelete.remove(threadId)
+        } else {
+            selectedForDelete.insert(threadId)
+        }
     }
 }
 

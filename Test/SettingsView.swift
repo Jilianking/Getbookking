@@ -821,7 +821,7 @@ private struct AccountSettingsDetailView: View {
                 if viewModel.hasProfile, viewModel.tenantId != nil {
                     Section(
                         header: Text("Plan & billing"),
-                        footer: Text("Manage your Get Bookking subscription and payment method in Stripe. Client payment Connect is set up separately under Payments.")
+                        footer: Text("Start paid plan opens the App Store payment sheet. Restore purchases brings back a plan you already paid for with this Apple ID. View Stripe account is for accepting client payments.")
                             .font(.caption2)
                     ) {
                         HStack {
@@ -843,41 +843,7 @@ private struct AccountSettingsDetailView: View {
                                     .font(.caption)
                                     .foregroundStyle(.red)
                             }
-                            if billingViewModel.hasStripeBillingCustomer {
-                                Button {
-                                    Task { await billingViewModel.openStripeBillingPortal() }
-                                } label: {
-                                    HStack {
-                                        if billingViewModel.isOpeningBillingPortal {
-                                            ProgressView()
-                                                .scaleEffect(0.9)
-                                        }
-                                        Text("View Stripe account")
-                                    }
-                                }
-                                .disabled(
-                                    billingViewModel.isOpeningBillingPortal ||
-                                    billingViewModel.isOpeningBillingWebsite
-                                )
-                            } else {
-                                Button {
-                                    Task { await billingViewModel.openBillingToStartSubscription() }
-                                } label: {
-                                    HStack {
-                                        if billingViewModel.isOpeningBillingWebsite {
-                                            ProgressView()
-                                                .scaleEffect(0.9)
-                                        }
-                                        Text("Sign up for Stripe")
-                                    }
-                                }
-                                .disabled(
-                                    billingViewModel.isOpeningBillingWebsite ||
-                                    billingViewModel.isOpeningBillingPortal
-                                )
-                            }
-                            if billingViewModel.hasStripeBillingCustomer,
-                               billingViewModel.subscriptionTrialing {
+                            if !billingViewModel.subscriptionPaid {
                                 Button {
                                     Task { _ = await billingViewModel.startSubscriptionToday() }
                                 } label: {
@@ -886,14 +852,41 @@ private struct AccountSettingsDetailView: View {
                                             ProgressView()
                                                 .scaleEffect(0.9)
                                         }
-                                        Text("Start subscription today")
+                                        Text("Start paid plan")
                                     }
                                 }
-                                .disabled(
-                                    billingViewModel.isOpeningBillingWebsite ||
-                                    billingViewModel.isOpeningBillingPortal
-                                )
+                                .disabled(billingViewModel.isOpeningBillingWebsite)
                             }
+                            Button {
+                                Task { await billingViewModel.restorePurchases() }
+                            } label: {
+                                HStack {
+                                    if billingViewModel.isRestoringPurchases {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    }
+                                    Text("Restore purchases")
+                                }
+                            }
+                            .disabled(billingViewModel.isRestoringPurchases)
+                            if let restoreMessage = billingViewModel.restorePurchasesMessage,
+                               !restoreMessage.isEmpty {
+                                Text(restoreMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button {
+                                Task { await billingViewModel.openClientPaymentsStripeAccount() }
+                            } label: {
+                                HStack {
+                                    if billingViewModel.isOpeningBillingPortal {
+                                        ProgressView()
+                                            .scaleEffect(0.9)
+                                    }
+                                    Text("View Stripe account")
+                                }
+                            }
+                            .disabled(billingViewModel.isOpeningBillingPortal)
                         }
                     }
                 } else if authViewModel.currentUserEmail != nil && !viewModel.hasProfile {

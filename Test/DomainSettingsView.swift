@@ -502,7 +502,7 @@ struct DomainSettingsView: View {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
                         } else {
-                            Text("Buy")
+                            Label("Buy on getbookking.com", systemImage: "arrow.up.right.square")
                                 .frame(maxWidth: .infinity)
                         }
                     }
@@ -534,7 +534,7 @@ struct DomainSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-            Text("Transfer it into Get Bookking. Follow the guide to get your code — we connect it automatically when the transfer finishes.")
+            Text("Transfer it into Get Bookking. Follow the guide to get your code, then finish on getbookking.com — we connect it automatically when the transfer finishes.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -562,35 +562,10 @@ struct DomainSettingsView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .onTapGesture { focusedField = .transferDomain }
 
-            SecureField("Authorization / EPP code", text: $viewModel.authCode)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .authCode)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 16)
-                .frame(minHeight: 52)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppDesign.background)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .onTapGesture { focusedField = .authCode }
-
-            Toggle(isOn: $viewModel.autoRenewEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-renew")
-                        .font(.subheadline.weight(.medium))
-                    Text("Keep the domain every year after the transfer.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .tint(AppDesign.brandDark)
-            .disabled(viewModel.hasManagedDomain)
-
             Button {
                 Task { await viewModel.startTransfer() }
             } label: {
-                Text(viewModel.isWorking ? "Starting transfer…" : "Start transfer")
+                Label("Continue on getbookking.com", systemImage: "arrow.up.right.square")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -607,9 +582,9 @@ struct DomainSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("How connecting works")
                 .font(.subheadline.weight(.semibold))
-            bullet("Buy: search a name, see the price, purchase in Bookking.")
-            bullet("Transfer: unlock at your old registrar, paste the auth code here.")
-            bullet("Auto-renew keeps the domain each year — you can change it anytime.")
+            bullet("Buy: search a name here, then pay on getbookking.com.")
+            bullet("Transfer: unlock at your old registrar, then enter the code on getbookking.com.")
+            bullet("Auto-renew charges your saved card each year — we remind you 7 days before. Change it anytime.")
             bullet("We point the domain at your Bookking site automatically.")
             bullet("If the domain stays elsewhere, we can’t connect it — transfer or buy here first.")
         }

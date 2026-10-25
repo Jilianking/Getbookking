@@ -98,6 +98,26 @@ enum SubscriptionPlan: String, CaseIterable {
 @MainActor
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
+    /// Signup stays on screen after the Firebase user exists, until Apple’s sheet and the business are done.
+    @Published var isCreatingAccount = false
+    /// Signed in to a login whose sign-up stopped before the business was created (the app was
+    /// closed at the payment sheet, or the connection dropped). The app finishes sign-up instead
+    /// of opening onto screens with nothing to load.
+    @Published var needsToFinishSignup = false
+    /// True while the app is finding out whether a login it hasn't seen before has a business.
+    /// The dashboard waits for this, so an unfinished sign-up never flashes the main app first.
+    @Published var isCheckingSignupState = false
+
+    /// Remembered per login once the server confirms a business, so later launches open at once.
+    private static func hasBusinessKey(_ uid: String) -> String { "auth.hasBusiness.\(uid)" }
+
+    /// Sign-up finished on this device: open straight to the app from now on.
+    func markSignupFinished() {
+        needsToFinishSignup = false
+        if let uid = currentUserUid {
+            UserDefaults.standard.set(true, forKey: Self.hasBusinessKey(uid))
+        }
+    }
     @Published private(set) var currentUserUid: String?
     @Published var currentUserEmail: String?
     @Published var currentUserDisplayName: String?
@@ -127,20 +147,41 @@ class AuthViewModel: ObservableObject {
                         NotificationCenter.default.post(name: .authUserDidChange, object: nil)
                     }
                     self.currentUserUid = newUid
+                    let knownBusiness = UserDefaults.standard.bool(forKey: Self.hasBusinessKey(newUid))
+                    let mustCheck = !knownBusiness && !self.isCreatingAccount
+                    if mustCheck { self.isCheckingSignupState = true }
                     self.isAuthenticated = true
                     self.isDemoMode = false
                     self.currentUserEmail = user.email
                     self.currentUserDisplayName = user.displayName
                     self.accountPhotoUrl = user.photoURL?.absoluteString
                     PushNotificationManager.shared.syncTokenAfterSignIn()
+                    if mustCheck {
+                        // Decide between the app and "Finish setting up" before showing either.
+                        let noBusiness = await self.loginHasNoBusiness()
+                        self.needsToFinishSignup = noBusiness == true
+                        // Only a definite answer is remembered; offline, the check runs again next launch.
+                        if noBusiness == false {
+                            UserDefaults.standard.set(true, forKey: Self.hasBusinessKey(newUid))
+                        }
+                        self.isCheckingSignupState = false
+                    }
                     await self.refreshTenantLogoFromServer()
                     await self.refreshTeamAccess()
+                    // Picks up an App Store plan this device paid for but the server never recorded.
+                    if self.teamAccess.isOwner, !self.isCreatingAccount,
+                       await BookkingSubscriptionStore.shared.syncActiveEntitlements() {
+                        await self.refreshTeamAccess()
+                    }
                 } else if !self.isDemoMode {
+                    self.needsToFinishSignup = false
+                    self.isCheckingSignupState = false
                     if self.currentUserUid != nil {
                         NotificationCenter.default.post(name: .authUserDidChange, object: nil)
                     }
                     self.currentUserUid = nil
                     self.isAuthenticated = false
+                    self.isCreatingAccount = false
                     self.currentUserEmail = nil
                     self.currentUserDisplayName = nil
                     self.tenantLogoUrl = nil
@@ -296,6 +337,23 @@ class AuthViewModel: ObservableObject {
     /// Legacy entry point — prefer `demoLogin(persona:)`.
     func demoLogin() {
         demoLogin(persona: .salon)
+    }
+
+    /// true: the server says this login has no business yet. false: it has one.
+    /// nil: couldn't tell (offline or another failure), which is never treated as unfinished.
+    private func loginHasNoBusiness() async -> Bool? {
+        let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+        do {
+            _ = try await functions.httpsCallable("getMyTeamAccess").call([:])
+            return false
+        } catch {
+            let message = FirebaseFunctionsErrorHelper.message(from: error)
+            if message.localizedCaseInsensitiveContains("No tenant linked")
+                || message.localizedCaseInsensitiveContains("User profile not found") {
+                return true
+            }
+            return nil
+        }
     }
 
     func refreshTeamAccess() async {

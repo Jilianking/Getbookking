@@ -49,7 +49,7 @@ struct PaymentTransactionDetailSheet: View {
             }
             return Int(round(transaction.amount * 100))
         }()
-        return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: .online)
+        return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: transaction.checkoutChannel)
     }
 
     private var creditColor: Color { AppDesign.accentGreen }
@@ -299,9 +299,14 @@ struct PaymentTransactionDetailSheet: View {
         }
     }
 
+    private var feePopoverMatchesDisplayedFee: Bool {
+        let estimated = Double(feeBreakdownForPopover.passThroughFeeCents) / 100.0
+        return abs(estimated - transaction.displayedProcessingFee) < 0.02
+    }
+
     private var processingFeeRow: some View {
         let fee = transaction.displayedProcessingFee
-        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: .online)
+        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: transaction.checkoutChannel)
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             HStack(spacing: 4) {
                 Text("Processing fee")
@@ -318,19 +323,26 @@ struct PaymentTransactionDetailSheet: View {
                 .accessibilityLabel("Processing fee details")
                 .popover(isPresented: $showFeeDetails, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 6) {
-                        if feeBreakdownForPopover.cardProcessingFeeCents > 0 {
-                            HStack {
-                                Text("Card processing (Stripe \(stripeRate))")
-                                Spacer(minLength: 8)
-                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.cardProcessingFeeCents))
+                        if feePopoverMatchesDisplayedFee {
+                            if feeBreakdownForPopover.cardProcessingFeeCents > 0 {
+                                HStack {
+                                    Text("Card processing (Stripe \(stripeRate))")
+                                    Spacer(minLength: 8)
+                                    Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.cardProcessingFeeCents))
+                                }
                             }
-                        }
-                        if feeBreakdownForPopover.platformFeeCents > 0 {
-                            HStack {
-                                Text("Platform fee (1%)")
-                                Spacer(minLength: 8)
-                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.platformFeeCents))
+                            if feeBreakdownForPopover.platformFeeCents > 0 {
+                                HStack {
+                                    Text("Platform fee (1%)")
+                                    Spacer(minLength: 8)
+                                    Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.platformFeeCents))
+                                }
                             }
+                        } else if fee > 0 {
+                            Text("Processing fee \(PaymentsViewModel.formatUSD(fee))")
+                            Text("This includes Stripe’s fee for the method the client paid with and the 1% platform fee.")
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .font(.caption)

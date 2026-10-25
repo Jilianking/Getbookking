@@ -36,12 +36,23 @@
  * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
  * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
  * Buy/transfer only — no DIY DNS connect.
+ *
+ * App Store subscriptions: the iOS app sends Apple's signed transaction.
+ * syncAppleSubscription verifies it. Renewals, cancels, and expirations arrive at
+ * appStoreServerNotification (App Store Server Notifications V2). URL:
+ * https://us-central1-test-app-96812.cloudfunctions.net/appStoreServerNotification
  */
 
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const shippoShop = require("./shippoShop");
+const {
+  platformFeeCents,
+  computeCardCheckoutAmounts,
+  checkoutMethodId,
+  checkoutRateForChannel,
+} = require("./checkoutRates");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const Stripe = require("stripe");
@@ -67,8 +78,10 @@ const {
   buildDemoAppSnapshot,
 } = require("./demoAppSnapshot");
 const charterOccupancy = require("./charterOccupancy");
+const appleSubscription = require("./appleSubscription");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
+const walletDomains = require("./walletDomains");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 /** Shippo API token (shippo_test_… or live). Rates-only at checkout — Bookking never buys labels. */
 const shippoApiToken = defineSecret("SHIPPO_API_TOKEN");
@@ -476,6 +489,121 @@ async function readSmsExtraQuantityOnStripe(stripe, subId, extraPriceIds) {
   return smsExtraQuantityFromSubscription(sub, extraPriceIds);
 }
 
+/** Metadata tag on the Stripe subscription that holds only an App Store subscriber's extra lines. */
+const SMS_ADD_ON_PURPOSE = "sms_extra_lines";
+
+/**
+ * A plan bought in the iOS app is billed by Apple and has no Stripe subscription to add a
+ * monthly texting line to. Those businesses pay for extra lines on a separate Stripe customer
+ * (tenant.smsAddOnStripeCustomerId) whose subscription contains nothing but the lines.
+ */
+function usesSmsAddOnBilling(tenant) {
+  return ((tenant && tenant.billingSource) || "").toString() === "apple";
+}
+
+/** Stripe customer and subscription that pay for this business's extra texting lines. */
+function smsLineBilling(tenant) {
+  const text = (value) => (value || "").toString().trim();
+  if (usesSmsAddOnBilling(tenant)) {
+    return {
+      addOn: true,
+      customerId: text(tenant.smsAddOnStripeCustomerId),
+      subscriptionId: text(tenant.smsAddOnStripeSubscriptionId),
+    };
+  }
+  return {
+    addOn: false,
+    customerId: text(tenant && tenant.stripeCustomerId),
+    subscriptionId: text(tenant && tenant.stripeSubscriptionId),
+  };
+}
+
+const SMS_ADD_ON_LIVE_STATUSES = ["active", "trialing", "past_due"];
+
+/**
+ * Sets how many extra lines an App Store subscriber's add-on subscription bills for.
+ * The first line creates the subscription with its first monthly charge a month out — the
+ * $12 for today is the separate one-time invoice — and removing the last line cancels it.
+ * Reads the ids fresh so back-to-back calls in one purchase never work from a stale copy.
+ */
+async function applySmsAddOnLineQuantity(stripe, tenantId, nextQty) {
+  const q = Math.max(0, Math.floor(Number(nextQty) || 0));
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const fresh = (await tenantRef.get()).data() || {};
+  const billing = smsLineBilling({ ...fresh, billingSource: "apple" });
+  let sub = null;
+  if (billing.subscriptionId) {
+    try {
+      sub = await stripe.subscriptions.retrieve(billing.subscriptionId, {
+        expand: ["items.data.price"],
+      });
+    } catch (e) {
+      console.warn("applySmsAddOnLineQuantity retrieve", billing.subscriptionId, e.message || e);
+    }
+  }
+  const live = !!sub && SMS_ADD_ON_LIVE_STATUSES.includes(sub.status);
+
+  if (q <= 0) {
+    if (live) await stripe.subscriptions.cancel(sub.id);
+    await tenantRef.set(
+      {
+        smsAddOnStripeSubscriptionId: admin.firestore.FieldValue.delete(),
+        smsExtraLineQuantity: 0,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return 0;
+  }
+
+  if (!billing.customerId) {
+    throw new Error("Add a card for extra texting numbers in billing first.");
+  }
+  const priceId = stripeSmsExtraPriceId();
+  if (live) {
+    const item = (sub.items.data || []).find((row) => row.price && row.price.id === priceId);
+    if (item) {
+      if (item.quantity !== q) {
+        await stripe.subscriptionItems.update(item.id, { quantity: q, proration_behavior: "none" });
+      }
+    } else {
+      await stripe.subscriptionItems.create({
+        subscription: sub.id,
+        price: priceId,
+        quantity: q,
+        proration_behavior: "none",
+      });
+    }
+  } else {
+    const firstMonthly = new Date();
+    firstMonthly.setMonth(firstMonthly.getMonth() + 1);
+    sub = await stripe.subscriptions.create({
+      customer: billing.customerId,
+      items: [{ price: priceId, quantity: q }],
+      billing_cycle_anchor: Math.floor(firstMonthly.getTime() / 1000),
+      proration_behavior: "none",
+      metadata: { tenantId, purpose: SMS_ADD_ON_PURPOSE },
+    });
+    if (!SMS_ADD_ON_LIVE_STATUSES.includes(sub.status)) {
+      try {
+        await stripe.subscriptions.cancel(sub.id);
+      } catch (_) {
+        /* best effort */
+      }
+      throw new Error("Stripe could not start billing for the extra texting number.");
+    }
+  }
+  await tenantRef.set(
+    {
+      smsAddOnStripeSubscriptionId: sub.id,
+      smsExtraLineQuantity: q,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return q;
+}
+
 async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts) {
   const q = Math.max(0, Math.floor(Number(nextQty) || 0));
   const prorationBehavior =
@@ -490,6 +618,10 @@ async function applySmsExtraLineQuantity(stripe, tenantId, tenant, nextQty, opts
     }
     await syncSmsExtraLineQuantityToTenant(tenantId, q);
     return q;
+  }
+
+  if (usesSmsAddOnBilling(tenant)) {
+    return applySmsAddOnLineQuantity(stripe, tenantId, q);
   }
 
   let extraPriceId;
@@ -653,15 +785,18 @@ async function resolveChargeablePaymentMethodId(
  * paid/$0 invoices when pending items are excluded), then pays it.
  */
 async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
-  const customerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
+  const lineBilling = smsLineBilling(tenant);
+  const customerId = lineBilling.customerId;
   if (!customerId) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Billing is not set up. Complete subscription checkout first."
+      lineBilling.addOn
+        ? "Add a card for extra texting numbers in billing first."
+        : "Billing is not set up. Complete subscription checkout first."
     );
   }
   const desc = (description || "Get Bookking extra texting number ($12)").toString();
-  const subId = ((tenant && tenant.stripeSubscriptionId) || "").toString().trim();
+  const subId = lineBilling.subscriptionId;
 
   let paymentMethodId = "";
   try {
@@ -796,6 +931,24 @@ async function reconcileSmsExtraPaidToUsage(
       return { tenant, paid: paidFs, changed: false };
     }
     await syncSmsExtraLineQuantityToTenant(tenantId, target);
+    return {
+      tenant: { ...tenant, smsExtraLineQuantity: target },
+      paid: target,
+      changed: true,
+    };
+  }
+
+  // App Store subscribers: the add-on subscription is the only thing to bring in line.
+  if (usesSmsAddOnBilling(tenant)) {
+    if (paidFs === target) {
+      return { tenant, paid: paidFs, changed: false };
+    }
+    if (target > 0 && !smsLineBilling(tenant).customerId) {
+      console.warn("reconcileSmsExtraPaidToUsage: add-on lines without a card", tenantId, target);
+      await syncSmsExtraLineQuantityToTenant(tenantId, target);
+    } else {
+      await applySmsAddOnLineQuantity(stripe, tenantId, target);
+    }
     return {
       tenant: { ...tenant, smsExtraLineQuantity: target },
       paid: target,
@@ -1148,6 +1301,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
   }
 
   const ownerMemberSlug = slugFromPersonName(firstName, lastName) || "owner";
+  const appleAppAccountToken = appleSubscription.preservedAccountToken(existingUser);
 
   const userDoc = {
     email: email || "",
@@ -1165,6 +1319,7 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     profilePhotoUrl: "",
     subscriptionPlan,
     subscriptionStatus,
+    ...(appleAppAccountToken ? { appleAppAccountToken } : {}),
     availability: {
       timeSlots: [{ open: 9, close: 18, type: "open_booking" }],
       daysOpen: [1, 2, 3, 4, 5],
@@ -1215,18 +1370,6 @@ async function provisionNewProviderFromWizard(uid, email, pending, billing) {
     });
   } catch (err) {
     console.error("scheduleTapToPayLaunchEmailAfterSignup", err);
-  }
-
-  if (pending.betaInviteToken) {
-    try {
-      await activateBetaTesterFromSignup({
-        uid,
-        email,
-        betaInviteToken: pending.betaInviteToken,
-      });
-    } catch (err) {
-      console.error("activateBetaTesterFromSignup", err);
-    }
   }
 
   return { tenantId, slug, subscriptionPlan };
@@ -1630,7 +1773,73 @@ async function deactivateTenantPaymentLinks(stripe, tenantId, tenantData) {
 }
 
 /** Find tenant by Stripe customer id and sync subscription + plan to Firestore. */
+/**
+ * Keeps an App Store subscriber's extra texting lines in step with their add-on subscription.
+ * While it is live the paid line count mirrors Stripe. Once it ends (cancelled, or unpaid
+ * after Stripe's retries) the paid lines are suspended; the daily job releases them 30 days on.
+ * Events for an older, already-replaced subscription are ignored.
+ */
+async function syncSmsAddOnSubscription(sub) {
+  const tenantId = ((sub.metadata && sub.metadata.tenantId) || "").toString().trim();
+  if (!tenantId) return;
+  const tenantRef = db.collection("tenants").doc(tenantId);
+  const tenantSnap = await tenantRef.get();
+  if (!tenantSnap.exists) return;
+  const tenant = tenantSnap.data() || {};
+  const storedSubId = (tenant.smsAddOnStripeSubscriptionId || "").toString().trim();
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
+  if ((tenant.smsAddOnStripeCustomerId || "").toString().trim() !== (customerId || "")) return;
+  if (storedSubId && storedSubId !== sub.id) return;
+
+  if (SMS_ADD_ON_LIVE_STATUSES.includes(sub.status)) {
+    if (!storedSubId) return;
+    const quantity = ((sub.items && sub.items.data) || []).reduce(
+      (sum, item) => sum + Math.max(0, Number(item.quantity) || 0),
+      0
+    );
+    await syncSmsExtraLineQuantityToTenant(tenantId, quantity);
+    return;
+  }
+  if (!storedSubId) return;
+  await tenantRef.set(
+    {
+      smsAddOnStripeSubscriptionId: admin.firestore.FieldValue.delete(),
+      smsExtraLineQuantity: 0,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const members = await db.collection("users").where("tenantId", "==", tenantId).get();
+  for (const doc of members.docs) {
+    const member = doc.data() || {};
+    if (member.smsLineIsPaidExtra !== true || member.smsStatus !== "active") continue;
+    await doc.ref.set(
+      {
+        smsStatus: "suspended",
+        smsSuspendedAt: admin.firestore.FieldValue.serverTimestamp(),
+        smsSuspendReason: "addon_ended",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+}
+
+/** Stops the monthly charge for extra lines, e.g. when the App Store plan itself has ended. */
+async function cancelSmsAddOnSubscription(stripe, tenantId) {
+  const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+  const subId = ((tenantSnap.data() || {}).smsAddOnStripeSubscriptionId || "").toString().trim();
+  if (!subId || !stripe) return false;
+  const cancelled = await stripe.subscriptions.cancel(subId);
+  await syncSmsAddOnSubscription(cancelled);
+  return true;
+}
+
 async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, status, sub) {
+  if (sub && sub.metadata && sub.metadata.purpose === SMS_ADD_ON_PURPOSE) {
+    await syncSmsAddOnSubscription(sub);
+    return;
+  }
   const cid = (stripeCustomerId || "").toString().trim();
   if (!cid) return;
   const snap = await db
@@ -1663,8 +1872,8 @@ async function syncStripeSubscriptionStatusToTenant(stripe, stripeCustomerId, st
   } catch (_) {
     /* optional */
   }
-  await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
-  if (normalized !== "active") {
+  const synced = await sms.syncSubscriptionStatusForTenant(tenantId, normalized, patch);
+  if (normalized !== "active" && !(synced && synced.skipped)) {
     await deactivateTenantPaymentLinks(stripe, tenantId, snap.docs[0].data() || {});
   }
 }
@@ -2332,61 +2541,10 @@ exports.updateStatementDescriptor = functions
   });
 
 /**
- * Platform fee on customer payments (Tap to Pay, deposit links, future checkout).
- * Not applied to provider subscriptions. 100 bps = 1%.
+ * Platform fee on customer payments (Tap to Pay, deposit links, shop, charter).
+ * Rates live in checkoutRates.js. Not applied to provider subscriptions.
  */
-const PLATFORM_FEE_BPS = 100;
-
 const PROCESSING_SERVICE_FEE_LABEL = "Processing & service fees";
-const PROCESSING_SERVICE_FEE_DESCRIPTION =
-  "Includes Stripe card processing (2.9% + 30¢) and a 1% platform fee.";
-
-/** Application fee in USD cents (min 1¢). Collected via Connect; grossed up to customer at checkout. */
-function platformFeeCents(amountCents) {
-  const n = Math.round(Number(amountCents));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.max(1, Math.round((n * PLATFORM_FEE_BPS) / 10000));
-}
-
-/** Estimated Stripe card rates used to gross-up customer checkout (USD). */
-const STRIPE_ONLINE_BPS = 290;
-const STRIPE_ONLINE_FIXED_CENTS = 30;
-const STRIPE_CARD_PRESENT_BPS = 270;
-/** In-person 5¢ + Tap to Pay authorization 10¢ (Stripe Terminal US pricing). */
-const STRIPE_CARD_PRESENT_FIXED_CENTS = 15;
-
-/**
- * Gross-up checkout so provider nets the quoted service/deposit after Stripe + platform fees.
- * @param {number} serviceCents
- * @param {"online"|"card_present"} channel
- */
-function computeCardCheckoutAmounts(serviceCents, channel = "online") {
-  const service = Math.max(0, Math.round(Number(serviceCents)));
-  if (service <= 0) {
-    return {
-      serviceCents: 0,
-      surchargeCents: 0,
-      totalCents: 0,
-      platformFeeCents: 0,
-    };
-  }
-  const isCardPresent = channel === "card_present";
-  const stripeBps = isCardPresent ? STRIPE_CARD_PRESENT_BPS : STRIPE_ONLINE_BPS;
-  const stripeFixed = isCardPresent
-    ? STRIPE_CARD_PRESENT_FIXED_CENTS
-    : STRIPE_ONLINE_FIXED_CENTS;
-  const combinedBps = stripeBps + PLATFORM_FEE_BPS;
-  const totalCents = Math.ceil(
-    (service + stripeFixed) / (1 - combinedBps / 10000)
-  );
-  const surchargeCents = totalCents - service;
-  return {
-    serviceCents: service,
-    surchargeCents,
-    totalCents,
-    platformFeeCents: platformFeeCents(totalCents),
-  };
-}
 
 /**
  * In-person manual / Tap to Pay: tax is pass-through but Stripe + platform fees apply
@@ -2412,6 +2570,74 @@ function computeInPersonCheckoutTotals(serviceCents, taxCents, channel = "online
     totalCents: checkout.totalCents,
     platformFeeCents: checkout.platformFeeCents,
   };
+}
+
+/**
+ * Card only. Link still appears inside the card option (Bank tab, saved Link details), and a
+ * Link bank payment then shows as card brand "link", which the web checkout prices at the
+ * instant-bank rate. Listing "link" as its own type instead hides card vs bank and lets Stripe
+ * show Klarna through Link; Klarna and Affirm terms forbid a processing fee for choosing them.
+ */
+async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payload) {
+  const methodLists = [["card"]];
+  let lastErr = null;
+  for (let i = 0; i < methodLists.length; i++) {
+    try {
+      return await stripe.paymentIntents.create(
+        {
+          ...payload,
+          payment_method_types: methodLists[i],
+        },
+        { stripeAccount: stripeAccountId }
+      );
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  // Never fall back to every method enabled in Stripe: those would be charged at the card price.
+  throw lastErr;
+}
+
+function pricedCustomerCheckoutFromMetadata(meta, method) {
+  const feeBase = parseInt(meta.feeBaseCents, 10);
+  const service = parseInt(meta.serviceAmountCents, 10);
+  const base = Number.isFinite(feeBase) && feeBase > 0 ? feeBase : service;
+  if (!Number.isFinite(base) || base <= 0) return null;
+  const taxOutside = (meta.taxOutsideFeeBase || "") === "1";
+  const tax = taxOutside ? Math.max(0, parseInt(meta.taxCents, 10) || 0) : 0;
+  const priced = computeCardCheckoutAmounts(base, method);
+  const totalCents = priced.totalCents + tax;
+  const splitApplied = (meta.splitApplied || "") === "true";
+  const studioShare = splitApplied ? Math.max(0, parseInt(meta.studioShareCents, 10) || 0) : 0;
+  const platform = platformFeeCents(totalCents);
+  const rate = checkoutRateForChannel(method);
+  return {
+    method: checkoutMethodId(method),
+    rateLabel: rate.label,
+    serviceCents: Number.isFinite(service) ? service : base,
+    surchargeCents: priced.surchargeCents,
+    taxCents: tax,
+    totalCents,
+    platformFeeCents: platform,
+    applicationFeeCents: platform + studioShare,
+  };
+}
+
+async function stripeAccountIdForCheckout(tenantId, tenantData, paymentIntentId) {
+  const docId = (paymentIntentId || "").toString().trim();
+  if (tenantId && docId) {
+    const snap = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("paymentCheckouts")
+      .doc(docId)
+      .get();
+    if (snap.exists) {
+      const id = ((snap.data() || {}).stripeAccountId || "").toString().trim();
+      if (id) return id;
+    }
+  }
+  return ((tenantData && tenantData.stripeAccountId) || "").toString().trim();
 }
 
 function parseServiceAmountCents(data) {
@@ -3385,7 +3611,10 @@ exports.createDepositLink = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -3433,35 +3662,15 @@ exports.createDepositLink = functions
       grossCents: checkout.totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
-    const lineItems = [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: { name: productName, ...(productDescription ? { description: productDescription } : {}) },
-          unit_amount: checkout.serviceCents,
-        },
-        quantity: 1,
-      },
-    ];
-    if (checkout.surchargeCents > 0) {
-      lineItems.push({
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: PROCESSING_SERVICE_FEE_LABEL,
-            description: PROCESSING_SERVICE_FEE_DESCRIPTION,
-          },
-          unit_amount: checkout.surchargeCents,
-        },
-        quantity: 1,
-      });
-    }
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
     const paymentMeta = {
       tenantId: tenantId || "",
       paymentKind,
+      productName,
       serviceAmountCents: String(checkout.serviceCents),
+      feeBaseCents: String(checkout.serviceCents),
       surchargeCents: String(checkout.surchargeCents),
+      checkoutMethod: "card",
       bookingRequestId,
       initiatedByUid: uid,
       attributedMemberUid,
@@ -3470,24 +3679,36 @@ exports.createDepositLink = functions
       checkoutChannel: "deposit_link",
       ...splitFee.splitMeta,
     };
-    const linkPayload = {
-      line_items: lineItems,
+    const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+      amount: checkout.totalCents,
+      currency: "usd",
       application_fee_amount: feeCents,
       metadata: paymentMeta,
-      // Payment Link top-level metadata does NOT copy to the PaymentIntent.
-      // Webhook settlement reads PI metadata — must set payment_intent_data.
-      payment_intent_data: {
-        metadata: paymentMeta,
-      },
-    };
-    if (paymentKind === "deposit") {
-      linkPayload.restrictions = { completed_sessions: { limit: 1 } };
-    }
-    const link = await stripe.paymentLinks.create(linkPayload, {
-      stripeAccount: stripeAccountId,
+      description: productDescription ? `${productName} — ${productDescription}` : productName,
     });
+    if (tenantId) {
+      await db.collection("tenants").doc(tenantId).collection("paymentCheckouts").doc(pi.id).set({
+        stripeAccountId,
+        paymentIntentId: pi.id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    const slug = (tenantData.slug || "").toString().trim().toLowerCase();
+    if (!slug) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This business has no public link yet."
+      );
+    }
+    const customDomain = (tenantData.customDomain || "").toString().trim().toLowerCase();
+    const domainStatus = (tenantData.customDomainStatus || "").toString().trim().toLowerCase();
+    const host =
+      customDomain && (domainStatus === "active" || domainStatus === "connected")
+        ? customDomain
+        : `${slug}.getbookking.com`;
     return {
-      url: link.url,
+      url: `https://${host}/pay?pi=${encodeURIComponent(pi.id)}`,
+      paymentIntentId: pi.id,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
       serviceCents: checkout.serviceCents,
@@ -3495,6 +3716,110 @@ exports.createDepositLink = functions
       totalCents: checkout.totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
+    };
+  });
+
+/**
+ * In-app manual checkout: set the PaymentIntent amount to the method the customer
+ * actually confirmed (card vs Link bank) so the business nets the service amount.
+ * Params: { paymentIntentId, paymentMethodId }
+ */
+exports.repriceInAppCheckout = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+    }
+    const paymentIntentId = (data?.paymentIntentId || "").toString().trim();
+    const paymentMethodId = (data?.paymentMethodId || "").toString().trim();
+    if (!paymentIntentId.startsWith("pi_") || !paymentMethodId.startsWith("pm_")) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "paymentIntentId and paymentMethodId are required"
+      );
+    }
+    const uid = context.auth.uid;
+    const tenantId = await getTenantIdForUser(uid);
+    const bookingRequestId = (data?.bookingRequestId || "").toString().trim();
+    const payCtx = await assertCanInitiateBookingPayment(
+      uid,
+      await resolveEffectivePaymentContext(uid, { bookingRequestId, tenantId })
+    );
+    const stripeAccountId = payCtx.stripeAccountId;
+    if (!stripeAccountId) {
+      throw new functions.https.HttpsError("failed-precondition", "No Stripe account linked");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+      stripeAccount: stripeAccountId,
+    });
+    const meta = pi.metadata || {};
+    if ((meta.checkoutChannel || "") !== "manual_in_app") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This payment cannot be repriced here."
+      );
+    }
+    if ((meta.tenantId || "") !== (tenantId || "") && (meta.initiatedByUid || "") !== uid) {
+      throw new functions.https.HttpsError("permission-denied", "This payment is not for this account.");
+    }
+    if ((meta.chargeStripeAccountId || "") !== stripeAccountId) {
+      throw new functions.https.HttpsError("permission-denied", "This payment is not for this account.");
+    }
+    if (pi.status === "succeeded" || pi.status === "canceled") {
+      throw new functions.https.HttpsError("failed-precondition", "This payment can no longer be updated.");
+    }
+    const classified = await checkoutMethodFromPaymentMethod(
+      stripe,
+      stripeAccountId,
+      paymentMethodId
+    );
+    if (!classified) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Could not price this payment method."
+      );
+    }
+    let pricingMeta = meta;
+    if (!(parseInt(meta.feeBaseCents, 10) > 0)) {
+      const service = parseInt(meta.serviceAmountCents, 10) || 0;
+      const tax = parseInt(meta.taxCents, 10) || 0;
+      pricingMeta = { ...meta, feeBaseCents: String(service + tax) };
+    }
+    const priced = pricedCustomerCheckoutFromMetadata(pricingMeta, classified);
+    if (!priced) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This payment is missing its service amount."
+      );
+    }
+    await stripe.paymentIntents.update(
+      paymentIntentId,
+      {
+        amount: priced.totalCents,
+        application_fee_amount: priced.applicationFeeCents,
+        metadata: {
+          ...meta,
+          feeBaseCents: pricingMeta.feeBaseCents,
+          surchargeCents: String(priced.surchargeCents),
+          checkoutMethod: priced.method,
+          platformFeeCents: String(priced.platformFeeCents),
+        },
+      },
+      { stripeAccount: stripeAccountId }
+    );
+    return {
+      method: priced.method,
+      rateLabel: priced.rateLabel,
+      serviceCents: priced.serviceCents,
+      taxCents: Math.max(0, parseInt(meta.taxCents, 10) || 0),
+      surchargeCents: priced.surchargeCents,
+      totalCents: priced.totalCents,
+      platformFeeCents: priced.platformFeeCents,
     };
   });
 
@@ -3508,7 +3833,10 @@ exports.createPaymentIntentForManualCheckout = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 500;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -3572,6 +3900,7 @@ exports.createPaymentIntentForManualCheckout = functions
           tenantId: tenantId || "",
           paymentKind,
           serviceAmountCents: String(priced.serviceCents),
+          feeBaseCents: String(priced.serviceCents + priced.taxCents),
           taxCents: String(priced.taxCents),
           surchargeCents: String(priced.surchargeCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
@@ -3590,6 +3919,9 @@ exports.createPaymentIntentForManualCheckout = functions
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       stripeAccountId,
+      // The app uses this key, not one built into it, so switching Stripe to live mode never
+      // leaves an older app version holding a test key.
+      publishableKey: stripePublishableKeyParam.value().trim() || null,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,
       serviceCents: priced.serviceCents,
@@ -4558,6 +4890,7 @@ async function refundConnectCharge({
         amountRefundedCents,
         refundStatus: (refund.status || "succeeded").toString(),
         runStudioReverse: true,
+        stripeAccountId,
         source: "createRefund",
       });
       if (!ledgerOut.duplicate) {
@@ -4603,9 +4936,109 @@ function stripeObjectId(value) {
   return "";
 }
 
+function feeBasisFromLedger(ledgerData, captured, totalRefunded) {
+  const disputeLost = Math.max(
+    0,
+    Math.round(Number(ledgerData && ledgerData.disputeLostCents) || 0)
+  );
+  const refunded = Math.max(0, Math.round(Number(totalRefunded) || 0));
+  const basis = refunded + disputeLost;
+  const cap = Math.max(0, Math.round(Number(captured) || 0));
+  if (cap > 0) return Math.min(cap, basis);
+  return basis;
+}
+
 /**
- * Idempotent refund row on paymentLedger + optional studio-share reversal.
- * Used by createRefund and Connect refund webhooks (refund.updated).
+ * Return the application fee (1% + studio share included in that fee) to the
+ * Connect account that was charged. The slice brings Stripe's refunded fee up
+ * to the cumulative covered charge, so a second webhook for the same refund
+ * returns nothing more. createRefund still sets refund_application_fee itself.
+ */
+async function refundConnectApplicationFeeIfNeeded(
+  stripe,
+  {
+    stripeAccountId,
+    chargeId,
+    refundId,
+    refundCents,
+    chargeCapturedCents,
+    feeBasisCents,
+  }
+) {
+  const acct = (stripeAccountId || "").toString().trim();
+  const chId = (chargeId || "").toString().trim();
+  const rid = (refundId || "").toString().trim();
+  const thisRefund = Math.max(0, Math.round(Number(refundCents) || 0));
+  if (!acct || !chId || !rid || thisRefund <= 0) {
+    return { refunded: false, reason: "missing" };
+  }
+  let charge;
+  try {
+    charge = await stripe.charges.retrieve(chId, {}, { stripeAccount: acct });
+  } catch (err) {
+    console.error("refundConnectApplicationFee retrieve charge", err.message || err);
+    return { refunded: false, reason: "charge_lookup_failed", error: err.message };
+  }
+  const feeId = stripeObjectId(charge.application_fee);
+  if (!feeId) return { refunded: false, reason: "no_application_fee" };
+  let fee;
+  try {
+    fee = await stripe.applicationFees.retrieve(feeId);
+  } catch (err) {
+    console.error("refundConnectApplicationFee retrieve fee", err.message || err);
+    return { refunded: false, reason: "fee_lookup_failed", error: err.message };
+  }
+  const feeAmount = Math.max(0, Math.round(Number(fee.amount) || 0));
+  const already = Math.max(0, Math.round(Number(fee.amount_refunded) || 0));
+  const remaining = Math.max(0, feeAmount - already);
+  if (remaining <= 0 || feeAmount <= 0) {
+    return { refunded: false, reason: "already_refunded" };
+  }
+  const captured = Math.max(
+    1,
+    Math.round(Number(chargeCapturedCents) || 0) ||
+      Math.round(Number(charge.amount_captured) || Number(charge.amount) || 0) ||
+      1
+  );
+  const basis = Math.max(
+    thisRefund,
+    Math.round(Number(feeBasisCents) || 0) || thisRefund
+  );
+  const slice = teamPaymentSplit.applicationFeeRefundSliceCents({
+    feeAmountCents: feeAmount,
+    alreadyRefundedCents: already,
+    capturedCents: captured,
+    basisCents: basis,
+  });
+  if (slice <= 0) return { refunded: false, reason: "already_refunded" };
+  try {
+    const feeRefund = await stripe.applicationFees.createRefund(
+      feeId,
+      { amount: slice },
+      {
+        idempotencyKey: `app-fee-refund-${rid}-${slice}`.slice(0, 255),
+      }
+    );
+    return {
+      refunded: true,
+      amountCents: slice,
+      applicationFeeRefundId: feeRefund.id,
+    };
+  } catch (err) {
+    const msg = (err && err.message) || "application_fee_refund_failed";
+    if (/already been refunded|greater than unrefunded/i.test(msg)) {
+      return { refunded: false, reason: "already_refunded" };
+    }
+    console.error("refundConnectApplicationFee", feeId, msg);
+    return { refunded: false, reason: "stripe_error", error: msg };
+  }
+}
+
+/**
+ * Idempotent refund row on paymentLedger + studio-share reversal.
+ * Used by createRefund and Connect refund webhooks (refund.updated, charge.refunded).
+ * A duplicate refund id still retries a failed studio-share reversal and any
+ * application fee Stripe has not already returned.
  */
 async function recordConnectRefundOnLedger(
   stripe,
@@ -4620,6 +5053,7 @@ async function recordConnectRefundOnLedger(
     amountRefundedCents,
     refundStatus,
     runStudioReverse = true,
+    stripeAccountId = "",
     source = "webhook",
   }
 ) {
@@ -4646,7 +5080,54 @@ async function recordConnectRefundOnLedger(
     ? ledgerData.refundEvents
     : [];
   if (processed.some((r) => (r && r.refundId) === rid)) {
-    return { recorded: false, duplicate: true, reason: "duplicate_refund_id" };
+    let studioReverse = { reversed: false, reason: "skipped" };
+    let applicationFeeRefund = { refunded: false, reason: "skipped" };
+    if (status === "succeeded" && thisRefundCents > 0 && source !== "createRefund") {
+      const dupCaptured =
+        Math.round(Number(chargeCapturedCents) || 0) ||
+        Math.round(Number(ledgerData.grossCents) || 0);
+      const dupRefunded = Math.max(
+        thisRefundCents,
+        Math.round(Number(amountRefundedCents) || 0),
+        Math.round(Number(ledgerData.amountRefundedCents) || 0)
+      );
+      applicationFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+        stripeAccountId,
+        chargeId: (chargeId || ledgerData.chargeId || "").toString(),
+        refundId: rid,
+        refundCents: thisRefundCents,
+        chargeCapturedCents: dupCaptured,
+        feeBasisCents: feeBasisFromLedger(ledgerData, dupCaptured, dupRefunded),
+      });
+      if (runStudioReverse) {
+        try {
+          studioReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+            db,
+            tenantId: tid,
+            chargeId: (chargeId || ledgerData.chargeId || "").toString() || null,
+            paymentIntentId: piId,
+            refundCents: thisRefundCents,
+            chargeCapturedCents:
+              Math.round(Number(chargeCapturedCents) || 0) ||
+              Math.round(Number(ledgerData.grossCents) || 0) ||
+              thisRefundCents,
+            refundId: rid,
+          });
+        } catch (err) {
+          console.error("recordConnectRefundOnLedger studio reverse retry", rid, err.message);
+          studioReverse = { reversed: false, reason: "error", error: err.message };
+        }
+      }
+    }
+    return {
+      recorded: false,
+      duplicate: true,
+      reason: "duplicate_refund_id",
+      studioReverse,
+      applicationFeeRefund,
+      paymentKind: (ledgerData.paymentKind || "").toString(),
+      shopOrderId: (ledgerData.shopOrderId || "").toString().trim(),
+    };
   }
 
   const captured = Math.max(
@@ -4689,7 +5170,26 @@ async function recordConnectRefundOnLedger(
   }
   await ledgerRef.set(patch, { merge: true });
 
+  let applicationFeeRefund = { refunded: false, reason: "skipped" };
   let studioReverse = { reversed: false, reason: "skipped" };
+  if (
+    status === "succeeded" &&
+    thisRefundCents > 0 &&
+    source !== "createRefund"
+  ) {
+    applicationFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+      stripeAccountId,
+      chargeId: (chargeId || ledgerData.chargeId || "").toString(),
+      refundId: rid,
+      refundCents: thisRefundCents,
+      chargeCapturedCents: captured || thisRefundCents,
+      feeBasisCents: feeBasisFromLedger(
+        ledgerData,
+        captured || thisRefundCents,
+        totalRefunded
+      ),
+    });
+  }
   if (runStudioReverse && status === "succeeded" && thisRefundCents > 0) {
     try {
       studioReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
@@ -4723,6 +5223,7 @@ async function recordConnectRefundOnLedger(
     amountRefundedCents: totalRefunded,
     fullyRefunded,
     studioReverse,
+    applicationFeeRefund,
     paymentKind: (ledgerData.paymentKind || "").toString(),
     shopOrderId: (ledgerData.shopOrderId || "").toString().trim(),
   };
@@ -5015,6 +5516,7 @@ async function handleConnectRefundWebhook(stripe, db, event) {
       amountRefundedCents,
       refundStatus: status,
       runStudioReverse: true,
+      stripeAccountId,
       source: "webhook",
     });
 
@@ -5048,6 +5550,7 @@ async function handleConnectRefundWebhook(stripe, db, event) {
         amountRefundedCents: out.amountRefundedCents,
         fullyRefunded: out.fullyRefunded,
         studioReverse: out.studioReverse,
+        applicationFeeRefund: out.applicationFeeRefund,
       })
     );
     return out;
@@ -5098,15 +5601,73 @@ async function handleConnectRefundWebhook(stripe, db, event) {
       Math.round(Number(charge.amount_captured) || Number(charge.amount) || 0)
     );
     const fullyRefunded = captured > 0 && amountRefundedCents >= captured;
-    await ledgerRef.set(
-      {
-        chargeId: chId || null,
-        amountRefundedCents,
-        fullyRefunded,
-        refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    let refunds = [];
+    if (chId) {
+      try {
+        const listed = await stripe.refunds.list(
+          { charge: chId, limit: 100 },
+          { stripeAccount: stripeAccountId }
+        );
+        refunds = (listed && listed.data) || [];
+      } catch (err) {
+        console.error("stripeSubscriptionWebhook charge.refunded list", err.message || err);
+      }
+    }
+    const settled = [];
+    for (const refund of refunds) {
+      const refundStatus = (refund.status || "").toString().trim().toLowerCase();
+      if (refundStatus !== "succeeded") continue;
+      const refundId = stripeObjectId(refund.id);
+      const refundCents = Math.max(0, Math.round(Number(refund.amount) || 0));
+      if (!refundId || refundCents <= 0) continue;
+      try {
+        const out = await recordConnectRefundOnLedger(stripe, db, {
+          tenantId,
+          paymentIntentId: piId,
+          chargeId: chId,
+          refundId,
+          refundCents,
+          chargeCapturedCents: captured,
+          amountRefundedCents,
+          refundStatus,
+          runStudioReverse: true,
+          stripeAccountId,
+          source: "charge.refunded",
+        });
+        settled.push({
+          refundId,
+          duplicate: !!out.duplicate,
+          studioReverse: out.studioReverse,
+          applicationFeeRefund: out.applicationFeeRefund,
+        });
+      } catch (err) {
+        console.error(
+          "stripeSubscriptionWebhook charge.refunded settle",
+          refundId,
+          err.message || err
+        );
+      }
+    }
+    if (!settled.length) {
+      const ledgerRef = db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("paymentLedger")
+        .doc(piId);
+      const snap = await ledgerRef.get();
+      if (!snap.exists) {
+        return { skipped: true, reason: "no_ledger" };
+      }
+      await ledgerRef.set(
+        {
+          chargeId: chId || null,
+          amountRefundedCents,
+          fullyRefunded,
+          refundUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
     try {
       await syncShopOrderRefundFromConnectPayment(stripe, db, {
         tenantId,
@@ -5115,16 +5676,16 @@ async function handleConnectRefundWebhook(stripe, db, event) {
         amountRefundedCents,
         capturedCents: captured,
         fullyRefunded,
-        refundId: "",
+        refundId: (settled[0] && settled[0].refundId) || "",
       });
     } catch (shopErr) {
       console.error("stripeSubscriptionWebhook charge.refunded shop", shopErr.message || shopErr);
     }
     console.log(
       "stripeSubscriptionWebhook charge.refunded sync",
-      JSON.stringify({ piId, tenantId, amountRefundedCents })
+      JSON.stringify({ piId, tenantId, amountRefundedCents, settled: settled.length })
     );
-    return { ok: true, syncOnly: true, amountRefundedCents };
+    return { ok: true, amountRefundedCents, settled };
   }
 
   return { skipped: true, reason: "unhandled_type" };
@@ -5401,8 +5962,9 @@ exports.createRefund = functions
   });
 
 /**
- * Retries failed studio-share transfers (platform → studio Connect).
- * Runs every hour; also callable by ops if needed later.
+ * Retries failed studio-share transfers and failed studio-share reversals.
+ * A transfer retry will not send a share already covered by a refund or lost dispute.
+ * Runs every hour.
  */
 exports.retryFailedStudioShareSettlements = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -5477,18 +6039,12 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
     );
   }
 
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data();
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data;
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -5901,16 +6457,12 @@ exports.listPublicCharterOccupancy = functions.https.onCall(async (data) => {
   if (!tenantSlug) {
     throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantData = tenantDoc.data() || {};
+  const tenantDocId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   const plan = normalizeSubscriptionPlan(tenantData.subscriptionPlan);
   if (plan !== "charter") return { slots: [], holdMinutes: charterOccupancy.CHARTER_PAYMENT_HOLD_MINUTES };
 
@@ -5923,7 +6475,7 @@ exports.listPublicCharterOccupancy = functions.https.onCall(async (data) => {
   );
   const queryFromIso = charterOccupancy.addDaysToIso(fromIso, -1) || fromIso;
 
-  const col = db.collection("tenants").doc(tenantDoc.id).collection("bookingRequests");
+  const col = db.collection("tenants").doc(tenantDocId).collection("bookingRequests");
   const nowMs = now.getTime();
   const slots = [];
   let lastDoc = null;
@@ -6131,151 +6683,6 @@ exports.expireCharterBookingRequests = functions.pubsub
     return null;
   });
 
-
-const BETA_WAITLIST_PLANS = new Set(["solo", "studio", "shop", "charter"]);
-const BETA_WAITLIST_BUSINESS_TYPES = new Set([
-  "barber",
-  "hair",
-  "tattoos",
-  "nails",
-  "charters",
-  "fitness",
-  "other",
-]);
-
-function parseBetaWaitlistTeamSize(raw) {
-  const n = parseInt(String(raw ?? ""), 10);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function validateBetaWaitlistPlanAndTeamSize(plan, teamSize) {
-  if (!BETA_WAITLIST_PLANS.has(plan)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Select a plan."
-    );
-  }
-  if (!Number.isFinite(teamSize) || teamSize < 1) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Enter the number of users on your team."
-    );
-  }
-  if ((plan === "solo" || plan === "charter") && teamSize !== 1) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      plan === "charter"
-        ? "Charter is for one user."
-        : "Solo is for one user. Choose Studio or Shop for teams."
-    );
-  }
-  if (plan === "studio" && (teamSize < 2 || teamSize > 5)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Studio supports 2–5 users."
-    );
-  }
-  if (plan === "shop" && (teamSize < 6 || teamSize > 10)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Shop supports 6–10 users."
-    );
-  }
-}
-
-/**
- * Public marketing: iOS beta waitlist (TestFlight signup page). No auth required.
- * Params: { firstName, lastName, email, plan, teamSize, businessName, businessType, businessTypeCustom?, website? (honeypot) }
- */
-exports.submitBetaWaitlist = functions.https.onCall(async (data) => {
-  if ((data?.website || "").toString().trim()) {
-    return { ok: true, duplicate: false };
-  }
-
-  const firstName = (data?.firstName || "").toString().trim();
-  const lastName = (data?.lastName || "").toString().trim();
-  const email = (data?.email || "").toString().trim().toLowerCase();
-  const plan = (data?.plan || "").toString().trim().toLowerCase();
-  const teamSize = parseBetaWaitlistTeamSize(data?.teamSize);
-  const businessName = (data?.businessName || "").toString().trim();
-  const businessType = (data?.businessType || "").toString().trim().toLowerCase();
-  const businessTypeCustom = (data?.businessTypeCustom || "")
-    .toString()
-    .trim()
-    .slice(0, 200);
-
-  if (!firstName || !lastName || !email || !plan || !businessName || !businessType) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "First name, last name, email, plan, business name, and business type are required."
-    );
-  }
-
-  if (businessType === "other" && !businessTypeCustom) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Describe your business type."
-    );
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Enter a valid email address."
-    );
-  }
-
-  if (!BETA_WAITLIST_BUSINESS_TYPES.has(businessType)) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Select a business type."
-    );
-  }
-
-  validateBetaWaitlistPlanAndTeamSize(plan, teamSize);
-
-  const waitlistBusinessFields = {
-    businessName,
-    businessType,
-    businessTypeCustom: businessType === "other" ? businessTypeCustom : "",
-  };
-
-  const existing = await db
-    .collection("betaWaitlist")
-    .where("email", "==", email)
-    .limit(1)
-    .get();
-
-  if (!existing.empty) {
-    await existing.docs[0].ref.set(
-      {
-        firstName,
-        lastName,
-        plan,
-        teamSize,
-        ...waitlistBusinessFields,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    return { ok: true, duplicate: true };
-  }
-
-  const ref = await db.collection("betaWaitlist").add({
-    firstName,
-    lastName,
-    email,
-    plan,
-    teamSize,
-    ...waitlistBusinessFields,
-    source: "testflight-page",
-    status: "pending",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  return { ok: true, duplicate: false, id: ref.id };
-});
 
 async function fetchTenantProductsById(tenantId) {
   const productSnap = await db
@@ -6502,13 +6909,12 @@ async function resolvePublicShopTenant(tenantSlug) {
   if (!slug) {
     throw new functions.https.HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(slug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -6824,19 +7230,12 @@ exports.createShopOrderFromWeb = functions.https.onCall(async (data, context) =>
     );
   }
 
-  const tenantSnap = await db
-    .collection("tenants")
-    .where("slug", "==", tenantSlug)
-    .limit(1)
-    .get();
-
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(tenantSlug);
+  if (!resolvedTenant) {
     throw new functions.https.HttpsError("not-found", "Business not found");
   }
-
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new functions.https.HttpsError(
       "failed-precondition",
@@ -6894,6 +7293,161 @@ const publicWebCallableOptions = {
   cors: true,
   region: "us-central1",
 };
+
+/**
+ * Public checkout page for a deposit or manual payment link.
+ * Params: { tenantSlug, paymentIntentId }
+ */
+exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  const paymentIntentId = (data.paymentIntentId || "").toString().trim();
+  if (!tenantSlug || !paymentIntentId.startsWith("pi_")) {
+    throw new HttpsError("invalid-argument", "tenantSlug and paymentIntentId are required");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) throw new HttpsError("not-found", "Business not found");
+  const tenantData = resolved.data || {};
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured");
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  const stripeAccountId = await stripeAccountIdForCheckout(resolved.id, tenantData, paymentIntentId);
+  if (!stripeAccountId) {
+    throw new HttpsError("failed-precondition", "This business is not accepting payments yet.");
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  const meta = pi.metadata || {};
+  if ((meta.tenantId || "") !== resolved.id) {
+    throw new HttpsError("permission-denied", "This payment link is not for this business.");
+  }
+  const priced = pricedCustomerCheckoutFromMetadata(meta, meta.checkoutMethod || "card");
+  const businessName = (tenantData.businessName || tenantData.displayName || "Payment").toString();
+  const pk = stripePublishableKeyParam.value().trim();
+  const paid = pi.status === "succeeded";
+  return {
+    paid,
+    status: pi.status,
+    businessName,
+    productName: (meta.productName || "Payment").toString(),
+    clientSecret: paid ? "" : pi.client_secret,
+    publishableKey: pk,
+    stripeAccountId,
+    paymentIntentId: pi.id,
+    serviceCents: priced ? priced.serviceCents : 0,
+    surchargeCents: priced ? priced.surchargeCents : 0,
+    totalCents: paid ? pi.amount : priced ? priced.totalCents : pi.amount,
+    rateLabel: priced ? priced.rateLabel : "2.9% + 30¢",
+    method: priced ? priced.method : "card",
+  };
+});
+
+/**
+ * Link Instant Bank Payments show up as a card whose brand is `link`.
+ * A saved Visa or Mastercard inside Link stays a normal card.
+ * @returns {"card"|"klarna"|"affirm"|"instant_bank"|""}
+ */
+async function checkoutMethodFromPaymentMethod(stripe, stripeAccountId, paymentMethodId) {
+  const id = (paymentMethodId || "").toString().trim();
+  if (!id.startsWith("pm_")) return "";
+  let pm = null;
+  try {
+    pm = await stripe.paymentMethods.retrieve(id, { stripeAccount: stripeAccountId });
+  } catch (err) {
+    try {
+      pm = await stripe.paymentMethods.retrieve(id);
+    } catch (err2) {
+      return "";
+    }
+  }
+  const type = (pm.type || "").toString();
+  if (type === "klarna" || type === "affirm") return type;
+  if (type === "link") return "instant_bank";
+  const brand = (pm.card && pm.card.brand ? pm.card.brand : "").toString().toLowerCase();
+  if (brand === "link") return "instant_bank";
+  if (type === "card") return "card";
+  return "";
+}
+
+/**
+ * Reprice an open customer PaymentIntent when they pick card, Klarna, Affirm, or a Link bank.
+ * Params: { tenantSlug, paymentIntentId, method, paymentMethodId? }
+ */
+exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (request) => {
+  const data = request.data || {};
+  const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
+  const paymentIntentId = (data.paymentIntentId || "").toString().trim();
+  const requested = checkoutMethodId(data.method);
+  if (!tenantSlug || !paymentIntentId.startsWith("pi_")) {
+    throw new HttpsError("invalid-argument", "tenantSlug and paymentIntentId are required");
+  }
+  if (requested === "card_present" || requested === "klarna" || requested === "affirm") {
+    throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
+  }
+  const resolved = await resolveTenantBySlug(tenantSlug);
+  if (!resolved) throw new HttpsError("not-found", "Business not found");
+  const tenantData = resolved.data || {};
+  const secretKey = stripeSecretKey.value();
+  if (!secretKey) throw new HttpsError("failed-precondition", "Stripe is not configured");
+  const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+  const stripeAccountId = await stripeAccountIdForCheckout(resolved.id, tenantData, paymentIntentId);
+  if (!stripeAccountId) {
+    throw new HttpsError("failed-precondition", "This business is not accepting payments yet.");
+  }
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    stripeAccount: stripeAccountId,
+  });
+  const meta = pi.metadata || {};
+  if ((meta.tenantId || "") !== resolved.id) {
+    throw new HttpsError("permission-denied", "This payment is not for this business.");
+  }
+  if (pi.status === "succeeded" || pi.status === "canceled") {
+    throw new HttpsError("failed-precondition", "This payment can no longer be updated.");
+  }
+  const classified = await checkoutMethodFromPaymentMethod(
+    stripe,
+    stripeAccountId,
+    data.paymentMethodId
+  );
+  const method = classified || requested;
+  if (method === "klarna" || method === "affirm") {
+    throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
+  }
+  const priced = pricedCustomerCheckoutFromMetadata(meta, method);
+  if (!priced) {
+    throw new HttpsError("failed-precondition", "This payment is missing its service amount.");
+  }
+  const nextMeta = {
+    ...meta,
+    surchargeCents: String(priced.surchargeCents),
+    checkoutMethod: priced.method,
+    platformFeeCents: String(priced.platformFeeCents),
+  };
+  await stripe.paymentIntents.update(
+    paymentIntentId,
+    {
+      amount: priced.totalCents,
+      application_fee_amount: priced.applicationFeeCents,
+      metadata: nextMeta,
+    },
+    { stripeAccount: stripeAccountId }
+  );
+  const shopOrderId = (meta.shopOrderId || "").toString().trim();
+  if (shopOrderId && meta.paymentKind === "shop") {
+    await db.collection("tenants").doc(resolved.id).collection("shopOrders").doc(shopOrderId).set(
+      {
+        surchargeCents: priced.surchargeCents,
+        totalCents: priced.totalCents,
+        checkoutMethod: priced.method,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+  return priced;
+});
+
 
 /** Shop checkout + shipping (Stripe Connect + optional Shippo). */
 const publicShopCallableOptions = {
@@ -7107,30 +7661,29 @@ exports.createShopCheckoutPayment = onCall(publicShopCallableOptions, async (req
       `guest+${orderId}@checkout.pending`;
     const isPlaceholderCustomer = customerEmail.endsWith("@checkout.pending");
 
-    const pi = await stripe.paymentIntents.create(
-      {
-        amount: piAmount,
-        currency: "usd",
-        automatic_payment_methods: { enabled: true },
-        application_fee_amount: feeCents,
-        receipt_email: customerEmail,
-        metadata: {
-          tenantId,
-          paymentKind: "shop",
-          shopOrderId: orderId,
-          serviceAmountCents: String(subtotalCents),
-          shippingCents: String(shippingCents),
-          taxCents: String(taxCents),
-          surchargeCents: String(checkout.surchargeCents),
-          fulfillmentMethod,
-          ...(shippoRateId ? { shippoRateId } : {}),
-          ...(taxCalculationId ? { taxCalculationId } : {}),
-          chargeStripeAccountId: stripeAccountId,
-          chargeStripeScope: "tenant",
-        },
+    const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+      amount: piAmount,
+      currency: "usd",
+      application_fee_amount: feeCents,
+      receipt_email: customerEmail,
+      metadata: {
+        tenantId,
+        paymentKind: "shop",
+        shopOrderId: orderId,
+        serviceAmountCents: String(subtotalCents),
+        feeBaseCents: String(merchandiseCents),
+        taxOutsideFeeBase: "1",
+        shippingCents: String(shippingCents),
+        taxCents: String(taxCents),
+        surchargeCents: String(checkout.surchargeCents),
+        checkoutMethod: "card",
+        fulfillmentMethod,
+        ...(shippoRateId ? { shippoRateId } : {}),
+        ...(taxCalculationId ? { taxCalculationId } : {}),
+        chargeStripeAccountId: stripeAccountId,
+        chargeStripeScope: "tenant",
       },
-      { stripeAccount: stripeAccountId }
-    );
+    });
 
     const orderData = {
       status: "pending_payment",
@@ -7286,13 +7839,12 @@ async function resolvePublicCharterTenant(tenantSlug) {
   if (!slug) {
     throw new HttpsError("invalid-argument", "tenantSlug is required");
   }
-  const tenantSnap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (tenantSnap.empty) {
+  const resolvedTenant = await resolveTenantBySlug(slug);
+  if (!resolvedTenant) {
     throw new HttpsError("not-found", "Business not found");
   }
-  const tenantDoc = tenantSnap.docs[0];
-  const tenantId = tenantDoc.id;
-  const tenantData = tenantDoc.data() || {};
+  const tenantId = resolvedTenant.id;
+  const tenantData = resolvedTenant.data || {};
   if (tenantData.isActive === false) {
     throw new HttpsError("failed-precondition", "This business is not accepting bookings");
   }
@@ -7564,29 +8116,27 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
 
     let pi;
     try {
-      pi = await stripe.paymentIntents.create(
-        {
-          amount: piAmount,
-          currency: "usd",
-          automatic_payment_methods: { enabled: true },
-          application_fee_amount: feeCents,
-          receipt_email: customerEmail,
-          metadata: {
-            tenantId,
-            paymentKind,
-            bookingRequestId: requestId,
-            charterPayMode: payMode,
-            serviceAmountCents: String(chargeCents),
-            surchargeCents: String(checkout.surchargeCents),
-            chargeStripeAccountId: stripeAccountId,
-            chargeStripeScope: "tenant",
-            checkoutChannel: "charter_web_checkout",
-            initiatedByUid: charterOwnerUid,
-            attributedMemberUid: charterOwnerUid,
-          },
+      pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
+        amount: piAmount,
+        currency: "usd",
+        application_fee_amount: feeCents,
+        receipt_email: customerEmail,
+        metadata: {
+          tenantId,
+          paymentKind,
+          bookingRequestId: requestId,
+          charterPayMode: payMode,
+          serviceAmountCents: String(chargeCents),
+          feeBaseCents: String(chargeCents),
+          surchargeCents: String(checkout.surchargeCents),
+          checkoutMethod: "card",
+          chargeStripeAccountId: stripeAccountId,
+          chargeStripeScope: "tenant",
+          checkoutChannel: "charter_web_checkout",
+          initiatedByUid: charterOwnerUid,
+          attributedMemberUid: charterOwnerUid,
         },
-        { stripeAccount: stripeAccountId }
-      );
+      });
     } catch (piErr) {
       await bookingRef.set(
         {
@@ -7681,7 +8231,10 @@ exports.createPaymentIntentForTapToPay = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
     }
-    const serviceAmount = parseServiceAmountCents(data) ?? 100;
+    const serviceAmount = parseServiceAmountCents(data);
+    if (serviceAmount == null) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount is required.");
+    }
     if (serviceAmount < 50) {
       throw new functions.https.HttpsError(
         "invalid-argument",
@@ -8347,11 +8900,6 @@ exports.createProviderSubscriptionCheckout = functions
     const normalized = normalizeSignupWizardPayload(data);
     const priceId = stripePriceIdForPlan(normalized.plan);
 
-    const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
-    if (betaInviteToken) {
-      await assertBetaSignupInviteForCheckout(betaInviteToken, email);
-    }
-
     const secretKey = stripeSecretKey.value();
     if (!secretKey) {
       throw new functions.https.HttpsError(
@@ -8367,9 +8915,6 @@ exports.createProviderSubscriptionCheckout = functions
       email,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (betaInviteToken) {
-      pendingPayload.betaInviteToken = betaInviteToken;
-    }
     await pendingRef.set(pendingPayload, { merge: true });
 
     const origin = (data.marketingOrigin || "")
@@ -8424,8 +8969,184 @@ exports.createProviderSubscriptionCheckout = functions
   });
 
 /**
- * Marketing wizard: cardless 14-day trial — provisions tenant without Stripe (pay on billing.html).
+ * Copies a verified App Store status onto the owner's profile and suspends texting when the plan
+ * is not active — the same follow-through a Stripe status change gets. The paid-feature checks
+ * read the owner's profile first, so without this an Apple subscriber stays "trialing".
  */
+async function mirrorAppleSubscriptionStatus(tenantId, applied) {
+  if (!applied || applied.applied !== true) return;
+  await sms.syncSubscriptionStatusForTenant(
+    tenantId,
+    applied.subscriptionStatus,
+    { subscriptionPlan: applied.subscriptionPlan },
+    { source: "apple" }
+  );
+  if (applied.subscriptionStatus === "canceled") {
+    try {
+      const secretKey = stripeSecretKey.value();
+      if (secretKey) {
+        const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+        await cancelSmsAddOnSubscription(stripe, tenantId);
+      }
+    } catch (e) {
+      console.error("mirrorAppleSubscriptionStatus cancel texting add-on", tenantId, e.message || e);
+    }
+  }
+}
+
+/**
+ * Stable Apple appAccountToken for this login. Created once, then reused.
+ * The purchase sheet must use this exact id so the signed receipt matches the account.
+ */
+exports.prepareAppleAccountToken = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const appleAppAccountToken = await appleSubscription.prepareAccountToken(context.auth.uid);
+  return { appleAppAccountToken };
+});
+
+/**
+ * Records an App Store subscription from Apple's signed transaction.
+ * Introductory period stays trialing so texting stays off until Apple charges.
+ * Cancels a Stripe trial so the website card is not also billed.
+ */
+exports.syncAppleSubscription = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can start the plan."
+      );
+    }
+    const signedTransaction = ((data && data.signedTransaction) || "").toString().trim();
+    if (!signedTransaction) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing App Store signature."
+      );
+    }
+    let transaction;
+    try {
+      transaction = await appleSubscription.verifySignedTransaction(signedTransaction);
+    } catch (error) {
+      console.error("syncAppleSubscription verify", error.message || error);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The App Store could not verify this purchase."
+      );
+    }
+    if (!appleSubscription.planForProduct(transaction.productId)) {
+      throw new functions.https.HttpsError("invalid-argument", "Unknown App Store plan.");
+    }
+    const userSnap = await db.collection("users").doc(context.auth.uid).get();
+    const expectedToken = appleSubscription.normalizeAccountToken(
+      userSnap.exists && userSnap.data().appleAppAccountToken
+    );
+    const receiptToken = appleSubscription.normalizeAccountToken(transaction.appAccountToken);
+    if (!expectedToken || receiptToken !== expectedToken) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This App Store purchase does not match this account."
+      );
+    }
+    let applied;
+    try {
+      applied = await appleSubscription.applyVerifiedTransaction(
+        ctx.tenantId,
+        transaction,
+        transaction.signedDate
+      );
+      await mirrorAppleSubscriptionStatus(ctx.tenantId, applied);
+    } catch (error) {
+      console.error("syncAppleSubscription apply", error.message || error);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The App Store purchase could not be saved."
+      );
+    }
+    const tenant = ctx.tenant || {};
+    const stripeSubId = (tenant.stripeSubscriptionId || "").toString().trim();
+    const stripeStatus = (tenant.subscriptionStatus || "").toString();
+    if (stripeSubId && stripeStatus === "trialing") {
+      try {
+        const stripe = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-11-20.acacia" });
+        await stripe.subscriptions.cancel(stripeSubId);
+      } catch (err) {
+        console.warn("syncAppleSubscription cancel stripe trial", err.message || err);
+      }
+    }
+    return {
+      ok: true,
+      subscriptionPlan: applied.subscriptionPlan,
+      subscriptionStatus: applied.subscriptionStatus,
+    };
+  });
+
+/**
+ * App Store Server Notifications V2. Apple posts { signedPayload } when a
+ * subscription renews, cancels, expires, or is refunded.
+ */
+exports.appStoreServerNotification = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onRequest(async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send("POST required");
+    return;
+  }
+  const signedPayload = ((req.body && req.body.signedPayload) || "").toString().trim();
+  if (!signedPayload) {
+    res.status(400).send("Missing signedPayload");
+    return;
+  }
+  try {
+    const notification = await appleSubscription.verifySignedNotification(signedPayload);
+    if (notification.notificationType === appleSubscription.NotificationTypeV2.TEST) {
+      res.status(200).send("ok");
+      return;
+    }
+    const signedTransaction =
+      notification.data && notification.data.signedTransactionInfo
+        ? notification.data.signedTransactionInfo.toString()
+        : "";
+    if (!signedTransaction) {
+      res.status(200).send("ok");
+      return;
+    }
+    const transaction = await appleSubscription.verifySignedTransaction(signedTransaction);
+    if (!appleSubscription.planForProduct(transaction.productId)) {
+      res.status(200).send("ok");
+      return;
+    }
+    const tenantDoc = await appleSubscription.findTenantForTransaction(transaction);
+    if (!tenantDoc) {
+      console.warn(
+        "appStoreServerNotification tenant not ready",
+        transaction.originalTransactionId || ""
+      );
+      res.status(500).send("tenant not ready");
+      return;
+    }
+    const appleStatus = notification.data && notification.data.status;
+    const applied = await appleSubscription.applyVerifiedTransaction(
+      tenantDoc.id,
+      transaction,
+      notification.signedDate || transaction.signedDate,
+      appleStatus
+    );
+    await mirrorAppleSubscriptionStatus(tenantDoc.id, applied);
+    res.status(200).send("ok");
+  } catch (error) {
+    console.error("appStoreServerNotification", error.message || error);
+    res.status(400).send("invalid");
+  }
+});
+
 exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -8448,11 +9169,6 @@ exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (da
   }
 
   const normalized = normalizeSignupWizardPayload(data);
-  const betaInviteToken = (data?.betaInviteToken || "").toString().trim();
-  if (betaInviteToken) {
-    await assertBetaSignupInviteForCheckout(betaInviteToken, email);
-  }
-
   const pendingRef = db.collection("pendingProviderSignups").doc(uid);
   await pendingRef.set(
     {
@@ -8604,6 +9320,82 @@ async function handleConnectDisputeWebhook(stripe, db, event) {
   }
   await ledgerRef.set(patch, { merge: true });
 
+  let disputeFeeRefund = null;
+  let disputeShareReverse = null;
+  if (closed && status === "lost" && disputeId && disputeCents > 0) {
+    try {
+      const snap = await ledgerRef.get();
+      const ledgerData = snap.exists ? snap.data() || {} : {};
+      const lostIds = Array.isArray(ledgerData.disputeLostIds)
+        ? ledgerData.disputeLostIds.map((id) => (id || "").toString())
+        : [];
+      let disputeLostCents = Math.max(
+        0,
+        Math.round(Number(ledgerData.disputeLostCents) || 0)
+      );
+      if (!lostIds.includes(disputeId)) {
+        disputeLostCents += disputeCents;
+        await ledgerRef.set(
+          {
+            disputeLostCents,
+            disputeLostIds: admin.firestore.FieldValue.arrayUnion(disputeId),
+          },
+          { merge: true }
+        );
+      }
+      let capturedCents = Math.max(
+        0,
+        Math.round(Number(pi.amount_received) || Number(pi.amount) || 0)
+      );
+      if (chargeId) {
+        try {
+          const ch = await stripe.charges.retrieve(
+            chargeId,
+            {},
+            { stripeAccount: stripeAccountId }
+          );
+          capturedCents = Math.max(
+            capturedCents,
+            Math.round(Number(ch.amount_captured) || Number(ch.amount) || 0)
+          );
+        } catch (chErr) {
+          console.warn("stripeSubscriptionWebhook dispute charge", chErr.message || chErr);
+        }
+      }
+      const amountRefundedCents = Math.max(
+        0,
+        Math.round(Number(ledgerData.amountRefundedCents) || 0)
+      );
+      disputeFeeRefund = await refundConnectApplicationFeeIfNeeded(stripe, {
+        stripeAccountId,
+        chargeId,
+        refundId: `dispute-${disputeId}`,
+        refundCents: disputeCents,
+        chargeCapturedCents: capturedCents || disputeCents,
+        feeBasisCents: feeBasisFromLedger(
+          { disputeLostCents },
+          capturedCents || disputeCents,
+          amountRefundedCents
+        ),
+      });
+      disputeShareReverse = await teamPaymentSplit.reverseStudioShareOnRefund(stripe, {
+        db,
+        tenantId,
+        chargeId: chargeId || null,
+        paymentIntentId: piId,
+        refundCents: disputeCents,
+        chargeCapturedCents: capturedCents || disputeCents,
+        refundId: `dispute-${disputeId}`,
+      });
+    } catch (disputeMoneyErr) {
+      console.error(
+        "stripeSubscriptionWebhook dispute settle",
+        disputeId,
+        disputeMoneyErr.message || disputeMoneyErr
+      );
+    }
+  }
+
   const relatedPatch = {
     disputeId,
     disputeStatus: status,
@@ -8666,6 +9458,8 @@ async function handleConnectDisputeWebhook(stripe, db, event) {
       status,
       tenantId,
       piId,
+      disputeFeeRefund,
+      disputeShareReverse,
     })
   );
   return { ok: true, disputeId, status };
@@ -8930,9 +9724,13 @@ exports.stripeSubscriptionWebhook = functions
         const inv = event.data.object;
         const customerId =
           typeof inv.customer === "string" ? inv.customer : inv.customer && inv.customer.id;
-        if (customerId && inv.subscription) {
-          const subId =
-            typeof inv.subscription === "string" ? inv.subscription : inv.subscription.id;
+        // Older API versions put the subscription on the invoice; newer ones (2025-03-31 onward,
+        // including the live webhooks' 2026-03-25.dahlia) put it under parent.subscription_details.
+        const invSub =
+          inv.subscription ||
+          (inv.parent && inv.parent.subscription_details && inv.parent.subscription_details.subscription);
+        if (customerId && invSub) {
+          const subId = typeof invSub === "string" ? invSub : invSub.id;
           const sub = await stripe.subscriptions.retrieve(subId, {
             expand: ["items.data.price"],
           });
@@ -8973,7 +9771,9 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   manageArtistSchedules: false,
   accessClientList: false,
   viewEarningsReports: false,
-  sendClientNotifications: false,
+  // On for new businesses: this switch also gates the owner's own texts and automatic booking
+  // texts, so starting it off made texting fail right after setup. Owners can turn it off.
+  sendClientNotifications: true,
 };
 
 const DEFAULT_TENANT_WORKFLOW = {
@@ -9742,9 +10542,21 @@ function serializeTeamRosterMember(doc, tenant) {
 async function resolveTenantBySlug(tenantSlug) {
   const slug = (tenantSlug || "").toString().trim().toLowerCase();
   if (!slug) return null;
-  const snap = await db.collection("tenants").where("slug", "==", slug).limit(1).get();
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, data: snap.docs[0].data() };
+  // The public site is the business guests are looking at. A slug query with
+  // limit(1) can hit an older duplicate and save the booking on the wrong account.
+  const publicSnap = await db.collection("publicSites").doc(slug).get();
+  const publishedTenantId = publicSnap.exists
+    ? (publicSnap.data().tenantId || "").toString().trim()
+    : "";
+  if (publishedTenantId) {
+    const tenantSnap = await db.collection("tenants").doc(publishedTenantId).get();
+    if (tenantSnap.exists) {
+      return { id: tenantSnap.id, data: tenantSnap.data() || {} };
+    }
+  }
+  const snap = await db.collection("tenants").where("slug", "==", slug).limit(2).get();
+  if (snap.size !== 1) return null;
+  return { id: snap.docs[0].id, data: snap.docs[0].data() || {} };
 }
 
 function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
@@ -11217,6 +12029,103 @@ async function deleteTenantInvitesForTenant(tenantId) {
   await batch.commit();
 }
 
+/**
+ * Gives a business's texting numbers back to Twilio — the studio line and every teammate's
+ * personal line — so we stop paying for numbers nobody is paying us for. Best effort: a Twilio
+ * failure is logged and never blocks the caller. The number fields are cleared only once Twilio
+ * confirms the release, so a failed release is retried instead of forgotten.
+ */
+async function releaseTenantTextingNumbers(tenantId, tenant) {
+  const out = { studioReleased: false, memberLinesReleased: 0 };
+  try {
+    if ((tenant && tenant.smsPhoneNumberSid || "").toString().trim()) {
+      const release = await sms.releaseTenantSms(tenant);
+      out.studioReleased = release.released === true;
+      if (out.studioReleased) {
+        await db.collection("tenants").doc(tenantId).set(sms.tenantSmsClearedFields(), { merge: true });
+      } else {
+        console.error("releaseTenantTextingNumbers: studio number NOT released", tenantId, tenant.smsPhoneNumberSid);
+      }
+    }
+  } catch (e) {
+    console.warn("releaseTenantTextingNumbers studio", tenantId, e.message || e);
+  }
+  try {
+    const members = await db.collection("users").where("tenantId", "==", tenantId).get();
+    for (const doc of members.docs) {
+      const memberData = doc.data() || {};
+      if (!(memberData.smsPhoneNumberSid || "").toString().trim()) continue;
+      try {
+        const release = await sms.releaseMemberSms(memberData);
+        if (release.released === true) {
+          out.memberLinesReleased += 1;
+          await doc.ref.set(sms.personalSmsClearedFields(), { merge: true });
+        } else {
+          console.error("releaseTenantTextingNumbers: member number NOT released", doc.id, memberData.smsPhoneNumberSid);
+        }
+      } catch (e) {
+        console.warn("releaseTenantTextingNumbers member", doc.id, e.message || e);
+      }
+    }
+  } catch (e) {
+    console.warn("releaseTenantTextingNumbers members", tenantId, e.message || e);
+  }
+  return out;
+}
+
+/** How long a number is kept after its plan lapses, so a late payment doesn't cost the number. */
+const SMS_LAPSED_NUMBER_GRACE_DAYS = 30;
+
+/**
+ * Daily: release numbers whose business has been suspended for an unpaid plan for 30 days.
+ * Texting is already off for these (suspended when the plan lapsed); this stops the Twilio rent.
+ */
+exports.releaseLapsedSmsNumbers = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .pubsub.schedule("every 24 hours")
+  .onRun(async () => {
+    const cutoffMs = Date.now() - SMS_LAPSED_NUMBER_GRACE_DAYS * 86400000;
+    const snap = await db.collection("tenants").where("smsStatus", "==", "suspended").get();
+    let released = 0;
+    for (const doc of snap.docs) {
+      const tenant = doc.data() || {};
+      const suspendedAt = tenant.smsSuspendedAt;
+      const suspendedMs =
+        suspendedAt && typeof suspendedAt.toMillis === "function" ? suspendedAt.toMillis() : 0;
+      if (!suspendedMs || suspendedMs > cutoffMs) continue;
+      // Only plan lapses. A number suspended for another reason is left for a person to review.
+      if (!(tenant.smsSuspendReason || "").toString().startsWith("subscription_")) continue;
+      if ((tenant.subscriptionStatus || "").toString().toLowerCase() === "active") continue;
+      if (tenant.complimentaryPaidAccess === true) continue;
+      const out = await releaseTenantTextingNumbers(doc.id, tenant);
+      released += (out.studioReleased ? 1 : 0) + out.memberLinesReleased;
+    }
+    // Paid extra lines whose monthly add-on ended (card failed or cancelled).
+    const lapsedLines = await db.collection("users").where("smsStatus", "==", "suspended").get();
+    for (const doc of lapsedLines.docs) {
+      const member = doc.data() || {};
+      if ((member.smsSuspendReason || "").toString() !== "addon_ended") continue;
+      const suspendedAt = member.smsSuspendedAt;
+      const suspendedMs =
+        suspendedAt && typeof suspendedAt.toMillis === "function" ? suspendedAt.toMillis() : 0;
+      if (!suspendedMs || suspendedMs > cutoffMs) continue;
+      if (!(member.smsPhoneNumberSid || "").toString().trim()) continue;
+      try {
+        const release = await sms.releaseMemberSms(member);
+        if (release.released === true) {
+          await doc.ref.set(sms.personalSmsClearedFields(), { merge: true });
+          released += 1;
+        } else {
+          console.error("releaseLapsedSmsNumbers: member number NOT released", doc.id);
+        }
+      } catch (e) {
+        console.warn("releaseLapsedSmsNumbers member", doc.id, e.message || e);
+      }
+    }
+    console.log("releaseLapsedSmsNumbers", JSON.stringify({ suspended: snap.size, released }));
+    return null;
+  });
+
 async function deleteTenantData(tenantId) {
   const tenantRef = db.collection("tenants").doc(tenantId);
   for (const sub of TENANT_SUBCOLLECTIONS) {
@@ -11449,7 +12358,7 @@ exports.transferTenantOwnership = functions
 
 /** Delete the signed-in user's account. Owners with team may shut down the business (SHUTDOWN) or transfer first. */
 exports.deleteMyAccount = functions
-  .runWith({ secrets: [stripeSecretKey] })
+  .runWith({ secrets: [stripeSecretKey, sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
@@ -11496,6 +12405,7 @@ exports.deleteMyAccount = functions
         );
       }
       await cancelTenantStripeSubscription(tenant);
+      await releaseTenantTextingNumbers(tenantId, tenant);
       await deleteTenantData(tenantId);
       await deleteUserFirestoreAndAuth(uid);
       return { ok: true, deletedTenant: true, shutDownBusiness: true };
@@ -11503,11 +12413,20 @@ exports.deleteMyAccount = functions
 
     if (isOwner) {
       await cancelTenantStripeSubscription(tenant);
+      await releaseTenantTextingNumbers(tenantId, tenant);
       await deleteTenantData(tenantId);
       await deleteUserFirestoreAndAuth(uid);
       return { ok: true, deletedTenant: true };
     }
 
+    // A teammate leaving: their personal number goes back to Twilio with them.
+    if ((userData.smsPhoneNumberSid || "").toString().trim()) {
+      try {
+        await sms.releaseMemberSms(userData);
+      } catch (e) {
+        console.warn("deleteMyAccount release member number", uid, e.message || e);
+      }
+    }
     await deleteUserFirestoreAndAuth(uid);
     return { ok: true, deletedTenant: false, leftTenant: true };
   });
@@ -11897,16 +12816,32 @@ exports.getBillingSummary = functions
       ).toString();
       const trialEndUnix = providerTrialEndUnixFromTenant(tenantData);
       if (!stripeCustomerId) {
-        const needsInitialCheckout = firestoreSubscriptionStatus === "trialing";
+        // A plan bought in the iOS app is billed by Apple: never ask for it again here.
+        const appleBilled = (tenantData.billingSource || "").toString() === "apple";
+        const needsInitialCheckout = !appleBilled && firestoreSubscriptionStatus === "trialing";
+        const appleExtras = appleBilled
+          ? {
+              messaging: await messagingFieldsWithLineCount(tenantId, tenantData, userData),
+              smsAddOn: {
+                hasCard: !!(tenantData.smsAddOnCardLabel || "").toString().trim(),
+                cardLabel: (tenantData.smsAddOnCardLabel || "").toString(),
+                monthlyLines: sms.smsExtraPaidQuantity(tenantData),
+              },
+            }
+          : {};
         return {
           ok: true,
           hasStripeCustomer: false,
+          ...appleExtras,
+          billingSource: appleBilled ? "apple" : "",
           firestorePlan,
           firestoreSubscriptionStatus,
           trialEndUnix,
           listPriceCents: planListPriceCents(firestorePlan),
           needsInitialCheckout,
-          message: needsInitialCheckout
+          message: appleBilled
+            ? "Your plan is billed through the App Store."
+            : needsInitialCheckout
             ? "Add a payment method to start or secure your plan."
             : "Billing is not set up for this business yet.",
           subscriptionPaymentBypass: sms.isSubscriptionPaymentGateBypassed() === true,
@@ -12222,7 +13157,10 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
   const subscriptionStatus = sms.resolveSubscriptionStatus(tenant, ownerUserData);
   const paid = sms.tenantHasPaidSubscription(tenant, ownerUserData);
   const trialing = sms.tenantIsTrialing(tenant, ownerUserData);
-  const canUse = sms.tenantCanUseSms(tenant, ownerUserData, tenant.managerPermissions);
+  // "Can use" here means texting is set up and paid for. The "Send client text notifications"
+  // switch is deliberately left out: the app only shows that switch when this is true, so
+  // counting it would hide the switch for good once it had been turned off.
+  const canUse = sms.tenantCanUseSms(tenant, ownerUserData, null);
   const usage = sms.smsMonthlyUsageForTenant(tenant);
   const stripeCustomerId = ((tenant && tenant.stripeCustomerId) || "").toString().trim();
   const plan = normalizeSubscriptionPlan(
@@ -12276,8 +13214,8 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
       lines.used
     ),
     smsPhonePurchasingBlockedDuringTestFlight:
-      sms.isSmsPhonePurchasingBlockedDuringTestFlight() === true,
-    smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason() || "").toString(),
+      sms.isSmsPhonePurchasingBlockedDuringTestFlight(tenant) === true,
+    smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason(tenant) || "").toString(),
   };
 }
 
@@ -12946,6 +13884,256 @@ exports.startSubscriptionToday = functions
  * with proration_behavior none. Free included slots must be used first.
  * Does not provision a number — returns a short-lived auth for requestSmsPhoneNumber.
  */
+/** Reserves a verified App Store texting-number purchase, as a callable error when it can't be. */
+async function claimAppleSmsExtraPurchase(params) {
+  try {
+    return await appleSubscription.claimSmsExtraPurchase(params);
+  } catch (error) {
+    const code = (error && error.code) || "";
+    if (code === "already-used") {
+      throw new functions.https.HttpsError("already-exists", error.message);
+    }
+    if (code === "wrong-account") {
+      throw new functions.https.HttpsError("permission-denied", error.message);
+    }
+    if (code === "unverified" || code === "refunded") {
+      throw new functions.https.HttpsError("failed-precondition", error.message);
+    }
+    throw error;
+  }
+}
+
+exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+  if (smsPurchaseBlock) {
+    throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the business owner can purchase extra texting numbers."
+    );
+  }
+  const memberUid = ((data && data.memberUid) || "").toString().trim();
+  const signedTransaction = ((data && data.signedTransaction) || "").toString().trim();
+  if (!memberUid || !signedTransaction) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing teammate or App Store purchase."
+    );
+  }
+  const memberRef = db.collection("users").doc(memberUid);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
+    throw new functions.https.HttpsError("not-found", "Team member not found.");
+  }
+  // A 3rd+ number is $12 today plus $12 a month. The App Store purchase is one-time only, so
+  // those are added in billing; refuse before the receipt is reserved so nothing is spent.
+  const planForLine = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+  const linesInUse = await sms.countOccupiedSmsLines(ctx.tenantId, ctx.tenant);
+  if (sms.buildSmsLineSummary(ctx.tenant, planForLine, linesInUse).needsMonthlyExtraForNext) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Additional numbers are $12 today and $12 a month. Add them in billing."
+    );
+  }
+  const claim = await claimAppleSmsExtraPurchase({
+    uid: context.auth.uid,
+    tenantId: ctx.tenantId,
+    signedTransaction,
+    purpose: "member_number",
+    memberUid,
+  });
+  const appleInvoiceId = `apple:${claim.transactionId}`;
+  const memberData = memberSnap.data() || {};
+  const existingExpiresAt = memberData.smsPaidLinePurchaseExpiresAt;
+  const existingExpiresMs =
+    existingExpiresAt && typeof existingExpiresAt.toMillis === "function"
+      ? existingExpiresAt.toMillis()
+      : 0;
+  const existingAuthorizationId = (memberData.smsPaidLinePurchaseAuthorizationId || "").toString();
+  // A retry of the same purchase gets the authorization it was already given.
+  if (
+    claim.alreadyClaimed &&
+    existingAuthorizationId &&
+    (memberData.smsPaidLinePurchaseInvoiceId || "").toString() === appleInvoiceId &&
+    existingExpiresMs > Date.now()
+  ) {
+    return { ok: true, smsPaidLinePurchaseAuthorizationId: existingAuthorizationId };
+  }
+  const authorizationId = crypto.randomBytes(24).toString("hex");
+  await memberRef.set(
+    {
+      smsPaidLinePurchaseAuthorizationId: authorizationId,
+      smsPaidLinePurchaseInvoiceId: appleInvoiceId,
+      smsPaidLinePurchaseAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
+      smsPaidLinePurchaseExpiresAt: admin.firestore.Timestamp.fromMillis(
+        Date.now() + 15 * 60 * 1000
+      ),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return { ok: true, smsPaidLinePurchaseAuthorizationId: authorizationId };
+});
+
+/**
+ * App Store subscribers: start saving a card for extra texting lines ($12 today + $12/mo each).
+ * The card lives on a Stripe customer used only for those lines; the plan stays with Apple.
+ * Returns an embedded Checkout (setup mode) client secret for the billing page.
+ */
+exports.createSmsLinesCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can manage billing."
+      );
+    }
+    if (!usesSmsAddOnBilling(ctx.tenant)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Extra texting numbers are billed with your plan. Use Add a texting number."
+      );
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    const tenantRef = db.collection("tenants").doc(ctx.tenantId);
+    let customerId = smsLineBilling(ctx.tenant).customerId;
+    try {
+      if (!customerId) {
+        const ownerEmail =
+          (ctx.ownerUserData && ctx.ownerUserData.email) ||
+          (ctx.userData && ctx.userData.email) ||
+          context.auth.token.email ||
+          "";
+        const customer = await stripe.customers.create({
+          email: ownerEmail || undefined,
+          name: (ctx.tenant.businessName || ctx.tenant.displayName || "").toString() || undefined,
+          metadata: {
+            tenantId: ctx.tenantId,
+            firebaseUid: context.auth.uid,
+            purpose: SMS_ADD_ON_PURPOSE,
+          },
+        });
+        customerId = customer.id;
+        await tenantRef.set(
+          {
+            smsAddOnStripeCustomerId: customerId,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      const base = billingPortalReturnBase(data);
+      const session = await stripe.checkout.sessions.create({
+        mode: "setup",
+        ui_mode: "embedded",
+        customer: customerId,
+        payment_method_types: ["card"],
+        metadata: { tenantId: ctx.tenantId, purpose: SMS_ADD_ON_PURPOSE },
+        return_url: `${base}/billing.html?sms_card=success&session_id={CHECKOUT_SESSION_ID}`,
+      });
+      if (!session.client_secret) {
+        throw new Error("Stripe did not return a card form.");
+      }
+      const out = { clientSecret: session.client_secret };
+      const pk = stripePublishableKeyParam.value().trim();
+      if (pk) out.publishableKey = pk;
+      return out;
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("createSmsLinesCardSetup", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not start the card form: ${stripeErrorMessage(e)}`
+      );
+    }
+  });
+
+/** Finishes the card setup: makes the saved card the one Stripe charges for extra lines. */
+exports.completeSmsLinesCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the business owner can manage billing."
+      );
+    }
+    const sessionId = ((data && data.sessionId) || "").toString().trim();
+    const customerId = smsLineBilling(ctx.tenant).customerId;
+    if (!sessionId || !usesSmsAddOnBilling(ctx.tenant) || !customerId) {
+      throw new functions.https.HttpsError("invalid-argument", "Card setup was not started.");
+    }
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    }
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ["setup_intent.payment_method"],
+      });
+      const sessionCustomer =
+        typeof session.customer === "string" ? session.customer : session.customer && session.customer.id;
+      const intent = session.setup_intent;
+      const paymentMethod = intent && intent.payment_method;
+      if (
+        session.mode !== "setup" ||
+        sessionCustomer !== customerId ||
+        session.status !== "complete" ||
+        !intent ||
+        intent.status !== "succeeded" ||
+        !paymentMethod ||
+        !paymentMethod.id
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "The card was not saved. Try again."
+        );
+      }
+      await stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: paymentMethod.id },
+      });
+      const card = paymentMethod.card || {};
+      const brand = (card.brand || "card").toString();
+      const cardLabel =
+        `${brand.charAt(0).toUpperCase()}${brand.slice(1)} ending ${card.last4 || "----"}`;
+      await db.collection("tenants").doc(ctx.tenantId).set(
+        {
+          smsAddOnCardLabel: cardLabel,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      return { ok: true, cardLabel };
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error("completeSmsLinesCardSetup", e);
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        `Stripe could not confirm the card: ${stripeErrorMessage(e)}`
+      );
+    }
+  });
+
 exports.purchaseSmsExtraLine = functions
   .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
   .https.onCall(async (data, context) => {
@@ -13034,35 +14222,45 @@ exports.purchaseSmsExtraLine = functions
     }
     const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
 
-    const subId = (tenant.stripeSubscriptionId || "").toString().trim();
-    const customerId = (tenant.stripeCustomerId || "").toString().trim();
-    if (!customerId || !subId) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Billing is not set up. Complete subscription checkout first."
-      );
+    const lineBilling = smsLineBilling(tenant);
+    let currentQty;
+    if (lineBilling.addOn) {
+      // Plan is billed by Apple; extra lines bill to the card saved for them on the billing page.
+      if (!lineBilling.customerId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Add a card for extra texting numbers first."
+        );
+      }
+      currentQty = sms.smsExtraPaidQuantity(tenant);
+    } else {
+      const subId = lineBilling.subscriptionId;
+      const customerId = lineBilling.customerId;
+      if (!customerId || !subId) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Billing is not set up. Complete subscription checkout first."
+        );
+      }
+      let sub;
+      try {
+        sub = await stripe.subscriptions.retrieve(subId, {
+          expand: ["items.data.price"],
+        });
+      } catch (e) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Could not load subscription: ${stripeErrorMessage(e)}`
+        );
+      }
+      if (!["active", "trialing", "past_due"].includes(sub.status)) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          `Subscription is ${sub.status}. Update billing before adding a texting number.`
+        );
+      }
+      currentQty = smsExtraQuantityFromSubscription(sub, stripeSmsExtraPriceIds());
     }
-
-    let sub;
-    try {
-      sub = await stripe.subscriptions.retrieve(subId, {
-        expand: ["items.data.price"],
-      });
-    } catch (e) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Could not load subscription: ${stripeErrorMessage(e)}`
-      );
-    }
-    if (!["active", "trialing", "past_due"].includes(sub.status)) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        `Subscription is ${sub.status}. Update billing before adding a texting number.`
-      );
-    }
-
-    const extraPriceIds = stripeSmsExtraPriceIds();
-    let currentQty = smsExtraQuantityFromSubscription(sub, extraPriceIds);
     let paidExtrasAfter = currentQty;
     let chargedInvoice;
     let freshTenant;
@@ -13218,7 +14416,7 @@ exports.requestTenantSmsProvisioning = functions
         alreadyActive: true,
       };
     }
-    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason(tenant);
     if (smsPurchaseBlock) {
       throw new functions.https.HttpsError("failed-precondition", smsPurchaseBlock);
     }
@@ -13318,6 +14516,45 @@ exports.requestTenantSmsProvisioning = functions
         }
         soloReplacementAuthorizationId = authorization.authorizationId;
         soloReplacementInvoiceId = authorization.invoiceId;
+        const appleSignedTransaction = ((data && data.appleSignedTransaction) || "")
+          .toString()
+          .trim();
+        // The iOS app already took this payment through the App Store; charging the Stripe
+        // card as well would bill the number twice.
+        if (!soloReplacementInvoiceId && appleSignedTransaction) {
+          try {
+            const claim = await claimAppleSmsExtraPurchase({
+              uid: context.auth.uid,
+              tenantId: ctx.tenantId,
+              signedTransaction: appleSignedTransaction,
+              purpose: "tenant_number",
+            });
+            soloReplacementInvoiceId = `apple:${claim.transactionId}`;
+            await tenantRef.set(
+              {
+                smsLastSoloReplacementInvoiceId: soloReplacementInvoiceId,
+                smsLastSoloReplacementAt: admin.firestore.FieldValue.serverTimestamp(),
+                smsSoloReplacementAuthorizationInvoiceId: soloReplacementInvoiceId,
+                smsSoloReplacementAuthorizationState: "authorized",
+                smsSoloReplacementAuthorizationExpiresAt:
+                  admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60 * 1000),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          } catch (e) {
+            await tenantRef.set(
+              {
+                smsSoloReplacementAuthorizationState: admin.firestore.FieldValue.delete(),
+                smsSoloReplacementInFlightAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            throw e;
+          }
+        }
         if (!soloReplacementInvoiceId) {
           try {
             const secretKey = stripeSecretKey.value();
@@ -14086,6 +15323,79 @@ exports.releaseSmsPhoneNumber = functions
   });
 
 /** Team: send an appointment-related SMS from the tenant number. */
+/**
+ * Permanently deletes text conversations and their messages (and any photos texted in them).
+ * Owners and managers can delete any conversation in the business; a team member only those on
+ * their own personal number. Consent and STOP opt-outs are stored separately and are kept.
+ * Params: { threadIds: string[] } (up to 50)
+ */
+exports.deleteSmsThreads = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const raw = Array.isArray(data && data.threadIds) ? data.threadIds : [];
+  const threadIds = [...new Set(raw.map((id) => (id || "").toString().trim()).filter(Boolean))];
+  if (!threadIds.length || threadIds.length > 50) {
+    throw new functions.https.HttpsError("invalid-argument", "Choose 1 to 50 conversations.");
+  }
+  const uid = context.auth.uid;
+  const ctx = await getMemberAccessContext(uid);
+  const canDeleteAny = ctx.isOwner || ctx.accessRole === "manager";
+  const tenantRef = db.collection("tenants").doc(ctx.tenantId);
+  const bucket = admin.storage().bucket();
+  const mediaPrefix = `tenants/${ctx.tenantId}/smsMedia/`;
+  let deleted = 0;
+  const skipped = [];
+
+  for (const threadId of threadIds) {
+    if (threadId.includes("/")) {
+      skipped.push(threadId);
+      continue;
+    }
+    const threadRef = tenantRef.collection("smsThreads").doc(threadId);
+    const threadSnap = await threadRef.get();
+    if (!threadSnap.exists) {
+      skipped.push(threadId);
+      continue;
+    }
+    const thread = threadSnap.data() || {};
+    const ownLine =
+      (thread.smsLineScope || "").toString() === "member" &&
+      (thread.assignedMemberUid || "").toString() === uid;
+    if (!canDeleteAny && !ownLine) {
+      skipped.push(threadId);
+      continue;
+    }
+
+    const logs = await tenantRef.collection("smsLog").where("threadId", "==", threadId).get();
+    const mediaPaths = new Set();
+    for (const doc of logs.docs) {
+      const urls = Array.isArray((doc.data() || {}).mediaUrls) ? doc.data().mediaUrls : [];
+      for (const url of urls) {
+        const match = /\/o\/([^?]+)/.exec((url || "").toString());
+        const objectPath = match ? decodeURIComponent(match[1]) : "";
+        if (objectPath.startsWith(mediaPrefix)) mediaPaths.add(objectPath);
+      }
+    }
+    for (let i = 0; i < logs.docs.length; i += 400) {
+      const batch = db.batch();
+      logs.docs.slice(i, i + 400).forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+    await threadRef.delete();
+    for (const objectPath of mediaPaths) {
+      try {
+        await bucket.file(objectPath).delete();
+      } catch (e) {
+        console.warn("deleteSmsThreads media", objectPath, e.message || e);
+      }
+    }
+    deleted += 1;
+  }
+
+  return { ok: true, deleted, skipped };
+});
+
 exports.sendClientSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {
@@ -14236,6 +15546,67 @@ exports.sendClientSms = functions
     }
   });
 
+/**
+ * Apple Pay / Google Pay: register the shop's booking address on its Stripe accounts when the
+ * shop connects Stripe or changes its web address. The old address is switched off.
+ */
+exports.syncShopWalletDomains = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .firestore.document("tenants/{tenantId}")
+  .onWrite(async (change, context) => {
+    const before = change.before.exists ? change.before.data() || {} : {};
+    const after = change.after.exists ? change.after.data() || {} : null;
+    if (!after) return null;
+    const beforeSlug = (before.slug || "").toString().trim().toLowerCase();
+    const afterSlug = (after.slug || "").toString().trim().toLowerCase();
+    const beforeAccount = (before.stripeAccountId || "").toString().trim();
+    const afterAccount = (after.stripeAccountId || "").toString().trim();
+    if (beforeSlug === afterSlug && beforeAccount === afterAccount) return null;
+    const newHost = walletDomains.bookingHostForSlug(afterSlug);
+    if (!newHost) return null;
+    const stripe = stripeClientFromSecret();
+    if (!stripe) return null;
+    const tenantId = context.params.tenantId;
+    const accounts = await walletDomains.stripeAccountsForShop(db, tenantId, after);
+    if (!accounts.length) return null;
+    const oldHost = walletDomains.bookingHostForSlug(beforeSlug);
+    if (oldHost && oldHost !== newHost) {
+      await walletDomains.setWalletDomain(stripe, accounts, oldHost, false);
+    }
+    const results = await walletDomains.setWalletDomain(stripe, accounts, newHost, true);
+    console.log("syncShopWalletDomains", tenantId, newHost, results.join("; "));
+    return null;
+  });
+
+/** Apple Pay / Google Pay: a team member who connects their own Stripe gets the shop's address registered. */
+exports.syncMemberWalletDomain = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .firestore.document("users/{memberUid}")
+  .onWrite(async (change, context) => {
+    const before = change.before.exists ? change.before.data() || {} : {};
+    const after = change.after.exists ? change.after.data() || {} : null;
+    if (!after) return null;
+    const account = (after.stripeAccountId || "").toString().trim();
+    const tenantId = (after.tenantId || "").toString().trim();
+    if (!account || !tenantId) return null;
+    if (
+      account === (before.stripeAccountId || "").toString().trim() &&
+      tenantId === (before.tenantId || "").toString().trim()
+    ) {
+      return null;
+    }
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const host = walletDomains.bookingHostForSlug(tenantSnap.exists ? (tenantSnap.data() || {}).slug : "");
+    if (!host) return null;
+    const stripe = stripeClientFromSecret();
+    if (!stripe) return null;
+    const accounts = (await walletDomains.stripeAccountsForShop(db, tenantId, {})).filter((id) => id === account);
+    if (!accounts.length) return null;
+    const results = await walletDomains.setWalletDomain(stripe, accounts, host, true);
+    console.log("syncMemberWalletDomain", context.params.memberUid, host, results.join("; "));
+    return null;
+  });
+
 /** Firestore: provision Twilio when smsStatus becomes pending. */
 exports.onTenantSmsProvisionRequested = functions
   .runWith({
@@ -14267,7 +15638,7 @@ exports.onTenantSmsProvisionRequested = functions
       );
       return null;
     }
-    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason();
+    const smsPurchaseBlock = sms.smsPhonePurchaseBlockReason(after);
     if (smsPurchaseBlock) {
       await db.collection("tenants").doc(tenantId).set(
         {
@@ -14315,20 +15686,29 @@ exports.onTenantSmsProvisionRequested = functions
           );
           return null;
         }
-        const secretKey = stripeSecretKey.value();
-        if (!secretKey) {
-          throw new Error("Stripe is not configured.");
+        let paymentVerified = false;
+        if (invoiceId.startsWith("apple:")) {
+          paymentVerified = await appleSubscription.smsExtraPurchaseIsUnspent(
+            invoiceId.slice("apple:".length),
+            tenantId,
+            "tenant_number"
+          );
+        } else {
+          const secretKey = stripeSecretKey.value();
+          if (!secretKey) {
+            throw new Error("Stripe is not configured.");
+          }
+          const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+          const invoice = await stripe.invoices.retrieve(invoiceId);
+          const customerMatches =
+            (invoice.customer || "").toString() === smsLineBilling(after).customerId;
+          const paidAmount = Math.max(
+            Number(invoice.amount_paid) || 0,
+            Number(invoice.total) || 0
+          );
+          paymentVerified = invoice.status === "paid" && customerMatches && paidAmount >= 1200;
         }
-        const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
-        const invoice = await stripe.invoices.retrieve(invoiceId);
-        const customerMatches =
-          (invoice.customer || "").toString() ===
-          (after.stripeCustomerId || "").toString();
-        const paidAmount = Math.max(
-          Number(invoice.amount_paid) || 0,
-          Number(invoice.total) || 0
-        );
-        if (invoice.status !== "paid" || !customerMatches || paidAmount < 1200) {
+        if (!paymentVerified) {
           await db.collection("tenants").doc(tenantId).set(
             {
               smsStatus: "failed",
@@ -14358,6 +15738,10 @@ exports.onTenantSmsProvisionRequested = functions
       }
       await provisionTenantSms(tenantId, after, { isPaidExtra: false });
       if (beforeSummary.canPurchaseSoloReplacement) {
+        const paidInvoiceId = (after.smsSoloReplacementAuthorizationInvoiceId || "").toString();
+        if (paidInvoiceId.startsWith("apple:")) {
+          await appleSubscription.consumeSmsExtraPurchase(paidInvoiceId.slice("apple:".length));
+        }
         await db.collection("tenants").doc(tenantId).set(
           {
             smsSoloReplacementAuthorizationState: "consumed",
@@ -14509,6 +15893,10 @@ exports.onUserMemberSmsProvisionRequested = functions
       });
       // Consume the authorization only after Twilio successfully provisions.
       if (requiresPaidPurchase) {
+        const paidInvoiceId = (after.smsPaidLinePurchaseInvoiceId || "").toString();
+        if (paidInvoiceId.startsWith("apple:")) {
+          await appleSubscription.consumeSmsExtraPurchase(paidInvoiceId.slice("apple:".length));
+        }
         await db.collection("users").doc(memberUid).set(
           {
             smsPaidLinePurchaseAuthorizationId: admin.firestore.FieldValue.delete(),
@@ -14849,37 +16237,6 @@ function passwordResetMarketingOrigin() {
     || "https://getbookking.com";
 }
 
-function passwordResetPortalOrigin(portal) {
-  const marketing = passwordResetMarketingOrigin();
-  if (portal === "admin") {
-    const explicit = (process.env.ADMIN_ORIGIN || "").toString().trim().replace(/\/+$/, "");
-    if (explicit) return explicit;
-    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
-      return "https://admin.getbookking.com";
-    }
-    return marketing;
-  }
-  if (portal === "beta") {
-    const explicit = (process.env.BETA_ORIGIN || "").toString().trim().replace(/\/+$/, "");
-    if (explicit) return explicit;
-    if (/getbookking\.com$/i.test(marketing.replace(/^https?:\/\//, ""))) {
-      return "https://beta.getbookking.com";
-    }
-    return marketing;
-  }
-  return marketing;
-}
-
-function passwordResetPortalPaths(portal) {
-  if (portal === "admin") {
-    return { resetPath: "/admin/reset-password", loginPath: "/admin/login" };
-  }
-  if (portal === "beta") {
-    return { resetPath: "/beta/reset-password", loginPath: "/beta/login" };
-  }
-  return { resetPath: "/reset-password", loginPath: "/login.html" };
-}
-
 function parsePasswordResetOobLink(link) {
   const parsed = new URL(link);
   let oobCode = parsed.searchParams.get("oobCode");
@@ -14894,7 +16251,7 @@ function parsePasswordResetOobLink(link) {
  * Sends a branded password reset email via Resend, pointing to the custom
  * reset-password handler instead of Firebase's default action page.
  * Public callable — no auth required (user is logged out).
- * Params: { email, portal?: "marketing" | "admin" | "beta" }
+ * Params: { email }
  */
 exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   const email = ((data && data.email) ? data.email : "").toString().trim().toLowerCase();
@@ -14902,10 +16259,8 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
     throw new functions.https.HttpsError("invalid-argument", "A valid email address is required.");
   }
 
-  const portalRaw = ((data && data.portal) ? data.portal : "marketing").toString().trim().toLowerCase();
-  const portal = portalRaw === "admin" || portalRaw === "beta" ? portalRaw : "marketing";
-  const origin = passwordResetPortalOrigin(portal);
-  const paths = passwordResetPortalPaths(portal);
+  const origin = passwordResetMarketingOrigin();
+  const paths = { resetPath: "/reset-password", loginPath: "/login.html" };
   const loginUrl = origin + paths.loginPath;
 
   let resetLink;
@@ -14945,8 +16300,10 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
     return { ok: true };
   }
 
-  const from = (process.env.BETA_EMAIL_FROM || "Get Bookking <beta@getbookking.com>").trim();
-  const replyTo = (process.env.BETA_SUPPORT_EMAIL || "support@getbookking.com").trim();
+  const from = (
+    process.env.PASSWORD_RESET_EMAIL_FROM || "Get Bookking <noreply@getbookking.com>"
+  ).trim();
+  const replyTo = (process.env.SUPPORT_EMAIL || "support@getbookking.com").trim();
 
   const html = [
     "<p>Hello,</p>",
@@ -14974,8 +16331,7 @@ exports.sendPasswordResetLink = functions.https.onCall(async (data) => {
   return { ok: true };
 });
 
-const { registerBetaAdminFunctions, assertPlatformAdmin, assertBetaSignupInviteForCheckout, activateBetaTesterFromSignup } = require("./betaAdmin");
-registerBetaAdminFunctions(exports);
+const { assertPlatformAdmin } = require("./platformAdmin");
 
 const { registerPublicSiteFunctions } = require("./publicSite");
 registerPublicSiteFunctions(exports, { assertPlatformAdmin });
@@ -14984,4 +16340,61 @@ const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail"
 registerTapToPayLaunchEmailFunctions(exports);
 
 const { registerCustomDomainFunctions } = require("./customDomain");
-registerCustomDomainFunctions(exports);
+registerCustomDomainFunctions(exports, {
+  notifyOwner: notifyOwnerAboutAccount,
+});
+
+function escapeEmailHtml(text) {
+  return (text || "")
+    .toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Tells the shop owner about something on their account (e.g. their domain): an app notification,
+ * a notice kept in the app's activity center, and an email. Each part is tried on its own.
+ */
+async function notifyOwnerAboutAccount({ tenantId, tenant, title, body, emailSubject }) {
+  const ownerUid = (tenant.ownerUid || "").toString().trim();
+  if (!ownerUid) return;
+  try {
+    const tokens = await collectDeviceTokensForUids([ownerUid]);
+    await sendBookingAlertPush({ tokens, title, body, data: { type: "account_notice", kind: "domain" } });
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount push", tenantId, e.message || e);
+  }
+  try {
+    await db.collection("tenants").doc(tenantId).collection("accountNotices").add({
+      kind: "domain",
+      title,
+      body,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount notice", tenantId, e.message || e);
+  }
+  try {
+    const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+    const ownerSnap = await db.collection("users").doc(ownerUid).get();
+    const email = ownerSnap.exists ? ((ownerSnap.data() || {}).email || "").toString().trim() : "";
+    if (!resendApiKey || !email) return;
+    const from = (process.env.PASSWORD_RESET_EMAIL_FROM || "Get Bookking <noreply@getbookking.com>").trim();
+    const replyTo = (process.env.SUPPORT_EMAIL || "support@getbookking.com").trim();
+    const html = [
+      "<p>Hello,</p>",
+      "<p>" + escapeEmailHtml(body) + "</p>",
+      "<p>Questions? Just reply to this email.</p>",
+      "<p>Thanks,<br>Your Get Bookking team</p>",
+    ].join("\n");
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + resendApiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: email, subject: emailSubject || title, html, reply_to: replyTo }),
+    });
+    if (!res.ok) console.warn("notifyOwnerAboutAccount email", tenantId, res.status, await res.text());
+  } catch (e) {
+    console.warn("notifyOwnerAboutAccount email", tenantId, e.message || e);
+  }
+}

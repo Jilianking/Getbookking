@@ -21,17 +21,11 @@
     };
   }
 
-  function detectPortal(pathname, continueUrl) {
-    var path = (pathname || global.location.pathname || "").toLowerCase();
-    var cont = (continueUrl || "").toLowerCase();
-    if (path.indexOf("/admin") === 0 || cont.indexOf("/admin") !== -1) return "admin";
-    if (path.indexOf("/beta") === 0 || cont.indexOf("/beta") !== -1) return "beta";
+  function detectPortal() {
     return "marketing";
   }
 
-  function loginPath(portal) {
-    if (portal === "admin") return "/admin/login";
-    if (portal === "beta") return "/beta/login";
+  function loginPath() {
     return "/login.html";
   }
 
@@ -39,11 +33,7 @@
     if (continueUrl && continueUrl.indexOf("://") !== -1) {
       try {
         var parsed = new URL(continueUrl);
-        if (
-          parsed.pathname.indexOf("/admin") === 0 ||
-          parsed.pathname.indexOf("/beta") === 0 ||
-          parsed.pathname.indexOf("/login") !== -1
-        ) {
+        if (parsed.pathname.indexOf("/login") !== -1) {
           return continueUrl;
         }
       } catch (err) {

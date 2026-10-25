@@ -116,6 +116,14 @@ struct MemberPersonalSmsView: View {
         }
         .appListSurface()
         .navigationTitle("Messaging")
+        .alert("Add in billing", isPresented: $viewModel.showMonthlyNumberBillingPrompt) {
+            Button("Open billing") {
+                Task { await viewModel.openBillingForExtraSmsLine() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ManagerSettingsViewModel.monthlyNumberBillingMessage)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)

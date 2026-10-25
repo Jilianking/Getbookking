@@ -191,12 +191,17 @@ function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
 }
 
-function isSmsPhonePurchasingBlockedDuringTestFlight() {
+/**
+ * The launch block on buying numbers. A business with `smsPurchaseBlockExempt` set (server-only,
+ * see scripts/set-shop-access.js) is let through so it can get its number before the block lifts.
+ */
+function isSmsPhonePurchasingBlockedDuringTestFlight(tenant) {
+  if (tenant && tenant.smsPurchaseBlockExempt === true) return false;
   return BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT === true;
 }
 
-function smsPhonePurchaseBlockReason() {
-  if (isSmsPhonePurchasingBlockedDuringTestFlight()) {
+function smsPhonePurchaseBlockReason(tenant) {
+  if (isSmsPhonePurchasingBlockedDuringTestFlight(tenant)) {
     return TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE;
   }
   return null;
@@ -212,8 +217,14 @@ function paidSubscriptionBlockReason(tenant, userData) {
   if (isSubscriptionPaymentGateBypassed()) {
     return null;
   }
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) {
+  // Complimentary access granted by Get Bookking (server-only, see scripts/set-shop-access.js).
+  if (tenant && tenant.complimentaryPaidAccess === true) {
+    return null;
+  }
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) {
     return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   const status = resolveSubscriptionStatus(tenant, userData);
@@ -227,8 +238,10 @@ function paidSubscriptionBlockReason(tenant, userData) {
 }
 
 function tenantIsTrialing(tenant, userData) {
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) return false;
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) return false;
   return resolveSubscriptionStatus(tenant, userData) === "trialing";
 }
 
@@ -599,12 +612,17 @@ async function ensureMasterIncomingNumber(master, tenant, webhook) {
   return null;
 }
 
-async function buyMasterLocalNumber(master, areaCode) {
+async function buyMasterLocalNumber(master, areaCode, opts) {
   let available = await master.availablePhoneNumbers("US").local.list({
     areaCode,
     smsEnabled: true,
     limit: 5,
   });
+  if ((!available || available.length === 0) && opts && opts.areaCodeRequired) {
+    throw new Error(
+      `No texting numbers are available in area code ${areaCode} right now. Try again later.`
+    );
+  }
   if (!available || available.length === 0) {
     const fallback = await master.availablePhoneNumbers("US").local.list({
       smsEnabled: true,
@@ -629,7 +647,7 @@ async function buyMasterLocalNumber(master, areaCode) {
  * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
  */
 async function provisionTenantSms(tenantId, tenant, opts) {
-  const purchaseBlock = smsPhonePurchaseBlockReason();
+  const purchaseBlock = smsPhonePurchaseBlockReason(tenant);
   if (purchaseBlock) {
     throw new Error(purchaseBlock);
   }
@@ -641,7 +659,10 @@ async function provisionTenantSms(tenantId, tenant, opts) {
   let numberResource = await ensureMasterIncomingNumber(master, tenant, webhook);
   let boughtNew = false;
   if (!numberResource) {
-    numberResource = await buyMasterLocalNumber(master, areaCode);
+    // An area code picked for the business (smsAreaCode) is kept; a guessed one may fall back.
+    const areaCodeRequired =
+      (tenant.smsAreaCode || "").toString().replace(/\D/g, "").slice(0, 3).length === 3;
+    numberResource = await buyMasterLocalNumber(master, areaCode, { areaCodeRequired });
     boughtNew = true;
     if (webhook) {
       await master.incomingPhoneNumbers(numberResource.sid).update({
@@ -1586,21 +1607,26 @@ async function recordInboundTenantSms(tenantId, inbound) {
     smsLineScope,
   });
 
-  // Fire-and-forget APNs/FCM so Twilio webhook stays fast.
-  notifyInboundClientSms(tenantId, {
-    threadId,
-    counterpartPhone: from,
-    bodyPreview: previewBody,
-    clientName: ((inbound && inbound.clientName) || "").toString(),
-    assignedMemberUid,
-    smsLineScope,
-  }).catch((e) => {
-    console.warn(
-      "notifyInboundClientSms",
-      tenantId,
-      e && e.message ? e.message : e
-    );
-  });
+  // Wait for the push before Twilio gets its reply: a Cloud Function can be frozen once it has
+  // responded, which cut fire-and-forget notifications off part-way. Capped at 5 seconds so a
+  // slow push service never holds up the incoming text (Twilio allows about 15).
+  await Promise.race([
+    notifyInboundClientSms(tenantId, {
+      threadId,
+      counterpartPhone: from,
+      bodyPreview: previewBody,
+      clientName: ((inbound && inbound.clientName) || "").toString(),
+      assignedMemberUid,
+      smsLineScope,
+    }).catch((e) => {
+      console.warn(
+        "notifyInboundClientSms",
+        tenantId,
+        e && e.message ? e.message : e
+      );
+    }),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
 
   return true;
 }
@@ -1778,18 +1804,33 @@ async function suspendTenantSms(tenantId, reason) {
   );
 }
 
-async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch) {
+/**
+ * Writes the plan status to the business and its owner, and suspends texting when it is not active.
+ * `opts.source` is who is reporting: "stripe" (default) or "apple". A business billed through the
+ * App Store keeps its Apple status when Stripe reports anything other than a paid subscription —
+ * for example the website trial we cancel when the Apple plan starts.
+ * Returns { skipped: true } when nothing was written.
+ */
+async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch, opts) {
   const status = (subscriptionStatus || "").toString().trim().toLowerCase();
   const extra = billingPatch && typeof billingPatch === "object" ? billingPatch : {};
+  const source = opts && opts.source === "apple" ? "apple" : "stripe";
   const tenantRef = getDb().collection("tenants").doc(tenantId);
   const tenantSnap = await tenantRef.get();
-  if (!tenantSnap.exists) return;
+  if (!tenantSnap.exists) return { skipped: true, reason: "no_tenant" };
   const tenant = tenantSnap.data();
   const ownerUid = tenant.ownerUid;
+  const appleBilled = (tenant.billingSource || "").toString() === "apple";
+  if (source === "stripe" && appleBilled && status !== "active") {
+    console.log("syncSubscriptionStatusForTenant: kept Apple status", { tenantId, stripeStatus: status });
+    return { skipped: true, reason: "apple_billed" };
+  }
   const tenantFields = {
     subscriptionStatus: status,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+  // A paid Stripe subscription on a business that was on Apple means billing moved to the website.
+  if (source === "stripe" && appleBilled) tenantFields.billingSource = "stripe";
   if (extra.stripeCustomerId) tenantFields.stripeCustomerId = extra.stripeCustomerId;
   if (extra.stripeSubscriptionId) tenantFields.stripeSubscriptionId = extra.stripeSubscriptionId;
   if (extra.subscriptionPlan) tenantFields.subscriptionPlan = extra.subscriptionPlan;
@@ -1803,8 +1844,12 @@ async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, bil
   await batch.commit();
 
   if (status !== "active" && tenant.smsStatus === "active") {
-    await suspendTenantSms(tenantId, `subscription_${status}`);
+    // Complimentary access keeps texting on whatever the plan says (e.g. a new free trial).
+    if (tenant.complimentaryPaidAccess !== true) {
+      await suspendTenantSms(tenantId, `subscription_${status}`);
+    }
   }
+  return { skipped: false };
 }
 
 const SMS_PRESET_MAX_LEN = 500;
@@ -1877,12 +1922,29 @@ function bookingStatusSmsBody(tenant, status, booking) {
   const service = ((booking && booking.serviceName) || "").toString().trim();
   const ctx = { business, service };
   if (status === "confirmed") {
-    return renderSmsPreset(presets.smsPresetConfirmed, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetConfirmed, ctx), business);
   }
   if (status === "declined") {
-    return renderSmsPreset(presets.smsPresetDeclined, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetDeclined, ctx), business);
   }
   return null;
+}
+
+/**
+ * Automatic texts must say who they're from and how to opt out, even if a business has edited
+ * those parts out of its templates: carriers expect both, and every business shares one registration.
+ */
+function withRequiredSmsWording(body, business) {
+  let text = (body || "").toString().trim();
+  if (!text) return text;
+  const name = (business || "").toString().trim();
+  if (name && !text.toLowerCase().includes(name.toLowerCase())) {
+    text = `${name}: ${text}`;
+  }
+  if (!/\bstop\b/i.test(text)) {
+    text = `${text.replace(/\s+$/, "")}${/[.!?]$/.test(text) ? "" : "."} Reply STOP to opt out.`;
+  }
+  return text.slice(0, 1600);
 }
 
 function wrapClockMin(min) {

@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import UIKit
 import FirebaseFunctions
 import Combine
 
@@ -245,152 +246,41 @@ final class DomainSettingsViewModel: ObservableObject {
         }
     }
 
+    /// Domains are paid for on the web billing page (card saved there for yearly renewals).
+    static func webDomainURL(buy domain: String? = nil, transfer: String? = nil) -> URL? {
+        var components = URLComponents(string: "https://getbookking.com/billing.html")
+        var items: [URLQueryItem] = []
+        if let domain, !domain.isEmpty { items.append(URLQueryItem(name: "domain_q", value: domain)) }
+        if let transfer, !transfer.isEmpty { items.append(URLQueryItem(name: "domain_transfer", value: transfer)) }
+        components?.queryItems = items.isEmpty ? nil : items
+        components?.fragment = "domain"
+        return components?.url
+    }
+
+    /// Opens the web billing page on the transfer step; the transfer code is entered there.
     func startTransfer() async {
         let domain = normalizedTransferDomain()
-        let code = authCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !domain.isEmpty else {
             errorMessage = "Enter the domain you want to transfer"
             return
         }
-        guard code.count >= 4 else {
-            errorMessage = "Paste the authorization / EPP code from your current registrar"
-            return
-        }
-        isWorking = true
         errorMessage = nil
-        infoMessage = nil
-        defer { isWorking = false }
-        do {
-            let result = try await functions.httpsCallable("startDomainTransfer").call([
-                "domain": domain,
-                "authCode": code,
-                "autoRenew": autoRenewEnabled,
-            ])
-            guard let data = result.data as? [String: Any] else { return }
-            if data["needsPayment"] as? Bool == true {
-                guard let clientSecret = data["clientSecret"] as? String,
-                      let paymentIntentId = data["paymentIntentId"] as? String else {
-                    errorMessage = "Could not start payment. Try again."
-                    return
-                }
-                let pk = data["publishableKey"] as? String
-                let priceLabel = data["customerPriceUsd"].map { "\($0)" } ?? ""
-                infoMessage = data["message"] as? String
-                let payResult = await DomainPaymentSheetPresenter.present(
-                    clientSecret: clientSecret,
-                    publishableKey: pk
-                )
-                switch payResult {
-                case .completed:
-                    let done = try await functions.httpsCallable("completeDomainTransfer").call([
-                        "paymentIntentId": paymentIntentId,
-                    ])
-                    applyStatus(done.data)
-                    var doneMessage = data["message"] as? String
-                    if let doneData = done.data as? [String: Any] {
-                        doneMessage = doneData["message"] as? String ?? doneMessage
-                    }
-                    authCode = ""
-                    NotificationCenter.default.post(name: .customDomainDidChange, object: nil)
-                    await load()
-                    presentSuccessConfirmation(
-                        kind: .transfer,
-                        fallbackDomain: domain,
-                        message: doneMessage
-                    )
-                case .canceled:
-                    infoMessage = "Payment canceled. Transfer was not started."
-                case .failed(let msg):
-                    errorMessage = msg
-                }
-                _ = priceLabel
-            } else {
-                applyStatus(result.data)
-                let msg = data["message"] as? String
-                infoMessage = msg
-                authCode = ""
-                NotificationCenter.default.post(name: .customDomainDidChange, object: nil)
-                await load()
-                presentSuccessConfirmation(
-                    kind: .transfer,
-                    fallbackDomain: domain,
-                    message: msg
-                )
-            }
-        } catch {
-            errorMessage = friendlyError(error)
-        }
+        guard let url = Self.webDomainURL(transfer: domain) else { return }
+        await UIApplication.shared.open(url)
+        infoMessage = "Finish the transfer on getbookking.com. This screen updates once it starts."
     }
 
+    /// Opens the web billing page with this name ready to buy.
     func startPurchase(domain: String) async {
         let d = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !d.isEmpty else {
             errorMessage = "Pick a domain to buy"
             return
         }
-        purchasingDomain = d
-        isWorking = true
         errorMessage = nil
-        infoMessage = nil
-        defer {
-            isWorking = false
-            purchasingDomain = nil
-        }
-        do {
-            let result = try await functions.httpsCallable("startDomainPurchase").call([
-                "domain": d,
-                "autoRenew": autoRenewEnabled,
-            ])
-            guard let data = result.data as? [String: Any] else { return }
-            if data["needsPayment"] as? Bool == true {
-                guard let clientSecret = data["clientSecret"] as? String,
-                      let paymentIntentId = data["paymentIntentId"] as? String else {
-                    errorMessage = "Could not start payment. Try again."
-                    return
-                }
-                let pk = data["publishableKey"] as? String
-                infoMessage = data["message"] as? String
-                let payResult = await DomainPaymentSheetPresenter.present(
-                    clientSecret: clientSecret,
-                    publishableKey: pk
-                )
-                switch payResult {
-                case .completed:
-                    let done = try await functions.httpsCallable("completeDomainPurchase").call([
-                        "paymentIntentId": paymentIntentId,
-                    ])
-                    applyStatus(done.data)
-                    var doneMessage: String?
-                    if let doneData = done.data as? [String: Any] {
-                        doneMessage = doneData["message"] as? String
-                    }
-                    NotificationCenter.default.post(name: .customDomainDidChange, object: nil)
-                    await load()
-                    presentSuccessConfirmation(
-                        kind: .purchase,
-                        fallbackDomain: d,
-                        message: doneMessage
-                    )
-                case .canceled:
-                    infoMessage = "Payment canceled. Domain was not registered."
-                case .failed(let msg):
-                    errorMessage = msg
-                }
-            } else {
-                applyStatus(result.data)
-                let msg = data["message"] as? String
-                infoMessage = msg
-                NotificationCenter.default.post(name: .customDomainDidChange, object: nil)
-                await load()
-                presentSuccessConfirmation(
-                    kind: .purchase,
-                    fallbackDomain: d,
-                    message: msg
-                )
-            }
-        } catch {
-            errorMessage = friendlyError(error)
-        }
+        guard let url = Self.webDomainURL(buy: d) else { return }
+        await UIApplication.shared.open(url)
+        infoMessage = "Finish buying \(d) on getbookking.com. This screen updates once it’s yours."
     }
 
     func isPurchasing(_ domain: String) -> Bool {

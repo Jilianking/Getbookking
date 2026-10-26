@@ -12,7 +12,7 @@ struct PlanChooserView: View {
     @ObservedObject var store: BookkingSubscriptionStore
     @Binding var isCharterPath: Bool
     @Binding var plan: SubscriptionPlan?
-    /// Sign-up lets people switch between shops and charters; an existing account can't.
+    /// Shows the Studios & Shops / Fishing Charters tabs, so every plan can be found.
     var showsPathPicker: Bool
     var isWorking: Bool
     var onPathChange: (Bool) -> Void = { _ in }
@@ -302,7 +302,7 @@ struct PlanPickerSheet: View {
                         store: store,
                         isCharterPath: $isCharterPath,
                         plan: $plan,
-                        showsPathPicker: false,
+                        showsPathPicker: true,
                         isWorking: isWorking,
                         onPurchase: { chosen, payNow in Task { await purchase(chosen, payNow: payNow) } },
                         onRestore: { Task { await restore() } }

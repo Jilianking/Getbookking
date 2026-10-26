@@ -653,6 +653,17 @@ struct CreateAccountView: View {
             } else if Auth.auth().currentUser == nil {
                 _ = try await Auth.auth().createUser(withEmail: trimmedEmail, password: password)
             }
+            // The login carries the owner's name (the dashboard greeting reads it).
+            let fullName = [firstName, lastName]
+                .map { USStateServiceAreaFormatting.titleCaseWords($0) }
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fullName.isEmpty, let user = Auth.auth().currentUser {
+                let change = user.createProfileChangeRequest()
+                change.displayName = fullName
+                try? await change.commitChanges()
+                authViewModel.currentUserDisplayName = fullName
+            }
             // The sign-up call reads the email from a fresh sign-in token.
             _ = try await Auth.auth().currentUser?.getIDTokenResult(forcingRefresh: true)
             authViewModel.currentUserEmail = Auth.auth().currentUser?.email

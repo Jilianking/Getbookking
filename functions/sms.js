@@ -184,8 +184,8 @@ const BYPASS_SUBSCRIPTION_PAYMENT_GATE = false;
  * Stripe subscription test checkout stays available via BYPASS above.
  * Set false before App Store launch when SMS sales go live.
  */
-const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = true;
-const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
+const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = false;
+const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE = "Texting numbers aren’t available right now. Please try again later.";
 
 function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
@@ -857,10 +857,10 @@ async function countOccupiedSmsLines(tenantId, tenant) {
  *
  * Studio/Shop billing model:
  * - ≤2 concurrent active lines → $0/mo smsExtra on subscription.
- * - 3+ concurrent → smsExtra qty = used − 2 ($12/mo each).
+ * - 3+ concurrent → smsExtra qty = used − 2 ($12.99/mo each).
  * - First 2 Twilio numbers ever are free (lifetime); after that, each new
- *   number costs $12 one-time even when under 2 concurrent.
- * - Adding a 3rd concurrent line → $12 one-time + $12/mo subscription seat.
+ *   number costs $12.99 one-time even when under 2 concurrent.
+ * - Adding a 3rd concurrent line → $12.99 one-time + $12.99/mo subscription seat.
  */
 function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
@@ -879,10 +879,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const isTeamPlan = plan === "studio" || plan === "shop";
   // Twilio provision is free only while lifetime free allotment remains.
   const nextIsFree = !atMax && lifetime < freeIncluded;
-  // 3rd+ concurrent line adds a recurring smsExtra seat (+ $12 one-time at purchase).
+  // 3rd+ concurrent line adds a recurring smsExtra seat (+ $12.99 one-time at purchase).
   const needsMonthlyExtraForNext =
     !atMax && isTeamPlan && used >= freeIncluded;
-  // Lifetime exhausted but still under concurrent free cap — $12 one-time only.
+  // Lifetime exhausted but still under concurrent free cap — $12.99 one-time only.
   const needsOneTimePurchaseForNext =
     !atMax && !nextIsFree && !needsMonthlyExtraForNext;
   const needsPurchaseForNext =
@@ -890,7 +890,7 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
-  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12 replacement only (max 1).
+  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12.99 replacement only (max 1).
   const canPurchaseExtra = isTeamPlan && !atMax && needsPurchaseForNext;
   const canPurchaseSoloReplacement =
     (plan === "solo" || plan === "charter") && needsPurchaseForNext;
@@ -917,10 +917,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     canProvisionNext,
     canPurchaseExtra,
     canPurchaseSoloReplacement,
-    extraMonthlyPriceCents: 1200,
-    extraMonthlyPriceLabel: "$12/mo",
-    extraOneTimeReplacementCents: 1200,
-    extraOneTimeReplacementLabel: "$12",
+    extraMonthlyPriceCents: 1299,
+    extraMonthlyPriceLabel: "$12.99/mo",
+    extraOneTimeReplacementCents: 1299,
+    extraOneTimeReplacementLabel: "$12.99",
   };
 }
 
@@ -952,18 +952,18 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
     if (summary.plan === "solo" || summary.plan === "charter") {
       return (
         "You've used your included texting number. " +
-        "Getting another costs a $12 fee (not monthly)."
+        "Getting another costs a $12.99 fee (not monthly)."
       );
     }
     if (summary.needsOneTimePurchaseForNext) {
       return (
         "You've used your included texting numbers. " +
-        "Getting another costs a $12 fee (not added to your monthly subscription while you have 2 or fewer lines)."
+        "Getting another costs a $12.99 fee (not added to your monthly subscription while you have 2 or fewer lines)."
       );
     }
     return (
       "You've used your included texting numbers. " +
-      "Add another number for $12 now plus $12/mo under Account → Plan & billing on getbookking.com."
+      "Add another number for $12.99 now plus $12.99/mo under Account → Plan & billing on getbookking.com."
     );
   }
   return null;

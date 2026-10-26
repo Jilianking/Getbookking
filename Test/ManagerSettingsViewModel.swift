@@ -58,7 +58,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// A 3rd+ number bills monthly, which the one-time App Store purchase can't do; it's added in billing.
     @Published var showMonthlyNumberBillingPrompt = false
     static let monthlyNumberBillingMessage =
-        "Additional numbers are $12 today and $12 a month. Add them in billing."
+        "Additional numbers are $12.99 today and $12.99 a month. Add them in billing."
     @Published var restorePurchasesMessage: String?
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
@@ -83,8 +83,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsCanAddWithoutPurchase: Bool = true
     @Published var smsCanPurchaseExtra: Bool = false
     @Published var smsCanPurchaseSoloReplacement: Bool = false
-    @Published var smsExtraMonthlyPriceLabel: String = "$12/mo"
-    @Published var smsExtraOneTimeReplacementLabel: String = "$12"
+    @Published var smsExtraMonthlyPriceLabel: String = "$12.99/mo"
+    @Published var smsExtraOneTimeReplacementLabel: String = "$12.99"
     @Published var smsNextLineIsFree: Bool = true
     /// Lifetime Twilio number acquisitions (free allotment Solo 1 · Studio/Shop 2).
     @Published var smsLifetimeNumbersBought: Int = 0
@@ -112,17 +112,17 @@ final class ManagerSettingsViewModel: ObservableObject {
         return smsNeedsPurchaseForNextLine
     }
 
-    /// Solo only: one-time $12 to get another number after the included lifetime get (not monthly).
+    /// Solo only: one-time $12.99 to get another number after the included lifetime get (not monthly).
     var smsMustPaySoloReplacementFee: Bool {
         tenantSubscriptionPlan == .solo && smsMustChargeForNextLine && !smsAtMaxLines
     }
 
-    /// 3rd+ concurrent line: $12 now + recurring smsExtra on subscription.
+    /// 3rd+ concurrent line: $12.99 now + recurring smsExtra on subscription.
     var smsMustChargeMonthlyForNextLine: Bool {
         smsNeedsMonthlyExtraForNextLine
     }
 
-    /// Under 2 concurrent lines but lifetime free allotment used: $12 one-time only.
+    /// Under 2 concurrent lines but lifetime free allotment used: $12.99 one-time only.
     var smsMustChargeOneTimeForNextLine: Bool {
         smsNeedsOneTimePurchaseForNextLine || smsMustPaySoloReplacementFee
     }
@@ -347,8 +347,12 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
             smsCanPurchaseSoloReplacement = data["smsCanPurchaseSoloReplacement"] as? Bool
                 ?? (tenantSubscriptionPlan == .solo && smsNeedsPurchaseForNextLine)
-            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$12/mo"
-            smsExtraOneTimeReplacementLabel = (data["smsExtraOneTimeReplacementLabel"] as? String) ?? "$12"
+            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$12.99/mo"
+            smsExtraOneTimeReplacementLabel = (data["smsExtraOneTimeReplacementLabel"] as? String) ?? "$12.99"
+            // The one-time number is bought through Apple; show exactly what Apple's sheet will charge.
+            if let applePrice = BookkingSubscriptionStore.shared.smsExtraDisplayPrice {
+                smsExtraOneTimeReplacementLabel = applePrice
+            }
             smsNextLineIsFree = data["smsNextLineIsFree"] as? Bool ?? (smsLinesUsed < smsFreeIncluded)
             smsLifetimeNumbersBought = (data["smsLifetimeNumbersBought"] as? Int) ?? 0
             smsRefreshNeedsPurchase = data["smsRefreshNeedsPurchase"] as? Bool
@@ -790,7 +794,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         }
     }
 
-    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $12 after lifetime free allotment.
+    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $12.99 after lifetime free allotment.
     @discardableResult
     func refreshSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
         guard isTenantOwner else { return false }

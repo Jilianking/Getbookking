@@ -538,8 +538,8 @@ struct TeamClientMessagingSettingsView: View {
         } footer: {
             Text(
                 viewModel.tenantSubscriptionPlan == .solo
-                    ? "Solo includes 1 texting number. After you remove it, getting another costs $12 (not monthly)."
-                    : "Includes 2 numbers with no $12/mo extra while 2 or fewer are active. A 3rd line is $12 now + $12/mo. After your 2 free lifetime numbers, replacing a line costs $12 one-time until you exceed 2 concurrent lines."
+                    ? "Solo includes 1 texting number. After you remove it, getting another costs $12.99 (not monthly)."
+                    : "Includes 2 numbers with no $12.99/mo extra while 2 or fewer are active. A 3rd line is $12.99 now + $12.99/mo. After your 2 free lifetime numbers, replacing a line costs $12.99 one-time until you exceed 2 concurrent lines."
             )
             .font(.caption2)
         }
@@ -715,7 +715,7 @@ struct TeamClientMessagingSettingsView: View {
                     } footer: {
                         Text(
                             viewModel.tenantSubscriptionPlan == .solo
-                                ? "Releases the number from Twilio. Your included number is used. Getting another later costs $12 (not monthly)."
+                                ? "Releases the number from Twilio. Your included number is used. Getting another later costs $12.99 (not monthly)."
                                 : "Releases the number from Twilio. The person keeps their Bookking login; they can get a new number later if capacity allows."
                         )
                         .font(.caption2)

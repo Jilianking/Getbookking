@@ -2,7 +2,7 @@
 //  MemberPersonalSmsView.swift
 //
 //  Independent members: Request phone number → free capacity provisions;
-//  paid capacity queues a request for the owner ($12 one-time or $12/mo for 3rd+ line).
+//  paid capacity queues a request for the owner ($12.99 one-time or $12.99/mo for 3rd+ line).
 //
 
 import SwiftUI

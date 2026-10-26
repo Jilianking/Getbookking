@@ -1,12 +1,15 @@
 //
 //  CreateAccountView.swift
 //
-//  In-app account creation. Same questions as getbookking.com/signup.
-//  Create my account opens Apple’s payment sheet.
+//  In-app sign-up. Plans and prices come first (App Review needs them up front): the owner
+//  picks a plan and either a free trial or paying now, Apple's sheet confirms it, then we
+//  collect the business and the login. The purchase is tied to a guest login made just before
+//  Apple's sheet; the last step turns that guest login into an email-and-password one.
 //
 
 import SwiftUI
 import UIKit
+import StoreKit
 import FirebaseAuth
 import FirebaseFunctions
 
@@ -15,9 +18,10 @@ struct CreateAccountView: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
     @StateObject private var store = BookkingSubscriptionStore.shared
 
-    /// Finishing a sign-up for a login that already exists: no email or password to collect.
+    /// Finishing a sign-up after the app was closed partway (the plan may already be paid).
     var isResuming = false
 
+    /// 0 = choose a plan, 1 = the business, 2 = the login.
     @State private var step = 0
     @State private var isCharterPath = false
     @State private var industry = ""
@@ -33,10 +37,13 @@ struct CreateAccountView: View {
     @State private var passwordConfirm = ""
     @State private var showPassword = false
     @State private var showPasswordConfirm = false
-    @State private var plan: SubscriptionPlan?
+    @State private var plan: SubscriptionPlan? = .solo
+    @State private var purchaseRecord: BookkingPurchaseRecord?
     @State private var agreeTerms = false
     @State private var isWorking = false
+    @State private var isPreparing = false
     @State private var errorMessage = ""
+    @State private var infoMessage = ""
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
@@ -52,21 +59,39 @@ struct CreateAccountView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Step \(step + 1) of 4")
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
+                    if step > 0 {
+                        if let purchaseRecord {
+                            purchaseBanner(purchaseRecord)
+                        }
+                        Text("Step \(step) of 2")
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
                     Text(stepTitle)
-                        .font(AppDesign.screenHeaderFont(size: 26))
+                        .font(AppDesign.screenHeaderFont(size: step == 0 ? 30 : 26))
                         .foregroundStyle(AppDesign.textPrimary)
                     Text(stepSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(AppDesign.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    stepContent
+                    if isPreparing {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                    } else {
+                        stepContent
+                    }
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(Color(hex: "C0392B"))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !infoMessage.isEmpty {
+                        Text(infoMessage)
+                            .font(.caption)
+                            .foregroundStyle(AppDesign.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(24)
@@ -81,95 +106,120 @@ struct CreateAccountView: View {
                 }
             }
             .interactiveDismissDisabled(isWorking || authViewModel.isCreatingAccount)
-            .task {
-                await store.loadProducts()
-                await store.refreshTrialEligibility()
-            }
+            .task { await prepare() }
         }
+    }
+
+    /// Loads Apple's prices; when resuming, skips the plan screen if this login already paid.
+    private func prepare() async {
+        isPreparing = isResuming
+        await store.loadProducts()
+        await store.refreshTrialEligibility()
+        if isResuming, Auth.auth().currentUser != nil, let existing = await store.existingSubscriptionRecord() {
+            usePurchase(existing)
+        }
+        isPreparing = false
     }
 
     @ViewBuilder
     private var stepContent: some View {
         switch step {
         case 0:
-            pathStep
+            planStep
         case 1:
             businessStep
-        case 2:
-            youStep
         default:
-            planStep
+            accountStep
         }
     }
 
     private var stepTitle: String {
         switch step {
-        case 0: return "What kind of business?"
+        case 0: return "Choose your plan"
         case 1: return "Tell us about your business"
-        case 2: return "Tell us about you"
-        default: return "Choose your plan"
+        default: return needsLoginFields ? "Create your login" : "Tell us about you"
         }
     }
 
     private var stepSubtitle: String {
         switch step {
         case 0:
-            return "Choose a path first. We’ll tailor signup, your site, and billing from this."
-        case 1:
-            return "We’ll tailor your booking form, services, and site from this. All editable after signup."
-        case 2:
-            return "Your name and phone appear on your profile and booking site."
-        default:
             return store.isEligibleForFreeTrial
-                ? "14 days free. Nothing is charged today. Apple’s sheet confirms the plan, and texting stays off until Apple charges."
-                : "Your plan starts today."
+                ? "Try it free for 14 days, or skip the trial and get every feature today."
+                : "Pick the plan that fits your business. Every feature starts today."
+        case 1:
+            return "We’ll set up your booking page, services and site from this. You can change everything later."
+        default:
+            return needsLoginFields
+                ? "You’ll use this to sign in to the app and the web, and we send receipts here. Your name and phone show on your booking page."
+                : "Your name and phone show on your profile and booking page."
         }
     }
 
-    private var pathStep: some View {
-        VStack(spacing: 12) {
-            pathButton(
-                title: "Studios and Shops",
-                subtitle: "Barbers, salons, tattoo, nails, and more · Solo, Studio, or Shop",
-                charter: false
-            )
-            pathButton(
-                title: "Fishing Charters",
-                subtitle: "Fishing charters, guides, and boat rentals · Trip booking, guest texting, and your site",
-                charter: true
-            )
-        }
+    /// A guest login (made just before Apple's sheet) still needs an email and password.
+    private var needsLoginFields: Bool {
+        guard let user = Auth.auth().currentUser else { return true }
+        return user.isAnonymous
     }
 
-    private func pathButton(title: String, subtitle: String, charter: Bool) -> some View {
-        Button {
-            isCharterPath = charter
-            if charter {
-                industry = BookingTemplate.charters.rawValue
-                customIndustry = ""
-                plan = .charter
-            } else {
-                if plan == .charter { plan = nil }
-                if industry == BookingTemplate.charters.rawValue { industry = "" }
-            }
-            errorMessage = ""
-            step = 1
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.body.weight(.medium))
+    private var selectedPlan: SubscriptionPlan {
+        if isCharterPath { return .charter }
+        if let plan, plan != .charter { return plan }
+        return .solo
+    }
+
+    // MARK: - Step 0: plans and prices
+
+    private var planStep: some View {
+        PlanChooserView(
+            store: store,
+            isCharterPath: $isCharterPath,
+            plan: $plan,
+            showsPathPicker: true,
+            isWorking: isWorking,
+            onPathChange: { charter in
+                if charter {
+                    industry = BookingTemplate.charters.rawValue
+                    customIndustry = ""
+                } else if industry == BookingTemplate.charters.rawValue {
+                    industry = ""
+                }
+                errorMessage = ""
+                infoMessage = ""
+            },
+            onPurchase: { chosen, payNow in
+                plan = chosen
+                Task { await startPlan(payNow: payNow) }
+            },
+            onRestore: { Task { await restore() } },
+            onLogin: isResuming ? nil : { closeSignup() }
+        )
+    }
+
+    private func purchaseBanner(_ record: BookkingPurchaseRecord) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "checkmark.circle")
+                .font(.title3)
+                .foregroundStyle(AppDesign.accentGreen)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.isIntroductory ? "Your 14-day free trial has started" : "You’re subscribed — every feature is on")
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppDesign.textPrimary)
-                Text(subtitle)
+                Text(record.isIntroductory
+                     ? "Nothing is charged today. Client texting and payments unlock when your paid plan starts."
+                     : "Client texting and payments are ready as soon as you finish setting up.")
                     .font(.caption)
                     .foregroundStyle(AppDesign.textSecondary)
-                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-            .signupChoiceChrome(selected: false)
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppDesign.accentGreen.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
+
+    // MARK: - Step 1: business
 
     private var businessStep: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -238,7 +288,7 @@ struct CreateAccountView: View {
                 )
                 stateField
             }
-            navRow(back: { step = 0 }, canContinue: businessStepValid) {
+            navRow(back: { step = 0 }, showBack: purchaseRecord == nil, canContinue: businessStepValid) {
                 businessName = USStateServiceAreaFormatting.titleCaseWords(businessName)
                 city = USStateServiceAreaFormatting.titleCaseWords(city)
                 customIndustry = USStateServiceAreaFormatting.titleCaseWords(customIndustry)
@@ -285,20 +335,16 @@ struct CreateAccountView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var youStep: some View {
+    // MARK: - Step 2: you and the login
+
+    private var accountStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            field("First name", text: $firstName, placeholder: "Brandon", contentType: .givenName)
-            field("Last name", text: $lastName, placeholder: "Smith", contentType: .familyName)
-            if !isResuming {
-            VStack(alignment: .leading, spacing: 6) {
-                field("Email", text: $email, placeholder: "you@example.com", keyboard: .emailAddress, contentType: .emailAddress)
-                Text("Used to sign in to the app and web, and for receipts.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.brandMuted)
-            }
+            HStack(alignment: .top, spacing: 12) {
+                field("First name", text: $firstName, placeholder: "Brandon", contentType: .givenName)
+                field("Last name", text: $lastName, placeholder: "Smith", contentType: .familyName)
             }
             field(
-                "Phone number",
+                "Mobile phone",
                 text: Binding(
                     get: { phone },
                     set: { phone = PhoneFormatting.formatAsYouType($0) }
@@ -307,63 +353,23 @@ struct CreateAccountView: View {
                 keyboard: .phonePad,
                 contentType: .telephoneNumber
             )
-            if !isResuming {
-            passwordField("Password", placeholder: "8+ characters", text: $password, revealed: $showPassword)
-            VStack(alignment: .leading, spacing: 6) {
-                passwordField("Confirm password", placeholder: "Re-enter password", text: $passwordConfirm, revealed: $showPasswordConfirm)
-                if !passwordConfirm.isEmpty && passwordConfirm != password {
-                    Text("Passwords do not match.")
-                        .font(.caption)
-                        .foregroundStyle(Color(hex: "C0392B"))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    passwordRule("At least 8 characters", met: password.count >= 8)
-                    passwordRule("One uppercase letter", met: password.range(of: "[A-Z]", options: .regularExpression) != nil)
-                    passwordRule("One lowercase letter", met: password.range(of: "[a-z]", options: .regularExpression) != nil)
-                    passwordRule("One number", met: password.range(of: "[0-9]", options: .regularExpression) != nil)
-                }
-                Text("Symbols (!@#…) are optional — add one if you like.")
-                    .font(.caption)
-                    .foregroundStyle(AppDesign.brandMuted)
-            }
-            }
-            navRow(back: { step = 1 }, canContinue: youStepValid) {
-                firstName = USStateServiceAreaFormatting.titleCaseWords(firstName)
-                lastName = USStateServiceAreaFormatting.titleCaseWords(lastName)
-                errorMessage = ""
-                step = 3
-            }
-        }
-    }
-
-    private var planStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if isCharterPath {
-                planCard(plan: .charter, selected: true) {}
-            } else {
-                ForEach([SubscriptionPlan.solo, .studio, .shop], id: \.self) { choice in
-                    planCard(plan: choice, selected: plan == choice) {
-                        plan = choice
-                        errorMessage = ""
+            if needsLoginFields {
+                field("Email", text: $email, placeholder: "you@yourshop.com", keyboard: .emailAddress, contentType: .emailAddress)
+                passwordField("Password", placeholder: "8+ characters", text: $password, revealed: $showPassword)
+                VStack(alignment: .leading, spacing: 6) {
+                    passwordField("Confirm password", placeholder: "Re-enter password", text: $passwordConfirm, revealed: $showPasswordConfirm)
+                    if !passwordConfirm.isEmpty && passwordConfirm != password {
+                        Text("Passwords do not match.")
+                            .font(.caption)
+                            .foregroundStyle(Color(hex: "C0392B"))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        passwordRule("At least 8 characters", met: password.count >= 8)
+                        passwordRule("One uppercase letter", met: password.range(of: "[A-Z]", options: .regularExpression) != nil)
+                        passwordRule("One lowercase letter", met: password.range(of: "[a-z]", options: .regularExpression) != nil)
+                        passwordRule("One number", met: password.range(of: "[0-9]", options: .regularExpression) != nil)
                     }
                 }
-            }
-            if let plan {
-                Text(store.isEligibleForFreeTrial
-                     ? "\(plan.displayName) plan — \(store.displayPrice(for: plan))/month when the 14 days end."
-                     : "\(plan.displayName) plan — \(store.displayPrice(for: plan))/month, starting today.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppDesign.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                if store.isEligibleForFreeTrial {
-                    bullet("Your 14-day trial starts today. Nothing is charged today.")
-                    bullet("Apple charges this plan when the 14 days end.")
-                } else {
-                    bullet("Apple charges this plan today.")
-                }
-                bullet("Renews automatically each month until you cancel in your Apple account settings.")
             }
             HStack(alignment: .top, spacing: 10) {
                 Button {
@@ -380,45 +386,26 @@ struct CreateAccountView: View {
                     .foregroundStyle(AppDesign.textSecondary)
                     .tint(AppDesign.brandWarm)
             }
+            navRow(back: { step = 1 }, continueTitle: "Finish setting up", canContinue: accountStepValid && !isWorking) {
+                firstName = USStateServiceAreaFormatting.titleCaseWords(firstName)
+                lastName = USStateServiceAreaFormatting.titleCaseWords(lastName)
+                Task { await finish() }
+            }
+            if isWorking {
+                ProgressView("Setting up your business…")
+                    .frame(maxWidth: .infinity)
+            }
+            Text("Your plan is already active with Apple. If you close the app now, you’ll come back to this step next time.")
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
             Text(.init("Questions? [support@getbookking.com](mailto:support@getbookking.com)"))
                 .font(.caption)
                 .foregroundStyle(AppDesign.textSecondary)
                 .tint(AppDesign.brandWarm)
-            navRow(back: { step = 2 }, continueTitle: "Create my account", canContinue: planStepValid && !isWorking) {
-                Task { await finish() }
-            }
-            if isWorking {
-                ProgressView("Starting your plan…")
-                    .frame(maxWidth: .infinity)
-            }
+                .frame(maxWidth: .infinity)
         }
-    }
-
-    private func planCard(plan choice: SubscriptionPlan, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(choice.displayName)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(AppDesign.textPrimary)
-                    Text(choice.shortDescription)
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
-                }
-                Spacer(minLength: 8)
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(store.displayPrice(for: choice))
-                        .font(AppDesign.screenHeaderFont(size: 22))
-                        .foregroundStyle(AppDesign.textPrimary)
-                    Text("/mo")
-                        .font(.caption)
-                        .foregroundStyle(AppDesign.textSecondary)
-                }
-            }
-            .padding(16)
-            .signupChoiceChrome(selected: selected)
-        }
-        .buttonStyle(.plain)
     }
 
     private func bullet(_ text: String) -> some View {
@@ -442,8 +429,9 @@ struct CreateAccountView: View {
         .font(.caption)
     }
 
-    private func navRow(back: @escaping () -> Void, continueTitle: String = "Continue", canContinue: Bool, next: @escaping () -> Void) -> some View {
+    private func navRow(back: @escaping () -> Void, showBack: Bool = true, continueTitle: String = "Continue", canContinue: Bool, next: @escaping () -> Void) -> some View {
         HStack(spacing: 12) {
+            if showBack {
             Button("Back", action: back)
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
@@ -454,6 +442,7 @@ struct CreateAccountView: View {
                         .stroke(AppDesign.chipBorder, lineWidth: 1)
                 )
                 .disabled(isWorking)
+            }
             Button(continueTitle, action: next)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppDesign.brandCream)
@@ -482,7 +471,13 @@ struct CreateAccountView: View {
             && stateAbbr.count == 2
     }
 
-    private var youStepValid: Bool {
+    private var accountStepValid: Bool {
+        let digits = phone.filter(\.isNumber).count
+        let namesOk = !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && digits >= 10
+            && agreeTerms
+        guard needsLoginFields else { return namesOk }
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let at = trimmedEmail.firstIndex(of: "@")
         let emailOk: Bool = {
@@ -491,17 +486,8 @@ struct CreateAccountView: View {
                 && trimmedEmail.lastIndex(of: "@") == at
                 && trimmedEmail.index(after: at) != trimmedEmail.endIndex
         }()
-        let digits = phone.filter(\.isNumber).count
-        if isResuming {
-            // The login already exists, so there is no email or password to check.
-            return !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && digits >= 10
-        }
-        return !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return namesOk
             && emailOk
-            && digits >= 10
             && passwordMeetsPolicy
             && !passwordConfirm.isEmpty
             && password == passwordConfirm
@@ -512,10 +498,6 @@ struct CreateAccountView: View {
             && password.range(of: "[A-Z]", options: .regularExpression) != nil
             && password.range(of: "[a-z]", options: .regularExpression) != nil
             && password.range(of: "[0-9]", options: .regularExpression) != nil
-    }
-
-    private var planStepValid: Bool {
-        agreeTerms && plan != nil
     }
 
     private func field(
@@ -583,26 +565,97 @@ struct CreateAccountView: View {
         dismiss()
     }
 
+    private func usePurchase(_ record: BookkingPurchaseRecord) {
+        purchaseRecord = record
+        if let bought = BookkingProductID.plan(for: record.productID) {
+            plan = bought
+            isCharterPath = bought == .charter
+            if isCharterPath {
+                industry = BookingTemplate.charters.rawValue
+                customIndustry = ""
+            }
+        }
+        step = 1
+    }
+
+    /// Apple's sheet for the chosen plan, with or without the free trial. A guest login is made
+    /// first so the purchase belongs to this sign-up; the last step adds the email and password.
+    private func startPlan(payNow: Bool) async {
+        let chosen = selectedPlan
+        isWorking = true
+        errorMessage = ""
+        infoMessage = ""
+        authViewModel.isCreatingAccount = true
+        do {
+            if Auth.auth().currentUser == nil {
+                _ = try await Auth.auth().signInAnonymously()
+            }
+            // A plan this login already bought (the sheet closed after paying) is used as is,
+            // so nobody is charged twice.
+            if let existing = await store.existingSubscriptionRecord() {
+                usePurchase(existing)
+            } else {
+                usePurchase(try await store.purchaseSubscription(plan: chosen, payNow: payNow))
+            }
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error {
+                errorMessage = ""
+            } else if case .productUnavailable = error {
+                errorMessage = "The App Store plan didn’t load. Check your connection and try again."
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isWorking = false
+    }
+
+    /// Restore purchases from the plan screen. A plan bought during this sign-up continues it;
+    /// a plan bought for another account means logging in to that account instead.
+    private func restore() async {
+        isWorking = true
+        errorMessage = ""
+        infoMessage = ""
+        defer { isWorking = false }
+        do {
+            try await AppStore.sync()
+        } catch StoreKitError.userCancelled {
+            return
+        } catch {
+            errorMessage = "Couldn’t reach the App Store. Check your connection and try again."
+            return
+        }
+        if Auth.auth().currentUser != nil, let existing = await store.existingSubscriptionRecord() {
+            usePurchase(existing)
+            return
+        }
+        infoMessage = await store.hasActiveSubscriptionOnThisAppleID()
+            ? "This Apple ID already has a Get Bookking plan. Log in with the account it belongs to."
+            : "No Get Bookking purchases were found for this Apple ID."
+    }
+
     private func finish() async {
-        guard let plan else { return }
+        guard let record = purchaseRecord else {
+            step = 0
+            return
+        }
+        let plan = BookkingProductID.plan(for: record.productID) ?? selectedPlan
         isWorking = true
         errorMessage = ""
         authViewModel.isCreatingAccount = true
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         do {
-            if Auth.auth().currentUser == nil {
+            if let user = Auth.auth().currentUser, user.isAnonymous {
+                // Same login (and so the same App Store purchase), now with an email and password.
+                let credential = EmailAuthProvider.credential(withEmail: trimmedEmail, password: password)
+                _ = try await user.link(with: credential)
+            } else if Auth.auth().currentUser == nil {
                 _ = try await Auth.auth().createUser(withEmail: trimmedEmail, password: password)
             }
-            // A plan this login already bought (sign-up interrupted after paying) is used as is,
-            // so nobody is shown the payment sheet twice.
-            let existing = await store.existingSubscriptionRecord()
-            let record: BookkingPurchaseRecord
-            if let existing {
-                record = existing
-            } else {
-                record = try await store.purchaseSubscription(plan: plan)
-            }
-            let plan = BookkingProductID.plan(for: record.productID) ?? plan
+            // The sign-up call reads the email from a fresh sign-in token.
+            _ = try await Auth.auth().currentUser?.getIDTokenResult(forcingRefresh: true)
+            authViewModel.currentUserEmail = Auth.auth().currentUser?.email
             let payload: [String: Any] = [
                 "plan": plan.rawValue,
                 "teamSize": plan == .shop ? "shop" : (plan == .studio ? "studio" : "solo"),
@@ -633,16 +686,17 @@ struct CreateAccountView: View {
             authViewModel.isCreatingAccount = false
             authViewModel.markSignupFinished()
             dismiss()
-        } catch let error as BookkingPurchaseError {
-            if case .cancelled = error {
-                errorMessage = ""
-            } else if case .productUnavailable = error {
-                errorMessage = "The App Store plan didn’t load. Stop the app, then in Xcode choose Product → Scheme → Edit Scheme → Run → Options, set StoreKit Configuration to GetBookking.storekit, and run again."
-            } else {
-                errorMessage = error.localizedDescription
-            }
         } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            let code = AuthErrorCode(rawValue: (error as NSError).code)
+            if code == .emailAlreadyInUse || code == .credentialAlreadyInUse {
+                errorMessage = "That email already has a Get Bookking account. Use a different email, or contact support@getbookking.com and we’ll move your plan over."
+            } else if code == .invalidEmail {
+                errorMessage = "That email address doesn’t look right."
+            } else if code == .weakPassword {
+                errorMessage = "Choose a stronger password."
+            } else {
+                errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            }
         }
         isWorking = false
     }

@@ -99,6 +99,7 @@ enum PlanBillingStatus {
         if billing.subscriptionPaid { return "Active" }
         if billing.subscriptionTrialing { return "Free trial" }
         let raw = billing.subscriptionStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if raw == "trialing" { return "Free trial" }
         if PlanStatus.hasEnded(raw) { return "Plan ended" }
         if raw == "past_due" || raw == "incomplete" { return "Payment issue" }
         if raw.isEmpty { return "No plan" }

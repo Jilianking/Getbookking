@@ -606,3 +606,31 @@
   .bill-plan-actions { flex-direction: column; }
   .bill-invoice-right { flex-wrap: wrap; justify-content: flex-end; }
 }
+
+/* Full-page wait while the Stripe billing page opens */
+.bill-portal-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: color-mix(in srgb, var(--brand-offwhite, #fdfaf6) 92%, transparent);
+  font-size: 15px;
+  color: var(--text-secondary, #6b5e4a);
+}
+
+.bill-portal-loading.hidden {
+  display: none;
+}
+
+.bill-portal-loading .spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border, #e8e0d4);
+  border-top-color: var(--brand-warm, #8b6f47);
+  border-radius: 50%;
+  animation: bill-checkout-spin 0.7s linear infinite;
+}

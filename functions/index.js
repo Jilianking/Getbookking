@@ -15458,6 +15458,58 @@ exports.deleteSmsThreads = functions.https.onCall(async (data, context) => {
   return { ok: true, deleted, skipped };
 });
 
+/**
+ * Who can act on an SMS conversation: personal-line threads stay with that teammate;
+ * studio threads need owner or manager. Same rules as sendClientSms.
+ */
+function assertCanUseSmsThread(ctx, uid, requestedThreadId, threadData) {
+  const isOwner = ctx.isOwner;
+  // Personal-line threads stay with that teammate — owners/managers cannot reply there.
+  if (sms.isLineScopedThreadId(requestedThreadId)) {
+    const assigned = ((threadData && threadData.assignedMemberUid) || "").toString().trim();
+    if (assigned) {
+      if (uid !== assigned) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This conversation belongs to another teammate's texting line."
+        );
+      }
+    } else {
+      const senderDigits = ((ctx.userData && ctx.userData.smsPhoneNumber) || "")
+        .toString()
+        .replace(/\D/g, "");
+      const lineDigits = requestedThreadId.split("_c")[0].replace(/^l/, "");
+      if (!senderDigits || senderDigits !== lineDigits) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This conversation belongs to another teammate's texting line."
+        );
+      }
+    }
+  } else if (threadData && !sms.isStudioSmsThread({ ...threadData, threadId: requestedThreadId })) {
+    const assigned = ((threadData.assignedMemberUid || "")).toString().trim();
+    if (uid !== assigned) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This conversation belongs to another teammate's texting line."
+      );
+    }
+  } else if (
+    !isOwner &&
+    ctx.accessRole !== "manager" &&
+    sms.memberPayoutMode(ctx.userData) === "independent" &&
+    (ctx.userData.smsStatus || "") === "active" &&
+    (ctx.userData.smsPhoneNumber || "").toString().trim()
+  ) {
+    // New compose from personal-line member — OK (routes to their number).
+  } else if (!isOwner && ctx.accessRole !== "manager") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to send on the studio texting line."
+    );
+  }
+}
+
 exports.sendClientSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {
@@ -15524,50 +15576,7 @@ exports.sendClientSms = functions
       }
     }
 
-    // Personal-line threads stay with that teammate — owners/managers cannot reply there.
-    if (sms.isLineScopedThreadId(requestedThreadId)) {
-      const assigned = ((threadData && threadData.assignedMemberUid) || "").toString().trim();
-      if (assigned) {
-        if (context.auth.uid !== assigned) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "This conversation belongs to another teammate's texting line."
-          );
-        }
-      } else {
-        const senderDigits = ((ctx.userData && ctx.userData.smsPhoneNumber) || "")
-          .toString()
-          .replace(/\D/g, "");
-        const lineDigits = requestedThreadId.split("_c")[0].replace(/^l/, "");
-        if (!senderDigits || senderDigits !== lineDigits) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "This conversation belongs to another teammate's texting line."
-          );
-        }
-      }
-    } else if (threadData && !sms.isStudioSmsThread({ ...threadData, threadId: requestedThreadId })) {
-      const assigned = ((threadData.assignedMemberUid || "")).toString().trim();
-      if (context.auth.uid !== assigned) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "This conversation belongs to another teammate's texting line."
-        );
-      }
-    } else if (
-      !isOwner &&
-      ctx.accessRole !== "manager" &&
-      sms.memberPayoutMode(ctx.userData) === "independent" &&
-      (ctx.userData.smsStatus || "") === "active" &&
-      (ctx.userData.smsPhoneNumber || "").toString().trim()
-    ) {
-      // New compose from personal-line member — OK (routes to their number).
-    } else if (!isOwner && ctx.accessRole !== "manager") {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "You do not have permission to send on the studio texting line."
-      );
-    }
+    assertCanUseSmsThread(ctx, context.auth.uid, requestedThreadId, threadData);
 
     try {
       const sent = await sms.sendOutboundClientSms({
@@ -15606,6 +15615,183 @@ exports.sendClientSms = functions
       }
       throw new functions.https.HttpsError("failed-precondition", msg);
     }
+  });
+
+/** Load an SMS conversation the caller may use, plus the client's phone. */
+async function loadSmsThreadForCaller(context, data) {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (
+    !sms.canSendClientSms({
+      isOwner: ctx.isOwner,
+      accessRole: ctx.accessRole,
+      managerPermissions: ctx.managerPermissions,
+      senderUserData: ctx.userData,
+    })
+  ) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to send client texts."
+    );
+  }
+  const threadId = ((data && data.threadId) || "").toString().trim();
+  if (!threadId || threadId.includes("/")) {
+    throw new functions.https.HttpsError("invalid-argument", "Choose a conversation.");
+  }
+  const threadRef = db.collection("tenants").doc(ctx.tenantId).collection("smsThreads").doc(threadId);
+  const threadSnap = await threadRef.get();
+  if (!threadSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Conversation not found.");
+  }
+  const threadData = threadSnap.data() || {};
+  assertCanUseSmsThread(ctx, context.auth.uid, threadId, threadData);
+  const clientPhone =
+    sms.toE164US(threadData.counterpartPhone) ||
+    sms.toE164US(threadId.includes("_c") ? threadId.split("_c").pop() : threadId) ||
+    "";
+  return { ctx, threadId, threadRef, threadData, clientPhone };
+}
+
+/** Texting consent for one conversation: drives the status line above the message box. */
+exports.getSmsConsentStatus = functions.https.onCall(async (data, context) => {
+  const { ctx, threadId, threadData, clientPhone } = await loadSmsThreadForCaller(context, data);
+  const status = await sms.smsConsentStatusForThread(ctx.tenantId, {
+    threadId,
+    clientPhone,
+    threadData,
+  });
+  return { ok: true, ...status };
+});
+
+/**
+ * Resend the "Reply YES" opt-in text. Only when the client texted first, never after STOP,
+ * and at most once every 24 hours per conversation.
+ */
+exports.resendSmsConsentPrompt = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    const { ctx, threadId, threadRef, threadData, clientPhone } =
+      await loadSmsThreadForCaller(context, data);
+    if (!clientPhone) {
+      throw new functions.https.HttpsError("failed-precondition", "This conversation has no phone number.");
+    }
+    const status = await sms.smsConsentStatusForThread(ctx.tenantId, {
+      threadId,
+      clientPhone,
+      threadData,
+    });
+    if (status.state === "opted_in") {
+      throw new functions.https.HttpsError("failed-precondition", "This client is already opted in.");
+    }
+    if (status.state === "opted_out") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This client replied STOP. They can opt back in by texting YES or START."
+      );
+    }
+    if (status.state !== "waiting") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The client needs to text you first, or opt in when booking."
+      );
+    }
+    if (status.canResendAtMs) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The opt-in text was sent in the last 24 hours. Try again tomorrow."
+      );
+    }
+
+    const tenant = ctx.tenant || {};
+    const businessName = (tenant.businessName || tenant.displayName || "us").toString();
+    try {
+      const sent = await sms.sendOutboundClientSms({
+        tenantId: ctx.tenantId,
+        tenant,
+        toE164: clientPhone,
+        body: sms.inboundConsentPromptBody(businessName),
+        meta: {
+          threadId,
+          threadData,
+          clientName: (threadData.clientName || "").toString(),
+          consentPrompt: true,
+        },
+        ownerUserData: ctx.ownerUserData || ctx.userData,
+        senderUid: context.auth.uid,
+        senderUserData: ctx.userData,
+        isOwner: ctx.isOwner,
+        accessRole: ctx.accessRole,
+        managerPermissions: ctx.managerPermissions,
+      });
+      await threadRef.set(
+        { smsConsentPromptSentAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+      return { ok: true, sid: sent.msg.sid };
+    } catch (e) {
+      const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
+      if (msg.includes("Monthly SMS limit reached")) {
+        throw new functions.https.HttpsError("resource-exhausted", msg);
+      }
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+  });
+
+/** Twilio delivery updates: marks texts that never reached the client as not delivered. */
+exports.twilioSmsStatus = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    const tenantId = ((req.query && req.query.t) || "").toString().trim();
+    const authToken = (sms.twilioAuthToken.value() || "").toString().trim();
+    const sig = (req.headers["x-twilio-signature"] || "").toString().trim();
+    const url = sms.statusCallbackUrl(tenantId);
+    const params = req.body || {};
+    if (!tenantId || tenantId.includes("/") || !authToken || !sig || !url) {
+      res.status(403).send("Forbidden");
+      return;
+    }
+    // eslint-disable-next-line global-require
+    const twilio = require("twilio");
+    if (!twilio.validateRequest(authToken, sig, url, params)) {
+      console.warn("twilioSmsStatus: invalid signature");
+      res.status(403).send("Forbidden");
+      return;
+    }
+    const messageSid = (params.MessageSid || params.SmsSid || "").toString().trim();
+    const status = (params.MessageStatus || params.SmsStatus || "").toString().trim().toLowerCase();
+    if (!messageSid || messageSid.includes("/") || !status) {
+      res.status(200).send("");
+      return;
+    }
+    const patch = {
+      status,
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const errorCode = (params.ErrorCode || "").toString().trim();
+    if (errorCode) patch.errorCode = errorCode;
+    try {
+      await db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsLog")
+        .doc(messageSid)
+        .update(patch);
+    } catch (e) {
+      // Not one of ours (or already deleted): nothing to update.
+      if (!(e && (e.code === 5 || String(e.message || "").includes("NOT_FOUND")))) {
+        console.warn("twilioSmsStatus", tenantId, messageSid, e.message || e);
+      }
+    }
+    if (status === "failed" || status === "undelivered") {
+      console.warn("twilioSmsStatus: not delivered", tenantId, messageSid, errorCode);
+    }
+    res.status(200).send("");
   });
 
 /**
@@ -16204,6 +16390,7 @@ exports.twilioInboundSms = functions
           .set(
             {
               smsOptedIn: false,
+              smsOptedOutAt: admin.firestore.FieldValue.serverTimestamp(),
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true }
@@ -16216,13 +16403,38 @@ exports.twilioInboundSms = functions
         lineScope: smsLineScope,
         memberUid: assignedMemberUid,
       });
-      res
-        .type("text/xml")
-        .send(
-          sms.twimlMessage(
-            "You have been unsubscribed. Reply YES or START to opt back in for appointment texts."
-          )
-        );
+      // Show the STOP and the unsubscribe reply in the conversation, so the app
+      // picks up the change and turns off the message box right away.
+      const stopThreadId = sms.lineScopedThreadId({
+        linePhone: to,
+        clientPhone: from,
+        lineScope: smsLineScope,
+        memberUid: assignedMemberUid,
+      });
+      const unsubscribed =
+        "You have been unsubscribed. Reply YES or START to opt back in for appointment texts.";
+      try {
+        await sms.recordInboundTenantSms(tenantId, {
+          from,
+          to,
+          body: rawBody,
+          mediaUrls: [],
+          threadId: stopThreadId,
+          assignedMemberUid,
+          smsLineScope,
+        });
+        await sms.recordSystemOutboundSms(tenantId, {
+          from: to,
+          to: from,
+          body: unsubscribed,
+          threadId: stopThreadId,
+          assignedMemberUid,
+          smsLineScope,
+        });
+      } catch (e) {
+        console.warn("twilioInboundSms: STOP log", e.message || e);
+      }
+      res.type("text/xml").send(sms.twimlMessage(unsubscribed));
       return;
     }
 

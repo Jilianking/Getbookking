@@ -319,6 +319,13 @@ function inboundWebhookUrl() {
   return `https://us-central1-${project}.cloudfunctions.net/twilioInboundSms`;
 }
 
+/** Twilio posts delivery updates (sent, delivered, undelivered, failed) here. */
+function statusCallbackUrl(tenantId) {
+  const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+  if (!project || !tenantId) return "";
+  return `https://us-central1-${project}.cloudfunctions.net/twilioSmsStatus?t=${encodeURIComponent(tenantId)}`;
+}
+
 function threadIdFromPhone(phone) {
   const normalized = toE164US(phone);
   return normalized || (phone || "").toString().trim();
@@ -1228,7 +1235,8 @@ async function sendOutboundClientSms({
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
   }
-  if (!(await phoneHasSmsConsent(tenantId, toE164, meta))) {
+  const isConsentPrompt = !!(meta && meta.consentPrompt === true);
+  if (!isConsentPrompt && !(await phoneHasSmsConsent(tenantId, toE164, meta))) {
     throw new Error(
       "Recipient has not opted into appointment-related text messages."
     );
@@ -1267,6 +1275,10 @@ async function sendOutboundClientSms({
   if (mediaUrls.length) {
     createOpts.mediaUrl = mediaUrls;
   }
+  const statusUrl = statusCallbackUrl(tenantId);
+  if (statusUrl) {
+    createOpts.statusCallback = statusUrl;
+  }
   const msg = await master.messages.create(createOpts);
 
   const threadId =
@@ -1302,6 +1314,9 @@ async function sendOutboundClientSms({
     ...paymentMeta,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+  if (isConsentPrompt) {
+    logPayload.systemKind = "consent_resend";
+  }
   if (mediaUrls.length) {
     logPayload.mediaUrls = mediaUrls;
   }
@@ -1475,12 +1490,17 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   await consumeSmsMonthlySlot(tenantId, { memberUid: null });
 
   const messagingServiceSid = getMasterMessagingServiceSid();
-  const msg = await master.messages.create({
+  const bookingCreateOpts = {
     to: toE164,
     body: body.slice(0, 1600),
     messagingServiceSid,
     from,
-  });
+  };
+  const bookingStatusUrl = statusCallbackUrl(tenantId);
+  if (bookingStatusUrl) {
+    bookingCreateOpts.statusCallback = bookingStatusUrl;
+  }
+  const msg = await master.messages.create(bookingCreateOpts);
 
   const logRef = getDb()
     .collection("tenants")
@@ -2285,6 +2305,7 @@ async function grantInboundSmsConsent(tenantId, phone) {
       smsOptedIn: true,
       smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
       smsConsentSource: keepWebSource ? "web_booking" : "inbound_sms",
+      smsOptedOutAt: admin.firestore.FieldValue.delete(),
       source: existing.source || "inbound_sms",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       ...(snap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
@@ -2416,6 +2437,42 @@ async function maybeSendInboundConsentPrompt(tenantId, {
   return twimlMessage(prompt);
 }
 
+const CONSENT_RESEND_WAIT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Where a conversation stands on texting consent, for the app's status line.
+ * state: "opted_in" | "opted_out" | "waiting" (client texted, no YES yet) | "needs_opt_in" (client never texted)
+ */
+async function smsConsentStatusForThread(tenantId, { threadId, clientPhone, threadData }) {
+  const phone = toE164US(clientPhone) || (clientPhone || "").toString().trim();
+  if (!tenantId || !phone) return { state: "needs_opt_in" };
+  if (await isPhoneOptedOut(tenantId, phone)) return { state: "opted_out" };
+  if (await phoneHasSmsConsent(tenantId, phone)) return { state: "opted_in" };
+
+  let clientTexted = false;
+  if (threadId) {
+    const inbound = await getDb()
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("smsLog")
+      .where("threadId", "==", threadId)
+      .where("direction", "==", "inbound")
+      .limit(1)
+      .get();
+    clientTexted = !inbound.empty;
+  }
+  if (!clientTexted) return { state: "needs_opt_in" };
+
+  const sentAt = threadData && threadData.smsConsentPromptSentAt;
+  const sentMs = sentAt && typeof sentAt.toMillis === "function" ? sentAt.toMillis() : 0;
+  const nextMs = sentMs ? sentMs + CONSENT_RESEND_WAIT_MS : 0;
+  return {
+    state: "waiting",
+    promptSentAtMs: sentMs || null,
+    canResendAtMs: nextMs && nextMs > Date.now() ? nextMs : null,
+  };
+}
+
 module.exports = {
   twilioAccountSid,
   twilioAuthToken,
@@ -2447,6 +2504,8 @@ module.exports = {
   notifyInboundClientSms,
   grantInboundSmsConsent,
   maybeSendInboundConsentPrompt,
+  smsConsentStatusForThread,
+  statusCallbackUrl,
   isInboundConsentAffirmation,
   inboundConsentPromptBody,
   inboundResubscribePromptBody,

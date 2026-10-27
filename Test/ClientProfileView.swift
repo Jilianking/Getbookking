@@ -201,7 +201,7 @@ struct ClientProfileView: View {
 
     private var profileHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(viewModel.client.name)
+            Text(viewModel.client.displayName)
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -533,17 +533,21 @@ struct ClientProfileView: View {
         VStack(spacing: 14) {
             ProfileKeyValueRow(
                 label: "SMS opt-in",
-                value: viewModel.smsOptedIn ? "Opted in" : "Not opted in",
+                value: viewModel.smsOptedIn
+                    ? "Opted in"
+                    : (viewModel.smsOptedOut ? "Opted out (replied STOP)" : "Not opted in"),
                 showsStatusDot: true,
-                statusColor: viewModel.smsOptedIn ? AppDesign.accentGreen : .secondary
+                statusColor: viewModel.smsOptedIn
+                    ? AppDesign.accentGreen
+                    : (viewModel.smsOptedOut ? .red : .secondary)
             )
-            if let consentDate = viewModel.smsConsentDate {
+            if viewModel.smsOptedIn, let consentDate = viewModel.smsConsentDate {
                 ProfileKeyValueRow(
                     label: "Consent date",
                     value: consentDate.formatted(date: .abbreviated, time: .omitted)
                 )
             }
-            if let method = viewModel.smsConsentMethod {
+            if viewModel.smsOptedIn, let method = viewModel.smsConsentMethod {
                 ProfileKeyValueRow(label: "Method", value: method)
             }
         }

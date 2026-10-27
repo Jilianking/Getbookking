@@ -219,6 +219,32 @@ struct PaymentReceiptDetail: Equatable {
                 amountCents: serviceCents
             ),
         ]
+        // Trip and add-ons recorded separately (charter checkout): show them as their own lines.
+        if let serviceAmount = transaction.serviceAmount {
+            let tripCents = Int(round(serviceAmount * 100))
+            let addonCents = Int(round((transaction.addonsAmount ?? 0) * 100))
+            if tripCents + addonCents == serviceCents {
+                items = [
+                    PaymentReceiptLineItem(
+                        id: "service",
+                        name: transaction.serviceLabel ?? serviceLabel,
+                        quantity: 1,
+                        amountCents: tripCents
+                    ),
+                ]
+                if addonCents > 0 {
+                    let names = transaction.addonsLabel ?? ""
+                    items.append(
+                        PaymentReceiptLineItem(
+                            id: "addons",
+                            name: names.isEmpty ? "Add-ons" : "Add-ons: \(names)",
+                            quantity: 1,
+                            amountCents: addonCents
+                        )
+                    )
+                }
+            }
+        }
         let passThroughFee = cardProcessing + platformFee
         if passThroughFee > 0 {
             items.append(
@@ -232,6 +258,7 @@ struct PaymentReceiptDetail: Equatable {
         }
 
         let customerName: String? = {
+            if let name = transaction.clientName, !name.isEmpty { return name }
             let trimmed = (transaction.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed.lowercased() != "payment" else { return nil }
             return trimmed

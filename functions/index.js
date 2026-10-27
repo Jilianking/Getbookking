@@ -4046,9 +4046,19 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
   let attributedMemberUid = null;
   let transferMetaPurpose = null;
   let description = t.description || null;
+  let clientName = null;
+  let serviceLabel = null;
+  let serviceCents = null;
+  let addonsLabel = null;
+  let addonCents = null;
   const src = t.source;
   if (src && typeof src === "object") {
     const meta = src.metadata || {};
+    if (meta.customerName) clientName = String(meta.customerName).trim() || null;
+    if (meta.serviceLabel) serviceLabel = String(meta.serviceLabel).trim() || null;
+    if (meta.serviceCents) serviceCents = parseInt(meta.serviceCents, 10) || null;
+    if (meta.addonsLabel) addonsLabel = String(meta.addonsLabel).trim() || null;
+    if (meta.addonCents) addonCents = parseInt(meta.addonCents, 10) || null;
     if (meta.attributedMemberUid) {
       attributedMemberUid = String(meta.attributedMemberUid).trim() || null;
     }
@@ -4094,6 +4104,11 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
     isCredit: net > 0,
     created: t.created ?? 0,
     description,
+    clientName,
+    serviceLabel,
+    serviceCents,
+    addonsLabel,
+    addonCents,
     reportingCategory: t.reporting_category || null,
     sourceId,
     chargeId,
@@ -4661,7 +4676,32 @@ exports.getPaymentReceiptDetail = functions
       grossCents,
     });
 
-    const serviceLabel = serviceName || receiptServiceLabel(paymentKind);
+    // Charter checkouts record the trip and the add-ons separately; show them as their own lines.
+    const metaServiceCents = parseInt(meta.serviceCents, 10);
+    const metaAddonCents = parseInt(meta.addonCents, 10) || 0;
+    const metaServiceLabel = (meta.serviceLabel || "").toString().trim();
+    if (
+      metaServiceLabel &&
+      Number.isFinite(metaServiceCents) &&
+      metaServiceCents + metaAddonCents === serviceCents &&
+      lineItems.length
+    ) {
+      const split = [{ name: metaServiceLabel, quantity: 1, amountCents: metaServiceCents }];
+      if (metaAddonCents > 0) {
+        const addonsLabel = (meta.addonsLabel || "").toString().trim();
+        split.push({
+          name: addonsLabel ? `Add-ons: ${addonsLabel}` : "Add-ons",
+          quantity: 1,
+          amountCents: metaAddonCents,
+        });
+      }
+      lineItems.splice(0, 1, ...split);
+    }
+    if (!customerName && meta.customerName) {
+      customerName = String(meta.customerName).trim() || null;
+    }
+
+    const serviceLabel = metaServiceLabel || serviceName || receiptServiceLabel(paymentKind);
 
     return {
       businessName,
@@ -8032,10 +8072,18 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
     const depositRaw = Number(tenantData.workflow && tenantData.workflow.depositAmount);
     const depositCents =
       Number.isFinite(depositRaw) && depositRaw > 0 ? Math.round(depositRaw * 100) : 0;
-    const chargeCents =
-      payMode === "deposit"
-        ? Math.max(50, Math.min(depositCents || Math.round(tripTotalCents * 0.2), tripTotalCents || depositCents))
-        : tripTotalCents;
+    // Deposit mode: the deposit (never more than a priced trip) plus add-ons, paid today.
+    // The rest of the trip price is the balance due before departure. A trip with no price
+    // keeps the full deposit and has no balance shown (the captain sets it).
+    let depositPartCents = 0;
+    let balanceDueCents = 0;
+    let chargeCents = tripTotalCents;
+    if (payMode === "deposit") {
+      const configuredDeposit = depositCents || Math.round(tripCents * 0.2);
+      depositPartCents = tripCents > 0 ? Math.min(configuredDeposit, tripCents) : configuredDeposit;
+      balanceDueCents = tripCents > 0 ? tripCents - depositPartCents : 0;
+      chargeCents = depositPartCents + addonCents;
+    }
     if (chargeCents < 50) {
       throw new HttpsError(
         "failed-precondition",
@@ -8081,6 +8129,8 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       addonCents,
       addonItems,
       chargeCents,
+      depositPartCents,
+      balanceDueCents,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     bookingData.customerPhone = customerPhone;
@@ -8114,6 +8164,11 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       bookingRef,
     });
 
+    const tripName = (svc.name || data.serviceName || "Charter").toString().trim() || "Charter";
+    // The app shows the trip and the add-ons as separate lines on the payment.
+    const serviceLabel = payMode === "deposit" ? `${tripName} deposit` : tripName;
+    const serviceCents = payMode === "deposit" ? depositPartCents : tripCents;
+    const addonsLabel = addonItems.map((a) => a.name).filter(Boolean).join(", ").slice(0, 450);
     let pi;
     try {
       pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
@@ -8121,11 +8176,16 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
         currency: "usd",
         application_fee_amount: feeCents,
         receipt_email: customerEmail,
+        description: `${customerName} · ${serviceLabel}${addonCents > 0 ? " + add-ons" : ""}`,
         metadata: {
           tenantId,
           paymentKind,
           bookingRequestId: requestId,
           charterPayMode: payMode,
+          customerName,
+          serviceLabel,
+          serviceCents: String(serviceCents),
+          ...(addonCents > 0 ? { addonsLabel, addonCents: String(addonCents) } : {}),
           serviceAmountCents: String(chargeCents),
           feeBaseCents: String(chargeCents),
           surchargeCents: String(checkout.surchargeCents),
@@ -8185,6 +8245,8 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       addonCents,
       addonItems,
       chargeCents,
+      depositPartCents,
+      balanceDueCents,
       surchargeCents: checkout.surchargeCents,
       platformFeeCents: feeCents,
       totalCents: piAmount,

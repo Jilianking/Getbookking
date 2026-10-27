@@ -61,6 +61,11 @@ struct BusinessServicesSettingsView: View {
                                         Text(service.bladePriceCaption)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
+                                    } else if isCharter {
+                                        // Guests see "Price set by captain" and pay only the deposit.
+                                        Text("No price set")
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(AppDesign.brandWarm)
                                     }
                                     if isCharter, !service.boatIds.isEmpty {
                                         let names = service.boatIds.compactMap { id in

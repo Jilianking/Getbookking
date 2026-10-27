@@ -38,6 +38,15 @@ struct PaymentTransaction: Identifiable, Hashable {
     let sourcePaymentService: Double?
     /// Pass-through fee cents on the underlying payment (studio-share rows).
     let sourcePassThroughFee: Double?
+    /// The client's name, when the payment recorded it (web checkouts).
+    var clientName: String? = nil
+    /// What the payment was for, e.g. "Full-day charter deposit".
+    var serviceLabel: String? = nil
+    /// The service part of the payment, before add-ons and fees.
+    var serviceAmount: Double? = nil
+    /// Add-ons paid with it, e.g. "Bait, Gear", and their total.
+    var addonsLabel: String? = nil
+    var addonsAmount: Double? = nil
 
     /// Platform fee credits from partial/full refunds — not customer-facing activity.
     var isApplicationFeeRefundLine: Bool {
@@ -105,6 +114,7 @@ struct PaymentTransaction: Identifiable, Hashable {
         if type == "refund" || isCustomerRefundLine {
             return "Refund"
         }
+        if let clientName, !clientName.isEmpty { return clientName }
         let trimmed = (customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
         return channelLabel
@@ -243,8 +253,18 @@ struct PaymentTransaction: Identifiable, Hashable {
             attributedMemberUid: attributedMemberUid?.isEmpty == false ? attributedMemberUid : nil,
             sourcePaymentTotal: sourceGross.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
             sourcePaymentService: sourceService.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
-            sourcePassThroughFee: sourceSurcharge.flatMap { $0 > 0 ? Double($0) / 100.0 : nil }
+            sourcePassThroughFee: sourceSurcharge.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
+            clientName: Self.trimmedNonEmpty(t["clientName"]),
+            serviceLabel: Self.trimmedNonEmpty(t["serviceLabel"]),
+            serviceAmount: (t["serviceCents"] as? NSNumber).flatMap { $0.intValue > 0 ? Double($0.intValue) / 100 : nil },
+            addonsLabel: Self.trimmedNonEmpty(t["addonsLabel"]),
+            addonsAmount: (t["addonCents"] as? NSNumber).flatMap { $0.intValue > 0 ? Double($0.intValue) / 100 : nil }
         )
+    }
+
+    private static func trimmedNonEmpty(_ raw: Any?) -> String? {
+        let text = (raw as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 
     private static func relativeDateString(for date: Date) -> String {

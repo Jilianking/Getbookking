@@ -103,6 +103,15 @@
           ]
         },
         {
+          "source": "**/*.@(mp4|webm)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=604800"
+            }
+          ]
+        },
+        {
           "source": "**/*.@(js|css|png|jpg|jpeg|gif|ico|svg|webp|woff2)",
           "headers": [
             {

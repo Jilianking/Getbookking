@@ -202,12 +202,14 @@
             muted
             loop
             playsinline
-            preload="metadata"
+            preload="none"
+            poster="assets/tap-to-pay/iphone-to-iphone-1x1-poster.jpg"
+            data-lazy
             width="1080"
             height="1080"
             aria-label="Tap to Pay on iPhone — customer holds their iPhone near a merchant iPhone to pay. No additional hardware required."
           >
-            <source src="assets/tap-to-pay/iphone-to-iphone-1x1-us-en.mp4" type="video/mp4" />
+            <source data-src="assets/tap-to-pay/iphone-to-iphone-1x1-us-en.mp4" type="video/mp4" />
           </video>
         </figure>
       </div>
@@ -328,5 +330,6 @@
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
   <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

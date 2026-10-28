@@ -1270,10 +1270,12 @@ html { scroll-behavior: smooth; width: 100%; }
             muted
             loop
             playsinline
-            preload="metadata"
+            preload="none"
+            poster="assets/how-it-works-reel-poster.jpg"
+            data-lazy
             aria-label="Get Bookking app demo on iPhone"
           >
-            <source src="assets/how-it-works-reel.mp4?v=2" type="video/mp4" />
+            <source data-src="assets/how-it-works-reel.mp4?v=2" type="video/mp4" />
           </video>
         </div>
       </div>
@@ -1527,5 +1529,6 @@ html { scroll-behavior: smooth; width: 100%; }
       cards.forEach(function (card) { observer.observe(card); });
     })();
   </script>
+  <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

@@ -266,6 +266,9 @@ class FirebaseService: ObservableObject {
         let paymentUrl = (data["paymentUrl"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let mediaUrls = Self.parseMediaUrls(data["mediaUrls"])
+        let status = (data["status"] as? String ?? "").lowercased()
+        let systemKind = (data["systemKind"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
@@ -280,7 +283,9 @@ class FirebaseService: ObservableObject {
             paymentKind: paymentKind,
             amountCents: (amountCents ?? 0) > 0 ? amountCents : nil,
             paymentUrl: (paymentUrl?.isEmpty == false) ? paymentUrl : nil,
-            mediaUrls: mediaUrls
+            mediaUrls: mediaUrls,
+            deliveryFailed: direction == "outbound" && (status == "failed" || status == "undelivered"),
+            systemKind: (systemKind?.isEmpty == false) ? systemKind : nil
         )
     }
 
@@ -672,6 +677,7 @@ class FirebaseService: ObservableObject {
             smsOptedIn: data["smsOptedIn"] as? Bool,
             smsConsentAt: (data["smsConsentAt"] as? Timestamp)?.dateValue(),
             smsConsentSource: data["smsConsentSource"] as? String,
+            smsOptedOutAt: (data["smsOptedOutAt"] as? Timestamp)?.dateValue(),
             birthday: data["birthday"] as? String,
             referralSource: data["referralSource"] as? String,
             profileExtras: profileExtras

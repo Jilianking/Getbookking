@@ -6,7 +6,7 @@
  *   firebase functions:secrets:set SHIPPO_API_TOKEN
  *     (Shippo API token — use shippo_test_… while developing shop shipping)
  *   firebase functions:secrets:set STRIPE_SUBSCRIPTION_PRICE_IDS
- *     (JSON map solo/studio/shop/charter → price_… and optional smsExtra $12/mo add-on;
+ *     (JSON map solo/studio/shop/charter → price_… and optional smsExtra $12.99/mo add-on;
  *      copy from stripe-subscription-price-ids.example.json or Stripe Dashboard)
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *     ("Your account" webhook destination → https://us-central1-<PROJECT>.cloudfunctions.net/stripeSubscriptionWebhook)
@@ -257,7 +257,7 @@ function stripePriceIdForPlan(planNorm) {
   return id;
 }
 
-/** Optional $12/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
+/** Optional $12.99/mo recurring price for SMS numbers beyond free included (Studio/Shop). */
 function stripeSmsExtraPriceId() {
   const map = parseStripeSubscriptionPriceIds();
   const id =
@@ -270,14 +270,14 @@ function stripeSmsExtraPriceId() {
     throw new functions.https.HttpsError(
       "failed-precondition",
       'Set "smsExtra":"price_..." in secret STRIPE_SUBSCRIPTION_PRICE_IDS ' +
-        "for the $12/mo extra texting number (Stripe product)."
+        "for the $12.99/mo extra texting number (Stripe product)."
     );
   }
   const trimmed = String(id).trim();
   if (trimmed.includes("REPLACE") || !trimmed.startsWith("price_")) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      'Create a $12/mo Stripe Price for extra SMS lines and set "smsExtra" in STRIPE_SUBSCRIPTION_PRICE_IDS.'
+      'Create a $12.99/mo Stripe Price for extra SMS lines and set "smsExtra" in STRIPE_SUBSCRIPTION_PRICE_IDS.'
     );
   }
   return trimmed;
@@ -369,7 +369,7 @@ async function syncSmsExtraLineQuantityToTenant(tenantId, quantity) {
 
 /**
  * Move any legacy smsExtra subscription items onto the current primary price
- * without invoicing, so price rotations ($10 → $12) never double-charge.
+ * without invoicing, so price rotations ($10 → $12.99) never double-charge.
  * Returns { primaryItem, quantity, subscription }.
  */
 async function migrateSmsExtraLegacyToPrimary(stripe, subscription) {
@@ -448,12 +448,12 @@ async function migrateSmsExtraLegacyToPrimary(stripe, subscription) {
 }
 
 /** Flat monthly price for an extra texting number (cents). Never prorate purchases. */
-const SMS_EXTRA_MONTHLY_CENTS = 1200;
+const SMS_EXTRA_MONTHLY_CENTS = 1299;
 
 /**
  * Set Stripe smsExtra subscription quantity (0 deletes items) and mirror on the tenant.
  * Legacy items are consolidated first with no invoice. Qty changes default to
- * proration_behavior "none" — purchases bill via a separate flat $12 invoice.
+ * proration_behavior "none" — purchases bill via a separate flat $12.99 invoice.
  */
 /** Resolve subscription id from tenant doc or Stripe customer lookup. */
 async function resolveTenantStripeSubscriptionId(stripe, tenant) {
@@ -523,7 +523,7 @@ const SMS_ADD_ON_LIVE_STATUSES = ["active", "trialing", "past_due"];
 /**
  * Sets how many extra lines an App Store subscriber's add-on subscription bills for.
  * The first line creates the subscription with its first monthly charge a month out — the
- * $12 for today is the separate one-time invoice — and removing the last line cancels it.
+ * $12.99 for today is the separate one-time invoice — and removing the last line cancels it.
  * Reads the ids fresh so back-to-back calls in one purchase never work from a stale copy.
  */
 async function applySmsAddOnLineQuantity(stripe, tenantId, nextQty) {
@@ -780,8 +780,8 @@ async function resolveChargeablePaymentMethodId(
 }
 
 /**
- * Flat $12 same-day charge via the same invoice collection path as their plan.
- * Creates a draft invoice, attaches the $12 line to that invoice (avoids empty
+ * Flat $12.99 same-day charge via the same invoice collection path as their plan.
+ * Creates a draft invoice, attaches the $12.99 line to that invoice (avoids empty
  * paid/$0 invoices when pending items are excluded), then pays it.
  */
 async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
@@ -795,7 +795,7 @@ async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
         : "Billing is not set up. Complete subscription checkout first."
     );
   }
-  const desc = (description || "Get Bookking extra texting number ($12)").toString();
+  const desc = (description || "Get Bookking extra texting number ($12.99)").toString();
   const subId = lineBilling.subscriptionId;
 
   let paymentMethodId = "";
@@ -810,7 +810,7 @@ async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
   }
 
   try {
-    // Draft first, then attach the $12 line to THIS invoice — never rely on
+    // Draft first, then attach the $12.99 line to THIS invoice — never rely on
     // pending_invoice_items_behavior (defaults can exclude items → paid/total=0).
     let invoice = await stripe.invoices.create({
       customer: customerId,
@@ -835,7 +835,7 @@ async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
       }
       throw new functions.https.HttpsError(
         "failed-precondition",
-        "Could not build the $12 texting-number invoice. Try again."
+        "Could not build the $12.99 texting-number invoice. Try again."
       );
     }
     invoice = await stripe.invoices.finalizeInvoice(invoice.id);
@@ -876,7 +876,7 @@ async function chargeOneTimeSmsExtraFee(stripe, tenant, description) {
     }
     throw new functions.https.HttpsError(
       "failed-precondition",
-      `Stripe did not confirm the $12 texting-number payment` +
+      `Stripe did not confirm the $12.99 texting-number payment` +
         (invoice ? ` (status=${invoice.status}, total=${total}).` : ".") +
         " No number was set up. Try again or update billing if the charge failed."
     );
@@ -4046,9 +4046,19 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
   let attributedMemberUid = null;
   let transferMetaPurpose = null;
   let description = t.description || null;
+  let clientName = null;
+  let serviceLabel = null;
+  let serviceCents = null;
+  let addonsLabel = null;
+  let addonCents = null;
   const src = t.source;
   if (src && typeof src === "object") {
     const meta = src.metadata || {};
+    if (meta.customerName) clientName = String(meta.customerName).trim() || null;
+    if (meta.serviceLabel) serviceLabel = String(meta.serviceLabel).trim() || null;
+    if (meta.serviceCents) serviceCents = parseInt(meta.serviceCents, 10) || null;
+    if (meta.addonsLabel) addonsLabel = String(meta.addonsLabel).trim() || null;
+    if (meta.addonCents) addonCents = parseInt(meta.addonCents, 10) || null;
     if (meta.attributedMemberUid) {
       attributedMemberUid = String(meta.attributedMemberUid).trim() || null;
     }
@@ -4094,6 +4104,11 @@ async function enrichConnectBalanceTransaction(stripe, t, stripeAccountId) {
     isCredit: net > 0,
     created: t.created ?? 0,
     description,
+    clientName,
+    serviceLabel,
+    serviceCents,
+    addonsLabel,
+    addonCents,
     reportingCategory: t.reporting_category || null,
     sourceId,
     chargeId,
@@ -4661,7 +4676,32 @@ exports.getPaymentReceiptDetail = functions
       grossCents,
     });
 
-    const serviceLabel = serviceName || receiptServiceLabel(paymentKind);
+    // Charter checkouts record the trip and the add-ons separately; show them as their own lines.
+    const metaServiceCents = parseInt(meta.serviceCents, 10);
+    const metaAddonCents = parseInt(meta.addonCents, 10) || 0;
+    const metaServiceLabel = (meta.serviceLabel || "").toString().trim();
+    if (
+      metaServiceLabel &&
+      Number.isFinite(metaServiceCents) &&
+      metaServiceCents + metaAddonCents === serviceCents &&
+      lineItems.length
+    ) {
+      const split = [{ name: metaServiceLabel, quantity: 1, amountCents: metaServiceCents }];
+      if (metaAddonCents > 0) {
+        const addonsLabel = (meta.addonsLabel || "").toString().trim();
+        split.push({
+          name: addonsLabel ? `Add-ons: ${addonsLabel}` : "Add-ons",
+          quantity: 1,
+          amountCents: metaAddonCents,
+        });
+      }
+      lineItems.splice(0, 1, ...split);
+    }
+    if (!customerName && meta.customerName) {
+      customerName = String(meta.customerName).trim() || null;
+    }
+
+    const serviceLabel = metaServiceLabel || serviceName || receiptServiceLabel(paymentKind);
 
     return {
       businessName,
@@ -8032,10 +8072,18 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
     const depositRaw = Number(tenantData.workflow && tenantData.workflow.depositAmount);
     const depositCents =
       Number.isFinite(depositRaw) && depositRaw > 0 ? Math.round(depositRaw * 100) : 0;
-    const chargeCents =
-      payMode === "deposit"
-        ? Math.max(50, Math.min(depositCents || Math.round(tripTotalCents * 0.2), tripTotalCents || depositCents))
-        : tripTotalCents;
+    // Deposit mode: the deposit (never more than a priced trip) plus add-ons, paid today.
+    // The rest of the trip price is the balance due before departure. A trip with no price
+    // keeps the full deposit and has no balance shown (the captain sets it).
+    let depositPartCents = 0;
+    let balanceDueCents = 0;
+    let chargeCents = tripTotalCents;
+    if (payMode === "deposit") {
+      const configuredDeposit = depositCents || Math.round(tripCents * 0.2);
+      depositPartCents = tripCents > 0 ? Math.min(configuredDeposit, tripCents) : configuredDeposit;
+      balanceDueCents = tripCents > 0 ? tripCents - depositPartCents : 0;
+      chargeCents = depositPartCents + addonCents;
+    }
     if (chargeCents < 50) {
       throw new HttpsError(
         "failed-precondition",
@@ -8081,6 +8129,8 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       addonCents,
       addonItems,
       chargeCents,
+      depositPartCents,
+      balanceDueCents,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     bookingData.customerPhone = customerPhone;
@@ -8114,6 +8164,11 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       bookingRef,
     });
 
+    const tripName = (svc.name || data.serviceName || "Charter").toString().trim() || "Charter";
+    // The app shows the trip and the add-ons as separate lines on the payment.
+    const serviceLabel = payMode === "deposit" ? `${tripName} deposit` : tripName;
+    const serviceCents = payMode === "deposit" ? depositPartCents : tripCents;
+    const addonsLabel = addonItems.map((a) => a.name).filter(Boolean).join(", ").slice(0, 450);
     let pi;
     try {
       pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
@@ -8121,11 +8176,16 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
         currency: "usd",
         application_fee_amount: feeCents,
         receipt_email: customerEmail,
+        description: `${customerName} · ${serviceLabel}${addonCents > 0 ? " + add-ons" : ""}`,
         metadata: {
           tenantId,
           paymentKind,
           bookingRequestId: requestId,
           charterPayMode: payMode,
+          customerName,
+          serviceLabel,
+          serviceCents: String(serviceCents),
+          ...(addonCents > 0 ? { addonsLabel, addonCents: String(addonCents) } : {}),
           serviceAmountCents: String(chargeCents),
           feeBaseCents: String(chargeCents),
           surchargeCents: String(checkout.surchargeCents),
@@ -8185,6 +8245,8 @@ exports.createCharterCheckoutPayment = onCall(publicWebCallableOptions, async (r
       addonCents,
       addonItems,
       chargeCents,
+      depositPartCents,
+      balanceDueCents,
       surchargeCents: checkout.surchargeCents,
       platformFeeCents: feeCents,
       totalCents: piAmount,
@@ -13202,8 +13264,8 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
     smsCanPurchaseSoloReplacement: !!lines.canPurchaseSoloReplacement,
     smsExtraMonthlyPriceCents: lines.extraMonthlyPriceCents,
     smsExtraMonthlyPriceLabel: lines.extraMonthlyPriceLabel,
-    smsExtraOneTimeReplacementCents: lines.extraOneTimeReplacementCents || 1200,
-    smsExtraOneTimeReplacementLabel: lines.extraOneTimeReplacementLabel || "$12",
+    smsExtraOneTimeReplacementCents: lines.extraOneTimeReplacementCents || SMS_EXTRA_MONTHLY_CENTS,
+    smsExtraOneTimeReplacementLabel: lines.extraOneTimeReplacementLabel || "$12.99",
     smsNextLineIsFree: lines.nextIsFree,
     smsLifetimeNumbersBought: lines.lifetimeNumbersBought || 0,
     // Refresh that buys a new Twilio number: free only within lifetime allotment
@@ -13879,8 +13941,8 @@ exports.startSubscriptionToday = functions
   });
 
 /**
- * Owner: add one paid SMS line capacity ($12 flat now + $12/mo recurring).
- * Charges a one-time $12 invoice (no proration), then adds the smsExtra seat
+ * Owner: add one paid SMS line capacity ($12.99 flat now + $12.99/mo recurring).
+ * Charges a one-time $12.99 invoice (no proration), then adds the smsExtra seat
  * with proration_behavior none. Free included slots must be used first.
  * Does not provision a number — returns a short-lived auth for requestSmsPhoneNumber.
  */
@@ -13931,14 +13993,14 @@ exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, contex
   if (!memberSnap.exists || memberSnap.data().tenantId !== ctx.tenantId) {
     throw new functions.https.HttpsError("not-found", "Team member not found.");
   }
-  // A 3rd+ number is $12 today plus $12 a month. The App Store purchase is one-time only, so
+  // A 3rd+ number is $12.99 today plus $12.99 a month. The App Store purchase is one-time only, so
   // those are added in billing; refuse before the receipt is reserved so nothing is spent.
   const planForLine = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
   const linesInUse = await sms.countOccupiedSmsLines(ctx.tenantId, ctx.tenant);
   if (sms.buildSmsLineSummary(ctx.tenant, planForLine, linesInUse).needsMonthlyExtraForNext) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Additional numbers are $12 today and $12 a month. Add them in billing."
+      "Additional numbers are $12.99 today and $12.99 a month. Add them in billing."
     );
   }
   const claim = await claimAppleSmsExtraPurchase({
@@ -13982,7 +14044,7 @@ exports.recordAppleSmsExtraPurchase = functions.https.onCall(async (data, contex
 });
 
 /**
- * App Store subscribers: start saving a card for extra texting lines ($12 today + $12/mo each).
+ * App Store subscribers: start saving a card for extra texting lines ($12.99 today + $12.99/mo each).
  * The card lives on a Stripe customer used only for those lines; the plan stays with Apple.
  * Returns an embedded Checkout (setup mode) client secret for the billing page.
  */
@@ -14195,8 +14257,8 @@ exports.purchaseSmsExtraLine = functions
       throw new functions.https.HttpsError("failed-precondition", paidBlock);
     }
 
-    // 3rd+ concurrent: $12 now + $12/mo subscription seat.
-    // Under 2 concurrent with lifetime exhausted: $12 one-time only.
+    // 3rd+ concurrent: $12.99 now + $12.99/mo subscription seat.
+    // Under 2 concurrent with lifetime exhausted: $12.99 one-time only.
     const usedBefore = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
     const free = sms.freeIncludedSmsLinesForPlan(plan);
     const max = sms.maxSmsLinesForPlan(plan);
@@ -14298,7 +14360,7 @@ exports.purchaseSmsExtraLine = functions
         chargedInvoice = await chargeOneTimeSmsExtraFee(
           stripe,
           tenantAtFloor,
-          "Get Bookking extra texting number ($12)"
+          "Get Bookking extra texting number ($12.99)"
         );
       } catch (e) {
         if (e instanceof functions.https.HttpsError) throw e;
@@ -14331,7 +14393,7 @@ exports.purchaseSmsExtraLine = functions
         chargedInvoice = await chargeOneTimeSmsExtraFee(
           stripe,
           tenant,
-          "Get Bookking texting number ($12)"
+          "Get Bookking texting number ($12.99)"
         );
       } catch (e) {
         if (e instanceof functions.https.HttpsError) throw e;
@@ -14426,7 +14488,7 @@ exports.requestTenantSmsProvisioning = functions
       if (sms.smsRefreshNeedsPurchase(tenant, plan, occupied)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          "Getting a new texting number after your included free numbers requires a $12 payment."
+          "Getting a new texting number after your included free numbers requires a $12.99 payment."
         );
       }
     }
@@ -14447,7 +14509,7 @@ exports.requestTenantSmsProvisioning = functions
       const lineCount = await sms.countOccupiedSmsLines(ctx.tenantId, tenant);
       const summary = sms.buildSmsLineSummary(tenant, plan, lineCount);
       // Solo: after the included lifetime number is used, authorize exactly one
-      // $12 replacement before setting pending. The Firestore trigger verifies
+      // $12.99 replacement before setting pending. The Firestore trigger verifies
       // this authorization before it may buy from Twilio.
       if (summary.canPurchaseSoloReplacement) {
         const tenantRef = db.collection("tenants").doc(ctx.tenantId);
@@ -14568,7 +14630,7 @@ exports.requestTenantSmsProvisioning = functions
             const invoice = await chargeOneTimeSmsExtraFee(
               stripe,
               tenant,
-              "Get Bookking Solo texting number replacement ($12)"
+              "Get Bookking Solo texting number replacement ($12.99)"
             );
             soloReplacementInvoiceId = invoice.id;
             await tenantRef.set(
@@ -14720,7 +14782,7 @@ exports.requestMemberSmsProvisioning = functions
       if (sms.smsRefreshNeedsPurchase(tenant, plan, occupied)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
-          "Getting a new texting number after your included free numbers requires a $12/mo payment. Use Refresh number in Messaging."
+          "Getting a new texting number after your included free numbers requires a $12.99/mo payment. Use Refresh number in Messaging."
         );
       }
     }
@@ -14921,11 +14983,11 @@ exports.requestSmsPhoneNumber = functions
         message:
           targetUid === context.auth.uid
             ? (summary.needsMonthlyExtraForNext
-                ? "Request sent. Your studio owner can add a number ($12 now + $12/mo) under Billing or Messaging."
-                : "Request sent. Your studio owner can add a number ($12 one-time) under Billing or Messaging.")
+                ? "Request sent. Your studio owner can add a number ($12.99 now + $12.99/mo) under Billing or Messaging."
+                : "Request sent. Your studio owner can add a number ($12.99 one-time) under Billing or Messaging.")
             : (summary.needsMonthlyExtraForNext
-                ? "This member needs a paid texting number ($12 now + $12/mo). Confirm the purchase, then enable their line."
-                : "This member needs a texting number ($12 one-time). Confirm the purchase, then enable their line."),
+                ? "This member needs a paid texting number ($12.99 now + $12.99/mo). Confirm the purchase, then enable their line."
+                : "This member needs a texting number ($12.99 one-time). Confirm the purchase, then enable their line."),
       };
     }
 
@@ -14996,20 +15058,20 @@ exports.clearSmsLineRequest = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * One-time $12 charge for a texting-number replacement after the lifetime
+ * One-time $12.99 charge for a texting-number replacement after the lifetime
  * free allotment is used (Solo 1 · Studio/Shop 2). Does not change seat qty.
  */
 async function chargeOneTimeSmsNumberReplacementFee(stripe, tenant) {
   return chargeOneTimeSmsExtraFee(
     stripe,
     tenant,
-    "Get Bookking texting number replacement ($12)"
+    "Get Bookking texting number replacement ($12.99)"
   );
 }
 
 /**
  * Owner: refresh a studio or personal texting number (release old Twilio SID, buy new).
- * Lifetime free buys: Solo 1 · Studio/Shop 2. Further refreshes charge $12 once, then buy.
+ * Lifetime free buys: Solo 1 · Studio/Shop 2. Further refreshes charge $12.99 once, then buy.
  */
 exports.refreshSmsPhoneNumber = functions
   .runWith({
@@ -15095,7 +15157,7 @@ exports.refreshSmsPhoneNumber = functions
           console.error("refreshSmsPhoneNumber reconcile after one-time", e);
           throw new functions.https.HttpsError(
             "failed-precondition",
-            `The $12 charge succeeded but subscription billing could not be synced: ${stripeErrorMessage(e)}`
+            `The $12.99 charge succeeded but subscription billing could not be synced: ${stripeErrorMessage(e)}`
           );
         }
       }
@@ -15396,6 +15458,58 @@ exports.deleteSmsThreads = functions.https.onCall(async (data, context) => {
   return { ok: true, deleted, skipped };
 });
 
+/**
+ * Who can act on an SMS conversation: personal-line threads stay with that teammate;
+ * studio threads need owner or manager. Same rules as sendClientSms.
+ */
+function assertCanUseSmsThread(ctx, uid, requestedThreadId, threadData) {
+  const isOwner = ctx.isOwner;
+  // Personal-line threads stay with that teammate — owners/managers cannot reply there.
+  if (sms.isLineScopedThreadId(requestedThreadId)) {
+    const assigned = ((threadData && threadData.assignedMemberUid) || "").toString().trim();
+    if (assigned) {
+      if (uid !== assigned) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This conversation belongs to another teammate's texting line."
+        );
+      }
+    } else {
+      const senderDigits = ((ctx.userData && ctx.userData.smsPhoneNumber) || "")
+        .toString()
+        .replace(/\D/g, "");
+      const lineDigits = requestedThreadId.split("_c")[0].replace(/^l/, "");
+      if (!senderDigits || senderDigits !== lineDigits) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This conversation belongs to another teammate's texting line."
+        );
+      }
+    }
+  } else if (threadData && !sms.isStudioSmsThread({ ...threadData, threadId: requestedThreadId })) {
+    const assigned = ((threadData.assignedMemberUid || "")).toString().trim();
+    if (uid !== assigned) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This conversation belongs to another teammate's texting line."
+      );
+    }
+  } else if (
+    !isOwner &&
+    ctx.accessRole !== "manager" &&
+    sms.memberPayoutMode(ctx.userData) === "independent" &&
+    (ctx.userData.smsStatus || "") === "active" &&
+    (ctx.userData.smsPhoneNumber || "").toString().trim()
+  ) {
+    // New compose from personal-line member — OK (routes to their number).
+  } else if (!isOwner && ctx.accessRole !== "manager") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to send on the studio texting line."
+    );
+  }
+}
+
 exports.sendClientSms = functions
   .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
   .https.onCall(async (data, context) => {
@@ -15462,50 +15576,7 @@ exports.sendClientSms = functions
       }
     }
 
-    // Personal-line threads stay with that teammate — owners/managers cannot reply there.
-    if (sms.isLineScopedThreadId(requestedThreadId)) {
-      const assigned = ((threadData && threadData.assignedMemberUid) || "").toString().trim();
-      if (assigned) {
-        if (context.auth.uid !== assigned) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "This conversation belongs to another teammate's texting line."
-          );
-        }
-      } else {
-        const senderDigits = ((ctx.userData && ctx.userData.smsPhoneNumber) || "")
-          .toString()
-          .replace(/\D/g, "");
-        const lineDigits = requestedThreadId.split("_c")[0].replace(/^l/, "");
-        if (!senderDigits || senderDigits !== lineDigits) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "This conversation belongs to another teammate's texting line."
-          );
-        }
-      }
-    } else if (threadData && !sms.isStudioSmsThread({ ...threadData, threadId: requestedThreadId })) {
-      const assigned = ((threadData.assignedMemberUid || "")).toString().trim();
-      if (context.auth.uid !== assigned) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "This conversation belongs to another teammate's texting line."
-        );
-      }
-    } else if (
-      !isOwner &&
-      ctx.accessRole !== "manager" &&
-      sms.memberPayoutMode(ctx.userData) === "independent" &&
-      (ctx.userData.smsStatus || "") === "active" &&
-      (ctx.userData.smsPhoneNumber || "").toString().trim()
-    ) {
-      // New compose from personal-line member — OK (routes to their number).
-    } else if (!isOwner && ctx.accessRole !== "manager") {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "You do not have permission to send on the studio texting line."
-      );
-    }
+    assertCanUseSmsThread(ctx, context.auth.uid, requestedThreadId, threadData);
 
     try {
       const sent = await sms.sendOutboundClientSms({
@@ -15544,6 +15615,183 @@ exports.sendClientSms = functions
       }
       throw new functions.https.HttpsError("failed-precondition", msg);
     }
+  });
+
+/** Load an SMS conversation the caller may use, plus the client's phone. */
+async function loadSmsThreadForCaller(context, data) {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  if (
+    !sms.canSendClientSms({
+      isOwner: ctx.isOwner,
+      accessRole: ctx.accessRole,
+      managerPermissions: ctx.managerPermissions,
+      senderUserData: ctx.userData,
+    })
+  ) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "You do not have permission to send client texts."
+    );
+  }
+  const threadId = ((data && data.threadId) || "").toString().trim();
+  if (!threadId || threadId.includes("/")) {
+    throw new functions.https.HttpsError("invalid-argument", "Choose a conversation.");
+  }
+  const threadRef = db.collection("tenants").doc(ctx.tenantId).collection("smsThreads").doc(threadId);
+  const threadSnap = await threadRef.get();
+  if (!threadSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Conversation not found.");
+  }
+  const threadData = threadSnap.data() || {};
+  assertCanUseSmsThread(ctx, context.auth.uid, threadId, threadData);
+  const clientPhone =
+    sms.toE164US(threadData.counterpartPhone) ||
+    sms.toE164US(threadId.includes("_c") ? threadId.split("_c").pop() : threadId) ||
+    "";
+  return { ctx, threadId, threadRef, threadData, clientPhone };
+}
+
+/** Texting consent for one conversation: drives the status line above the message box. */
+exports.getSmsConsentStatus = functions.https.onCall(async (data, context) => {
+  const { ctx, threadId, threadData, clientPhone } = await loadSmsThreadForCaller(context, data);
+  const status = await sms.smsConsentStatusForThread(ctx.tenantId, {
+    threadId,
+    clientPhone,
+    threadData,
+  });
+  return { ok: true, ...status };
+});
+
+/**
+ * Resend the "Reply YES" opt-in text. Only when the client texted first, never after STOP,
+ * and at most once every 24 hours per conversation.
+ */
+exports.resendSmsConsentPrompt = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onCall(async (data, context) => {
+    const { ctx, threadId, threadRef, threadData, clientPhone } =
+      await loadSmsThreadForCaller(context, data);
+    if (!clientPhone) {
+      throw new functions.https.HttpsError("failed-precondition", "This conversation has no phone number.");
+    }
+    const status = await sms.smsConsentStatusForThread(ctx.tenantId, {
+      threadId,
+      clientPhone,
+      threadData,
+    });
+    if (status.state === "opted_in") {
+      throw new functions.https.HttpsError("failed-precondition", "This client is already opted in.");
+    }
+    if (status.state === "opted_out") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This client replied STOP. They can opt back in by texting YES or START."
+      );
+    }
+    if (status.state !== "waiting") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The client needs to text you first, or opt in when booking."
+      );
+    }
+    if (status.canResendAtMs) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The opt-in text was sent in the last 24 hours. Try again tomorrow."
+      );
+    }
+
+    const tenant = ctx.tenant || {};
+    const businessName = (tenant.businessName || tenant.displayName || "us").toString();
+    try {
+      const sent = await sms.sendOutboundClientSms({
+        tenantId: ctx.tenantId,
+        tenant,
+        toE164: clientPhone,
+        body: sms.inboundConsentPromptBody(businessName),
+        meta: {
+          threadId,
+          threadData,
+          clientName: (threadData.clientName || "").toString(),
+          consentPrompt: true,
+        },
+        ownerUserData: ctx.ownerUserData || ctx.userData,
+        senderUid: context.auth.uid,
+        senderUserData: ctx.userData,
+        isOwner: ctx.isOwner,
+        accessRole: ctx.accessRole,
+        managerPermissions: ctx.managerPermissions,
+      });
+      await threadRef.set(
+        { smsConsentPromptSentAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+      return { ok: true, sid: sent.msg.sid };
+    } catch (e) {
+      const msg = (e && e.message ? e.message : String(e)).slice(0, 400);
+      if (msg.includes("Monthly SMS limit reached")) {
+        throw new functions.https.HttpsError("resource-exhausted", msg);
+      }
+      throw new functions.https.HttpsError("failed-precondition", msg);
+    }
+  });
+
+/** Twilio delivery updates: marks texts that never reached the client as not delivered. */
+exports.twilioSmsStatus = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken] })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+    const tenantId = ((req.query && req.query.t) || "").toString().trim();
+    const authToken = (sms.twilioAuthToken.value() || "").toString().trim();
+    const sig = (req.headers["x-twilio-signature"] || "").toString().trim();
+    const url = sms.statusCallbackUrl(tenantId);
+    const params = req.body || {};
+    if (!tenantId || tenantId.includes("/") || !authToken || !sig || !url) {
+      res.status(403).send("Forbidden");
+      return;
+    }
+    // eslint-disable-next-line global-require
+    const twilio = require("twilio");
+    if (!twilio.validateRequest(authToken, sig, url, params)) {
+      console.warn("twilioSmsStatus: invalid signature");
+      res.status(403).send("Forbidden");
+      return;
+    }
+    const messageSid = (params.MessageSid || params.SmsSid || "").toString().trim();
+    const status = (params.MessageStatus || params.SmsStatus || "").toString().trim().toLowerCase();
+    if (!messageSid || messageSid.includes("/") || !status) {
+      res.status(200).send("");
+      return;
+    }
+    const patch = {
+      status,
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const errorCode = (params.ErrorCode || "").toString().trim();
+    if (errorCode) patch.errorCode = errorCode;
+    try {
+      await db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("smsLog")
+        .doc(messageSid)
+        .update(patch);
+    } catch (e) {
+      // Not one of ours (or already deleted): nothing to update.
+      if (!(e && (e.code === 5 || String(e.message || "").includes("NOT_FOUND")))) {
+        console.warn("twilioSmsStatus", tenantId, messageSid, e.message || e);
+      }
+    }
+    if (status === "failed" || status === "undelivered") {
+      console.warn("twilioSmsStatus: not delivered", tenantId, messageSid, errorCode);
+    }
+    res.status(200).send("");
   });
 
 /**
@@ -15652,7 +15900,7 @@ exports.onTenantSmsProvisionRequested = functions
     }
     try {
       const plan = normalizeSubscriptionPlan(after.subscriptionPlan);
-      // A Solo replacement needs the existing $12 invoice authorization.
+      // A Solo replacement needs the existing $12.99 invoice authorization.
       // Calculate from the pre-pending record: after is already pending and
       // therefore occupies the only Solo slot.
       const beforeLineCount = await sms.countOccupiedSmsLines(tenantId, before);
@@ -15679,7 +15927,7 @@ exports.onTenantSmsProvisionRequested = functions
             {
               smsStatus: "failed",
               smsProvisionError:
-                "A completed $12 texting-number payment is required before setup.",
+                "A completed $12.99 texting-number payment is required before setup.",
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true }
@@ -15706,14 +15954,14 @@ exports.onTenantSmsProvisionRequested = functions
             Number(invoice.amount_paid) || 0,
             Number(invoice.total) || 0
           );
-          paymentVerified = invoice.status === "paid" && customerMatches && paidAmount >= 1200;
+          paymentVerified = invoice.status === "paid" && customerMatches && paidAmount >= SMS_EXTRA_MONTHLY_CENTS;
         }
         if (!paymentVerified) {
           await db.collection("tenants").doc(tenantId).set(
             {
               smsStatus: "failed",
               smsProvisionError:
-                "Your $12 texting-number payment could not be verified. Please try again.",
+                "Your $12.99 texting-number payment could not be verified. Please try again.",
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true }
@@ -16142,6 +16390,7 @@ exports.twilioInboundSms = functions
           .set(
             {
               smsOptedIn: false,
+              smsOptedOutAt: admin.firestore.FieldValue.serverTimestamp(),
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true }
@@ -16154,13 +16403,38 @@ exports.twilioInboundSms = functions
         lineScope: smsLineScope,
         memberUid: assignedMemberUid,
       });
-      res
-        .type("text/xml")
-        .send(
-          sms.twimlMessage(
-            "You have been unsubscribed. Reply YES or START to opt back in for appointment texts."
-          )
-        );
+      // Show the STOP and the unsubscribe reply in the conversation, so the app
+      // picks up the change and turns off the message box right away.
+      const stopThreadId = sms.lineScopedThreadId({
+        linePhone: to,
+        clientPhone: from,
+        lineScope: smsLineScope,
+        memberUid: assignedMemberUid,
+      });
+      const unsubscribed =
+        "You have been unsubscribed. Reply YES or START to opt back in for appointment texts.";
+      try {
+        await sms.recordInboundTenantSms(tenantId, {
+          from,
+          to,
+          body: rawBody,
+          mediaUrls: [],
+          threadId: stopThreadId,
+          assignedMemberUid,
+          smsLineScope,
+        });
+        await sms.recordSystemOutboundSms(tenantId, {
+          from: to,
+          to: from,
+          body: unsubscribed,
+          threadId: stopThreadId,
+          assignedMemberUid,
+          smsLineScope,
+        });
+      } catch (e) {
+        console.warn("twilioInboundSms: STOP log", e.message || e);
+      }
+      res.type("text/xml").send(sms.twimlMessage(unsubscribed));
       return;
     }
 

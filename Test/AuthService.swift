@@ -156,6 +156,9 @@ class AuthViewModel: ObservableObject {
                     self.currentUserDisplayName = user.displayName
                     self.accountPhotoUrl = user.photoURL?.absoluteString
                     PushNotificationManager.shared.syncTokenAfterSignIn()
+                    if (user.displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !user.isAnonymous {
+                        Task { await self.copyProfileNameToLogin(user) }
+                    }
                     if mustCheck {
                         // Decide between the app and "Finish setting up" before showing either.
                         let noBusiness = await self.loginHasNoBusiness()
@@ -254,6 +257,25 @@ class AuthViewModel: ObservableObject {
         try await user.reauthenticate(with: credential)
     }
     
+    /// A login with no name (some sign-ups missed it) takes the name from the profile,
+    /// so the dashboard greets the owner by first name.
+    private func copyProfileNameToLogin(_ user: User) async {
+        guard let data = try? await firebaseService.fetchUserDocument(uid: user.uid) else { return }
+        let first = (data["firstName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = (data["lastName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        if name.isEmpty {
+            name = (data["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !name.isEmpty else { return }
+        let change = user.createProfileChangeRequest()
+        change.displayName = name
+        try? await change.commitChanges()
+        if currentUserUid == user.uid {
+            currentUserDisplayName = name
+        }
+    }
+
     func signUp(
         email: String,
         password: String,

@@ -344,6 +344,36 @@ class MessagesViewModel: ObservableObject {
         }
     }
 
+    /// Texting consent for a conversation. Nil when it can't be checked (the server still enforces it).
+    func loadSmsConsentStatus(threadId: String) async -> SmsConsentStatus? {
+        let normalizedId = PhoneFormatting.smsThreadId(threadId)
+        guard !normalizedId.isEmpty else { return nil }
+        do {
+            let result = try await functions.httpsCallable("getSmsConsentStatus")
+                .call(["threadId": normalizedId])
+            guard let data = result.data as? [String: Any] else { return nil }
+            return SmsConsentStatus(callableData: data)
+        } catch {
+            print("Error loading SMS consent status: \(error)")
+            return nil
+        }
+    }
+
+    /// Sends the "Reply YES" opt-in text again. Returns true on success.
+    func resendSmsConsentPrompt(threadId: String) async -> Bool {
+        let normalizedId = PhoneFormatting.smsThreadId(threadId)
+        do {
+            _ = try await functions.httpsCallable("resendSmsConsentPrompt")
+                .call(["threadId": normalizedId])
+            return true
+        } catch {
+            await MainActor.run {
+                lastError = FirebaseFunctionsErrorHelper.message(from: error)
+            }
+            return false
+        }
+    }
+
     @discardableResult
     func sendPhotoMessage(
         threadId: String,

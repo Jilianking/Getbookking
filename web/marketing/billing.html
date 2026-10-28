@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <meta name="billing-copy" content="sms-billing-assign-v3" />
   <link rel="stylesheet" href="assets/account.css?v=5" />
-  <link rel="stylesheet" href="assets/billing.css?v=11" />
+  <link rel="stylesheet" href="assets/billing.css?v=12" />
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -142,14 +142,14 @@
           </div>
           <div class="bill-kv" id="smsLinesPaidRow">
             <span class="bill-kv-label">Additional numbers</span>
-            <span class="bill-kv-value" id="smsLinesPaid">$12/mo each</span>
+            <span class="bill-kv-value" id="smsLinesPaid">$12.99/mo each</span>
           </div>
           <div id="smsLineAssignmentsWrap" class="bill-sms-assignments hidden">
             <div class="bill-sms-assignments-label">Who has a number</div>
             <ul class="bill-sms-line-list" id="smsLineList"></ul>
           </div>
           <p class="bill-note" id="smsLinesNote" style="margin-top:12px;">
-            Additional numbers beyond your plan allotment are <span id="smsExtraPriceNote">$12/mo</span>. Tap a person to manage their line. Add or assign numbers below.
+            Additional numbers beyond your plan allotment are <span id="smsExtraPriceNote">$12.99/mo</span>. Tap a person to manage their line. Add or assign numbers below.
           </p>
           <button type="button" class="btn-upgrade hidden" id="addSmsLineBtn" style="margin-top:14px;width:100%;">
             Add a texting number
@@ -265,6 +265,11 @@
     <p class="bill-error hidden" id="billingError"></p>
   </main>
 
+  <div class="bill-portal-loading hidden" id="portalLoading" role="status" aria-live="polite">
+    <span class="spinner"></span>
+    <span>Opening your Stripe billing page…</span>
+  </div>
+
   <div class="acct-modal-backdrop hidden" id="cancelModalBackdrop" aria-hidden="true"></div>
   <div class="acct-modal hidden" id="cancelModal" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle" aria-hidden="true">
     <div class="acct-modal-card">
@@ -299,7 +304,7 @@
         Choose a teammate to enable their personal texting number.
       </p>
       <p id="addSmsLinePayNote" class="hidden" style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin:12px 0 0;">
-        This will charge your card <strong>$12 now</strong><span id="addSmsLineModalMonthlyNote"> plus <span id="addSmsLineModalPrice">$12/mo</span> on your subscription</span> for one additional number, then set up their line.
+        This will charge your card <strong>$12.99 now</strong><span id="addSmsLineModalMonthlyNote"> plus <span id="addSmsLineModalPrice">$12.99/mo</span> on your subscription</span> for one additional number, then set up their line.
       </p>
       <label class="bill-sms-consent" style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--text-secondary);line-height:1.45;">
         <input type="checkbox" id="addSmsLineConsent" style="margin-top:3px;" />
@@ -555,14 +560,43 @@
       }
     }
 
+    var portalOpening = false;
+    function setPortalLoading(on) {
+      portalOpening = on;
+      document.getElementById('portalLoading').classList.toggle('hidden', !on);
+    }
+    // Coming back from Stripe (Back button, Stripe's logo link, or switching back to this tab):
+    // clear the wait screen and re-check Stripe so a cancel or plan change shows right away.
+    var billingLastLoadedAt = 0;
+    function refreshBillingIfStale() {
+      if (!auth.currentUser || !billingData) return;
+      if (Date.now() - billingLastLoadedAt < 5000) return;
+      billingLastLoadedAt = Date.now();
+      loadBilling();
+    }
+    window.addEventListener('pageshow', function(e) {
+      setPortalLoading(false);
+      if (e.persisted) refreshBillingIfStale();
+    });
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') refreshBillingIfStale();
+    });
+
     function openBillingPortal() {
+      if (portalOpening) return Promise.resolve();
       var errEl = document.getElementById('billingError');
       errEl.classList.add('hidden');
+      setPortalLoading(true);
       return fns.httpsCallable('createBillingPortalSession')({
         marketingOrigin: window.location.origin
       }).then(function(res) {
-        if (res.data && res.data.url) window.location.href = res.data.url;
+        if (res.data && res.data.url) {
+          window.location.href = res.data.url;
+        } else {
+          setPortalLoading(false);
+        }
       }).catch(function(err) {
+        setPortalLoading(false);
         errEl.textContent = (err && err.message) ? err.message : String(err);
         errEl.classList.remove('hidden');
       });
@@ -847,6 +881,7 @@
 
     function renderBilling(d, user) {
       billingData = d;
+      billingLastLoadedAt = Date.now();
       document.getElementById('billingLoading').classList.add('hidden');
       document.getElementById('billingContent').classList.remove('hidden');
 
@@ -872,6 +907,9 @@
           badge.textContent = 'Free';
           badge.classList.remove('is-active');
         }
+      } else if (status === 'active' && sub && sub.cancelAtPeriodEnd) {
+        badge.textContent = 'Ending ' + formatBillingDate(sub.currentPeriodEnd).replace(/, \d{4}$/, '');
+        badge.classList.remove('is-active');
       } else if (status === 'active') {
         badge.textContent = 'Active';
         badge.classList.add('is-active');
@@ -948,6 +986,11 @@
       } else if (d.hasStripeCustomer && sub && (sub.status === 'active' || sub.status === 'past_due')) {
         planActions.classList.remove('hidden');
         planStripeNote.classList.remove('hidden');
+        // Already cancelled: "Keep subscription" replaces "Cancel subscription".
+        document.getElementById('cancelSubBtn').classList.toggle(
+          'hidden',
+          sub.status === 'active' && !!sub.cancelAtPeriodEnd
+        );
         if (sub.status === 'active' && sub.cancelAtPeriodEnd) {
           cancelPendingNote.textContent =
             'Your subscription is scheduled to end on ' +
@@ -1210,7 +1253,7 @@
 
     function smsExtraPriceLabel(m) {
       var label = (m && m.smsExtraMonthlyPriceLabel) ? String(m.smsExtraMonthlyPriceLabel).trim() : '';
-      return label || '$12/mo';
+      return label || '$12.99/mo';
     }
 
     function applySmsExtraPriceCopy(m) {
@@ -1271,7 +1314,7 @@
       if (appleBilled) {
         document.getElementById('smsAddOnCardNote').textContent = smsAddOn.hasCard
           ? 'Your plan is billed through the App Store. Extra texting numbers are billed to ' + smsAddOn.cardLabel + '.'
-          : 'Your plan is billed through the App Store. Extra texting numbers ($12 today, then $12/mo each) are billed to a card you add here.';
+          : 'Your plan is billed through the App Store. Extra texting numbers ($12.99 today, then $12.99/mo each) are billed to a card you add here.';
         document.getElementById('smsAddOnCardBtn').textContent = smsAddOn.hasCard
           ? 'Change card'
           : 'Add a card for extra texting numbers';
@@ -1286,7 +1329,7 @@
         if (freeRow) freeRow.classList.remove('hidden');
         if (linesNote) {
           linesNote.textContent =
-            'This plan includes 1 studio texting number. After you remove it, getting another costs $12 (not monthly). Enable it in the Get Bookking app under Messaging.';
+            'This plan includes 1 studio texting number. After you remove it, getting another costs $12.99 (not monthly). Enable it in the Get Bookking app under Messaging.';
         }
         return;
       }
@@ -1317,11 +1360,11 @@
         if (needsPayNext) {
           if (m.smsNeedsMonthlyExtraForNextLine) {
             note.textContent =
-              'A 3rd (or additional) line costs $12 now plus ' + priceLabel +
+              'A 3rd (or additional) line costs $12.99 now plus ' + priceLabel +
               ' on your subscription. Choose a teammate to assign the next number.';
           } else {
             note.textContent =
-              'Getting another number costs $12 (one-time). Your subscription stays at $0/mo extra while you have 2 or fewer lines. Choose a teammate.';
+              'Getting another number costs $12.99 (one-time). Your subscription stays at $0/mo extra while you have 2 or fewer lines. Choose a teammate.';
           }
         } else if (!eligible.length) {
           note.textContent =
@@ -1329,7 +1372,7 @@
         } else {
           note.textContent = m.smsNextLineIsFree
             ? 'You have an included slot available. Choose a teammate to enable their personal line.'
-            : 'Confirm the $12 charge for the next number, then choose a teammate.';
+            : 'Confirm the $12.99 charge for the next number, then choose a teammate.';
         }
         note.classList.remove('hidden');
       }
@@ -1396,9 +1439,9 @@
     function smsPayNoteForNext(m) {
       m = m || messagingFromBilling();
       if (m.smsNeedsMonthlyExtraForNextLine) {
-        return '$12 now plus ' + smsExtraPriceLabel(m) + ' on your subscription';
+        return '$12.99 now plus ' + smsExtraPriceLabel(m) + ' on your subscription';
       }
-      return '$12 one-time (no monthly extra while you have 2 or fewer lines)';
+      return '$12.99 one-time (no monthly extra while you have 2 or fewer lines)';
     }
 
     function openAddSmsLineModal() {

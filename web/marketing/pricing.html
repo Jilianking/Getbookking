@@ -36,7 +36,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/nav.css?v=22" />
-  <link rel="stylesheet" href="assets/pricing.css?v=5" />
+  <link rel="stylesheet" href="assets/pricing.css?v=9" />
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -98,8 +98,8 @@
 
   <header class="pr-hero">
     <div class="pr-kicker">Pricing</div>
-    <h1>Site, books, texts, and tap. One monthly rate.</h1>
-    <p>14-day trial on every plan. Card on file — cancel before the trial ends and you are not charged. No yearly toggle: you pay month to month.</p>
+    <h1>Your website, inbox, payments and calendar. One monthly rate.</h1>
+    <p>Start with a limited 14-day free trial, or skip it and get every feature today. Card required. Month to month, cancel anytime.</p>
   </header>
 
   <section class="pr-section" aria-labelledby="plans-heading">
@@ -108,7 +108,7 @@
       <span class="pr-band-line" aria-hidden="true"></span>
     </div>
     <div class="pr-grid">
-      <article class="pr-card" data-plan-card="charter">
+      <article class="pr-card pr-reveal" data-plan-card="charter">
         <a class="pr-card-hit" href="pricing.html?plan=charter#details">
           <div class="pr-name">Charter</div>
           <div class="pr-price">$24 <span>/ mo</span></div>
@@ -122,7 +122,7 @@
         <a class="pr-cta pr-cta--ghost" href="signup.html?plan=charter&amp;industry=charters">Start free trial</a>
       </article>
 
-      <article class="pr-card" data-plan-card="solo">
+      <article class="pr-card pr-reveal" data-plan-card="solo">
         <a class="pr-card-hit" href="pricing.html?plan=solo#details">
           <div class="pr-name">Solo</div>
           <div class="pr-price">$39 <span>/ mo</span></div>
@@ -137,7 +137,7 @@
         <a class="pr-cta pr-cta--ghost" href="signup.html?plan=solo">Start free trial</a>
       </article>
 
-      <article class="pr-card is-featured" data-plan-card="studio">
+      <article class="pr-card is-featured pr-reveal" data-plan-card="studio">
         <a class="pr-card-hit" href="pricing.html?plan=studio#details">
           <div class="pr-badge">Most popular</div>
           <div class="pr-name">Studio</div>
@@ -147,13 +147,13 @@
             <li>Everything in Solo</li>
             <li>Team calendars, roles, payouts</li>
             <li>2 texting numbers included</li>
-            <li>Extra numbers $12/mo</li>
+            <li>Extra numbers $12.99/mo</li>
           </ul>
         </a>
         <a class="pr-cta pr-cta--ink" href="signup.html?plan=studio">Start free trial</a>
       </article>
 
-      <article class="pr-card" data-plan-card="shop">
+      <article class="pr-card pr-reveal" data-plan-card="shop">
         <a class="pr-card-hit" href="pricing.html?plan=shop#details">
           <div class="pr-name">Shop</div>
           <div class="pr-price">$149 <span>/ mo</span></div>
@@ -162,14 +162,14 @@
             <li>Everything in Studio</li>
             <li>Whole-floor teams</li>
             <li>2 texting numbers included</li>
-            <li>Extra numbers $12/mo</li>
+            <li>Extra numbers $12.99/mo</li>
           </ul>
         </a>
         <a class="pr-cta pr-cta--ghost" href="signup.html?plan=shop">Start free trial</a>
       </article>
     </div>
-    <p class="pr-note">All plans include a 14-day trial. Card required.</p>
   </section>
+
 
   <section class="pr-section" id="details" aria-labelledby="details-heading">
     <div class="pr-band">
@@ -177,7 +177,7 @@
       <span class="pr-band-line" aria-hidden="true"></span>
     </div>
 
-    <div class="pr-sheet">
+    <div class="pr-sheet pr-reveal">
       <div class="pr-sheet-head">Payment processing</div>
       <dl>
         <div class="pr-fee-row">
@@ -192,7 +192,7 @@
       <p class="pr-fine">Your client pays the quoted price plus those fees. You receive the full quoted amount. Get Bookking does not keep a cut of the service price.</p>
     </div>
 
-    <div class="pr-sheet">
+    <div class="pr-sheet pr-reveal">
       <div class="pr-sheet-head">Plans and limits</div>
       <div class="pr-cmp-row pr-cmp-head" role="row">
         <span>Feature</span>
@@ -233,8 +233,8 @@
         <span>Extra texting number</span>
         <span data-col="charter" data-label="Charter">&mdash;</span>
         <span data-col="solo" data-label="Solo">&mdash;</span>
-        <span data-col="studio" data-label="Studio">$12/mo</span>
-        <span data-col="shop" data-label="Shop">$12/mo</span>
+        <span data-col="studio" data-label="Studio">$12.99/mo</span>
+        <span data-col="shop" data-label="Shop">$12.99/mo</span>
       </div>
       <div class="pr-cmp-row" role="row">
         <span>Website + booking</span>
@@ -250,7 +250,7 @@
         <span class="is-on" data-col="studio" data-label="Studio">Yes</span>
         <span class="is-on" data-col="shop" data-label="Shop">Yes</span>
       </div>
-      <p class="pr-fine">If you release your only number on Solo or Charter, a replacement is $12 once. Extra concurrent numbers are Studio and Shop only.</p>
+      <p class="pr-fine">If you release your only number on Solo or Charter, a replacement is $12.99 once. Extra concurrent numbers are Studio and Shop only.</p>
     </div>
   </section>
 
@@ -337,6 +337,27 @@
         row.classList.remove("is-plan-charter", "is-plan-solo", "is-plan-studio", "is-plan-shop");
         row.classList.add("is-plan-" + plan);
       });
+    })();
+  </script>
+  <script>
+    // Cards and tables fade up as they scroll into view (same effect as the home page).
+    (function () {
+      var items = document.querySelectorAll(".pr-reveal");
+      if (!items.length) return;
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduce || !("IntersectionObserver" in window)) return;
+      document.documentElement.classList.add("js-reveal");
+      document.querySelectorAll(".pr-grid .pr-reveal").forEach(function (el, i) {
+        el.style.transitionDelay = (i * 0.08) + "s";
+      });
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-in");
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
+      items.forEach(function (el) { observer.observe(el); });
     })();
   </script>
 </body>

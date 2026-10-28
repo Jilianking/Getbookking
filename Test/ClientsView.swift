@@ -140,7 +140,8 @@ struct ClientsView: View {
 
     private var alphabeticalSections: [(letter: String, clients: [Client])] {
         let grouped = Dictionary(grouping: filteredClients) { client in
-            String(client.name.prefix(1).uppercased())
+            let first = client.displayName.prefix(1).uppercased()
+            return first.rangeOfCharacter(from: .letters) == nil ? "#" : String(first)
         }
         return grouped.keys.sorted().map { letter in
             (letter: letter, clients: grouped[letter] ?? [])
@@ -263,14 +264,15 @@ struct ClientRow: View {
             AppAvatarView(
                 tenantLogoURL: nil,
                 accountPhotoURL: nil,
-                displayNameFallback: client.name,
+                displayNameFallback: client.displayName,
                 size: 44
             )
             VStack(alignment: .leading, spacing: 4) {
-                Text(client.name)
+                Text(client.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppDesign.textPrimary)
-                if let phone = client.phone, !phone.isEmpty {
+                if let phone = client.phone, !phone.isEmpty,
+                   PhoneFormatting.displayUS(phone) != client.displayName {
                     Text(PhoneFormatting.displayUS(phone))
                         .font(.caption)
                         .foregroundStyle(AppDesign.textSecondary)

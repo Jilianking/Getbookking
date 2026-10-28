@@ -436,3 +436,24 @@ body {
     font-weight: 600;
   }
 }
+
+/* Scroll-in reveal (only when JS runs and motion is allowed) */
+.js-reveal .pr-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.js-reveal .pr-reveal--left {
+  transform: translateX(-44px);
+}
+
+.js-reveal .pr-reveal--right {
+  transform: translateX(44px);
+  transition-delay: 0.06s;
+}
+
+.js-reveal .pr-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}

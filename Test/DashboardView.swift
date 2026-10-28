@@ -12,6 +12,7 @@ struct DashboardView: View {
     @State private var selectedRequest: Request?
     @State private var profileClient: Client?
     @State private var showPaidFeatureUpgrade = false
+    @State private var showPlanPicker = false
     var drawerState: DrawerState
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPaySheet = false
@@ -42,11 +43,55 @@ struct DashboardView: View {
         viewModel.unreadRequestsCount
     }
 
+    /// The owner's plan was cancelled and ran out, or went unpaid.
+    private var showsPlanEndedBanner: Bool {
+        !authViewModel.isDemoMode
+            && paymentsViewModel.isTenantOwner
+            && !paymentsViewModel.subscriptionPaid
+            && PlanStatus.hasEnded(paymentsViewModel.subscriptionStatus)
+    }
+
+    private var planEndedBanner: some View {
+        Button { showPlanPicker = true } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.circle")
+                    .font(.title3)
+                    .foregroundStyle(AppDesign.brandWarm)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your plan has ended")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                    Text("Choose a plan to turn client texting and payments back on.")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Choose a plan")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.brandDark)
+                        .padding(.top, 2)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppDesign.brandWarm.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the plan picker")
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     AppBrandScreenTitle(title: dashboardHeadline)
+                    if showsPlanEndedBanner {
+                        planEndedBanner
+                    }
                     LazyVGrid(columns: statColumns, spacing: 12) {
                         AppStatCard(
                             title: "New requests",
@@ -196,6 +241,18 @@ struct DashboardView: View {
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
             )
+        }
+        .sheet(isPresented: $showPlanPicker) {
+            PlanPickerSheet(currentPlan: authViewModel.tenantSubscriptionPlan, planEnded: true)
+                .environmentObject(authViewModel)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .subscriptionDidChange)) { _ in
+            Task {
+                await paymentsViewModel.loadData(
+                    isDemoMode: authViewModel.isDemoMode,
+                    sessionStore: sessionStore
+                )
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
             Task {

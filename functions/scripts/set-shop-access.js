@@ -11,6 +11,8 @@
  *   --complimentary on|off      Treat this business as paid (texting and payments) without billing.
  *   --area-code 727             Area code for its next texting number (3 digits).
  *   --text-notifications on|off The "Send client text notifications" switch in Notifications.
+ *   --plan-ended on             Mark the plan as ended (like an expired subscription), for Apple's
+ *                               demo account. Clears the App Store link so a new purchase starts fresh.
  *
  * Auth: firebase login OR GOOGLE_APPLICATION_CREDENTIALS
  */
@@ -93,6 +95,10 @@ async function main() {
   const domainExempt = onOff(args["domain-exempt"], "--domain-exempt");
   const complimentary = onOff(args.complimentary, "--complimentary");
   const textNotifications = onOff(args["text-notifications"], "--text-notifications");
+  const planEnded = onOff(args["plan-ended"], "--plan-ended");
+  if (planEnded === false) {
+    throw new Error("--plan-ended only takes \"on\". To bring a plan back, buy or restore it in the app.");
+  }
   const areaCode = args["area-code"];
   if (areaCode !== undefined && !/^[2-9]\d{2}$/.test(areaCode)) {
     throw new Error("--area-code must be a 3-digit US area code.");
@@ -135,6 +141,35 @@ async function main() {
       textNotifications ? "on" : "off"
     );
   }
+  let ownerPatch = null;
+  let ownerRef = null;
+  if (planEnded) {
+    patch.subscriptionStatus = "canceled";
+    for (const field of [
+      "billingSource",
+      "appleOriginalTransactionId",
+      "appleProductId",
+      "appleSignedDateMs",
+      "appleExpiresAt",
+      "complimentaryPaidAccess",
+    ]) {
+      if (tenant[field] !== undefined) patch[field] = FieldValue.delete();
+    }
+    note("Plan status", tenant.subscriptionStatus || "(none)", "canceled (plan ended)");
+    if (tenant.appleOriginalTransactionId) note("App Store link", "set", "cleared");
+    if (tenant.complimentaryPaidAccess === true) note("Complimentary paid access", "on", "off");
+    // The owner's profile can carry its own status, and it wins over the business's.
+    const ownerUid = (tenant.ownerUid || "").toString();
+    if (ownerUid) {
+      ownerRef = db.collection("users").doc(ownerUid);
+      const owner = await ownerRef.get();
+      const ownerStatus = owner.exists ? (owner.data().subscriptionStatus || "").toString() : "";
+      if (ownerStatus) {
+        ownerPatch = { subscriptionStatus: "canceled", updatedAt: FieldValue.serverTimestamp() };
+        note("Owner profile plan status", ownerStatus, "canceled");
+      }
+    }
+  }
   if (!lines.length) throw new Error("Nothing to change. See the options at the top of this script.");
 
   console.log(`Business: ${tenant.displayName || tenant.businessName || doc.id} (${tenant.slug || "no slug"})`);
@@ -145,6 +180,7 @@ async function main() {
   }
   patch.updatedAt = FieldValue.serverTimestamp();
   await doc.ref.set(patch, { merge: true });
+  if (ownerRef && ownerPatch) await ownerRef.set(ownerPatch, { merge: true });
   console.log("\nSaved.");
 }
 

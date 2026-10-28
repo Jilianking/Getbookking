@@ -27,10 +27,8 @@ enum DashboardGreeting {
     }
 
     static func headline(displayName: String?, email: String?, date: Date = Date()) -> String {
-        var name = firstName(from: displayName)
-        if name.isEmpty {
-            name = firstNameFromEmail(email)
-        }
+        // No name on the login: greet without one rather than show part of the email.
+        let name = firstName(from: displayName)
         let greeting = salutation(for: date)
         return name.isEmpty ? greeting : "\(greeting), \(name)"
     }

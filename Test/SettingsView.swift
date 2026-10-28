@@ -114,6 +114,10 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .stripeConnectShouldRefresh)) { _ in
                 Task { await paymentsViewModel.refreshStripeConnectStatus(isDemoMode: authViewModel.isDemoMode) }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .subscriptionDidChange)) { _ in
+                guard viewModel.isTenantOwner else { return }
+                Task { await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode) }
+            }
         }
         .navigationViewStyle(.stack)
     }
@@ -244,20 +248,22 @@ struct SettingsView: View {
 
                     Divider().padding(.leading, 52)
 
-                    NavigationLink {
-                        DomainSettingsView()
-                            .environmentObject(authViewModel)
-                    } label: {
-                        AppSettingsRow(
-                            icon: "globe",
-                            iconColor: AppDesign.accentBlue,
-                            title: "Domain",
-                            value: "Buy or transfer"
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    if showsDomainRow {
+                        NavigationLink {
+                            DomainSettingsView()
+                                .environmentObject(authViewModel)
+                        } label: {
+                            AppSettingsRow(
+                                icon: "globe",
+                                iconColor: AppDesign.accentBlue,
+                                title: "Domain",
+                                value: "Buy or transfer"
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                    Divider().padding(.leading, 52)
+                        Divider().padding(.leading, 52)
+                    }
                 }
 
                 if viewModel.isTenantOwner && viewModel.tenantSubscriptionPlan.allowsTeamInvites,
@@ -344,6 +350,14 @@ struct SettingsView: View {
         }
     }
 
+    /// Domains aren't for sale yet; the row shows only for a shop that already has one
+    /// or has been let in early.
+    private var showsDomainRow: Bool {
+        guard let tenant = sessionStore.tenant else { return false }
+        if let domain = tenant["customDomain"] as? String, !domain.isEmpty { return true }
+        return tenant["domainPurchaseBlockExempt"] as? Bool == true
+    }
+
     private var paymentsSetupStatus: (label: String, color: Color) {
         if !paymentsViewModel.stripeConnected {
             return ("Setup", AppDesign.brandWarm)
@@ -372,6 +386,24 @@ struct SettingsView: View {
             AppSectionHeader(title: "Account")
 
             VStack(spacing: 0) {
+                if !authViewModel.isDemoMode, viewModel.isTenantOwner {
+                    NavigationLink {
+                        PlanBillingView()
+                            .environmentObject(authViewModel)
+                    } label: {
+                        AppSettingsRow(
+                            icon: "creditcard.fill",
+                            iconColor: AppDesign.brandWarm,
+                            title: "Plan & billing",
+                            status: PlanBillingStatus.label(for: teamPolicyViewModel),
+                            statusColor: PlanBillingStatus.color(for: teamPolicyViewModel)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().padding(.leading, 52)
+                }
+
                 if !authViewModel.isDemoMode, authViewModel.currentUserEmail != nil {
                     Button { sendPasswordReset() } label: {
                         AppSettingsRow(icon: "lock.fill", iconColor: .gray, title: "Change password")
@@ -591,8 +623,6 @@ private struct SettingsBusinessHoursSheet: View {
 private struct AccountSettingsDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: SettingsViewModel
-    @StateObject private var billingViewModel = ManagerSettingsViewModel()
-    @Environment(\.scenePhase) private var scenePhase
     @State private var profilePhotoPickerItem: PhotosPickerItem?
     @State private var profilePhotoCropItem: SingleImageCropSheetItem?
     @State private var showIndustryChangeAlert = false
@@ -818,78 +848,7 @@ private struct AccountSettingsDetailView: View {
                     }
                     }
                 }
-                if viewModel.hasProfile, viewModel.tenantId != nil {
-                    Section(
-                        header: Text("Plan & billing"),
-                        footer: Text("Start paid plan opens the App Store payment sheet. Restore purchases brings back a plan you already paid for with this Apple ID. View Stripe account is for accepting client payments.")
-                            .font(.caption2)
-                    ) {
-                        HStack {
-                            Text("Current plan")
-                            Spacer()
-                            Text(billingViewModel.tenantSubscriptionPlan.displayName)
-                                .foregroundStyle(.secondary)
-                        }
-                        if viewModel.isTenantOwner {
-                            HStack {
-                                Text("Billing status")
-                                Spacer()
-                                Text(billingStatusLabel)
-                                    .foregroundStyle(billingStatusColor)
-                            }
-                            if let billingError = billingViewModel.errorMessage,
-                               !billingError.isEmpty {
-                                Text(billingError)
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
-                            }
-                            if !billingViewModel.subscriptionPaid {
-                                Button {
-                                    Task { _ = await billingViewModel.startSubscriptionToday() }
-                                } label: {
-                                    HStack {
-                                        if billingViewModel.isOpeningBillingWebsite {
-                                            ProgressView()
-                                                .scaleEffect(0.9)
-                                        }
-                                        Text("Start paid plan")
-                                    }
-                                }
-                                .disabled(billingViewModel.isOpeningBillingWebsite)
-                            }
-                            Button {
-                                Task { await billingViewModel.restorePurchases() }
-                            } label: {
-                                HStack {
-                                    if billingViewModel.isRestoringPurchases {
-                                        ProgressView()
-                                            .scaleEffect(0.9)
-                                    }
-                                    Text("Restore purchases")
-                                }
-                            }
-                            .disabled(billingViewModel.isRestoringPurchases)
-                            if let restoreMessage = billingViewModel.restorePurchasesMessage,
-                               !restoreMessage.isEmpty {
-                                Text(restoreMessage)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Button {
-                                Task { await billingViewModel.openClientPaymentsStripeAccount() }
-                            } label: {
-                                HStack {
-                                    if billingViewModel.isOpeningBillingPortal {
-                                        ProgressView()
-                                            .scaleEffect(0.9)
-                                    }
-                                    Text("View Stripe account")
-                                }
-                            }
-                            .disabled(billingViewModel.isOpeningBillingPortal)
-                        }
-                    }
-                } else if authViewModel.currentUserEmail != nil && !viewModel.hasProfile {
+                if authViewModel.currentUserEmail != nil && !viewModel.hasProfile {
                     Section {
                         Text("Your business profile is still loading. Pull to refresh on Settings, or try again in a moment.")
                             .font(.caption)
@@ -913,17 +872,7 @@ private struct AccountSettingsDetailView: View {
             Text(industryChangeAlertMessage)
         }
         .task {
-            if !authViewModel.isDemoMode {
-                await billingViewModel.load(isDemoMode: false)
-            }
             hasLoadedIndustryOnce = true
-        }
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .inAppSafariBillingDismissed)) { _ in
-            Task { await billingViewModel.syncBillingAfterWebIfNeeded() }
         }
         .onChange(of: profilePhotoPickerItem) { _, newItem in
             Task {
@@ -969,19 +918,6 @@ private struct AccountSettingsDetailView: View {
             return authName
         }
         return "—"
-    }
-
-    private var billingStatusLabel: String {
-        if billingViewModel.subscriptionPaid { return "Active" }
-        if billingViewModel.subscriptionTrialing { return "Free trial" }
-        let raw = billingViewModel.subscriptionStatus.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? "Not linked" : raw.capitalized
-    }
-
-    private var billingStatusColor: Color {
-        if billingViewModel.subscriptionPaid { return AppDesign.accentGreen }
-        if billingViewModel.subscriptionTrialing { return .secondary }
-        return AppDesign.statusPending
     }
 
     private var industryChangeAlertTitle: String {

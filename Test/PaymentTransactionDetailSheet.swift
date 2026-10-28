@@ -28,6 +28,7 @@ struct PaymentTransactionDetailSheet: View {
     }
 
     private var serviceLabel: String {
+        if let label = transaction.serviceLabel, !label.isEmpty { return label }
         let trimmed = (transaction.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
         return transaction.channelLabel
@@ -246,10 +247,18 @@ struct PaymentTransactionDetailSheet: View {
         if transaction.isPayoutLine {
             payoutBreakdown
         } else {
-            breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
+            if let serviceAmount = transaction.serviceAmount {
+                itemRow(label: "Service", name: serviceLabel, amount: serviceAmount)
+                if let addonsAmount = transaction.addonsAmount {
+                    Divider()
+                    itemRow(label: "Add-ons", name: transaction.addonsLabel ?? "", amount: addonsAmount)
+                }
+            } else {
+                breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
+            }
             Divider()
             breakdownRow(
-                label: "Subtotal",
+                label: "Client paid",
                 value: PaymentsViewModel.formatUSD(transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount)
             )
             Divider()
@@ -385,6 +394,27 @@ struct PaymentTransactionDetailSheet: View {
     }
 
     @ViewBuilder
+    /// A paid item: label on the left, what it was and its amount on the right.
+    private func itemRow(label: String, name: String, amount: Double) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textSecondary)
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(PaymentsViewModel.formatUSD(amount))
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textPrimary)
+                if !name.isEmpty {
+                    Text(name)
+                        .font(.caption)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+        }
+    }
+
     private func breakdownRow(label: String, value: String, valueIsText: Bool = false) -> some View {
         HStack(alignment: .top) {
             Text(label)
@@ -440,7 +470,7 @@ struct PaymentTransactionDetailSheet: View {
             ?? PhoneFormatting.e164US(transaction.customerName)
         drawerState.openExistingMessagesThread(
             phone: phoneGuess,
-            clientName: detail.customerName ?? transaction.customerName,
+            clientName: detail.customerName ?? transaction.clientName ?? transaction.customerName,
             body: shareText
         )
         dismiss()

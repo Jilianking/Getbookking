@@ -164,6 +164,18 @@ final class BookkingSubscriptionStore: ObservableObject {
         return nil
     }
 
+    /// True when this Apple ID has any active Get Bookking plan, whichever account bought it.
+    /// Used on the sign-up screen to point someone who already subscribed to logging in.
+    func hasActiveSubscriptionOnThisAppleID() async -> Bool {
+        for await entitlement in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = entitlement,
+                  transaction.revocationDate == nil,
+                  BookkingProductID.plan(for: transaction.productID) != nil else { continue }
+            return true
+        }
+        return false
+    }
+
     /// Restore purchases: asks the App Store for this Apple ID's purchases, then records the plan.
     /// Returns false when the Apple ID has no plan that belongs to this account.
     func restorePurchases() async throws -> Bool {
@@ -230,6 +242,11 @@ final class BookkingSubscriptionStore: ObservableObject {
             .compactMap({ self.productsByID[$0]?.subscription })
             .first(where: { $0.introductoryOffer != nil }) else { return }
         isEligibleForFreeTrial = await subscription.isEligibleForIntroOffer
+    }
+
+    /// Apple's price for a new texting number, once the App Store products have loaded.
+    var smsExtraDisplayPrice: String? {
+        productsByID[BookkingProductID.smsExtra]?.displayPrice
     }
 
     func displayPrice(for plan: SubscriptionPlan) -> String {
@@ -387,5 +404,8 @@ final class BookkingSubscriptionStore: ObservableObject {
         _ = try await functions.httpsCallable("syncAppleSubscription").call([
             "signedTransaction": record.signedTransaction,
         ])
+        await MainActor.run {
+            NotificationCenter.default.post(name: .subscriptionDidChange, object: nil)
+        }
     }
 }

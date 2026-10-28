@@ -166,6 +166,11 @@ final class ClientProfileViewModel: ObservableObject {
         return matchingBookings.contains { $0.smsConsentAccepted == true }
     }
 
+    /// Client replied STOP (and hasn't opted back in).
+    var smsOptedOut: Bool {
+        client.smsOptedIn != true && client.smsOptedOutAt != nil
+    }
+
     var smsConsentDate: Date? {
         client.smsConsentAt ?? matchingBookings.compactMap(\.smsConsentAt).max()
     }

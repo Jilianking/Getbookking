@@ -98,6 +98,10 @@ struct Message: Codable, Identifiable {
     var paymentUrl: String? = nil
     /// Public HTTPS image URLs for MMS (Firebase Storage).
     var mediaUrls: [String] = []
+    /// Twilio reported the text never reached the client (failed / undelivered).
+    var deliveryFailed: Bool = false
+    /// Automatic texts (opt-in request, opt-in confirmation) rather than ones the shop typed.
+    var systemKind: String? = nil
 
     enum MessageSender: String, Codable {
         case client = "client"
@@ -107,6 +111,11 @@ struct Message: Codable, Identifiable {
     /// Stable id for SwiftUI when backend id is nil
     var stableId: String {
         id ?? "\(clientId)-\(createdAt.timeIntervalSince1970)"
+    }
+
+    var isConsentSystemText: Bool {
+        guard let kind = systemKind else { return false }
+        return kind == "inbound_consent" || kind == "consent_resend"
     }
 
     var hasMedia: Bool {
@@ -144,5 +153,39 @@ struct Message: Codable, Identifiable {
     ) -> String {
         let amount = String(format: "$%.2f", Double(amountCents) / 100.0)
         return "\(kind.title) · \(amount)"
+    }
+}
+
+/// Where a conversation stands on texting consent (from `getSmsConsentStatus`).
+struct SmsConsentStatus: Equatable {
+    enum State: String {
+        case optedIn = "opted_in"
+        case optedOut = "opted_out"
+        /// Client texted the shop but hasn't replied YES yet.
+        case waiting
+        /// Client never texted and never opted in at booking.
+        case needsOptIn = "needs_opt_in"
+    }
+
+    let state: State
+    let canResendAt: Date?
+
+    var allowsSending: Bool { state == .optedIn }
+    var canResendNow: Bool { state == .waiting && canResendAt == nil }
+
+    init(state: State, canResendAt: Date? = nil) {
+        self.state = state
+        self.canResendAt = canResendAt
+    }
+
+    init?(callableData: [String: Any]) {
+        guard let raw = callableData["state"] as? String,
+              let state = State(rawValue: raw) else { return nil }
+        self.state = state
+        if let ms = (callableData["canResendAtMs"] as? NSNumber)?.doubleValue, ms > 0 {
+            self.canResendAt = Date(timeIntervalSince1970: ms / 1000)
+        } else {
+            self.canResendAt = nil
+        }
     }
 }

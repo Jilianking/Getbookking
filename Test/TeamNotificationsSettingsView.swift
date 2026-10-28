@@ -31,11 +31,6 @@ struct TeamNotificationsSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                TeamNotificationToggle(
-                    viewModel: viewModel,
-                    title: "Daily summary email",
-                    keyPath: \.dailySummaryEmail
-                )
             }
 
             TeamManagerPolicySaveSection(viewModel: viewModel, label: "Save")

@@ -123,6 +123,7 @@ function parsePath(customHostSlug) {
     isChartersPath: isChartersPath,
     isCharterDetailPath: isCharterDetailPath,
     isHowItWorksPath: isHowItWorksPath,
+    isPayPath: page === 'pay',
     isProviderPath: !!memberSlug,
     legacyMemberPath: legacyMemberPath,
     sectionTarget: sectionTarget,
@@ -175,9 +176,9 @@ function themeAssetsReady(t) {
   if (window.BKSitePerf && window.BKSitePerf.ensureThemeCss) {
     css = window.BKSitePerf.ensureThemeCss(themeId);
   } else if (/studio-?12/i.test(String(themeId || ''))) {
-    css = loadThemeStylesheet('/css/studio12-theme.css?v=20260822g', 'bk-theme-css-studio12');
+    css = loadThemeStylesheet('/css/studio12-theme.css?v=20260915a', 'bk-theme-css-studio12');
   } else if (/blade/i.test(String(themeId || ''))) {
-    css = loadThemeStylesheet('/css/blade-theme.css?v=20260812m', 'bk-theme-css-blade');
+    css = loadThemeStylesheet('/css/blade-theme.css?v=20260915a', 'bk-theme-css-blade');
   } else if (/luxe/i.test(String(themeId || ''))) {
     css = loadThemeStylesheet('/css/luxe-theme.css?v=20260822a', 'bk-theme-css-luxe');
   } else if (/stonecut/i.test(String(themeId || ''))) {
@@ -737,12 +738,12 @@ function tenantBusinessHoursTrimmed(tenant) {
   return String(tenant.businessHours || '').trim();
 }
 
-/** Parse tenant `businessHoursWeekly` into grouped display rows (Mon-first). */
+/** Parse tenant `businessHoursWeekly` into one display row per day (Mon-first). */
 function businessHoursWeeklyGroupedRows(tenant) {
   var w = tenant && tenant.businessHoursWeekly;
   if (!w || typeof w !== 'object') return null;
   var dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var dayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   if (!Object.keys(w).length) return null;
   function intMin(v) {
     if (v == null) return 0;
@@ -771,28 +772,16 @@ function businessHoursWeeklyGroupedRows(tenant) {
       })
     };
   }
-  function scheduleKey(day) {
-    if (day.closed || !day.ranges.length) return 'closed';
-    return day.ranges.map(function(r) { return r.openMin + '-' + r.closeMin; }).join(',');
-  }
   function scheduleText(day) {
     if (day.closed || !day.ranges.length) return 'Closed';
     return day.ranges.map(function(r) {
       return formatMin(r.openMin) + ' – ' + formatMin(r.closeMin);
     }).join(', ');
   }
-  var days = dayKeys.map(function(k) { return parseDay(w[k]); });
-  var rows = [];
-  var i = 0;
-  while (i < 7) {
-    var j = i;
-    var keyI = scheduleKey(days[i]);
-    while (j + 1 < 7 && scheduleKey(days[j + 1]) === keyI) j++;
-    var label = i === j ? dayLabels[i] : (dayLabels[i] + ' – ' + dayLabels[j]);
-    rows.push({ label: label, time: scheduleText(days[i]), closed: days[i].closed || !days[i].ranges.length });
-    i = j + 1;
-  }
-  return rows;
+  return dayKeys.map(function(k, i) {
+    var day = parseDay(w[k]);
+    return { label: dayLabels[i], time: scheduleText(day), closed: day.closed || !day.ranges.length };
+  });
 }
 
 function filterSidebarLinksForPageVisibility(tenant, links) {
@@ -1216,6 +1205,7 @@ function resolvedWebThemeId(tenant) {
 
 function mapLoadedTenant(id, data, slug) {
       var row = { id: id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
+        canonicalDomain: (data.canonicalDomain || '').toString().trim().toLowerCase(),
         smsEnabled: data.smsEnabled === true,
         smsStatus: (data.smsStatus || '').toString(),
         smsPhoneNumber: (data.smsPhoneNumber || '').toString(),
@@ -1593,6 +1583,11 @@ function init() {
     }
     applyPreviewThemeOverride(tenant);
     applyBranding(tenant);
+    if (p.isPayPath) {
+      document.getElementById('root').innerHTML = depositPayPageHtml(tenant);
+      bindDepositPayPage(tenant);
+      return;
+    }
     return Promise.all([
       loadServices(tenant.id),
       loadProducts(tenant.id),

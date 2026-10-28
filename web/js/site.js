@@ -34,7 +34,7 @@ const db = firebase.firestore();
 const functions = firebase.app().functions('us-central1');
 
 /** Supports subdomain (`{tenant}.getbookking.com/home`, `{tenant}.getbooking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
-var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1, charters: 1, 'how-it-works': 1 };
+var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1, charters: 1, 'how-it-works': 1, pay: 1 };
 
 window.__bkApplyCharterHeroPhoto = function() {
   var url = window.__bkNativeHeroImageUrl || '';
@@ -257,6 +257,7 @@ function parsePath(customHostSlug) {
     isChartersPath: isChartersPath,
     isCharterDetailPath: isCharterDetailPath,
     isHowItWorksPath: isHowItWorksPath,
+    isPayPath: page === 'pay',
     isProviderPath: !!memberSlug,
     legacyMemberPath: legacyMemberPath,
     sectionTarget: sectionTarget,
@@ -309,9 +310,9 @@ function themeAssetsReady(t) {
   if (window.BKSitePerf && window.BKSitePerf.ensureThemeCss) {
     css = window.BKSitePerf.ensureThemeCss(themeId);
   } else if (/studio-?12/i.test(String(themeId || ''))) {
-    css = loadThemeStylesheet('/css/studio12-theme.css?v=20260822g', 'bk-theme-css-studio12');
+    css = loadThemeStylesheet('/css/studio12-theme.css?v=20260915a', 'bk-theme-css-studio12');
   } else if (/blade/i.test(String(themeId || ''))) {
-    css = loadThemeStylesheet('/css/blade-theme.css?v=20260812m', 'bk-theme-css-blade');
+    css = loadThemeStylesheet('/css/blade-theme.css?v=20260915a', 'bk-theme-css-blade');
   } else if (/luxe/i.test(String(themeId || ''))) {
     css = loadThemeStylesheet('/css/luxe-theme.css?v=20260822a', 'bk-theme-css-luxe');
   } else if (/stonecut/i.test(String(themeId || ''))) {
@@ -871,12 +872,12 @@ function tenantBusinessHoursTrimmed(tenant) {
   return String(tenant.businessHours || '').trim();
 }
 
-/** Parse tenant `businessHoursWeekly` into grouped display rows (Mon-first). */
+/** Parse tenant `businessHoursWeekly` into one display row per day (Mon-first). */
 function businessHoursWeeklyGroupedRows(tenant) {
   var w = tenant && tenant.businessHoursWeekly;
   if (!w || typeof w !== 'object') return null;
   var dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var dayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   if (!Object.keys(w).length) return null;
   function intMin(v) {
     if (v == null) return 0;
@@ -905,28 +906,16 @@ function businessHoursWeeklyGroupedRows(tenant) {
       })
     };
   }
-  function scheduleKey(day) {
-    if (day.closed || !day.ranges.length) return 'closed';
-    return day.ranges.map(function(r) { return r.openMin + '-' + r.closeMin; }).join(',');
-  }
   function scheduleText(day) {
     if (day.closed || !day.ranges.length) return 'Closed';
     return day.ranges.map(function(r) {
       return formatMin(r.openMin) + ' – ' + formatMin(r.closeMin);
     }).join(', ');
   }
-  var days = dayKeys.map(function(k) { return parseDay(w[k]); });
-  var rows = [];
-  var i = 0;
-  while (i < 7) {
-    var j = i;
-    var keyI = scheduleKey(days[i]);
-    while (j + 1 < 7 && scheduleKey(days[j + 1]) === keyI) j++;
-    var label = i === j ? dayLabels[i] : (dayLabels[i] + ' – ' + dayLabels[j]);
-    rows.push({ label: label, time: scheduleText(days[i]), closed: days[i].closed || !days[i].ranges.length });
-    i = j + 1;
-  }
-  return rows;
+  return dayKeys.map(function(k, i) {
+    var day = parseDay(w[k]);
+    return { label: dayLabels[i], time: scheduleText(day), closed: day.closed || !day.ranges.length };
+  });
 }
 
 function filterSidebarLinksForPageVisibility(tenant, links) {
@@ -1350,6 +1339,7 @@ function resolvedWebThemeId(tenant) {
 
 function mapLoadedTenant(id, data, slug) {
       var row = { id: id, slug: data.slug || slug, displayName: data.displayName, businessName: data.businessName || '', logoUrl: data.logoUrl, tagline: data.tagline,
+        canonicalDomain: (data.canonicalDomain || '').toString().trim().toLowerCase(),
         smsEnabled: data.smsEnabled === true,
         smsStatus: (data.smsStatus || '').toString(),
         smsPhoneNumber: (data.smsPhoneNumber || '').toString(),
@@ -1727,6 +1717,11 @@ function init() {
     }
     applyPreviewThemeOverride(tenant);
     applyBranding(tenant);
+    if (p.isPayPath) {
+      document.getElementById('root').innerHTML = depositPayPageHtml(tenant);
+      bindDepositPayPage(tenant);
+      return;
+    }
     return Promise.all([
       loadServices(tenant.id),
       loadProducts(tenant.id),
@@ -3103,8 +3098,29 @@ function applyWebButtonColors(tenant) {
   });
 }
 
+/** Tells search engines the shop's connected domain is its main address (both addresses serve the same site). */
+function applyCanonicalLink(t) {
+  var domain = (t && t.canonicalDomain) || '';
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return;
+  var path = location.pathname || '/';
+  if (!tenantSlugFromBookingHost((location.hostname || '').toLowerCase()) &&
+      (location.hostname || '').toLowerCase() !== domain) {
+    var prefix = '/' + (t.slug || '');
+    if (t.slug && (path === prefix || path.indexOf(prefix + '/') === 0)) {
+      path = path.slice(prefix.length) || '/';
+    }
+  }
+  var link = document.querySelector('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'canonical';
+    document.head.appendChild(link);
+  }
+  link.href = 'https://' + domain + path;
+}
 function applyBranding(t) {
   if (!t) return;
+  applyCanonicalLink(t);
   applySiteSeo(t);
   applySiteAnnouncement(t);
   applyTenantColorVars(t);
@@ -6043,10 +6059,420 @@ function shopCheckoutSubtitleLine(tenant) {
   return tenantSiteDisplayName(tenant, '');
 }
 
-function shopCheckoutFeeTooltipHtml() {
-  return '<p>Card processing (Stripe 2.9% + 30\u00a2)</p>' +
+function shopCheckoutFeeTooltipHtml(state) {
+  var method = state && state.method;
+  var label = (state && state.rateLabel) || '2.9% + 30\u00a2';
+  var name = method === 'klarna' ? 'Klarna' : method === 'affirm' ? 'Affirm' : method === 'instant_bank' ? 'Bank' : 'Card processing';
+  return '<p>' + name + ' (Stripe ' + label + ')</p>' +
     '<p>Platform fee (1%)</p>' +
-    '<p class="bk-shop-fee-tip-note">The business receives the full product price.</p>';
+    '<p class="bk-shop-fee-tip-note">The business receives the full service amount.</p>';
+}
+function checkoutStripeOptions(stripeAccountId) {
+  return {
+    stripeAccount: stripeAccountId,
+    betas: ['change_event_improvements_beta_1']
+  };
+}
+function checkoutMethodTitle(method) {
+  if (method === 'klarna') return 'Klarna';
+  if (method === 'affirm') return 'Affirm';
+  if (method === 'instant_bank') return 'Bank';
+  return 'Card';
+}
+/** Stripe can offer Klarna inside Link; it isn't allowed here (no processing fee on pay-later). */
+var BLOCKED_CHECKOUT_METHOD_MESSAGE = 'Klarna isn\u2019t available for this business. Please pay with Card or Bank.';
+function isBlockedCheckoutMethod(method) {
+  return method === 'klarna' || method === 'affirm';
+}
+function isRepricedCheckoutMethod(method) {
+  return method === 'card' || method === 'klarna' || method === 'affirm' || method === 'instant_bank';
+}
+function methodFromPaymentPreview(preview) {
+  if (!preview) return '';
+  var type = (preview.type || '').toString();
+  if (type === 'klarna' || preview.klarna) return 'klarna';
+  if (type === 'affirm' || preview.affirm) return 'affirm';
+  var card = preview.card || {};
+  var brand = (card.brand || '').toString().toLowerCase();
+  if (brand === 'link' || type === 'link_card_brand') return 'instant_bank';
+  if (type === 'card' && brand && brand !== 'unknown') return 'card';
+  return '';
+}
+function methodFromLinkValue(value) {
+  if (!value) return '';
+  var preview = methodFromPaymentPreview(value.payment_method);
+  if (preview === 'klarna' || preview === 'affirm' || preview === 'instant_bank') return preview;
+  var blob = '';
+  try { blob = JSON.stringify(value).toLowerCase(); } catch (e) { return ''; }
+  if (blob.indexOf('klarna') !== -1) return 'klarna';
+  if (blob.indexOf('affirm') !== -1) return 'affirm';
+  if (blob.indexOf('link_card_brand') !== -1 || blob.indexOf('"brand":"link"') !== -1) return 'instant_bank';
+  return '';
+}
+function methodFromChangeEvent(event) {
+  var value = (event && event.value) || {};
+  var type = (value.type || '').toString();
+  var saved = methodFromPaymentPreview(value.payment_method);
+  if (saved === 'instant_bank' || saved === 'klarna' || saved === 'affirm') return saved;
+  if (type === 'klarna' || type === 'affirm') return type;
+  if (type === 'link_card_brand' || type === 'instant_bank' || type === 'instant_bank_account') return 'instant_bank';
+  if (type === 'link') return methodFromLinkValue(value);
+  return '';
+}
+function bindCheckoutMethodReprice(config) {
+  var initial = isRepricedCheckoutMethod(config.initialMethod) ? config.initialMethod : 'card';
+  var selected = initial;
+  var priced = initial;
+  var queue = Promise.resolve();
+  var generation = 0;
+  var lastEvent = null;
+
+  function previewCheckoutMethod(shouldSubmit) {
+    if (!config.stripe || typeof config.stripe.createConfirmationToken !== 'function') {
+      return Promise.resolve('');
+    }
+    var ready = Promise.resolve(true);
+    if (shouldSubmit && config.elements && typeof config.elements.submit === 'function') {
+      ready = config.elements.submit().then(function(res) {
+        return !(res && res.error);
+      }).catch(function() { return false; });
+    }
+    return ready.then(function(ok) {
+      if (!ok) return '';
+      return config.stripe.createConfirmationToken({ elements: config.elements }).then(function(result) {
+        if (!result || result.error) return '';
+        var token = result.confirmationToken;
+        var preview = token && token.payment_method_preview;
+        return methodFromPaymentPreview(preview) || methodFromLinkValue(preview);
+      }).catch(function() {
+        return '';
+      });
+    });
+  }
+
+  function reprice(method, paymentMethodId) {
+    if (!isRepricedCheckoutMethod(method)) return Promise.resolve(null);
+    if (isBlockedCheckoutMethod(method)) {
+      selected = method;
+      if (config.onNotice) config.onNotice(BLOCKED_CHECKOUT_METHOD_MESSAGE);
+      return Promise.resolve(null);
+    }
+    if (config.onNotice) config.onNotice('');
+    selected = method;
+    if (priced === method && !paymentMethodId) return Promise.resolve(null);
+    if (config.onUpdating) config.onUpdating(method);
+    return ensureAnonymousAuth().then(function() {
+      return functions.httpsCallable('repriceCustomerCheckout')({
+        tenantSlug: config.tenantSlug,
+        paymentIntentId: config.paymentIntentId,
+        method: method,
+        paymentMethodId: paymentMethodId || ''
+      });
+    }).then(function(res) {
+      var data = (res && res.data) || {};
+      var resolved = data.method || method;
+      if (selected !== method && selected !== resolved) return null;
+      selected = resolved;
+      priced = resolved;
+      return config.elements.fetchUpdates().then(function() { return data; });
+    }).then(function(data) {
+      if (!data) return null;
+      var resolved = data.method || method;
+      if (selected !== resolved && selected !== method) return null;
+      if (config.onPriced) config.onPriced(data);
+      return data;
+    });
+  }
+
+  function resolveEvent(event) {
+    var gen = ++generation;
+    var hinted = methodFromChangeEvent(event);
+    var type = (event && event.value && event.value.type) || '';
+    var pmId = (event && event.value && event.value.payment_method && event.value.payment_method.id) || '';
+    if (hinted && (elementReady || hinted === 'card')) selected = hinted;
+    var pmFor = function(method) {
+      var preview = methodFromPaymentPreview(event && event.value && event.value.payment_method);
+      return preview === method ? pmId : '';
+    };
+    queue = queue.then(function() {
+      if (gen !== generation) return null;
+      if (!elementReady && hinted && hinted !== 'card') return null;
+      if (hinted === 'klarna' || hinted === 'affirm' || hinted === 'instant_bank') {
+        if (hinted !== 'card') userPicked = true;
+        return reprice(hinted, pmFor(hinted));
+      }
+      var complete = !!(event && event.complete);
+      if (type === 'link' || (complete && (type === 'card' || type === 'link_card_brand'))) {
+        // Stripe only reveals a Link bank (card brand "link") after elements.submit().
+        // Never for Apple Pay / Google Pay: submit() would open their sheet unprompted.
+        return previewCheckoutMethod(complete).then(function(previewed) {
+          if (gen !== generation) return null;
+          var fromValue = type === 'link' ? methodFromLinkValue(event && event.value) : '';
+          var method = previewed || fromValue;
+          if (!method && type === 'link_card_brand') method = 'instant_bank';
+          if (!method && type === 'card') method = 'card';
+          if (!method) return null;
+          if (!elementReady && method !== 'card') return null;
+          if (method !== 'card') userPicked = true;
+          return reprice(method, pmFor(method));
+        });
+      }
+      if (type === 'card' && !complete) {
+        return reprice('card', pmFor('card'));
+      }
+      return reprice(hinted || 'card', pmFor(hinted || 'card'));
+    }).catch(function(err) {
+      if (config.onError) config.onError(err);
+      return null;
+    });
+    return queue;
+  }
+
+  var paymentChanges = 0;
+  var bankFormSelected = false;
+  var elementReady = false;
+  var userPicked = false;
+  function applyDetectedMethod(method) {
+    if (!method) return;
+    if (!elementReady && method !== 'card') return;
+    if (elementReady && method !== 'card') userPicked = true;
+    if (method === priced) return;
+    generation += 1;
+    selected = method;
+    queue = queue.then(function() { return reprice(method); }).catch(function(err) {
+      if (config.onError) config.onError(err);
+      return null;
+    });
+  }
+  config.paymentElement.on('change', function(event) {
+    paymentChanges += 1;
+    lastEvent = event;
+    var type = event && event.value && event.value.type;
+    var hinted = methodFromChangeEvent(event);
+    if (hinted || type === 'card' || type === 'link' || type === 'link_card_brand') resolveEvent(event);
+  });
+  if (typeof config.paymentElement.on === 'function') {
+    config.paymentElement.on('carddetailschange', function(event) {
+      if (!event || event.loading) return;
+      if (paymentChanges < 1) return;
+      var details = event.details;
+      var lastType = (lastEvent && lastEvent.value && lastEvent.value.type) || '';
+      if (!details) {
+        if (!elementReady) return;
+        if (lastType === 'klarna' || lastType === 'affirm') return;
+        if (lastType === 'link') {
+          previewCheckoutMethod().then(function(previewed) {
+            var fromValue = methodFromLinkValue(lastEvent && lastEvent.value);
+            var method = previewed || fromValue;
+            if (method) applyDetectedMethod(method);
+          }).catch(function() {});
+          return;
+        }
+        bankFormSelected = true;
+        applyDetectedMethod('instant_bank');
+        return;
+      }
+      var brands = details.brands || [];
+      var linkBrand = false;
+      for (var i = 0; i < brands.length; i++) {
+        if (String(brands[i] || '').toLowerCase() === 'link') linkBrand = true;
+      }
+      if (linkBrand) {
+        bankFormSelected = true;
+        applyDetectedMethod('instant_bank');
+        return;
+      }
+      bankFormSelected = false;
+      applyDetectedMethod('card');
+    });
+  }
+  if (typeof config.paymentElement.on === 'function') {
+    config.paymentElement.on('ready', function() {
+      elementReady = true;
+      if (!userPicked && config.openOnCard !== false) applyDetectedMethod('card');
+    });
+  }
+  config.prepareConfirm = function() {
+    elementReady = true;
+    return resolveEvent(lastEvent).then(function() {
+      if (priced !== selected) return resolveEvent(lastEvent);
+    }).then(function() {
+      if (isBlockedCheckoutMethod(selected)) {
+        throw new Error(BLOCKED_CHECKOUT_METHOD_MESSAGE);
+      }
+      if (priced !== selected) {
+        throw new Error('The total is still updating for this payment method. Try again.');
+      }
+    });
+  };
+  return config;
+}
+/**
+ * Apple Pay / Google Pay must open right after the tap, so elements.submit() runs first and
+ * any server work (repricing, saving contact details) comes after it.
+ */
+function confirmCheckoutPayment(prepare, stripe, elements, confirmParams, beforeConfirm) {
+  var submitted = (elements && typeof elements.submit === 'function')
+    ? elements.submit()
+    : Promise.resolve({});
+  return submitted.then(function(res) {
+    if (res && res.error) return { error: res.error };
+    var ready = (typeof prepare === 'function') ? prepare() : Promise.resolve();
+    return ready.then(function() {
+      return (typeof beforeConfirm === 'function') ? beforeConfirm() : null;
+    }).then(function() {
+      return stripe.confirmPayment({
+        elements: elements,
+        redirect: 'if_required',
+        confirmParams: confirmParams
+      });
+    });
+  });
+}
+function depositPayPageHtml(tenant) {
+  var name = tenantSiteDisplayName(tenant, 'Payment');
+  return '<div class="container" style="max-width:440px;margin:48px auto;padding:0 16px">' +
+    '<div class="card" id="bk-pay-card" style="padding:28px 24px">' +
+    '<p id="bk-pay-business" style="margin:0 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;opacity:.6">' + esc(name) + '</p>' +
+    '<h1 id="bk-pay-title" style="margin:0 0 18px;font-size:22px">Payment</h1>' +
+    '<div id="bk-pay-summary" style="display:none;margin-bottom:16px;font-size:15px">' +
+    '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Service</span><span id="bk-pay-service"></span></div>' +
+    '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Processing &amp; service fees</span><span id="bk-pay-fee"></span></div>' +
+    '<div style="display:flex;justify-content:space-between;margin:10px 0 0;font-weight:650"><span>Customer pays</span><span id="bk-pay-total"></span></div>' +
+    '<p id="bk-pay-rate" style="margin:8px 0 0;font-size:13px;opacity:.65"></p>' +
+    '</div>' +
+    '<p id="bk-pay-status" style="margin:0 0 12px">Loading payment…</p>' +
+    '<div id="bk-pay-element"></div>' +
+    '<p id="bk-pay-error" style="display:none;color:#9b2c2c;margin:12px 0 0"></p>' +
+    '<button type="button" id="bk-pay-button" style="display:none;width:100%;margin-top:16px" class="btn">Pay</button>' +
+    '</div></div>';
+}
+function bindDepositPayPage(tenant) {
+  var params;
+  try { params = new URLSearchParams(location.search || ''); } catch (e) { params = null; }
+  var pi = params ? (params.get('pi') || '') : '';
+  var statusEl = document.getElementById('bk-pay-status');
+  var errorEl = document.getElementById('bk-pay-error');
+  var summaryEl = document.getElementById('bk-pay-summary');
+  var button = document.getElementById('bk-pay-button');
+  function showPayError(msg) {
+    if (!errorEl) return;
+    errorEl.style.display = msg ? 'block' : 'none';
+    errorEl.textContent = msg || '';
+  }
+  function money(cents) {
+    return (typeof formatMoney === 'function') ? formatMoney((Number(cents) || 0) / 100) : ('$' + ((Number(cents) || 0) / 100).toFixed(2));
+  }
+  function paintSummary(data) {
+    if (summaryEl) summaryEl.style.display = '';
+    var serviceEl = document.getElementById('bk-pay-service');
+    var feeEl = document.getElementById('bk-pay-fee');
+    var totalEl = document.getElementById('bk-pay-total');
+    var rateEl = document.getElementById('bk-pay-rate');
+    if (serviceEl) serviceEl.textContent = money(data.serviceCents);
+    if (feeEl) feeEl.textContent = data.surchargeCents == null ? '…' : money(data.surchargeCents);
+    if (totalEl) totalEl.textContent = data.totalCents == null ? '…' : money(data.totalCents);
+    if (rateEl) {
+      var method = checkoutMethodTitle(data.method);
+      rateEl.textContent = method + ' · Stripe ' + (data.rateLabel || '2.9% + 30¢') + ' plus a 1% platform fee.';
+    }
+    if (button && data.totalCents != null) button.textContent = 'Pay ' + money(data.totalCents);
+  }
+  if (!pi || pi.indexOf('pi_') !== 0) {
+    if (statusEl) statusEl.textContent = 'This payment link is missing its payment.';
+    return;
+  }
+  if (params && params.get('redirect_status') === 'succeeded') {
+    if (statusEl) statusEl.textContent = 'Payment received. Thank you.';
+    return;
+  }
+  ensureAnonymousAuth().then(function() {
+    var stripeReady = (window.BKSitePerf && window.BKSitePerf.ensureStripe)
+      ? window.BKSitePerf.ensureStripe()
+      : Promise.resolve();
+    return stripeReady.then(function() {
+      return functions.httpsCallable('getDepositCheckout')({
+        tenantSlug: tenant.slug,
+        paymentIntentId: pi
+      });
+    });
+  }).then(function(res) {
+    var data = (res && res.data) || {};
+    var title = document.getElementById('bk-pay-title');
+    if (title) title.textContent = data.productName || 'Payment';
+    if (data.paid) {
+      if (statusEl) statusEl.textContent = 'Payment received. Thank you.';
+      paintSummary(data);
+      return;
+    }
+    if (!data.clientSecret || !data.stripeAccountId) {
+      throw new Error('Could not start payment.');
+    }
+    if ((data.method || 'card') === 'card') {
+      paintSummary(data);
+    } else {
+      paintSummary({
+        serviceCents: data.serviceCents,
+        method: 'card',
+        rateLabel: '2.9% + 30¢'
+      });
+    }
+    if (statusEl) statusEl.style.display = 'none';
+    if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
+    var pk = shopStripePublishableKey(data.publishableKey);
+    var stripe = Stripe(pk, checkoutStripeOptions(data.stripeAccountId));
+    var elements = stripe.elements({
+      clientSecret: data.clientSecret,
+      appearance: shopPaymentElementAppearance(tenant)
+    });
+    var paymentElement = elements.create('payment', { layout: 'tabs' });
+    paymentElement.mount('#bk-pay-element');
+    if (button) button.style.display = '';
+    var payState = data;
+    var depositReprice = bindCheckoutMethodReprice({
+      tenantSlug: tenant.slug,
+      paymentIntentId: pi,
+      initialMethod: data.method || 'card',
+      openOnCard: true,
+      paymentElement: paymentElement,
+      elements: elements,
+      stripe: stripe,
+      onPriced: function(priced) {
+        payState = priced;
+        paintSummary(priced);
+        showPayError('');
+      },
+      onError: function(err) { showPayError(formatFirebaseHttpsError(err)); },
+      onNotice: function(msg) { showPayError(msg || ''); }
+    });
+    if (button) {
+      button.addEventListener('click', function() {
+        button.disabled = true;
+        showPayError('');
+        confirmCheckoutPayment(
+          depositReprice.prepareConfirm,
+          stripe,
+          elements,
+          { return_url: location.href }
+        ).then(function(result) {
+          if (result.error) throw result.error;
+          if (statusEl) {
+            statusEl.style.display = '';
+            statusEl.textContent = 'Payment received. Thank you.';
+          }
+          if (button) button.style.display = 'none';
+          var mount = document.getElementById('bk-pay-element');
+          if (mount) mount.innerHTML = '';
+        }).catch(function(err) {
+          button.disabled = false;
+          showPayError((err && err.message) ? err.message : formatFirebaseHttpsError(err));
+        });
+      });
+    }
+  }).catch(function(err) {
+    if (statusEl) statusEl.textContent = 'This payment link could not be opened.';
+    showPayError(formatFirebaseHttpsError(err));
+  });
 }
 
 function updateShopCheckoutSummary(cart, stripeState, contactOk, isPreparing) {
@@ -6577,7 +7003,7 @@ function bindShopCheckoutPage(tenant) {
     var pk = shopStripePublishableKey(checkoutData.publishableKey);
     if (!pk) throw new Error('Stripe publishable key is missing. Configure STRIPE_PUBLISHABLE_KEY on Cloud Functions.');
     if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
-    var stripe = Stripe(pk, { stripeAccount: checkoutData.stripeAccountId });
+    var stripe = Stripe(pk, checkoutStripeOptions(checkoutData.stripeAccountId));
     var elements = stripe.elements({
       clientSecret: checkoutData.clientSecret,
       appearance: shopPaymentElementAppearance(tenant),
@@ -6602,6 +7028,35 @@ function bindShopCheckoutPage(tenant) {
       fulfillmentMethod: checkoutData.fulfillmentMethod || 'pickup',
     };
     if (paymentLoading) paymentLoading.style.display = 'none';
+    var shopReprice = bindCheckoutMethodReprice({
+      tenantSlug: tenant.slug,
+      paymentIntentId: checkoutData.paymentIntentId,
+      paymentElement: paymentElement,
+      elements: elements,
+      stripe: stripe,
+      onPriced: function(data) {
+        var state = window.__bkShopCheckoutStripe;
+        if (!state) return;
+        state.surchargeCents = data.surchargeCents;
+        state.totalCents = data.totalCents;
+        state.platformFeeCents = data.platformFeeCents || 0;
+        state.rateLabel = data.rateLabel || '';
+        state.method = data.method || 'card';
+        updateCheckoutChrome();
+      },
+      onError: function(err) {
+        if (errorEl) {
+          errorEl.textContent = formatFirebaseHttpsError(err);
+          errorEl.style.display = 'block';
+        }
+      },
+      onNotice: function(msg) {
+        if (!errorEl) return;
+        errorEl.textContent = msg || '';
+        errorEl.style.display = msg ? 'block' : 'none';
+      }
+    });
+    window.__bkShopCheckoutStripe.prepareConfirm = shopReprice.prepareConfirm;
     updateCheckoutChrome();
   }
 
@@ -6794,22 +7249,22 @@ function bindShopCheckoutPage(tenant) {
       }
       var returnUrl = tenantBaseUrl(tenant) + '/shop/checkout?order_id=' +
         encodeURIComponent(stripeState.orderId || '');
-      return syncShopCheckoutContact(contact).then(function() {
-        return stripeState.stripe.confirmPayment({
-          elements: stripeState.elements,
-          confirmParams: {
-            return_url: returnUrl,
-            payment_method_data: {
-              billing_details: {
-                name: contact.name,
-                email: contact.email,
-                phone: contact.phone || undefined,
-              },
+      return confirmCheckoutPayment(
+        stripeState.prepareConfirm,
+        stripeState.stripe,
+        stripeState.elements,
+        {
+          return_url: returnUrl,
+          payment_method_data: {
+            billing_details: {
+              name: contact.name,
+              email: contact.email,
+              phone: contact.phone || undefined,
             },
           },
-          redirect: 'if_required',
-        });
-      }).then(function(result) {
+        },
+        function() { return syncShopCheckoutContact(contact); }
+      ).then(function(result) {
         if (result.error) throw result.error;
         return finalizeShopCheckoutPayment(
           tenant,
@@ -13732,19 +14187,24 @@ function charterCheckoutPage(tenant, service, services) {
   var payNote = payMode === 'full'
     ? 'You’ll pay the trip total today to confirm your booking.'
     : payMode === 'deposit'
-      ? (depositAmt
-        ? 'You’ll pay a $' + Math.round(depositAmt) + ' deposit today to confirm your trip. The remaining balance is due before departure.'
-        : 'You’ll pay a deposit today to confirm your trip. The remaining balance is due before departure.')
+      ? (priceNum > 0
+        ? 'Today you pay the deposit plus any add-ons to confirm your trip. The rest of the trip price is due before departure.'
+        : 'Today you pay the deposit plus any add-ons to confirm your trip. The captain will confirm the trip price.')
       : 'You’ll hear back after the captain reviews this request. The boat is held for up to ' +
         responseHours + ' hours while they respond — no payment is taken now.';
-  var dueLabel = payMode === 'deposit' ? 'Due now (deposit)' : (payMode === 'full' ? 'Due now' : 'Trip total');
+  var dueLabel = payMode === 'request' ? 'Trip total' : 'Due today';
   var dueAmt = priceNum;
+  var depositPart = 0;
   if (payMode === 'deposit') {
     var configuredDeposit = depositAmt > 0 ? depositAmt : Math.round(priceNum * 0.2 * 100) / 100;
-    dueAmt = priceNum > 0
-      ? Math.max(0.5, Math.min(configuredDeposit, priceNum))
-      : Math.max(0.5, configuredDeposit);
+    depositPart = priceNum > 0 ? Math.min(configuredDeposit, priceNum) : configuredDeposit;
+    dueAmt = depositPart;
   }
+  var charterDollars = function(n) {
+    n = Number(n) || 0;
+    return '$' + (Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2));
+  };
+  var tripPriceLabel = priceNum > 0 ? charterDollars(priceNum) : 'Price set by captain';
   return '<div class="charter-page">' +
     charterCheckoutNavHtml(tenant, s) +
     charterRouteCanvasOpen(tenant, 'charter.checkoutPage') +
@@ -13785,10 +14245,15 @@ function charterCheckoutPage(tenant, service, services) {
             '<div class="charter-meta">' + esc(metaBits.join(' · ')) + '</div></div>' +
           '</div>' +
           '<div class="charter-order-lines">' +
-            '<div class="row"><span class="muted" data-line="anglers">' + people + ' anglers</span><span data-line="tripTotal">$' + Math.round(priceNum) + '</span></div>' +
-            (addons.length ? '<div class="row"><span class="muted">Add-ons</span><span data-line="addons">$0</span></div>' : '') +
+            '<div class="row"><span class="muted" data-line="anglers">Trip · ' + people + ' anglers</span><span data-line="tripTotal">' + esc(tripPriceLabel) + '</span></div>' +
+            (addons.length ? '<div class="row"><span class="muted" data-line="addons-label">Add-ons</span><span data-line="addons">$0</span></div>' : '') +
+            (priceNum > 0 && addons.length ? '<div class="row" data-line="trip-sum-row"><span>Trip total</span><span data-line="trip-sum">' + charterDollars(priceNum) + '</span></div>' : '') +
             '<div class="hr"></div>' +
-            '<div class="row total" data-line="due-row"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">$' + Math.round(dueAmt) + '</span></div>' +
+            (payMode === 'deposit'
+              ? '<div class="row"><span class="muted">Deposit</span><span data-line="deposit">' + charterDollars(depositPart) + '</span></div>' +
+                (addons.length ? '<div class="row" data-line="due-addons-row" hidden><span class="muted">Add-ons</span><span data-line="due-addons">$0</span></div>' : '')
+              : '') +
+            '<div class="row total" data-line="due-row"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">' + charterDollars(dueAmt) + '</span></div>' +
             (payMode === 'request' ? '' :
               '<div class="row" data-line="fee-row">' +
                 '<span class="charter-fee-label">' +
@@ -13801,6 +14266,9 @@ function charterCheckoutPage(tenant, service, services) {
                 '<span data-line="fees" class="bk-shop-checkout-summary-fee-pending">Calculated at checkout</span>' +
               '</div>' +
               '<div class="row total" data-line="card-total-row" hidden><span>Charged on card</span><span data-line="card-total"></span></div>') +
+            (payMode === 'deposit' && priceNum > 0
+              ? '<div class="row" data-line="balance-row"><span class="muted">Balance due before departure</span><span data-line="balance">' + charterDollars(priceNum - depositPart) + '</span></div>'
+              : '') +
           '</div>' +
           '<button type="button" class="charter-btn charter-btn-block" data-cta-key="wc.charter.checkoutConfirm" data-charter-confirm>' + esc(cta) + '</button>',
           ' data-base-price="' + priceNum + '" data-per-angler="' + perAngler + '"' +
@@ -13879,21 +14347,43 @@ function bindCharterCheckout(tenant, service) {
     }
     return add;
   }
-  function tripTotal() { return Math.round(base) + addonTotal(); }
+  function dollars(n) {
+    n = Number(n) || 0;
+    return '$' + (Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2));
+  }
+  function tripTotal() { return base + addonTotal(); }
+  // Deposit mode: the deposit (never more than a priced trip) plus add-ons, paid today.
+  // Matches createCharterCheckoutPayment on the server.
+  function depositPart() {
+    var configured = depositAmt > 0 ? depositAmt : Math.round(base * 0.2 * 100) / 100;
+    return base > 0 ? Math.min(configured, base) : configured;
+  }
   function dueNow() {
-    var total = tripTotal();
-    if (payMode !== 'deposit') return total;
-    var configured = depositAmt > 0 ? depositAmt : Math.round(total * 0.2 * 100) / 100;
-    return total > 0
-      ? Math.max(0.5, Math.min(configured, total))
-      : Math.max(0.5, configured);
+    if (payMode !== 'deposit') return tripTotal();
+    return depositPart() + addonTotal();
   }
   function refresh() {
     var add = addonTotal();
-    var elAdd = order.querySelector('[data-line="addons"]');
-    var elDue = order.querySelector('[data-line="due"]');
-    if (elAdd) elAdd.textContent = '$' + add;
-    if (elDue) elDue.textContent = '$' + dueNow();
+    var set = function(key, text) {
+      var el = order.querySelector('[data-line="' + key + '"]');
+      if (el) el.textContent = text;
+    };
+    set('addons', dollars(add));
+    set('trip-sum', dollars(tripTotal()));
+    set('deposit', dollars(depositPart()));
+    set('due-addons', dollars(add));
+    var dueAddRow = order.querySelector('[data-line="due-addons-row"]');
+    if (dueAddRow) dueAddRow.hidden = add <= 0;
+    set('due', dollars(dueNow()));
+    if (base > 0) set('balance', dollars(base - depositPart()));
+    var picked = [];
+    var checked = root.querySelectorAll('[data-charter-addon]:checked');
+    for (var k = 0; k < checked.length; k++) {
+      var lab = checked[k].closest('[data-addon-name]');
+      var nm = lab ? String(lab.getAttribute('data-addon-name') || '').trim() : '';
+      if (nm) picked.push(nm);
+    }
+    set('addons-label', picked.length ? 'Add-ons (' + picked.join(', ') + ')' : 'Add-ons');
     setCharterFeePending('Calculated at checkout');
     charterPay = null;
   }
@@ -13927,6 +14417,10 @@ function bindCharterCheckout(tenant, service) {
     q.push('mode=' + encodeURIComponent(payMode));
     if (totalCents != null && isFinite(Number(totalCents))) {
       q.push('paid=' + encodeURIComponent(String(Math.max(0, Math.round(Number(totalCents))))));
+    }
+    var balanceCents = charterPay && charterPay.balanceDueCents;
+    if (balanceCents != null && isFinite(Number(balanceCents)) && Number(balanceCents) > 0) {
+      q.push('balance=' + encodeURIComponent(String(Math.round(Number(balanceCents)))));
     }
     return q.length ? (done + '?' + q.join('&')) : done;
   }
@@ -13983,7 +14477,7 @@ function bindCharterCheckout(tenant, service) {
     var pk = shopStripePublishableKey(data.publishableKey);
     if (!pk) throw new Error('Stripe publishable key is missing.');
     if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
-    var stripe = Stripe(pk, { stripeAccount: data.stripeAccountId });
+    var stripe = Stripe(pk, checkoutStripeOptions(data.stripeAccountId));
     var elements = stripe.elements({
       clientSecret: data.clientSecret,
       appearance: shopPaymentElementAppearance(tenant)
@@ -13991,7 +14485,8 @@ function bindCharterCheckout(tenant, service) {
     var mountEl = document.getElementById('bk-charter-payment-element');
     if (!mountEl) throw new Error('Payment form is unavailable.');
     mountEl.innerHTML = '';
-    elements.create('payment', { layout: 'tabs' }).mount('#bk-charter-payment-element');
+    var paymentElement = elements.create('payment', { layout: 'tabs' });
+    paymentElement.mount('#bk-charter-payment-element');
     if (payBox) payBox.hidden = false;
     if (payLoading) payLoading.hidden = true;
     var cardTot = order.querySelector('[data-line="card-total"]');
@@ -14012,13 +14507,48 @@ function bindCharterCheckout(tenant, service) {
     if (cardTot && data.totalCents != null) cardTot.textContent = charterMoney(data.totalCents);
     if (addonLine && data.addonCents != null) addonLine.textContent = charterMoney(data.addonCents);
     if (dueLine && data.chargeCents != null) dueLine.textContent = charterMoney(data.chargeCents);
+    var depositLine = order.querySelector('[data-line="deposit"]');
+    if (depositLine && data.depositPartCents != null && data.payMode === 'deposit') {
+      depositLine.textContent = charterMoney(data.depositPartCents);
+    }
+    var balanceLine = order.querySelector('[data-line="balance"]');
+    if (balanceLine && data.balanceDueCents != null && data.tripCents > 0) {
+      balanceLine.textContent = charterMoney(data.balanceDueCents);
+    }
     charterPay = {
       stripe: stripe,
       elements: elements,
       requestId: data.requestId,
       paymentIntentId: data.paymentIntentId,
-      totalCents: data.totalCents
+      totalCents: data.totalCents,
+      surchargeCents: data.surchargeCents || 0,
+      balanceDueCents: data.payMode === 'deposit' && data.tripCents > 0 ? data.balanceDueCents : null,
+      rateLabel: '2.9% + 30¢',
+      method: 'card'
     };
+    var charterReprice = bindCheckoutMethodReprice({
+      tenantSlug: tenant.slug,
+      paymentIntentId: data.paymentIntentId,
+      paymentElement: paymentElement,
+      elements: elements,
+      stripe: stripe,
+      onPriced: function(priced) {
+        if (!charterPay) return;
+        charterPay.totalCents = priced.totalCents;
+        charterPay.surchargeCents = priced.surchargeCents;
+        charterPay.rateLabel = priced.rateLabel || '';
+        charterPay.method = priced.method || 'card';
+        if (feeLine && priced.surchargeCents != null) {
+          feeLine.textContent = charterMoney(priced.surchargeCents);
+          feeLine.className = '';
+        }
+        if (feeTip) feeTip.innerHTML = shopCheckoutFeeTooltipHtml(charterPay);
+        if (cardTot && priced.totalCents != null) cardTot.textContent = charterMoney(priced.totalCents);
+      },
+      onError: function(err) { showErr(formatFirebaseHttpsError(err)); },
+      onNotice: function(msg) { if (msg || errEl) showErr(msg || ''); }
+    });
+    charterPay.prepareConfirm = charterReprice.prepareConfirm;
     btn.textContent = payMode === 'deposit' ? 'Pay deposit' : 'Pay now';
   }
 
@@ -14049,13 +14579,12 @@ function bindCharterCheckout(tenant, service) {
     if (charterPay && charterPay.stripe && charterPay.elements) {
       btn.disabled = true;
       btn.textContent = 'Paying…';
-      charterPay.stripe.confirmPayment({
-        elements: charterPay.elements,
-        redirect: 'if_required',
-        confirmParams: {
-          return_url: confirmationUrl(null)
-        }
-      }).then(function(result) {
+      confirmCheckoutPayment(
+        charterPay.prepareConfirm,
+        charterPay.stripe,
+        charterPay.elements,
+        { return_url: confirmationUrl(null) }
+      ).then(function(result) {
         if (result.error) throw result.error;
         return ensureAnonymousAuth().then(function() {
           return functions.httpsCallable('finalizeCharterBookingPayment')({
@@ -14122,9 +14651,14 @@ function charterConfirmationPage(tenant, service) {
     ? search.people + (search.people === 1 ? ' angler' : ' anglers')
     : '—';
   var meeting = webCopyOverrideText(tenant, 'wc.charter.meetingPoint', 'Garrison Bight Marina');
+  var balanceCents = params ? parseInt(params.get('balance') || '', 10) : NaN;
   var paidRow = !isRequest && isFinite(paidCents)
     ? '<div class="hr"></div><div class="row total"><span>Paid today</span><span>$' +
-      (paidCents / 100).toFixed(2) + '</span></div>'
+      (paidCents / 100).toFixed(2) + '</span></div>' +
+      (isFinite(balanceCents) && balanceCents > 0
+        ? '<div class="row"><span class="muted">Balance due before departure</span><span>$' +
+          (balanceCents / 100).toFixed(2) + '</span></div>'
+        : '')
     : '';
   var smsPhone = (tenant.smsPhoneNumber || '').toString().trim();
   var contactPhone = (tenant.contactPhone || '').toString().trim();

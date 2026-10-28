@@ -15,6 +15,8 @@ struct Client: Codable, Identifiable {
     var smsOptedIn: Bool?
     var smsConsentAt: Date?
     var smsConsentSource: String?
+    /// Set when the client replied STOP; cleared when they reply YES / START.
+    var smsOptedOutAt: Date?
     var birthday: String?
     var referralSource: String?
     var profileExtras: [ClientProfileExtra]?
@@ -34,6 +36,7 @@ struct Client: Codable, Identifiable {
         smsOptedIn: Bool? = nil,
         smsConsentAt: Date? = nil,
         smsConsentSource: String? = nil,
+        smsOptedOutAt: Date? = nil,
         birthday: String? = nil,
         referralSource: String? = nil,
         profileExtras: [ClientProfileExtra]? = nil
@@ -52,9 +55,20 @@ struct Client: Codable, Identifiable {
         self.smsOptedIn = smsOptedIn
         self.smsConsentAt = smsConsentAt
         self.smsConsentSource = smsConsentSource
+        self.smsOptedOutAt = smsOptedOutAt
         self.birthday = birthday
         self.referralSource = referralSource
         self.profileExtras = profileExtras
+    }
+
+    /// Name to show: the formatted phone number while the name is still "Customer" / "Client" / "Guest".
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, !ClientsViewModel.isPlaceholderContactName(trimmed) { return trimmed }
+        if let phone, !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return PhoneFormatting.displayUS(phone)
+        }
+        return trimmed.isEmpty ? "Client" : trimmed
     }
 
     /// Internal note card (Notes tab); persisted as `noteEntries` on the customer doc.

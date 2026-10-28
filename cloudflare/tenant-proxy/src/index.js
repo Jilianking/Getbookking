@@ -4,10 +4,15 @@
  * brandonsmith.getbookking.com/gallery  →  https://test-app-96812.web.app/brandonsmith/gallery
  * brandonsmith.getbookking.com/js/...   →  https://test-app-96812.web.app/js/...  (no tenant prefix)
  *
- * Custom domains (Bookking-managed via Namecheap):
+ * Custom domains (Bookking-managed via Namecheap, connected as Cloudflare custom hostnames):
  *   Resolve host → slug from Cloud Function resolveTenantDomain (domainMappings).
  *   Response: { ok, host, slug, status } — no tenantId.
  *   Only status=active domains are served. No hardcoded domain map.
+ *   Every address ends at https://{domain} (no www). Page visits are forwarded with a
+ *   temporary redirect (302) so a lapsed domain falls back to the subdomain at once:
+ *     http://… → https://…
+ *     www.{domain}/x → {domain}/x
+ *     {slug}.getbookking.com/x → {domain}/x   (only while the domain is active)
  *
  * Team invites:
  *   - Apex / www: getbookking.com/join* → Firebase (when apex is proxied through Cloudflare).
@@ -25,6 +30,7 @@ const RESOLVE_DOMAIN_URL =
 const RESERVED = new Set([
   "www",
   "join", // team invite host join.getbookking.com — not a tenant slug
+  "domains", // Cloudflare for SaaS fallback origin for customer domains — not a tenant slug
   "app",
   "api",
   "admin",
@@ -96,6 +102,32 @@ function proxyTenantPath(request, slug, pathname, search) {
   return proxyToUpstream(request, upstreamPath, search);
 }
 
+/** Only normal page loads are forwarded; form posts and file requests are served where they land. */
+function isForwardablePageVisit(request, pathname) {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  return !isStaticPath(pathname);
+}
+
+function temporaryRedirect(host, pathname, search) {
+  return Response.redirect("https://" + host + pathname + search, 302);
+}
+
+/** Connected custom domain for a shop's slug, or null. Cached briefly at the edge. */
+async function resolveActiveDomainForSlug(slug) {
+  try {
+    const url = RESOLVE_DOMAIN_URL + "?slug=" + encodeURIComponent(slug);
+    const res = await fetch(url, {
+      cf: { cacheTtl: 60, cacheEverything: true },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const domain = data && data.domain ? String(data.domain).toLowerCase() : "";
+    return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function resolveCustomDomainSlug(hostname) {
   const host = (hostname || "").toLowerCase();
   if (!host || host.endsWith("." + TENANT_DOMAIN) || host === TENANT_DOMAIN) {
@@ -134,11 +166,22 @@ export default {
 
     const sub = extractSubdomain(url.hostname);
     if (sub) {
+      if (isForwardablePageVisit(request, pathname)) {
+        const domain = await resolveActiveDomainForSlug(sub);
+        if (domain) return temporaryRedirect(domain, pathname, url.search);
+      }
       return proxyTenantPath(request, sub, pathname, url.search);
     }
 
-    const customSlug = await resolveCustomDomainSlug(url.hostname);
+    const host = url.hostname.toLowerCase();
+    const customSlug = await resolveCustomDomainSlug(host);
     if (customSlug) {
+      if (isForwardablePageVisit(request, pathname)) {
+        const bareHost = host.startsWith("www.") ? host.slice(4) : host;
+        if (bareHost !== host || url.protocol === "http:") {
+          return temporaryRedirect(bareHost, pathname, url.search);
+        }
+      }
       return proxyTenantPath(request, customSlug, pathname, url.search);
     }
 

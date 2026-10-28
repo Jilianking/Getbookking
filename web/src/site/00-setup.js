@@ -31,7 +31,7 @@ const db = firebase.firestore();
 const functions = firebase.app().functions('us-central1');
 
 /** Supports subdomain (`{tenant}.getbookking.com/home`, `{tenant}.getbooking.com/home`), path (`/tenant/home`), team member (`/team/maya`, `/team/maya/book`). */
-var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1, charters: 1, 'how-it-works': 1 };
+var RESERVED_TENANT_PAGES = { book: 1, gallery: 1, shop: 1, about: 1, team: 1, home: 1, join: 1, charters: 1, 'how-it-works': 1, pay: 1 };
 
 window.__bkApplyCharterHeroPhoto = function() {
   var url = window.__bkNativeHeroImageUrl || '';

@@ -27,6 +27,8 @@ final class TenantSessionStore: ObservableObject {
     @Published private(set) var smsThreads: [SmsThreadSummary] = []
     /// Shop orders for Activity + shared cache (one-shot fetch, not a live listener).
     @Published private(set) var shopOrders: [ShopOrder] = []
+    @Published private(set) var accountNotices: [AccountNotice] = []
+    private var accountNoticesLoadedAt: Date?
     /// Recent Stripe Connect credits for Activity (deposit / remote pay only).
     @Published private(set) var recentPayments: [PaymentTransaction] = []
 
@@ -116,6 +118,8 @@ final class TenantSessionStore: ObservableObject {
         ownerUid = nil
         smsThreads = []
         shopOrders = []
+        accountNotices = []
+        accountNoticesLoadedAt = nil
         recentPayments = []
         sessionLoaded = false
         bookingsLoadedAt = nil
@@ -179,7 +183,8 @@ final class TenantSessionStore: ObservableObject {
         async let members: () = loadTeamMembersIfNeeded(force: false, isDemoMode: false)
         async let shop: () = loadShopOrdersIfNeeded(force: false, isDemoMode: false)
         async let payments: () = loadRecentPaymentsIfNeeded(force: false, isDemoMode: false)
-        _ = await (bookings, newBookings, members, shop, payments)
+        async let notices: () = loadAccountNoticesIfNeeded(force: false, isDemoMode: false)
+        _ = await (bookings, newBookings, members, shop, payments, notices)
         startSmsThreadsListening(isDemoMode: false)
     }
 
@@ -261,6 +266,8 @@ final class TenantSessionStore: ObservableObject {
         recentPayments = (demoPayments?.transactions ?? []).compactMap { PaymentTransaction.fromFirestoreDict($0) }
         shopOrders = []
         shopOrdersLoadedAt = Date()
+        accountNotices = []
+        accountNoticesLoadedAt = Date()
         recentPaymentsLoadedAt = Date()
 
         smsQuickPresets = ManagerSettingsViewModel.defaultQuickReplyPresets
@@ -689,6 +696,25 @@ final class TenantSessionStore: ObservableObject {
             }
         }
         return []
+    }
+
+    // MARK: - Account notices
+
+    /// Owner-only (rules allow the owner to read); anyone else simply gets none.
+    func loadAccountNoticesIfNeeded(force: Bool = false, isDemoMode: Bool = false) async {
+        if isDemoMode || isDemoSession { return }
+        if !force, let loadedAt = accountNoticesLoadedAt,
+           Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
+            return
+        }
+        guard let tid = tenantId ?? profile?.tenantId else { return }
+        do {
+            accountNotices = try await firebaseService.fetchAccountNotices(tenantId: tid)
+            accountNoticesLoadedAt = Date()
+        } catch {
+            accountNotices = []
+            accountNoticesLoadedAt = Date()
+        }
     }
 
     // MARK: - Shop orders

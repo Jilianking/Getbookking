@@ -1,7 +1,7 @@
 //
 //  LoginView.swift
 //
-//  Business sign-in; new accounts open the marketing sign-up wizard in Safari.
+//  Business sign-in; new accounts open the marketing sign-up wizard in an in-app sheet.
 //
 
 import SwiftUI
@@ -14,6 +14,7 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var isPasswordVisible = false
+    @State private var showingCreateAccount = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,10 @@ struct LoginView: View {
                 Spacer()
             }
             .appScreenBackground()
+            .sheet(isPresented: $showingCreateAccount) {
+                CreateAccountView()
+                    .environmentObject(authViewModel)
+            }
         }
     }
 
@@ -39,9 +44,6 @@ struct LoginView: View {
                 .font(AppDesign.screenHeaderFont(size: 28))
                 .tracking(AppDesign.screenHeaderTracking(forSize: 28))
                 .foregroundStyle(AppDesign.textPrimary)
-            Text("Use your account to manage bookings")
-                .font(.subheadline)
-                .foregroundStyle(AppDesign.textSecondary)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
@@ -51,6 +53,8 @@ struct LoginView: View {
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .onChange(of: email) { email = email.filter { !$0.isWhitespace } }
                     .padding(12)
                     .background(AppDesign.searchBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -67,8 +71,10 @@ struct LoginView: View {
                 HStack {
                     if isPasswordVisible {
                         TextField("Password", text: $password)
+                            .onChange(of: password) { password = password.filter { !$0.isWhitespace } }
                     } else {
                         SecureField("Password", text: $password)
+                            .onChange(of: password) { password = password.filter { !$0.isWhitespace } }
                     }
                     Button(action: { isPasswordVisible.toggle() }) {
                         Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
@@ -113,7 +119,9 @@ struct LoginView: View {
             .buttonStyle(AppPrimaryButtonStyle(enabled: !isLoading && !email.isEmpty && !password.isEmpty))
             .disabled(isLoading || email.isEmpty || password.isEmpty)
 
-            Button(action: openMarketingSignUp) {
+            Button {
+                showingCreateAccount = true
+            } label: {
                 Text("Create an account")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -130,14 +138,9 @@ struct LoginView: View {
         .padding(.horizontal, 24)
     }
 
-    private func openMarketingSignUp() {
-        guard let url = URL(string: Constants.Hosting.marketingSignUpURL) else { return }
-        UIApplication.shared.open(url)
-    }
-
     private func openMarketingForgotPassword() {
         guard let url = Constants.Hosting.marketingForgotPasswordURL(email: email) else { return }
-        UIApplication.shared.open(url)
+        InAppSafari.openSync(url, context: .general)
     }
 
     private func performSignIn() {

@@ -14,6 +14,12 @@ struct MessagesView: View {
     @State private var pendingThreadComposerDraft = ""
     @State private var searchText = ""
     @State private var showErrorAlert = false
+    /// Select mode for deleting several conversations at once.
+    @State private var isSelecting = false
+    @State private var selectedForDelete: Set<String> = []
+    @State private var pendingDeleteIds: [String] = []
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -75,11 +81,22 @@ struct MessagesView: View {
                         } else {
                             List {
                                 ForEach(Array(filteredSummaries.enumerated()), id: \.element.id) { index, summary in
-                                    ThreadRow(
-                                        summary: summary,
-                                        viewModel: viewModel,
-                                        showsDivider: index < filteredSummaries.count - 1
-                                    )
+                                    HStack(spacing: 0) {
+                                        if isSelecting {
+                                            Image(systemName: selectedForDelete.contains(summary.threadId)
+                                                  ? "checkmark.circle.fill" : "circle")
+                                                .font(.title3)
+                                                .foregroundStyle(selectedForDelete.contains(summary.threadId)
+                                                                 ? AppDesign.brandWarm : AppDesign.textSecondary)
+                                                .padding(.leading, 16)
+                                                .accessibilityHidden(true)
+                                        }
+                                        ThreadRow(
+                                            summary: summary,
+                                            viewModel: viewModel,
+                                            showsDivider: index < filteredSummaries.count - 1
+                                        )
+                                    }
                                     .appTourAnchor(
                                         .messagesReply,
                                         isActive: appTour.isStepActive(.messagesReply)
@@ -87,7 +104,24 @@ struct MessagesView: View {
                                     )
                                     .contentShape(Rectangle())
                                     .onTapGesture {
-                                        selectedThreadId = summary.threadId
+                                        if isSelecting {
+                                            toggleSelected(summary.threadId)
+                                        } else {
+                                            selectedThreadId = summary.threadId
+                                        }
+                                    }
+                                    .accessibilityAddTraits(
+                                        isSelecting && selectedForDelete.contains(summary.threadId) ? .isSelected : []
+                                    )
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        if canDeleteConversations && !isSelecting {
+                                            Button(role: .destructive) {
+                                                pendingDeleteIds = [summary.threadId]
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
                                     }
                                     .listRowInsets(EdgeInsets())
                                     .listRowSeparator(.hidden)
@@ -143,8 +177,19 @@ struct MessagesView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if selectedThreadId == nil {
+                    if selectedThreadId == nil, isSelecting {
+                        Button("Done") {
+                            isSelecting = false
+                            selectedForDelete = []
+                        }
+                    } else if selectedThreadId == nil {
                         HStack(spacing: 16) {
+                            if canDeleteConversations, !filteredSummaries.isEmpty {
+                                Button("Select") {
+                                    selectedForDelete = []
+                                    isSelecting = true
+                                }
+                            }
                             NavigationLink {
                                 MessagesSettingsView(viewModel: messagingSettingsViewModel)
                                     .environmentObject(authViewModel)
@@ -183,6 +228,51 @@ struct MessagesView: View {
             }
             .onChange(of: viewModel.lastError) { _, err in
                 showErrorAlert = err != nil
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting, selectedThreadId == nil {
+                    Button(role: .destructive) {
+                        pendingDeleteIds = Array(selectedForDelete)
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            if isDeleting { ProgressView() }
+                            Text(selectedForDelete.isEmpty ? "Delete" : "Delete (\(selectedForDelete.count))")
+                                .font(.body.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(selectedForDelete.isEmpty || isDeleting)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .background(AppDesign.cardBackground)
+                }
+            }
+            .confirmationDialog(
+                pendingDeleteIds.count == 1
+                    ? "Delete this conversation?"
+                    : "Delete \(pendingDeleteIds.count) conversations?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    let ids = pendingDeleteIds
+                    Task {
+                        isDeleting = true
+                        let ok = await viewModel.deleteThreads(ids)
+                        isDeleting = false
+                        if ok {
+                            selectedForDelete.subtract(ids)
+                            if selectedForDelete.isEmpty { isSelecting = false }
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingDeleteIds = [] }
+            } message: {
+                Text("This permanently deletes the messages and any photos in them. It can't be undone.")
             }
             .alert("Message", isPresented: $showErrorAlert) {
                 Button("OK", role: .cancel) {
@@ -291,6 +381,19 @@ struct MessagesView: View {
     }
 }
 
+extension MessagesView {
+    /// Deleting talks to the server, so it's off in demo mode.
+    var canDeleteConversations: Bool { !authViewModel.isDemoMode }
+
+    func toggleSelected(_ threadId: String) {
+        if selectedForDelete.contains(threadId) {
+            selectedForDelete.remove(threadId)
+        } else {
+            selectedForDelete.insert(threadId)
+        }
+    }
+}
+
 struct ThreadRow: View {
     let summary: SmsThreadSummary
     @ObservedObject var viewModel: MessagesViewModel
@@ -363,6 +466,10 @@ struct MessageThreadView: View {
     @State private var interactiveBackOffset: CGFloat = 0
     /// Bumped when composer tray / draft chrome collapses so the thread re-pins to the latest bubble.
     @State private var scrollToLatestRequest = 0
+    /// Texting consent for this client; nil until loaded (or if it couldn't be checked).
+    @State private var consentStatus: SmsConsentStatus?
+    @State private var showResendConfirm = false
+    @State private var isResendingConsent = false
 
     private let interactiveBackEdgeWidth: CGFloat = 28
     private let interactiveBackDismissThreshold: CGFloat = 110
@@ -449,13 +556,17 @@ struct MessageThreadView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            if let status = consentStatus, !status.allowsSending {
+                consentStatusLine(status)
+            }
+
             MessageComposerBar(
                 message: $newMessage,
                 darkStyle: false,
-                placeholder: "Type a message...",
+                placeholder: composerAllowsSending ? "Type a message..." : "Texting is off for this client",
                 quickPresets: viewModel.smsQuickPresets,
                 isSending: isLoading,
-                canSend: true,
+                canSend: composerAllowsSending,
                 onSend: sendMessage,
                 onSendPaymentRequest: sendPaymentRequest,
                 onSendPhoto: sendPhoto,
@@ -470,6 +581,8 @@ struct MessageThreadView: View {
                 }
             )
             .appTourAnchor(.messagesReply, isActive: appTour.isStepActive(.messagesReply))
+            .disabled(!composerAllowsSending)
+            .opacity(composerAllowsSending ? 1 : 0.45)
         }
         .background(AppDesign.cardBackground)
         .offset(x: max(0, interactiveBackOffset))
@@ -509,13 +622,24 @@ struct MessageThreadView: View {
             )
             refreshClientDisplayName()
             await loadMessages()
+            await refreshConsentStatus()
             await viewModel.loadSmsQuickPresets(isDemoMode: authViewModel.isDemoMode)
+        }
+        .onChange(of: messages.count) { _, _ in
+            // A YES / STOP reply or a new opt-in text arrives as a message; re-check.
+            Task { await refreshConsentStatus() }
         }
         .onChange(of: viewModel.threadSummaries) { _, _ in
             refreshClientDisplayName()
         }
         .onChange(of: viewModel.lastError) { _, err in
             showThreadError = err != nil
+        }
+        .alert("Resend opt-in text?", isPresented: $showResendConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Send") { resendConsentPrompt() }
+        } message: {
+            Text("This sends \"Reply YES to get appointment updates by text\" to \(clientPhone.isEmpty ? clientName : clientPhone) again. You can do this once every 24 hours.")
         }
         .alert("Could not send", isPresented: $showThreadError) {
             Button("OK", role: .cancel) { viewModel.lastError = nil }
@@ -562,6 +686,81 @@ struct MessageThreadView: View {
             }
             .environmentObject(authViewModel)
             .environmentObject(sessionStore)
+        }
+    }
+
+    /// Unknown status (still loading or couldn't check) never blocks; the server still enforces consent.
+    private var composerAllowsSending: Bool {
+        guard let status = consentStatus else { return true }
+        return status.allowsSending
+    }
+
+    @ViewBuilder
+    private func consentStatusLine(_ status: SmsConsentStatus) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: status.state == .optedOut ? "nosign" : "hourglass")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppDesign.textSecondary)
+            Text(consentStatusText(status))
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if status.state == .waiting {
+                if status.canResendNow {
+                    Button {
+                        isComposerFocused = false
+                        showResendConfirm = true
+                    } label: {
+                        if isResendingConsent {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Resend")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppDesign.brandWarm)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isResendingConsent)
+                } else {
+                    Text("Sent · try again tomorrow")
+                        .font(.caption)
+                        .foregroundStyle(AppDesign.textSecondary.opacity(0.7))
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppDesign.searchBackground)
+    }
+
+    private func consentStatusText(_ status: SmsConsentStatus) -> String {
+        switch status.state {
+        case .optedIn:
+            return ""
+        case .waiting:
+            return "Waiting for client to reply YES"
+        case .optedOut:
+            return "Client opted out (replied STOP). They can text YES or START to opt back in."
+        case .needsOptIn:
+            return "Client must text you first, or opt in when booking."
+        }
+    }
+
+    private func refreshConsentStatus() async {
+        if authViewModel.isDemoMode { return }
+        guard let status = await viewModel.loadSmsConsentStatus(threadId: threadId) else { return }
+        await MainActor.run { consentStatus = status }
+    }
+
+    private func resendConsentPrompt() {
+        guard !isResendingConsent else { return }
+        isResendingConsent = true
+        Task {
+            _ = await viewModel.resendSmsConsentPrompt(threadId: threadId)
+            await refreshConsentStatus()
+            await MainActor.run { isResendingConsent = false }
         }
     }
 
@@ -770,6 +969,11 @@ struct MessageBubble: View {
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                if message.deliveryFailed {
+                    Label("Not delivered", systemImage: "exclamationmark.circle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
             }
             if message.sender == .client {
                 Spacer()

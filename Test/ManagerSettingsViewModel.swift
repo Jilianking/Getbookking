@@ -54,6 +54,12 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsMonthlyUsageRemaining: Int = 1000
     @Published var smsMonthlyLimit: Int = 1000
     @Published var isOpeningBillingWebsite = false
+    @Published var isRestoringPurchases = false
+    /// A 3rd+ number bills monthly, which the one-time App Store purchase can't do; it's added in billing.
+    @Published var showMonthlyNumberBillingPrompt = false
+    static let monthlyNumberBillingMessage =
+        "Additional numbers are $12.99 today and $12.99 a month. Add them in billing."
+    @Published var restorePurchasesMessage: String?
     @Published var isSyncingBilling = false
     @Published var isOpeningBillingPortal = false
     @Published var isStartingSubscription = false
@@ -77,8 +83,8 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsCanAddWithoutPurchase: Bool = true
     @Published var smsCanPurchaseExtra: Bool = false
     @Published var smsCanPurchaseSoloReplacement: Bool = false
-    @Published var smsExtraMonthlyPriceLabel: String = "$12/mo"
-    @Published var smsExtraOneTimeReplacementLabel: String = "$12"
+    @Published var smsExtraMonthlyPriceLabel: String = "$12.99/mo"
+    @Published var smsExtraOneTimeReplacementLabel: String = "$12.99"
     @Published var smsNextLineIsFree: Bool = true
     /// Lifetime Twilio number acquisitions (free allotment Solo 1 · Studio/Shop 2).
     @Published var smsLifetimeNumbersBought: Int = 0
@@ -95,7 +101,7 @@ final class ManagerSettingsViewModel: ObservableObject {
     var smsPhonePurchaseBlockedDisplayMessage: String {
         let trimmed = smsPhonePurchaseBlockMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "Phone number purchasing is blocked during TestFlight."
+            return "Unavailable."
         }
         return trimmed
     }
@@ -106,17 +112,17 @@ final class ManagerSettingsViewModel: ObservableObject {
         return smsNeedsPurchaseForNextLine
     }
 
-    /// Solo only: one-time $12 to get another number after the included lifetime get (not monthly).
+    /// Solo only: one-time $12.99 to get another number after the included lifetime get (not monthly).
     var smsMustPaySoloReplacementFee: Bool {
         tenantSubscriptionPlan == .solo && smsMustChargeForNextLine && !smsAtMaxLines
     }
 
-    /// 3rd+ concurrent line: $12 now + recurring smsExtra on subscription.
+    /// 3rd+ concurrent line: $12.99 now + recurring smsExtra on subscription.
     var smsMustChargeMonthlyForNextLine: Bool {
         smsNeedsMonthlyExtraForNextLine
     }
 
-    /// Under 2 concurrent lines but lifetime free allotment used: $12 one-time only.
+    /// Under 2 concurrent lines but lifetime free allotment used: $12.99 one-time only.
     var smsMustChargeOneTimeForNextLine: Bool {
         smsNeedsOneTimePurchaseForNextLine || smsMustPaySoloReplacementFee
     }
@@ -341,8 +347,12 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsCanPurchaseExtra = data["smsCanPurchaseExtra"] as? Bool ?? (tenantSubscriptionPlan != .solo)
             smsCanPurchaseSoloReplacement = data["smsCanPurchaseSoloReplacement"] as? Bool
                 ?? (tenantSubscriptionPlan == .solo && smsNeedsPurchaseForNextLine)
-            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$12/mo"
-            smsExtraOneTimeReplacementLabel = (data["smsExtraOneTimeReplacementLabel"] as? String) ?? "$12"
+            smsExtraMonthlyPriceLabel = (data["smsExtraMonthlyPriceLabel"] as? String) ?? "$12.99/mo"
+            smsExtraOneTimeReplacementLabel = (data["smsExtraOneTimeReplacementLabel"] as? String) ?? "$12.99"
+            // The one-time number is bought through Apple; show exactly what Apple's sheet will charge.
+            if let applePrice = BookkingSubscriptionStore.shared.smsExtraDisplayPrice {
+                smsExtraOneTimeReplacementLabel = applePrice
+            }
             smsNextLineIsFree = data["smsNextLineIsFree"] as? Bool ?? (smsLinesUsed < smsFreeIncluded)
             smsLifetimeNumbersBought = (data["smsLifetimeNumbersBought"] as? Int) ?? 0
             smsRefreshNeedsPurchase = data["smsRefreshNeedsPurchase"] as? Bool
@@ -392,7 +402,7 @@ final class ManagerSettingsViewModel: ObservableObject {
                 )
             }
             shouldSyncBillingAfterWeb = true
-            await UIApplication.shared.open(url)
+            await InAppSafari.openInSystemBrowser(url)
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
@@ -405,34 +415,77 @@ final class ManagerSettingsViewModel: ObservableObject {
         await syncBillingFromStripe()
     }
 
-    /// Ends free trial now and activates paid plan via Stripe (card already on file).
-    /// Prefer this over opening the Customer Portal — the portal cannot end a trial early.
+    /// Opens the App Store payment sheet for this business's plan.
     @discardableResult
     func startSubscriptionToday() async -> Bool {
         guard isTenantOwner else { return false }
-        if !hasStripeBillingCustomer {
-            await openBillingToStartSubscription()
+        isOpeningBillingWebsite = true
+        errorMessage = nil
+        defer { isOpeningBillingWebsite = false }
+        do {
+            _ = try await BookkingSubscriptionStore.shared.purchaseAndSync(plan: tenantSubscriptionPlan)
+            await load(isDemoMode: false)
+            return true
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
+        } catch {
+            errorMessage = error.localizedDescription
             return false
         }
-        isStartingSubscription = true
+    }
+
+    /// Re-applies an App Store plan this Apple ID already paid for (new phone, reinstall).
+    func restorePurchases() async {
+        guard isTenantOwner else { return }
+        isRestoringPurchases = true
         errorMessage = nil
-        defer { isStartingSubscription = false }
+        restorePurchasesMessage = nil
+        defer { isRestoringPurchases = false }
         do {
-            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
-            let data = result.data as? [String: Any] ?? [:]
-            let status = ((data["subscriptionStatus"] as? String) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            await load(isDemoMode: false)
-            if status == "active" || subscriptionPaid {
-                return true
+            if try await BookkingSubscriptionStore.shared.restorePurchases() {
+                await load(isDemoMode: false)
+                restorePurchasesMessage = "Your plan was restored."
+            } else {
+                restorePurchasesMessage = "No Get Bookking plan was found for this Apple ID and account."
             }
-            // Sync once more from Stripe in case Firestore lagged.
-            await syncBillingFromStripe()
-            return subscriptionPaid
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return }
+            errorMessage = error.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Stripe account that accepts client payments. Always available to the owner.
+    func openClientPaymentsStripeAccount() async {
+        isOpeningBillingPortal = true
+        errorMessage = nil
+        defer { isOpeningBillingPortal = false }
+        do {
+            let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+                return
+            }
+        } catch {
+            // No connected account yet.
+        }
+        do {
+            let base = Constants.Hosting.marketingWebOrigin
+            let result = try await functions.httpsCallable("createConnectAccountLink").call([
+                "returnBaseUrl": base,
+                "returnUrl": "\(base)/account.html?stripe=success",
+                "refreshUrl": "\(base)/account.html?stripe=refresh",
+            ])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+            }
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
-            return false
         }
     }
 
@@ -444,7 +497,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await UIApplication.shared.open(url)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
     /// Opens marketing billing Client texting section to purchase an extra number.
@@ -455,10 +508,43 @@ final class ManagerSettingsViewModel: ObservableObject {
         defer { isOpeningBillingWebsite = false }
         guard let url = URL(string: Constants.Hosting.marketingBillingMessagingURL) else { return }
         shouldSyncBillingAfterWeb = true
-        await UIApplication.shared.open(url)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
-    func requestSmsProvisioning(consentAccepted: Bool, forceReprovision: Bool = false) async {
+    /// App Store purchase, then studio texting setup.
+    func purchaseSmsExtraThenProvisionStudio() async {
+        guard isTenantOwner else { return }
+        // Never take the App Store payment when the number can't be set up afterwards.
+        if smsPhonePurchasingBlockedDuringTestFlight {
+            errorMessage = smsPhonePurchaseBlockedDisplayMessage
+            return
+        }
+        isProvisioningSms = true
+        errorMessage = nil
+        let purchase: BookkingSmsExtraPurchase
+        do {
+            purchase = try await BookkingSubscriptionStore.shared.purchaseSmsExtra()
+        } catch let error as BookkingPurchaseError {
+            isProvisioningSms = false
+            if case .cancelled = error { return }
+            errorMessage = error.localizedDescription
+            return
+        } catch {
+            isProvisioningSms = false
+            errorMessage = error.localizedDescription
+            return
+        }
+        isProvisioningSms = false
+        await requestSmsProvisioning(consentAccepted: true, applePurchase: purchase)
+    }
+
+    /// `applePurchase` is the App Store payment for this number; the server uses it instead of
+    /// charging the card on file.
+    func requestSmsProvisioning(
+        consentAccepted: Bool,
+        forceReprovision: Bool = false,
+        applePurchase: BookkingSmsExtraPurchase? = nil
+    ) async {
         guard isTenantOwner else { return }
         if smsPhonePurchasingBlockedDuringTestFlight {
             errorMessage = smsPhonePurchaseBlockedDisplayMessage
@@ -477,7 +563,13 @@ final class ManagerSettingsViewModel: ObservableObject {
             if forceReprovision {
                 payload["forceReprovision"] = true
             }
+            if let applePurchase {
+                payload["appleSignedTransaction"] = applePurchase.signedTransaction
+            }
             _ = try await functions.httpsCallable("requestTenantSmsProvisioning").call(payload)
+            if let applePurchase {
+                await BookkingSubscriptionStore.shared.settleSmsExtra(applePurchase)
+            }
             for _ in 0..<12 {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 await load(isDemoMode: false)
@@ -485,6 +577,9 @@ final class ManagerSettingsViewModel: ObservableObject {
                 if smsStatus == "failed" { break }
             }
         } catch {
+            if let applePurchase {
+                await BookkingSubscriptionStore.shared.settleSmsExtra(applePurchase, error: error)
+            }
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isProvisioningSms = false
@@ -618,6 +713,10 @@ final class ManagerSettingsViewModel: ObservableObject {
     /// to provision this teammate's personal number.
     @discardableResult
     func purchaseAndEnablePersonalSmsLine(for memberUid: String, consentAccepted: Bool) async -> Bool {
+        if smsNeedsMonthlyExtraForNextLine {
+            showMonthlyNumberBillingPrompt = true
+            return false
+        }
         guard isTenantOwner, consentAccepted, !memberUid.isEmpty else { return false }
         if smsPhonePurchasingBlockedDuringTestFlight {
             errorMessage = smsPhonePurchaseBlockedDisplayMessage
@@ -631,13 +730,23 @@ final class ManagerSettingsViewModel: ObservableObject {
             provisioningMemberUid = nil
         }
         do {
-            let purchase = try await functions.httpsCallable("purchaseSmsExtraLine").call([
-                "memberUid": memberUid
-            ])
+            let store = BookkingSubscriptionStore.shared
+            let applePurchase = try await store.purchaseSmsExtra()
+            let purchase: HTTPSCallableResult
+            do {
+                purchase = try await functions.httpsCallable("recordAppleSmsExtraPurchase").call([
+                    "memberUid": memberUid,
+                    "signedTransaction": applePurchase.signedTransaction,
+                ])
+            } catch {
+                await store.settleSmsExtra(applePurchase, error: error)
+                throw error
+            }
+            await store.settleSmsExtra(applePurchase)
             let data = purchase.data as? [String: Any] ?? [:]
             guard let authorizationId = data["smsPaidLinePurchaseAuthorizationId"] as? String,
                   !authorizationId.isEmpty else {
-                errorMessage = "Stripe did not confirm the texting-number payment. No number was set up."
+                errorMessage = "The App Store did not confirm the texting-number payment. No number was set up."
                 return false
             }
             return await requestSmsPhoneNumber(
@@ -645,6 +754,10 @@ final class ManagerSettingsViewModel: ObservableObject {
                 consentAccepted: true,
                 paidPurchaseAuthorizationId: authorizationId
             )
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
             return false
@@ -681,7 +794,7 @@ final class ManagerSettingsViewModel: ObservableObject {
         }
     }
 
-    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $12 after lifetime free allotment.
+    /// Owner: refresh a studio or personal number (new Twilio buy). Charges $12.99 after lifetime free allotment.
     @discardableResult
     func refreshSmsPhoneNumber(scope: String, memberUid: String?) async -> Bool {
         guard isTenantOwner else { return false }

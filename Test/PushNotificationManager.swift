@@ -16,6 +16,15 @@ final class PushNotificationManager: NSObject {
 
     private let db = Firestore.firestore()
     private var pendingFCMToken: String?
+    /// Conversation from a tapped notification, kept until the main screen has appeared. On a cold
+    /// launch the tap arrives before anything is listening, so the posted event alone was lost.
+    private var pendingOpenThreadId: String?
+
+    /// Hands over (once) the conversation a tapped notification asked to open.
+    func takePendingOpenThreadId() -> String? {
+        defer { pendingOpenThreadId = nil }
+        return pendingOpenThreadId
+    }
 
     private override init() {
         super.init()
@@ -96,31 +105,42 @@ final class PushNotificationManager: NSObject {
     }
 }
 
+// Completion-handler versions, not the async ones: iOS must be told "done" on the main thread.
+// The async didReceive finished on a background thread, which UIKit aborts on when the app is
+// launched by tapping a notification (crash in builds 11, 16 and 18).
 extension PushNotificationManager: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .badge]
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let finish = UncheckedSendableBox(completionHandler)
+        DispatchQueue.main.async {
+            finish.value([.banner, .sound, .badge])
+        }
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         let userInfo = response.notification.request.content.userInfo
         let type = Self.stringValue(userInfo["type"])?.lowercased() ?? ""
-        guard type == "sms_message" || type == "booking_request" else { return }
-        if type == "sms_message",
-           let threadId = Self.stringValue(userInfo["threadId"]),
-           !threadId.isEmpty {
-            await MainActor.run {
+        let threadId = type == "sms_message" ? Self.stringValue(userInfo["threadId"]) : nil
+        let finish = UncheckedSendableBox(completionHandler)
+        DispatchQueue.main.async {
+            if let threadId, !threadId.isEmpty {
+                MainActor.assumeIsolated {
+                    PushNotificationManager.shared.pendingOpenThreadId = threadId
+                }
                 NotificationCenter.default.post(
                     name: .pushOpenMessagesThread,
                     object: nil,
                     userInfo: ["threadId": threadId]
                 )
             }
+            finish.value()
         }
     }
 
@@ -147,4 +167,10 @@ extension PushNotificationManager: MessagingDelegate {
 
 extension Notification.Name {
     static let pushOpenMessagesThread = Notification.Name("pushOpenMessagesThread")
+}
+
+/// Carries a UIKit completion handler onto the main queue; it is only ever called there.
+nonisolated private struct UncheckedSendableBox<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }

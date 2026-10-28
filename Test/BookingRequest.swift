@@ -49,6 +49,15 @@ struct BookingRequest: Identifiable {
     }
 
     var statusPillText: String {
+        let refund = (cancelRefundStatus ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if refund == "refunded" || refund == "already_refunded" {
+            return "refunded"
+        }
+        if refund == "partially_refunded" {
+            return "partially_refunded"
+        }
         if BookingRequestStatus.normalized(status) == BookingRequestStatus.cancelled, isRefundPending {
             return "refund_pending"
         }

@@ -520,8 +520,29 @@ function applyWebButtonColors(tenant) {
   });
 }
 
+/** Tells search engines the shop's connected domain is its main address (both addresses serve the same site). */
+function applyCanonicalLink(t) {
+  var domain = (t && t.canonicalDomain) || '';
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return;
+  var path = location.pathname || '/';
+  if (!tenantSlugFromBookingHost((location.hostname || '').toLowerCase()) &&
+      (location.hostname || '').toLowerCase() !== domain) {
+    var prefix = '/' + (t.slug || '');
+    if (t.slug && (path === prefix || path.indexOf(prefix + '/') === 0)) {
+      path = path.slice(prefix.length) || '/';
+    }
+  }
+  var link = document.querySelector('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'canonical';
+    document.head.appendChild(link);
+  }
+  link.href = 'https://' + domain + path;
+}
 function applyBranding(t) {
   if (!t) return;
+  applyCanonicalLink(t);
   applySiteSeo(t);
   applySiteAnnouncement(t);
   applyTenantColorVars(t);

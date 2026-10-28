@@ -10,7 +10,8 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
   <!-- End Google Tag Manager -->
-  <script src="assets/gtm-events.js"></script>
+  <script src="assets/gtm-events.js?v=2"></script>
+  <script src="assets/oaiq-pixel.js?v=1"></script>
   <title>Tap to Pay on iPhone — Get Bookking</title>
   <meta name="description" content="Accept contactless payments right on your iPhone with Tap to Pay on iPhone in Get Bookking. Powered by Stripe — no extra card reader required." />
   <link rel="canonical" href="https://getbookking.com/tap-to-pay" />
@@ -39,7 +40,7 @@
   <link rel="stylesheet" href="assets/footer.css?v=2" />
 
   <link rel="stylesheet" href="assets/tap-to-pay.css?v=23" />
-  <link rel="stylesheet" href="assets/nav.css?v=23" />
+  <link rel="stylesheet" href="assets/nav.css?v=25" />
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -201,12 +202,14 @@
             muted
             loop
             playsinline
-            preload="metadata"
+            preload="none"
+            poster="assets/tap-to-pay/iphone-to-iphone-1x1-poster.jpg"
+            data-lazy
             width="1080"
             height="1080"
             aria-label="Tap to Pay on iPhone — customer holds their iPhone near a merchant iPhone to pay. No additional hardware required."
           >
-            <source src="assets/tap-to-pay/iphone-to-iphone-1x1-us-en.mp4" type="video/mp4" />
+            <source data-src="assets/tap-to-pay/iphone-to-iphone-1x1-us-en.mp4" type="video/mp4" />
           </video>
         </figure>
       </div>
@@ -327,5 +330,6 @@
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
   <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

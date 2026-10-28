@@ -3054,19 +3054,24 @@ function charterCheckoutPage(tenant, service, services) {
   var payNote = payMode === 'full'
     ? 'You’ll pay the trip total today to confirm your booking.'
     : payMode === 'deposit'
-      ? (depositAmt
-        ? 'You’ll pay a $' + Math.round(depositAmt) + ' deposit today to confirm your trip. The remaining balance is due before departure.'
-        : 'You’ll pay a deposit today to confirm your trip. The remaining balance is due before departure.')
+      ? (priceNum > 0
+        ? 'Today you pay the deposit plus any add-ons to confirm your trip. The rest of the trip price is due before departure.'
+        : 'Today you pay the deposit plus any add-ons to confirm your trip. The captain will confirm the trip price.')
       : 'You’ll hear back after the captain reviews this request. The boat is held for up to ' +
         responseHours + ' hours while they respond — no payment is taken now.';
-  var dueLabel = payMode === 'deposit' ? 'Due now (deposit)' : (payMode === 'full' ? 'Due now' : 'Trip total');
+  var dueLabel = payMode === 'request' ? 'Trip total' : 'Due today';
   var dueAmt = priceNum;
+  var depositPart = 0;
   if (payMode === 'deposit') {
     var configuredDeposit = depositAmt > 0 ? depositAmt : Math.round(priceNum * 0.2 * 100) / 100;
-    dueAmt = priceNum > 0
-      ? Math.max(0.5, Math.min(configuredDeposit, priceNum))
-      : Math.max(0.5, configuredDeposit);
+    depositPart = priceNum > 0 ? Math.min(configuredDeposit, priceNum) : configuredDeposit;
+    dueAmt = depositPart;
   }
+  var charterDollars = function(n) {
+    n = Number(n) || 0;
+    return '$' + (Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2));
+  };
+  var tripPriceLabel = priceNum > 0 ? charterDollars(priceNum) : 'Price set by captain';
   return '<div class="charter-page">' +
     charterCheckoutNavHtml(tenant, s) +
     charterRouteCanvasOpen(tenant, 'charter.checkoutPage') +
@@ -3107,10 +3112,15 @@ function charterCheckoutPage(tenant, service, services) {
             '<div class="charter-meta">' + esc(metaBits.join(' · ')) + '</div></div>' +
           '</div>' +
           '<div class="charter-order-lines">' +
-            '<div class="row"><span class="muted" data-line="anglers">' + people + ' anglers</span><span data-line="tripTotal">$' + Math.round(priceNum) + '</span></div>' +
-            (addons.length ? '<div class="row"><span class="muted">Add-ons</span><span data-line="addons">$0</span></div>' : '') +
+            '<div class="row"><span class="muted" data-line="anglers">Trip · ' + people + ' anglers</span><span data-line="tripTotal">' + esc(tripPriceLabel) + '</span></div>' +
+            (addons.length ? '<div class="row"><span class="muted" data-line="addons-label">Add-ons</span><span data-line="addons">$0</span></div>' : '') +
+            (priceNum > 0 && addons.length ? '<div class="row" data-line="trip-sum-row"><span>Trip total</span><span data-line="trip-sum">' + charterDollars(priceNum) + '</span></div>' : '') +
             '<div class="hr"></div>' +
-            '<div class="row total" data-line="due-row"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">$' + Math.round(dueAmt) + '</span></div>' +
+            (payMode === 'deposit'
+              ? '<div class="row"><span class="muted">Deposit</span><span data-line="deposit">' + charterDollars(depositPart) + '</span></div>' +
+                (addons.length ? '<div class="row" data-line="due-addons-row" hidden><span class="muted">Add-ons</span><span data-line="due-addons">$0</span></div>' : '')
+              : '') +
+            '<div class="row total" data-line="due-row"><span data-line="due-label">' + esc(dueLabel) + '</span><span data-line="due">' + charterDollars(dueAmt) + '</span></div>' +
             (payMode === 'request' ? '' :
               '<div class="row" data-line="fee-row">' +
                 '<span class="charter-fee-label">' +
@@ -3123,6 +3133,9 @@ function charterCheckoutPage(tenant, service, services) {
                 '<span data-line="fees" class="bk-shop-checkout-summary-fee-pending">Calculated at checkout</span>' +
               '</div>' +
               '<div class="row total" data-line="card-total-row" hidden><span>Charged on card</span><span data-line="card-total"></span></div>') +
+            (payMode === 'deposit' && priceNum > 0
+              ? '<div class="row" data-line="balance-row"><span class="muted">Balance due before departure</span><span data-line="balance">' + charterDollars(priceNum - depositPart) + '</span></div>'
+              : '') +
           '</div>' +
           '<button type="button" class="charter-btn charter-btn-block" data-cta-key="wc.charter.checkoutConfirm" data-charter-confirm>' + esc(cta) + '</button>',
           ' data-base-price="' + priceNum + '" data-per-angler="' + perAngler + '"' +
@@ -3201,21 +3214,43 @@ function bindCharterCheckout(tenant, service) {
     }
     return add;
   }
-  function tripTotal() { return Math.round(base) + addonTotal(); }
+  function dollars(n) {
+    n = Number(n) || 0;
+    return '$' + (Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2));
+  }
+  function tripTotal() { return base + addonTotal(); }
+  // Deposit mode: the deposit (never more than a priced trip) plus add-ons, paid today.
+  // Matches createCharterCheckoutPayment on the server.
+  function depositPart() {
+    var configured = depositAmt > 0 ? depositAmt : Math.round(base * 0.2 * 100) / 100;
+    return base > 0 ? Math.min(configured, base) : configured;
+  }
   function dueNow() {
-    var total = tripTotal();
-    if (payMode !== 'deposit') return total;
-    var configured = depositAmt > 0 ? depositAmt : Math.round(total * 0.2 * 100) / 100;
-    return total > 0
-      ? Math.max(0.5, Math.min(configured, total))
-      : Math.max(0.5, configured);
+    if (payMode !== 'deposit') return tripTotal();
+    return depositPart() + addonTotal();
   }
   function refresh() {
     var add = addonTotal();
-    var elAdd = order.querySelector('[data-line="addons"]');
-    var elDue = order.querySelector('[data-line="due"]');
-    if (elAdd) elAdd.textContent = '$' + add;
-    if (elDue) elDue.textContent = '$' + dueNow();
+    var set = function(key, text) {
+      var el = order.querySelector('[data-line="' + key + '"]');
+      if (el) el.textContent = text;
+    };
+    set('addons', dollars(add));
+    set('trip-sum', dollars(tripTotal()));
+    set('deposit', dollars(depositPart()));
+    set('due-addons', dollars(add));
+    var dueAddRow = order.querySelector('[data-line="due-addons-row"]');
+    if (dueAddRow) dueAddRow.hidden = add <= 0;
+    set('due', dollars(dueNow()));
+    if (base > 0) set('balance', dollars(base - depositPart()));
+    var picked = [];
+    var checked = root.querySelectorAll('[data-charter-addon]:checked');
+    for (var k = 0; k < checked.length; k++) {
+      var lab = checked[k].closest('[data-addon-name]');
+      var nm = lab ? String(lab.getAttribute('data-addon-name') || '').trim() : '';
+      if (nm) picked.push(nm);
+    }
+    set('addons-label', picked.length ? 'Add-ons (' + picked.join(', ') + ')' : 'Add-ons');
     setCharterFeePending('Calculated at checkout');
     charterPay = null;
   }
@@ -3249,6 +3284,10 @@ function bindCharterCheckout(tenant, service) {
     q.push('mode=' + encodeURIComponent(payMode));
     if (totalCents != null && isFinite(Number(totalCents))) {
       q.push('paid=' + encodeURIComponent(String(Math.max(0, Math.round(Number(totalCents))))));
+    }
+    var balanceCents = charterPay && charterPay.balanceDueCents;
+    if (balanceCents != null && isFinite(Number(balanceCents)) && Number(balanceCents) > 0) {
+      q.push('balance=' + encodeURIComponent(String(Math.round(Number(balanceCents)))));
     }
     return q.length ? (done + '?' + q.join('&')) : done;
   }
@@ -3305,7 +3344,7 @@ function bindCharterCheckout(tenant, service) {
     var pk = shopStripePublishableKey(data.publishableKey);
     if (!pk) throw new Error('Stripe publishable key is missing.');
     if (typeof Stripe !== 'function') throw new Error('Stripe.js did not load.');
-    var stripe = Stripe(pk, { stripeAccount: data.stripeAccountId });
+    var stripe = Stripe(pk, checkoutStripeOptions(data.stripeAccountId));
     var elements = stripe.elements({
       clientSecret: data.clientSecret,
       appearance: shopPaymentElementAppearance(tenant)
@@ -3313,7 +3352,8 @@ function bindCharterCheckout(tenant, service) {
     var mountEl = document.getElementById('bk-charter-payment-element');
     if (!mountEl) throw new Error('Payment form is unavailable.');
     mountEl.innerHTML = '';
-    elements.create('payment', { layout: 'tabs' }).mount('#bk-charter-payment-element');
+    var paymentElement = elements.create('payment', { layout: 'tabs' });
+    paymentElement.mount('#bk-charter-payment-element');
     if (payBox) payBox.hidden = false;
     if (payLoading) payLoading.hidden = true;
     var cardTot = order.querySelector('[data-line="card-total"]');
@@ -3334,13 +3374,48 @@ function bindCharterCheckout(tenant, service) {
     if (cardTot && data.totalCents != null) cardTot.textContent = charterMoney(data.totalCents);
     if (addonLine && data.addonCents != null) addonLine.textContent = charterMoney(data.addonCents);
     if (dueLine && data.chargeCents != null) dueLine.textContent = charterMoney(data.chargeCents);
+    var depositLine = order.querySelector('[data-line="deposit"]');
+    if (depositLine && data.depositPartCents != null && data.payMode === 'deposit') {
+      depositLine.textContent = charterMoney(data.depositPartCents);
+    }
+    var balanceLine = order.querySelector('[data-line="balance"]');
+    if (balanceLine && data.balanceDueCents != null && data.tripCents > 0) {
+      balanceLine.textContent = charterMoney(data.balanceDueCents);
+    }
     charterPay = {
       stripe: stripe,
       elements: elements,
       requestId: data.requestId,
       paymentIntentId: data.paymentIntentId,
-      totalCents: data.totalCents
+      totalCents: data.totalCents,
+      surchargeCents: data.surchargeCents || 0,
+      balanceDueCents: data.payMode === 'deposit' && data.tripCents > 0 ? data.balanceDueCents : null,
+      rateLabel: '2.9% + 30¢',
+      method: 'card'
     };
+    var charterReprice = bindCheckoutMethodReprice({
+      tenantSlug: tenant.slug,
+      paymentIntentId: data.paymentIntentId,
+      paymentElement: paymentElement,
+      elements: elements,
+      stripe: stripe,
+      onPriced: function(priced) {
+        if (!charterPay) return;
+        charterPay.totalCents = priced.totalCents;
+        charterPay.surchargeCents = priced.surchargeCents;
+        charterPay.rateLabel = priced.rateLabel || '';
+        charterPay.method = priced.method || 'card';
+        if (feeLine && priced.surchargeCents != null) {
+          feeLine.textContent = charterMoney(priced.surchargeCents);
+          feeLine.className = '';
+        }
+        if (feeTip) feeTip.innerHTML = shopCheckoutFeeTooltipHtml(charterPay);
+        if (cardTot && priced.totalCents != null) cardTot.textContent = charterMoney(priced.totalCents);
+      },
+      onError: function(err) { showErr(formatFirebaseHttpsError(err)); },
+      onNotice: function(msg) { if (msg || errEl) showErr(msg || ''); }
+    });
+    charterPay.prepareConfirm = charterReprice.prepareConfirm;
     btn.textContent = payMode === 'deposit' ? 'Pay deposit' : 'Pay now';
   }
 
@@ -3371,13 +3446,12 @@ function bindCharterCheckout(tenant, service) {
     if (charterPay && charterPay.stripe && charterPay.elements) {
       btn.disabled = true;
       btn.textContent = 'Paying…';
-      charterPay.stripe.confirmPayment({
-        elements: charterPay.elements,
-        redirect: 'if_required',
-        confirmParams: {
-          return_url: confirmationUrl(null)
-        }
-      }).then(function(result) {
+      confirmCheckoutPayment(
+        charterPay.prepareConfirm,
+        charterPay.stripe,
+        charterPay.elements,
+        { return_url: confirmationUrl(null) }
+      ).then(function(result) {
         if (result.error) throw result.error;
         return ensureAnonymousAuth().then(function() {
           return functions.httpsCallable('finalizeCharterBookingPayment')({
@@ -3444,9 +3518,14 @@ function charterConfirmationPage(tenant, service) {
     ? search.people + (search.people === 1 ? ' angler' : ' anglers')
     : '—';
   var meeting = webCopyOverrideText(tenant, 'wc.charter.meetingPoint', 'Garrison Bight Marina');
+  var balanceCents = params ? parseInt(params.get('balance') || '', 10) : NaN;
   var paidRow = !isRequest && isFinite(paidCents)
     ? '<div class="hr"></div><div class="row total"><span>Paid today</span><span>$' +
-      (paidCents / 100).toFixed(2) + '</span></div>'
+      (paidCents / 100).toFixed(2) + '</span></div>' +
+      (isFinite(balanceCents) && balanceCents > 0
+        ? '<div class="row"><span class="muted">Balance due before departure</span><span>$' +
+          (balanceCents / 100).toFixed(2) + '</span></div>'
+        : '')
     : '';
   var smsPhone = (tenant.smsPhoneNumber || '').toString().trim();
   var contactPhone = (tenant.contactPhone || '').toString().trim();

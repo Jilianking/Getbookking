@@ -1,7 +1,7 @@
 /**
  * Apple Tap to Pay on iPhone partner launch email (req 6.1).
  * Uses Marketing Toolkit Email Launch copy structure + Get Bookking branding.
- * Sent via Resend (same credentials as beta / password-reset mail).
+ * Sent via Resend (same credentials as the password-reset mail).
  */
 
 const functions = require("firebase-functions");
@@ -29,13 +29,13 @@ function assetUrl(path) {
 
 function resolveFrom() {
   return (
-    (process.env.BETA_EMAIL_FROM || "").trim() ||
-    "Get Bookking <beta@getbookking.com>"
+    (process.env.WELCOME_EMAIL_FROM || "").trim() ||
+    "Get Bookking <support@getbookking.com>"
   );
 }
 
 function resolveReplyTo() {
-  return (process.env.BETA_SUPPORT_EMAIL || DEFAULT_SUPPORT).trim();
+  return (process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT).trim();
 }
 
 function escapeHtml(str) {

@@ -2,7 +2,7 @@
 //  MemberPersonalSmsView.swift
 //
 //  Independent members: Request phone number → free capacity provisions;
-//  paid capacity queues a request for the owner ($12 one-time or $12/mo for 3rd+ line).
+//  paid capacity queues a request for the owner ($12.99 one-time or $12.99/mo for 3rd+ line).
 //
 
 import SwiftUI
@@ -116,6 +116,14 @@ struct MemberPersonalSmsView: View {
         }
         .appListSurface()
         .navigationTitle("Messaging")
+        .alert("Add in billing", isPresented: $viewModel.showMonthlyNumberBillingPrompt) {
+            Button("Open billing") {
+                Task { await viewModel.openBillingForExtraSmsLine() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ManagerSettingsViewModel.monthlyNumberBillingMessage)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)

@@ -142,6 +142,8 @@ enum ShopOrderStatus {
     static let paid = "paid"
     static let fulfilled = "fulfilled"
     static let cancelled = "cancelled"
+    static let partiallyRefunded = "partially_refunded"
+    static let refunded = "refunded"
 
     static func displayLabel(for status: String) -> String {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -150,6 +152,8 @@ enum ShopOrderStatus {
         case paid: return "Paid"
         case fulfilled: return "Fulfilled"
         case cancelled: return "Cancelled"
+        case partiallyRefunded: return "Partially refunded"
+        case refunded: return "Refunded"
         default: return status.capitalized
         }
     }

@@ -38,6 +38,15 @@ struct PaymentTransaction: Identifiable, Hashable {
     let sourcePaymentService: Double?
     /// Pass-through fee cents on the underlying payment (studio-share rows).
     let sourcePassThroughFee: Double?
+    /// The client's name, when the payment recorded it (web checkouts).
+    var clientName: String? = nil
+    /// What the payment was for, e.g. "Full-day charter deposit".
+    var serviceLabel: String? = nil
+    /// The service part of the payment, before add-ons and fees.
+    var serviceAmount: Double? = nil
+    /// Add-ons paid with it, e.g. "Bait, Gear", and their total.
+    var addonsLabel: String? = nil
+    var addonsAmount: Double? = nil
 
     /// Platform fee credits from partial/full refunds — not customer-facing activity.
     var isApplicationFeeRefundLine: Bool {
@@ -105,6 +114,7 @@ struct PaymentTransaction: Identifiable, Hashable {
         if type == "refund" || isCustomerRefundLine {
             return "Refund"
         }
+        if let clientName, !clientName.isEmpty { return clientName }
         let trimmed = (customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
         return channelLabel
@@ -112,6 +122,11 @@ struct PaymentTransaction: Identifiable, Hashable {
 
     private var isCustomerRefundLine: Bool {
         !isCredit && (type == "refund" || (customerName ?? "").lowercased().contains("refund"))
+    }
+
+    /// Pricing row for this charge. Tap to Pay uses the in-person rate; other charges use the card rate.
+    var checkoutChannel: CardCheckoutChannel {
+        channelLabel == "Tap to Pay on iPhone" ? .tapToPay : .online
     }
 
     var channelLabel: String {
@@ -238,8 +253,18 @@ struct PaymentTransaction: Identifiable, Hashable {
             attributedMemberUid: attributedMemberUid?.isEmpty == false ? attributedMemberUid : nil,
             sourcePaymentTotal: sourceGross.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
             sourcePaymentService: sourceService.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
-            sourcePassThroughFee: sourceSurcharge.flatMap { $0 > 0 ? Double($0) / 100.0 : nil }
+            sourcePassThroughFee: sourceSurcharge.flatMap { $0 > 0 ? Double($0) / 100.0 : nil },
+            clientName: Self.trimmedNonEmpty(t["clientName"]),
+            serviceLabel: Self.trimmedNonEmpty(t["serviceLabel"]),
+            serviceAmount: (t["serviceCents"] as? NSNumber).flatMap { $0.intValue > 0 ? Double($0.intValue) / 100 : nil },
+            addonsLabel: Self.trimmedNonEmpty(t["addonsLabel"]),
+            addonsAmount: (t["addonCents"] as? NSNumber).flatMap { $0.intValue > 0 ? Double($0.intValue) / 100 : nil }
         )
+    }
+
+    private static func trimmedNonEmpty(_ raw: Any?) -> String? {
+        let text = (raw as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 
     private static func relativeDateString(for date: Date) -> String {
@@ -586,31 +611,42 @@ class PaymentsViewModel: ObservableObject {
         Constants.App.paidFeatureUpgradeMessage
     }
 
-    /// Ends free trial now via Stripe (card on file). Portal cannot end a trial early.
+    /// Opens the App Store payment sheet for the current plan.
     @discardableResult
-    func startSubscriptionToday() async -> Bool {
+    func startSubscriptionToday(plan: SubscriptionPlan) async -> Bool {
         guard isTenantOwner else {
             errorMessage = "Ask your business owner to start the paid Get Bookking plan."
             return false
         }
-        isStartingSubscription = true
-        errorMessage = nil
-        defer { isStartingSubscription = false }
         do {
-            let result = try await functions.httpsCallable("startSubscriptionToday").call([:])
-            let data = result.data as? [String: Any] ?? [:]
-            let status = ((data["subscriptionStatus"] as? String) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            await refresh(isDemoMode: false)
-            if status == "active" || subscriptionPaid {
-                return true
-            }
-            return subscriptionPaid
+            _ = try await BookkingSubscriptionStore.shared.purchaseAndSync(plan: plan)
+            return true
+        } catch let error as BookkingPurchaseError {
+            if case .cancelled = error { return false }
+            errorMessage = error.localizedDescription
+            return false
         } catch {
-            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Stripe account that accepts client payments. Does not start the Get Bookking plan.
+    func openClientPaymentsStripeAccount(isDemoMode: Bool = false) async {
+        isOpeningStripeDashboard = true
+        errorMessage = nil
+        defer { isOpeningStripeDashboard = false }
+        do {
+            let result = try await functions.httpsCallable("createExpressDashboardLink").call([:])
+            let data = result.data as? [String: Any]
+            if let urlString = data?["url"] as? String, let url = URL(string: urlString) {
+                _ = await InAppSafari.open(url, context: .stripeConnect)
+                return
+            }
+        } catch {
+            // No connected account yet — fall through to Connect setup.
+        }
+        _ = await createConnectAccountLink(isDemoMode: isDemoMode)
     }
 
     /// Opens getbookking.com billing (web fallback / signup).
@@ -622,7 +658,7 @@ class PaymentsViewModel: ObservableObject {
         guard let url = URL(string: Constants.Hosting.marketingBillingStartURL) else { return }
         isOpeningBillingWebsite = true
         defer { isOpeningBillingWebsite = false }
-        await UIApplication.shared.open(url)
+        await InAppSafari.openInSystemBrowser(url)
     }
 
     func refresh(isDemoMode: Bool = false) async {
@@ -1341,9 +1377,9 @@ class PaymentsViewModel: ObservableObject {
             StripeConnectLinkCache.invalidate()
             isConnectingStripe = true
             defer { isConnectingStripe = false }
-            let opened = await UIApplication.shared.open(cached)
+            let opened = await InAppSafari.open(cached, context: .stripeConnect)
             if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
+                errorMessage = "Could not open Stripe."
                 return .noAction
             }
             return .openedInSafari
@@ -1353,9 +1389,9 @@ class PaymentsViewModel: ObservableObject {
             StripeConnectLinkCache.invalidate()
             isConnectingStripe = true
             defer { isConnectingStripe = false }
-            let opened = await UIApplication.shared.open(ready)
+            let opened = await InAppSafari.open(ready, context: .stripeConnect)
             if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
+                errorMessage = "Could not open Stripe."
                 return .noAction
             }
             return .openedInSafari
@@ -1413,7 +1449,7 @@ class PaymentsViewModel: ObservableObject {
                 if openInSafari,
                    let urlString = data?["url"] as? String,
                    let url = URL(string: urlString) {
-                    let opened = await UIApplication.shared.open(url)
+                    let opened = await InAppSafari.open(url, context: .stripeConnect)
                     if opened { return .openedInSafari }
                 }
                 if openInSafari {
@@ -1434,9 +1470,9 @@ class PaymentsViewModel: ObservableObject {
 
             if openInSafari {
                 invalidateConnectLinkPrefetch()
-                let opened = await UIApplication.shared.open(url)
+                let opened = await InAppSafari.open(url, context: .stripeConnect)
                 if !opened {
-                    errorMessage = "Could not open Stripe. Check that Safari is available."
+                    errorMessage = "Could not open Stripe."
                     return .noAction
                 }
                 return .openedInSafari
@@ -1561,9 +1597,9 @@ class PaymentsViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"]
                 )
             }
-            let opened = await UIApplication.shared.open(url)
+            let opened = await InAppSafari.open(url, context: .stripeConnect)
             if !opened {
-                errorMessage = "Could not open Stripe. Check that Safari is available."
+                errorMessage = "Could not open Stripe."
                 return false
             }
             return true
@@ -1663,8 +1699,55 @@ class PaymentsViewModel: ObservableObject {
             clientSecret: clientSecret,
             paymentIntentId: paymentIntentId,
             stripeAccountId: stripeAccountId,
+            publishableKey: data?["publishableKey"] as? String,
             checkout: checkout
         )
+    }
+
+    /// Sets the open in-app PaymentIntent to the card or Link bank total before confirm.
+    func repriceInAppCheckout(
+        paymentIntentId: String,
+        paymentMethodId: String,
+        bookingRequestId: String? = nil
+    ) async throws -> InAppCheckoutPrice {
+        var payload: [String: Any] = [
+            "paymentIntentId": paymentIntentId,
+            "paymentMethodId": paymentMethodId,
+        ]
+        if let bookingRequestId, !bookingRequestId.isEmpty {
+            payload["bookingRequestId"] = bookingRequestId
+        }
+        let result = try await functions.httpsCallable("repriceInAppCheckout").call(payload)
+        let data = result.data as? [String: Any]
+        let service = checkoutCents(data?["serviceCents"])
+        let tax = checkoutCents(data?["taxCents"])
+        let passThrough = checkoutCents(data?["surchargeCents"])
+        let total = checkoutCents(data?["totalCents"])
+        guard service > 0, total > 0 else {
+            throw NSError(
+                domain: "Payments",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "Could not price this payment method."]
+            )
+        }
+        let platformFee = checkoutCents(data?["platformFeeCents"])
+        let method = (data?["method"] as? String) ?? "card"
+        let checkout = CardCheckoutBreakdown(
+            serviceCents: service,
+            taxCents: tax,
+            passThroughFeeCents: passThrough,
+            platformFeeCents: platformFee > 0 ? platformFee : CardCheckoutPricing.platformFeeCents(totalCents: total),
+            totalCents: total,
+            channel: .online
+        )
+        return InAppCheckoutPrice(method: method, checkout: checkout)
+    }
+
+    private func checkoutCents(_ value: Any?) -> Int {
+        if let number = value as? NSNumber { return number.intValue }
+        if let number = value as? Int { return number }
+        if let number = value as? Double { return Int(number) }
+        return 0
     }
 
     /// Creates PaymentIntent and presents Stripe Payment Sheet in-app.
@@ -1681,15 +1764,29 @@ class PaymentsViewModel: ObservableObject {
             let sheetResult = await ManualPaymentSheetPresenter.present(
                 clientSecret: intent.clientSecret,
                 stripeAccountId: intent.stripeAccountId,
-                merchantDisplayName: effectiveTapToPayDisplayName
+                publishableKey: intent.publishableKey,
+                merchantDisplayName: effectiveTapToPayDisplayName,
+                amountCents: intent.checkout.totalCents,
+                reprice: { paymentMethodId in
+                    try await self.repriceInAppCheckout(
+                        paymentIntentId: intent.paymentIntentId,
+                        paymentMethodId: paymentMethodId,
+                        bookingRequestId: bookingRequestId
+                    )
+                }
             )
             switch sheetResult {
-            case .completed:
+            case .completed(let price):
+                var settled = intent
+                if let price {
+                    settled.checkout = price.checkout
+                    settled.paymentMethodLabel = price.paymentMethodLabel
+                }
                 // Return immediately so UI can show the receipt; settle ledger in background.
-                if !intent.paymentIntentId.isEmpty {
+                if !settled.paymentIntentId.isEmpty {
                     Task {
                         await recordTenantPayment(
-                            paymentIntentId: intent.paymentIntentId,
+                            paymentIntentId: settled.paymentIntentId,
                             bookingRequestId: bookingRequestId
                         )
                         await loadData(isDemoMode: false)
@@ -1697,7 +1794,7 @@ class PaymentsViewModel: ObservableObject {
                 } else {
                     Task { await loadData(isDemoMode: false) }
                 }
-                return .success(intent)
+                return .success(settled)
             case .canceled:
                 return .canceled
             case .failed(let message):
@@ -1952,10 +2049,10 @@ class PaymentsViewModel: ObservableObject {
     }
     #endif
 
-    /// Opens Stripe receipt for a charge in Safari.
+    /// Opens Stripe receipt for a charge in the in-app browser.
     func openReceipt(chargeId: String) async {
         guard let url = await fetchReceiptUrl(chargeId: chargeId) else { return }
-        await UIApplication.shared.open(url)
+        await InAppSafari.open(url, context: .general)
     }
 
     func fetchReceiptDetail(

@@ -17,15 +17,16 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
   <!-- End Google Tag Manager -->
-  <script src="assets/gtm-events.js"></script>
+  <script src="assets/gtm-events.js?v=2"></script>
+  <script src="assets/oaiq-pixel.js?v=1"></script>
   <title>Account — Get Bookking</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
-  <link rel="stylesheet" href="assets/nav.css?v=23" />
-  <link rel="stylesheet" href="assets/account.css?v=7" />
+  <link rel="stylesheet" href="assets/nav.css?v=25" />
+  <link rel="stylesheet" href="assets/account.css?v=8" />
 </head>
 <body class="acct-layout">
   <!-- Google Tag Manager (noscript) -->
@@ -281,9 +282,7 @@
     function resolveOpenAppHref() {
       var store = (window.appStoreUrl || '').trim();
       if (store) return store;
-      var tf = (window.testflightPublicJoinUrl || '').trim();
-      if (tf) return tf;
-      return 'testflight.html';
+      return 'signup.html';
     }
 
     function wireStripeReturnLinks() {

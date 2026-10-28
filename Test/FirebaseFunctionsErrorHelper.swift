@@ -31,13 +31,13 @@ enum FirebaseFunctionsErrorHelper {
             case .permissionDenied:
                 return "You don't have permission to do that."
             case .notFound:
-                return "This feature isn't available. Check that Cloud Functions are deployed."
+                return "This isn't available right now. Please try again later."
             case .failedPrecondition:
                 return fnMessage.isEmpty || fnMessage.uppercased() == "INTERNAL"
-                    ? "Setup is incomplete. Check Stripe configuration and try again."
+                    ? "This isn't ready yet. Please try again in a moment."
                     : fnMessage
             case .internal:
-                return "Server error. Check Firebase Functions logs and Stripe secrets (STRIPE_SECRET_KEY), then try again."
+                return "Something went wrong on our end. Please try again in a moment."
             case .unavailable:
                 return "Service temporarily unavailable. Try again in a moment."
             case .deadlineExceeded:

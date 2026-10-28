@@ -19,7 +19,14 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authViewModel.isAuthenticated {
+            if authViewModel.isAuthenticated && authViewModel.isCheckingSignupState {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .appScreenBackground()
+            } else if authViewModel.isAuthenticated && authViewModel.needsToFinishSignup {
+                CreateAccountView(isResuming: true)
+                    .environmentObject(authViewModel)
+            } else if authViewModel.isAuthenticated && !authViewModel.isCreatingAccount {
                 AdminTabView()
                     .environmentObject(authViewModel)
             } else {
@@ -29,6 +36,7 @@ struct ContentView: View {
         }
         .preferredColorScheme(appAppearance.preferredColorScheme)
         .tint(AppDesign.brandWarm)
+        .inAppSafariSheet()
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, authViewModel.isAuthenticated, !authViewModel.isDemoMode {
                 TapToPayAppLifecycle.warmUpReaderIfConfigured()

@@ -1,11 +1,9 @@
 /**
- * Portal host isolation: marketing, admin, and beta each have their own origin
- * so Firebase Auth sessions do not overwrite each other in the same browser.
+ * Where sign-in and password-reset links point. There is one site now; the separate admin and
+ * beta portals were retired, so every "portal" resolves to the marketing site.
  */
 (function (global) {
   var PROD_MARKETING = "https://getbookking.com";
-  var PROD_ADMIN = "https://admin.getbookking.com";
-  var PROD_BETA = "https://beta.getbookking.com";
 
   function isDevHost(hostname) {
     var h = (hostname || global.location.hostname || "").toLowerCase();
@@ -17,30 +15,19 @@
     );
   }
 
-  function portalFromPath(pathname) {
-    var p = pathname || global.location.pathname || "";
-    if (p.indexOf("/admin") === 0) return "admin";
-    if (p.indexOf("/beta") === 0) return "beta";
+  function portalFromPath() {
     return "marketing";
   }
 
   function origins() {
     if (isDevHost()) {
-      var origin = global.location.origin.replace(/\/+$/, "");
-      return { marketing: origin, admin: origin, beta: origin };
+      return { marketing: global.location.origin.replace(/\/+$/, "") };
     }
-    return {
-      marketing: PROD_MARKETING,
-      admin: PROD_ADMIN,
-      beta: PROD_BETA,
-    };
+    return { marketing: PROD_MARKETING };
   }
 
-  function originForPortal(portal) {
-    var o = origins();
-    if (portal === "admin") return o.admin;
-    if (portal === "beta") return o.beta;
-    return o.marketing;
+  function originForPortal() {
+    return origins().marketing;
   }
 
   function absoluteUrl(portal, pathAndQuery) {
@@ -52,7 +39,7 @@
     return base + path;
   }
 
-  /** Redirect admin/beta paths on main marketing host to their subdomains (production only). */
+  /** Kept for callers; with a single site there is never a host to move to. */
   function enforcePortalHost() {
     if (isDevHost()) return false;
     var host = (global.location.hostname || "").toLowerCase();

@@ -651,6 +651,8 @@ private struct ShopHubOrderRow: View {
             return (AppDesign.accentGreen, AppDesign.accentGreen.opacity(0.14))
         case ShopOrderStatus.cancelled:
             return (AppDesign.textSecondary, AppDesign.searchBackground)
+        case ShopOrderStatus.refunded, ShopOrderStatus.partiallyRefunded:
+            return (AppDesign.brandWarm, AppDesign.brandCream)
         default:
             return (AppDesign.textSecondary, AppDesign.searchBackground)
         }

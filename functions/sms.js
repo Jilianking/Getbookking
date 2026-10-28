@@ -173,28 +173,35 @@ const PAID_FEATURE_UPGRADE_MESSAGE =
  * require an active paid subscription (no charge required).
  * UI copy can still show “start subscription” / free trial.
  * Set false and redeploy before real billing enforcement.
+ *
+ * Deploy note (2026-09): BYPASS=false — billing / Stripe Checkout testing (payment block visible on billing.html).
+ * For TestFlight “no charge” testing, set true and redeploy functions.
  */
-const BYPASS_SUBSCRIPTION_PAYMENT_GATE = true;
+const BYPASS_SUBSCRIPTION_PAYMENT_GATE = false;
 
 /**
  * TestFlight: block Twilio number buy/provision/refresh (costs real money on all plans).
  * Stripe subscription test checkout stays available via BYPASS above.
  * Set false before App Store launch when SMS sales go live.
  */
-const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = true;
-const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE =
-  "Phone number purchasing is blocked during TestFlight.";
+const BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT = false;
+const TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE = "Texting numbers aren’t available right now. Please try again later.";
 
 function isSubscriptionPaymentGateBypassed() {
   return BYPASS_SUBSCRIPTION_PAYMENT_GATE === true;
 }
 
-function isSmsPhonePurchasingBlockedDuringTestFlight() {
+/**
+ * The launch block on buying numbers. A business with `smsPurchaseBlockExempt` set (server-only,
+ * see scripts/set-shop-access.js) is let through so it can get its number before the block lifts.
+ */
+function isSmsPhonePurchasingBlockedDuringTestFlight(tenant) {
+  if (tenant && tenant.smsPurchaseBlockExempt === true) return false;
   return BLOCK_SMS_PHONE_PURCHASING_DURING_TESTFLIGHT === true;
 }
 
-function smsPhonePurchaseBlockReason() {
-  if (isSmsPhonePurchasingBlockedDuringTestFlight()) {
+function smsPhonePurchaseBlockReason(tenant) {
+  if (isSmsPhonePurchasingBlockedDuringTestFlight(tenant)) {
     return TESTFLIGHT_SMS_PHONE_PURCHASE_BLOCK_MESSAGE;
   }
   return null;
@@ -210,8 +217,14 @@ function paidSubscriptionBlockReason(tenant, userData) {
   if (isSubscriptionPaymentGateBypassed()) {
     return null;
   }
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) {
+  // Complimentary access granted by Get Bookking (server-only, see scripts/set-shop-access.js).
+  if (tenant && tenant.complimentaryPaidAccess === true) {
+    return null;
+  }
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) {
     return PAID_FEATURE_UPGRADE_MESSAGE;
   }
   const status = resolveSubscriptionStatus(tenant, userData);
@@ -225,8 +238,10 @@ function paidSubscriptionBlockReason(tenant, userData) {
 }
 
 function tenantIsTrialing(tenant, userData) {
-  const hasStripe = !!((tenant && tenant.stripeCustomerId) || "").toString().trim();
-  if (!hasStripe) return false;
+  const hasBilling =
+    !!((tenant && tenant.stripeCustomerId) || "").toString().trim() ||
+    ((tenant && tenant.billingSource) || "").toString() === "apple";
+  if (!hasBilling) return false;
   return resolveSubscriptionStatus(tenant, userData) === "trialing";
 }
 
@@ -302,6 +317,13 @@ function inboundWebhookUrl() {
   const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
   if (!project) return "";
   return `https://us-central1-${project}.cloudfunctions.net/twilioInboundSms`;
+}
+
+/** Twilio posts delivery updates (sent, delivered, undelivered, failed) here. */
+function statusCallbackUrl(tenantId) {
+  const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+  if (!project || !tenantId) return "";
+  return `https://us-central1-${project}.cloudfunctions.net/twilioSmsStatus?t=${encodeURIComponent(tenantId)}`;
 }
 
 function threadIdFromPhone(phone) {
@@ -597,12 +619,17 @@ async function ensureMasterIncomingNumber(master, tenant, webhook) {
   return null;
 }
 
-async function buyMasterLocalNumber(master, areaCode) {
+async function buyMasterLocalNumber(master, areaCode, opts) {
   let available = await master.availablePhoneNumbers("US").local.list({
     areaCode,
     smsEnabled: true,
     limit: 5,
   });
+  if ((!available || available.length === 0) && opts && opts.areaCodeRequired) {
+    throw new Error(
+      `No texting numbers are available in area code ${areaCode} right now. Try again later.`
+    );
+  }
   if (!available || available.length === 0) {
     const fallback = await master.availablePhoneNumbers("US").local.list({
       smsEnabled: true,
@@ -627,7 +654,7 @@ async function buyMasterLocalNumber(master, areaCode) {
  * Provision a local SMS number on the master account and add it to the shared 10DLC messaging service.
  */
 async function provisionTenantSms(tenantId, tenant, opts) {
-  const purchaseBlock = smsPhonePurchaseBlockReason();
+  const purchaseBlock = smsPhonePurchaseBlockReason(tenant);
   if (purchaseBlock) {
     throw new Error(purchaseBlock);
   }
@@ -639,7 +666,10 @@ async function provisionTenantSms(tenantId, tenant, opts) {
   let numberResource = await ensureMasterIncomingNumber(master, tenant, webhook);
   let boughtNew = false;
   if (!numberResource) {
-    numberResource = await buyMasterLocalNumber(master, areaCode);
+    // An area code picked for the business (smsAreaCode) is kept; a guessed one may fall back.
+    const areaCodeRequired =
+      (tenant.smsAreaCode || "").toString().replace(/\D/g, "").slice(0, 3).length === 3;
+    numberResource = await buyMasterLocalNumber(master, areaCode, { areaCodeRequired });
     boughtNew = true;
     if (webhook) {
       await master.incomingPhoneNumbers(numberResource.sid).update({
@@ -834,10 +864,10 @@ async function countOccupiedSmsLines(tenantId, tenant) {
  *
  * Studio/Shop billing model:
  * - ≤2 concurrent active lines → $0/mo smsExtra on subscription.
- * - 3+ concurrent → smsExtra qty = used − 2 ($12/mo each).
+ * - 3+ concurrent → smsExtra qty = used − 2 ($12.99/mo each).
  * - First 2 Twilio numbers ever are free (lifetime); after that, each new
- *   number costs $12 one-time even when under 2 concurrent.
- * - Adding a 3rd concurrent line → $12 one-time + $12/mo subscription seat.
+ *   number costs $12.99 one-time even when under 2 concurrent.
+ * - Adding a 3rd concurrent line → $12.99 one-time + $12.99/mo subscription seat.
  */
 function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const plan = (planNorm || "solo").toString().trim().toLowerCase() || "solo";
@@ -856,10 +886,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const isTeamPlan = plan === "studio" || plan === "shop";
   // Twilio provision is free only while lifetime free allotment remains.
   const nextIsFree = !atMax && lifetime < freeIncluded;
-  // 3rd+ concurrent line adds a recurring smsExtra seat (+ $12 one-time at purchase).
+  // 3rd+ concurrent line adds a recurring smsExtra seat (+ $12.99 one-time at purchase).
   const needsMonthlyExtraForNext =
     !atMax && isTeamPlan && used >= freeIncluded;
-  // Lifetime exhausted but still under concurrent free cap — $12 one-time only.
+  // Lifetime exhausted but still under concurrent free cap — $12.99 one-time only.
   const needsOneTimePurchaseForNext =
     !atMax && !nextIsFree && !needsMonthlyExtraForNext;
   const needsPurchaseForNext =
@@ -867,7 +897,7 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
   const canAddWithoutPurchase = nextIsFree;
   const canProvisionNext = canAddWithoutPurchase;
   const nextUsesPaidCapacity = false;
-  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12 replacement only (max 1).
+  // Studio/Shop: recurring Extra SMS seats. Solo/Charter: one-time $12.99 replacement only (max 1).
   const canPurchaseExtra = isTeamPlan && !atMax && needsPurchaseForNext;
   const canPurchaseSoloReplacement =
     (plan === "solo" || plan === "charter") && needsPurchaseForNext;
@@ -894,10 +924,10 @@ function buildSmsLineSummary(tenant, planNorm, lineCount) {
     canProvisionNext,
     canPurchaseExtra,
     canPurchaseSoloReplacement,
-    extraMonthlyPriceCents: 1200,
-    extraMonthlyPriceLabel: "$12/mo",
-    extraOneTimeReplacementCents: 1200,
-    extraOneTimeReplacementLabel: "$12",
+    extraMonthlyPriceCents: 1299,
+    extraMonthlyPriceLabel: "$12.99/mo",
+    extraOneTimeReplacementCents: 1299,
+    extraOneTimeReplacementLabel: "$12.99",
   };
 }
 
@@ -929,18 +959,18 @@ function newSmsLineBlockReason(tenant, planNorm, lineCount) {
     if (summary.plan === "solo" || summary.plan === "charter") {
       return (
         "You've used your included texting number. " +
-        "Getting another costs a $12 fee (not monthly)."
+        "Getting another costs a $12.99 fee (not monthly)."
       );
     }
     if (summary.needsOneTimePurchaseForNext) {
       return (
         "You've used your included texting numbers. " +
-        "Getting another costs a $12 fee (not added to your monthly subscription while you have 2 or fewer lines)."
+        "Getting another costs a $12.99 fee (not added to your monthly subscription while you have 2 or fewer lines)."
       );
     }
     return (
       "You've used your included texting numbers. " +
-      "Add another number for $12 now plus $12/mo under Account → Plan & billing on getbookking.com."
+      "Add another number for $12.99 now plus $12.99/mo under Account → Plan & billing on getbookking.com."
     );
   }
   return null;
@@ -1205,7 +1235,8 @@ async function sendOutboundClientSms({
   if (optSnap.exists) {
     throw new Error("Recipient opted out of SMS.");
   }
-  if (!(await phoneHasSmsConsent(tenantId, toE164, meta))) {
+  const isConsentPrompt = !!(meta && meta.consentPrompt === true);
+  if (!isConsentPrompt && !(await phoneHasSmsConsent(tenantId, toE164, meta))) {
     throw new Error(
       "Recipient has not opted into appointment-related text messages."
     );
@@ -1244,6 +1275,10 @@ async function sendOutboundClientSms({
   if (mediaUrls.length) {
     createOpts.mediaUrl = mediaUrls;
   }
+  const statusUrl = statusCallbackUrl(tenantId);
+  if (statusUrl) {
+    createOpts.statusCallback = statusUrl;
+  }
   const msg = await master.messages.create(createOpts);
 
   const threadId =
@@ -1279,6 +1314,9 @@ async function sendOutboundClientSms({
     ...paymentMeta,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+  if (isConsentPrompt) {
+    logPayload.systemKind = "consent_resend";
+  }
   if (mediaUrls.length) {
     logPayload.mediaUrls = mediaUrls;
   }
@@ -1452,12 +1490,17 @@ async function sendTenantSms(tenantId, tenant, toE164, body, meta, ownerUserData
   await consumeSmsMonthlySlot(tenantId, { memberUid: null });
 
   const messagingServiceSid = getMasterMessagingServiceSid();
-  const msg = await master.messages.create({
+  const bookingCreateOpts = {
     to: toE164,
     body: body.slice(0, 1600),
     messagingServiceSid,
     from,
-  });
+  };
+  const bookingStatusUrl = statusCallbackUrl(tenantId);
+  if (bookingStatusUrl) {
+    bookingCreateOpts.statusCallback = bookingStatusUrl;
+  }
+  const msg = await master.messages.create(bookingCreateOpts);
 
   const logRef = getDb()
     .collection("tenants")
@@ -1584,21 +1627,26 @@ async function recordInboundTenantSms(tenantId, inbound) {
     smsLineScope,
   });
 
-  // Fire-and-forget APNs/FCM so Twilio webhook stays fast.
-  notifyInboundClientSms(tenantId, {
-    threadId,
-    counterpartPhone: from,
-    bodyPreview: previewBody,
-    clientName: ((inbound && inbound.clientName) || "").toString(),
-    assignedMemberUid,
-    smsLineScope,
-  }).catch((e) => {
-    console.warn(
-      "notifyInboundClientSms",
-      tenantId,
-      e && e.message ? e.message : e
-    );
-  });
+  // Wait for the push before Twilio gets its reply: a Cloud Function can be frozen once it has
+  // responded, which cut fire-and-forget notifications off part-way. Capped at 5 seconds so a
+  // slow push service never holds up the incoming text (Twilio allows about 15).
+  await Promise.race([
+    notifyInboundClientSms(tenantId, {
+      threadId,
+      counterpartPhone: from,
+      bodyPreview: previewBody,
+      clientName: ((inbound && inbound.clientName) || "").toString(),
+      assignedMemberUid,
+      smsLineScope,
+    }).catch((e) => {
+      console.warn(
+        "notifyInboundClientSms",
+        tenantId,
+        e && e.message ? e.message : e
+      );
+    }),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
 
   return true;
 }
@@ -1776,18 +1824,33 @@ async function suspendTenantSms(tenantId, reason) {
   );
 }
 
-async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch) {
+/**
+ * Writes the plan status to the business and its owner, and suspends texting when it is not active.
+ * `opts.source` is who is reporting: "stripe" (default) or "apple". A business billed through the
+ * App Store keeps its Apple status when Stripe reports anything other than a paid subscription —
+ * for example the website trial we cancel when the Apple plan starts.
+ * Returns { skipped: true } when nothing was written.
+ */
+async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, billingPatch, opts) {
   const status = (subscriptionStatus || "").toString().trim().toLowerCase();
   const extra = billingPatch && typeof billingPatch === "object" ? billingPatch : {};
+  const source = opts && opts.source === "apple" ? "apple" : "stripe";
   const tenantRef = getDb().collection("tenants").doc(tenantId);
   const tenantSnap = await tenantRef.get();
-  if (!tenantSnap.exists) return;
+  if (!tenantSnap.exists) return { skipped: true, reason: "no_tenant" };
   const tenant = tenantSnap.data();
   const ownerUid = tenant.ownerUid;
+  const appleBilled = (tenant.billingSource || "").toString() === "apple";
+  if (source === "stripe" && appleBilled && status !== "active") {
+    console.log("syncSubscriptionStatusForTenant: kept Apple status", { tenantId, stripeStatus: status });
+    return { skipped: true, reason: "apple_billed" };
+  }
   const tenantFields = {
     subscriptionStatus: status,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+  // A paid Stripe subscription on a business that was on Apple means billing moved to the website.
+  if (source === "stripe" && appleBilled) tenantFields.billingSource = "stripe";
   if (extra.stripeCustomerId) tenantFields.stripeCustomerId = extra.stripeCustomerId;
   if (extra.stripeSubscriptionId) tenantFields.stripeSubscriptionId = extra.stripeSubscriptionId;
   if (extra.subscriptionPlan) tenantFields.subscriptionPlan = extra.subscriptionPlan;
@@ -1801,8 +1864,12 @@ async function syncSubscriptionStatusForTenant(tenantId, subscriptionStatus, bil
   await batch.commit();
 
   if (status !== "active" && tenant.smsStatus === "active") {
-    await suspendTenantSms(tenantId, `subscription_${status}`);
+    // Complimentary access keeps texting on whatever the plan says (e.g. a new free trial).
+    if (tenant.complimentaryPaidAccess !== true) {
+      await suspendTenantSms(tenantId, `subscription_${status}`);
+    }
   }
+  return { skipped: false };
 }
 
 const SMS_PRESET_MAX_LEN = 500;
@@ -1875,12 +1942,29 @@ function bookingStatusSmsBody(tenant, status, booking) {
   const service = ((booking && booking.serviceName) || "").toString().trim();
   const ctx = { business, service };
   if (status === "confirmed") {
-    return renderSmsPreset(presets.smsPresetConfirmed, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetConfirmed, ctx), business);
   }
   if (status === "declined") {
-    return renderSmsPreset(presets.smsPresetDeclined, ctx);
+    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetDeclined, ctx), business);
   }
   return null;
+}
+
+/**
+ * Automatic texts must say who they're from and how to opt out, even if a business has edited
+ * those parts out of its templates: carriers expect both, and every business shares one registration.
+ */
+function withRequiredSmsWording(body, business) {
+  let text = (body || "").toString().trim();
+  if (!text) return text;
+  const name = (business || "").toString().trim();
+  if (name && !text.toLowerCase().includes(name.toLowerCase())) {
+    text = `${name}: ${text}`;
+  }
+  if (!/\bstop\b/i.test(text)) {
+    text = `${text.replace(/\s+$/, "")}${/[.!?]$/.test(text) ? "" : "."} Reply STOP to opt out.`;
+  }
+  return text.slice(0, 1600);
 }
 
 function wrapClockMin(min) {
@@ -2221,6 +2305,7 @@ async function grantInboundSmsConsent(tenantId, phone) {
       smsOptedIn: true,
       smsConsentAt: admin.firestore.FieldValue.serverTimestamp(),
       smsConsentSource: keepWebSource ? "web_booking" : "inbound_sms",
+      smsOptedOutAt: admin.firestore.FieldValue.delete(),
       source: existing.source || "inbound_sms",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       ...(snap.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
@@ -2352,6 +2437,42 @@ async function maybeSendInboundConsentPrompt(tenantId, {
   return twimlMessage(prompt);
 }
 
+const CONSENT_RESEND_WAIT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Where a conversation stands on texting consent, for the app's status line.
+ * state: "opted_in" | "opted_out" | "waiting" (client texted, no YES yet) | "needs_opt_in" (client never texted)
+ */
+async function smsConsentStatusForThread(tenantId, { threadId, clientPhone, threadData }) {
+  const phone = toE164US(clientPhone) || (clientPhone || "").toString().trim();
+  if (!tenantId || !phone) return { state: "needs_opt_in" };
+  if (await isPhoneOptedOut(tenantId, phone)) return { state: "opted_out" };
+  if (await phoneHasSmsConsent(tenantId, phone)) return { state: "opted_in" };
+
+  let clientTexted = false;
+  if (threadId) {
+    const inbound = await getDb()
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("smsLog")
+      .where("threadId", "==", threadId)
+      .where("direction", "==", "inbound")
+      .limit(1)
+      .get();
+    clientTexted = !inbound.empty;
+  }
+  if (!clientTexted) return { state: "needs_opt_in" };
+
+  const sentAt = threadData && threadData.smsConsentPromptSentAt;
+  const sentMs = sentAt && typeof sentAt.toMillis === "function" ? sentAt.toMillis() : 0;
+  const nextMs = sentMs ? sentMs + CONSENT_RESEND_WAIT_MS : 0;
+  return {
+    state: "waiting",
+    promptSentAtMs: sentMs || null,
+    canResendAtMs: nextMs && nextMs > Date.now() ? nextMs : null,
+  };
+}
+
 module.exports = {
   twilioAccountSid,
   twilioAuthToken,
@@ -2383,6 +2504,8 @@ module.exports = {
   notifyInboundClientSms,
   grantInboundSmsConsent,
   maybeSendInboundConsentPrompt,
+  smsConsentStatusForThread,
+  statusCallbackUrl,
   isInboundConsentAffirmation,
   inboundConsentPromptBody,
   inboundResubscribePromptBody,

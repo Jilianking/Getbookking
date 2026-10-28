@@ -28,6 +28,7 @@ struct PaymentTransactionDetailSheet: View {
     }
 
     private var serviceLabel: String {
+        if let label = transaction.serviceLabel, !label.isEmpty { return label }
         let trimmed = (transaction.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed.lowercased() != "payment" { return trimmed }
         return transaction.channelLabel
@@ -49,7 +50,7 @@ struct PaymentTransactionDetailSheet: View {
             }
             return Int(round(transaction.amount * 100))
         }()
-        return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: .online)
+        return CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: transaction.checkoutChannel)
     }
 
     private var creditColor: Color { AppDesign.accentGreen }
@@ -246,10 +247,18 @@ struct PaymentTransactionDetailSheet: View {
         if transaction.isPayoutLine {
             payoutBreakdown
         } else {
-            breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
+            if let serviceAmount = transaction.serviceAmount {
+                itemRow(label: "Service", name: serviceLabel, amount: serviceAmount)
+                if let addonsAmount = transaction.addonsAmount {
+                    Divider()
+                    itemRow(label: "Add-ons", name: transaction.addonsLabel ?? "", amount: addonsAmount)
+                }
+            } else {
+                breakdownRow(label: "Service", value: serviceLabel, valueIsText: true)
+            }
             Divider()
             breakdownRow(
-                label: "Subtotal",
+                label: "Client paid",
                 value: PaymentsViewModel.formatUSD(transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount)
             )
             Divider()
@@ -299,9 +308,14 @@ struct PaymentTransactionDetailSheet: View {
         }
     }
 
+    private var feePopoverMatchesDisplayedFee: Bool {
+        let estimated = Double(feeBreakdownForPopover.passThroughFeeCents) / 100.0
+        return abs(estimated - transaction.displayedProcessingFee) < 0.02
+    }
+
     private var processingFeeRow: some View {
         let fee = transaction.displayedProcessingFee
-        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: .online)
+        let stripeRate = CardCheckoutPricing.stripeRateLabel(for: transaction.checkoutChannel)
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             HStack(spacing: 4) {
                 Text("Processing fee")
@@ -318,19 +332,26 @@ struct PaymentTransactionDetailSheet: View {
                 .accessibilityLabel("Processing fee details")
                 .popover(isPresented: $showFeeDetails, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 6) {
-                        if feeBreakdownForPopover.cardProcessingFeeCents > 0 {
-                            HStack {
-                                Text("Card processing (Stripe \(stripeRate))")
-                                Spacer(minLength: 8)
-                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.cardProcessingFeeCents))
+                        if feePopoverMatchesDisplayedFee {
+                            if feeBreakdownForPopover.cardProcessingFeeCents > 0 {
+                                HStack {
+                                    Text("Card processing (Stripe \(stripeRate))")
+                                    Spacer(minLength: 8)
+                                    Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.cardProcessingFeeCents))
+                                }
                             }
-                        }
-                        if feeBreakdownForPopover.platformFeeCents > 0 {
-                            HStack {
-                                Text("Platform fee (1%)")
-                                Spacer(minLength: 8)
-                                Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.platformFeeCents))
+                            if feeBreakdownForPopover.platformFeeCents > 0 {
+                                HStack {
+                                    Text("Platform fee (1%)")
+                                    Spacer(minLength: 8)
+                                    Text(CardCheckoutPricing.formatUSD(cents: feeBreakdownForPopover.platformFeeCents))
+                                }
                             }
+                        } else if fee > 0 {
+                            Text("Processing fee \(PaymentsViewModel.formatUSD(fee))")
+                            Text("This includes Stripe’s fee for the method the client paid with and the 1% platform fee.")
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .font(.caption)
@@ -373,6 +394,27 @@ struct PaymentTransactionDetailSheet: View {
     }
 
     @ViewBuilder
+    /// A paid item: label on the left, what it was and its amount on the right.
+    private func itemRow(label: String, name: String, amount: Double) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textSecondary)
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(PaymentsViewModel.formatUSD(amount))
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textPrimary)
+                if !name.isEmpty {
+                    Text(name)
+                        .font(.caption)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+        }
+    }
+
     private func breakdownRow(label: String, value: String, valueIsText: Bool = false) -> some View {
         HStack(alignment: .top) {
             Text(label)
@@ -428,7 +470,7 @@ struct PaymentTransactionDetailSheet: View {
             ?? PhoneFormatting.e164US(transaction.customerName)
         drawerState.openExistingMessagesThread(
             phone: phoneGuess,
-            clientName: detail.customerName ?? transaction.customerName,
+            clientName: detail.customerName ?? transaction.clientName ?? transaction.customerName,
             body: shareText
         )
         dismiss()

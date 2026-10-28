@@ -106,7 +106,13 @@ struct ShopAnalyticsSnapshot {
             return true
         }
 
-        let active = filtered.filter { $0.statusLower != ShopOrderStatus.cancelled }
+        let active = filtered.filter {
+            let s = $0.statusLower
+            return s != ShopOrderStatus.cancelled
+                && s != ShopOrderStatus.refunded
+                && s != ShopOrderStatus.partiallyRefunded
+                && s != ShopOrderStatus.pendingPayment
+        }
         let totalRevenueCents = active.reduce(0) { $0 + $1.subtotalCents }
         let fulfilledCount = filtered.filter { $0.statusLower == ShopOrderStatus.fulfilled }.count
         let pendingCount = filtered.filter { $0.statusLower == ShopOrderStatus.pending }.count

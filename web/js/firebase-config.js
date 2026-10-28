@@ -7,7 +7,7 @@
  * createShopCheckoutPayment callable does not return publishableKey (set STRIPE_PUBLISHABLE_KEY on Functions).
  */
 window.stripePublishableKey =
-  "pk_test_51TP6NMCeE17fSOZIRoGV8tDxkkL70jTwci1hWWj3fXnbBr6ShlFddU6gexd3XunYhd7JeOejslpDASXBvZj0iZ8f00OMYp9uSD";
+  "pk_live_51TP6NFEC5gt8o49hpbWXQMukWP8Miuo4H0RC2z26o1XJHSt8tpGAjGsIeIBFMKrQVF1FptbGyA6NJAnIMvWOl6Pe00fsa5c3CJ";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB9DwVkkCM-0cpYhkWRnTfScHIRNIDyJ3g",
